@@ -247,11 +247,11 @@ export class SaleService {
       prisma.sale.count({ where: { ...where, status: SaleStatus.COMPLETED } }),
       prisma.sale.count({ where: { ...where, status: SaleStatus.CANCELLED } }),
       prisma.sale.aggregate({
-        where: { ...where, status: SaleStatus.COMPLETED },
+        where: { ...where, status: SaleStatus.COMPLETED as any },
         _sum: { salePrice: true },
       }),
       prisma.sale.aggregate({
-        where: { ...where, status: SaleStatus.COMPLETED },
+        where: { ...where, status: SaleStatus.COMPLETED as any },
         _sum: { userCommission: true },
       }),
     ]);
