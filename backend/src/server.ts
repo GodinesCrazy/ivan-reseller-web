@@ -2,11 +2,38 @@ import app from './app';
 import { env } from './config/env';
 import { prisma } from './config/database';
 import { redis } from './config/redis';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
+const execAsync = promisify(exec);
 const PORT = parseInt(env.PORT, 10);
+
+async function runMigrations() {
+  try {
+    console.log('🔄 Running database migrations...');
+    await execAsync('npx prisma migrate deploy');
+    console.log('✅ Migrations completed');
+    
+    // Only seed in production on first deploy
+    if (env.NODE_ENV === 'production') {
+      try {
+        console.log('🌱 Seeding database...');
+        await execAsync('npx tsx prisma/seed.ts');
+        console.log('✅ Database seeded');
+      } catch (seedError) {
+        console.log('ℹ️  Seed skipped (database may already have data)');
+      }
+    }
+  } catch (error) {
+    console.error('⚠️  Migration warning:', error);
+  }
+}
 
 async function startServer() {
   try {
+    // Run migrations before connecting
+    await runMigrations();
+    
     // Test database connection
     await prisma.$connect();
     console.log('✅ Database connected');
