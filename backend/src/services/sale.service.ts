@@ -243,15 +243,15 @@ export class SaleService {
       totalCommissions,
     ] = await Promise.all([
       prisma.sale.count({ where }),
-      prisma.sale.count({ where: { ...where, status: 'PENDING' } }),
-      prisma.sale.count({ where: { ...where, status: 'COMPLETED' } }),
-      prisma.sale.count({ where: { ...where, status: 'CANCELLED' } }),
+      prisma.sale.count({ where: { ...where, status: SaleStatus.PENDING } }),
+      prisma.sale.count({ where: { ...where, status: SaleStatus.COMPLETED } }),
+      prisma.sale.count({ where: { ...where, status: SaleStatus.CANCELLED } }),
       prisma.sale.aggregate({
-        where: { ...where, status: 'COMPLETED' },
+        where: { ...where, status: SaleStatus.COMPLETED },
         _sum: { salePrice: true },
       }),
       prisma.sale.aggregate({
-        where: { ...where, status: 'COMPLETED' },
+        where: { ...where, status: SaleStatus.COMPLETED },
         _sum: { userCommission: true },
       }),
     ]);
