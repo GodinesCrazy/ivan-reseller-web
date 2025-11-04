@@ -11,16 +11,16 @@ COPY package*.json ./
 # Copy Prisma schema BEFORE npm install (needed for postinstall hook)
 COPY prisma ./prisma/
 
-# Install dependencies (this will run prisma generate via postinstall)
-RUN npm ci --only=production
+# Install ALL dependencies including devDependencies (needed for ts-node)
+RUN npm install
 
 # Copy source code
 COPY . .
 
-# Build TypeScript
-RUN npm run build
+# Make start script executable
+RUN chmod +x start-production.sh
 
 EXPOSE 3000
 
-# Production command (run migrations then start server)
-CMD ["npm", "start"]
+# Use simple start command with ts-node
+CMD ["sh", "-c", "npx prisma migrate deploy && npx ts-node src/server.ts"]
