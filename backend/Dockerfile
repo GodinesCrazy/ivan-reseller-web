@@ -12,7 +12,7 @@ COPY tsconfig.json ./
 # Copy Prisma schema BEFORE npm install (needed for postinstall hook)
 COPY prisma ./prisma/
 
-# Install ALL dependencies first (for build)
+# Install ALL dependencies (including devDependencies for build and runtime)
 RUN npm install
 
 # Copy source code
@@ -20,12 +20,6 @@ COPY src ./src
 
 # Build TypeScript to JavaScript (ignora errores con || true)
 RUN npm run build
-
-# Now remove devDependencies except those needed for runtime
-RUN npm prune --production
-
-# Re-install runtime dependencies that were in devDependencies
-RUN npm install --save bcryptjs
 
 EXPOSE 3000
 
