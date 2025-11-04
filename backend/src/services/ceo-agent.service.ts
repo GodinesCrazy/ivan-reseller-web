@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import axios from 'axios';
 import { logger } from '../config/logger';
 import { aiLearningSystem } from './ai-learning.service';
-import prisma from '../config/database';
+import { prisma } from '../config/database';
 import env from '../config/env';
 
 /**

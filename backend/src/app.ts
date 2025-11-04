@@ -15,7 +15,7 @@ import dashboardRoutes from './api/routes/dashboard.routes';
 
 // Additional routes
 import opportunitiesRoutes from './api/routes/opportunities.routes';
-import automationRoutes from './routes/automation.routes';
+import { automationRoutes } from './routes/automation.routes';
 import settingsRoutes from './routes/settings.routes';
 import marketplaceRoutes from './api/routes/marketplace.routes';
 import marketplaceOauthRoutes from './api/routes/marketplace-oauth.routes';

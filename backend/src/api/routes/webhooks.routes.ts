@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import prisma from '../../config/database';
+import { prisma } from '../../config/database';
 import costCalculator from '../../services/cost-calculator.service';
 import { notificationService } from '../../services/notification.service';
 

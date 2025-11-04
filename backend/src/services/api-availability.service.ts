@@ -4,7 +4,7 @@
  * All services should check this before attempting to use external APIs
  */
 
-import prisma from '../config/database';
+import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import crypto from 'crypto';
 

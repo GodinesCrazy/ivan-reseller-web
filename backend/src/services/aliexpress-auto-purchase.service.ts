@@ -3,7 +3,7 @@ import type { Browser, Page } from 'puppeteer';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { logger } from '../config/logger';
 import { AppError } from '../middleware/error.middleware';
-import prisma from '../config/database';
+import { prisma } from '../config/database';
 
 puppeteer.use(StealthPlugin());
 

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import prisma from '../../config/database';
+import { prisma } from '../../config/database';
 import scraperBridge from '../../services/scraper-bridge.service';
 import { automatedBusinessSystem } from '../../services/automated-business.service';
 import { secureCredentialManager } from '../../services/security.service';

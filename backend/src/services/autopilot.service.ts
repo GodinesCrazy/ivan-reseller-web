@@ -4,7 +4,7 @@ import { logger } from '../config/logger';
 import { stealthScrapingService } from './stealth-scraping.service';
 import { autoRecoverySystem } from './auto-recovery.service';
 import { apiAvailability } from './api-availability.service';
-import prisma from '../config/database';
+import { prisma } from '../config/database';
 
 /**
  * Configuration for autopilot system

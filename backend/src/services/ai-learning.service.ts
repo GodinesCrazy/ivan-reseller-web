@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { logger } from '../config/logger';
-import prisma from '../config/database';
+import { prisma } from '../config/database';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
