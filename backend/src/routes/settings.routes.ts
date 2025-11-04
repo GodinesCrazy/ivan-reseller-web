@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticateToken } from '../middleware/auth.middleware';
+import { authenticate } from '../middleware/auth.middleware';
 import prisma from '../config/database';
 import crypto from 'crypto';
 
@@ -50,7 +50,7 @@ function decrypt(encryptedData: { encrypted: string; iv: string; tag: string }):
  * GET /api/settings/apis
  * Get all API configurations
  */
-router.get('/apis', authenticateToken, async (req, res) => {
+router.get('/apis', authenticate, async (req, res) => {
   try {
     // Define available APIs
     const apis = [
@@ -234,7 +234,7 @@ router.get('/apis', authenticateToken, async (req, res) => {
  * POST /api/settings/apis/:apiId
  * Save API configuration
  */
-router.post('/apis/:apiId', authenticateToken, async (req, res) => {
+router.post('/apis/:apiId', authenticate, async (req, res) => {
   try {
     const { apiId } = req.params;
     const { name, credentials } = req.body;
@@ -292,7 +292,7 @@ router.post('/apis/:apiId', authenticateToken, async (req, res) => {
  * GET /api/settings/apis/:apiId
  * Get specific API configuration (decrypted)
  */
-router.get('/apis/:apiId', authenticateToken, async (req, res) => {
+router.get('/apis/:apiId', authenticate, async (req, res) => {
   try {
     const { apiId } = req.params;
 
@@ -315,7 +315,7 @@ router.get('/apis/:apiId', authenticateToken, async (req, res) => {
  * DELETE /api/settings/apis/:apiId
  * Delete API configuration
  */
-router.delete('/apis/:apiId', authenticateToken, async (req, res) => {
+router.delete('/apis/:apiId', authenticate, async (req, res) => {
   try {
     const { apiId } = req.params;
     const { keys } = req.body;
