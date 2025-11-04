@@ -17,9 +17,6 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Make start script executable
-RUN chmod +x start-production.sh
-
 EXPOSE 3000
 
 # Use simple start command with ts-node
