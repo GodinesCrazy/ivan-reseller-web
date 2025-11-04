@@ -17,6 +17,15 @@ export default defineConfig({
       '@utils': path.resolve(__dirname, './src/utils'),
     },
   },
+  build: {
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // Ignorar warnings de variables no usadas
+        if (warning.code === 'UNUSED_EXTERNAL_IMPORT') return;
+        warn(warning);
+      },
+    },
+  },
   server: {
     port: 5173,
     host: true,
