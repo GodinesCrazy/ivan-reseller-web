@@ -158,6 +158,19 @@ cd backend
 npx prisma migrate deploy
 ```
 
+## Notas Importantes
+
+### Tipos de Datos para Valores Monetarios
+
+⚠️ **Nota**: El esquema actual utiliza `Float` (DOUBLE PRECISION en PostgreSQL) para valores monetarios. Para aplicaciones financieras que requieren precisión exacta, considera migrar a `Decimal` en el futuro para evitar problemas de redondeo de punto flotante.
+
+Campos afectados:
+- `commissionRate`, `fixedMonthlyCost`, `balance`, `totalEarnings` en tabla `users`
+- `aliexpressPrice`, `suggestedPrice`, `finalPrice` en tabla `products`
+- `salePrice`, `aliexpressCost`, `marketplaceFee`, `grossProfit`, `commissionAmount`, `netProfit` en tabla `sales`
+- `amount` en tabla `commissions`
+
+
 ## Estructura de la Base de Datos
 
 El sistema utiliza las siguientes tablas:
