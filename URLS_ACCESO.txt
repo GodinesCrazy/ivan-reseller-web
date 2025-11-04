@@ -1,0 +1,8 @@
+URLS DE ACCESO - IVAN RESELLER 
+ 
+LOCAL:    http://localhost:5173 
+LAN:      http://192.168.4.43:5173 
+INTERNET: http://201.186.232.242:5173 
+ 
+Usuario: admin@ivanreseller.com 
+Password: admin123 

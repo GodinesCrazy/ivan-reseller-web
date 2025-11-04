@@ -1,0 +1,144 @@
+{
+  "productTitle": {
+    "primary": "h1[data-pl=\"product-title\"]",
+    "fallbacks": [
+      "h1.product-title-text",
+      ".product-title h1",
+      "[class*=\"productTitle\"]",
+      "h1[class*=\"title\"]",
+      "div[data-pl=\"product-title\"] h1"
+    ],
+    "successRate": 1,
+    "description": "Product title on detail page"
+  },
+  "productPrice": {
+    "primary": ".product-price-value",
+    "fallbacks": [
+      "[class*=\"price\"] [class*=\"value\"]",
+      "[data-price-value]",
+      ".uniform-banner-box-price",
+      "span[class*=\"price\"]",
+      "div[data-pl=\"product-price\"]",
+      "[itemprop=\"price\"]"
+    ],
+    "successRate": 1,
+    "description": "Product price"
+  },
+  "originalPrice": {
+    "primary": ".product-price-original",
+    "fallbacks": [
+      "[class*=\"original\"] [class*=\"price\"]",
+      "[class*=\"oldPrice\"]",
+      "del[class*=\"price\"]",
+      "s[class*=\"price\"]"
+    ],
+    "successRate": 0.8,
+    "description": "Original price before discount"
+  },
+  "productImages": {
+    "primary": ".image-view-magnifier img",
+    "fallbacks": [
+      "[class*=\"imageView\"] img",
+      "[class*=\"gallery\"] img",
+      "[data-role=\"thumb\"] img",
+      "ul[class*=\"image\"] img",
+      ".slider-image img"
+    ],
+    "successRate": 0.95,
+    "description": "Product images in gallery"
+  },
+  "description": {
+    "primary": ".product-description",
+    "fallbacks": [
+      "[class*=\"description\"]",
+      "[data-pl=\"product-description\"]",
+      "div[class*=\"detail\"]",
+      ".html-content"
+    ],
+    "successRate": 0.9,
+    "description": "Product description"
+  },
+  "shipping": {
+    "primary": "[class*=\"shipping\"] [class*=\"price\"]",
+    "fallbacks": [
+      "[data-pl=\"shipping\"]",
+      "span[class*=\"shipping\"]",
+      "div[class*=\"delivery\"]"
+    ],
+    "successRate": 0.7,
+    "description": "Shipping cost and info"
+  },
+  "shippingTime": {
+    "primary": "[class*=\"delivery\"] [class*=\"time\"]",
+    "fallbacks": [
+      "[class*=\"shipping\"] [class*=\"days\"]",
+      "span[class*=\"deliveryTime\"]",
+      "[data-spm*=\"shipping\"]"
+    ],
+    "successRate": 0.7,
+    "description": "Estimated delivery time"
+  },
+  "seller": {
+    "primary": ".seller-info-name",
+    "fallbacks": [
+      "[class*=\"store\"] [class*=\"name\"]",
+      "a[class*=\"seller\"]",
+      "[class*=\"shop\"] [class*=\"title\"]",
+      "[data-spm*=\"store\"]"
+    ],
+    "successRate": 0.85,
+    "description": "Seller/store name"
+  },
+  "rating": {
+    "primary": ".overview-rating-average",
+    "fallbacks": [
+      "[class*=\"rating\"] [class*=\"average\"]",
+      "span[class*=\"score\"]",
+      "[itemprop=\"ratingValue\"]",
+      "[class*=\"star\"] [class*=\"num\"]"
+    ],
+    "successRate": 0.9,
+    "description": "Product rating"
+  },
+  "reviews": {
+    "primary": ".product-reviewer-reviews",
+    "fallbacks": [
+      "[class*=\"review\"] [class*=\"count\"]",
+      "span[class*=\"reviewCount\"]",
+      "[itemprop=\"reviewCount\"]"
+    ],
+    "successRate": 0.85,
+    "description": "Number of reviews"
+  },
+  "orders": {
+    "primary": "[class*=\"order\"] [class*=\"num\"]",
+    "fallbacks": [
+      "span[class*=\"sold\"]",
+      "[class*=\"sales\"]",
+      "span:contains(\"orders\")"
+    ],
+    "successRate": 0.75,
+    "description": "Number of orders"
+  },
+  "stock": {
+    "primary": "[class*=\"quantity\"] [class*=\"available\"]",
+    "fallbacks": [
+      "span[class*=\"stock\"]",
+      "[class*=\"inventory\"]",
+      "span:contains(\"available\")"
+    ],
+    "successRate": 0.6,
+    "description": "Available stock"
+  },
+  "addToCart": {
+    "primary": "button[class*=\"add-to-cart\"]",
+    "fallbacks": [
+      "button:contains(\"Add to Cart\")",
+      "button[data-role=\"addToCart\"]",
+      "button:contains(\"Buy Now\")",
+      ".product-action button"
+    ],
+    "successRate": 0.9,
+    "description": "Add to cart button"
+  }
+}

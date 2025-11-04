@@ -1,0 +1,812 @@
+import axios, { AxiosInstance } from 'axios';
+import { AppError } from '../middleware/error.middleware';
+import { URLSearchParams } from 'url';
+
+export interface EbayCredentials {
+  appId: string;
+  devId: string;
+  certId: string;
+  token?: string;
+  refreshToken?: string;
+  sandbox: boolean;
+}
+
+export interface EbayProduct {
+  title: string;
+  description: string;
+  categoryId: string;
+  startPrice: number;
+  buyItNowPrice?: number;
+  quantity: number;
+  condition: string;
+  images: string[];
+  shippingCost?: number;
+  handlingTime?: number;
+  returnPolicy?: string;
+}
+
+export interface EbayListingResponse {
+  itemId: string;
+  listingUrl: string;
+  fees: {
+    insertionFee: number;
+    finalValueFee: number;
+  };
+}
+
+export interface EBaySearchProduct {
+  itemId: string;
+  title: string;
+  price: {
+    value: string;
+    currency: string;
+  };
+  condition: string;
+  itemLocation: {
+    country: string;
+  };
+  seller: {
+    username: string;
+    feedbackPercentage: string;
+  };
+  itemWebUrl: string;
+  image: {
+    imageUrl: string;
+  };
+  shippingOptions: Array<{
+    shippingCost: {
+      value: string;
+      currency: string;
+    };
+    shippingServiceCode: string;
+  }>;
+  marketingPrice?: {
+    originalPrice: {
+      value: string;
+      currency: string;
+    };
+    discountPercentage: string;
+  };
+}
+
+export interface EBaySearchParams {
+  keywords: string;
+  categoryId?: string;
+  filter?: string;
+  sort?: string;
+  limit?: number;
+  offset?: number;
+  marketplace_id?: string;
+}
+
+export interface ArbitrageOpportunity {
+  product: EBaySearchProduct;
+  arbitrageScore: number;
+  estimatedProfit: number;
+  competitionLevel: 'low' | 'medium' | 'high';
+  reasoning: string[];
+  aiConfidence: number;
+  trend: 'rising' | 'stable' | 'declining';
+}
+
+export class EbayService {
+  private credentials?: EbayCredentials;
+  private apiClient: AxiosInstance;
+  private baseUrl: string;
+  private accessToken?: string;
+  private tokenExpiry?: Date;
+
+  constructor(credentials?: EbayCredentials) {
+    this.credentials = credentials;
+    this.baseUrl = credentials?.sandbox 
+      ? 'https://api.sandbox.ebay.com' 
+      : 'https://api.ebay.com';
+    
+    this.apiClient = axios.create({
+      baseURL: this.baseUrl,
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
+        ...(credentials?.devId && { 'X-EBAY-API-DEV-NAME': credentials.devId }),
+        ...(credentials?.appId && { 'X-EBAY-API-APP-NAME': credentials.appId }),
+        ...(credentials?.certId && { 'X-EBAY-API-CERT-NAME': credentials.certId }),
+      },
+    });
+
+    // Add request interceptor for authentication
+    this.apiClient.interceptors.request.use((config) => {
+      if (this.credentials?.token) {
+        config.headers['X-EBAY-API-IAF-TOKEN'] = this.credentials.token;
+      }
+      return config;
+    });
+  }
+
+  /**
+   * Create EbayService from environment variables (useful for server-side jobs/tests)
+   */
+  static fromEnv(): EbayService | null {
+    const appId = process.env.EBAY_APP_ID;
+    const devId = process.env.EBAY_DEV_ID;
+    const certId = process.env.EBAY_CERT_ID;
+    if (!appId || !devId || !certId) return null;
+    const token = process.env.EBAY_OAUTH_TOKEN;
+    const refreshToken = process.env.EBAY_REFRESH_TOKEN;
+    return new EbayService({ appId, devId, certId, token, refreshToken, sandbox: false });
+  }
+
+  /**
+   * Get eBay authentication URL for OAuth flow
+   */
+  getAuthUrl(redirectUri: string, scopes: string[] = ['sell.inventory.readonly', 'sell.inventory', 'sell.marketing.readonly', 'sell.marketing']): string {
+    if (!this.credentials) {
+      throw new Error('eBay credentials not configured');
+    }
+    const params = new URLSearchParams({
+      client_id: this.credentials.appId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: scopes.join(' '),
+      state: 'state_' + Date.now(),
+    });
+    const authBase = this.credentials.sandbox ? 'https://auth.sandbox.ebay.com/oauth2/authorize' : 'https://auth.ebay.com/oauth2/authorize';
+    return `${authBase}?${params.toString()}`;
+  }
+
+  /**
+   * Exchange authorization code for access token
+   */
+  async exchangeCodeForToken(code: string, redirectUri: string): Promise<{ token: string; refreshToken: string; expiresIn: number }> {
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/identity/v1/oauth2/token`,
+        new URLSearchParams({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: redirectUri,
+        }),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Authorization: `Basic ${Buffer.from(`${this.credentials.appId}:${this.credentials.certId}`).toString('base64')}`,
+          },
+        }
+      );
+
+      return {
+        token: response.data.access_token,
+        refreshToken: response.data.refresh_token,
+        expiresIn: response.data.expires_in,
+      };
+    } catch (error: any) {
+      throw new AppError(`eBay OAuth error: ${error.response?.data?.error_description || error.message}`, 400);
+    }
+  }
+
+  /**
+   * Refresh access token
+   */
+  async refreshAccessToken(): Promise<{ token: string; expiresIn: number }> {
+    if (!this.credentials.refreshToken) {
+      throw new AppError('No refresh token available', 400);
+    }
+
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/identity/v1/oauth2/token`,
+        new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: this.credentials.refreshToken,
+        }),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Authorization: `Basic ${Buffer.from(`${this.credentials.appId}:${this.credentials.certId}`).toString('base64')}`,
+          },
+        }
+      );
+
+      return {
+        token: response.data.access_token,
+        expiresIn: response.data.expires_in,
+      };
+    } catch (error: any) {
+      throw new AppError(`eBay token refresh error: ${error.response?.data?.error_description || error.message}`, 400);
+    }
+  }
+
+  /**
+   * Create or update inventory item
+   */
+  async createInventoryItem(sku: string, product: EbayProduct): Promise<any> {
+    if (!this.credentials.token) {
+      throw new AppError('eBay token required for API calls', 401);
+    }
+
+    try {
+      const inventoryData = {
+        availability: {
+          shipToLocationAvailability: {
+            quantity: product.quantity,
+          },
+        },
+        condition: product.condition || 'NEW',
+        product: {
+          title: product.title,
+          description: product.description,
+          imageUrls: product.images,
+          aspects: {
+            Brand: ['Generic'],
+            Type: ['Product'],
+          },
+        },
+      };
+
+      const response = await this.apiClient.put(`/sell/inventory/v1/inventory_item/${sku}`, inventoryData);
+      return response.data;
+    } catch (error: any) {
+      throw new AppError(`eBay inventory creation error: ${error.response?.data?.errors?.[0]?.message || error.message}`, 400);
+    }
+  }
+
+  /**
+   * Create eBay listing from inventory item
+   */
+  async createListing(sku: string, product: EbayProduct): Promise<EbayListingResponse> {
+    if (!this.credentials.token) {
+      throw new AppError('eBay token required for API calls', 401);
+    }
+
+    try {
+      // First create inventory item
+      await this.createInventoryItem(sku, product);
+
+      // Then create the listing
+      const listingData = {
+        categoryId: product.categoryId,
+        merchantLocationKey: 'default_location',
+        pricingSummary: {
+          price: {
+            currency: 'USD',
+            value: product.startPrice.toString(),
+          },
+        },
+        quantityLimitPerBuyer: 10,
+        listingPolicies: {
+          fulfillmentPolicyId: 'default_fulfillment',
+          paymentPolicyId: 'default_payment',
+          returnPolicyId: 'default_return',
+        },
+        ...(product.buyItNowPrice && {
+          pricingSummary: {
+            price: {
+              currency: 'USD',
+              value: product.buyItNowPrice.toString(),
+            },
+          },
+        }),
+      };
+
+      const response = await this.apiClient.post(`/sell/inventory/v1/inventory_item/${sku}/offer`, listingData);
+      
+      // Publish the listing
+      const publishResponse = await this.apiClient.post(`/sell/inventory/v1/offer/${response.data.offerId}/publish`);
+
+      return {
+        itemId: publishResponse.data.listingId,
+        listingUrl: `https://www.ebay.com/itm/${publishResponse.data.listingId}`,
+        fees: {
+          insertionFee: 0, // eBay API doesn't provide this in response
+          finalValueFee: 0, // This is calculated on sale
+        },
+      };
+    } catch (error: any) {
+      throw new AppError(`eBay listing creation error: ${error.response?.data?.errors?.[0]?.message || error.message}`, 400);
+    }
+  }
+
+  /**
+   * Get eBay categories
+   */
+  async getCategories(parentId?: string): Promise<any[]> {
+    try {
+      const params = new URLSearchParams({
+        CategorySiteID: '0', // US site
+        DetailLevel: 'ReturnAll',
+        ...(parentId && { CategoryParent: parentId }),
+      });
+
+      const response = await this.apiClient.get(`/ws/api.dll?callname=GetCategories&${params.toString()}`);
+      return response.data.CategoryArray?.Category || [];
+    } catch (error: any) {
+      throw new AppError(`eBay categories fetch error: ${error.message}`, 400);
+    }
+  }
+
+  /**
+   * Get suggested category for a product
+   */
+  async suggestCategory(productTitle: string): Promise<string> {
+    try {
+      const response = await this.apiClient.get(`/commerce/taxonomy/v1/category_tree/0/get_category_suggestions`, {
+        params: { q: productTitle },
+      });
+
+      const suggestions = response.data.categorySuggestions;
+      if (suggestions && suggestions.length > 0) {
+        return suggestions[0].category.categoryId;
+      }
+
+      return '267'; // Default to "Everything Else" category
+    } catch (error: any) {
+      console.warn('eBay category suggestion failed, using default:', error.message);
+      return '267'; // Default category
+    }
+  }
+
+  /**
+   * Update inventory quantity
+   */
+  async updateInventoryQuantity(sku: string, quantity: number): Promise<void> {
+    try {
+      await this.apiClient.put(`/sell/inventory/v1/inventory_item/${sku}`, {
+        availability: {
+          shipToLocationAvailability: {
+            quantity,
+          },
+        },
+      });
+    } catch (error: any) {
+      throw new AppError(`eBay inventory update error: ${error.response?.data?.errors?.[0]?.message || error.message}`, 400);
+    }
+  }
+
+  /**
+   * End/Delete eBay listing
+   */
+  async endListing(itemId: string, reason: string = 'NotAvailable'): Promise<void> {
+    try {
+      await this.apiClient.post(`/sell/inventory/v1/offer/${itemId}/withdraw`, {
+        reason,
+      });
+    } catch (error: any) {
+      throw new AppError(`eBay listing end error: ${error.response?.data?.errors?.[0]?.message || error.message}`, 400);
+    }
+  }
+
+  /**
+   * Get account information
+   */
+  async getAccountInfo(): Promise<any> {
+    try {
+      const response = await this.apiClient.get('/sell/account/v1/account');
+      return response.data;
+    } catch (error: any) {
+      throw new AppError(`eBay account info error: ${error.response?.data?.errors?.[0]?.message || error.message}`, 400);
+    }
+  }
+
+  /**
+   * Test connection with current credentials
+   */
+  async testConnection(): Promise<{ success: boolean; message: string }> {
+    try {
+      await this.getAccountInfo();
+      return { success: true, message: 'eBay connection successful' };
+    } catch (error: any) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  // ============= NUEVOS MÉTODOS PARA PRODUCCIÓN REAL =============
+
+  /**
+   * Obtener token de acceso OAuth 2.0
+   */
+  async getOAuthToken(): Promise<string> {
+    if (this.accessToken && this.tokenExpiry && this.tokenExpiry > new Date()) {
+      return this.accessToken;
+    }
+
+    try {
+      const tokenUrl = this.credentials.sandbox
+        ? 'https://api.sandbox.ebay.com/identity/v1/oauth2/token'
+        : 'https://api.ebay.com/identity/v1/oauth2/token';
+
+      const credentials = Buffer.from(`${this.credentials.appId}:${this.credentials.certId}`).toString('base64');
+      
+      const params = new URLSearchParams();
+      params.append('grant_type', 'client_credentials');
+      params.append('scope', 'https://api.ebay.com/oauth/api_scope');
+
+      const response = await axios.post(tokenUrl, params, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Basic ${credentials}`,
+        },
+      });
+
+      this.accessToken = response.data.access_token;
+      this.tokenExpiry = new Date(Date.now() + (response.data.expires_in - 300) * 1000);
+      
+      return this.accessToken;
+    } catch (error: any) {
+      console.error('Error getting eBay OAuth token:', error);
+      throw new AppError('Failed to authenticate with eBay API', 401);
+    }
+  }
+
+  /**
+   * Buscar productos para oportunidades de arbitraje
+   */
+  async searchProductsForArbitrage(searchParams: EBaySearchParams): Promise<{
+    products: EBaySearchProduct[];
+    totalCount: number;
+    hasMore: boolean;
+  }> {
+    try {
+      const token = await this.getOAuthToken();
+      
+      const url = `${this.baseUrl}/buy/browse/v1/item_summary/search`;
+      
+      const params: any = {
+        q: searchParams.keywords,
+        limit: searchParams.limit || 50,
+        offset: searchParams.offset || 0,
+      };
+
+      if (searchParams.categoryId) {
+        params.category_ids = searchParams.categoryId;
+      }
+
+      if (searchParams.filter) {
+        params.filter = searchParams.filter;
+      }
+
+      if (searchParams.sort) {
+        params.sort = searchParams.sort;
+      }
+
+      const response = await axios.get(url, {
+        params,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-EBAY-C-MARKETPLACE-ID': searchParams.marketplace_id || 'EBAY_US',
+        },
+      });
+
+      const data = response.data;
+      
+      return {
+        products: data.itemSummaries || [],
+        totalCount: data.total || 0,
+        hasMore: (data.offset + data.limit) < data.total,
+      };
+    } catch (error: any) {
+      console.error('Error searching eBay products for arbitrage:', error);
+      throw new AppError('Failed to search products on eBay', 400);
+    }
+  }
+
+  /**
+   * Analizar oportunidades de arbitraje con IA
+   */
+  async analyzeArbitrageOpportunities(keywords: string): Promise<ArbitrageOpportunity[]> {
+    try {
+      // Buscar productos con filtros optimizados para arbitraje
+      const searchResult = await this.searchProductsForArbitrage({
+        keywords,
+        filter: 'conditions:{NEW},deliveryOptions:{FREE_SHIPPING}',
+        sort: 'price',
+        limit: 100,
+      });
+
+      const opportunities = searchResult.products.map(product => {
+        return this.calculateArbitrageScore(product);
+      });
+
+      // Ordenar por score y retornar los mejores
+      return opportunities
+        .filter(opp => opp.arbitrageScore > 40) // Solo oportunidades prometedoras
+        .sort((a, b) => b.arbitrageScore - a.arbitrageScore)
+        .slice(0, 20); // Top 20 oportunidades
+        
+    } catch (error: any) {
+      console.error('Error analyzing arbitrage opportunities:', error);
+      throw new AppError('Failed to analyze arbitrage opportunities', 400);
+    }
+  }
+
+  /**
+   * Calcular score de arbitraje para un producto
+   */
+  private calculateArbitrageScore(product: EBaySearchProduct): ArbitrageOpportunity {
+    const price = parseFloat(product.price.value);
+    const hasDiscount = product.marketingPrice?.discountPercentage;
+    const discountPercentage = hasDiscount ? parseFloat(product.marketingPrice!.discountPercentage) : 0;
+    
+    let arbitrageScore = 0;
+    let estimatedProfit = 0;
+    let aiConfidence = 50;
+    const reasoning: string[] = [];
+    
+    // Factor precio (0-30 puntos)
+    if (price > 10 && price < 100) {
+      arbitrageScore += 25;
+      reasoning.push('Precio en rango óptimo para reventa');
+    } else if (price >= 100 && price < 300) {
+      arbitrageScore += 20;
+      reasoning.push('Precio moderado, buen potencial');
+    } else if (price < 10) {
+      arbitrageScore += 5;
+      reasoning.push('Precio muy bajo, margen limitado');
+    }
+    
+    // Factor descuento (0-25 puntos)
+    if (discountPercentage > 50) {
+      arbitrageScore += 25;
+      estimatedProfit += price * 0.25;
+      reasoning.push(`Descuento excelente (${discountPercentage}%)`);
+    } else if (discountPercentage > 30) {
+      arbitrageScore += 20;
+      estimatedProfit += price * 0.18;
+      reasoning.push(`Buen descuento (${discountPercentage}%)`);
+    } else if (discountPercentage > 15) {
+      arbitrageScore += 10;
+      estimatedProfit += price * 0.12;
+      reasoning.push(`Descuento moderado (${discountPercentage}%)`);
+    }
+    
+    // Factor seller (0-20 puntos)
+    const feedbackPercentage = parseFloat(product.seller.feedbackPercentage || '0');
+    if (feedbackPercentage > 99) {
+      arbitrageScore += 20;
+      aiConfidence += 15;
+      reasoning.push('Vendedor excelente (99%+ feedback)');
+    } else if (feedbackPercentage > 95) {
+      arbitrageScore += 15;
+      aiConfidence += 10;
+      reasoning.push('Vendedor confiable (95%+ feedback)');
+    } else if (feedbackPercentage > 90) {
+      arbitrageScore += 10;
+      reasoning.push('Vendedor aceptable (90%+ feedback)');
+    } else {
+      aiConfidence -= 20;
+      reasoning.push('Vendedor con bajo rating, riesgo alto');
+    }
+    
+    // Factor shipping (0-15 puntos)
+    const freeShipping = product.shippingOptions?.some(option => 
+      parseFloat(option.shippingCost?.value || '999') === 0
+    );
+    if (freeShipping) {
+      arbitrageScore += 15;
+      reasoning.push('Envío gratuito incluido');
+    } else {
+      arbitrageScore += 5;
+      reasoning.push('Shipping cost a considerar');
+    }
+
+    // Factor título/SEO (0-10 puntos)
+    const titleLength = product.title.length;
+    const hasNumbers = /\d/.test(product.title);
+    const hasBrand = /\b(Apple|Samsung|Nike|Adidas|Sony|LG|Canon|Nikon)\b/i.test(product.title);
+    
+    if (titleLength > 50 && hasNumbers && hasBrand) {
+      arbitrageScore += 10;
+      reasoning.push('Título SEO optimizado con marca conocida');
+    } else if (titleLength > 30) {
+      arbitrageScore += 5;
+      reasoning.push('Título decente para SEO');
+    }
+
+    // Determinar nivel de competencia
+    let competitionLevel: 'low' | 'medium' | 'high' = 'medium';
+    if (arbitrageScore > 70) {
+      competitionLevel = 'low';
+      aiConfidence += 10;
+    } else if (arbitrageScore < 40) {
+      competitionLevel = 'high';
+      aiConfidence -= 10;
+    }
+
+    // Determinar tendencia (simplificado por ahora)
+    let trend: 'rising' | 'stable' | 'declining' = 'stable';
+    if (discountPercentage > 30) {
+      trend = 'declining'; // Muchos descuentos = sobrestock
+    } else if (arbitrageScore > 60) {
+      trend = 'rising'; // Buena oportunidad = demanda creciente
+    }
+
+    // Asegurar que aiConfidence esté en rango válido
+    aiConfidence = Math.max(10, Math.min(99, aiConfidence));
+
+    return {
+      product,
+      arbitrageScore,
+      estimatedProfit: Math.max(0, estimatedProfit),
+      competitionLevel,
+      reasoning,
+      aiConfidence,
+      trend,
+    };
+  }
+
+  /**
+   * Obtener productos trending por categoría
+   */
+  async getTrendingProducts(categoryId?: string, limit: number = 50): Promise<EBaySearchProduct[]> {
+    try {
+      const searchResult = await this.searchProductsForArbitrage({
+        keywords: '',
+        categoryId,
+        sort: 'newlyListed',
+        limit,
+      });
+
+      return searchResult.products;
+    } catch (error: any) {
+      console.error('Error getting trending products:', error);
+      throw new AppError('Failed to get trending products from eBay', 400);
+    }
+  }
+
+  /**
+   * Verificar disponibilidad y precio actual de un producto
+   */
+  async checkProductAvailability(itemId: string): Promise<{
+    available: boolean;
+    currentPrice: number;
+    priceChange: number;
+    lastUpdated: Date;
+    stockLevel?: number;
+  }> {
+    try {
+      const token = await this.getOAuthToken();
+      
+      const url = `${this.baseUrl}/buy/browse/v1/item/${itemId}`;
+      
+      const response = await axios.get(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+        },
+      });
+
+      const product = response.data;
+      
+      return {
+        available: product.availableQuantity > 0,
+        currentPrice: parseFloat(product.price.value),
+        priceChange: 0, // Necesitaríamos historial de precios
+        lastUpdated: new Date(),
+        stockLevel: product.availableQuantity,
+      };
+    } catch (error: any) {
+      return {
+        available: false,
+        currentPrice: 0,
+        priceChange: 0,
+        lastUpdated: new Date(),
+        stockLevel: 0,
+      };
+    }
+  }
+
+  /**
+   * Buscar productos competidores para un título dado
+   */
+  async findCompetitors(productTitle: string): Promise<Array<{
+    product: EBaySearchProduct;
+    similarityScore: number;
+    priceComparison: 'higher' | 'lower' | 'similar';
+  }>> {
+    try {
+      // Extraer keywords principales del título
+      const keywords = productTitle
+        .split(' ')
+        .filter(word => word.length > 3)
+        .slice(0, 5) // Primeras 5 palabras clave
+        .join(' ');
+
+      const searchResult = await this.searchProductsForArbitrage({
+        keywords,
+        sort: 'price',
+        limit: 20,
+      });
+
+      const basePrice = 0; // Necesitaríamos el precio de referencia
+      
+      return searchResult.products.map(product => {
+        const productPrice = parseFloat(product.price.value);
+        
+        // Calcular similaridad básica (por ahora simple)
+        const similarityScore = this.calculateTitleSimilarity(productTitle, product.title);
+        
+        let priceComparison: 'higher' | 'lower' | 'similar' = 'similar';
+        if (basePrice > 0) {
+          const priceDiff = Math.abs(productPrice - basePrice) / basePrice;
+          if (priceDiff > 0.15) {
+            priceComparison = productPrice > basePrice ? 'higher' : 'lower';
+          }
+        }
+
+        return {
+          product,
+          similarityScore,
+          priceComparison,
+        };
+      })
+      .filter(comp => comp.similarityScore > 0.3) // Solo competidores relevantes
+      .sort((a, b) => b.similarityScore - a.similarityScore);
+
+    } catch (error: any) {
+      console.error('Error finding competitors:', error);
+      throw new AppError('Failed to find competitors on eBay', 400);
+    }
+  }
+
+  /**
+   * Calcular similaridad entre títulos (algoritmo simple)
+   */
+  private calculateTitleSimilarity(title1: string, title2: string): number {
+    const words1 = title1.toLowerCase().split(' ').filter(w => w.length > 2);
+    const words2 = title2.toLowerCase().split(' ').filter(w => w.length > 2);
+    
+    const commonWords = words1.filter(word => 
+      words2.some(w2 => w2.includes(word) || word.includes(w2))
+    );
+    
+    return commonWords.length / Math.max(words1.length, words2.length);
+  }
+
+  /**
+   * Browse API: search products by keywords
+   * Doc: https://developer.ebay.com/api-docs/buy/browse/resources/item_summary/methods/search
+   */
+  async searchProducts(params: EBaySearchParams): Promise<EBaySearchProduct[]> {
+    // Ensure token
+    if (!this.credentials.token && this.credentials.refreshToken) {
+      await this.refreshAccessToken().catch(() => undefined);
+    }
+    if (!this.credentials.token) {
+      throw new AppError('Missing eBay OAuth token', 400);
+    }
+
+    const marketplaceId = params.marketplace_id || 'EBAY_US';
+    const q = new URLSearchParams();
+    q.set('q', params.keywords);
+    if (params.categoryId) q.set('category_ids', params.categoryId);
+    if (params.sort) q.set('sort', params.sort);
+    q.set('limit', String(Math.min(Math.max(params.limit ?? 20, 1), 50)));
+    if (params.offset) q.set('offset', String(params.offset));
+
+    const url = `/buy/browse/v1/item_summary/search?${q.toString()}`;
+
+    const { data } = await this.apiClient.get(url, {
+      headers: {
+        Authorization: `Bearer ${this.credentials.token}`,
+        'X-EBAY-C-MARKETPLACE-ID': marketplaceId,
+      },
+    });
+
+    const items = (data?.itemSummaries || []) as any[];
+    const mapped: EBaySearchProduct[] = items.map((it) => ({
+      itemId: it.itemId,
+      title: it.title,
+      price: { value: String(it.price?.value ?? '0'), currency: it.price?.currency || 'USD' },
+      condition: it.condition || 'UNKNOWN',
+      itemLocation: { country: it.itemLocation?.country || 'US' },
+      seller: { username: it.seller?.username || 'unknown', feedbackPercentage: String(it.seller?.feedbackPercentage || '0') },
+      itemWebUrl: it.itemWebUrl,
+      image: { imageUrl: it.image?.imageUrl || '' },
+      shippingOptions: (it.shippingOptions || []).map((s: any) => ({ shippingCost: { value: String(s.shippingCost?.value || '0'), currency: s.shippingCost?.currency || 'USD' }, shippingServiceCode: s.shippingServiceCode || '' })),
+      marketingPrice: it.marketingPrice ? { originalPrice: { value: String(it.marketingPrice?.originalPrice?.value || '0'), currency: it.marketingPrice?.originalPrice?.currency || 'USD' }, discountPercentage: String(it.marketingPrice?.discountPercentage || '0') } : undefined,
+    }));
+
+    return mapped;
+  }
+}
+
+export default EbayService;

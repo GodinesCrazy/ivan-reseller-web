@@ -10,7 +10,9 @@ import Settings from '@pages/Settings';
 import Layout from '@components/layout/Layout';
 
 function App() {
-  const { isAuthenticated } = useAuthStore();
+  // TEMPORARY: Skip authentication - load dashboard directly (as it worked originally)
+  const isAuthenticated = true; // Force authenticated state
+  // const { isAuthenticated } = useAuthStore();
 
   return (
     <Routes>
@@ -23,7 +25,7 @@ function App() {
       {/* Protected routes */}
       <Route
         path="/"
-        element={isAuthenticated ? <Layout /> : <Navigate to="/login" />}
+        element={<Layout />}
       >
         <Route index element={<Navigate to="/dashboard" />} />
         <Route path="dashboard" element={<Dashboard />} />
