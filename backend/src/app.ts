@@ -31,7 +31,7 @@ import publisherRoutes from './api/routes/publisher.routes';
 import currencyRoutes from './api/routes/currency.routes';
 import captchaRoutes from './api/routes/captcha.routes';
 import apiCredentialsRoutes from './api/routes/api-credentials.routes';
-import adminRoutes from './api/routes/admin.routes';
+// import adminRoutes from './api/routes/admin.routes'; // Temporarily disabled
 
 const app: Application = express();
 

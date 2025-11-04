@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../config/database';
 import bcrypt from 'bcryptjs';
 import { SecureCredentialManager } from './security.service';
-
-const prisma = new PrismaClient();
 
 export interface UserCreationData {
   username: string;
