@@ -22,8 +22,6 @@
     "strictPropertyInitialization": false,
     "noImplicitThis": false,
     "alwaysStrict": false,
-    "suppressImplicitAnyIndexErrors": true,
-    "noStrictGenericChecks": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
