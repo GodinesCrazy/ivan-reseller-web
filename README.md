@@ -70,6 +70,7 @@ cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 
 # 3. Editar backend/.env con tus credenciales (JWT_SECRET, APIs, etc.)
+# Ver CONFIGURACION_DATABASE.md para más detalles sobre DATABASE_URL
 
 # 4. Levantar stack completo
 docker-compose up -d
@@ -249,6 +250,8 @@ docker-compose exec backend npx prisma db seed
 ## 🔐 Seguridad
 
 ### Variables de Entorno Críticas
+
+📖 **Ver [CONFIGURACION_DATABASE.md](./CONFIGURACION_DATABASE.md) para guía completa de configuración de PostgreSQL**
 
 ```env
 # backend/.env
