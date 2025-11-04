@@ -12,6 +12,7 @@ import productRoutes from './api/routes/products.routes';
 import saleRoutes from './api/routes/sales.routes';
 import commissionRoutes from './api/routes/commissions.routes';
 import dashboardRoutes from './api/routes/dashboard.routes';
+import adminRoutes from './api/routes/admin.routes';
 
 // Additional routes
 import opportunitiesRoutes from './api/routes/opportunities.routes';
