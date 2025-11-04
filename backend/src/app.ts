@@ -13,6 +13,26 @@ import saleRoutes from './api/routes/sales.routes';
 import commissionRoutes from './api/routes/commissions.routes';
 import dashboardRoutes from './api/routes/dashboard.routes';
 
+// Additional routes
+import opportunitiesRoutes from './api/routes/opportunities.routes';
+import automationRoutes from './routes/automation.routes';
+import settingsRoutes from './routes/settings.routes';
+import marketplaceRoutes from './api/routes/marketplace.routes';
+import marketplaceOauthRoutes from './api/routes/marketplace-oauth.routes';
+import amazonRoutes from './api/routes/amazon.routes';
+import jobsRoutes from './api/routes/jobs.routes';
+import reportsRoutes from './api/routes/reports.routes';
+import notificationsRoutes from './api/routes/notifications.routes';
+import webhooksRoutes from './api/routes/webhooks.routes';
+import systemRoutes from './api/routes/system.routes';
+import logsRoutes from './api/routes/logs.routes';
+import proxiesRoutes from './api/routes/proxies.routes';
+import publisherRoutes from './api/routes/publisher.routes';
+import currencyRoutes from './api/routes/currency.routes';
+import captchaRoutes from './api/routes/captcha.routes';
+import apiCredentialsRoutes from './api/routes/api-credentials.routes';
+import adminRoutes from './api/routes/admin.routes';
+
 const app: Application = express();
 
 // ====================================
@@ -63,6 +83,26 @@ app.use('/api/products', productRoutes);
 app.use('/api/sales', saleRoutes);
 app.use('/api/commissions', commissionRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+
+// Additional API routes
+app.use('/api/opportunities', opportunitiesRoutes);
+app.use('/api/automation', automationRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/marketplace-oauth', marketplaceOauthRoutes);
+app.use('/api/amazon', amazonRoutes);
+app.use('/api/jobs', jobsRoutes);
+app.use('/api/reports', reportsRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/webhooks', webhooksRoutes);
+app.use('/api/system', systemRoutes);
+app.use('/api/logs', logsRoutes);
+app.use('/api/proxies', proxiesRoutes);
+app.use('/api/publisher', publisherRoutes);
+app.use('/api/currency', currencyRoutes);
+app.use('/api/captcha', captchaRoutes);
+app.use('/api/credentials', apiCredentialsRoutes);
+app.use('/api/admin', adminRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
