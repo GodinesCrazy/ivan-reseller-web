@@ -1,7 +1,7 @@
 import app from './app';
 import { env } from './config/env';
 import { prisma } from './config/database';
-import { redis } from './config/redis';
+import { redis, isRedisAvailable } from './config/redis';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -38,9 +38,11 @@ async function startServer() {
     await prisma.$connect();
     console.log('✅ Database connected');
 
-    // Test Redis connection
-    await redis.ping();
-    console.log('✅ Redis connected');
+    // Test Redis connection (only if configured)
+    if (isRedisAvailable) {
+      await redis.ping();
+      console.log('✅ Redis connected');
+    }
 
     // Start server
     app.listen(PORT, '0.0.0.0', () => {

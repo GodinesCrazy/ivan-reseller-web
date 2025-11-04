@@ -1,43 +1,11 @@
-// Prisma Schema - Ivan Reseller Database
+// Prisma Schema - Ivan Reseller Database (SQLite Version)
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
-}
-
-// ====================================
-// ENUMS
-// ====================================
-
-enum Role {
-  ADMIN
-  USER
-}
-
-enum ProductStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  PUBLISHED
-  INACTIVE
-}
-
-enum SaleStatus {
-  PENDING
-  PROCESSING
-  SHIPPED
-  DELIVERED
-  CANCELLED
-}
-
-enum CommissionStatus {
-  PENDING
-  SCHEDULED
-  PAID
-  FAILED
 }
 
 // ====================================
@@ -48,23 +16,24 @@ model User {
   id                Int       @id @default(autoincrement())
   username          String    @unique
   email             String    @unique
-  passwordHash      String
-  role              Role      @default(USER)
-  commissionRate    Decimal   @default(10.00) @db.Decimal(5, 2)
-  fixedMonthlyCost  Decimal   @default(17.00) @db.Decimal(8, 2)
-  isActive          Boolean   @default(true)
-  paypalEmail       String?
-  phone             String?
+  password          String
   fullName          String?
+  role              String    @default("USER") // "ADMIN" or "USER"
+  commissionRate    Float     @default(0.10) // 10%
+  fixedMonthlyCost  Float     @default(17.00) // $17 USD monthly
+  balance           Float     @default(0)
+  totalEarnings     Float     @default(0)
+  totalSales        Int       @default(0)
+  isActive          Boolean   @default(true)
+  lastLoginAt       DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-  lastLogin         DateTime?
-  
+
   // Relations
-  apiCredentials    ApiCredential[]
   products          Product[]
   sales             Sale[]
   commissions       Commission[]
+  apiCredentials    ApiCredential[]
   activities        Activity[]
 
   @@map("users")
@@ -74,7 +43,7 @@ model ApiCredential {
   id            Int       @id @default(autoincrement())
   userId        Int
   apiName       String    // ebay, mercadolibre, amazon, paypal, groq
-  credentials   Json      // Encrypted JSON with API keys
+  credentials   String    // JSON string with encrypted API keys
   isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -91,14 +60,14 @@ model Product {
   userId              Int
   aliexpressUrl       String
   title               String
-  description         String?         @db.Text
-  aliexpressPrice     Decimal         @db.Decimal(10, 2)
-  suggestedPrice      Decimal         @db.Decimal(10, 2)
-  finalPrice          Decimal?        @db.Decimal(10, 2)
+  description         String?
+  aliexpressPrice     Float
+  suggestedPrice      Float
+  finalPrice          Float?
   category            String?
-  images              Json            // Array of image URLs
-  productData         Json?           // Full scraped data
-  status              ProductStatus   @default(PENDING)
+  images              String          // JSON string with array of image URLs
+  productData         String?         // JSON string with full scraped data
+  status              String          @default("PENDING") // PENDING, APPROVED, REJECTED, PUBLISHED, INACTIVE
   isPublished         Boolean         @default(false)
   publishedAt         DateTime?
   approvalId          String?         // Marketplace approval ID
@@ -109,8 +78,6 @@ model Product {
   user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   sales               Sale[]
 
-  @@index([userId, status])
-  @@index([status])
   @@map("products")
 }
 
@@ -120,63 +87,56 @@ model Sale {
   productId         Int
   orderId           String          @unique
   marketplace       String          // ebay, mercadolibre, amazon
-  salePrice         Decimal         @db.Decimal(10, 2)
-  aliexpressCost    Decimal         @db.Decimal(10, 2)
-  marketplaceFee    Decimal         @db.Decimal(10, 2)
-  grossProfit       Decimal         @db.Decimal(10, 2)
-  commissionAmount  Decimal         @db.Decimal(10, 2)
-  netProfit         Decimal         @db.Decimal(10, 2)
-  status            SaleStatus      @default(PENDING)
+  salePrice         Float
+  aliexpressCost    Float
+  marketplaceFee    Float
+  grossProfit       Float
+  commissionAmount  Float
+  netProfit         Float
+  status            String          @default("PENDING") // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
   trackingNumber    String?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
   
   // Relations
   user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product           Product         @relation(fields: [productId], references: [id])
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
   commission        Commission?
 
-  @@index([userId, status])
-  @@index([status])
-  @@index([marketplace])
   @@map("sales")
 }
 
 model Commission {
-  id                Int                 @id @default(autoincrement())
-  userId            Int
-  saleId            Int                 @unique
-  amount            Decimal             @db.Decimal(10, 2)
-  status            CommissionStatus    @default(PENDING)
-  scheduledPayoutAt DateTime?
-  paidAt            DateTime?
-  paypalTxnId       String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  id            Int                 @id @default(autoincrement())
+  userId        Int
+  saleId        Int                 @unique
+  amount        Float
+  status        String              @default("PENDING") // PENDING, SCHEDULED, PAID, FAILED
+  scheduledAt   DateTime?
+  paidAt        DateTime?
+  failureReason String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
   
   // Relations
-  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sale              Sale                @relation(fields: [saleId], references: [id])
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sale          Sale                @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
-  @@index([userId, status])
-  @@index([status])
   @@map("commissions")
 }
 
 model Activity {
   id            Int       @id @default(autoincrement())
-  userId        Int
+  userId        Int?
   action        String    // login, logout, product_created, sale_completed, etc.
-  description   String    @db.Text
+  description   String
   ipAddress     String?
-  userAgent     String?   @db.Text
-  metadata      Json?     // Additional data
+  userAgent     String?
+  metadata      String?   // JSON string with additional data
   createdAt     DateTime  @default(now())
   
   // Relations
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([createdAt])
   @@map("activities")
 }
