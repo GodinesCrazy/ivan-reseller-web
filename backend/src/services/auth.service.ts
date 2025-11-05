@@ -32,7 +32,7 @@ export class AuthService {
       data: {
         username: data.username,
         email: data.email,
-        passwordHash,
+        password: passwordHash, // ✅ CORREGIDO: usar 'password' según schema
         fullName: data.fullName,
         role: 'USER',
       },
@@ -121,6 +121,43 @@ export class AuthService {
     } catch (error) {
       throw new AppError('Invalid token', 401);
     }
+  }
+
+  async changePassword(userId: number, currentPassword: string, newPassword: string) {
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      throw new AppError('Current password is incorrect', 401);
+    }
+
+    // Hash new password
+    const newPasswordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    // Update password
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: newPasswordHash },
+    });
+
+    // Log activity
+    await prisma.activity.create({
+      data: {
+        userId: user.id,
+        action: 'password_changed',
+        description: `User ${user.username} changed password`,
+      },
+    });
+
+    return { message: 'Password changed successfully' };
   }
 }
 

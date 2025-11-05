@@ -226,7 +226,7 @@ export class AILearningSystem extends EventEmitter {
   }
 
   /**
-   * Learn from a sale
+   * ✅ Learn from a sale (solo de operaciones exitosas completas)
    */
   public async learnFromSale(saleData: {
     sku?: string;
@@ -237,6 +237,9 @@ export class AILearningSystem extends EventEmitter {
     category?: string;
     marketplace?: string;
     daysToSell?: number;
+    isCompleteCycle?: boolean; // ✅ Nuevo campo para indicar ciclo completo
+    hadReturns?: boolean;
+    hadIssues?: boolean;
   }): Promise<boolean> {
     try {
       if (!this.isInitialized) {
@@ -256,11 +259,26 @@ export class AILearningSystem extends EventEmitter {
         daysToSell: saleData.daysToSell
       };
 
-      // Add feedback
-      this.learningData.salesFeedback.push(feedback);
+      // ✅ Solo aprender de operaciones exitosas completas (sin devoluciones ni problemas)
+      if (saleData.isCompleteCycle && !saleData.hadReturns && !saleData.hadIssues) {
+        // Add feedback solo de operaciones exitosas completas
+        this.learningData.salesFeedback.push(feedback);
 
-      // Update stats
-      this.updateStats(feedback.actualSuccess);
+        // Update stats
+        this.updateStats(feedback.actualSuccess);
+        
+        logger.info('AI Learning: Learned from successful complete cycle', {
+          sku: feedback.productSku,
+          success: feedback.actualSuccess
+        });
+      } else {
+        logger.debug('AI Learning: Skipping learning - not a complete successful cycle', {
+          sku: saleData.sku,
+          isCompleteCycle: saleData.isCompleteCycle,
+          hadReturns: saleData.hadReturns,
+          hadIssues: saleData.hadIssues
+        });
+      }
 
       // Save data
       await this.saveLearningData();

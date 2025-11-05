@@ -88,11 +88,11 @@ export default function Sales() {
     try {
       setLoading(true);
       const [salesResponse, statsResponse] = await Promise.all([
-        api.get('/sales'),
-        api.get(`/sales/stats?days=${dateRange}`)
+        api.get('/api/sales'),
+        api.get(`/api/sales/stats?days=${dateRange}`)
       ]);
-      setSales(salesResponse.data);
-      setStats(statsResponse.data);
+      setSales(salesResponse.data?.sales || salesResponse.data || []);
+      setStats(statsResponse.data || {});
     } catch (error) {
       console.error('Error fetching sales:', error);
       toast.error('Error al cargar ventas');

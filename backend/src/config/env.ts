@@ -23,6 +23,7 @@ const envSchema = z.object({
   MERCADOLIBRE_CLIENT_SECRET: z.string().optional(),
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
+  PAYPAL_ENVIRONMENT: z.enum(['sandbox', 'production']).default('sandbox'),
   GROQ_API_KEY: z.string().optional(),
   SCRAPERAPI_KEY: z.string().optional(),
 });

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import toast from 'react-hot-toast';
+import api from '@services/api';
 import {
   Brain,
   Search,
@@ -64,126 +66,92 @@ export default function AIOpportunityFinder() {
     trend: 'all'
   });
 
-  const mockOpportunities: MarketOpportunity[] = [
-    {
-      id: '1',
-      product: 'Auriculares Inalámbricos Gaming RGB',
-      category: 'Electrónicos > Gaming',
-      marketplace: 'eBay',
-      currentPrice: 45.99,
-      suggestedPrice: 78.99,
-      profitMargin: 41.8,
-      competition: 'low',
-      demand: 'high',
-      trend: 'rising',
-      confidence: 94,
-      monthlySales: 2340,
-      keywords: ['gaming headphones', 'rgb lighting', 'wireless', 'bluetooth'],
-      suppliers: 23,
-      aiAnalysis: {
-        strengths: [
-          'Nicho gaming en crecimiento exponencial',
-          'Pocas ofertas con RGB y buena calidad',
-          'Margen de ganancia muy atractivo'
-        ],
-        weaknesses: [
-          'Competencia de marcas establecidas',
-          'Necesita marketing específico para gamers'
-        ],
-        recommendations: [
-          'Enfocar en características RGB únicas',
-          'Optimizar para palabras clave gaming',
-          'Considerar bundle con accesorios'
-        ]
-      }
-    },
-    {
-      id: '2',
-      product: 'Organizador de Escritorio con Carga Inalámbrica',
-      category: 'Hogar > Oficina',
-      marketplace: 'Amazon',
-      currentPrice: 28.50,
-      suggestedPrice: 49.99,
-      profitMargin: 43.0,
-      competition: 'medium',
-      demand: 'medium',
-      trend: 'stable',
-      confidence: 87,
-      monthlySales: 890,
-      keywords: ['desk organizer', 'wireless charging', 'office accessories'],
-      suppliers: 15,
-      aiAnalysis: {
-        strengths: [
-          'Combina utilidad con tecnología',
-          'Mercado de home office estable',
-          'Producto diferenciado'
-        ],
-        weaknesses: [
-          'Competencia moderada',
-          'Requiere educación del cliente'
-        ],
-        recommendations: [
-          'Destacar beneficios de productividad',
-          'Mostrar compatibilidad con dispositivos',
-          'Ofertar en paquetes de oficina'
-        ]
-      }
-    }
-  ];
-
-  const mockInsights: AIInsight[] = [
-    {
-      type: 'market_trend',
-      title: 'Tendencia al alza en gaming accessories',
-      description: 'El mercado de accesorios gaming ha crecido 34% en los últimos 3 meses. Oportunidad para entrar en RGB y wireless.',
-      impact: 'positive',
-      confidence: 91,
-      actionable: true
-    },
-    {
-      type: 'pricing',
-      title: 'Ajuste de precios recomendado',
-      description: 'Los competidores han aumentado precios 12% en promedio. Es momento de ajustar al alza sin perder competitividad.',
-      impact: 'positive',
-      confidence: 85,
-      actionable: true
-    },
-    {
-      type: 'competition',
-      title: 'Nueva competencia detectada',
-      description: '3 nuevos vendedores han entrado al nicho de auriculares gaming en la última semana con precios agresivos.',
-      impact: 'negative',
-      confidence: 78,
-      actionable: true
-    }
-  ];
-
   const analyzeOpportunities = async () => {
+    if (!searchQuery.trim()) {
+      toast.error('Por favor ingresa un término de búsqueda');
+      return;
+    }
+
     setIsAnalyzing(true);
     
-    // Simulate AI analysis
-    setTimeout(() => {
-      const filteredOpportunities = mockOpportunities.filter(opp => {
-        if (searchQuery && !opp.product.toLowerCase().includes(searchQuery.toLowerCase()) &&
-            !opp.category.toLowerCase().includes(searchQuery.toLowerCase())) {
-          return false;
+    try {
+      // ✅ USAR API REAL - Buscar oportunidades reales
+      const response = await api.get('/api/opportunities', {
+        params: {
+          query: searchQuery,
+          maxItems: 10,
+          marketplaces: selectedFilters.marketplace === 'all' ? 'ebay,amazon,mercadolibre' : selectedFilters.marketplace,
+          region: 'us'
         }
-        
-        if (selectedFilters.marketplace !== 'all' && opp.marketplace.toLowerCase() !== selectedFilters.marketplace) {
-          return false;
+      });
+
+      const items = response.data?.items || [];
+      
+      // Convertir items de la API al formato del componente
+      const formattedOpportunities: MarketOpportunity[] = items.map((item: any, index: number) => ({
+        id: String(item.productId || index),
+        product: item.title || 'Producto sin título',
+        category: 'General',
+        marketplace: item.targetMarketplaces?.[0] || 'ebay',
+        currentPrice: item.costUsd || 0,
+        suggestedPrice: item.suggestedPriceUsd || 0,
+        profitMargin: (item.profitMargin || 0) * 100,
+        competition: item.competitionLevel || 'unknown',
+        demand: item.marketDemand || 'unknown',
+        trend: 'stable',
+        confidence: (item.confidenceScore || 0.5) * 100,
+        monthlySales: 0,
+        keywords: [],
+        suppliers: 0,
+        aiAnalysis: {
+          strengths: ['Oportunidad validada por análisis de mercado'],
+          weaknesses: [],
+          recommendations: ['Revisar detalles antes de publicar']
         }
-        
+      }));
+
+      // Aplicar filtros adicionales
+      const filteredOpportunities = formattedOpportunities.filter(opp => {
         if (selectedFilters.competition !== 'all' && opp.competition !== selectedFilters.competition) {
           return false;
         }
-        
         return true;
       });
       
       setOpportunities(filteredOpportunities);
-      setInsights(mockInsights);
+      
+      // Generar insights basados en resultados reales
+      const realInsights: AIInsight[] = [];
+      if (filteredOpportunities.length > 0) {
+        const avgMargin = filteredOpportunities.reduce((sum, opp) => sum + opp.profitMargin, 0) / filteredOpportunities.length;
+        realInsights.push({
+          type: 'market_trend',
+          title: `${filteredOpportunities.length} oportunidades encontradas`,
+          description: `Margen promedio: ${avgMargin.toFixed(1)}%. Analiza cada oportunidad antes de proceder.`,
+          impact: avgMargin > 30 ? 'positive' : 'neutral',
+          confidence: Math.min(90, filteredOpportunities.length * 10),
+          actionable: true
+        });
+      } else {
+        realInsights.push({
+          type: 'market_trend',
+          title: 'No se encontraron oportunidades',
+          description: 'Intenta con términos de búsqueda diferentes o ajusta los filtros.',
+          impact: 'neutral',
+          confidence: 50,
+          actionable: true
+        });
+      }
+      
+      setInsights(realInsights);
+    } catch (error: any) {
+      console.error('Error searching opportunities:', error);
+      toast.error(error.response?.data?.error || 'Error al buscar oportunidades');
+      setOpportunities([]);
+      setInsights([]);
+    } finally {
       setIsAnalyzing(false);
-    }, 2000);
+    }
   };
 
   const getCompetitionColor = (level: string) => {

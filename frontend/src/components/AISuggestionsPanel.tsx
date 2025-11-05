@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import {
   Lightbulb,
   TrendingUp,
@@ -64,175 +65,33 @@ export default function AISuggestionsPanel() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null);
 
-  const mockSuggestions: AISuggestion[] = [
-    {
-      id: '1',
-      type: 'pricing',
-      priority: 'high',
-      title: 'Optimizar precios en categoría Gaming',
-      description: 'Los precios actuales están 15% por debajo del mercado. Ajustar puede incrementar ingresos significativamente.',
-      impact: {
-        revenue: 2340,
-        time: 85,
-        difficulty: 'easy'
-      },
-      confidence: 94,
-      actionable: true,
-      implemented: false,
-      estimatedTime: '5 minutos',
-      requirements: ['Acceso a API de precios', 'Autorización para cambios automáticos'],
-      steps: [
-        'Analizar precios de competencia actual',
-        'Calcular nuevo precio óptimo',
-        'Implementar cambio gradual (3 días)',
-        'Monitorear respuesta del mercado'
-      ],
-      relatedProducts: ['Auriculares Gaming RGB', 'Mouse Gaming Pro', 'Teclado Mecánico'],
-      metrics: {
-        currentValue: 45.99,
-        targetValue: 52.99,
-        unit: 'USD'
-      }
-    },
-    {
-      id: '2',
-      type: 'inventory',
-      priority: 'high',
-      title: 'Reabastecer productos de alta rotación',
-      description: '3 productos están agotándose rápidamente. Reabastecer ahora evitará pérdida de ventas.',
-      impact: {
-        revenue: 1580,
-        time: 120,
-        difficulty: 'medium'
-      },
-      confidence: 91,
-      actionable: true,
-      implemented: false,
-      estimatedTime: '2 horas',
-      requirements: ['Contacto con proveedores', 'Capital disponible: $850'],
-      steps: [
-        'Contactar proveedores prioritarios',
-        'Negociar precios por volumen',
-        'Procesar órdenes de compra',
-        'Actualizar listings con nuevo stock'
-      ],
-      relatedProducts: ['Cargador USB-C Rápido', 'Soporte para Laptop', 'Hub USB 7-en-1']
-    },
-    {
-      id: '3',
-      type: 'marketing',
-      priority: 'medium',
-      title: 'Campaña para Black Friday',
-      description: 'Crear estrategia de marketing específica para productos electrónicos en temporada alta.',
-      impact: {
-        revenue: 3200,
-        time: 200,
-        difficulty: 'medium'
-      },
-      confidence: 87,
-      actionable: true,
-      implemented: false,
-      estimatedTime: '3 días',
-      requirements: ['Presupuesto marketing: $200', 'Imágenes promocionales'],
-      steps: [
-        'Seleccionar productos para promoción',
-        'Crear contenido visual atractivo',
-        'Configurar campañas en marketplaces',
-        'Programar descuentos escalonados'
-      ]
-    },
-    {
-      id: '4',
-      type: 'listing',
-      priority: 'medium',
-      title: 'Optimizar SEO en títulos de productos',
-      description: 'Mejorar títulos y descripciones puede aumentar visibilidad en 40% según análisis de keywords.',
-      impact: {
-        revenue: 980,
-        time: 60,
-        difficulty: 'easy'
-      },
-      confidence: 83,
-      actionable: true,
-      implemented: false,
-      estimatedTime: '1 hora',
-      requirements: ['Lista de keywords optimizadas'],
-      steps: [
-        'Analizar keywords de alta conversión',
-        'Reescribir títulos principales',
-        'Actualizar descripciones con SEO',
-        'A/B test nuevas versiones'
-      ]
-    },
-    {
-      id: '5',
-      type: 'automation',
-      priority: 'low',
-      title: 'Automatizar respuestas a preguntas frecuentes',
-      description: 'Configurar respuestas automáticas puede ahorrar 2 horas diarias de atención al cliente.',
-      impact: {
-        revenue: 0,
-        time: 120,
-        difficulty: 'hard'
-      },
-      confidence: 75,
-      actionable: true,
-      implemented: false,
-      estimatedTime: '1 día',
-      requirements: ['Integración con chat bots', 'Base de conocimientos'],
-      steps: [
-        'Identificar preguntas más frecuentes',
-        'Crear plantillas de respuesta',
-        'Configurar triggers automáticos',
-        'Entrenar sistema con casos reales'
-      ]
-    }
-  ];
-
-  const mockAutomationRules: AutomationRule[] = [
-    {
-      id: '1',
-      name: 'Ajuste automático de precios competitivos',
-      type: 'pricing',
-      status: 'active',
-      trigger: 'Competidor reduce precio >5%',
-      action: 'Igualar precio con margen mínimo 15%',
-      lastRun: 'Hace 2 horas',
-      successRate: 94
-    },
-    {
-      id: '2',
-      name: 'Reabastecimiento automático',
-      type: 'inventory',
-      status: 'active',
-      trigger: 'Stock < 10 unidades',
-      action: 'Orden automática al proveedor preferido',
-      lastRun: 'Hace 6 horas',
-      successRate: 87
-    },
-    {
-      id: '3',
-      name: 'Pausa de listings sin stock',
-      type: 'listing',
-      status: 'paused',
-      trigger: 'Inventario = 0',
-      action: 'Pausar listing hasta reabastecimiento',
-      lastRun: 'Ayer',
-      successRate: 100
-    }
-  ];
-
   useEffect(() => {
-    setSuggestions(mockSuggestions);
-    setAutomationRules(mockAutomationRules);
+    loadSuggestions();
   }, []);
 
-  const generateNewSuggestions = () => {
+  const loadSuggestions = async () => {
+    try {
+      // ✅ CARGAR DATOS REALES - Por ahora mostrar mensaje informativo
+      // TODO: Implementar endpoint de sugerencias IA cuando esté disponible
+      setSuggestions([]);
+      setAutomationRules([]);
+    } catch (error) {
+      console.error('Error loading suggestions:', error);
+    }
+  };
+
+  const generateNewSuggestions = async () => {
     setIsGenerating(true);
-    setTimeout(() => {
+    try {
+      // ✅ SOLICITAR SUGERENCIAS REALES
+      // TODO: Implementar endpoint cuando esté disponible
+      // Por ahora mostrar mensaje
+      toast.success('Sistema de sugerencias IA en desarrollo. Próximamente disponible.');
+    } catch (error: any) {
+      toast.error('Error al generar sugerencias');
+    } finally {
       setIsGenerating(false);
-      // Simulate new suggestions
-    }, 2000);
+    }
   };
 
   const implementSuggestion = (suggestionId: string) => {

@@ -33,6 +33,7 @@ const navItems = [
   { path: '/users', label: 'Users', icon: Users },
   { path: '/regional', label: 'Regional Config', icon: Globe },
   { path: '/logs', label: 'System Logs', icon: Terminal },
+  { path: '/workflow-config', label: 'Workflow Config', icon: Settings },
   { path: '/settings', label: 'Settings', icon: Settings },
   { path: '/help', label: 'Help Center', icon: HelpCircle },
 ];

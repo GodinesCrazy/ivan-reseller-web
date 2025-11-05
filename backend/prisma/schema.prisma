@@ -28,6 +28,7 @@ model User {
   lastLoginAt       DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+  createdBy         Int?      // ID del admin que creó este usuario (null si es admin o auto-creado)
 
   // Relations
   products          Product[]
@@ -35,6 +36,10 @@ model User {
   commissions       Commission[]
   apiCredentials    ApiCredential[]
   activities        Activity[]
+  workflowConfig    UserWorkflowConfig?
+  createdUsers      User[]    @relation("UserCreator") // Usuarios creados por este admin
+  creator           User?     @relation("UserCreator", fields: [createdBy], references: [id])
+  adminCommissions  AdminCommission[] // Comisiones que recibe como admin de usuarios creados
 
   @@map("users")
 }
@@ -78,6 +83,7 @@ model Product {
   // Relations
   user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   sales               Sale[]
+  successfulOperations SuccessfulOperation[]
 
   @@map("products")
 }
@@ -94,8 +100,10 @@ model Sale {
   grossProfit       Float
   commissionAmount  Float
   netProfit         Float
-  status            String          @default("PENDING") // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+  status            String          @default("PENDING") // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED, RETURNED
   trackingNumber    String?
+  isCompleteCycle   Boolean         @default(false) // Si completó ciclo completo sin devoluciones
+  completedAt       DateTime?       // Fecha de completado del ciclo
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
   
@@ -103,6 +111,8 @@ model Sale {
   user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
   commission        Commission?
+  adminCommissions  AdminCommission[]
+  successfulOperation SuccessfulOperation?
 
   @@map("sales")
 }
@@ -140,4 +150,92 @@ model Activity {
   user          User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("activities")
+}
+
+// ✅ CONFIGURACIÓN DE WORKFLOW POR USUARIO
+model UserWorkflowConfig {
+  id                    Int       @id @default(autoincrement())
+  userId                Int       @unique
+  environment           String    @default("sandbox") // sandbox, production
+  workflowMode          String    @default("manual") // manual, automatic, hybrid
+  
+  // Configuración por etapa del dropshipping
+  stageScrape           String    @default("automatic") // manual, automatic, guided
+  stageAnalyze          String    @default("automatic") // manual, automatic, guided
+  stagePublish          String    @default("manual") // manual, automatic, guided
+  stagePurchase         String    @default("manual") // manual, automatic, guided
+  stageFulfillment      String    @default("manual") // manual, automatic, guided
+  stageCustomerService  String    @default("manual") // manual, automatic, guided
+  
+  // Configuraciones de automatización
+  autoApproveThreshold  Float?    // Confianza mínima para auto-aprobar
+  autoPublishThreshold  Float?    // Confianza mínima para auto-publicar
+  maxAutoInvestment     Float?    // Inversión máxima para auto-operaciones
+  workingCapital        Float     @default(500) // Capital de trabajo disponible en PayPal (USD)
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  // Relations
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_workflow_configs")
+}
+
+// ✅ COMISIONES DE ADMIN POR USUARIOS CREADOS
+model AdminCommission {
+  id              Int       @id @default(autoincrement())
+  adminId          Int       // ID del admin que recibe la comisión
+  userId           Int       // ID del usuario que generó la venta
+  saleId           Int       // ID de la venta que generó la comisión
+  amount           Float     // Monto de la comisión del admin
+  commissionType   String    @default("user_sale") // user_sale, monthly_fee, etc.
+  status           String    @default("PENDING") // PENDING, PAID, FAILED
+  paidAt           DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  admin            User      @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  sale             Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  
+  @@map("admin_commissions")
+}
+
+// ✅ TRACKING DE OPERACIONES EXITOSAS (CICLOS COMPLETOS)
+model SuccessfulOperation {
+  id                    Int       @id @default(autoincrement())
+  userId                Int
+  productId             Int
+  saleId                Int
+  operationType         String    @default("full_cycle") // full_cycle, partial, etc.
+  
+  // Datos de la operación
+  startDate             DateTime
+  completionDate        DateTime
+  daysToComplete        Int
+  totalProfit           Float
+  expectedProfit        Float
+  profitAccuracy        Float    // % de diferencia entre esperado y real
+  
+  // Estado de la operación
+  hadReturns            Boolean   @default(false)
+  hadIssues             Boolean   @default(false)
+  issuesDescription     String?
+  customerSatisfaction  Int?      // 1-5 rating
+  
+  // Datos de aprendizaje
+  aiPredictionScore     Float?
+  aiConfidence          Float?
+  actualSuccess         Boolean   @default(true)
+  learningPattern       String?   // JSON con patrones identificados
+  
+  createdAt             DateTime  @default(now())
+  
+  // Relations
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product               Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sale                  Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  
+  @@map("successful_operations")
 }

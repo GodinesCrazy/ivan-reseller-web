@@ -47,12 +47,46 @@ interface DashboardData {
   monthlyCommissions: number;
 }
 
+interface AdminCommission {
+  id: number;
+  amount: number;
+  status: 'PENDING' | 'PAID' | 'SCHEDULED';
+  createdAt: string;
+  sale: {
+    id: number;
+    orderId: string;
+    salePrice: number;
+    user: {
+      id: number;
+      username: string;
+      email: string;
+    };
+    product: {
+      id: number;
+      title: string;
+    };
+  };
+}
+
+interface AdminCommissionStats {
+  total: number;
+  pending: number;
+  paid: number;
+  totalAmount: number;
+  pendingAmount: number;
+  paidAmount: number;
+}
+
 export default function AdminPanel() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showCommissionModal, setShowCommissionModal] = useState(false);
+  const [adminCommissions, setAdminCommissions] = useState<AdminCommission[]>([]);
+  const [adminCommissionStats, setAdminCommissionStats] = useState<AdminCommissionStats | null>(null);
+  const [loadingCommissions, setLoadingCommissions] = useState(false);
+  const [showCommissionsTab, setShowCommissionsTab] = useState(false);
 
   const {
     register,
@@ -71,7 +105,25 @@ export default function AdminPanel() {
 
   useEffect(() => {
     loadDashboard();
+    loadAdminCommissions();
   }, []);
+
+  const loadAdminCommissions = async () => {
+    try {
+      setLoadingCommissions(true);
+      const [commissionsRes, statsRes] = await Promise.all([
+        api.get('/api/admin/commissions'),
+        api.get('/api/admin/commissions/stats')
+      ]);
+      setAdminCommissions(commissionsRes.data?.commissions || []);
+      setAdminCommissionStats(statsRes.data?.stats || null);
+    } catch (error: any) {
+      console.error('Error loading admin commissions:', error);
+      toast.error('Error cargando comisiones de admin');
+    } finally {
+      setLoadingCommissions(false);
+    }
+  };
 
   const loadDashboard = async () => {
     try {
@@ -175,7 +227,136 @@ export default function AdminPanel() {
         >
           💰 Procesar Cobros Mensuales
         </button>
+        <button
+          onClick={() => setShowCommissionsTab(!showCommissionsTab)}
+          className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-medium"
+        >
+          {showCommissionsTab ? '👁️ Ocultar' : '💰 Ver'} Comisiones Admin
+        </button>
       </div>
+
+      {/* Comisiones Admin */}
+      {showCommissionsTab && (
+        <div className="bg-white rounded-lg shadow-md mb-6">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-800">Comisiones de Administrador</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Comisiones ganadas por usuarios creados por ti
+            </p>
+          </div>
+
+          {loadingCommissions ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+            </div>
+          ) : (
+            <>
+              {/* Estadísticas */}
+              {adminCommissionStats && (
+                <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Total</p>
+                      <p className="text-xl font-bold text-gray-900">{adminCommissionStats.total}</p>
+                      <p className="text-sm text-gray-500">${adminCommissionStats.totalAmount.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Pendientes</p>
+                      <p className="text-xl font-bold text-orange-600">{adminCommissionStats.pending}</p>
+                      <p className="text-sm text-gray-500">${adminCommissionStats.pendingAmount.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Pagadas</p>
+                      <p className="text-xl font-bold text-green-600">{adminCommissionStats.paid}</p>
+                      <p className="text-sm text-gray-500">${adminCommissionStats.paidAmount.toFixed(2)}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Lista de Comisiones */}
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Usuario
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Producto
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Venta
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Monto
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Estado
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Fecha
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {adminCommissions.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                          No hay comisiones registradas aún
+                        </td>
+                      </tr>
+                    ) : (
+                      adminCommissions.map((commission) => (
+                        <tr key={commission.id}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">
+                              {commission.sale.user.username}
+                            </div>
+                            <div className="text-sm text-gray-500">{commission.sale.user.email}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-gray-900">{commission.sale.product.title}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">#{commission.sale.orderId}</div>
+                            <div className="text-sm text-gray-500">${commission.sale.salePrice.toFixed(2)}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-semibold text-purple-600">
+                              ${commission.amount.toFixed(2)}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                commission.status === 'PAID'
+                                  ? 'bg-green-100 text-green-800'
+                                  : commission.status === 'PENDING'
+                                  ? 'bg-orange-100 text-orange-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}
+                            >
+                              {commission.status === 'PAID'
+                                ? 'Pagada'
+                                : commission.status === 'PENDING'
+                                ? 'Pendiente'
+                                : 'Programada'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {new Date(commission.createdAt).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Lista de Usuarios */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">

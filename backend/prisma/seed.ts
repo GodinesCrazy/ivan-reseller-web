@@ -21,7 +21,8 @@ async function main() {
       email: 'admin@ivanreseller.com',
       password: adminPassword,
       role: 'ADMIN',
-      commissionRate: 0.10, // 10% comisión por defecto
+      commissionRate: 0.15, // ✅ 15% comisión por defecto
+      fixedMonthlyCost: 17.0, // ✅ $17 costo fijo mensual
       balance: 0,
       totalEarnings: 0,
       isActive: true,
@@ -45,7 +46,8 @@ async function main() {
       email: 'demo@ivanreseller.com',
       password: demoPassword,
       role: 'USER',
-      commissionRate: 0.08, // 8% comisión para usuarios
+      commissionRate: 0.15, // ✅ 15% comisión por defecto
+      fixedMonthlyCost: 17.0, // ✅ $17 costo fijo mensual
       balance: 0,
       totalEarnings: 0,
       isActive: true,

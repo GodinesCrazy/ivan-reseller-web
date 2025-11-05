@@ -5,6 +5,8 @@ import { stealthScrapingService } from './stealth-scraping.service';
 import { autoRecoverySystem } from './auto-recovery.service';
 import { apiAvailability } from './api-availability.service';
 import { prisma } from '../config/database';
+import { workflowConfigService } from './workflow-config.service';
+import { publicationOptimizerService } from './publication-optimizer.service';
 
 /**
  * Configuration for autopilot system
@@ -299,15 +301,14 @@ export class AutopilotSystem extends EventEmitter {
       return;
     }
 
-    // ✅ CHECK: Verify required APIs are configured
-    logger.info('Autopilot: Checking API availability...');
+      // ✅ CHECK: Verify required APIs are configured
+      logger.info('Autopilot: Checking API availability...');
+      
+      // ✅ Obtener userId del parámetro o usar admin por defecto
+      const currentUserId = 1; // TODO: Pasar userId como parámetro al método start()
     
-    // TODO: Add userId parameter to start() method and pass to getCapabilities()
-    // For now, using admin user ID (1) as placeholder
-    const userId = 1;
-    
-    const capabilities = await apiAvailability.getCapabilities(userId);
-    const apiStatuses = await apiAvailability.getAllAPIStatus(userId);
+    const capabilities = await apiAvailability.getCapabilities(currentUserId);
+    const apiStatuses = await apiAvailability.getAllAPIStatus(currentUserId);
 
     const missingAPIs: string[] = [];
     
@@ -448,8 +449,27 @@ export class AutopilotSystem extends EventEmitter {
 
       logger.info('Autopilot: Available capital', { capital: availableCapital });
 
-      // 3. Search opportunities
-      const opportunities = await this.searchOpportunities(selectedQuery);
+      // ✅ Verificar etapa ANALYZE
+      const analyzeMode = await workflowConfigService.getStageMode(currentUserId, 'analyze');
+      if (analyzeMode === 'manual') {
+        logger.info('Autopilot: Etapa ANALYZE en modo manual - pausando', { userId: currentUserId });
+        return {
+          success: false,
+          message: 'Etapa ANALYZE en modo manual - requiere acción del usuario',
+          category,
+          query: selectedQuery,
+          opportunitiesFound: 0,
+          opportunitiesProcessed: 0,
+          productsPublished: 0,
+          productsApproved: 0,
+          capitalUsed: 0,
+          errors: ['ANALYZE stage is in manual mode'],
+          timestamp: new Date()
+        };
+      }
+
+      // 3. Search opportunities (con userId y environment)
+      const opportunities = await this.searchOpportunities(selectedQuery, currentUserId, userEnvironment);
 
       if (opportunities.length === 0) {
         const result: CycleResult = {
@@ -502,8 +522,26 @@ export class AutopilotSystem extends EventEmitter {
         capitalReserved 
       });
 
-      // 5. Process opportunities
-      const { published, approved } = await this.processOpportunities(affordable);
+      // ✅ Verificar etapa PUBLISH
+      const publishMode = await workflowConfigService.getStageMode(currentUserId, 'publish');
+      if (publishMode === 'manual') {
+        logger.info('Autopilot: Etapa PUBLISH en modo manual - pausando', { userId: currentUserId });
+        return {
+          success: true,
+          message: 'Etapa PUBLISH en modo manual - oportunidades encontradas pero no publicadas',
+          category,
+          query: selectedQuery,
+          opportunitiesFound: opportunities.length,
+          opportunitiesProcessed: affordable.length,
+          productsPublished: 0,
+          productsApproved: 0,
+          capitalUsed: capitalReserved,
+          timestamp: new Date()
+        };
+      }
+
+      // 5. Process opportunities (con userId y environment)
+      const { published, approved } = await this.processOpportunities(affordable, currentUserId, userEnvironment, publishMode);
 
       // 6. Update category performance
       this.updateCategoryPerformance(category, {
@@ -579,44 +617,43 @@ export class AutopilotSystem extends EventEmitter {
   }
 
   /**
-   * Search for opportunities using stealth scraping
+   * ✅ Search for opportunities using stealth scraping (con userId y environment)
    */
-  private async searchOpportunities(query: string): Promise<Opportunity[]> {
+  private async searchOpportunities(query: string, userId?: number, environment?: 'sandbox' | 'production'): Promise<Opportunity[]> {
     try {
       // Build AliExpress search URL
       const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}&SortType=total_tranpro_desc`;
       
-      // TODO: Add userId parameter and pass to scrapeAliExpressProduct()
-      // For now, using admin user ID (1) as placeholder
-      const userId = 1;
+      // ✅ Usar userId proporcionado o admin por defecto
+      const currentUserId = userId || 1;
       
-      // Scrape search results page
-      const searchHtml = await stealthScrapingService.scrapeAliExpressProduct(searchUrl, userId);
-      
-      // For now, return mock opportunities
-      // TODO: Parse search results from HTML
-      const opportunities: Opportunity[] = [];
-      
-      // Generate sample opportunities based on query
-      const basePrice = 10 + Math.random() * 40;
-      for (let i = 0; i < Math.min(this.config.maxOpportunitiesPerCycle, 3); i++) {
-        const price = basePrice + (i * 5);
-        opportunities.push({
-          title: `${query} - Product ${i + 1}`,
-          url: `https://www.aliexpress.com/item/${1000000000 + i}.html`,
-          price: Math.round(price * 100) / 100,
-          estimatedCost: Math.round(price * 100) / 100,
-          estimatedProfit: this.calculateProfit(price),
-          roi: this.calculateROI(price),
-          category: this.getQueryCategory(query),
-          images: ['https://via.placeholder.com/300'],
-          description: `Quality ${query} from AliExpress`,
-          rating: 4.5 + (Math.random() * 0.5),
-          orders: Math.floor(100 + Math.random() * 900)
-        });
-      }
+      // ✅ USAR SERVICIO REAL DE OPORTUNIDADES (con userId y environment)
+      // Usar opportunity-finder service que hace scraping real
+      const opportunityFinder = await import('./opportunity-finder.service');
+      const foundItems = await opportunityFinder.default.findOpportunities(currentUserId, {
+        query,
+        maxItems: this.config.maxOpportunitiesPerCycle,
+        marketplaces: [this.config.targetMarketplace as 'ebay' | 'amazon' | 'mercadolibre'],
+        region: 'us'
+      });
 
-      logger.info('Autopilot: Generated opportunities', { count: opportunities.length, query });
+      // Convertir items encontrados al formato Opportunity
+      const opportunities: Opportunity[] = foundItems.map((item: any) => ({
+        id: item.productId,
+        title: item.title,
+        url: item.aliexpressUrl,
+        price: item.costUsd,
+        estimatedCost: item.costUsd,
+        estimatedProfit: (item.suggestedPriceUsd - item.costUsd) * (1 - item.profitMargin),
+        roi: item.roiPercentage,
+        category: this.getQueryCategory(query),
+        images: item.image ? [item.image] : [],
+        description: `Producto encontrado: ${item.title}`,
+        rating: 0,
+        orders: 0
+      }));
+
+      logger.info('Autopilot: Found real opportunities', { count: opportunities.length, query });
 
       return opportunities;
 
@@ -646,15 +683,19 @@ export class AutopilotSystem extends EventEmitter {
   }
 
   /**
-   * Get available working capital
+   * ✅ Get available working capital (con userId - desde UserWorkflowConfig)
    */
-  private async getAvailableCapital(): Promise<number> {
+  private async getAvailableCapital(userId?: number): Promise<number> {
     try {
-      const totalCapital = this.config.workingCapital;
+      const currentUserId = userId || 1;
+      
+      // ✅ Obtener capital del usuario desde UserWorkflowConfig
+      const totalCapital = await workflowConfigService.getWorkingCapital(currentUserId);
 
-      // Get pending orders cost
+      // ✅ Get pending orders cost del usuario
       const pendingOrders = await prisma.sale.findMany({
         where: {
+          userId: currentUserId,
           status: {
             in: ['PENDING', 'PROCESSING']
           }
@@ -665,9 +706,10 @@ export class AutopilotSystem extends EventEmitter {
         sum + (order.aliexpressCost || 0), 0
       );
 
-      // Get approved but not published products
+      // ✅ Get approved but not published products del usuario
       const approvedProducts = await prisma.product.findMany({
         where: {
+          userId: currentUserId,
           status: 'APPROVED',
           isPublished: false
         }
@@ -753,28 +795,35 @@ export class AutopilotSystem extends EventEmitter {
   }
 
   /**
-   * Process opportunities - publish or send to approval
+   * ✅ Process opportunities - publish or send to approval (con userId, environment y modo)
    */
   private async processOpportunities(
-    opportunities: Opportunity[]
+    opportunities: Opportunity[],
+    userId?: number,
+    environment?: 'sandbox' | 'production',
+    publishMode?: 'manual' | 'automatic' | 'guided'
   ): Promise<{ published: number; approved: number }> {
     let published = 0;
     let approved = 0;
+    const currentUserId = userId || 1;
+    const currentEnvironment = environment || 'sandbox';
+    const currentPublishMode = publishMode || this.config.publicationMode;
 
     for (const opp of opportunities) {
       try {
-        if (this.config.publicationMode === 'automatic') {
+        // ✅ Verificar modo de publicación
+        if (currentPublishMode === 'automatic' || (currentPublishMode === 'guided' && this.config.publicationMode === 'automatic')) {
           // Auto-publish to marketplace
-          const result = await this.publishToMarketplace(opp);
+          const result = await this.publishToMarketplace(opp, currentUserId, currentEnvironment);
           if (result.success) {
             published++;
             logger.info('Autopilot: Product published automatically', {
               title: opp.title
             });
           }
-        } else {
-          // Send to manual approval queue
-          await this.sendToApprovalQueue(opp);
+        } else if (currentPublishMode === 'manual') {
+          // ✅ Send to manual approval queue (con userId)
+          await this.sendToApprovalQueue(opp, currentUserId);
           approved++;
           logger.info('Autopilot: Product sent to approval queue', {
             title: opp.title
@@ -792,14 +841,39 @@ export class AutopilotSystem extends EventEmitter {
   }
 
   /**
-   * Publish opportunity to marketplace
+   * ✅ Publish opportunity to marketplace (con userId y environment)
    */
-  private async publishToMarketplace(opportunity: Opportunity): Promise<{ success: boolean }> {
+  private async publishToMarketplace(opportunity: Opportunity, userId?: number, environment?: 'sandbox' | 'production'): Promise<{ success: boolean }> {
     try {
-      // Create product in database
+      const currentUserId = userId || 1;
+      const currentEnvironment = environment || 'sandbox';
+      
+      // ✅ Verificar etapa PUBLISH antes de publicar
+      const publishMode = await workflowConfigService.getStageMode(currentUserId, 'publish');
+      if (publishMode === 'manual') {
+        logger.info('Autopilot: Publicación en modo manual - enviando a cola de aprobación', { userId: currentUserId });
+        await this.sendToApprovalQueue(opportunity, currentUserId);
+        return { success: false }; // No publica, pero envía a aprobación
+      }
+      
+      // ✅ Calcular tiempo óptimo de publicación basado en capital de trabajo
+      const optimization = await publicationOptimizerService.calculateOptimalPublicationDuration(
+        currentUserId,
+        opportunity.estimatedCost,
+        opportunity.estimatedProfit
+      );
+
+      logger.info('Autopilot: Publication duration optimized', {
+        userId: currentUserId,
+        productCost: opportunity.estimatedCost,
+        durationDays: optimization.durationDays,
+        reasoning: optimization.reasoning
+      });
+
+      // Create product in database (con userId del usuario)
       const product = await prisma.product.create({
         data: {
-          userId: 1, // System user
+          userId: currentUserId, // ✅ Usar userId del usuario
           title: opportunity.title,
           description: opportunity.description || '',
           aliexpressUrl: opportunity.url,
@@ -807,17 +881,32 @@ export class AutopilotSystem extends EventEmitter {
           suggestedPrice: opportunity.estimatedCost * 2,
           category: opportunity.category,
           images: JSON.stringify(opportunity.images || []),
-          productData: JSON.stringify(opportunity),
+          productData: JSON.stringify({
+            ...opportunity,
+            optimalPublicationDuration: optimization.durationDays,
+            optimizationReasoning: optimization.reasoning
+          }),
           status: 'PUBLISHED',
           isPublished: true,
           publishedAt: new Date()
         }
       });
 
+      // ✅ Programar despublicación automática basada en tiempo óptimo
+      await publicationOptimizerService.scheduleAutoUnpublish(
+        currentUserId,
+        product.id,
+        optimization.durationDays
+      );
+
       // Trigger marketplace publishing
       // TODO: Integrate with marketplace API
 
-      this.emit('product:published', { productId: product.id, opportunity });
+      this.emit('product:published', { 
+        productId: product.id, 
+        opportunity,
+        publicationDuration: optimization.durationDays
+      });
 
       return { success: true };
     } catch (error) {
@@ -827,13 +916,15 @@ export class AutopilotSystem extends EventEmitter {
   }
 
   /**
-   * Send opportunity to manual approval queue
+   * ✅ Send opportunity to manual approval queue (con userId)
    */
-  private async sendToApprovalQueue(opportunity: Opportunity): Promise<void> {
+  private async sendToApprovalQueue(opportunity: Opportunity, userId?: number): Promise<void> {
     try {
+      const currentUserId = userId || 1;
+      
       await prisma.product.create({
         data: {
-          userId: 1, // System user
+          userId: currentUserId, // ✅ Usar userId del usuario
           title: opportunity.title,
           description: opportunity.description || '',
           aliexpressUrl: opportunity.url,

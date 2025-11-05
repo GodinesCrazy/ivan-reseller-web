@@ -4,6 +4,7 @@ import { prisma } from './config/database';
 import { redis, isRedisAvailable } from './config/redis';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { scheduledTasksService } from './services/scheduled-tasks.service';
 
 const execAsync = promisify(exec);
 const PORT = parseInt(env.PORT, 10);
@@ -54,6 +55,10 @@ async function startServer() {
       console.log(`Health: http://localhost:${PORT}/health`);
       console.log('================================');
       console.log('');
+      console.log('✅ Scheduled tasks initialized');
+      console.log('  - Financial alerts: Daily at 6:00 AM');
+      console.log('  - Commission processing: Daily at 2:00 AM');
+      console.log('');
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
@@ -64,6 +69,7 @@ async function startServer() {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
+  await scheduledTasksService.shutdown();
   await prisma.$disconnect();
   await redis.quit();
   process.exit(0);
@@ -71,6 +77,7 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down gracefully...');
+  await scheduledTasksService.shutdown();
   await prisma.$disconnect();
   await redis.quit();
   process.exit(0);

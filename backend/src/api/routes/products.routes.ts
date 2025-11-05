@@ -30,7 +30,20 @@ router.get('/', async (req: Request, res: Response, next) => {
     const userId = req.user?.role === 'ADMIN' ? undefined : req.user?.userId;
     const status = req.query.status as ProductStatus | undefined;
     const products = await productService.getProducts(userId, status);
-    res.json({ products });
+    
+    // ✅ Mapear datos del backend al formato esperado por el frontend
+    const mappedProducts = products.map((product: any) => ({
+      id: String(product.id),
+      title: product.title,
+      description: product.description || '',
+      status: product.status,
+      marketplace: product.marketplace || product.publishedMarketplace || 'unknown',
+      price: product.suggestedPrice || product.price || product.aliexpressPrice || 0,
+      profit: product.profit || 0,
+      createdAt: product.createdAt?.toISOString() || new Date().toISOString()
+    }));
+    
+    res.json({ products: mappedProducts });
   } catch (error) {
     next(error);
   }

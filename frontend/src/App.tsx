@@ -1,37 +1,46 @@
+import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@stores/authStore';
-import Login from '@pages/Login';
-import Dashboard from '@pages/Dashboard';
-import Opportunities from '@pages/Opportunities';
-import OpportunitiesHistory from '@pages/OpportunitiesHistory';
-import OpportunityDetail from '@pages/OpportunityDetail';
-import Autopilot from '@pages/Autopilot';
-import Products from '@pages/Products';
-import Sales from '@pages/Sales';
-import Commissions from '@pages/Commissions';
-import FinanceDashboard from '@pages/FinanceDashboard';
-import FlexibleDropshipping from '@pages/FlexibleDropshipping';
-import IntelligentPublisher from '@pages/IntelligentPublisher';
-import Jobs from '@pages/Jobs';
-import Reports from '@pages/Reports';
-import Users from '@pages/Users';
-import RegionalConfig from '@pages/RegionalConfig';
-import SystemLogs from '@pages/SystemLogs';
-import Settings from '@pages/Settings';
-import APIConfiguration from '@pages/APIConfiguration';
-import APISettings from '@pages/APISettings';
-import APIKeys from '@pages/APIKeys';
-import AdminPanel from '@pages/AdminPanel';
-import HelpCenter from '@pages/HelpCenter';
+const Login = lazy(() => import('@pages/Login'));
+const Dashboard = lazy(() => import('@pages/Dashboard'));
+const Opportunities = lazy(() => import('@pages/Opportunities'));
+const OpportunitiesHistory = lazy(() => import('@pages/OpportunitiesHistory'));
+const OpportunityDetail = lazy(() => import('@pages/OpportunityDetail'));
+const Autopilot = lazy(() => import('@pages/Autopilot'));
+const Products = lazy(() => import('@pages/Products'));
+const Sales = lazy(() => import('@pages/Sales'));
+const Commissions = lazy(() => import('@pages/Commissions'));
+const FinanceDashboard = lazy(() => import('@pages/FinanceDashboard'));
+const FlexibleDropshipping = lazy(() => import('@pages/FlexibleDropshipping'));
+const IntelligentPublisher = lazy(() => import('@pages/IntelligentPublisher'));
+const Jobs = lazy(() => import('@pages/Jobs'));
+const Reports = lazy(() => import('@pages/Reports'));
+const Users = lazy(() => import('@pages/Users'));
+const RegionalConfig = lazy(() => import('@pages/RegionalConfig'));
+const SystemLogs = lazy(() => import('@pages/SystemLogs'));
+const Settings = lazy(() => import('@pages/Settings'));
+const APIConfiguration = lazy(() => import('@pages/APIConfiguration'));
+const APISettings = lazy(() => import('@pages/APISettings'));
+const APIKeys = lazy(() => import('@pages/APIKeys'));
+const AdminPanel = lazy(() => import('@pages/AdminPanel'));
+const HelpCenter = lazy(() => import('@pages/HelpCenter'));
+const WorkflowConfig = lazy(() => import('@pages/WorkflowConfig'));
 import Layout from '@components/layout/Layout';
 
 function App() {
-  // TEMPORARY: Skip authentication - load dashboard directly (as it worked originally)
-  const isAuthenticated = true; // Force authenticated state
-  // const { isAuthenticated } = useAuthStore();
+  // ✅ RESTAURADO: Usar autenticación real
+  const { isAuthenticated } = useAuthStore();
+
+  const Fallback = (
+    <div className="flex items-center justify-center min-h-[30vh] text-gray-600">
+      <div className="h-5 w-5 mr-2 rounded-full border-2 border-gray-300 border-t-gray-700 animate-spin" />
+      Cargando...
+    </div>
+  );
 
   return (
-    <Routes>
+    <Suspense fallback={Fallback}>
+      <Routes>
       {/* Public routes */}
       <Route
         path="/login"
@@ -41,7 +50,7 @@ function App() {
       {/* Protected routes */}
       <Route
         path="/"
-        element={<Layout />}
+        element={isAuthenticated ? <Layout /> : <Navigate to="/login" />}
       >
         <Route index element={<Navigate to="/dashboard" />} />
         <Route path="dashboard" element={<Dashboard />} />
@@ -77,6 +86,7 @@ function App() {
         
         {/* Settings & Configuration */}
         <Route path="settings" element={<Settings />} />
+        <Route path="workflow-config" element={<WorkflowConfig />} />
         <Route path="api-config" element={<APIConfiguration />} />
         <Route path="api-settings" element={<APISettings />} />
         <Route path="api-keys" element={<APIKeys />} />
@@ -90,7 +100,8 @@ function App() {
 
       {/* 404 */}
       <Route path="*" element={<Navigate to="/" />} />
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }
 

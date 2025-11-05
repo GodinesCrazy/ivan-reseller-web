@@ -205,26 +205,93 @@ export class AutomatedBusinessService {
   }
 
   /**
-   * Procesar ciclo de automatización
+   * ✅ Procesar ciclo de automatización con configuración por usuario
    */
-  private async processAutomationCycle(): Promise<void> {
+  private async processAutomationCycle(userId?: number): Promise<void> {
     try {
-      console.log('🔄 Ejecutando ciclo de automatización...');
+      // Si no hay userId, usar admin por defecto (para backward compatibility)
+      const currentUserId = userId || 1;
       
-      // 1. Buscar nuevas oportunidades
-      await this.discoverOpportunities();
+      // ✅ Obtener configuración de workflow del usuario
+      const workflowConfig = await workflowConfigService.getUserConfig(currentUserId);
+      const environment = await workflowConfigService.getUserEnvironment(currentUserId);
       
-      // 2. Monitorear precios existentes
-      await this.monitorPricing();
+      logger.info('🔄 Ejecutando ciclo de automatización', { userId: currentUserId, environment });
       
-      // 3. Procesar órdenes pendientes
-      await this.processOrders();
+      // ✅ Verificar etapa SCRAPE
+      const scrapeMode = await workflowConfigService.getStageMode(currentUserId, 'scrape');
+      if (scrapeMode === 'manual') {
+        logger.info('Etapa SCRAPE en modo manual - pausando', { userId: currentUserId });
+        await this.notificationService.sendAlert({
+          type: 'action_required',
+          title: 'Etapa SCRAPE pausada',
+          message: 'Modo manual: presiona "Continuar" para seguir con SCRAPE.',
+          priority: 'HIGH',
+          data: { stage: 'scrape', userId: currentUserId },
+          actions: [{ id: 'continue_scrape', label: 'Continuar SCRAPE', action: 'continue_stage:scrape', variant: 'primary' }]
+        });
+        return;
+      }
       
-      // 4. Actualizar tracking
-      await this.updateTracking();
+      // 1. Buscar nuevas oportunidades (si está en automatic o guided)
+      if (scrapeMode === 'automatic' || scrapeMode === 'guided') {
+        await this.discoverOpportunities(currentUserId, environment);
+      }
       
-    } catch (error) {
-      console.error('❌ Error en ciclo de automatización:', error);
+      // ✅ Verificar etapa ANALYZE
+      const analyzeMode = await workflowConfigService.getStageMode(currentUserId, 'analyze');
+      if (analyzeMode === 'manual') {
+        logger.info('Etapa ANALYZE en modo manual - pausando', { userId: currentUserId });
+        await this.notificationService.sendAlert({
+          type: 'action_required',
+          title: 'Etapa ANALYZE pausada',
+          message: 'Modo manual: presiona "Continuar" para seguir con ANALYZE.',
+          priority: 'HIGH',
+          data: { stage: 'analyze', userId: currentUserId },
+          actions: [{ id: 'continue_analyze', label: 'Continuar ANALYZE', action: 'continue_stage:analyze', variant: 'primary' }]
+        });
+        return;
+      }
+      
+      // 2. Monitorear precios existentes (si está en automatic o guided)
+      if (analyzeMode === 'automatic' || analyzeMode === 'guided') {
+        await this.monitorPricing(currentUserId);
+      }
+      
+      // ✅ Verificar etapa PUBLISH
+      const publishMode = await workflowConfigService.getStageMode(currentUserId, 'publish');
+      if (publishMode === 'manual') {
+        logger.info('Etapa PUBLISH en modo manual - pausando', { userId: currentUserId });
+        await this.notificationService.sendAlert({
+          type: 'action_required',
+          title: 'Etapa PUBLISH pausada',
+          message: 'Modo manual: presiona "Continuar" para seguir con PUBLISH.',
+          priority: 'HIGH',
+          data: { stage: 'publish', userId: currentUserId },
+          actions: [{ id: 'continue_publish', label: 'Continuar PUBLISH', action: 'continue_stage:publish', variant: 'primary' }]
+        });
+        return;
+      }
+      
+      // 3. Procesar órdenes pendientes (si está en automatic o guided)
+      if (publishMode === 'automatic' || publishMode === 'guided') {
+        await this.processOrders(currentUserId);
+      }
+      
+      // ✅ Verificar etapa FULFILLMENT
+      const fulfillmentMode = await workflowConfigService.getStageMode(currentUserId, 'fulfillment');
+      if (fulfillmentMode === 'manual') {
+        logger.info('Etapa FULFILLMENT en modo manual - pausando', { userId: currentUserId });
+        return;
+      }
+      
+      // 4. Actualizar tracking (si está en automatic o guided)
+      if (fulfillmentMode === 'automatic' || fulfillmentMode === 'guided') {
+        await this.updateTracking(currentUserId);
+      }
+      
+    } catch (error: any) {
+      logger.error('❌ Error en ciclo de automatización', { error, userId });
       await this.notificationService.sendAlert({
         type: 'error',
         title: 'Error en automatización',
@@ -234,45 +301,57 @@ export class AutomatedBusinessService {
   }
 
   /**
-   * Descubrir nuevas oportunidades automáticamente
+   * ✅ Descubrir nuevas oportunidades automáticamente (con userId y environment)
    */
-  private async discoverOpportunities(): Promise<void> {
+  private async discoverOpportunities(userId?: number, environment?: 'sandbox' | 'production'): Promise<void> {
     const rule = this.automationRules.get('auto-listing');
     if (!rule?.active) return;
 
     try {
+      // ✅ Obtener configuración del usuario si está disponible
+      const currentUserId = userId || 1;
+      let userEnvironment = environment;
+      let userConfig = null;
+
+      if (userId) {
+        userEnvironment = await workflowConfigService.getUserEnvironment(currentUserId);
+        userConfig = await workflowConfigService.getUserConfig(currentUserId);
+      }
+
       const opportunities = await this.aiEngine.findTrendingOpportunities({
-        minConfidence: this.config.thresholds.minConfidence,
+        minConfidence: userConfig?.autoApproveThreshold || this.config.thresholds.minConfidence,
         minProfitMargin: this.config.thresholds.minProfitMargin,
-        maxInvestment: this.config.thresholds.maxInvestment
+        maxInvestment: userConfig?.maxAutoInvestment || this.config.thresholds.maxInvestment
       });
 
       for (const opportunity of opportunities.slice(0, rule.parameters.maxListings)) {
-        await this.autoCreateListing(opportunity);
+        await this.autoCreateListing(opportunity, currentUserId, userEnvironment);
       }
 
     } catch (error) {
-      console.error('❌ Error descubriendo oportunidades:', error);
+      logger.error('❌ Error descubriendo oportunidades', { error, userId });
     }
   }
 
   /**
-   * Monitorear precios automáticamente
+   * ✅ Monitorear precios automáticamente (con userId)
    */
-  private async monitorPricing(): Promise<void> {
+  private async monitorPricing(userId?: number): Promise<void> {
     const rule = this.automationRules.get('auto-pricing');
     if (!rule?.active) return;
 
     try {
-      // Obtener listings activos (esto vendría de la BD)
-      const activeListings = await this.getActiveListings();
+      const currentUserId = userId || 1;
+      
+      // Obtener listings activos del usuario (esto vendría de la BD)
+      const activeListings = await this.getActiveListings(currentUserId);
       
       for (const listing of activeListings) {
-        await this.checkAndAdjustPrice(listing);
+        await this.checkAndAdjustPrice(listing, currentUserId);
       }
 
     } catch (error) {
-      console.error('❌ Error monitoreando precios:', error);
+      logger.error('❌ Error monitoreando precios', { error, userId });
     }
   }
 
@@ -719,12 +798,98 @@ ${opportunity.aiAnalysis.strengths.map(s => `• ${s}`).join('\n')}
     // Implementar lógica de ajuste de precios
   }
 
-  private async processOrders(): Promise<void> {
-    // Implementar procesamiento de órdenes pendientes
+  /**
+   * ✅ Procesar órdenes pendientes (con userId)
+   */
+  private async processOrders(userId?: number): Promise<void> {
+    try {
+      const currentUserId = userId || 1;
+      
+      // ✅ Verificar etapa PURCHASE
+      const purchaseMode = await workflowConfigService.getStageMode(currentUserId, 'purchase');
+      if (purchaseMode === 'manual') {
+        logger.info('Etapa PURCHASE en modo manual - pausando', { userId: currentUserId });
+        return;
+      }
+      
+      // Obtener órdenes pendientes del usuario
+      const pendingOrders = await this.getPendingOrders(currentUserId);
+      
+      for (const order of pendingOrders) {
+        if (purchaseMode === 'automatic') {
+          // Compra automática
+          await this.executePurchase(order);
+        } else if (purchaseMode === 'guided') {
+          // Modo guiado - notificar y esperar confirmación
+          await this.notificationService.sendAlert({
+            type: 'action_required',
+            title: 'Orden lista para compra',
+            message: `Orden ${order.id} lista para compra. ¿Proceder?`,
+            priority: 'HIGH',
+            data: { orderId: order.id, stage: 'purchase', userId: currentUserId },
+            actions: [{ id: 'confirm_purchase', label: 'Confirmar Compra', action: 'confirm_purchase', variant: 'primary' }]
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('❌ Error procesando órdenes', { error, userId });
+    }
   }
 
-  private async updateTracking(): Promise<void> {
-    // Implementar actualización masiva de tracking
+  /**
+   * ✅ Actualizar tracking (con userId)
+   */
+  private async updateTracking(userId?: number): Promise<void> {
+    try {
+      const currentUserId = userId || 1;
+      
+      // ✅ Verificar etapa FULFILLMENT
+      const fulfillmentMode = await workflowConfigService.getStageMode(currentUserId, 'fulfillment');
+      if (fulfillmentMode === 'manual') {
+        return;
+      }
+      
+      // Obtener órdenes en tránsito del usuario
+      const ordersInTransit = await this.getOrdersInTransit(currentUserId);
+      
+      for (const order of ordersInTransit) {
+        await this.updateOrderTracking(order);
+      }
+    } catch (error) {
+      logger.error('❌ Error actualizando tracking', { error, userId });
+    }
+  }
+
+  // Métodos auxiliares (implementar según necesidad)
+  private async getActiveListings(userId: number): Promise<any[]> {
+    // TODO: Implementar obtención de listings activos del usuario
+    return [];
+  }
+
+  private async getPendingOrders(userId: number): Promise<any[]> {
+    // TODO: Implementar obtención de órdenes pendientes del usuario
+    return [];
+  }
+
+  private async getOrdersInTransit(userId: number): Promise<any[]> {
+    // TODO: Implementar obtención de órdenes en tránsito del usuario
+    return [];
+  }
+
+  private async checkAndAdjustPrice(listing: any, userId: number): Promise<void> {
+    // TODO: Implementar verificación y ajuste de precios
+  }
+
+  private async executePurchase(order: any): Promise<void> {
+    // TODO: Implementar compra automática
+  }
+
+  private async updateOrderTracking(order: any): Promise<void> {
+    // TODO: Implementar actualización de tracking
+  }
+
+  private async autoCreateListing(opportunity: any, userId?: number, environment?: 'sandbox' | 'production'): Promise<void> {
+    // TODO: Implementar creación automática de listing con userId y environment
   }
 }
 

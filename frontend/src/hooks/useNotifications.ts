@@ -64,12 +64,12 @@ export const useNotifications = (): UseNotificationsReturn => {
       newSocket.emit('join_room', `user_${user.id}`);
     });
 
-    newSocket.on('disconnect', (reason) => {
+    newSocket.on('disconnect', (reason: Socket.DisconnectReason) => {
       console.log('❌ Socket.IO disconnected:', reason);
       setIsConnected(false);
     });
 
-    newSocket.on('connect_error', (error) => {
+    newSocket.on('connect_error', (error: Error) => {
       console.error('🔌 Socket.IO connection error:', error);
       setIsConnected(false);
     });

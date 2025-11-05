@@ -36,7 +36,7 @@ export default function Opportunities() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.get('/opportunities', {
+      const { data } = await api.get('/api/opportunities', {
         params: { query, maxItems, marketplaces: marketplacesParam, region }
       });
       setItems(data?.items || []);

@@ -22,7 +22,7 @@ export default function OpportunitiesHistory() {
   async function load(p = 1) {
     setLoading(true);
     try {
-      const { data } = await api.get('/opportunities/list', { params: { page: p, limit: 20 } });
+      const { data } = await api.get('/api/opportunities/list', { params: { page: p, limit: 20 } });
       setItems(data.items || []);
       setCount(data.count || 0);
       setPage(data.page || p);

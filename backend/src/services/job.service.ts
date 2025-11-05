@@ -367,32 +367,96 @@ class JobService {
         const commission = commissions[i];
         
         try {
-          // TODO: Integrate with PayPal API for actual payout
-          // For now, just mark as scheduled
-          await prisma.commission.update({
-            where: { id: commission.id },
-            data: {
-              status: 'SCHEDULED',
-              scheduledPayoutAt: new Date(),
-            },
-          });
+          // ✅ INTEGRAR CON PAYPAL API REAL
+          // Obtener email del usuario para el pago
+          if (!commission.user.email) {
+            throw new Error(`Usuario ${commission.userId} no tiene email configurado para pagos`);
+          }
 
-          results.push({
-            success: true,
-            commissionId: commission.id,
-            amount: commission.amount,
-            userId: commission.userId,
-          });
+          // Intentar crear servicio PayPal desde credenciales
+          const PayPalPayoutService = (await import('./paypal-payout.service')).default;
+          const paypalService = PayPalPayoutService.fromEnv();
+
+          if (!paypalService) {
+            // Si PayPal no está configurado, marcar como programado
+            await prisma.commission.update({
+              where: { id: commission.id },
+              data: {
+                status: 'SCHEDULED',
+                scheduledPayoutAt: new Date(),
+              },
+            });
+            
+            results.push({
+              success: true,
+              commissionId: commission.id,
+              amount: commission.amount,
+              userId: commission.userId,
+              note: 'PayPal no configurado - programado para pago manual'
+            });
+          } else {
+            // Realizar pago real con PayPal
+            try {
+              const payoutResult = await paypalService.sendPayout({
+                recipientEmail: commission.user.email,
+                amount: commission.amount,
+                currency: commission.currency || 'USD',
+                note: `Comisión por venta - Commission ID: ${commission.id}`,
+                senderItemId: `commission_${commission.id}`
+              });
+
+              if (payoutResult.success && payoutResult.items && payoutResult.items.length > 0) {
+                const payoutItem = payoutResult.items[0];
+                
+                // Actualizar comisión como pagada con ID de transacción PayPal
+                await prisma.commission.update({
+                  where: { id: commission.id },
+                  data: {
+                    status: 'PAID',
+                    paidAt: new Date(),
+                    paypalTransactionId: payoutItem.transactionId || payoutResult.batchId,
+                  },
+                });
+
+                results.push({
+                  success: true,
+                  commissionId: commission.id,
+                  amount: commission.amount,
+                  userId: commission.userId,
+                  paypalTransactionId: payoutItem.transactionId,
+                  paypalBatchId: payoutResult.batchId
+                });
+              } else {
+                throw new Error('PayPal payout no completado correctamente');
+              }
+            } catch (paypalError: any) {
+              // Si falla PayPal, marcar como programado para reintento
+              await prisma.commission.update({
+                where: { id: commission.id },
+                data: {
+                  status: 'SCHEDULED',
+                  scheduledPayoutAt: new Date(),
+                },
+              });
+              
+              results.push({
+                success: false,
+                commissionId: commission.id,
+                error: `PayPal error: ${paypalError.message}`,
+                note: 'Programado para reintento'
+              });
+            }
+          }
 
           // Update progress
           const progress = Math.round(((i + 1) / commissions.length) * 60) + 30;
           await job.updateProgress(progress);
-        } catch (error) {
+        } catch (error: any) {
           console.error(`Failed to process payout for commission ${commission.id}:`, error);
           results.push({
             success: false,
             commissionId: commission.id,
-            error: error.message,
+            error: error.message || 'Error desconocido',
           });
         }
       }

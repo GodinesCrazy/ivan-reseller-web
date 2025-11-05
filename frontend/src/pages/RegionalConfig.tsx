@@ -616,5 +616,4 @@ export default function RegionalConfig() {
     </div>
   );
 }
-  );
-}
+

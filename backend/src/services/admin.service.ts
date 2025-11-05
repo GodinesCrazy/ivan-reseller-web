@@ -66,7 +66,7 @@ export class AdminService {
     // Hash de la contraseña
     const hashedPassword = bcrypt.hashSync(userData.password, 10);
 
-    // Crear usuario con configuración de comisiones
+    // ✅ Crear usuario con configuración de comisiones y tracking de creador
     const newUser = await prisma.user.create({
       data: {
         username: userData.username,
@@ -76,7 +76,8 @@ export class AdminService {
         role: userData.role,
         commissionRate: userData.commissionRate,
         fixedMonthlyCost: userData.fixedMonthlyCost,
-        isActive: userData.isActive ?? true
+        isActive: userData.isActive ?? true,
+        createdBy: adminId // ✅ Trackear admin que creó el usuario
       },
       select: {
         id: true,
@@ -88,6 +89,21 @@ export class AdminService {
         fixedMonthlyCost: true,
         isActive: true,
         createdAt: true
+      }
+    });
+
+    // ✅ Crear configuración de workflow por defecto para el nuevo usuario
+    await prisma.userWorkflowConfig.create({
+      data: {
+        userId: newUser.id,
+        environment: 'sandbox',
+        workflowMode: 'manual',
+        stageScrape: 'automatic',
+        stageAnalyze: 'automatic',
+        stagePublish: 'manual',
+        stagePurchase: 'manual',
+        stageFulfillment: 'manual',
+        stageCustomerService: 'manual'
       }
     });
 

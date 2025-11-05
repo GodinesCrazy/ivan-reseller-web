@@ -86,9 +86,9 @@ export default function Commissions() {
     try {
       setLoading(true);
       const [commissionsResponse, statsResponse, scheduleResponse] = await Promise.all([
-        api.get('/commissions'),
-        api.get('/commissions/stats'),
-        api.get('/commissions/payout-schedule')
+        api.get('/api/commissions'),
+        api.get('/api/commissions/stats'),
+        api.get('/api/commissions/payout-schedule')
       ]);
       setCommissions(commissionsResponse.data);
       setStats(statsResponse.data);
@@ -109,7 +109,7 @@ export default function Commissions() {
 
     try {
       setRequestingPayout(true);
-      await api.post('/commissions/request-payout');
+      await api.post('/api/commissions/request-payout');
       toast.success('Payout request submitted successfully');
       fetchCommissionsData();
     } catch (error) {

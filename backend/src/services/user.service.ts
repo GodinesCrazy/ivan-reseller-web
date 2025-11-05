@@ -75,8 +75,8 @@ export class UserService {
         email: data.email,
         password: hashedPassword,
         role: data.role || 'USER',
-        commissionRate: data.commissionRate || 10.0,
-        fixedMonthlyCost: data.fixedMonthlyCost || 17.0,
+        commissionRate: data.commissionRate ?? 0.15, // ✅ 15% por defecto
+        fixedMonthlyCost: data.fixedMonthlyCost ?? 17.0, // ✅ $17 por defecto
       },
       select: {
         id: true,

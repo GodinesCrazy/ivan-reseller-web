@@ -1,8 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate, authorize } from '../../middleware/auth.middleware';
-import { saleService } from '../../services/sale.service';
+import { saleService, CreateSaleDto } from '../../services/sale.service';
 import { z } from 'zod';
-import { SaleStatus } from '@prisma/client';
 
 const router = Router();
 router.use(authenticate);
@@ -22,10 +21,27 @@ const createSaleSchema = z.object({
 // GET /api/sales - Listar ventas
 router.get('/', async (req: Request, res: Response, next) => {
   try {
-    const userId = req.user?.role === 'ADMIN' ? undefined : req.user?.userId;
-    const status = req.query.status as SaleStatus | undefined;
-    const sales = await saleService.getSales(userId, status);
-    res.json({ sales });
+    const userId = req.user?.role === 'ADMIN' ? undefined : String(req.user?.userId || '');
+    const status = req.query.status as string | undefined;
+    const sales = await saleService.getSales(userId, status as any);
+    
+    // ✅ Mapear datos del backend al formato esperado por el frontend
+    const mappedSales = sales.map((sale: any) => ({
+      id: String(sale.id),
+      orderId: sale.orderId,
+      productTitle: sale.product?.title || 'Unknown Product',
+      marketplace: sale.marketplace,
+      buyerName: sale.user?.username || sale.buyerEmail || 'Unknown Buyer',
+      salePrice: sale.salePrice,
+      cost: sale.aliexpressCost || sale.costPrice || 0,
+      profit: sale.netProfit || sale.grossProfit || 0,
+      commission: sale.commissionAmount || sale.userCommission || 0,
+      status: sale.status,
+      trackingNumber: sale.trackingNumber || undefined,
+      createdAt: sale.createdAt?.toISOString() || new Date().toISOString()
+    }));
+    
+    res.json({ sales: mappedSales });
   } catch (error) {
     next(error);
   }
@@ -34,9 +50,24 @@ router.get('/', async (req: Request, res: Response, next) => {
 // GET /api/sales/stats - Estadísticas
 router.get('/stats', async (req: Request, res: Response, next) => {
   try {
-    const userId = req.user?.role === 'ADMIN' ? undefined : req.user?.userId;
+    const userId = req.user?.role === 'ADMIN' ? undefined : String(req.user?.userId || '');
+    const days = parseInt(req.query.days as string) || 30;
     const stats = await saleService.getSalesStats(userId);
-    res.json(stats);
+    
+    // Calcular promedio de orden y cambios
+    const avgOrderValue = stats.totalSales > 0 ? (stats.totalRevenue || 0) / stats.totalSales : 0;
+    
+    // ✅ Mapear estadísticas al formato esperado por el frontend
+    const mappedStats = {
+      totalRevenue: stats.totalRevenue || 0,
+      totalProfit: stats.totalRevenue - stats.totalCommissions || 0,
+      totalSales: stats.totalSales || 0,
+      avgOrderValue: avgOrderValue,
+      revenueChange: 0, // TODO: Calcular cambio de ingresos comparando con período anterior
+      profitChange: 0  // TODO: Calcular cambio de ganancias comparando con período anterior
+    };
+    
+    res.json(mappedStats);
   } catch (error) {
     next(error);
   }
@@ -55,8 +86,8 @@ router.get('/:id', async (req: Request, res: Response, next) => {
 // POST /api/sales - Crear venta
 router.post('/', async (req: Request, res: Response, next) => {
   try {
-    const data = createSaleSchema.parse(req.body);
-    const sale = await saleService.createSale(req.user!.userId, data);
+    const data = createSaleSchema.parse(req.body) as CreateSaleDto;
+    const sale = await saleService.createSale(String(req.user!.userId), data);
     res.status(201).json(sale);
   } catch (error: any) {
     if (error.name === 'ZodError') {
@@ -73,7 +104,7 @@ router.patch('/:id/status', authorize('ADMIN'), async (req: Request, res: Respon
     if (!['PENDING', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED', 'REFUNDED'].includes(status)) {
       return res.status(400).json({ error: 'Estado inválido' });
     }
-    const sale = await saleService.updateSaleStatus(req.params.id, status);
+    const sale = await saleService.updateSaleStatus(String(req.params.id), status as 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'COMPLETED' | 'RETURNED');
     res.json(sale);
   } catch (error) {
     next(error);

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import api from '@services/api';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+// removed unused Input import
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -22,18 +23,19 @@ import {
   Pie,
   Cell
 } from 'recharts';
-import {
-  Download,
+import { 
   FileText,
   TrendingUp,
   Users,
   Package,
   DollarSign,
-  Calendar,
   Filter,
   Eye,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  CheckCircle,
+  Brain,
+  Target
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -136,6 +138,12 @@ export default function Reports() {
       description: 'Analytics comparativo por marketplace'
     },
     {
+      id: 'successful-operations',
+      name: 'Operaciones Exitosas',
+      icon: TrendingUp,
+      description: 'Estadísticas y patrones de aprendizaje de operaciones exitosas'
+    },
+    {
       id: 'executive',
       name: 'Ejecutivo',
       icon: Eye,
@@ -143,9 +151,14 @@ export default function Reports() {
     }
   ];
 
+  const [successStats, setSuccessStats] = useState<any>(null);
+  const [learningPatterns, setLearningPatterns] = useState<any>(null);
+
   useEffect(() => {
     if (activeTab === 'executive') {
       loadExecutiveReport();
+    } else if (activeTab === 'successful-operations') {
+      loadSuccessfulOperations();
     }
   }, [activeTab]);
 
@@ -167,6 +180,24 @@ export default function Reports() {
     } catch (error) {
       console.error('Error loading executive report:', error);
       toast.error('Error al cargar el reporte ejecutivo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadSuccessfulOperations = async () => {
+    try {
+      setLoading(true);
+      const [statsRes, patternsRes] = await Promise.all([
+        api.get('/api/operations/success-stats'),
+        api.get('/api/operations/learning-patterns')
+      ]);
+
+      setSuccessStats(statsRes.data?.stats);
+      setLearningPatterns(patternsRes.data?.patterns);
+    } catch (error) {
+      console.error('Error loading successful operations:', error);
+      toast.error('Error al cargar operaciones exitosas');
     } finally {
       setLoading(false);
     }
@@ -360,6 +391,173 @@ export default function Reports() {
     );
   };
 
+  // Render content for successful operations tab
+  const renderSuccessfulOperations = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+        </div>
+      );
+    }
+
+    if (!successStats || !learningPatterns) {
+      return (
+        <div className="text-center py-12">
+          <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600">No hay datos de operaciones exitosas disponibles</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* Estadísticas Principales */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">Total Operaciones</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{successStats.total || 0}</div>
+              <p className="text-xs text-gray-500 mt-1">Operaciones completadas</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">Tasa de Éxito</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">
+                {successStats.successRate?.toFixed(1) || 0}%
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {successStats.successful || 0} exitosas
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">Precisión Promedio</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">
+                {successStats.avgProfitAccuracy?.toFixed(1) || 0}%
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Exactitud de predicción</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">Días Promedio</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-purple-600">
+                {successStats.avgDaysToComplete?.toFixed(1) || 0}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Tiempo de ciclo completo</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Problemas */}
+        {(successStats.withReturns > 0 || successStats.withIssues > 0) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <AlertCircle className="h-5 w-5 text-orange-500" />
+                <span>Operaciones con Problemas</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-2xl font-bold text-orange-600">{successStats.withReturns || 0}</div>
+                  <p className="text-sm text-gray-600">Con Devoluciones</p>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-red-600">{successStats.withIssues || 0}</div>
+                  <p className="text-sm text-gray-600">Con Problemas</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Patrones de Aprendizaje */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Brain className="h-5 w-5 text-purple-500" />
+              <span>Patrones de Aprendizaje IA</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-semibold mb-2">Precisión Promedio de Predicción</h4>
+                <div className="text-2xl font-bold text-purple-600">
+                  {learningPatterns.avgProfitAccuracy?.toFixed(1) || 0}%
+                </div>
+                <p className="text-sm text-gray-600 mt-1">
+                  La IA predice correctamente la ganancia en promedio
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-semibold mb-2">Días Promedio para Completar</h4>
+                <div className="text-2xl font-bold text-blue-600">
+                  {learningPatterns.avgDaysToComplete?.toFixed(1) || 0} días
+                </div>
+                <p className="text-sm text-gray-600 mt-1">
+                  Tiempo promedio desde publicación hasta entrega completa
+                </p>
+              </div>
+
+              {learningPatterns.categories && Object.keys(learningPatterns.categories).length > 0 && (
+                <div>
+                  <h4 className="font-semibold mb-3">Categorías Más Exitosas</h4>
+                  <div className="space-y-2">
+                    {Object.entries(learningPatterns.categories)
+                      .sort(([, a]: any, [, b]: any) => b - a)
+                      .slice(0, 5)
+                      .map(([category, count]: [string, any]) => (
+                        <div key={category} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <span className="text-sm font-medium">{category}</span>
+                          <span className="text-sm text-gray-600">{count} operaciones</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Satisfacción del Cliente */}
+        {successStats.avgCustomerSatisfaction > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Target className="h-5 w-5 text-green-500" />
+                <span>Satisfacción del Cliente</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-green-600">
+                {successStats.avgCustomerSatisfaction?.toFixed(1) || 0}/5
+              </div>
+              <p className="text-sm text-gray-600 mt-2">Calificación promedio de clientes</p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -378,7 +576,7 @@ export default function Reports() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           {reportTypes.map((type) => (
             <TabsTrigger key={type.id} value={type.id}>
               <type.icon className="h-4 w-4 mr-2" />
@@ -415,16 +613,16 @@ export default function Reports() {
               <div>
                 <Label htmlFor="startDate">Fecha Inicio</Label>
                 <DatePicker
-                  date={filters.startDate}
-                  onDateChange={(date) => setFilters({ ...filters, startDate: date })}
+                  value={filters.startDate}
+                  onChange={(date: Date | undefined) => setFilters({ ...filters, startDate: date })}
                 />
               </div>
 
               <div>
                 <Label htmlFor="endDate">Fecha Fin</Label>
                 <DatePicker
-                  date={filters.endDate}
-                  onDateChange={(date) => setFilters({ ...filters, endDate: date })}
+                  value={filters.endDate}
+                  onChange={(date: Date | undefined) => setFilters({ ...filters, endDate: date })}
                 />
               </div>
 
@@ -564,6 +762,11 @@ export default function Reports() {
             </Card>
           </TabsContent>
         ))}
+
+        {/* Successful Operations Tab */}
+        <TabsContent value="successful-operations">
+          {renderSuccessfulOperations()}
+        </TabsContent>
       </Tabs>
     </div>
   );

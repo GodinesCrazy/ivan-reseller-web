@@ -32,6 +32,19 @@ import publisherRoutes from './api/routes/publisher.routes';
 import currencyRoutes from './api/routes/currency.routes';
 import captchaRoutes from './api/routes/captcha.routes';
 import apiCredentialsRoutes from './api/routes/api-credentials.routes';
+import workflowConfigRoutes from './api/routes/workflow-config.routes';
+import adminCommissionsRoutes from './api/routes/admin-commissions.routes';
+import successfulOperationsRoutes from './api/routes/successful-operations.routes';
+import autopilotRoutes from './api/routes/autopilot.routes';
+import financialAlertsRoutes from './api/routes/financial-alerts.routes';
+import businessMetricsRoutes from './api/routes/business-metrics.routes';
+import antiChurnRoutes from './api/routes/anti-churn.routes';
+import pricingTiersRoutes from './api/routes/pricing-tiers.routes';
+import referralRoutes from './api/routes/referral.routes';
+import costOptimizationRoutes from './api/routes/cost-optimization.routes';
+import aiImprovementsRoutes from './api/routes/ai-improvements.routes';
+import advancedReportsRoutes from './api/routes/advanced-reports.routes';
+import revenueChangeRoutes from './api/routes/revenue-change.routes';
 // import adminRoutes from './api/routes/admin.routes'; // Temporarily disabled
 
 const app: Application = express();
@@ -88,6 +101,7 @@ app.use('/api/dashboard', dashboardRoutes);
 // Additional API routes
 app.use('/api/opportunities', opportunitiesRoutes);
 app.use('/api/automation', automationRoutes);
+app.use('/api/autopilot', autopilotRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/marketplace-oauth', marketplaceOauthRoutes);
@@ -103,7 +117,19 @@ app.use('/api/publisher', publisherRoutes);
 app.use('/api/currency', currencyRoutes);
 app.use('/api/captcha', captchaRoutes);
 app.use('/api/credentials', apiCredentialsRoutes);
+app.use('/api/workflow', workflowConfigRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin', adminCommissionsRoutes);
+app.use('/api/operations', successfulOperationsRoutes);
+app.use('/api/financial-alerts', financialAlertsRoutes);
+app.use('/api/business-metrics', businessMetricsRoutes);
+app.use('/api/anti-churn', antiChurnRoutes);
+app.use('/api/pricing-tiers', pricingTiersRoutes);
+app.use('/api/referral', referralRoutes);
+app.use('/api/cost-optimization', costOptimizationRoutes);
+app.use('/api/ai-improvements', aiImprovementsRoutes);
+app.use('/api/advanced-reports', advancedReportsRoutes);
+app.use('/api/revenue-change', revenueChangeRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

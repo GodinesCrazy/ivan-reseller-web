@@ -6,6 +6,8 @@ import { MercadoLibreService } from './mercadolibre.service';
 import { AIOpportunityEngine } from './ai-opportunity.service';
 import { NotificationService } from './notifications.service';
 import { SecureCredentialManager } from './security.service';
+import logger from '../config/logger';
+import { workflowConfigService } from './workflow-config.service';
 
 export interface AutomationConfig {
   mode: 'manual' | 'automatic';
@@ -435,27 +437,42 @@ export class AutomationService {
   }
 
   /**
-   * Configurar modo de operación
+   * ✅ Configurar modo de operación (con userId para config por usuario)
    */
-  async setOperationMode(mode: 'manual' | 'automatic', environment: 'sandbox' | 'production'): Promise<void> {
-    console.log(`⚙️ Cambiando modo: ${mode} - Entorno: ${environment}`);
+  async setOperationMode(mode: 'manual' | 'automatic', environment: 'sandbox' | 'production', userId?: number): Promise<void> {
+    const currentUserId = userId || 1;
     
-    this.config.mode = mode;
-    this.config.environment = environment;
+    logger.info(`⚙️ Cambiando modo: ${mode} - Entorno: ${environment}`, { userId: currentUserId });
+    
+    // ✅ Actualizar configuración de workflow del usuario
+    if (userId) {
+      await workflowConfigService.updateUserConfig(currentUserId, {
+        environment,
+        workflowMode: mode
+      });
+    } else {
+      // Backward compatibility - actualizar config global
+      this.config.mode = mode;
+      this.config.environment = environment;
+    }
 
-    // Actualizar configuración de servicios
-    await this.ebayService.setEnvironment(environment);
-    await this.amazonService.setEnvironment(environment);
-    await this.mercadolibreService.setEnvironment(environment);
+    // Actualizar configuración de servicios con environment del usuario
+    const userEnvironment = userId 
+      ? await workflowConfigService.getUserEnvironment(currentUserId)
+      : environment;
+      
+    await this.ebayService.setEnvironment(userEnvironment);
+    await this.amazonService.setEnvironment(userEnvironment);
+    await this.mercadolibreService.setEnvironment(userEnvironment);
 
     // Notificar cambio de modo
     await this.notificationService.sendModeChange({
       mode,
-      environment,
+      environment: userEnvironment,
       timestamp: new Date()
     });
 
-    console.log(`✅ Modo actualizado: ${mode} (${environment})`);
+    logger.info(`✅ Modo actualizado: ${mode} (${userEnvironment})`, { userId: currentUserId });
   }
 
   /**
@@ -521,27 +538,41 @@ export class AutomationService {
   }
 
   private async getOpportunityById(id: string): Promise<OpportunityData | null> {
-    // En implementación real, obtener de base de datos
-    // Por ahora retornar mock data
-    return {
-      id,
-      product: 'Mock Product',
-      sourceMarketplace: 'ebay',
-      targetMarketplace: 'amazon',
-      buyPrice: 25.99,
-      sellPrice: 39.99,
-      profitMargin: 35.0,
-      supplierUrl: 'https://example.com/product',
-      confidence: 85,
-      metadata: {
-        title: 'Mock Product Title',
-        description: 'Mock description',
-        images: [],
-        category: 'Electronics',
-        condition: 'new',
-        shipping: {}
+    // ✅ OBTENER OPORTUNIDAD REAL DE LA BASE DE DATOS
+    try {
+      const { prisma } = await import('../config/database');
+      const opportunity = await prisma.$queryRaw`
+        SELECT * FROM opportunities WHERE id = ${id} LIMIT 1
+      ` as any[];
+
+      if (!opportunity || opportunity.length === 0) {
+        return null;
       }
-    };
+
+      const opp = opportunity[0];
+      return {
+        id: String(opp.id),
+        product: opp.title || 'Producto',
+        sourceMarketplace: opp.sourceMarketplace || 'aliexpress',
+        targetMarketplace: opp.targetMarketplaces?.[0] || 'ebay',
+        buyPrice: opp.costUsd || 0,
+        sellPrice: opp.suggestedPriceUsd || 0,
+        profitMargin: (opp.profitMargin || 0) * 100,
+        supplierUrl: opp.aliexpressUrl || '',
+        confidence: (opp.confidenceScore || 0.5) * 100,
+        metadata: {
+          title: opp.title || '',
+          description: '',
+          images: [],
+          category: '',
+          condition: 'new',
+          shipping: {}
+        }
+      };
+    } catch (error) {
+      logger.error('Error getting opportunity from database:', error);
+      return null;
+    }
   }
 
   private async executePurchaseFromSupplier(params: {

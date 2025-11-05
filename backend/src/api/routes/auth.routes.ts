@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authService } from '../../services/auth.service';
 import { AppError } from '../../middleware/error.middleware';
+import { authenticate } from '../../middleware/auth.middleware';
 import { z } from 'zod';
 
 const router = Router();
@@ -18,24 +19,13 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
-// POST /api/auth/register
+// POST /api/auth/register - DISABLED: Solo admin puede crear usuarios
 router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const data = registerSchema.parse(req.body);
-    const result = await authService.register(data);
-
-    res.status(201).json({
-      success: true,
-      message: 'User registered successfully',
-      data: result,
-    });
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      next(new AppError(error.errors[0].message, 400));
-    } else {
-      next(error);
-    }
-  }
+  // ✅ REGISTRO PÚBLICO DESHABILITADO: Solo admin puede crear usuarios
+  return res.status(403).json({
+    success: false,
+    message: 'Public registration is disabled. Please contact an administrator to create an account.',
+  });
 });
 
 // POST /api/auth/login
@@ -59,22 +49,73 @@ router.post('/login', async (req: Request, res: Response, next: NextFunction) =>
 });
 
 // GET /api/auth/me
-router.get('/me', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/me', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const token = req.headers.authorization?.substring(7);
-    
-    if (!token) {
-      throw new AppError('No token provided', 401);
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new AppError('User not found', 404);
     }
 
-    const decoded = await authService.verifyToken(token);
+    // Get full user data from database
+    const { prisma } = await import('../../config/database');
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        fullName: true,
+        commissionRate: true,
+        fixedMonthlyCost: true,
+        balance: true,
+        totalEarnings: true,
+        totalSales: true,
+        isActive: true,
+        lastLoginAt: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
 
     res.json({
       success: true,
-      data: decoded,
+      data: user,
     });
   } catch (error) {
     next(error);
+  }
+});
+
+// POST /api/auth/change-password
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+});
+
+router.post('/change-password', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new AppError('User not authenticated', 401);
+    }
+
+    const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+    const result = await authService.changePassword(userId, currentPassword, newPassword);
+
+    res.json({
+      success: true,
+      message: result.message,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      next(new AppError(error.errors[0].message, 400));
+    } else {
+      next(error);
+    }
   }
 });
 

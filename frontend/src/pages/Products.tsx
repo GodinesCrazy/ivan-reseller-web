@@ -49,8 +49,8 @@ export default function Products() {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/products');
-      setProducts(response.data);
+      const response = await api.get('/api/products');
+      setProducts(response.data?.products || response.data || []);
     } catch (error) {
       console.error('Error fetching products:', error);
       toast.error('Error al cargar productos');
@@ -61,7 +61,7 @@ export default function Products() {
 
   const handleApprove = async (productId: string) => {
     try {
-      await api.patch(`/products/${productId}/approve`);
+      await api.patch(`/api/products/${productId}/status`, { status: 'APPROVED' });
       toast.success('Producto aprobado');
       fetchProducts();
     } catch (error) {
@@ -72,7 +72,7 @@ export default function Products() {
 
   const handleReject = async (productId: string) => {
     try {
-      await api.patch(`/products/${productId}/reject`);
+      await api.patch(`/api/products/${productId}/status`, { status: 'REJECTED' });
       toast.success('Producto rechazado');
       fetchProducts();
     } catch (error) {
@@ -83,7 +83,7 @@ export default function Products() {
 
   const handlePublish = async (productId: string) => {
     try {
-      await api.post(`/products/${productId}/publish`);
+      await api.patch(`/api/products/${productId}/status`, { status: 'PUBLISHED' });
       toast.success('Producto publicado');
       fetchProducts();
     } catch (error) {
@@ -96,7 +96,7 @@ export default function Products() {
     if (!confirm('¿Estás seguro de eliminar este producto?')) return;
     
     try {
-      await api.delete(`/products/${productId}`);
+      await api.delete(`/api/products/${productId}`);
       toast.success('Producto eliminado');
       fetchProducts();
     } catch (error) {
