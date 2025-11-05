@@ -42,7 +42,8 @@ model User {
 model ApiCredential {
   id            Int       @id @default(autoincrement())
   userId        Int
-  apiName       String    // ebay, mercadolibre, amazon, paypal, groq
+  apiName       String    // ebay, mercadolibre, amazon, paypal, groq, email, twilio, slack, stripe, etc.
+  environment   String    @default("production") // sandbox, production
   credentials   String    // JSON string with encrypted API keys
   isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
@@ -51,7 +52,7 @@ model ApiCredential {
   // Relations
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  @@unique([userId, apiName])
+  @@unique([userId, apiName, environment])
   @@map("api_credentials")
 }
 
