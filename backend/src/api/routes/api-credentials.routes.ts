@@ -1,126 +1,32 @@
 import { Router, Request, Response } from 'express';
 import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { PrismaClient } from '@prisma/client';
-import { z } from 'zod';
-import crypto from 'crypto';
 import { AppError } from '../../middleware/error.middleware';
 import { apiAvailability } from '../../services/api-availability.service';
+import { CredentialsManager } from '../../services/credentials-manager.service';
+import { supportsEnvironments } from '../../config/api-keys.config';
+import type { ApiName, ApiEnvironment } from '../../types/api-credentials.types';
 
 const router = Router();
 const prisma = new PrismaClient();
 router.use(authenticate);
 
-// Encryption configuration
-const ALGORITHM = 'aes-256-gcm';
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
-const IV_LENGTH = 16;
-const TAG_LENGTH = 16;
-
-/**
- * Encrypt API credentials
- */
-function encryptCredentials(credentials: Record<string, string>): string {
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const key = Buffer.from(ENCRYPTION_KEY.slice(0, 64), 'hex');
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-  
-  const encrypted = Buffer.concat([
-    cipher.update(JSON.stringify(credentials), 'utf8'),
-    cipher.final(),
-  ]);
-  
-  const tag = cipher.getAuthTag();
-  
-  // Combine iv + tag + encrypted
-  const result = Buffer.concat([iv, tag, encrypted]);
-  return result.toString('base64');
-}
-
-/**
- * Decrypt API credentials
- */
-function decryptCredentials(encryptedData: string): Record<string, string> {
-  const data = Buffer.from(encryptedData, 'base64');
-  const key = Buffer.from(ENCRYPTION_KEY.slice(0, 64), 'hex');
-  
-  const iv = data.slice(0, IV_LENGTH);
-  const tag = data.slice(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
-  const encrypted = data.slice(IV_LENGTH + TAG_LENGTH);
-  
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(tag);
-  
-  const decrypted = Buffer.concat([
-    decipher.update(encrypted),
-    decipher.final(),
-  ]);
-  
-  return JSON.parse(decrypted.toString('utf8'));
-}
-
-// Schema validation for each API type
-const apiSchemas = {
-  ebay: z.object({
-    EBAY_APP_ID: z.string().min(1),
-    EBAY_DEV_ID: z.string().min(1),
-    EBAY_CERT_ID: z.string().min(1),
-    EBAY_TOKEN: z.string().optional(),
-  }),
-  amazon: z.object({
-    AMAZON_CLIENT_ID: z.string().min(1),
-    AMAZON_CLIENT_SECRET: z.string().min(1),
-    AMAZON_REFRESH_TOKEN: z.string().min(1),
-    AMAZON_REGION: z.string().default('us-east-1'),
-  }),
-  mercadolibre: z.object({
-    MERCADOLIBRE_CLIENT_ID: z.string().min(1),
-    MERCADOLIBRE_CLIENT_SECRET: z.string().min(1),
-    MERCADOLIBRE_REDIRECT_URI: z.string().url().optional(),
-  }),
-  groq: z.object({
-    GROQ_API_KEY: z.string().min(1),
-  }),
-  scraperapi: z.object({
-    SCRAPERAPI_KEY: z.string().min(1),
-  }),
-  zenrows: z.object({
-    ZENROWS_API_KEY: z.string().min(1),
-  }),
-  '2captcha': z.object({
-    CAPTCHA_API_KEY: z.string().min(1),
-  }),
-  paypal: z.object({
-    PAYPAL_CLIENT_ID: z.string().min(1),
-    PAYPAL_CLIENT_SECRET: z.string().min(1),
-    PAYPAL_MODE: z.enum(['sandbox', 'production']).default('sandbox'),
-  }),
-  aliexpress: z.object({
-    ALIEXPRESS_APP_KEY: z.string().min(1),
-    ALIEXPRESS_APP_SECRET: z.string().min(1),
-  }),
-};
-
-// GET /api/api-credentials - Listar APIs del usuario
+// GET /api/api-credentials - Listar APIs configuradas del usuario
 router.get('/', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     
-    const credentials = await prisma.apiCredential.findMany({
-      where: { userId },
-      select: {
-        id: true,
-        apiName: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-        // No incluir credentials por seguridad
-      },
-      orderBy: { apiName: 'asc' },
-    });
+    // Usar CredentialsManager para listar APIs configuradas
+    const apis = await CredentialsManager.listConfiguredApis(userId);
 
     res.json({ 
       success: true,
-      data: credentials 
+      data: apis,
+      summary: {
+        total: apis.length,
+        active: apis.filter(a => a.isActive).length,
+        inactive: apis.filter(a => !a.isActive).length,
+      }
     });
   } catch (error) {
     next(error);
@@ -160,32 +66,34 @@ router.get('/:apiName', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const { apiName } = req.params;
+    const environment = (req.query.environment as ApiEnvironment) || 'production';
 
-    const credential = await prisma.apiCredential.findUnique({
-      where: {
-        userId_apiName: { userId, apiName },
-      },
-    });
-
-    if (!credential) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'API credential not found' 
-      });
+    // Validar environment
+    if (environment !== 'sandbox' && environment !== 'production') {
+      throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
     }
 
-    // Decrypt credentials
-    const decrypted = decryptCredentials(credential.credentials);
+    // Usar CredentialsManager para obtener credenciales
+    const credentials = await CredentialsManager.getCredentials(
+      userId,
+      apiName as ApiName,
+      environment
+    );
+
+    if (!credentials) {
+      return res.status(404).json({ 
+        success: false,
+        error: `${apiName} credentials not found for ${environment} environment` 
+      });
+    }
 
     res.json({ 
       success: true,
       data: {
-        id: credential.id,
-        apiName: credential.apiName,
-        credentials: decrypted,
-        isActive: credential.isActive,
-        createdAt: credential.createdAt,
-        updatedAt: credential.updatedAt,
+        apiName,
+        environment,
+        credentials,
+        supportsEnvironments: supportsEnvironments(apiName),
       }
     });
   } catch (error) {
@@ -197,40 +105,55 @@ router.get('/:apiName', async (req: Request, res: Response, next) => {
 router.post('/', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
-    const { apiName, credentials, isActive = true } = req.body;
+    const { apiName, credentials, environment = 'production', isActive = true } = req.body;
 
-    // Validate apiName
-    const validApiNames = Object.keys(apiSchemas);
-    if (!validApiNames.includes(apiName)) {
-      throw new AppError(
-        `Invalid API name. Must be one of: ${validApiNames.join(', ')}`,
-        400
-      );
+    // Validar apiName
+    if (!apiName || typeof apiName !== 'string') {
+      throw new AppError('API name is required', 400);
     }
 
-    // Validate credentials schema
-    const schema = apiSchemas[apiName as keyof typeof apiSchemas];
-    const validatedCredentials = schema.parse(credentials);
+    // Validar environment
+    const env = environment as ApiEnvironment;
+    if (env !== 'sandbox' && env !== 'production') {
+      throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
+    }
 
-    // Encrypt credentials
-    const encrypted = encryptCredentials(validatedCredentials);
+    // Validar credentials
+    if (!credentials || typeof credentials !== 'object') {
+      throw new AppError('Credentials object is required', 400);
+    }
 
-    // Upsert (create or update)
-    const credential = await prisma.apiCredential.upsert({
-      where: {
-        userId_apiName: { userId, apiName },
-      },
-      create: {
+    // Validar credenciales usando CredentialsManager
+    const validation = CredentialsManager.validateCredentials(
+      apiName as ApiName,
+      credentials
+    );
+
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid credentials format',
+        details: validation.errors,
+      });
+    }
+
+    // Guardar credenciales usando CredentialsManager
+    await CredentialsManager.saveCredentials(
+      userId,
+      apiName as ApiName,
+      credentials,
+      env
+    );
+
+    // Actualizar isActive si es necesario
+    if (isActive !== undefined) {
+      await CredentialsManager.toggleCredentials(
         userId,
-        apiName,
-        credentials: encrypted,
-        isActive,
-      },
-      update: {
-        credentials: encrypted,
-        isActive,
-      },
-    });
+        apiName as ApiName,
+        env,
+        isActive
+      );
+    }
 
     // Clear cache for this API
     await apiAvailability.clearAPICache(userId, apiName);
@@ -240,18 +163,19 @@ router.post('/', async (req: Request, res: Response, next) => {
       data: {
         userId,
         action: 'API_CREDENTIAL_UPDATED',
-        description: `API credentials updated: ${apiName}`,
-        metadata: JSON.stringify({ apiName, isActive }),
+        description: `API credentials updated: ${apiName} (${env})`,
+        metadata: JSON.stringify({ apiName, environment: env, isActive }),
       },
     });
 
     res.json({ 
       success: true,
-      message: `${apiName} credentials saved successfully`,
+      message: `${apiName} credentials saved successfully for ${env} environment`,
       data: {
-        id: credential.id,
-        apiName: credential.apiName,
-        isActive: credential.isActive,
+        apiName,
+        environment: env,
+        isActive,
+        supportsEnvironments: supportsEnvironments(apiName),
       }
     });
   } catch (error: any) {
@@ -271,25 +195,37 @@ router.put('/:apiName/toggle', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const { apiName } = req.params;
+    const { environment = 'production' } = req.body;
 
-    const credential = await prisma.apiCredential.findUnique({
-      where: {
-        userId_apiName: { userId, apiName },
-      },
-    });
-
-    if (!credential) {
-      throw new AppError('API credential not found', 404);
+    // Validar environment
+    const env = environment as ApiEnvironment;
+    if (env !== 'sandbox' && env !== 'production') {
+      throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
     }
 
-    const updated = await prisma.apiCredential.update({
-      where: {
-        userId_apiName: { userId, apiName },
-      },
-      data: {
-        isActive: !credential.isActive,
-      },
-    });
+    // Verificar que existan credenciales
+    const hasCredentials = await CredentialsManager.hasCredentials(
+      userId,
+      apiName as ApiName,
+      env
+    );
+
+    if (!hasCredentials) {
+      throw new AppError(`${apiName} credentials not found for ${env} environment`, 404);
+    }
+
+    // Obtener estado actual
+    const apis = await CredentialsManager.listConfiguredApis(userId);
+    const current = apis.find(a => a.apiName === apiName && a.environment === env);
+    const newState = !current?.isActive;
+
+    // Toggle estado
+    await CredentialsManager.toggleCredentials(
+      userId,
+      apiName as ApiName,
+      env,
+      newState
+    );
 
     // Clear cache
     await apiAvailability.clearAPICache(userId, apiName);
@@ -299,17 +235,18 @@ router.put('/:apiName/toggle', async (req: Request, res: Response, next) => {
       data: {
         userId,
         action: 'API_CREDENTIAL_TOGGLED',
-        description: `API ${apiName} ${updated.isActive ? 'activated' : 'deactivated'}`,
-        metadata: JSON.stringify({ apiName, isActive: updated.isActive }),
+        description: `API ${apiName} (${env}) ${newState ? 'activated' : 'deactivated'}`,
+        metadata: JSON.stringify({ apiName, environment: env, isActive: newState }),
       },
     });
 
     res.json({ 
       success: true,
-      message: `${apiName} ${updated.isActive ? 'activated' : 'deactivated'}`,
+      message: `${apiName} (${env}) ${newState ? 'activated' : 'deactivated'}`,
       data: {
-        apiName: updated.apiName,
-        isActive: updated.isActive,
+        apiName,
+        environment: env,
+        isActive: newState,
       }
     });
   } catch (error) {
@@ -322,22 +259,33 @@ router.delete('/:apiName', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const { apiName } = req.params;
+    const environment = (req.query.environment as ApiEnvironment) || 'production';
 
-    const credential = await prisma.apiCredential.findUnique({
-      where: {
-        userId_apiName: { userId, apiName },
-      },
-    });
-
-    if (!credential) {
-      throw new AppError('API credential not found', 404);
+    // Validar environment
+    if (environment !== 'sandbox' && environment !== 'production') {
+      throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
     }
 
-    await prisma.apiCredential.delete({
-      where: {
-        userId_apiName: { userId, apiName },
-      },
-    });
+    // Verificar que existan credenciales
+    const hasCredentials = await CredentialsManager.hasCredentials(
+      userId,
+      apiName as ApiName,
+      environment
+    );
+
+    if (!hasCredentials) {
+      throw new AppError(
+        `${apiName} credentials not found for ${environment} environment`,
+        404
+      );
+    }
+
+    // Eliminar usando CredentialsManager
+    await CredentialsManager.deleteCredentials(
+      userId,
+      apiName as ApiName,
+      environment
+    );
 
     // Clear cache
     await apiAvailability.clearAPICache(userId, apiName);
@@ -347,14 +295,14 @@ router.delete('/:apiName', async (req: Request, res: Response, next) => {
       data: {
         userId,
         action: 'API_CREDENTIAL_DELETED',
-        description: `API credentials deleted: ${apiName}`,
-        metadata: JSON.stringify({ apiName }),
+        description: `API credentials deleted: ${apiName} (${environment})`,
+        metadata: JSON.stringify({ apiName, environment }),
       },
     });
 
     res.json({ 
       success: true,
-      message: `${apiName} credentials deleted successfully` 
+      message: `${apiName} credentials deleted successfully for ${environment} environment` 
     });
   } catch (error) {
     next(error);
