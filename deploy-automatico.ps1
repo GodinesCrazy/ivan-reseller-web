@@ -46,7 +46,7 @@ if (-not $remotes) {
     Write-Host ""
     Write-Host "Configuracion de Git Remote" -ForegroundColor Yellow
     Write-Host "No hay un repositorio remoto configurado." -ForegroundColor Yellow
-    $repoUrl = Read-Host "Ingresa la URL de tu repositorio GitHub (ej: https://github.com/usuario/repo.git)"
+    $repoUrl = Read-Host "Ingresa la URL de tu repositorio GitHub (ej: https://github.com/GodinesCrazy/ivan-reseller-web.git)"
     if ($repoUrl) {
         git remote add origin $repoUrl
         Write-Host "Remote configurado" -ForegroundColor Green
@@ -97,7 +97,8 @@ Write-Host ""
 Write-Host "1. Ve a: https://railway.app" -ForegroundColor Cyan
 Write-Host "2. Login con GitHub" -ForegroundColor Cyan
 Write-Host "3. Click 'New Project' -> 'Deploy from GitHub repo'" -ForegroundColor Cyan
-Write-Host "4. Selecciona tu repositorio" -ForegroundColor Cyan
+Write-Host "4. Busca: GodinesCrazy/ivan-reseller-web" -ForegroundColor Cyan
+Write-Host "5. Selecciona el repositorio" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Configuracion del servicio:" -ForegroundColor Yellow
 Write-Host "  - Root Directory: backend" -ForegroundColor White
@@ -137,10 +138,10 @@ Write-Host ""
 Write-Host "PASO 5: Configurar Vercel (Frontend)" -ForegroundColor Yellow
 Write-Host "=======================================" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "1. Ve a: https://vercel.com" -ForegroundColor Cyan
-Write-Host "2. Login con GitHub" -ForegroundColor Cyan
-Write-Host "3. Click 'Add New...' -> 'Project'" -ForegroundColor Cyan
-Write-Host "4. Importar tu repositorio" -ForegroundColor Cyan
+Write-Host "1. Ve a: https://vercel.com/ivan-martys-projects" -ForegroundColor Cyan
+Write-Host "   O ve a: https://vercel.com/new" -ForegroundColor Cyan
+Write-Host "2. Busca: GodinesCrazy/ivan-reseller-web" -ForegroundColor Cyan
+Write-Host "3. Click 'Import'" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Configuracion:" -ForegroundColor Yellow
 Write-Host "  - Framework Preset: Vite" -ForegroundColor White
