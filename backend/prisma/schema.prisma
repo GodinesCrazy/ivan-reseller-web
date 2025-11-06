@@ -41,6 +41,8 @@ model User {
   creator              User?                 @relation("UserCreator", fields: [createdBy], references: [id])
   adminCommissions     AdminCommission[] // Comisiones que recibe como admin de usuarios creados
   successfulOperations SuccessfulOperation[] // Operaciones exitosas del usuario
+  marketplaceListings  MarketplaceListing[]
+  opportunities        Opportunity[]
 
   @@map("users")
 }
@@ -85,6 +87,7 @@ model Product {
   user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   sales                Sale[]
   successfulOperations SuccessfulOperation[]
+  marketplaceListings  MarketplaceListing[]
 
   @@map("products")
 }
@@ -239,4 +242,85 @@ model SuccessfulOperation {
   sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
   @@map("successful_operations")
+}
+
+// ✅ CONFIGURACIÓN DEL SISTEMA (SystemConfig)
+model SystemConfig {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String // JSON string
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_configs")
+}
+
+// ✅ LISTINGS DE MARKETPLACE
+model MarketplaceListing {
+  id          Int       @id @default(autoincrement())
+  productId   Int
+  userId      Int
+  marketplace String // ebay, mercadolibre, amazon
+  listingId   String // ID del listing en el marketplace
+  listingUrl  String?
+  sku         String?
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([marketplace, listingId])
+  @@map("marketplace_listings")
+}
+
+// ✅ OPORTUNIDADES DE NEGOCIO
+model Opportunity {
+  id                 Int      @id @default(autoincrement())
+  userId             Int
+  sourceMarketplace  String? // aliexpress, ebay, etc.
+  sourceProductId    Int?
+  title              String
+  costUsd            Float
+  suggestedPriceUsd  Float
+  profitMargin       Float
+  roiPercentage      Float
+  competitionLevel   String? // low, medium, high
+  marketDemand       String? // low, medium, high
+  confidenceScore    Float
+  feesConsidered     String? // JSON
+  targetMarketplaces String? // JSON array
+  status             String   @default("PENDING") // PENDING, APPROVED, REJECTED, PUBLISHED
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relations
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competitionSnapshots CompetitionSnapshot[]
+
+  @@map("opportunities")
+}
+
+// ✅ SNAPSHOTS DE COMPETENCIA
+model CompetitionSnapshot {
+  id               Int      @id @default(autoincrement())
+  opportunityId    Int
+  marketplace      String // ebay, mercadolibre, amazon
+  region           String?
+  currency         String?
+  listingsFound    Int?
+  averagePrice     Float?
+  minPrice         Float?
+  maxPrice         Float?
+  medianPrice      Float?
+  competitivePrice Float?
+  topListings      String? // JSON
+  createdAt        DateTime @default(now())
+
+  // Relations
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@map("competition_snapshots")
 }

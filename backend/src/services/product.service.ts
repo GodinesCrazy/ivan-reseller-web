@@ -1,4 +1,4 @@
-import { PrismaClient, ProductStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 
 const prisma = new PrismaClient();
@@ -30,7 +30,7 @@ export interface UpdateProductDto {
 }
 
 export class ProductService {
-  async createProduct(userId: string, data: CreateProductDto) {
+  async createProduct(userId: number, data: CreateProductDto) {
     const product = await prisma.product.create({
       data: {
         ...data,
@@ -123,7 +123,7 @@ export class ProductService {
     return product;
   }
 
-  async updateProduct(id: string, userId: string, data: UpdateProductDto) {
+  async updateProduct(id: number, userId: number, data: UpdateProductDto) {
     const product = await this.getProductById(id);
 
     if (product.userId !== userId) {
@@ -197,7 +197,7 @@ export class ProductService {
     return updated;
   }
 
-  async deleteProduct(id: string, userId: string, isAdmin: boolean = false) {
+  async deleteProduct(id: number, userId: number, isAdmin: boolean = false) {
     const product = await this.getProductById(id);
 
     if (!isAdmin && product.userId !== userId) {
