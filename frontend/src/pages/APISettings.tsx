@@ -308,6 +308,10 @@ export default function APISettings() {
     setError(null);
     try {
       const apiDef = API_DEFINITIONS[apiName];
+      // Usar campos del backend si están disponibles, sino usar API_DEFINITIONS
+      const backendDef = backendApiDefinitions[apiName];
+      const fieldsToUse = backendDef?.fields || apiDef.fields;
+      
       const credentials: Record<string, any> = {};
 
       // Mapear campos del frontend a los campos esperados por el backend
@@ -332,7 +336,7 @@ export default function APISettings() {
         'PAYPAL_CLIENT_ID': 'clientId',
         'PAYPAL_CLIENT_SECRET': 'clientSecret',
         'PAYPAL_MODE': 'environment',
-        // AliExpress usa email/password, no appKey/appSecret
+        // AliExpress usa email/password directamente del backend
         'email': 'email',
         'password': 'password',
         'twoFactorEnabled': 'twoFactorEnabled',
@@ -340,18 +344,23 @@ export default function APISettings() {
       };
 
       // Validar campos requeridos y mapear
-      for (const field of apiDef.fields) {
-        const value = formData[apiName]?.[field.key] || '';
-        if (field.required && !value.trim()) {
-          throw new Error(`El campo "${field.label}" es requerido`);
+      for (const field of fieldsToUse) {
+        // Normalizar campo del backend o del frontend
+        const fieldKey = field.key;
+        const fieldRequired = field.required !== undefined ? field.required : (field.required || false);
+        const fieldLabel = field.label || fieldKey;
+        
+        const value = formData[apiName]?.[fieldKey] || '';
+        if (fieldRequired && !value.trim()) {
+          throw new Error(`El campo "${fieldLabel}" es requerido`);
         }
         // Incluir campos incluso si están vacíos para AliExpress (twoFactorEnabled puede ser false)
-        if (value.trim() || (apiName === 'aliexpress' && field.key === 'twoFactorEnabled')) {
+        if (value.trim() || (apiName === 'aliexpress' && fieldKey === 'twoFactorEnabled')) {
           // Mapear el nombre del campo al formato esperado por el backend
-          const backendKey = fieldMapping[field.key] || field.key.toLowerCase();
+          const backendKey = fieldMapping[fieldKey] || fieldKey.toLowerCase();
           
           // Manejar campos booleanos
-          if (field.key === 'twoFactorEnabled') {
+          if (fieldKey === 'twoFactorEnabled') {
             credentials[backendKey] = value.trim().toLowerCase() === 'true' || value === true;
           } else if (value.trim()) {
             credentials[backendKey] = value.trim();
