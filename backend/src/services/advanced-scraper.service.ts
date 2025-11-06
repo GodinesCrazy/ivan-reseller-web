@@ -103,6 +103,35 @@ export class AdvancedMarketplaceScraper {
         console.log(`🔧 Usando Chromium del sistema: ${executablePath}`);
       } else {
         console.log('⚠️  Chromium del sistema no encontrado, Puppeteer usará su Chrome descargado');
+        // Intentar encontrar Chrome descargado por Puppeteer
+        try {
+          const puppeteerChromePath = execSync('find /root/.cache/puppeteer -name chrome -type f 2>/dev/null | head -1', { encoding: 'utf-8' }).trim();
+          if (puppeteerChromePath && fs.existsSync(puppeteerChromePath)) {
+            launchOptions.executablePath = puppeteerChromePath;
+            console.log(`🔧 Usando Chrome de Puppeteer en: ${puppeteerChromePath}`);
+          } else {
+            // Buscar en otras ubicaciones comunes
+            const commonPaths = [
+              '/root/.local/share/puppeteer/chrome',
+              '/tmp/.puppeteer/chrome',
+            ];
+            for (const basePath of commonPaths) {
+              try {
+                const found = execSync(`find ${basePath} -name chrome -type f 2>/dev/null | head -1`, { encoding: 'utf-8' }).trim();
+                if (found && fs.existsSync(found)) {
+                  launchOptions.executablePath = found;
+                  console.log(`🔧 Usando Chrome encontrado en: ${found}`);
+                  break;
+                }
+              } catch (e) {
+                // Continuar buscando
+              }
+            }
+          }
+        } catch (e) {
+          // No se encontró Chrome descargado, Puppeteer intentará descargarlo
+          console.log('⚠️  Chrome de Puppeteer no encontrado, se intentará descargar automáticamente');
+        }
       }
       
       this.browser = await puppeteer.launch(launchOptions);
