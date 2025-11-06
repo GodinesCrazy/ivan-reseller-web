@@ -82,10 +82,14 @@ export default function Users() {
   const itemsPerPage = 20;
 
   useEffect(() => {
+    let isMounted = true;
+    
     const verifyAndLoad = async () => {
       // Forzar actualización del usuario desde el backend
       console.log('Verificando autenticación y rol de usuario...');
       const isAuthenticated = await checkAuth();
+      
+      if (!isMounted) return;
       
       if (!isAuthenticated) {
         toast.error('Please log in to access this page');
@@ -95,6 +99,8 @@ export default function Users() {
 
       // Obtener usuario actualizado del store después de checkAuth
       const updatedUser = useAuthStore.getState().user;
+      
+      if (!isMounted) return;
       
       if (!updatedUser) {
         console.error('User information not available after checkAuth');
@@ -117,24 +123,35 @@ export default function Users() {
         toast.error('Access denied. Admin only.');
         // Esperar un momento antes de redirigir para que el usuario vea el mensaje
         setTimeout(() => {
-          navigate('/dashboard');
+          if (isMounted) {
+            navigate('/dashboard');
+          }
         }, 2000);
         return;
       }
 
       // Usuario es admin, cargar usuarios
       console.log('Usuario es admin, cargando lista de usuarios...');
-      loadUsers();
+      if (isMounted) {
+        loadUsers();
+      }
     };
 
     verifyAndLoad();
-  }, [checkAuth, navigate]);
+    
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Solo ejecutar una vez al montar el componente
 
   const loadUsers = async () => {
     try {
-      const { data } = await api.get('/api/admin/users');
+      setLoading(true);
+      const { data } = await api.get('/api/users');
+      // El backend devuelve { success: true, data: users }
+      const usersList = data?.data || data?.users || [];
       // Mapear datos del backend al formato esperado por el frontend
-      const mappedUsers = (data?.users || []).map((user: any) => ({
+      const mappedUsers = usersList.map((user: any) => ({
         id: user.id,
         name: user.fullName || user.username, // Usar fullName si existe, sino username
         email: user.email,
@@ -156,12 +173,13 @@ export default function Users() {
   const loadUserDetails = async (userId: number) => {
     try {
       const [detailsRes, statsRes] = await Promise.all([
-        api.get(`/api/admin/users/${userId}`),
-        api.get(`/api/admin/users/${userId}/stats`)
+        api.get(`/api/users/${userId}`),
+        api.get(`/api/users/${userId}/stats`)
       ]);
       
       // Mapear datos del backend al formato esperado por el frontend
-      const backendUser = detailsRes.data?.user;
+      // El backend devuelve { success: true, data: user }
+      const backendUser = detailsRes.data?.data || detailsRes.data?.user;
       const mappedUser: User = {
         id: backendUser.id,
         name: backendUser.fullName || backendUser.username,
@@ -188,8 +206,9 @@ export default function Users() {
     
     // Obtener datos completos del backend
     try {
-      const detailsRes = await api.get(`/api/admin/users/${user.id}`);
-      const backendUser = detailsRes.data?.user;
+      const detailsRes = await api.get(`/api/users/${user.id}`);
+      // El backend devuelve { success: true, data: user }
+      const backendUser = detailsRes.data?.data || detailsRes.data?.user;
       
       // Actualizar formData con datos del backend
       setFormData({
@@ -273,7 +292,7 @@ export default function Users() {
 
       console.log('Creating user with data:', { ...backendData, password: '***' });
 
-      const response = await api.post('/api/admin/users', backendData);
+      const response = await api.post('/api/users', backendData);
       
       console.log('User created successfully:', response.data);
       
@@ -330,7 +349,7 @@ export default function Users() {
       if (formData.password) {
         backendData.password = formData.password;
       }
-      await api.put(`/api/admin/users/${selectedUser.id}`, backendData);
+      await api.put(`/api/users/${selectedUser.id}`, backendData);
       toast.success('User updated successfully');
       setShowEditModal(false);
       loadUsers();
@@ -342,7 +361,7 @@ export default function Users() {
   const toggleUserStatus = async (userId: number, currentStatus: 'active' | 'inactive') => {
     try {
       const newIsActive = currentStatus === 'inactive'; // Invertir estado
-      await api.put(`/api/admin/users/${userId}`, { isActive: newIsActive });
+      await api.put(`/api/users/${userId}`, { isActive: newIsActive });
       toast.success(`User ${newIsActive ? 'activated' : 'deactivated'}`);
       loadUsers();
     } catch (error: any) {
@@ -358,7 +377,9 @@ export default function Users() {
     }
 
     try {
-      await api.post(`/api/admin/users/${userId}/reset-password`, { newPassword });
+      // Nota: El endpoint de reset-password puede no existir aún en el backend
+      // Por ahora, usamos el endpoint de actualización de usuario
+      await api.put(`/api/users/${userId}`, { password: newPassword });
       toast.success('Password reset successfully');
       loadUsers();
     } catch (error: any) {
@@ -370,7 +391,7 @@ export default function Users() {
     if (!confirm('Are you sure you want to deactivate this user? This action can be reversed.')) return;
 
     try {
-      await api.delete(`/api/admin/users/${userId}`);
+      await api.delete(`/api/users/${userId}`);
       toast.success('User deactivated');
       loadUsers();
     } catch (error: any) {
