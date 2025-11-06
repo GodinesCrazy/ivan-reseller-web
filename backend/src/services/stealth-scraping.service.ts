@@ -176,6 +176,35 @@ export class StealthScrapingService {
    * Initialize browser with stealth configuration
    */
   private async initializeBrowser(proxy?: ProxyConfig): Promise<Browser> {
+    // Intentar encontrar Chromium del sistema (instalado por Nix)
+    const fs = require('fs');
+    const { execSync } = require('child_process');
+    let executablePath: string | undefined = undefined;
+    
+    // Primero intentar encontrar Chromium usando 'which'
+    try {
+      const chromiumPath = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null', { encoding: 'utf-8' }).trim();
+      if (chromiumPath && fs.existsSync(chromiumPath)) {
+        executablePath = chromiumPath;
+        logger.info(`Found system Chromium at: ${executablePath}`);
+      }
+    } catch (e) {
+      // 'which' no encontró Chromium, continuar con otras opciones
+    }
+    
+    // Si no se encontró, buscar en el store de Nix
+    if (!executablePath) {
+      try {
+        const nixStorePath = execSync('find /nix/store -name chromium -type f 2>/dev/null | head -1', { encoding: 'utf-8' }).trim();
+        if (nixStorePath && fs.existsSync(nixStorePath)) {
+          executablePath = nixStorePath;
+          logger.info(`Found Nix Chromium at: ${executablePath}`);
+        }
+      } catch (e) {
+        // Continuar sin Chromium del sistema
+      }
+    }
+    
     try {
       const launchOptions: any = {
         headless: true, // Changed to true for production
@@ -192,6 +221,12 @@ export class StealthScrapingService {
           '--disable-features=IsolateOrigins,site-per-process',
         ],
       };
+
+      // Si encontramos Chromium del sistema, usarlo
+      if (executablePath) {
+        launchOptions.executablePath = executablePath;
+        logger.info(`Using system Chromium: ${executablePath}`);
+      }
 
       // Add proxy if provided
       if (proxy) {
@@ -211,7 +246,6 @@ export class StealthScrapingService {
       ];
       const viewport = viewports[Math.floor(Math.random() * viewports.length)];
 
-      // En Railway/Linux, no especificar executablePath para usar Chrome de Puppeteer
       this.browser = await puppeteer.launch(launchOptions);
 
       // Create fingerprint
@@ -224,14 +258,20 @@ export class StealthScrapingService {
       // Intentar con configuración mínima como fallback
       try {
         logger.info('Attempting browser launch with minimal configuration');
-        this.browser = await puppeteer.launch({
+        const minimalOptions: any = {
           headless: true,
           args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
           ],
-        });
+        };
+        
+        if (executablePath) {
+          minimalOptions.executablePath = executablePath;
+        }
+        
+        this.browser = await puppeteer.launch(minimalOptions);
         logger.info('Browser initialized with minimal configuration');
         return this.browser;
       } catch (fallbackError: any) {
