@@ -30,9 +30,11 @@ export interface MLProduct {
 }
 
 export interface MLListingResponse {
-  itemId: string;
-  permalink: string;
-  status: string;
+  success: boolean;
+  itemId?: string;
+  permalink?: string;
+  status?: string;
+  error?: string;
 }
 
 export class MercadoLibreService {

@@ -383,7 +383,7 @@ class JobService {
               where: { id: commission.id },
               data: {
                 status: 'SCHEDULED',
-                scheduledPayoutAt: new Date(),
+                scheduledAt: new Date(),
               },
             });
             
@@ -414,7 +414,7 @@ class JobService {
                   data: {
                     status: 'PAID',
                     paidAt: new Date(),
-                    paypalTransactionId: payoutItem.transactionId || payoutResult.batchId,
+                    // paypalTransactionId se guarda en Activity metadata
                   },
                 });
 
@@ -435,7 +435,7 @@ class JobService {
                 where: { id: commission.id },
                 data: {
                   status: 'SCHEDULED',
-                  scheduledPayoutAt: new Date(),
+                  scheduledAt: new Date(),
                 },
               });
               
