@@ -29,57 +29,12 @@ export class AdvancedMarketplaceScraper {
   async init(): Promise<void> {
     console.log('🚀 Iniciando navegador con evasión anti-bot...');
     
-    // Intentar encontrar Chromium del sistema (instalado por Nix)
-    const possiblePaths = [
-      '/nix/store/*/bin/chromium', // Nix store path (wildcard porque cambia)
-      '/usr/bin/chromium',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/google-chrome',
-      '/usr/bin/google-chrome-stable',
-    ];
-    
-    const fs = require('fs');
-    const { execSync } = require('child_process');
-    let executablePath: string | undefined = undefined;
-    
-    // Primero intentar encontrar Chromium usando 'which'
+    // Configuración SIMPLE como funcionaba originalmente
+    // Puppeteer descargará Chrome automáticamente si no se especifica executablePath
+    // NO buscar Chrome manualmente - dejar que Puppeteer lo maneje
     try {
-      const chromiumPath = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null', { encoding: 'utf-8' }).trim();
-      if (chromiumPath && fs.existsSync(chromiumPath)) {
-        executablePath = chromiumPath;
-        console.log(`✅ Encontrado Chromium del sistema en: ${executablePath}`);
-      }
-    } catch (e) {
-      // 'which' no encontró Chromium, continuar con otras opciones
-    }
-    
-    // Si no se encontró, buscar en rutas comunes
-    if (!executablePath) {
-      for (const path of possiblePaths) {
-        if (path.includes('*')) {
-          // Para rutas con wildcard, intentar buscar en el store de Nix
-          try {
-            const nixStorePath = execSync('find /nix/store -name chromium -type f 2>/dev/null | head -1', { encoding: 'utf-8' }).trim();
-            if (nixStorePath && fs.existsSync(nixStorePath)) {
-              executablePath = nixStorePath;
-              console.log(`✅ Encontrado Chromium de Nix en: ${executablePath}`);
-              break;
-            }
-          } catch (e) {
-            // Continuar buscando
-          }
-        } else if (fs.existsSync(path)) {
-          executablePath = path;
-          console.log(`✅ Encontrado Chromium en: ${executablePath}`);
-          break;
-        }
-      }
-    }
-    
-    try {
-      // Configuración de lanzamiento
-      const launchOptions: any = {
-        headless: 'new',
+      this.browser = await puppeteer.launch({
+        headless: 'new', // Usar nuevo modo headless
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -91,74 +46,26 @@ export class AdvancedMarketplaceScraper {
           '--disable-web-security',
           '--disable-features=VizDisplayCompositor',
           '--window-size=1920,1080',
-          '--single-process',
         ],
         ignoreDefaultArgs: ['--enable-automation'],
         ignoreHTTPSErrors: true,
-      };
-      
-      // Si encontramos Chromium del sistema, usarlo
-      if (executablePath) {
-        launchOptions.executablePath = executablePath;
-        console.log(`🔧 Usando Chromium del sistema: ${executablePath}`);
-      } else {
-        console.log('⚠️  Chromium del sistema no encontrado, Puppeteer usará su Chrome descargado');
-        // Intentar encontrar Chrome descargado por Puppeteer
-        try {
-          const puppeteerChromePath = execSync('find /root/.cache/puppeteer -name chrome -type f 2>/dev/null | head -1', { encoding: 'utf-8' }).trim();
-          if (puppeteerChromePath && fs.existsSync(puppeteerChromePath)) {
-            launchOptions.executablePath = puppeteerChromePath;
-            console.log(`🔧 Usando Chrome de Puppeteer en: ${puppeteerChromePath}`);
-          } else {
-            // Buscar en otras ubicaciones comunes
-            const commonPaths = [
-              '/root/.local/share/puppeteer/chrome',
-              '/tmp/.puppeteer/chrome',
-            ];
-            for (const basePath of commonPaths) {
-              try {
-                const found = execSync(`find ${basePath} -name chrome -type f 2>/dev/null | head -1`, { encoding: 'utf-8' }).trim();
-                if (found && fs.existsSync(found)) {
-                  launchOptions.executablePath = found;
-                  console.log(`🔧 Usando Chrome encontrado en: ${found}`);
-                  break;
-                }
-              } catch (e) {
-                // Continuar buscando
-              }
-            }
-          }
-        } catch (e) {
-          // No se encontró Chrome descargado, Puppeteer intentará descargarlo automáticamente
-          console.log('⚠️  Chrome de Puppeteer no encontrado, se intentará descargar automáticamente');
-          // Asegurar que PUPPETEER_SKIP_DOWNLOAD no esté configurado
-          if (process.env.PUPPETEER_SKIP_DOWNLOAD === 'true') {
-            console.log('⚠️  PUPPETEER_SKIP_DOWNLOAD está en true, deshabilitándolo para permitir descarga');
-            delete process.env.PUPPETEER_SKIP_DOWNLOAD;
-          }
-        }
-      }
-      
-      this.browser = await puppeteer.launch(launchOptions);
+        // NO especificar executablePath - dejar que Puppeteer use su Chrome descargado automáticamente
+      });
+
       console.log('✅ Navegador iniciado exitosamente');
     } catch (error: any) {
       console.error('❌ Error al iniciar navegador:', error.message);
-      // Si falla, intentar sin algunas opciones avanzadas
+      // Si falla, intentar con configuración mínima (como fallback)
       try {
-        const minimalOptions: any = {
+        this.browser = await puppeteer.launch({
           headless: true,
           args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
           ],
-        };
-        
-        if (executablePath) {
-          minimalOptions.executablePath = executablePath;
-        }
-        
-        this.browser = await puppeteer.launch(minimalOptions);
+          // NO especificar executablePath aquí tampoco
+        });
         console.log('✅ Navegador iniciado con configuración mínima');
       } catch (fallbackError: any) {
         console.error('❌ Error crítico al iniciar navegador:', fallbackError.message);
