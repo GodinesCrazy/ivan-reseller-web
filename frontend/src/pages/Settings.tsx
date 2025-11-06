@@ -115,10 +115,8 @@ export default function Settings() {
 
   const loadSettings = async () => {
     try {
-      const { data } = await api.get('/api/settings');
-      if (data?.settings) {
-        setGeneralSettings(data.settings);
-      }
+      // El endpoint /api/settings no existe, usar valores por defecto
+      // Si en el futuro se implementa, usar: await api.get('/api/settings');
     } catch (error: any) {
       console.error('Error loading settings:', error);
     }
@@ -126,21 +124,41 @@ export default function Settings() {
 
   const loadProfile = async () => {
     try {
-      const { data } = await api.get('/api/users/me');
-      if (data?.user) {
-        setProfile(data.user);
+      // Corregir endpoint: /api/users/me -> /api/auth/me
+      const { data } = await api.get('/api/auth/me');
+      if (data?.data) {
+        const user = data.data;
+        setProfile({
+          id: user.id,
+          name: user.fullName || user.username || '',
+          email: user.email || '',
+          phone: ''
+        });
       }
     } catch (error: any) {
       console.error('Error loading profile:', error);
+      // Si falla, intentar obtener desde el store de auth
+      try {
+        const { useAuthStore } = await import('../stores/authStore');
+        const { user } = useAuthStore.getState();
+        if (user) {
+          setProfile({
+            id: user.id,
+            name: user.fullName || user.username || '',
+            email: user.email || '',
+            phone: ''
+          });
+        }
+      } catch (e) {
+        // Ignorar error silenciosamente
+      }
     }
   };
 
   const loadNotifications = async () => {
     try {
-      const { data } = await api.get('/api/users/notifications');
-      if (data?.notifications) {
-        setNotifications(data.notifications);
-      }
+      // El endpoint /api/users/notifications no existe, usar valores por defecto
+      // Si en el futuro se implementa, usar: await api.get('/api/notifications/preferences');
     } catch (error: any) {
       console.error('Error loading notifications:', error);
     }
@@ -163,7 +181,8 @@ export default function Settings() {
   const saveGeneralSettings = async () => {
     setSaving(true);
     try {
-      await api.put('/api/settings', { settings: generalSettings });
+      // El endpoint /api/settings no existe aún, guardar en localStorage como fallback
+      localStorage.setItem('userSettings', JSON.stringify(generalSettings));
       toast.success('Settings saved successfully');
     } catch (error: any) {
       toast.error('Error saving settings: ' + (error.response?.data?.error || error.message));
@@ -187,7 +206,8 @@ export default function Settings() {
   const saveNotifications = async () => {
     setSaving(true);
     try {
-      await api.put('/api/users/notifications', { notifications });
+      // El endpoint /api/users/notifications no existe aún, guardar en localStorage como fallback
+      localStorage.setItem('notificationSettings', JSON.stringify(notifications));
       toast.success('Notification settings saved');
     } catch (error: any) {
       toast.error('Error saving notifications: ' + (error.response?.data?.error || error.message));
@@ -224,8 +244,8 @@ export default function Settings() {
 
   const testNotifications = async () => {
     try {
-      await api.post('/api/users/notifications/test');
-      toast.success('Test notification sent! Check your email.');
+      // El endpoint /api/users/notifications/test no existe aún
+      toast.info('Test notification feature coming soon');
     } catch (error: any) {
       toast.error('Error sending test notification');
     }
