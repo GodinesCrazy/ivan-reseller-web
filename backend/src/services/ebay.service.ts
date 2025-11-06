@@ -1,6 +1,8 @@
 import axios, { AxiosInstance } from 'axios';
 import { AppError } from '../middleware/error.middleware';
 import { URLSearchParams } from 'url';
+import { retryMarketplaceOperation } from '../utils/retry.util';
+import logger from '../config/logger';
 
 export interface EbayCredentials {
   appId: string;
@@ -195,20 +197,38 @@ export class EbayService {
     }
 
     try {
-      const response = await axios.post(
-        `${this.baseUrl}/identity/v1/oauth2/token`,
-        new URLSearchParams({
-          grant_type: 'refresh_token',
-          refresh_token: this.credentials.refreshToken,
+      // ✅ Usar retry para refresh token (crítico para mantener sesión)
+      const result = await retryMarketplaceOperation(
+        () => axios.post(
+          `${this.baseUrl}/identity/v1/oauth2/token`,
+          new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: this.credentials.refreshToken!,
         }),
         {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             Authorization: `Basic ${Buffer.from(`${this.credentials.appId}:${this.credentials.certId}`).toString('base64')}`,
           },
+        }),
+        'ebay',
+        {
+          maxRetries: 3,
+          initialDelay: 2000,
+          onRetry: (attempt, error, delay) => {
+            logger.warn(`Retrying refreshAccessToken for eBay (attempt ${attempt})`, {
+              error: error.message,
+              delay,
+            });
+          },
         }
       );
 
+      if (!result.success || !result.data) {
+        throw new AppError(`Failed to refresh token after retries: ${result.error?.message || 'Unknown error'}`, 401);
+      }
+
+      const response = result.data;
       return {
         token: response.data.access_token,
         expiresIn: response.data.expires_in,
@@ -290,10 +310,31 @@ export class EbayService {
         }),
       };
 
-      const response = await this.apiClient.post(`/sell/inventory/v1/inventory_item/${sku}/offer`, listingData);
-      
-      // Publish the listing
-      const publishResponse = await this.apiClient.post(`/sell/inventory/v1/offer/${response.data.offerId}/publish`);
+      // ✅ Usar retry para crear listing y publicar
+      const result = await retryMarketplaceOperation(
+        async () => {
+          const response = await this.apiClient.post(`/sell/inventory/v1/inventory_item/${sku}/offer`, listingData);
+          const publishResponse = await this.apiClient.post(`/sell/inventory/v1/offer/${response.data.offerId}/publish`);
+          return { response, publishResponse };
+        },
+        'ebay',
+        {
+          maxRetries: 3,
+          onRetry: (attempt, error, delay) => {
+            logger.warn(`Retrying createListing for eBay (attempt ${attempt})`, {
+              sku,
+              error: error.message,
+              delay,
+            });
+          },
+        }
+      );
+
+      if (!result.success || !result.data) {
+        throw new AppError(`Failed to create eBay listing after retries: ${result.error?.message || 'Unknown error'}`, 400);
+      }
+
+      const { response, publishResponse } = result.data;
 
       return {
         itemId: publishResponse.data.listingId,
@@ -319,7 +360,26 @@ export class EbayService {
         ...(parentId && { CategoryParent: parentId }),
       });
 
-      const response = await this.apiClient.get(`/ws/api.dll?callname=GetCategories&${params.toString()}`);
+      const result = await retryMarketplaceOperation(
+        () => this.apiClient.get(`/ws/api.dll?callname=GetCategories&${params.toString()}`),
+        'ebay',
+        {
+          maxRetries: 2,
+          onRetry: (attempt, error, delay) => {
+            logger.warn(`Retrying getCategories for eBay (attempt ${attempt})`, {
+              parentId,
+              error: error.message,
+              delay,
+            });
+          },
+        }
+      );
+
+      if (!result.success || !result.data) {
+        throw new AppError(`Failed to get categories after retries: ${result.error?.message || 'Unknown error'}`, 400);
+      }
+
+      const response = result.data;
       return response.data.CategoryArray?.Category || [];
     } catch (error: any) {
       throw new AppError(`eBay categories fetch error: ${error.message}`, 400);
@@ -331,10 +391,29 @@ export class EbayService {
    */
   async suggestCategory(productTitle: string): Promise<string> {
     try {
-      const response = await this.apiClient.get(`/commerce/taxonomy/v1/category_tree/0/get_category_suggestions`, {
-        params: { q: productTitle },
-      });
+      const result = await retryMarketplaceOperation(
+        () => this.apiClient.get(`/commerce/taxonomy/v1/category_tree/0/get_category_suggestions`, {
+          params: { q: productTitle },
+        }),
+        'ebay',
+        {
+          maxRetries: 2,
+          onRetry: (attempt, error, delay) => {
+            logger.warn(`Retrying suggestCategory for eBay (attempt ${attempt})`, {
+              productTitle,
+              error: error.message,
+              delay,
+            });
+          },
+        }
+      );
 
+      if (!result.success || !result.data) {
+        console.warn('eBay category suggestion failed after retries, using default');
+        return '267';
+      }
+
+      const response = result.data;
       const suggestions = response.data.categorySuggestions;
       if (suggestions && suggestions.length > 0) {
         return suggestions[0].category.categoryId;

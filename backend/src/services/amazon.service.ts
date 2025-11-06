@@ -2,6 +2,8 @@ import axios, { AxiosInstance } from 'axios';
 import crypto from 'crypto';
 import { prisma } from '../config/database';
 import { signAwsRequest } from '../utils/aws-sigv4';
+import { retryMarketplaceOperation } from '../utils/retry.util';
+import logger from '../config/logger';
 
 // Amazon SP-API Configuration
 interface AmazonCredentials {
@@ -168,10 +170,29 @@ class AmazonService {
       form.set('refresh_token', this.credentials.refreshToken);
       form.set('client_id', this.credentials.clientId);
       form.set('client_secret', this.credentials.clientSecret);
-      const response = await axios.post('https://api.amazon.com/auth/o2/token', form.toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-      });
+      // ✅ Usar retry para autenticación (crítico)
+      const result = await retryMarketplaceOperation(
+        () => axios.post('https://api.amazon.com/auth/o2/token', form.toString(), {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        }),
+        'amazon',
+        {
+          maxRetries: 3,
+          initialDelay: 2000,
+          onRetry: (attempt, error, delay) => {
+            logger.warn(`Retrying authenticate for Amazon (attempt ${attempt})`, {
+              error: error.message,
+              delay,
+            });
+          },
+        }
+      );
 
+      if (!result.success || !result.data) {
+        throw new Error(`Failed to authenticate after retries: ${result.error?.message || 'Unknown error'}`);
+      }
+
+      const response = result.data;
       const accessToken = response.data.access_token;
       
       // Update credentials with new access token
@@ -204,28 +225,54 @@ class AmazonService {
 
       // Submit product via Feeds API
       const feedsPath = '/feeds/2021-06-30/feeds';
-      const feedPayload = {
-        feedType: 'POST_PRODUCT_DATA',
-        marketplaceIds: [this.credentials?.marketplace],
-        inputFeedDocumentId: await this.uploadFeedDocument(productXML)
-      } as any;
-      const feedHeaders = this.signHeaders('POST', feedsPath);
-      const feedResponse = await this.httpClient.post(feedsPath, feedPayload, { headers: { ...feedHeaders } });
-
-      const feedId = feedResponse.data.feedId;
       
-      // Poll for feed processing result
-      const result = await this.pollFeedResult(feedId);
+      // ✅ Usar retry para crear listing (operación crítica)
+      const result = await retryMarketplaceOperation(
+        async () => {
+          const feedPayload = {
+            feedType: 'POST_PRODUCT_DATA',
+            marketplaceIds: [this.credentials?.marketplace],
+            inputFeedDocumentId: await this.uploadFeedDocument(productXML)
+          } as any;
+          const feedHeaders = this.signHeaders('POST', feedsPath);
+          const feedResponse = await this.httpClient.post(feedsPath, feedPayload, { headers: { ...feedHeaders } });
+
+          const feedId = feedResponse.data.feedId;
+          
+          // Poll for feed processing result
+          const pollResult = await this.pollFeedResult(feedId);
+
+          return pollResult;
+        },
+        'amazon',
+        {
+          maxRetries: 4,
+          initialDelay: 2000,
+          onRetry: (attempt, error, delay) => {
+            logger.warn(`Retrying createListing for Amazon (attempt ${attempt})`, {
+              sku: product.sku,
+              error: error.message,
+              delay,
+            });
+          },
+        }
+      );
+
+      if (!result.success || !result.data) {
+        throw new Error(`Failed to create Amazon listing after retries: ${result.error?.message || 'Unknown error'}`);
+      }
+
+      const listingResult = result.data;
 
       // Update local database
       await this.updateProductInDatabase(product.sku, {
-        amazonASIN: result.asin,
-        amazonStatus: result.status,
+        amazonASIN: listingResult.asin,
+        amazonStatus: listingResult.status,
         lastSyncAmazon: new Date()
       });
 
-      console.log(`✅ Amazon listing created: SKU ${product.sku}, Status: ${result.status}`);
-      return result;
+      console.log(`✅ Amazon listing created: SKU ${product.sku}, Status: ${listingResult.status}`);
+      return listingResult;
 
     } catch (error) {
       console.error('❌ Failed to create Amazon listing:', error);

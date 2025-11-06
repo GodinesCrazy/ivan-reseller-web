@@ -3,6 +3,8 @@ import { MercadoLibreService, MercadoLibreCredentials, MLProduct } from './merca
 import { AmazonService, AmazonCredentials, AmazonProduct } from './amazon.service';
 import { AppError } from '../middleware/error.middleware';
 import { prisma } from '../config/database';
+import { retryMarketplaceOperation } from '../utils/retry.util';
+import logger from '../config/logger';
 import crypto from 'crypto';
 
 export interface MarketplaceCredentials {
@@ -224,10 +226,31 @@ export class MarketplaceService {
     try {
       const ebayService = new EbayService(credentials);
 
-      // Suggest category if not provided
+      // Suggest category if not provided (con retry)
       let categoryId = customData?.categoryId;
       if (!categoryId) {
-        categoryId = await ebayService.suggestCategory(product.title);
+        // ✅ Usar retry para suggestCategory
+        const categoryResult = await retryMarketplaceOperation(
+          () => ebayService.suggestCategory(product.title),
+          'ebay',
+          {
+            maxRetries: 2,
+            onRetry: (attempt, error, delay) => {
+              logger.warn(`Retrying suggestCategory in marketplace service (attempt ${attempt})`, {
+                productTitle: product.title,
+                error: error.message,
+                delay,
+              });
+            },
+          }
+        );
+
+        if (categoryResult.success && categoryResult.data) {
+          categoryId = categoryResult.data;
+        } else {
+          // Fallback a categoría por defecto si falla
+          categoryId = '267'; // Default category
+        }
       }
 
       const ebayProduct: EbayProduct = {
