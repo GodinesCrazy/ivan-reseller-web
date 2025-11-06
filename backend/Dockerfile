@@ -1,7 +1,12 @@
 FROM node:20-alpine
 
-# Instalar OpenSSL (requerido por Prisma)
-RUN apk add --no-cache openssl
+# Instalar herramientas de compilación necesarias para módulos nativos (bcrypt, etc.)
+RUN apk add --no-cache \
+    openssl \
+    python3 \
+    make \
+    g++ \
+    && ln -sf python3 /usr/bin/python
 
 WORKDIR /app
 
@@ -13,8 +18,8 @@ COPY tsconfig.json ./
 COPY prisma ./prisma/
 
 # Install ALL dependencies (including devDependencies for build and runtime)
-# Skip postinstall to avoid Prisma generate failing (DATABASE_URL not available during build)
-RUN npm install --ignore-scripts
+# NO ignorar scripts para que bcrypt y otros módulos nativos se compilen correctamente
+RUN npm install
 
 # Copy source code
 COPY src ./src
