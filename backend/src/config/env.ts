@@ -82,14 +82,21 @@ function getDatabaseUrl(): string {
 
 const databaseUrl = getDatabaseUrl();
 
+// Validación mejorada de DATABASE_URL con mejor mensaje de error
+const databaseUrlSchema = z.string().min(1, 'DATABASE_URL no puede estar vacía')
+  .url('DATABASE_URL debe ser una URL válida')
+  .refine(
+    (url) => url.startsWith('postgresql://') || url.startsWith('postgres://'),
+    { 
+      message: 'DATABASE_URL debe empezar con postgresql:// o postgres://',
+    }
+  );
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().default('3000'),
   API_URL: z.string().url().default('http://localhost:3000'),
-  DATABASE_URL: z.string().url().refine(
-    (url) => url.startsWith('postgresql://') || url.startsWith('postgres://'),
-    { message: 'DATABASE_URL must start with postgresql:// or postgres://' }
-  ),
+  DATABASE_URL: databaseUrlSchema,
   REDIS_URL: z.string().default('redis://localhost:6379'),
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('7d'),
@@ -117,8 +124,44 @@ if (!process.env.DATABASE_URL && databaseUrl) {
   console.log('✅ DATABASE_URL configurada desde variable alternativa');
 }
 
+// Validar DATABASE_URL antes de parsear todo el schema
+if (process.env.DATABASE_URL) {
+  const dbUrlValue = process.env.DATABASE_URL.trim();
+  if (dbUrlValue.length === 0) {
+    console.error('❌ ERROR: DATABASE_URL está vacía');
+    console.error('   Ve a Railway Dashboard → ivan-reseller-web → Variables');
+    console.error('   Verifica que DATABASE_URL tenga un valor válido');
+    process.exit(1);
+  }
+  if (!dbUrlValue.startsWith('postgresql://') && !dbUrlValue.startsWith('postgres://')) {
+    console.error('❌ ERROR: DATABASE_URL tiene formato inválido');
+    console.error(`   Valor actual: ${dbUrlValue.substring(0, 50)}...`);
+    console.error('   Debe empezar con: postgresql:// o postgres://');
+    console.error('   Ve a Railway Dashboard → Postgres → Variables → DATABASE_URL');
+    console.error('   Copia el valor completo y pégalo en ivan-reseller-web → Variables → DATABASE_URL');
+    process.exit(1);
+  }
+} else {
+  console.error('❌ ERROR: DATABASE_URL no está configurada');
+  console.error('   Ve a Railway Dashboard → ivan-reseller-web → Variables');
+  console.error('   Agrega DATABASE_URL con el valor de Postgres → Variables → DATABASE_URL');
+  process.exit(1);
+}
+
 // Si aún no tenemos DATABASE_URL, el schema de Zod fallará con un mensaje claro
+let env: z.infer<typeof envSchema>;
+try {
+  env = envSchema.parse(process.env);
+} catch (error: any) {
+  if (error.name === 'ZodError') {
+    console.error('❌ ERROR DE VALIDACIÓN DE VARIABLES DE ENTORNO:');
+    error.errors.forEach((err: any) => {
+      console.error(`   - ${err.path.join('.')}: ${err.message}`);
+    });
+    process.exit(1);
+  }
+  throw error;
+}
 
-export const env = envSchema.parse(process.env);
-
+export { env };
 export default env;
