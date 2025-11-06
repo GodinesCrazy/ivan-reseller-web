@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@stores/authStore';
 const Login = lazy(() => import('@pages/Login'));
 const Dashboard = lazy(() => import('@pages/Dashboard'));
@@ -27,61 +27,8 @@ const HelpCenter = lazy(() => import('@pages/HelpCenter'));
 const WorkflowConfig = lazy(() => import('@pages/WorkflowConfig'));
 import Layout from '@components/layout/Layout';
 
-function App() {
-  const { isAuthenticated, isCheckingAuth, checkAuth, token } = useAuthStore();
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  // Validar token al iniciar la app (solo si hay token)
-  useEffect(() => {
-    let isMounted = true;
-    let timeoutId: NodeJS.Timeout;
-    
-    const validateToken = async () => {
-      // Si no hay token, no hacer nada - permitir que la app cargue inmediatamente
-      const currentToken = useAuthStore.getState().token;
-      if (!currentToken) {
-        if (isMounted) {
-          setIsInitialized(true);
-        }
-        return;
-      }
-
-      try {
-        // Timeout de 3 segundos - si tarda más, continuar de todas formas
-        const timeoutPromise = new Promise((_, reject) => {
-          timeoutId = setTimeout(() => {
-            reject(new Error('Timeout'));
-          }, 3000);
-        });
-
-        await Promise.race([
-          checkAuth(),
-          timeoutPromise
-        ]);
-        
-        clearTimeout(timeoutId);
-        if (isMounted) {
-          setIsInitialized(true);
-        }
-      } catch (error) {
-        clearTimeout(timeoutId);
-        console.warn('Error o timeout validando token, continuando:', error);
-        // Continuar aunque falle o haya timeout - permitir que la app cargue
-        if (isMounted) {
-          setIsInitialized(true);
-        }
-      }
-    };
-    
-    validateToken();
-    
-    return () => {
-      isMounted = false;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
-  }, []); // Solo ejecutar una vez al montar
+function AppContent() {
+  const { isAuthenticated } = useAuthStore();
 
   const Fallback = (
     <div className="flex items-center justify-center min-h-[30vh] text-gray-600">
@@ -89,21 +36,6 @@ function App() {
       Cargando...
     </div>
   );
-
-  // Solo mostrar loading si hay token Y está verificando
-  // Si no hay token, mostrar la app inmediatamente (para que se vea el login)
-  const shouldShowLoading = token && (!isInitialized || isCheckingAuth);
-  
-  if (shouldShowLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center">
-          <div className="h-8 w-8 mx-auto mb-4 rounded-full border-4 border-gray-300 border-t-blue-600 animate-spin" />
-          <p className="text-gray-600">Verificando sesión...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <Suspense fallback={Fallback}>
@@ -170,6 +102,108 @@ function App() {
       </Routes>
     </Suspense>
   );
+}
+
+function App() {
+  const { isAuthenticated, isCheckingAuth, checkAuth, token } = useAuthStore();
+  const [isInitialized, setIsInitialized] = useState(false);
+  const location = useLocation();
+
+  // Validar token al iniciar la app (solo si hay token)
+  useEffect(() => {
+    let isMounted = true;
+    let timeoutId: NodeJS.Timeout;
+    
+    const validateToken = async () => {
+      // Si estamos en login, inicializar inmediatamente
+      if (location.pathname === '/login') {
+        useAuthStore.setState({ isCheckingAuth: false });
+        if (isMounted) {
+          setIsInitialized(true);
+        }
+        return;
+      }
+
+      // Si no hay token, no hacer nada - permitir que la app cargue inmediatamente
+      const currentToken = useAuthStore.getState().token;
+      if (!currentToken) {
+        // Asegurarse de que isCheckingAuth esté en false
+        useAuthStore.setState({ isCheckingAuth: false });
+        if (isMounted) {
+          setIsInitialized(true);
+        }
+        return;
+      }
+
+      try {
+        // Timeout de 2 segundos - si tarda más, continuar de todas formas
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error('Timeout'));
+          }, 2000);
+        });
+
+        await Promise.race([
+          checkAuth(),
+          timeoutPromise
+        ]);
+        
+        clearTimeout(timeoutId);
+        if (isMounted) {
+          setIsInitialized(true);
+        }
+      } catch (error) {
+        clearTimeout(timeoutId);
+        console.warn('Error o timeout validando token, continuando:', error);
+        // Asegurarse de que isCheckingAuth esté en false
+        useAuthStore.setState({ isCheckingAuth: false });
+        // Continuar aunque falle o haya timeout - permitir que la app cargue
+        if (isMounted) {
+          setIsInitialized(true);
+        }
+      }
+    };
+    
+    // Pequeño delay para asegurar que el store esté hidratado
+    const timer = setTimeout(() => {
+      validateToken();
+    }, 50);
+    
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [location.pathname]); // Re-ejecutar si cambia la ruta
+
+  const Fallback = (
+    <div className="flex items-center justify-center min-h-[30vh] text-gray-600">
+      <div className="h-5 w-5 mr-2 rounded-full border-2 border-gray-300 border-t-gray-700 animate-spin" />
+      Cargando...
+    </div>
+  );
+
+  // Si estamos en login, mostrar inmediatamente sin verificar token
+  const isLoginPage = location.pathname === '/login';
+  
+  // Solo mostrar loading si hay token Y está verificando Y NO estamos en login
+  // Si no hay token o estamos en login, mostrar la app inmediatamente
+  const shouldShowLoading = !isLoginPage && token && (!isInitialized || isCheckingAuth);
+  
+  if (shouldShowLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="h-8 w-8 mx-auto mb-4 rounded-full border-4 border-gray-300 border-t-blue-600 animate-spin" />
+          <p className="text-gray-600">Verificando sesión...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <AppContent />;
 }
 
 export default App;
