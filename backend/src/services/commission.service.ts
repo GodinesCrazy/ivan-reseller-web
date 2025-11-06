@@ -1,10 +1,10 @@
-import { PrismaClient, CommissionStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 
 const prisma = new PrismaClient();
 
 export class CommissionService {
-  async getCommissions(userId?: string, status?: CommissionStatus) {
+  async getCommissions(userId?: number, status?: string) {
     const where: any = {};
     
     if (userId) {
