@@ -36,25 +36,44 @@ export class AdvancedMarketplaceScraper {
     
     // Primero intentar encontrar Chromium usando 'which'
     try {
-      const chromiumPath = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null', { encoding: 'utf-8' }).trim();
+      const chromiumPath = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null', { encoding: 'utf-8', timeout: 5000 }).trim();
       if (chromiumPath && fs.existsSync(chromiumPath)) {
         executablePath = chromiumPath;
         console.log(`✅ Encontrado Chromium del sistema en: ${executablePath}`);
       }
     } catch (e) {
       // 'which' no encontró Chromium, continuar con otras opciones
+      console.log('⚠️  No se encontró Chromium en PATH');
     }
     
-    // Si no se encontró, buscar en el store de Nix
+    // Si no se encontró, buscar en el store de Nix (instalado por Nixpacks)
     if (!executablePath) {
       try {
-        const nixStorePath = execSync('find /nix/store -name chromium -type f 2>/dev/null | head -1', { encoding: 'utf-8' }).trim();
+        const nixStorePath = execSync('find /nix/store -name chromium -type f 2>/dev/null | head -1', { encoding: 'utf-8', timeout: 10000 }).trim();
         if (nixStorePath && fs.existsSync(nixStorePath)) {
           executablePath = nixStorePath;
           console.log(`✅ Encontrado Chromium de Nix en: ${executablePath}`);
         }
       } catch (e) {
         // Continuar sin Chromium del sistema
+        console.log('⚠️  No se encontró Chromium en Nix store');
+      }
+    }
+    
+    // También buscar en ubicaciones comunes de Nixpacks
+    if (!executablePath) {
+      const commonPaths = [
+        '/usr/bin/chromium',
+        '/usr/bin/chromium-browser',
+        '/usr/local/bin/chromium',
+        '/usr/local/bin/chromium-browser',
+      ];
+      for (const path of commonPaths) {
+        if (fs.existsSync(path)) {
+          executablePath = path;
+          console.log(`✅ Encontrado Chromium en ubicación común: ${executablePath}`);
+          break;
+        }
       }
     }
     
