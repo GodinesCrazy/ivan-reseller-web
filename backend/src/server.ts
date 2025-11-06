@@ -19,7 +19,7 @@ async function ensureAdminUser() {
 
     if (!adminExists) {
       console.log('👤 Usuario admin no encontrado. Creando...');
-      const adminPassword = await bcrypt.hash('admin123', 10);
+      const adminPassword = bcrypt.hashSync('admin123', 10);
       
       await prisma.user.create({
         data: {
