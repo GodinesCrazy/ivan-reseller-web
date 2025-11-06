@@ -336,7 +336,13 @@ export default function APISettings() {
         if (value.trim()) {
           // Mapear el nombre del campo al formato esperado por el backend
           const backendKey = fieldMapping[field.key] || field.key.toLowerCase();
-          credentials[backendKey] = value.trim();
+          
+          // Manejar campos booleanos
+          if (field.key === 'twoFactorEnabled') {
+            credentials[backendKey] = value.trim().toLowerCase() === 'true' || value === true;
+          } else {
+            credentials[backendKey] = value.trim();
+          }
         }
       }
 
