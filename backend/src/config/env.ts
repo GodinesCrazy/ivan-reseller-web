@@ -62,8 +62,37 @@ function getDatabaseUrl(): string {
     }
     
     try {
+      // Verificar si la URL está incompleta o mal formada
+      if (dbUrl.includes('://:@') || dbUrl.endsWith('://') || dbUrl === 'postgresql://' || dbUrl === 'postgres://') {
+        console.error('❌ ERROR: DATABASE_URL está incompleta o mal formada');
+        console.error(`   Valor recibido: ${dbUrl}`);
+        console.error('   La URL debe tener el formato completo:');
+        console.error('   postgresql://usuario:contraseña@host:puerto/base_de_datos');
+        console.error('');
+        console.error('🔧 SOLUCIÓN:');
+        console.error('   1. Ve a Railway Dashboard → Postgres → Variables');
+        console.error('   2. Busca DATABASE_PUBLIC_URL');
+        console.error('   3. Click en el ojo 👁️ para VER el valor completo');
+        console.error('   4. Click en copiar 📋 para copiar TODO el valor');
+        console.error('   5. Ve a ivan-reseller-web → Variables → DATABASE_URL');
+        console.error('   6. Pega el valor completo (debe empezar con postgresql://)');
+        console.error('');
+        return '';
+      }
+      
       // Mostrar información de debugging (sin mostrar la contraseña completa)
       const url = new URL(dbUrl);
+      
+      // Verificar que tenga los componentes necesarios
+      if (!url.hostname || !url.username || !url.pathname) {
+        console.error('❌ ERROR: DATABASE_URL está incompleta');
+        console.error(`   Hostname: ${url.hostname || 'FALTA'}`);
+        console.error(`   Username: ${url.username || 'FALTA'}`);
+        console.error(`   Database: ${url.pathname || 'FALTA'}`);
+        console.error('   La URL debe tener host, usuario y base de datos');
+        return '';
+      }
+      
       const maskedPassword = url.password ? 
         (url.password.substring(0, 4) + '***' + url.password.substring(url.password.length - 4)) : 
         '***';
@@ -78,6 +107,16 @@ function getDatabaseUrl(): string {
       console.log(`   User: ${url.username}`);
     } catch (e) {
       console.error('⚠️  No se pudo parsear DATABASE_URL:', e);
+      console.error(`   Valor recibido: ${dbUrl}`);
+      console.error('');
+      console.error('🔧 SOLUCIÓN:');
+      console.error('   1. Ve a Railway Dashboard → Postgres → Variables');
+      console.error('   2. Busca DATABASE_PUBLIC_URL');
+      console.error('   3. Click en el ojo 👁️ para VER el valor completo');
+      console.error('   4. Click en copiar 📋 para copiar TODO el valor');
+      console.error('   5. Ve a ivan-reseller-web → Variables → DATABASE_URL');
+      console.error('   6. Pega el valor completo (debe empezar con postgresql://)');
+      console.error('');
     }
   } else {
     console.error('❌ ERROR: DATABASE_URL no encontrada');
