@@ -592,9 +592,21 @@ class AmazonService {
     try {
       const encryptedData = this.encryptCredentials(JSON.stringify(credentials));
       await prisma.apiCredential.upsert({
-        where: { userId_apiName: { userId: 1, apiName: 'amazon' } as any },
+        where: { 
+          userId_apiName_environment: { 
+            userId: 1, 
+            apiName: 'amazon',
+            environment: 'production'
+          } 
+        },
         update: { credentials: encryptedData, isActive: true },
-        create: { userId: 1, apiName: 'amazon', credentials: encryptedData, isActive: true },
+        create: { 
+          userId: 1, 
+          apiName: 'amazon', 
+          environment: 'production',
+          credentials: encryptedData, 
+          isActive: true 
+        },
       });
     } catch (e) {
       console.warn('Failed to persist Amazon credentials', e);
