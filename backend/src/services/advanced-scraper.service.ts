@@ -129,8 +129,13 @@ export class AdvancedMarketplaceScraper {
             }
           }
         } catch (e) {
-          // No se encontró Chrome descargado, Puppeteer intentará descargarlo
+          // No se encontró Chrome descargado, Puppeteer intentará descargarlo automáticamente
           console.log('⚠️  Chrome de Puppeteer no encontrado, se intentará descargar automáticamente');
+          // Asegurar que PUPPETEER_SKIP_DOWNLOAD no esté configurado
+          if (process.env.PUPPETEER_SKIP_DOWNLOAD === 'true') {
+            console.log('⚠️  PUPPETEER_SKIP_DOWNLOAD está en true, deshabilitándolo para permitir descarga');
+            delete process.env.PUPPETEER_SKIP_DOWNLOAD;
+          }
         }
       }
       
