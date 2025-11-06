@@ -418,8 +418,7 @@ export default function APIConfigurationPage() {
               </div>
             </div>
           ))}
-          </div>
-        )}
+        </div>
 
         {/* Information Panel */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
