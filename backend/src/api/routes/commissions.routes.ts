@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { commissionService } from '../../services/commission.service';
 import { z } from 'zod';
-import { CommissionStatus } from '@prisma/client';
+// CommissionStatus no existe como enum, usar string
 
 const router = Router();
 router.use(authenticate);
@@ -11,7 +11,7 @@ router.use(authenticate);
 router.get('/', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user?.role === 'ADMIN' ? undefined : req.user?.userId;
-    const status = req.query.status as CommissionStatus | undefined;
+    const status = req.query.status as string | undefined;
     const commissions = await commissionService.getCommissions(userId, status);
     
     // ✅ Mapear datos del backend al formato esperado por el frontend
@@ -40,11 +40,11 @@ router.get('/stats', async (req: Request, res: Response, next) => {
     
     // ✅ Mapear estadísticas al formato esperado por el frontend
     const mappedStats = {
-      totalPending: stats.pending || stats.pendingCount || 0,
-      totalPaid: stats.paid || stats.paidCount || 0,
-      totalCommissions: stats.total || stats.totalCount || 0,
-      nextPayoutDate: stats.nextPayoutDate?.toISOString() || stats.nextScheduledDate?.toISOString() || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      monthlyEarnings: stats.monthlyEarnings || stats.totalPaidAmount || stats.paidAmount || 0,
+      totalPending: stats.pending || 0,
+      totalPaid: stats.paid || 0,
+      totalCommissions: stats.total || 0,
+      nextPayoutDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // TODO: Calcular desde scheduledAt
+      monthlyEarnings: stats.paidAmount || 0,
       earningsChange: 0 // TODO: Calcular cambio de ganancias
     };
     
@@ -67,7 +67,7 @@ router.get('/balance', async (req: Request, res: Response, next) => {
 // GET /api/commissions/:id - Obtener por ID
 router.get('/:id', async (req: Request, res: Response, next) => {
   try {
-    const commission = await commissionService.getCommissionById(req.params.id);
+    const commission = await commissionService.getCommissionById(Number(req.params.id));
     res.json(commission);
   } catch (error) {
     next(error);
@@ -79,7 +79,7 @@ router.post('/:id/schedule', authorize('ADMIN'), async (req: Request, res: Respo
   try {
     const schema = z.object({ scheduledDate: z.string().datetime() });
     const { scheduledDate } = schema.parse(req.body);
-    const commission = await commissionService.scheduleCommission(req.params.id, new Date(scheduledDate));
+    const commission = await commissionService.scheduleCommission(Number(req.params.id), new Date(scheduledDate));
     res.json(commission);
   } catch (error: any) {
     if (error.name === 'ZodError') {
@@ -93,7 +93,7 @@ router.post('/:id/schedule', authorize('ADMIN'), async (req: Request, res: Respo
 router.post('/:id/pay', authorize('ADMIN'), async (req: Request, res: Response, next) => {
   try {
     const { paypalTransactionId } = req.body;
-    const commission = await commissionService.markAsPaid(req.params.id, paypalTransactionId);
+    const commission = await commissionService.markAsPaid(Number(req.params.id), paypalTransactionId);
     res.json(commission);
   } catch (error) {
     next(error);
@@ -104,7 +104,7 @@ router.post('/:id/pay', authorize('ADMIN'), async (req: Request, res: Response, 
 router.post('/batch-pay', authorize('ADMIN'), async (req: Request, res: Response, next) => {
   try {
     const schema = z.object({
-      commissionIds: z.array(z.string().uuid()),
+      commissionIds: z.array(z.number().int().positive()),
       paypalBatchId: z.string().optional(),
     });
     const { commissionIds, paypalBatchId } = schema.parse(req.body);

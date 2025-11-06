@@ -42,7 +42,8 @@ router.get('/stats', async (req: Request, res: Response, next) => {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
 
-    const stats = autopilotSystem.getStats();
+    const status = autopilotSystem.getStatus();
+    const stats = status.basicStats;
     
     res.json({
       success: true,
@@ -69,7 +70,8 @@ router.get('/status', async (req: Request, res: Response, next) => {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
 
-    const stats = autopilotSystem.getStats();
+    const status = autopilotSystem.getStatus();
+    const stats = status.basicStats;
     const isRunning = stats.currentStatus === 'running';
     
     res.json({
