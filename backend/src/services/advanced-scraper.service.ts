@@ -30,59 +30,61 @@ export class AdvancedMarketplaceScraper {
 
   async init(): Promise<void> {
     console.log('🚀 Iniciando navegador con evasión anti-bot...');
-    
+
     let executablePath: string | undefined = undefined;
-    
-    // ESTRATEGIA 1: Buscar Chromium del sistema (instalado por Nixpacks)
-    try {
-      const chromiumPath = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null', { encoding: 'utf-8', timeout: 5000 }).trim();
-      if (chromiumPath && fs.existsSync(chromiumPath)) {
-        executablePath = chromiumPath;
-        console.log(`✅ Encontrado Chromium del sistema en: ${executablePath}`);
+
+    const preferredPaths: string[] = [
+      process.env.CHROMIUM_PATH || '',
+      '/app/.chromium/chromium',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/local/bin/chromium',
+      '/usr/local/bin/chromium-browser',
+    ];
+
+    for (const candidate of preferredPaths) {
+      if (candidate && fs.existsSync(candidate)) {
+        executablePath = candidate;
+        console.log(`✅ Chromium encontrado en ruta preferida: ${executablePath}`);
+        break;
       }
-    } catch (e) {
-      console.log('⚠️  No se encontró Chromium en PATH');
     }
-    
-    // ESTRATEGIA 2: Buscar en el store de Nix (instalado por Nixpacks)
+
+    // ESTRATEGIA 2: Buscar usando which si aún no tenemos ruta
     if (!executablePath) {
       try {
-        const nixStorePath = execSync('find /nix/store -name chromium -type f 2>/dev/null | head -1', { encoding: 'utf-8', timeout: 10000 }).trim();
+        const chromiumPath = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null', { encoding: 'utf-8', timeout: 5000 }).trim();
+        if (chromiumPath && fs.existsSync(chromiumPath)) {
+          executablePath = chromiumPath;
+          console.log(`✅ Encontrado Chromium en PATH: ${executablePath}`);
+        }
+      } catch (e) {
+        console.log('⚠️  No se encontró Chromium mediante which');
+      }
+    }
+
+    // ESTRATEGIA 3: Buscar en el store de Nix (instalado por Nixpacks)
+    if (!executablePath) {
+      try {
+        const nixStorePath = execSync('find /nix/store -maxdepth 5 -type f -name chromium 2>/dev/null | head -1', { encoding: 'utf-8', timeout: 10000 }).trim();
         if (nixStorePath && fs.existsSync(nixStorePath)) {
           executablePath = nixStorePath;
-          console.log(`✅ Encontrado Chromium de Nix en: ${executablePath}`);
+          console.log(`✅ Encontrado Chromium en Nix store: ${executablePath}`);
         }
       } catch (e) {
         console.log('⚠️  No se encontró Chromium en Nix store');
       }
     }
-    
-    // ESTRATEGIA 3: Buscar en ubicaciones comunes
-    if (!executablePath) {
-      const commonPaths = [
-        '/usr/bin/chromium',
-        '/usr/bin/chromium-browser',
-        '/usr/local/bin/chromium',
-        '/usr/local/bin/chromium-browser',
-      ];
-      for (const path of commonPaths) {
-        if (fs.existsSync(path)) {
-          executablePath = path;
-          console.log(`✅ Encontrado Chromium en ubicación común: ${executablePath}`);
-          break;
-        }
-      }
-    }
-    
+
     // ESTRATEGIA 4: Forzar descarga de Chrome de Puppeteer si no encontramos Chromium
     if (!executablePath) {
       console.log('⚠️  Chromium del sistema no encontrado, forzando descarga de Chrome de Puppeteer...');
-      
+
       // Asegurar que PUPPETEER_SKIP_DOWNLOAD no esté bloqueando
       if (process.env.PUPPETEER_SKIP_DOWNLOAD === 'true') {
         delete process.env.PUPPETEER_SKIP_DOWNLOAD;
       }
-      
+
       // Intentar descargar Chrome explícitamente
       try {
         console.log('📥 Descargando Chrome de Puppeteer...');
@@ -106,7 +108,13 @@ export class AdvancedMarketplaceScraper {
         // Continuar sin executablePath, Puppeteer intentará encontrarlo
       }
     }
-    
+
+    if (!executablePath) {
+      const errorMessage = 'Chromium no encontrado después de intentar todas las estrategias (PATH, Nix, descarga).';
+      console.error(`❌ ${errorMessage}`);
+      throw new Error(errorMessage);
+    }
+
     try {
       const launchOptions: any = {
         headless: 'new',
@@ -124,14 +132,10 @@ export class AdvancedMarketplaceScraper {
         ],
         ignoreDefaultArgs: ['--enable-automation'],
         ignoreHTTPSErrors: true,
+        executablePath,
       };
 
-      if (executablePath) {
-        launchOptions.executablePath = executablePath;
-        console.log(`🔧 Usando navegador en: ${executablePath}`);
-      } else {
-        console.log('⚠️  Usando Chrome por defecto de Puppeteer (se descargará automáticamente)');
-      }
+      console.log(`🔧 Lanzando Chromium en: ${executablePath}`);
 
       this.browser = await puppeteer.launch(launchOptions);
       console.log('✅ Navegador iniciado exitosamente');
@@ -147,11 +151,11 @@ export class AdvancedMarketplaceScraper {
             '--disable-dev-shm-usage',
           ],
         };
-        
+
         if (executablePath) {
           minimalOptions.executablePath = executablePath;
         }
-        
+
         this.browser = await puppeteer.launch(minimalOptions);
         console.log('✅ Navegador iniciado con configuración mínima');
       } catch (fallbackError: any) {
@@ -173,21 +177,21 @@ export class AdvancedMarketplaceScraper {
    */
   async scrapeAliExpress(query: string): Promise<ScrapedProduct[]> {
     if (!this.browser) await this.init();
-    
+
     console.log(`🔍 Scraping REAL AliExpress: "${query}"`);
-    
+
     const page = await this.browser!.newPage();
-    
+
     try {
       // Configurar página para parecer navegador real
       await this.setupRealBrowser(page);
-      
+
       const searchUrl = `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(query)}.html`;
       console.log(`📡 Navegando a: ${searchUrl}`);
-      
-      await page.goto(searchUrl, { 
+
+      await page.goto(searchUrl, {
         waitUntil: 'networkidle2',
-        timeout: 30000 
+        timeout: 30000
       });
 
       // Verificar si hay CAPTCHA
@@ -210,7 +214,7 @@ export class AdvancedMarketplaceScraper {
 
       // Esperar a que carguen los productos
       await page.waitForSelector('.search-item-card-wrapper-gallery', { timeout: 15000 });
-      
+
       // Hacer scroll para cargar más productos
       await this.autoScroll(page);
 
@@ -221,7 +225,7 @@ export class AdvancedMarketplaceScraper {
 
         items.forEach((item, index) => {
           if (index >= 20) return; // Limitar resultados
-          
+
           try {
             const titleElement = item.querySelector('.multi--titleText--nXeOvyr');
             const priceElement = item.querySelector('.multi--price-sale--U-S0jtj');
@@ -274,20 +278,20 @@ export class AdvancedMarketplaceScraper {
    */
   async scrapeEbay(query: string): Promise<ScrapedProduct[]> {
     if (!this.browser) await this.init();
-    
+
     console.log(`🔍 Scraping REAL eBay: "${query}"`);
-    
+
     const page = await this.browser!.newPage();
-    
+
     try {
       await this.setupRealBrowser(page);
-      
+
       const searchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&_sacat=0&LH_BIN=1`;
       console.log(`📡 Navegando a: ${searchUrl}`);
-      
-      await page.goto(searchUrl, { 
+
+      await page.goto(searchUrl, {
         waitUntil: 'networkidle2',
-        timeout: 30000 
+        timeout: 30000
       });
 
       // Esperar productos
@@ -299,7 +303,7 @@ export class AdvancedMarketplaceScraper {
 
         items.forEach((item, index) => {
           if (index >= 20 || index === 0) return; // Saltar primer elemento (ad)
-          
+
           try {
             const titleElement = item.querySelector('.s-item__title');
             const priceElement = item.querySelector('.s-item__price');
@@ -349,21 +353,21 @@ export class AdvancedMarketplaceScraper {
    */
   async scrapeAmazon(query: string): Promise<ScrapedProduct[]> {
     if (!this.browser) await this.init();
-    
+
     console.log(`🔍 Scraping REAL Amazon: "${query}"`);
-    
+
     const page = await this.browser!.newPage();
-    
+
     try {
       await this.setupRealBrowser(page);
-      
+
       // Amazon detecta bots fácilmente, usar múltiples estrategias
       const searchUrl = `https://www.amazon.com/s?k=${encodeURIComponent(query)}&ref=sr_pg_1`;
       console.log(`📡 Navegando a: ${searchUrl}`);
-      
-      await page.goto(searchUrl, { 
+
+      await page.goto(searchUrl, {
         waitUntil: 'networkidle2',
-        timeout: 30000 
+        timeout: 30000
       });
 
       // Verificar si Amazon nos bloqueó
@@ -387,7 +391,7 @@ export class AdvancedMarketplaceScraper {
 
         items.forEach((item, index) => {
           if (index >= 15) return;
-          
+
           try {
             const titleElement = item.querySelector('h2 a span, .s-size-mini .s-link-style');
             const priceElement = item.querySelector('.a-price-whole, .a-offscreen');
@@ -438,10 +442,10 @@ export class AdvancedMarketplaceScraper {
   private async setupRealBrowser(page: Page): Promise<void> {
     // User agent realista
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-    
+
     // Viewport realista
     await page.setViewport({ width: 1920, height: 1080 });
-    
+
     // Headers adicionales
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'en-US,en;q=0.9',
@@ -489,12 +493,12 @@ export class AdvancedMarketplaceScraper {
    */
   private async solveCaptcha(page: Page): Promise<boolean> {
     console.log('🤖 Intentando resolver CAPTCHA...');
-    
+
     try {
       // Estrategia 1: Esperar y recargar
       await page.waitForTimeout(5000);
       await page.reload({ waitUntil: 'networkidle2' });
-      
+
       // Verificar si desapareció el CAPTCHA
       const stillHasCaptcha = await this.checkForCaptcha(page);
       if (!stillHasCaptcha) {
@@ -504,7 +508,7 @@ export class AdvancedMarketplaceScraper {
 
       // Estrategia 2: Simular comportamiento humano
       await this.simulateHumanBehavior(page);
-      
+
       return true;
     } catch (error) {
       console.error('❌ Error resolviendo CAPTCHA:', error);
@@ -560,12 +564,12 @@ export class AdvancedMarketplaceScraper {
    */
   private async useAmazonAlternative(query: string): Promise<ScrapedProduct[]> {
     console.log('🔄 Usando estrategia alternativa para Amazon...');
-    
+
     // Podrías implementar aquí:
     // 1. Amazon Product Advertising API
     // 2. Proxy rotation
     // 3. Scraping de sitios alternativos
-    
+
     return [];
   }
 }
