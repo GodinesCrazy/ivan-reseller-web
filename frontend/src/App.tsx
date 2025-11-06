@@ -28,21 +28,30 @@ const WorkflowConfig = lazy(() => import('@pages/WorkflowConfig'));
 import Layout from '@components/layout/Layout';
 
 function App() {
-  const { isAuthenticated, isCheckingAuth, checkAuth } = useAuthStore();
+  const { isAuthenticated, isCheckingAuth, checkAuth, token } = useAuthStore();
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Validar token al iniciar la app (solo una vez)
+  // Validar token al iniciar la app (solo si hay token)
   useEffect(() => {
     let isMounted = true;
     let timeoutId: NodeJS.Timeout;
     
     const validateToken = async () => {
+      // Si no hay token, no hacer nada - permitir que la app cargue inmediatamente
+      const currentToken = useAuthStore.getState().token;
+      if (!currentToken) {
+        if (isMounted) {
+          setIsInitialized(true);
+        }
+        return;
+      }
+
       try {
-        // Timeout de 5 segundos - si tarda más, continuar de todas formas
+        // Timeout de 3 segundos - si tarda más, continuar de todas formas
         const timeoutPromise = new Promise((_, reject) => {
           timeoutId = setTimeout(() => {
             reject(new Error('Timeout'));
-          }, 5000);
+          }, 3000);
         });
 
         await Promise.race([
@@ -81,8 +90,11 @@ function App() {
     </div>
   );
 
-  // Mostrar loading mientras se valida el token
-  if (!isInitialized || isCheckingAuth) {
+  // Solo mostrar loading si hay token Y está verificando
+  // Si no hay token, mostrar la app inmediatamente (para que se vea el login)
+  const shouldShowLoading = token && (!isInitialized || isCheckingAuth);
+  
+  if (shouldShowLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
