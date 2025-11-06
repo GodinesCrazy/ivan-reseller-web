@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { Check, X } from 'lucide-react';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 export default function IntelligentPublisher() {
   const [pending, setPending] = useState<any[]>([]);
@@ -9,15 +10,23 @@ export default function IntelligentPublisher() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [bulkMk, setBulkMk] = useState<{ ebay: boolean; mercadolibre: boolean; amazon: boolean }>({ ebay: true, mercadolibre: false, amazon: false });
   const [bulkStatus, setBulkStatus] = useState<{ total: number; queued: number; done: number; errors: number; running: boolean }>({ total: 0, queued: 0, done: 0, errors: 0, running: false });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await api.get('/api/products', { params: { status: 'PENDING' } });
-        setPending(data?.products || []);
-        const l = await api.get('/api/publisher/listings');
-        setListings(l.data?.items || []);
-      } catch {}
+        setLoading(true);
+        const [productsRes, listingsRes] = await Promise.all([
+          api.get('/api/products', { params: { status: 'PENDING' } }),
+          api.get('/api/publisher/listings')
+        ]);
+        setPending(productsRes.data?.products || []);
+        setListings(listingsRes.data?.items || []);
+      } catch (error) {
+        console.error('Error loading publisher data:', error);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, []);
 
@@ -29,6 +38,14 @@ export default function IntelligentPublisher() {
     } catch (e: any) {
       alert(`Error approving: ${e?.message || e}`);
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <LoadingSpinner text="Cargando publicador..." />
+      </div>
+    );
   }
 
   return (

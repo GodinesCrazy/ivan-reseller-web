@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../services/api';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 export default function OpportunityDetail() {
   const { id } = useParams();
@@ -22,8 +23,8 @@ export default function OpportunityDetail() {
     })();
   }, [id]);
 
-  if (loading) return <div className="p-6">Loading…</div>;
-  if (!item) return <div className="p-6">Not found</div>;
+  if (loading) return <LoadingSpinner text="Cargando oportunidad..." />;
+  if (!item) return <div className="p-6 text-center text-gray-500">Oportunidad no encontrada</div>;
 
   return (
     <div className="p-6 space-y-4">

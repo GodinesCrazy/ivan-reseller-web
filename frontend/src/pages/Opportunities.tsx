@@ -96,21 +96,26 @@ export default function Opportunities() {
       {error && <div className="text-red-600 text-sm">{error}</div>}
 
       <div className="overflow-auto bg-white border rounded">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left p-3">Title</th>
-              <th className="text-right p-3">Cost (USD)</th>
-              <th className="text-right p-3">Suggested (USD)</th>
-              <th className="text-right p-3">Margin %</th>
-              <th className="text-right p-3">ROI %</th>
-              <th className="text-center p-3">Competition</th>
-              <th className="text-center p-3">Targets</th>
-              <th className="text-center p-3">Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((it, idx) => (
+        {loading ? (
+          <div className="p-4">
+            <TableSkeleton rows={5} columns={8} />
+          </div>
+        ) : (
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left p-3">Title</th>
+                <th className="text-right p-3">Cost (USD)</th>
+                <th className="text-right p-3">Suggested (USD)</th>
+                <th className="text-right p-3">Margin %</th>
+                <th className="text-right p-3">ROI %</th>
+                <th className="text-center p-3">Competition</th>
+                <th className="text-center p-3">Targets</th>
+                <th className="text-center p-3">Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it, idx) => (
               <tr key={idx} className="border-t">
                 <td className="p-3">
                   <div className="font-medium line-clamp-2">{it.title}</div>
@@ -125,11 +130,12 @@ export default function Opportunities() {
                 <td className="p-3 text-center"><a className="text-primary-600 underline" href={it.aliexpressUrl} target="_blank" rel="noreferrer">AliExpress</a></td>
               </tr>
             ))}
-            {!loading && items.length === 0 && (
-              <tr><td className="p-6 text-center text-gray-500" colSpan={8}>No results</td></tr>
-            )}
-          </tbody>
-        </table>
+              {items.length === 0 && (
+                <tr><td className="p-6 text-center text-gray-500" colSpan={8}>No results</td></tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
