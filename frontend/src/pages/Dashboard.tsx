@@ -69,17 +69,24 @@ export default function Dashboard() {
       setLoading(true);
       // ✅ CARGAR DATOS REALES DE LA API
       const [statsRes, activityRes] = await Promise.all([
-        api.get('/api/dashboard/stats'),
-        api.get('/api/dashboard/recent-activity?limit=10')
+        api.get('/api/dashboard/stats').catch(err => {
+          console.warn('Error loading stats:', err);
+          return { data: {} };
+        }),
+        api.get('/api/dashboard/recent-activity?limit=10').catch(err => {
+          console.warn('Error loading activity:', err);
+          return { data: { activities: [] } };
+        })
       ]);
 
-      const stats = statsRes.data;
+      const stats = statsRes.data || {};
       const activities = activityRes.data?.activities || [];
 
       // Calcular total de ventas y ganancias desde estadísticas reales
-      const totalSales = stats?.sales?.totalRevenue || 0;
-      const totalProfit = stats?.commissions?.totalAmount || 0;
-      const activeProducts = stats?.products?.published || 0;
+      // El backend devuelve: { products: {...}, sales: {...}, commissions: {...} }
+      const totalSales = stats?.sales?.totalRevenue || stats?.sales?.total || 0;
+      const totalProfit = stats?.commissions?.totalAmount || stats?.commissions?.total || 0;
+      const activeProducts = stats?.products?.published || stats?.products?.active || 0;
 
       setDashboardData({
         totalSales,
