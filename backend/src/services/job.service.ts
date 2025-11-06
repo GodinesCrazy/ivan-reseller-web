@@ -198,10 +198,18 @@ class JobService {
       await job.updateProgress(50);
 
       // Create product in database
-      const product = await this.productService.createProductFromAliExpress(
+      const product = await this.productService.createProduct(
         userId,
-        aliexpressUrl,
-        customData || {}
+        {
+          title: scrapedData.title || 'Producto sin título',
+          description: scrapedData.description,
+          aliexpressUrl: aliexpressUrl,
+          aliexpressPrice: scrapedData.price || 0,
+          suggestedPrice: (scrapedData.price || 0) * 2,
+          category: scrapedData.category,
+          imageUrl: scrapedData.images?.[0],
+          ...customData
+        }
       );
       await job.updateProgress(90);
 
@@ -400,7 +408,7 @@ class JobService {
               const payoutResult = await paypalService.sendPayout({
                 recipientEmail: commission.user.email,
                 amount: commission.amount,
-                currency: commission.currency || 'USD',
+                currency: 'USD', // Commission siempre en USD
                 note: `Comisión por venta - Commission ID: ${commission.id}`,
                 senderItemId: `commission_${commission.id}`
               });

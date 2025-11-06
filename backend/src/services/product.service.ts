@@ -55,14 +55,14 @@ export class ProductService {
         userId,
         type: 'PRODUCT_CREATED',
         description: `Producto creado: ${product.title}`,
-        metadata: { productId: product.id },
+        metadata: JSON.stringify({ productId: product.id }),
       },
     });
 
     return product;
   }
 
-  async getProducts(userId?: string, status?: ProductStatus) {
+  async getProducts(userId?: number, status?: string) {
     const where: any = {};
     
     if (userId) {
@@ -97,7 +97,7 @@ export class ProductService {
     });
   }
 
-  async getProductById(id: string) {
+  async getProductById(id: number) {
     const product = await prisma.product.findUnique({
       where: { id },
       include: {
@@ -205,7 +205,10 @@ export class ProductService {
     }
 
     // Verificar que no tenga ventas asociadas
-    if (product.sales.length > 0) {
+    const salesCount = await prisma.sale.count({
+      where: { productId: id }
+    });
+    if (salesCount > 0) {
       throw new AppError('No se puede eliminar un producto con ventas asociadas', 400);
     }
 
@@ -226,7 +229,7 @@ export class ProductService {
     return { message: 'Producto eliminado exitosamente' };
   }
 
-  async getProductStats(userId?: string) {
+  async getProductStats(userId?: number) {
     const where = userId ? { userId } : {};
 
     const [total, pending, approved, rejected, published] = await Promise.all([
