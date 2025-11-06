@@ -100,11 +100,7 @@ export default function WorkflowConfig() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="h-8 w-8 rounded-full border-2 border-gray-300 border-t-gray-700 animate-spin" />
-      </div>
-    );
+    return <LoadingSpinner text="Cargando configuración de workflow..." />;
   }
 
   if (!config) {

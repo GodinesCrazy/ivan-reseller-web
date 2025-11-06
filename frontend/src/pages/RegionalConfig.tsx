@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
+import LoadingSpinner, { TableSkeleton } from '@/components/ui/LoadingSpinner';
 
 interface RegionalConfig {
   id: number;

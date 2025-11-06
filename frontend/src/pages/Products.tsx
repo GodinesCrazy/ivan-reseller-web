@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
+import LoadingSpinner, { TableSkeleton } from '@/components/ui/LoadingSpinner';
 
 interface Product {
   id: string;

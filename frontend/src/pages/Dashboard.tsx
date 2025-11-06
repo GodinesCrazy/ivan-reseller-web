@@ -30,6 +30,7 @@ import {
 import toast from 'react-hot-toast';
 import api from '@services/api';
 import UniversalSearchDashboard from '@components/UniversalSearchDashboard';
+import LoadingSpinner, { CardSkeleton } from '@/components/ui/LoadingSpinner';
 
 import AIOpportunityFinder from '../components/AIOpportunityFinder';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
@@ -179,9 +180,7 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* Métricas principales */}
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 rounded-full border-2 border-gray-300 border-t-gray-700 animate-spin" />
-        </div>
+        <CardSkeleton count={6} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
           <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
