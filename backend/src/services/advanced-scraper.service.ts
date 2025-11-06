@@ -29,25 +29,48 @@ export class AdvancedMarketplaceScraper {
   async init(): Promise<void> {
     console.log('🚀 Iniciando navegador con evasión anti-bot...');
     
-    this.browser = await puppeteer.launch({
-      headless: 'new', // Usar nuevo modo headless
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-        '--window-size=1920,1080'
-      ],
-      ignoreDefaultArgs: ['--enable-automation'],
-      ignoreHTTPSErrors: true
-    });
+    try {
+      // En Railway/Linux, Puppeteer debe usar el Chrome que viene con el paquete
+      // No especificar executablePath para que use el Chrome descargado por Puppeteer
+      this.browser = await puppeteer.launch({
+        headless: 'new', // Usar nuevo modo headless
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+          '--window-size=1920,1080',
+          '--single-process', // Útil para contenedores con recursos limitados
+        ],
+        ignoreDefaultArgs: ['--enable-automation'],
+        ignoreHTTPSErrors: true,
+        // No especificar executablePath - dejar que Puppeteer use su Chrome descargado
+      });
 
-    console.log('✅ Navegador iniciado exitosamente');
+      console.log('✅ Navegador iniciado exitosamente');
+    } catch (error: any) {
+      console.error('❌ Error al iniciar navegador:', error.message);
+      // Si falla, intentar sin algunas opciones avanzadas
+      try {
+        this.browser = await puppeteer.launch({
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+          ],
+        });
+        console.log('✅ Navegador iniciado con configuración mínima');
+      } catch (fallbackError: any) {
+        console.error('❌ Error crítico al iniciar navegador:', fallbackError.message);
+        throw new Error(`No se pudo iniciar el navegador: ${fallbackError.message}`);
+      }
+    }
   }
 
   async close(): Promise<void> {
