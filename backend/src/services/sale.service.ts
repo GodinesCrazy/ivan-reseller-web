@@ -1,4 +1,4 @@
-import { PrismaClient, SaleStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 import logger from '../config/logger';
 
@@ -255,11 +255,12 @@ export class SaleService {
     return sale;
   }
 
-  async getSales(userId?: string, status?: SaleStatus) {
+  async getSales(userId?: string | number, status?: string) {
     const where: any = {};
     
     if (userId) {
-      where.userId = userId;
+      // Convertir userId a number si es string (Prisma espera number)
+      where.userId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
     }
     
     if (status) {
@@ -308,7 +309,7 @@ export class SaleService {
     return sale;
   }
 
-  async updateSaleStatus(id: string, status: SaleStatus) {
+  async updateSaleStatus(id: string, status: string) {
     const sale = await this.getSaleById(id);
 
     const updateData: any = { status };
@@ -411,10 +412,10 @@ export class SaleService {
         where: { id: sale.userId },
         data: {
           balance: {
-            decrement: sale.userCommission,
+            decrement: sale.commissionAmount,
           },
           totalEarnings: {
-            decrement: sale.userCommission,
+            decrement: sale.commissionAmount,
           },
         },
       });
@@ -423,8 +424,10 @@ export class SaleService {
     return updated;
   }
 
-  async getSalesStats(userId?: string) {
-    const where = userId ? { userId } : {};
+  async getSalesStats(userId?: string | number) {
+    // Convertir userId a number si es string (Prisma espera number)
+    const userIdNumber = userId ? (typeof userId === 'string' ? parseInt(userId, 10) : userId) : undefined;
+    const where = userIdNumber ? { userId: userIdNumber } : {};
 
     const [
       totalSales,
@@ -435,16 +438,16 @@ export class SaleService {
       totalCommissions,
     ] = await Promise.all([
       prisma.sale.count({ where }),
-      prisma.sale.count({ where: { ...where, status: SaleStatus.PENDING } }),
-      prisma.sale.count({ where: { ...where, status: SaleStatus.COMPLETED } }),
-      prisma.sale.count({ where: { ...where, status: SaleStatus.CANCELLED } }),
+      prisma.sale.count({ where: { ...where, status: 'PENDING' } }),
+      prisma.sale.count({ where: { ...where, status: 'COMPLETED' } }),
+      prisma.sale.count({ where: { ...where, status: 'CANCELLED' } }),
       prisma.sale.aggregate({
-        where: { ...where, status: SaleStatus.COMPLETED as any },
+        where: { ...where, status: 'COMPLETED' },
         _sum: { salePrice: true },
       }),
       prisma.sale.aggregate({
-        where: { ...where, status: SaleStatus.COMPLETED as any },
-        _sum: { userCommission: true },
+        where: { ...where, status: 'COMPLETED' },
+        _sum: { commissionAmount: true },
       }),
     ]);
 
@@ -454,7 +457,7 @@ export class SaleService {
       completedSales,
       cancelledSales,
       totalRevenue: totalRevenue._sum.salePrice || 0,
-      totalCommissions: totalCommissions._sum.userCommission || 0,
+      totalCommissions: totalCommissions._sum.commissionAmount || 0,
     };
   }
 }

@@ -30,13 +30,13 @@ import { useAuthStore } from '@stores/authStore';
 
 interface User {
   id: number;
-  name: string;
+  name: string; // Mapeado desde username o fullName
   email: string;
   phone?: string;
-  role: 'admin' | 'user' | 'viewer';
-  status: 'active' | 'inactive';
+  role: 'ADMIN' | 'USER'; // Estandarizado a mayúsculas para coincidir con backend
+  status: 'active' | 'inactive'; // Mapeado desde isActive
   createdAt: string;
-  lastLogin?: string;
+  lastLogin?: string; // Mapeado desde lastLoginAt
   avatar?: string;
 }
 
@@ -50,7 +50,7 @@ interface UserStats {
 
 export default function Users() {
   const navigate = useNavigate();
-  const { user: currentUser } = useAuthStore();
+  const { user: currentUser, checkAuth } = useAuthStore();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -67,12 +67,14 @@ export default function Users() {
 
   // New/Edit User Form
   const [formData, setFormData] = useState({
-    name: '',
+    username: '', // Backend espera username, no name
     email: '',
-    phone: '',
+    fullName: '', // Backend espera fullName opcional
     password: '',
-    role: 'user' as 'admin' | 'user' | 'viewer',
-    status: 'active' as 'active' | 'inactive'
+    role: 'USER' as 'ADMIN' | 'USER', // Estandarizado a mayúsculas
+    commissionRate: 0.15, // Backend requiere commissionRate
+    fixedMonthlyCost: 17.0, // Backend requiere fixedMonthlyCost
+    isActive: true // Backend espera isActive, no status
   });
 
   // Pagination
@@ -80,20 +82,70 @@ export default function Users() {
   const itemsPerPage = 20;
 
   useEffect(() => {
-    // Verificar que el usuario actual es admin
-    if (currentUser?.role !== 'admin') {
-      toast.error('Access denied. Admin only.');
-      navigate('/dashboard');
-      return;
-    }
+    const verifyAndLoad = async () => {
+      // Forzar actualización del usuario desde el backend
+      console.log('Verificando autenticación y rol de usuario...');
+      const isAuthenticated = await checkAuth();
+      
+      if (!isAuthenticated) {
+        toast.error('Please log in to access this page');
+        navigate('/login');
+        return;
+      }
 
-    loadUsers();
-  }, []);
+      // Obtener usuario actualizado del store después de checkAuth
+      const updatedUser = useAuthStore.getState().user;
+      
+      if (!updatedUser) {
+        console.error('User information not available after checkAuth');
+        toast.error('User information not available');
+        navigate('/dashboard');
+        return;
+      }
+
+      // Verificar que el usuario actual es admin
+      // El backend usa 'ADMIN' (mayúsculas), normalizar para comparación
+      const userRole = updatedUser.role?.toUpperCase();
+      
+      console.log('Current user:', updatedUser);
+      console.log('User role:', userRole);
+      console.log('Role comparison:', userRole, '===', 'ADMIN', '?', userRole === 'ADMIN');
+      
+      if (!userRole || userRole !== 'ADMIN') {
+        console.warn('Access denied - User role:', userRole, 'Expected: ADMIN');
+        console.warn('Full user object:', JSON.stringify(updatedUser, null, 2));
+        toast.error('Access denied. Admin only.');
+        // Esperar un momento antes de redirigir para que el usuario vea el mensaje
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 2000);
+        return;
+      }
+
+      // Usuario es admin, cargar usuarios
+      console.log('Usuario es admin, cargando lista de usuarios...');
+      loadUsers();
+    };
+
+    verifyAndLoad();
+  }, [checkAuth, navigate]);
 
   const loadUsers = async () => {
     try {
       const { data } = await api.get('/api/admin/users');
-      setUsers(data?.users || []);
+      // Mapear datos del backend al formato esperado por el frontend
+      const mappedUsers = (data?.users || []).map((user: any) => ({
+        id: user.id,
+        name: user.fullName || user.username, // Usar fullName si existe, sino username
+        email: user.email,
+        phone: '', // No existe en backend
+        role: user.role || 'USER', // Asegurar que sea ADMIN o USER
+        status: user.isActive ? 'active' : 'inactive', // Mapear isActive a status
+        createdAt: user.createdAt,
+        lastLogin: user.lastLoginAt || undefined, // Mapear lastLoginAt a lastLogin
+        avatar: undefined
+      }));
+      setUsers(mappedUsers);
     } catch (error: any) {
       toast.error('Error loading users: ' + (error.response?.data?.error || error.message));
     } finally {
@@ -108,7 +160,21 @@ export default function Users() {
         api.get(`/api/admin/users/${userId}/stats`)
       ]);
       
-      setSelectedUser(detailsRes.data?.user);
+      // Mapear datos del backend al formato esperado por el frontend
+      const backendUser = detailsRes.data?.user;
+      const mappedUser: User = {
+        id: backendUser.id,
+        name: backendUser.fullName || backendUser.username,
+        email: backendUser.email,
+        phone: '', // No existe en backend
+        role: backendUser.role || 'USER',
+        status: backendUser.isActive ? 'active' : 'inactive',
+        createdAt: backendUser.createdAt,
+        lastLogin: backendUser.lastLoginAt || undefined,
+        avatar: undefined
+      };
+      
+      setSelectedUser(mappedUser);
       setUserStats(statsRes.data?.stats);
       setShowDetailsModal(true);
     } catch (error: any) {
@@ -116,45 +182,133 @@ export default function Users() {
     }
   };
 
-  const openEditModal = (user: User) => {
+  const openEditModal = async (user: User) => {
     setSelectedUser(user);
-    setFormData({
-      name: user.name,
-      email: user.email,
-      phone: user.phone || '',
-      password: '',
-      role: user.role,
-      status: user.status
-    });
     setShowEditModal(true);
+    
+    // Obtener datos completos del backend
+    try {
+      const detailsRes = await api.get(`/api/admin/users/${user.id}`);
+      const backendUser = detailsRes.data?.user;
+      
+      // Actualizar formData con datos del backend
+      setFormData({
+        username: backendUser.username || user.name,
+        email: backendUser.email || user.email,
+        fullName: backendUser.fullName || '',
+        password: '',
+        role: (backendUser.role || user.role) as 'ADMIN' | 'USER',
+        commissionRate: backendUser.commissionRate || 0.15,
+        fixedMonthlyCost: backendUser.fixedMonthlyCost || 17.0,
+        isActive: backendUser.isActive !== undefined ? backendUser.isActive : (user.status === 'active')
+      });
+    } catch (error: any) {
+      // Si falla, usar datos del frontend como fallback
+      setFormData({
+        username: user.name,
+        email: user.email,
+        fullName: user.name,
+        password: '',
+        role: user.role as 'ADMIN' | 'USER',
+        commissionRate: 0.15,
+        fixedMonthlyCost: 17.0,
+        isActive: user.status === 'active'
+      });
+    }
   };
 
   const openNewUserModal = () => {
     setSelectedUser(null);
     setFormData({
-      name: '',
+      username: '',
       email: '',
-      phone: '',
+      fullName: '',
       password: '',
-      role: 'user',
-      status: 'active'
+      role: 'USER' as 'ADMIN' | 'USER',
+      commissionRate: 0.15,
+      fixedMonthlyCost: 17.0,
+      isActive: true
     });
     setShowNewUserModal(true);
   };
 
   const createUser = async () => {
-    if (!formData.name || !formData.email || !formData.password) {
-      toast.error('Name, email and password are required');
+    // Validar campos requeridos
+    if (!formData.username || !formData.email || !formData.password) {
+      toast.error('Username, email and password are required');
+      return;
+    }
+
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    // Validar longitud de password
+    if (formData.password.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    // Validar username
+    if (formData.username.length < 3) {
+      toast.error('Username must be at least 3 characters');
       return;
     }
 
     try {
-      await api.post('/api/admin/users', formData);
+      // Mapear datos del frontend al formato esperado por el backend
+      const backendData = {
+        username: formData.username.trim(),
+        email: formData.email.trim().toLowerCase(),
+        fullName: formData.fullName?.trim() || undefined,
+        password: formData.password,
+        role: formData.role,
+        commissionRate: formData.commissionRate || 0.15,
+        fixedMonthlyCost: formData.fixedMonthlyCost || 17.0,
+        isActive: formData.isActive !== undefined ? formData.isActive : true
+      };
+
+      console.log('Creating user with data:', { ...backendData, password: '***' });
+
+      const response = await api.post('/api/admin/users', backendData);
+      
+      console.log('User created successfully:', response.data);
+      
       toast.success('User created successfully');
       setShowNewUserModal(false);
+      
+      // Limpiar formulario
+      setFormData({
+        username: '',
+        email: '',
+        fullName: '',
+        password: '',
+        role: 'USER' as 'ADMIN' | 'USER',
+        commissionRate: 0.15,
+        fixedMonthlyCost: 17.0,
+        isActive: true
+      });
+      
       loadUsers();
     } catch (error: any) {
-      toast.error('Error creating user: ' + (error.response?.data?.error || error.message));
+      console.error('Error creating user:', error);
+      console.error('Error response:', error.response?.data);
+      
+      // Mostrar error detallado
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          error.message || 
+                          'Error creating user';
+      
+      // Si hay detalles adicionales, mostrarlos
+      if (error.response?.data?.details) {
+        toast.error(`${errorMessage}: ${JSON.stringify(error.response.data.details)}`);
+      } else {
+        toast.error(errorMessage);
+      }
     }
   };
 
@@ -162,7 +316,21 @@ export default function Users() {
     if (!selectedUser) return;
 
     try {
-      await api.put(`/api/admin/users/${selectedUser.id}`, formData);
+      // Mapear datos del frontend al formato esperado por el backend
+      const backendData: any = {
+        username: formData.username,
+        email: formData.email,
+        fullName: formData.fullName || undefined,
+        role: formData.role,
+        commissionRate: formData.commissionRate,
+        fixedMonthlyCost: formData.fixedMonthlyCost,
+        isActive: formData.isActive
+      };
+      // Solo incluir password si se proporcionó
+      if (formData.password) {
+        backendData.password = formData.password;
+      }
+      await api.put(`/api/admin/users/${selectedUser.id}`, backendData);
       toast.success('User updated successfully');
       setShowEditModal(false);
       loadUsers();
@@ -173,9 +341,9 @@ export default function Users() {
 
   const toggleUserStatus = async (userId: number, currentStatus: 'active' | 'inactive') => {
     try {
-      const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-      await api.put(`/api/admin/users/${userId}`, { status: newStatus });
-      toast.success(`User ${newStatus === 'active' ? 'activated' : 'deactivated'}`);
+      const newIsActive = currentStatus === 'inactive'; // Invertir estado
+      await api.put(`/api/admin/users/${userId}`, { isActive: newIsActive });
+      toast.success(`User ${newIsActive ? 'activated' : 'deactivated'}`);
       loadUsers();
     } catch (error: any) {
       toast.error('Error updating user status');
@@ -183,13 +351,18 @@ export default function Users() {
   };
 
   const resetPassword = async (userId: number) => {
-    if (!confirm('Send password reset email to this user?')) return;
+    const newPassword = prompt('Enter new password for this user (min 6 characters):');
+    if (!newPassword || newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
 
     try {
-      await api.post(`/api/admin/users/${userId}/reset-password`);
-      toast.success('Password reset email sent');
+      await api.post(`/api/admin/users/${userId}/reset-password`, { newPassword });
+      toast.success('Password reset successfully');
+      loadUsers();
     } catch (error: any) {
-      toast.error('Error sending password reset email');
+      toast.error('Error resetting password: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -210,7 +383,10 @@ export default function Users() {
     .filter(user => {
       const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            user.email.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesRole = filterRole === 'all' || user.role === filterRole;
+      // Normalizar roles a mayúsculas para comparación
+      const userRoleUpper = user.role.toUpperCase();
+      const filterRoleUpper = filterRole.toUpperCase();
+      const matchesRole = filterRole === 'all' || userRoleUpper === filterRoleUpper;
       const matchesStatus = filterStatus === 'all' || user.status === filterStatus;
       return matchesSearch && matchesRole && matchesStatus;
     })
@@ -228,10 +404,10 @@ export default function Users() {
   );
 
   const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'admin': return 'bg-purple-100 text-purple-700';
-      case 'user': return 'bg-blue-100 text-blue-700';
-      case 'viewer': return 'bg-gray-100 text-gray-700';
+    const roleUpper = role.toUpperCase(); // Normalizar a mayúsculas
+    switch (roleUpper) {
+      case 'ADMIN': return 'bg-purple-100 text-purple-700';
+      case 'USER': return 'bg-blue-100 text-blue-700';
       default: return 'bg-gray-100 text-gray-700';
     }
   };
@@ -299,9 +475,8 @@ export default function Users() {
             className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
           >
             <option value="all">All Roles</option>
-            <option value="admin">Admin</option>
-            <option value="user">User</option>
-            <option value="viewer">Viewer</option>
+            <option value="ADMIN">Admin</option>
+            <option value="USER">User</option>
           </select>
 
           {/* Filter by Status */}
@@ -373,7 +548,7 @@ export default function Users() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleBadgeColor(user.role)}`}>
-                    {user.role}
+                    {user.role.toUpperCase()}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
@@ -511,7 +686,7 @@ export default function Users() {
                   <div>
                     <div className="text-sm text-gray-500">Role</div>
                     <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleBadgeColor(selectedUser.role)}`}>
-                      {selectedUser.role}
+                      {selectedUser.role.toUpperCase()}
                     </span>
                   </div>
                 </div>
@@ -605,16 +780,27 @@ export default function Users() {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Username *</label>
                 <input
                   type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  placeholder="johndoe"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                <input
+                  type="text"
+                  value={formData.fullName}
+                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  placeholder="John Doe"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
                 <input
                   type="email"
                   value={formData.email}
@@ -623,31 +809,54 @@ export default function Users() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Password (leave empty to keep current)</label>
                 <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  placeholder="New password"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
                 <select
                   value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value as 'ADMIN' | 'USER' })}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
                 >
-                  <option value="admin">Admin</option>
-                  <option value="user">User</option>
-                  <option value="viewer">Viewer</option>
+                  <option value="USER">User</option>
+                  <option value="ADMIN">Admin</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Commission Rate</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="1"
+                  value={formData.commissionRate}
+                  onChange={(e) => setFormData({ ...formData, commissionRate: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Fixed Monthly Cost</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.fixedMonthlyCost}
+                  onChange={(e) => setFormData({ ...formData, fixedMonthlyCost: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
                 <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                  value={formData.isActive ? 'active' : 'inactive'}
+                  onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'active' })}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="active">Active</option>
@@ -686,11 +895,21 @@ export default function Users() {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Name *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Username *</label>
                 <input
                   type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  placeholder="johndoe"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                <input
+                  type="text"
+                  value={formData.fullName}
+                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
                   placeholder="John Doe"
                 />
@@ -706,36 +925,48 @@ export default function Users() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
-                  placeholder="+1 (555) 123-4567"
-                />
-              </div>
-              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Password *</label>
                 <input
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
-                  placeholder="At least 8 characters"
+                  placeholder="At least 6 characters"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
                 <select
                   value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value as 'ADMIN' | 'USER' })}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
                 >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
-                  <option value="viewer">Viewer</option>
+                  <option value="USER">User</option>
+                  <option value="ADMIN">Admin</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Commission Rate</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="1"
+                  value={formData.commissionRate}
+                  onChange={(e) => setFormData({ ...formData, commissionRate: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Fixed Monthly Cost</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.fixedMonthlyCost}
+                  onChange={(e) => setFormData({ ...formData, fixedMonthlyCost: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                />
               </div>
             </div>
             <div className="p-6 border-t flex justify-end gap-3">

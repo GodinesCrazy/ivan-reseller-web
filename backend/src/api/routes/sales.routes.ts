@@ -8,7 +8,7 @@ router.use(authenticate);
 
 const createSaleSchema = z.object({
   orderId: z.string().min(3),
-  productId: z.string().uuid(),
+  productId: z.union([z.string(), z.number()]).transform((val) => typeof val === 'string' ? parseInt(val, 10) : val),
   marketplace: z.string(),
   salePrice: z.number().positive(),
   costPrice: z.number().positive(),
@@ -50,7 +50,10 @@ router.get('/', async (req: Request, res: Response, next) => {
 // GET /api/sales/stats - Estadísticas
 router.get('/stats', async (req: Request, res: Response, next) => {
   try {
-    const userId = req.user?.role === 'ADMIN' ? undefined : String(req.user?.userId || '');
+    // Normalizar rol a mayúsculas para comparación case-insensitive
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? undefined : (req.user?.userId ? String(req.user.userId) : undefined);
     const days = parseInt(req.query.days as string) || 30;
     const stats = await saleService.getSalesStats(userId);
     
@@ -86,8 +89,20 @@ router.get('/:id', async (req: Request, res: Response, next) => {
 // POST /api/sales - Crear venta
 router.post('/', async (req: Request, res: Response, next) => {
   try {
-    const data = createSaleSchema.parse(req.body) as CreateSaleDto;
-    const sale = await saleService.createSale(String(req.user!.userId), data);
+    const parsedData = createSaleSchema.parse(req.body);
+    // Convertir productId de string a number y asegurar que todos los campos requeridos estén presentes
+    const data: CreateSaleDto = {
+      orderId: parsedData.orderId,
+      productId: typeof parsedData.productId === 'string' ? parseInt(parsedData.productId, 10) : parsedData.productId,
+      marketplace: parsedData.marketplace,
+      salePrice: parsedData.salePrice,
+      costPrice: parsedData.costPrice,
+      platformFees: parsedData.platformFees,
+      currency: parsedData.currency,
+      buyerEmail: parsedData.buyerEmail,
+      shippingAddress: parsedData.shippingAddress,
+    };
+    const sale = await saleService.createSale(req.user!.userId, data);
     res.status(201).json(sale);
   } catch (error: any) {
     if (error.name === 'ZodError') {

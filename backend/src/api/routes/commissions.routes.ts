@@ -36,7 +36,7 @@ router.get('/', async (req: Request, res: Response, next) => {
 router.get('/stats', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user?.role === 'ADMIN' ? undefined : req.user?.userId;
-    const stats = await commissionService.getCommissionStats(userId);
+    const stats = await commissionService.getCommissionStats(userId ? String(userId) : undefined);
     
     // ✅ Mapear estadísticas al formato esperado por el frontend
     const mappedStats = {
@@ -114,6 +114,72 @@ router.post('/batch-pay', authorize('ADMIN'), async (req: Request, res: Response
     if (error.name === 'ZodError') {
       return res.status(400).json({ error: 'Datos inválidos', details: error.errors });
     }
+    next(error);
+  }
+});
+
+// POST /api/commissions/request-payout - Solicitar pago de comisiones pendientes
+router.post('/request-payout', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user!.userId;
+    
+    // Obtener comisiones pendientes del usuario
+    const pendingCommissions = await commissionService.getCommissions(userId, 'PENDING');
+    
+    if (pendingCommissions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No hay comisiones pendientes para solicitar pago'
+      });
+    }
+
+    // Calcular total pendiente
+    const totalAmount = pendingCommissions.reduce((sum: number, comm: any) => sum + (comm.amount || 0), 0);
+
+    // Marcar comisiones como SCHEDULED (programadas para pago)
+    const commissionIds = pendingCommissions.map((c: any) => c.id);
+    const nextPayoutDate = new Date();
+    nextPayoutDate.setDate(nextPayoutDate.getDate() + 7); // Pago en 7 días
+
+    for (const comm of pendingCommissions) {
+      await commissionService.scheduleCommission(comm.id, nextPayoutDate);
+    }
+
+    res.json({
+      success: true,
+      message: 'Payout request submitted successfully',
+      data: {
+        commissionCount: pendingCommissions.length,
+        totalAmount,
+        scheduledDate: nextPayoutDate.toISOString(),
+        commissionIds
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/commissions/payout-schedule - Obtener programación de pagos
+router.get('/payout-schedule', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user!.role === 'ADMIN' ? undefined : req.user!.userId;
+    const scheduledCommissions = await commissionService.getCommissions(userId, 'SCHEDULED');
+    
+    const schedule = scheduledCommissions.map((comm: any) => ({
+      commissionId: comm.id,
+      amount: comm.amount,
+      scheduledDate: comm.scheduledAt?.toISOString() || null,
+      saleId: comm.saleId
+    }));
+
+    res.json({
+      success: true,
+      schedule,
+      totalAmount: schedule.reduce((sum: number, s: any) => sum + s.amount, 0),
+      count: schedule.length
+    });
+  } catch (error) {
     next(error);
   }
 });

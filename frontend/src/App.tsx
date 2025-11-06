@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@stores/authStore';
 const Login = lazy(() => import('@pages/Login'));
@@ -28,8 +28,18 @@ const WorkflowConfig = lazy(() => import('@pages/WorkflowConfig'));
 import Layout from '@components/layout/Layout';
 
 function App() {
-  // ✅ RESTAURADO: Usar autenticación real
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isCheckingAuth, checkAuth } = useAuthStore();
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Validar token al iniciar la app
+  useEffect(() => {
+    const validateToken = async () => {
+      await checkAuth();
+      setIsInitialized(true);
+    };
+    
+    validateToken();
+  }, [checkAuth]);
 
   const Fallback = (
     <div className="flex items-center justify-center min-h-[30vh] text-gray-600">
@@ -37,6 +47,18 @@ function App() {
       Cargando...
     </div>
   );
+
+  // Mostrar loading mientras se valida el token
+  if (!isInitialized || isCheckingAuth) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="h-8 w-8 mx-auto mb-4 rounded-full border-4 border-gray-300 border-t-blue-600 animate-spin" />
+          <p className="text-gray-600">Verificando sesión...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Suspense fallback={Fallback}>
