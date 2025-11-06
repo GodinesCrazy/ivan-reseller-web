@@ -130,11 +130,47 @@ export default function APIConfigurationPage() {
       
       const mappedApiName = apiNameMap[apiName] || apiName.toLowerCase().replace(/\s+/g, '');
 
+      // Procesar credenciales según el tipo de API
+      let processedCredentials: Record<string, any> = { ...formData[apiId] };
+
+      // Procesamiento especial para AliExpress
+      if (mappedApiName === 'aliexpress') {
+        // Asegurar que twoFactorEnabled sea boolean
+        if (processedCredentials.twoFactorEnabled !== undefined) {
+          processedCredentials.twoFactorEnabled = 
+            processedCredentials.twoFactorEnabled === 'true' || 
+            processedCredentials.twoFactorEnabled === true;
+        } else {
+          processedCredentials.twoFactorEnabled = false;
+        }
+        
+        // Validar campos requeridos
+        if (!processedCredentials.email || !processedCredentials.password) {
+          throw new Error('Email y Password son requeridos para AliExpress');
+        }
+      }
+
+      // Procesamiento para otras APIs que necesiten conversión de tipos
+      if (mappedApiName === 'ebay') {
+        processedCredentials.sandbox = false;
+      } else if (mappedApiName === 'amazon') {
+        processedCredentials.sandbox = false;
+        if (!processedCredentials.region) {
+          processedCredentials.region = 'us-east-1';
+        }
+      } else if (mappedApiName === 'mercadolibre') {
+        processedCredentials.sandbox = false;
+      } else if (mappedApiName === 'paypal') {
+        if (processedCredentials.environment !== 'sandbox') {
+          processedCredentials.environment = 'live';
+        }
+      }
+
       // Usar endpoint unificado /api/credentials
       const response = await api.post('/api/credentials', {
         apiName: mappedApiName,
         environment: api.environment || 'production',
-        credentials: formData[apiId],
+        credentials: processedCredentials,
         isActive: true
       });
 
