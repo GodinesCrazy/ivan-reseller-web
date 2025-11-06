@@ -37,7 +37,7 @@ export class CommissionService {
     });
   }
 
-  async getCommissionById(id: string) {
+  async getCommissionById(id: number) {
     const commission = await prisma.commission.findUnique({
       where: { id },
       include: {
@@ -63,7 +63,7 @@ export class CommissionService {
     return commission;
   }
 
-  async scheduleCommission(id: string, scheduledDate: Date) {
+  async scheduleCommission(id: number, scheduledDate: Date) {
     const commission = await this.getCommissionById(id);
 
     if (commission.status !== 'PENDING') {
@@ -74,7 +74,7 @@ export class CommissionService {
       where: { id },
       data: {
         status: 'SCHEDULED',
-        scheduledDate,
+        scheduledAt: scheduledDate,
       },
       include: {
         sale: {
@@ -98,14 +98,14 @@ export class CommissionService {
         userId: commission.userId,
         type: 'COMMISSION_SCHEDULED',
         description: `Comisión de $${commission.amount} programada para ${scheduledDate.toLocaleDateString()}`,
-        metadata: { commissionId: id },
+        metadata: JSON.stringify({ commissionId: id }),
       },
     });
 
     return updated;
   }
 
-  async markAsPaid(id: string, paypalTransactionId?: string) {
+  async markAsPaid(id: number, paypalTransactionId?: string) {
     const commission = await this.getCommissionById(id);
 
     if (commission.status === 'PAID') {
@@ -117,7 +117,7 @@ export class CommissionService {
       data: {
         status: 'PAID',
         paidAt: new Date(),
-        paypalTransactionId,
+        // paypalTransactionId se guarda en metadata de Activity
       },
       include: {
         sale: {
@@ -141,17 +141,17 @@ export class CommissionService {
         userId: commission.userId,
         type: 'COMMISSION_PAID',
         description: `Comisión de $${commission.amount} pagada`,
-        metadata: { 
+        metadata: JSON.stringify({ 
           commissionId: id,
-          paypalTransactionId,
-        },
+          paypalTransactionId: paypalTransactionId || null,
+        }),
       },
     });
 
     return updated;
   }
 
-  async batchPayCommissions(commissionIds: string[], paypalBatchId?: string) {
+  async batchPayCommissions(commissionIds: number[], paypalBatchId?: string) {
     const commissions = await Promise.all(
       commissionIds.map(id => this.getCommissionById(id))
     );
@@ -176,7 +176,7 @@ export class CommissionService {
           data: {
             status: 'PAID',
             paidAt: new Date(),
-            paypalTransactionId: paypalBatchId,
+            // paypalBatchId se guarda en metadata de Activity
           },
         })
       )
@@ -188,12 +188,12 @@ export class CommissionService {
         prisma.activity.create({
           data: {
             userId: c.userId,
-            type: 'COMMISSION_PAID',
+            action: 'COMMISSION_PAID',
             description: `Comisión de $${c.amount} pagada (lote)`,
-            metadata: { 
+            metadata: JSON.stringify({ 
               commissionId: c.id,
-              paypalBatchId,
-            },
+              paypalBatchId: paypalBatchId || null,
+            }),
           },
         })
       )
@@ -242,7 +242,7 @@ export class CommissionService {
     };
   }
 
-  async getUserBalance(userId: string) {
+  async getUserBalance(userId: number) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
