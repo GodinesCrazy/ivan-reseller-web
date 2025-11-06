@@ -175,6 +175,9 @@ export default function APISettings() {
     loadCredentials();
   }, []);
 
+  // Estado para almacenar las definiciones de APIs del backend
+  const [backendApiDefinitions, setBackendApiDefinitions] = useState<Record<string, any>>({});
+
   const loadCredentials = async () => {
     setLoading(true);
     setError(null);
@@ -182,6 +185,15 @@ export default function APISettings() {
       // Cargar lista de APIs disponibles desde /api/settings/apis
       const apisResponse = await api.get('/api/settings/apis');
       const apisData = apisResponse.data?.data || [];
+      
+      // Crear un mapa de definiciones de APIs del backend (para usar campos correctos)
+      const backendDefs: Record<string, any> = {};
+      apisData.forEach((api: any) => {
+        if (api.apiName) {
+          backendDefs[api.apiName] = api;
+        }
+      });
+      setBackendApiDefinitions(backendDefs);
       
       // Cargar credenciales configuradas desde /api/credentials
       const credsResponse = await api.get('/api/credentials');
