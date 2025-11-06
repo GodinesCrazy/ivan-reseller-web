@@ -206,8 +206,10 @@ export class CommissionService {
     };
   }
 
-  async getCommissionStats(userId?: string) {
-    const where = userId ? { userId } : {};
+  async getCommissionStats(userId?: string | number) {
+    // Convertir userId a number si es string (Prisma espera number)
+    const userIdNumber = userId ? (typeof userId === 'string' ? parseInt(userId, 10) : userId) : undefined;
+    const where = userIdNumber ? { userId: userIdNumber } : {};
 
     const [
       total,

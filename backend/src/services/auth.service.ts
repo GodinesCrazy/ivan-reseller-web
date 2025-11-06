@@ -91,15 +91,18 @@ export class AuthService {
       },
     });
 
+    // Normalizar rol a mayúsculas para consistencia
+    const normalizedRole = user.role.toUpperCase();
+
     // Generate token
-    const token = this.generateToken(user.id, user.username, user.role);
+    const token = this.generateToken(user.id, user.username, normalizedRole);
 
     return {
       user: {
         id: user.id,
         username: user.username,
         email: user.email,
-        role: user.role,
+        role: normalizedRole,
         fullName: user.fullName,
       },
       token,
@@ -107,8 +110,11 @@ export class AuthService {
   }
 
   generateToken(userId: number, username: string, role: string): string {
+    // Normalizar rol a mayúsculas para consistencia
+    const normalizedRole = role.toUpperCase();
+    
     return jwt.sign(
-      { userId, username, role },
+      { userId, username, role: normalizedRole },
       env.JWT_SECRET,
       { expiresIn: env.JWT_EXPIRES_IN }
     );

@@ -52,8 +52,12 @@ export const authorize = (...roles: string[]) => {
       return next(new AppError('Authentication required', 401));
     }
 
-    if (!roles.includes(req.user.role)) {
-      return next(new AppError('Insufficient permissions', 403));
+    // Normalizar roles a mayúsculas para comparación case-insensitive
+    const userRoleUpper = req.user.role?.toUpperCase();
+    const allowedRolesUpper = roles.map(r => r.toUpperCase());
+
+    if (!userRoleUpper || !allowedRolesUpper.includes(userRoleUpper)) {
+      return next(new AppError('Insufficient permissions. Admin access required.', 403));
     }
 
     next();

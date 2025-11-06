@@ -81,9 +81,15 @@ router.get('/me', authenticate, async (req: Request, res: Response, next: NextFu
       throw new AppError('User not found', 404);
     }
 
+    // Normalizar rol a mayúsculas para consistencia
+    const normalizedUser = {
+      ...user,
+      role: user.role.toUpperCase()
+    };
+
     res.json({
       success: true,
-      data: user,
+      data: normalizedUser,
     });
   } catch (error) {
     next(error);
