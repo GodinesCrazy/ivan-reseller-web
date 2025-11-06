@@ -125,7 +125,8 @@ export default function APIConfigurationPage() {
         'ScraperAPI': 'scraperapi',
         'ZenRows API': 'zenrows',
         '2Captcha API': '2captcha',
-        'AliExpress API': 'aliexpress'
+        'AliExpress API': 'aliexpress',
+        'AliExpress Auto-Purchase': 'aliexpress' // También mapear el nombre completo del backend
       };
       
       const mappedApiName = apiNameMap[apiName] || apiName.toLowerCase().replace(/\s+/g, '');
