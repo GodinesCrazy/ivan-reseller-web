@@ -73,14 +73,16 @@ export class APIAvailabilityService {
    */
   private async getUserCredentials(
     userId: number, 
-    apiName: string
+    apiName: string,
+    environment: 'sandbox' | 'production' = 'production'
   ): Promise<Record<string, string> | null> {
     try {
       const credential = await prisma.apiCredential.findUnique({
         where: {
-          userId_apiName: {
+          userId_apiName_environment: {
             userId,
-            apiName
+            apiName,
+            environment
           }
         }
       });
