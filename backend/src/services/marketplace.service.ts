@@ -66,22 +66,26 @@ export class MarketplaceService {
   /**
    * Save or update marketplace credentials
    */
-  async saveCredentials(userId: number, marketplace: string, credentials: any): Promise<void> {
+  async saveCredentials(userId: number, marketplace: string, credentials: any, environment?: 'sandbox' | 'production'): Promise<void> {
     try {
+      // ✅ Obtener environment del usuario si no se proporciona
+      const workflowConfigService = await import('./workflow-config.service');
+      const userEnvironment = environment || await workflowConfigService.workflowConfigService.getUserEnvironment(userId);
+      
       const data = this.encrypt(JSON.stringify(credentials));
       await prisma.apiCredential.upsert({
         where: { 
           userId_apiName_environment: {
             userId: userId,
             apiName: marketplace,
-            environment: 'production'
+            environment: userEnvironment
           }
         },
         update: { credentials: data, isActive: true },
         create: { 
           userId, 
           apiName: marketplace, 
-          environment: 'production',
+          environment: userEnvironment,
           credentials: data, 
           isActive: true 
         },
