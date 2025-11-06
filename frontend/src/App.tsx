@@ -34,9 +34,10 @@ function App() {
   // Validar token al iniciar la app (solo si hay token)
   useEffect(() => {
     let isMounted = true;
+    let timeoutId: NodeJS.Timeout;
     
     const validateToken = async () => {
-      // Si no hay token, no hacer nada - mostrar login inmediatamente
+      // Si no hay token, mostrar login inmediatamente
       if (!token) {
         if (isMounted) {
           setIsInitialized(true);
@@ -44,15 +45,29 @@ function App() {
         return;
       }
 
+      // Timeout de 2 segundos - si tarda más, continuar de todas formas
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error('Timeout'));
+        }, 2000);
+      });
+
       try {
-        await checkAuth();
+        await Promise.race([
+          checkAuth(),
+          timeoutPromise
+        ]);
+        clearTimeout(timeoutId);
         if (isMounted) {
           setIsInitialized(true);
         }
       } catch (error) {
-        console.error('Error validating token:', error);
+        clearTimeout(timeoutId);
+        console.warn('Error o timeout validando token, continuando:', error);
+        // Si falla, limpiar token inválido y continuar
         if (isMounted) {
-          setIsInitialized(true); // Continuar aunque falle
+          // No limpiar el token aquí, solo continuar
+          setIsInitialized(true);
         }
       }
     };
@@ -61,6 +76,7 @@ function App() {
     
     return () => {
       isMounted = false;
+      clearTimeout(timeoutId);
     };
   }, []); // Solo ejecutar una vez al montar
 
@@ -71,9 +87,11 @@ function App() {
     </div>
   );
 
-  // Solo mostrar loading si hay token Y está verificando
-  // Si no hay token, mostrar la app inmediatamente (para que se vea el login)
-  if (token && (!isInitialized || isCheckingAuth)) {
+  // Solo mostrar loading si hay token Y está verificando Y no estamos en login
+  // Si no hay token o estamos en login, mostrar la app inmediatamente
+  const isLoginPage = window.location.pathname === '/login';
+  
+  if (!isLoginPage && token && !isInitialized && isCheckingAuth) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
@@ -82,6 +100,14 @@ function App() {
         </div>
       </div>
     );
+  }
+
+  // Si estamos en login o no hay token, mostrar inmediatamente
+  if (isLoginPage || !token) {
+    // Forzar inicialización si no está inicializado
+    if (!isInitialized) {
+      setIsInitialized(true);
+    }
   }
 
   return (
