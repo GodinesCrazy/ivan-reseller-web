@@ -380,32 +380,23 @@ export default function Settings() {
             </div>
 
             {/* Quick Links */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <button
-                onClick={() => navigate('/api-config')}
-                className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
-              >
-                <Key className="w-6 h-6 text-primary-600 mb-2" />
-                <h3 className="font-semibold text-gray-900">API Configuration</h3>
-                <p className="text-sm text-gray-600">Configure marketplace APIs</p>
-              </button>
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <button
                 onClick={() => navigate('/api-settings')}
                 className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
               >
                 <SettingsIcon className="w-6 h-6 text-primary-600 mb-2" />
-                <h3 className="font-semibold text-gray-900">API Settings</h3>
-                <p className="text-sm text-gray-600">Advanced API settings</p>
+                <h3 className="font-semibold text-gray-900">API Configuration</h3>
+                <p className="text-sm text-gray-600">Configure all marketplace and service APIs</p>
               </button>
 
               <button
                 onClick={() => navigate('/api-keys')}
                 className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
               >
-                <LinkIcon className="w-6 h-6 text-primary-600 mb-2" />
-                <h3 className="font-semibold text-gray-900">API Keys</h3>
-                <p className="text-sm text-gray-600">Manage API keys</p>
+                <Key className="w-6 h-6 text-primary-600 mb-2" />
+                <h3 className="font-semibold text-gray-900">Marketplace Keys</h3>
+                <p className="text-sm text-gray-600">Quick setup for eBay, MercadoLibre & Amazon</p>
               </button>
             </div>
 
