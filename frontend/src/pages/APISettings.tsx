@@ -580,6 +580,12 @@ export default function APISettings() {
           const isSaving = saving === apiDef.name;
           const isTesting = testing === apiDef.name;
           const isDeleting = deleting === apiDef.name;
+          
+          // Usar campos del backend si están disponibles, sino usar API_DEFINITIONS
+          const backendDef = backendApiDefinitions[apiDef.name];
+          const fieldsToUse = backendDef?.fields || apiDef.fields;
+          const displayName = backendDef?.name || apiDef.displayName;
+          const description = backendDef?.description || apiDef.description;
 
           return (
             <div
@@ -592,7 +598,7 @@ export default function APISettings() {
                   <span className="text-3xl">{apiDef.icon}</span>
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                      {apiDef.displayName}
+                      {displayName}
                       {apiDef.docsUrl && (
                         <a
                           href={apiDef.docsUrl}
@@ -605,7 +611,7 @@ export default function APISettings() {
                         </a>
                       )}
                     </h3>
-                    <p className="text-sm text-gray-600">{apiDef.description}</p>
+                    <p className="text-sm text-gray-600">{description}</p>
                   </div>
                 </div>
 
@@ -685,39 +691,49 @@ export default function APISettings() {
               {isExpanded && (
                 <div className="border-t border-gray-200 p-4 bg-gray-50">
                   <div className="space-y-4">
-                    {apiDef.fields.map((field) => (
-                      <div key={field.key}>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          {field.label}
-                          {field.required && <span className="text-red-500 ml-1">*</span>}
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={field.type === 'password' && !showPasswords[field.key] ? 'password' : 'text'}
-                            value={formData[apiDef.name]?.[field.key] || ''}
-                            onChange={(e) => handleInputChange(apiDef.name, field.key, e.target.value)}
-                            placeholder={field.placeholder}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          />
-                          {field.type === 'password' && (
-                            <button
-                              type="button"
-                              onClick={() => setShowPasswords(prev => ({ ...prev, [field.key]: !prev[field.key] }))}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                            >
-                              {showPasswords[field.key] ? (
-                                <EyeOff className="w-5 h-5" />
-                              ) : (
-                                <Eye className="w-5 h-5" />
-                              )}
-                            </button>
+                    {fieldsToUse.map((field: any) => {
+                      // Normalizar campo del backend o del frontend
+                      const fieldKey = field.key;
+                      const fieldLabel = field.label;
+                      const fieldRequired = field.required !== undefined ? field.required : (field.required || false);
+                      const fieldType = field.type === 'password' || field.type === 'email' ? field.type : 'text';
+                      const fieldPlaceholder = field.placeholder || '';
+                      const fieldHelpText = field.helpText;
+                      
+                      return (
+                        <div key={fieldKey}>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {fieldLabel}
+                            {fieldRequired && <span className="text-red-500 ml-1">*</span>}
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={fieldType === 'password' && !showPasswords[fieldKey] ? 'password' : 'text'}
+                              value={formData[apiDef.name]?.[fieldKey] || ''}
+                              onChange={(e) => handleInputChange(apiDef.name, fieldKey, e.target.value)}
+                              placeholder={fieldPlaceholder}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            {fieldType === 'password' && (
+                              <button
+                                type="button"
+                                onClick={() => setShowPasswords(prev => ({ ...prev, [fieldKey]: !prev[fieldKey] }))}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                              >
+                                {showPasswords[fieldKey] ? (
+                                  <EyeOff className="w-5 h-5" />
+                                ) : (
+                                  <Eye className="w-5 h-5" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                          {fieldHelpText && (
+                            <p className="mt-1 text-xs text-gray-500">{fieldHelpText}</p>
                           )}
                         </div>
-                        {field.helpText && (
-                          <p className="mt-1 text-xs text-gray-500">{field.helpText}</p>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     <div className="flex gap-2 pt-2">
                       <button
