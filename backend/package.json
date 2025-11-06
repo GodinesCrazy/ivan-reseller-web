@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc --noEmitOnError false || true && npx prisma generate || true",
+    "build:ignore-errors": "tsc || true && npx prisma generate || true",
     "start": "npx prisma migrate deploy && node dist/server.js",
     "start:prod": "node dist/server.js",
     "prisma:generate": "prisma generate",

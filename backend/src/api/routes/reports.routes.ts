@@ -49,8 +49,8 @@ router.get('/sales', async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename="${excelFileName}"`);
         
         // Notify user
-        if (req.user?.id) {
-          await reportsService.notifyReportGeneration(req.user.id, 'ventas', excelFileName);
+        if (req.user?.userId) {
+          await reportsService.notifyReportGeneration(req.user.userId, 'ventas', excelFileName);
         }
         
         return res.send(excelBuffer);
@@ -68,8 +68,8 @@ router.get('/sales', async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename="${pdfFileName}"`);
         
         // Notify user
-        if (req.user?.id) {
-          await reportsService.notifyReportGeneration(req.user.id, 'ventas', pdfFileName);
+        if (req.user?.userId) {
+          await reportsService.notifyReportGeneration(req.user.userId, 'ventas', pdfFileName);
         }
         
         return res.send(pdfBuffer);
@@ -136,8 +136,8 @@ router.get('/products', async (req, res) => {
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${excelFileName}"`);
         
-        if (req.user?.id) {
-          await reportsService.notifyReportGeneration(req.user.id, 'productos', excelFileName);
+        if (req.user?.userId) {
+          await reportsService.notifyReportGeneration(req.user.userId, 'productos', excelFileName);
         }
         
         return res.send(excelBuffer);
@@ -154,8 +154,8 @@ router.get('/products', async (req, res) => {
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${pdfFileName}"`);
         
-        if (req.user?.id) {
-          await reportsService.notifyReportGeneration(req.user.id, 'productos', pdfFileName);
+        if (req.user?.userId) {
+          await reportsService.notifyReportGeneration(req.user.userId, 'productos', pdfFileName);
         }
         
         return res.send(pdfBuffer);
@@ -210,8 +210,8 @@ router.get('/users', async (req, res) => {
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${excelFileName}"`);
         
-        if (req.user?.id) {
-          await reportsService.notifyReportGeneration(req.user.id, 'usuarios', excelFileName);
+        if (req.user?.userId) {
+          await reportsService.notifyReportGeneration(req.user.userId, 'usuarios', excelFileName);
         }
         
         return res.send(excelBuffer);
@@ -228,8 +228,8 @@ router.get('/users', async (req, res) => {
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${pdfFileName}"`);
         
-        if (req.user?.id) {
-          await reportsService.notifyReportGeneration(req.user.id, 'usuarios', pdfFileName);
+        if (req.user?.userId) {
+          await reportsService.notifyReportGeneration(req.user.userId, 'usuarios', pdfFileName);
         }
         
         return res.send(pdfBuffer);
@@ -284,8 +284,8 @@ router.get('/marketplace-analytics', async (req, res) => {
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${excelFileName}"`);
         
-        if (req.user?.id) {
-          await reportsService.notifyReportGeneration(req.user.id, 'marketplaces', excelFileName);
+        if (req.user?.userId) {
+          await reportsService.notifyReportGeneration(req.user.userId, 'marketplaces', excelFileName);
         }
         
         return res.send(excelBuffer);
@@ -333,8 +333,8 @@ router.get('/executive', async (req, res) => {
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${excelFileName}"`);
         
-        if (req.user?.id) {
-          await reportsService.notifyReportGeneration(req.user.id, 'ejecutivo', excelFileName);
+        if (req.user?.userId) {
+          await reportsService.notifyReportGeneration(req.user.userId, 'ejecutivo', excelFileName);
         }
         
         return res.send(excelBuffer);
@@ -351,8 +351,8 @@ router.get('/executive', async (req, res) => {
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${pdfFileName}"`);
         
-        if (req.user?.id) {
-          await reportsService.notifyReportGeneration(req.user.id, 'ejecutivo', pdfFileName);
+        if (req.user?.userId) {
+          await reportsService.notifyReportGeneration(req.user.userId, 'ejecutivo', pdfFileName);
         }
         
         return res.send(pdfBuffer);
@@ -445,7 +445,7 @@ router.get('/types', (req, res) => {
 router.post('/schedule', async (req, res) => {
   try {
     const { reportType, format, filters, schedule, email } = req.body;
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
 
     if (!userId) {
       return res.status(401).json({
@@ -486,7 +486,7 @@ router.post('/schedule', async (req, res) => {
  */
 router.get('/history', async (req, res) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
 
