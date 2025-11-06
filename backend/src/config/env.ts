@@ -51,6 +51,16 @@ function getDatabaseUrl(): string {
   }
 
   if (dbUrl) {
+    // Verificar si es una referencia de Railway sin resolver
+    if (dbUrl.startsWith('{{') && dbUrl.endsWith('}}')) {
+      console.error('❌ ERROR: Variable Reference no resuelta por Railway');
+      console.error(`   Valor recibido: ${dbUrl}`);
+      console.error('   Railway debería resolver automáticamente las referencias {{Service.Variable}}');
+      console.error('   Solución: Copia el valor real de la variable en lugar de usar la referencia');
+      console.error('');
+      return ''; // Retornar vacío para que el código muestre el error apropiado
+    }
+    
     try {
       // Mostrar información de debugging (sin mostrar la contraseña completa)
       const url = new URL(dbUrl);
