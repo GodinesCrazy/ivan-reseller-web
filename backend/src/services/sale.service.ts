@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 
 export interface CreateSaleDto {
   orderId: string;
-  productId: string;
+  productId: number; // ✅ Cambiado a number
   marketplace: string;
   salePrice: number;
   costPrice: number;
@@ -17,7 +17,7 @@ export interface CreateSaleDto {
 }
 
 export class SaleService {
-  async createSale(userId: string, data: CreateSaleDto) {
+  async createSale(userId: number, data: CreateSaleDto) {
     // Verificar que el producto existe
     const product = await prisma.product.findUnique({
       where: { id: data.productId },
@@ -26,6 +26,30 @@ export class SaleService {
 
     if (!product) {
       throw new AppError('Producto no encontrado', 404);
+    }
+
+    // ✅ Validar estado del producto antes de crear venta
+    if (product.status === 'INACTIVE' || product.status === 'REJECTED') {
+      throw new AppError(`Cannot create sale for product with status: ${product.status}. Product must be approved and active.`, 400);
+    }
+
+    // ✅ Validar que el producto esté publicado (si se requiere)
+    if (!product.isPublished && product.status !== 'APPROVED') {
+      throw new AppError('Product must be published or approved before creating a sale', 400);
+    }
+
+    // ✅ Validar precios
+    if (data.salePrice <= 0) {
+      throw new AppError('Sale price must be greater than 0', 400);
+    }
+
+    if (data.costPrice <= 0) {
+      throw new AppError('Cost price must be greater than 0', 400);
+    }
+
+    // ✅ Validar que salePrice sea mayor que costPrice
+    if (data.salePrice <= data.costPrice) {
+      throw new AppError('Sale price must be greater than cost price to generate profit', 400);
     }
 
     // Calcular ganancias y comisiones
@@ -55,99 +79,99 @@ export class SaleService {
     // El usuario se queda con: grossProfit - adminCommission - platformFees
     const netProfit = grossProfit - adminCommission - platformFees;
 
-    // Crear la venta
-    const sale = await prisma.sale.create({
-      data: {
-        orderId: data.orderId,
-        productId: data.productId,
-        userId,
-        marketplace: data.marketplace,
-        salePrice: data.salePrice,
-        costPrice: data.costPrice,
-        grossProfit,
-        userCommission: 0, // Deprecated: la comisión ahora es del admin
-        commissionAmount: adminCommission, // Comisión del admin (20% por defecto)
-        adminCommission,
-        platformFees,
-        netProfit,
-        currency: data.currency || 'USD',
-        buyerEmail: data.buyerEmail,
-        shippingAddress: data.shippingAddress,
-        status: 'PENDING',
-      },
-      include: {
-        product: true,
-        user: {
-          select: {
-            id: true,
-            username: true,
-            email: true,
+    // ✅ Usar transacción para crear venta, comisiones y actualizar balances de forma atómica
+    const sale = await prisma.$transaction(async (tx) => {
+      // Crear la venta
+      const newSale = await tx.sale.create({
+        data: {
+          orderId: data.orderId,
+          productId: data.productId,
+          userId: userId,
+          marketplace: data.marketplace,
+          salePrice: data.salePrice,
+          aliexpressCost: data.costPrice,
+          marketplaceFee: platformFees,
+          grossProfit,
+          commissionAmount: adminCommission, // Comisión del admin (20% por defecto)
+          netProfit,
+          status: 'PENDING',
+        },
+        include: {
+          product: true,
+          user: {
+            select: {
+              id: true,
+              username: true,
+              email: true,
+            },
           },
         },
-      },
-    });
-
-    // ✅ Crear registro de comisión del ADMIN (20% de gross profit)
-    // Esta es la comisión que el admin cobra por la operación exitosa
-    await prisma.commission.create({
-      data: {
-        saleId: sale.id,
-        userId, // Usuario que generó la venta
-        amount: adminCommission, // Comisión del admin (20% de gross profit)
-        currency: sale.currency || 'USD',
-        status: 'PENDING',
-      },
-    });
-
-    // ✅ Crear comisión adicional del admin si el usuario fue creado por otro admin
-    // Esto permite tracking de comisiones cuando un admin crea usuarios para otro admin
-    if (adminId && user.createdBy && adminId !== parseInt(userId)) {
-      await prisma.adminCommission.create({
-        data: {
-          adminId,
-          userId: parseInt(userId),
-          saleId: sale.id,
-          amount: adminCommission,
-          commissionType: 'user_sale',
-          status: 'PENDING'
-        }
       });
 
-      // Actualizar balance del admin
-      await prisma.user.update({
-        where: { id: adminId },
+      // ✅ Crear registro de comisión del ADMIN (20% de gross profit)
+      await tx.commission.create({
+        data: {
+          saleId: newSale.id,
+          userId, // Usuario que generó la venta
+          amount: adminCommission, // Comisión del admin (20% de gross profit)
+          status: 'PENDING',
+        },
+      });
+
+      // ✅ Crear comisión adicional del admin si el usuario fue creado por otro admin
+      if (adminId && user.createdBy && adminId !== userId) {
+        await tx.adminCommission.create({
+          data: {
+            adminId,
+            userId: userId,
+            saleId: newSale.id,
+            amount: adminCommission,
+            commissionType: 'user_sale',
+            status: 'PENDING'
+          }
+        });
+
+        // Actualizar balance del admin
+        await tx.user.update({
+          where: { id: adminId },
+          data: {
+            balance: {
+              increment: adminCommission
+            },
+            totalEarnings: {
+              increment: adminCommission
+            }
+          }
+        });
+      }
+
+      // Actualizar balance del USUARIO con su ganancia neta
+      await tx.user.update({
+        where: { id: userId },
         data: {
           balance: {
-            increment: adminCommission
+            increment: netProfit, // Usuario recibe su ganancia neta (después de comisiones)
           },
           totalEarnings: {
-            increment: adminCommission
-          }
-        }
+            increment: netProfit,
+          },
+          totalSales: {
+            increment: 1,
+          },
+        },
       });
-    }
 
-    // Actualizar balance del USUARIO con su ganancia neta
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        balance: {
-          increment: netProfit, // Usuario recibe su ganancia neta (después de comisiones)
+      // Registrar actividad dentro de la transacción
+      await tx.activity.create({
+        data: {
+          userId: userId,
+          action: 'SALE_CREATED',
+          description: `Venta registrada: ${newSale.orderId} - $${newSale.salePrice}`,
+          metadata: JSON.stringify({ saleId: newSale.id, orderId: newSale.orderId }),
         },
-        totalEarnings: {
-          increment: netProfit,
-        },
-      },
-    });
+      });
 
-    // Registrar actividad
-    await prisma.activity.create({
-      data: {
-        userId,
-        action: 'SALE_CREATED',
-        description: `Venta registrada: ${sale.orderId} - $${sale.salePrice}`,
-        metadata: JSON.stringify({ saleId: sale.id, orderId: sale.orderId }),
-      },
+      return newSale;
     });
 
     // ✅ NOTIFICAR AL USUARIO DE LA VENTA
@@ -167,7 +191,7 @@ export class SaleService {
     // ✅ VERIFICAR MODO DE COMPRA (AUTO o MANUAL) y EJECUTAR FLUJO
     try {
       const purchaseMode = await import('./workflow-config.service').then(m => 
-        m.workflowConfigService.getStageMode(parseInt(userId), 'purchase')
+        m.workflowConfigService.getStageMode(userId, 'purchase')
       );
 
       if (purchaseMode === 'automatic') {
@@ -210,7 +234,7 @@ export class SaleService {
             saleId: sale.id, 
             orderId: sale.orderId,
             stage: 'purchase',
-            userId: parseInt(userId)
+            userId: userId
           },
           actions: [
             { 

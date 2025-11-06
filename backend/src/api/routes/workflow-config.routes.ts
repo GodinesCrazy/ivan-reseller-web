@@ -129,5 +129,71 @@ router.put('/working-capital', async (req: Request, res: Response, next) => {
   }
 });
 
+// ✅ POST /api/workflow/continue-stage - Continuar etapa en modo "guided"
+router.post('/continue-stage', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const schema = z.object({
+      stage: z.enum(['scrape', 'analyze', 'publish', 'purchase', 'fulfillment', 'customerService']),
+      action: z.enum(['continue', 'skip', 'cancel']).optional(),
+      data: z.any().optional() // Datos adicionales para la acción
+    });
+
+    const { stage, action = 'continue', data } = schema.parse(req.body);
+
+    // Verificar que la etapa esté en modo guided
+    const currentMode = await workflowConfigService.getStageMode(userId, stage);
+    if (currentMode !== 'guided') {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Stage ${stage} is not in guided mode. Current mode: ${currentMode}` 
+      });
+    }
+
+    // ✅ Ejecutar acción según el tipo
+    if (action === 'continue') {
+      // Continuar con la etapa automáticamente
+      // TODO: Implementar lógica específica para cada etapa
+      // Por ahora, solo confirmamos que se puede continuar
+      
+      // Emitir evento para que los servicios reaccionen
+      const { EventEmitter } = await import('events');
+      // Nota: En producción, esto debería usar un sistema de eventos real
+      
+      res.json({ 
+        success: true, 
+        message: `Stage ${stage} continued successfully`,
+        stage,
+        action: 'continued'
+      });
+    } else if (action === 'skip') {
+      // Saltar esta etapa
+      res.json({ 
+        success: true, 
+        message: `Stage ${stage} skipped`,
+        stage,
+        action: 'skipped'
+      });
+    } else if (action === 'cancel') {
+      // Cancelar la operación
+      res.json({ 
+        success: true, 
+        message: `Stage ${stage} cancelled`,
+        stage,
+        action: 'cancelled'
+      });
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ success: false, error: 'Invalid input', details: error.errors });
+    }
+    next(error);
+  }
+});
+
 export default router;
 

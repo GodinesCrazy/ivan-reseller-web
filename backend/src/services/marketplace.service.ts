@@ -145,6 +145,24 @@ export class MarketplaceService {
         throw new AppError('Product not found', 404);
       }
 
+      // ✅ Validar estado del producto antes de publicar
+      if (product.status === 'REJECTED') {
+        throw new AppError('Cannot publish a rejected product. Please approve it first.', 400);
+      }
+
+      if (product.status === 'INACTIVE') {
+        throw new AppError('Cannot publish an inactive product. Please reactivate it first.', 400);
+      }
+
+      if (product.isPublished && product.status === 'PUBLISHED') {
+        throw new AppError('Product is already published. Use updateListing to modify it.', 400);
+      }
+
+      // ✅ Validar que el producto tenga datos mínimos requeridos
+      if (!product.title || !product.aliexpressPrice || product.aliexpressPrice <= 0) {
+        throw new AppError('Product is missing required data (title, price). Please complete product information.', 400);
+      }
+
       // Get marketplace credentials
       const credentials = await this.getCredentials(userId, request.marketplace);
       if (!credentials || !credentials.isActive) {
