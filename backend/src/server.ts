@@ -5,9 +5,46 @@ import { redis, isRedisAvailable } from './config/redis';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { scheduledTasksService } from './services/scheduled-tasks.service';
+import bcrypt from 'bcrypt';
 
 const execAsync = promisify(exec);
 const PORT = parseInt(env.PORT, 10);
+
+async function ensureAdminUser() {
+  try {
+    // Verificar si existe el usuario admin
+    const adminExists = await prisma.user.findUnique({
+      where: { username: 'admin' },
+    });
+
+    if (!adminExists) {
+      console.log('👤 Usuario admin no encontrado. Creando...');
+      const adminPassword = await bcrypt.hash('admin123', 10);
+      
+      await prisma.user.create({
+        data: {
+          username: 'admin',
+          email: 'admin@ivanreseller.com',
+          password: adminPassword,
+          role: 'ADMIN',
+          commissionRate: 0.15,
+          fixedMonthlyCost: 17.0,
+          balance: 0,
+          totalEarnings: 0,
+          isActive: true,
+        },
+      });
+      
+      console.log('✅ Usuario admin creado exitosamente');
+      console.log('   Usuario: admin');
+      console.log('   Contraseña: admin123');
+    } else {
+      console.log('✅ Usuario admin ya existe');
+    }
+  } catch (error) {
+    console.error('⚠️  Error al verificar/crear usuario admin:', error);
+  }
+}
 
 async function runMigrations() {
   try {
@@ -15,14 +52,16 @@ async function runMigrations() {
     await execAsync('npx prisma migrate deploy');
     console.log('✅ Migrations completed');
     
-    // Only seed in production on first deploy
+    // Intentar ejecutar seed completo
     if (env.NODE_ENV === 'production') {
       try {
         console.log('🌱 Seeding database...');
         await execAsync('npx tsx prisma/seed.ts');
         console.log('✅ Database seeded');
       } catch (seedError) {
-        console.log('ℹ️  Seed skipped (database may already have data)');
+        console.log('ℹ️  Seed completo falló, verificando usuario admin...');
+        // Aunque el seed falle, verificamos que el admin exista
+        await ensureAdminUser();
       }
     }
   } catch (error) {
@@ -38,6 +77,9 @@ async function startServer() {
     // Test database connection
     await prisma.$connect();
     console.log('✅ Database connected');
+    
+    // Asegurar que el usuario admin existe (verificación final)
+    await ensureAdminUser();
 
     // Test Redis connection (only if configured)
     if (isRedisAvailable) {
