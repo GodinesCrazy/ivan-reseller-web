@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users as UsersIcon, 
@@ -81,59 +81,81 @@ export default function Users() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
+  // Usar useRef para evitar múltiples ejecuciones
+  const hasInitialized = useRef(false);
+  const isVerifying = useRef(false);
+
   useEffect(() => {
+    // Prevenir múltiples ejecuciones
+    if (hasInitialized.current || isVerifying.current) {
+      return;
+    }
+
+    isVerifying.current = true;
+    hasInitialized.current = true;
+    
     let isMounted = true;
     
     const verifyAndLoad = async () => {
-      // Forzar actualización del usuario desde el backend
-      console.log('Verificando autenticación y rol de usuario...');
-      const isAuthenticated = await checkAuth();
-      
-      if (!isMounted) return;
-      
-      if (!isAuthenticated) {
-        toast.error('Please log in to access this page');
-        navigate('/login');
-        return;
-      }
+      try {
+        // Forzar actualización del usuario desde el backend
+        console.log('Verificando autenticación y rol de usuario...');
+        const isAuthenticated = await checkAuth();
+        
+        if (!isMounted) return;
+        
+        if (!isAuthenticated) {
+          toast.error('Please log in to access this page');
+          navigate('/login');
+          return;
+        }
 
-      // Obtener usuario actualizado del store después de checkAuth
-      const updatedUser = useAuthStore.getState().user;
-      
-      if (!isMounted) return;
-      
-      if (!updatedUser) {
-        console.error('User information not available after checkAuth');
-        toast.error('User information not available');
-        navigate('/dashboard');
-        return;
-      }
+        // Obtener usuario actualizado del store después de checkAuth
+        const updatedUser = useAuthStore.getState().user;
+        
+        if (!isMounted) return;
+        
+        if (!updatedUser) {
+          console.error('User information not available after checkAuth');
+          toast.error('User information not available');
+          navigate('/dashboard');
+          return;
+        }
 
-      // Verificar que el usuario actual es admin
-      // El backend usa 'ADMIN' (mayúsculas), normalizar para comparación
-      const userRole = updatedUser.role?.toUpperCase();
-      
-      console.log('Current user:', updatedUser);
-      console.log('User role:', userRole);
-      console.log('Role comparison:', userRole, '===', 'ADMIN', '?', userRole === 'ADMIN');
-      
-      if (!userRole || userRole !== 'ADMIN') {
-        console.warn('Access denied - User role:', userRole, 'Expected: ADMIN');
-        console.warn('Full user object:', JSON.stringify(updatedUser, null, 2));
-        toast.error('Access denied. Admin only.');
-        // Esperar un momento antes de redirigir para que el usuario vea el mensaje
-        setTimeout(() => {
-          if (isMounted) {
-            navigate('/dashboard');
-          }
-        }, 2000);
-        return;
-      }
+        // Verificar que el usuario actual es admin
+        // El backend usa 'ADMIN' (mayúsculas), normalizar para comparación
+        const userRole = updatedUser.role?.toUpperCase();
+        
+        console.log('Current user:', updatedUser);
+        console.log('User role:', userRole);
+        console.log('Role comparison:', userRole, '===', 'ADMIN', '?', userRole === 'ADMIN');
+        
+        if (!userRole || userRole !== 'ADMIN') {
+          console.warn('Access denied - User role:', userRole, 'Expected: ADMIN');
+          console.warn('Full user object:', JSON.stringify(updatedUser, null, 2));
+          toast.error('Access denied. Admin only.');
+          // Esperar un momento antes de redirigir para que el usuario vea el mensaje
+          setTimeout(() => {
+            if (isMounted) {
+              navigate('/dashboard');
+            }
+          }, 2000);
+          return;
+        }
 
-      // Usuario es admin, cargar usuarios
-      console.log('Usuario es admin, cargando lista de usuarios...');
-      if (isMounted) {
-        loadUsers();
+        // Usuario es admin, cargar usuarios
+        console.log('Usuario es admin, cargando lista de usuarios...');
+        if (isMounted) {
+          await loadUsers();
+        }
+      } catch (error) {
+        console.error('Error en verifyAndLoad:', error);
+        if (isMounted) {
+          toast.error('Error verificando autenticación');
+          navigate('/dashboard');
+        }
+      } finally {
+        isVerifying.current = false;
       }
     };
 
