@@ -5,12 +5,16 @@ import { MercadoLibreService } from '../../services/mercadolibre.service';
 import crypto from 'crypto';
 import { authenticate } from '../../middleware/auth.middleware';
 import { z } from 'zod';
+import { marketplaceRateLimit, ebayRateLimit, mercadolibreRateLimit, amazonRateLimit } from '../../middleware/rate-limit.middleware';
 
 const router = Router();
 const marketplaceService = new MarketplaceService();
 
 // Apply auth middleware to all routes
 router.use(authenticate);
+
+// ✅ Aplicar rate limiting general
+router.use(marketplaceRateLimit);
 
 // Validation schemas
 const publishProductSchema = z.object({
@@ -59,7 +63,8 @@ const syncInventorySchema = z.object({
  * POST /api/marketplace/publish
  * Publish product to a single marketplace
  */
-router.post('/publish', async (req: Request, res: Response) => {
+// ✅ Rate limit específico por marketplace
+router.post('/publish', marketplaceRateLimit, async (req: Request, res: Response) => {
   try {
     const data = publishProductSchema.parse(req.body);
     

@@ -874,26 +874,51 @@ export class AutopilotSystem extends EventEmitter {
         reasoning: optimization.reasoning
       });
 
-      // Create product in database (con userId del usuario)
-      const product = await prisma.product.create({
-        data: {
-          userId: currentUserId, // ✅ Usar userId del usuario
-          title: opportunity.title,
-          description: opportunity.description || '',
-          aliexpressUrl: opportunity.url,
-          aliexpressPrice: opportunity.estimatedCost,
-          suggestedPrice: opportunity.estimatedCost * 2,
-          category: opportunity.category,
-          images: JSON.stringify(opportunity.images || []),
-          productData: JSON.stringify({
-            ...opportunity,
-            optimalPublicationDuration: optimization.durationDays,
-            optimizationReasoning: optimization.reasoning
-          }),
-          status: 'PUBLISHED',
-          isPublished: true,
-          publishedAt: new Date()
-        }
+      // ✅ Validar datos de oportunidad antes de crear producto
+      if (!opportunity.title || !opportunity.url || !opportunity.estimatedCost || opportunity.estimatedCost <= 0) {
+        logger.error('Autopilot: Invalid opportunity data', { opportunity });
+        throw new Error('Invalid opportunity data: missing required fields');
+      }
+
+      // ✅ Usar transacción para crear producto y listing de forma atómica
+      const product = await prisma.$transaction(async (tx) => {
+        // Create product in database (con userId del usuario)
+        const newProduct = await tx.product.create({
+          data: {
+            userId: currentUserId, // ✅ Usar userId del usuario
+            title: opportunity.title,
+            description: opportunity.description || '',
+            aliexpressUrl: opportunity.url,
+            aliexpressPrice: opportunity.estimatedCost,
+            suggestedPrice: opportunity.estimatedCost * 2,
+            category: opportunity.category,
+            images: JSON.stringify(opportunity.images || []),
+            productData: JSON.stringify({
+              ...opportunity,
+              optimalPublicationDuration: optimization.durationDays,
+              optimizationReasoning: optimization.reasoning
+            }),
+            status: 'PENDING', // ✅ Cambiar a PENDING inicialmente
+            isPublished: false, // ✅ Cambiar a false hasta que se publique exitosamente
+          }
+        });
+
+        // ✅ Crear registro de oportunidad para tracking
+        await tx.opportunity.create({
+          data: {
+            userId: currentUserId,
+            sourceMarketplace: 'aliexpress',
+            title: opportunity.title,
+            costUsd: opportunity.estimatedCost,
+            suggestedPriceUsd: opportunity.estimatedCost * 2,
+            profitMargin: ((opportunity.estimatedCost * 2 - opportunity.estimatedCost) / opportunity.estimatedCost) * 100,
+            roiPercentage: ((opportunity.estimatedProfit / opportunity.estimatedCost) * 100),
+            confidenceScore: opportunity.confidence || 50,
+            status: 'PENDING'
+          }
+        });
+
+        return newProduct;
       });
 
       // ✅ Programar despublicación automática basada en tiempo óptimo

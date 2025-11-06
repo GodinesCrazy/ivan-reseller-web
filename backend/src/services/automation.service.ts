@@ -282,6 +282,11 @@ export class AutomationService {
         timestamp: new Date()
       });
 
+      // ✅ Validar que la venta esté en estado correcto antes de procesar
+      if (automatedOrder.status !== 'pending' && automatedOrder.status !== 'confirmed') {
+        throw new Error(`Cannot process order in status: ${automatedOrder.status}`);
+      }
+
       // 2. Si está en automático, proceder con compra automática
       automatedOrder.status = 'processing';
       automatedOrder.timestamps.processed = new Date();
@@ -292,20 +297,38 @@ export class AutomationService {
         throw new Error('Oportunidad no encontrada');
       }
 
-      // 4. Realizar compra automática al proveedor
-      const purchaseResult = await this.executePurchaseFromSupplier({
-        supplierUrl: opportunity.supplierUrl,
-        quantity: automatedOrder.orderDetails.quantity,
-        maxPrice: opportunity.buyPrice,
-        shippingAddress: automatedOrder.customerInfo.address
-      });
-
-      if (!purchaseResult.success) {
-        throw new Error(`Error en compra automática: ${purchaseResult.error}`);
+      // ✅ Validar datos de compra
+      if (!opportunity.supplierUrl || !automatedOrder.customerInfo.address) {
+        throw new Error('Missing required data for purchase: supplierUrl or shipping address');
       }
 
-      automatedOrder.status = 'purchasing';
-      automatedOrder.timestamps.purchased = new Date();
+      // ✅ Validar precio máximo
+      if (opportunity.buyPrice <= 0) {
+        throw new Error('Invalid buy price: must be greater than 0');
+      }
+
+      // 4. Realizar compra automática al proveedor (con try-catch para rollback)
+      let purchaseResult;
+      try {
+        purchaseResult = await this.executePurchaseFromSupplier({
+          supplierUrl: opportunity.supplierUrl,
+          quantity: automatedOrder.orderDetails.quantity,
+          maxPrice: opportunity.buyPrice,
+          shippingAddress: automatedOrder.customerInfo.address
+        });
+
+        if (!purchaseResult.success) {
+          throw new Error(`Error en compra automática: ${purchaseResult.error}`);
+        }
+
+        automatedOrder.status = 'purchasing';
+        automatedOrder.timestamps.purchased = new Date();
+      } catch (purchaseError) {
+        // ✅ Rollback: Marcar orden como fallida
+        automatedOrder.status = 'failed';
+        automatedOrder.error = purchaseError instanceof Error ? purchaseError.message : 'Unknown purchase error';
+        throw purchaseError; // Re-throw para que se maneje arriba
+      }
 
       // 5. Actualizar tracking y notificar
       await this.notificationService.sendPurchaseConfirmation({
