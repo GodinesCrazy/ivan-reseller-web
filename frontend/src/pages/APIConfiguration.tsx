@@ -17,6 +17,7 @@ import {
   Database,
   Cloud
 } from 'lucide-react';
+import { api } from '../services/api';
 
 interface APIField {
   key: string;
@@ -52,13 +53,45 @@ export default function APIConfigurationPage() {
   const fetchAPIConfigs = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/settings/apis');
-      const data = await response.json();
-      setApis(data.apis || []);
+      // Usar endpoint correcto /api/settings/apis que existe en el backend
+      const response = await api.get('/api/settings/apis');
+      
+      const data = response.data;
+      const apisData = data?.data || data?.apis || [];
+      
+      // Convertir formato del backend al formato esperado por el componente
+      const formattedApis: APIConfig[] = apisData.map((api: any, index: number) => {
+        // Si la API soporta ambientes, usar production por defecto
+        const env = api.supportsEnvironments && api.environments 
+          ? api.environments.production || api.environments.sandbox
+          : api;
+        
+        const fields = (env.fields || []).map((field: any) => ({
+          key: field.key,
+          label: field.label,
+          required: field.required || false,
+          type: field.type === 'password' ? 'password' : 'text',
+          placeholder: field.placeholder
+        }));
+        
+        return {
+          id: api.id || index + 1,
+          name: api.name || api.apiName || 'Unknown API',
+          status: env.status === 'configured' ? 'configured' : 'not_configured',
+          environment: env.status === 'configured' ? 'production' : 'sandbox',
+          lastUsed: env.lastUpdated || null,
+          requestsToday: 0,
+          limit: 10000,
+          fields,
+          description: api.description
+        };
+      });
+      
+      setApis(formattedApis);
       
       // Initialize form data
       const initialFormData: Record<number, Record<string, string>> = {};
-      data.apis.forEach((api: APIConfig) => {
+      formattedApis.forEach((api: APIConfig) => {
         initialFormData[api.id] = {};
         api.fields.forEach(field => {
           initialFormData[api.id][field.key] = '';
@@ -67,6 +100,8 @@ export default function APIConfigurationPage() {
       setFormData(initialFormData);
     } catch (error) {
       console.error('Error fetching API configs:', error);
+      // Si falla, mostrar mensaje pero no bloquear la UI
+      setApis([]);
     } finally {
       setLoading(false);
     }
@@ -75,31 +110,55 @@ export default function APIConfigurationPage() {
   const handleSaveAPI = async (apiId: number, apiName: string) => {
     setSaving(apiId);
     try {
-      const response = await fetch(`/api/settings/apis/${apiId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: apiName,
-          credentials: formData[apiId]
-        }),
+      const api = apis.find(a => a.id === apiId);
+      if (!api) {
+        throw new Error('API not found');
+      }
+
+      // Mapear apiName al formato correcto
+      const apiNameMap: Record<string, string> = {
+        'eBay API': 'ebay',
+        'Amazon SP-API': 'amazon',
+        'MercadoLibre API': 'mercadolibre',
+        'PayPal Payouts API': 'paypal',
+        'GROQ AI API': 'groq',
+        'ScraperAPI': 'scraperapi',
+        'ZenRows API': 'zenrows',
+        '2Captcha API': '2captcha',
+        'AliExpress API': 'aliexpress'
+      };
+      
+      const mappedApiName = apiNameMap[apiName] || apiName.toLowerCase().replace(/\s+/g, '');
+
+      // Usar endpoint unificado /api/credentials
+      const response = await api.post('/api/credentials', {
+        apiName: mappedApiName,
+        environment: api.environment || 'production',
+        credentials: formData[apiId],
+        isActive: true
       });
 
-      if (response.ok) {
+      if (response.data) {
+        const result = response.data;
         // Update API status
-        setApis(prev => prev.map(api => 
-          api.id === apiId 
-            ? { ...api, status: 'configured' as const, lastUsed: new Date().toISOString() }
-            : api
+        setApis(prev => prev.map(a => 
+          a.id === apiId 
+            ? { ...a, status: 'configured' as const, lastUsed: new Date().toISOString() }
+            : a
         ));
         
         // Show success message
-        alert('API configurada exitosamente');
+        alert(`✅ ${apiName} configurada exitosamente`);
+        
+        // Limpiar formulario
+        setFormData(prev => ({
+          ...prev,
+          [apiId]: {}
+        }));
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving API:', error);
-      alert('Error al configurar API');
+      alert(`❌ Error al configurar API: ${error.message || 'Error desconocido'}`);
     } finally {
       setSaving(null);
     }
@@ -322,7 +381,8 @@ export default function APIConfigurationPage() {
               </div>
             </div>
           ))}
-        </div>
+          </div>
+        )}
 
         {/* Information Panel */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">

@@ -42,20 +42,38 @@ export default function APIKeys() {
   useEffect(() => {
     MARKETPLACES.forEach(async (m) => {
       try {
-        const { data } = await api.get(`/api/marketplace/credentials/${m.key}`);
-        setStatus((prev) => ({ ...prev, [m.key]: { present: true, isActive: !!data?.data?.isActive } }));
-      } catch {}
+        // Usar endpoint unificado /api/credentials
+        const { data } = await api.get(`/api/credentials/${m.key}?environment=production`);
+        setStatus((prev) => ({ ...prev, [m.key]: { present: !!data?.data, isActive: !!data?.data?.isActive } }));
+        
+        // Si hay credenciales, cargar datos en el formulario
+        if (data?.data?.credentials) {
+          setForm((prev) => ({
+            ...prev,
+            [m.key]: data.data.credentials
+          }));
+        }
+      } catch {
+        // Si no hay credenciales, mantener estado por defecto
+      }
     });
   }, []);
 
   const save = async (mk: Marketplace) => {
     setSaving(mk);
     try {
-      await api.post('/api/marketplace/credentials', { marketplace: mk, credentials: form[mk] });
+      // Usar endpoint unificado /api/credentials
+      await api.post('/api/credentials', {
+        apiName: mk,
+        environment: 'production',
+        credentials: form[mk],
+        isActive: true
+      });
       setStatus((s) => ({ ...s, [mk]: { present: true, isActive: true } }));
-      alert(`${mk} credentials saved`);
-    } catch (e) {
-      alert(`Error saving ${mk} credentials`);
+      alert(`✅ ${mk} credentials saved successfully`);
+    } catch (e: any) {
+      const errorMsg = e?.response?.data?.error || e?.response?.data?.message || e?.message || 'Unknown error';
+      alert(`❌ Error saving ${mk} credentials: ${errorMsg}`);
     } finally {
       setSaving(null);
     }
@@ -64,10 +82,17 @@ export default function APIKeys() {
   const test = async (mk: Marketplace) => {
     setTesting(mk);
     try {
-      const { data } = await api.post(`/api/marketplace/test-connection/${mk}`);
-      alert(`${mk} test: ${data?.message || (data?.success ? 'OK' : 'FAIL')}`);
-    } catch (e) {
-      alert(`Error testing ${mk}`);
+      // Usar endpoint unificado /api/credentials/:apiName/test
+      const { data } = await api.post(`/api/credentials/${mk}/test`);
+      const result = data?.data || data;
+      if (result?.isAvailable || result?.available) {
+        alert(`✅ ${mk} connection test: SUCCESS`);
+      } else {
+        alert(`❌ ${mk} connection test: ${result?.message || 'FAILED'}`);
+      }
+    } catch (e: any) {
+      const errorMsg = e?.response?.data?.error || e?.response?.data?.message || e?.message || 'Unknown error';
+      alert(`❌ Error testing ${mk}: ${errorMsg}`);
     } finally {
       setTesting(null);
     }
@@ -159,13 +184,18 @@ export default function APIKeys() {
 }
 
 async function connectOAuth(mk: Marketplace) {
-  const redirect = window.location.origin + '/settings/apis';
+  const redirect = window.location.origin + '/api-keys';
   try {
-    const { data } = await api.get(`/api/marketplace/auth-url/${mk}`, { params: { redirect_uri: redirect } });
-    const url = data?.data?.authUrl || data?.authUrl;
-    if (url) window.open(url, '_blank');
-    else alert('No auth URL available');
-  } catch (e:any) {
-    alert('OAuth init failed');
+    // Usar endpoint de marketplace OAuth
+    const { data } = await api.get(`/api/marketplace-oauth/auth-url/${mk}`, { params: { redirect_uri: redirect } });
+    const url = data?.data?.authUrl || data?.authUrl || data?.url;
+    if (url) {
+      window.location.href = url; // Redirigir en la misma ventana para OAuth
+    } else {
+      alert('❌ No auth URL available for OAuth');
+    }
+  } catch (e: any) {
+    const errorMsg = e?.response?.data?.error || e?.response?.data?.message || e?.message || 'Unknown error';
+    alert(`❌ OAuth initialization failed: ${errorMsg}`);
   }
 }
