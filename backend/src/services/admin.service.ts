@@ -234,6 +234,7 @@ export class AdminService {
         create: {
           userId: userId,
           apiName: apiConfig.marketplace,
+          environment: apiConfig.environment || 'production',
           credentials: credentialId,
           isActive: true
         }
