@@ -123,6 +123,16 @@ router.post('/', async (req: Request, res: Response, next) => {
       throw new AppError('Credentials object is required', 400);
     }
 
+    // Log para debugging (sin datos sensibles)
+    console.log(`[API Credentials] Saving ${apiName} for user ${userId}:`, {
+      apiName,
+      environment: env,
+      hasCredentials: !!credentials,
+      credentialKeys: Object.keys(credentials || {}),
+      twoFactorEnabled: credentials?.twoFactorEnabled,
+      twoFactorEnabledType: typeof credentials?.twoFactorEnabled
+    });
+
     // Validar credenciales usando CredentialsManager
     const validation = CredentialsManager.validateCredentials(
       apiName as ApiName,
@@ -130,10 +140,16 @@ router.post('/', async (req: Request, res: Response, next) => {
     );
 
     if (!validation.valid) {
+      console.error(`[API Credentials] Validation failed for ${apiName}:`, validation.errors);
       return res.status(400).json({
         success: false,
         error: 'Invalid credentials format',
         details: validation.errors,
+        received: {
+          keys: Object.keys(credentials || {}),
+          twoFactorEnabled: credentials?.twoFactorEnabled,
+          twoFactorEnabledType: typeof credentials?.twoFactorEnabled
+        }
       });
     }
 

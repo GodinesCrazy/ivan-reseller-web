@@ -211,7 +211,25 @@ export class CredentialsManager {
     // Validar credenciales con Zod
     const schema = apiSchemas[apiName];
     if (schema) {
-      schema.parse(credentials);
+      try {
+        // Para AliExpress, asegurar que twoFactorEnabled sea boolean
+        if (apiName === 'aliexpress' && credentials) {
+          const aliexpressCreds = credentials as any;
+          if (typeof aliexpressCreds.twoFactorEnabled === 'string') {
+            aliexpressCreds.twoFactorEnabled = aliexpressCreds.twoFactorEnabled.toLowerCase() === 'true';
+          }
+          if (aliexpressCreds.twoFactorEnabled === undefined || aliexpressCreds.twoFactorEnabled === null) {
+            aliexpressCreds.twoFactorEnabled = false;
+          }
+        }
+        schema.parse(credentials);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          console.error(`[CredentialsManager] Validation error for ${apiName}:`, error.errors);
+          throw error;
+        }
+        throw error;
+      }
     }
 
     // Determinar ambiente correcto
