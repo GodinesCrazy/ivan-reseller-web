@@ -31,15 +31,30 @@ function App() {
   const { isAuthenticated, isCheckingAuth, checkAuth } = useAuthStore();
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Validar token al iniciar la app
+  // Validar token al iniciar la app (solo una vez)
   useEffect(() => {
+    let isMounted = true;
+    
     const validateToken = async () => {
-      await checkAuth();
-      setIsInitialized(true);
+      try {
+        await checkAuth();
+        if (isMounted) {
+          setIsInitialized(true);
+        }
+      } catch (error) {
+        console.error('Error validating token:', error);
+        if (isMounted) {
+          setIsInitialized(true); // Continuar aunque falle
+        }
+      }
     };
     
     validateToken();
-  }, [checkAuth]);
+    
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Solo ejecutar una vez al montar
 
   const Fallback = (
     <div className="flex items-center justify-center min-h-[30vh] text-gray-600">
