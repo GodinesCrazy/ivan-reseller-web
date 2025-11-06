@@ -29,11 +29,37 @@ export class AdvancedMarketplaceScraper {
   async init(): Promise<void> {
     console.log('🚀 Iniciando navegador con evasión anti-bot...');
     
-    // Configuración SIMPLE como funcionaba originalmente
-    // Puppeteer descargará Chrome automáticamente si no se especifica executablePath
-    // NO buscar Chrome manualmente - dejar que Puppeteer lo maneje
+    // Intentar encontrar Chromium del sistema (instalado por Nixpacks)
+    const fs = require('fs');
+    const { execSync } = require('child_process');
+    let executablePath: string | undefined = undefined;
+    
+    // Primero intentar encontrar Chromium usando 'which'
     try {
-      this.browser = await puppeteer.launch({
+      const chromiumPath = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null', { encoding: 'utf-8' }).trim();
+      if (chromiumPath && fs.existsSync(chromiumPath)) {
+        executablePath = chromiumPath;
+        console.log(`✅ Encontrado Chromium del sistema en: ${executablePath}`);
+      }
+    } catch (e) {
+      // 'which' no encontró Chromium, continuar con otras opciones
+    }
+    
+    // Si no se encontró, buscar en el store de Nix
+    if (!executablePath) {
+      try {
+        const nixStorePath = execSync('find /nix/store -name chromium -type f 2>/dev/null | head -1', { encoding: 'utf-8' }).trim();
+        if (nixStorePath && fs.existsSync(nixStorePath)) {
+          executablePath = nixStorePath;
+          console.log(`✅ Encontrado Chromium de Nix en: ${executablePath}`);
+        }
+      } catch (e) {
+        // Continuar sin Chromium del sistema
+      }
+    }
+    
+    try {
+      const launchOptions: any = {
         headless: 'new', // Usar nuevo modo headless
         args: [
           '--no-sandbox',
@@ -49,23 +75,41 @@ export class AdvancedMarketplaceScraper {
         ],
         ignoreDefaultArgs: ['--enable-automation'],
         ignoreHTTPSErrors: true,
-        // NO especificar executablePath - dejar que Puppeteer use su Chrome descargado automáticamente
-      });
+      };
 
+      // Si encontramos Chromium del sistema, usarlo
+      if (executablePath) {
+        launchOptions.executablePath = executablePath;
+        console.log(`🔧 Usando Chromium del sistema: ${executablePath}`);
+      } else {
+        console.log('⚠️  Chromium del sistema no encontrado, Puppeteer intentará usar su Chrome descargado');
+        // Asegurar que PUPPETEER_SKIP_DOWNLOAD no esté configurado
+        if (process.env.PUPPETEER_SKIP_DOWNLOAD === 'true') {
+          console.log('⚠️  PUPPETEER_SKIP_DOWNLOAD está en true, deshabilitándolo para permitir descarga');
+          delete process.env.PUPPETEER_SKIP_DOWNLOAD;
+        }
+      }
+
+      this.browser = await puppeteer.launch(launchOptions);
       console.log('✅ Navegador iniciado exitosamente');
     } catch (error: any) {
       console.error('❌ Error al iniciar navegador:', error.message);
       // Si falla, intentar con configuración mínima (como fallback)
       try {
-        this.browser = await puppeteer.launch({
+        const minimalOptions: any = {
           headless: true,
           args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
           ],
-          // NO especificar executablePath aquí tampoco
-        });
+        };
+        
+        if (executablePath) {
+          minimalOptions.executablePath = executablePath;
+        }
+        
+        this.browser = await puppeteer.launch(minimalOptions);
         console.log('✅ Navegador iniciado con configuración mínima');
       } catch (fallbackError: any) {
         console.error('❌ Error crítico al iniciar navegador:', fallbackError.message);
