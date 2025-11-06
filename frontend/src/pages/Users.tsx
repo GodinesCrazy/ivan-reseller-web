@@ -95,16 +95,53 @@ export default function Users() {
     hasInitialized.current = true;
     
     let isMounted = true;
+    let timeoutId: NodeJS.Timeout;
     
     const verifyAndLoad = async () => {
       try {
-        // Forzar actualización del usuario desde el backend
+        // Primero verificar si ya tenemos usuario en el store
+        const currentUserFromStore = useAuthStore.getState().user;
+        const isAuthFromStore = useAuthStore.getState().isAuthenticated;
+        
+        // Si ya tenemos usuario y está autenticado, verificar rol directamente
+        if (currentUserFromStore && isAuthFromStore) {
+          const userRole = currentUserFromStore.role?.toUpperCase();
+          
+          if (userRole === 'ADMIN') {
+            // Usuario es admin, cargar usuarios directamente
+            if (isMounted) {
+              await loadUsers();
+            }
+            return;
+          } else {
+            // No es admin, redirigir
+            if (isMounted) {
+              toast.error('Access denied. Admin only.');
+              setTimeout(() => navigate('/dashboard'), 1000);
+            }
+            return;
+          }
+        }
+
+        // Si no hay usuario en el store, validar token con timeout
         console.log('Verificando autenticación y rol de usuario...');
-        const isAuthenticated = await checkAuth();
+        
+        const timeoutPromise = new Promise<boolean>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error('Timeout'));
+          }, 5000);
+        });
+
+        const authResult = await Promise.race([
+          checkAuth(),
+          timeoutPromise
+        ]) as boolean;
+        
+        clearTimeout(timeoutId);
         
         if (!isMounted) return;
         
-        if (!isAuthenticated) {
+        if (!authResult) {
           toast.error('Please log in to access this page');
           navigate('/login');
           return;
@@ -123,18 +160,11 @@ export default function Users() {
         }
 
         // Verificar que el usuario actual es admin
-        // El backend usa 'ADMIN' (mayúsculas), normalizar para comparación
         const userRole = updatedUser.role?.toUpperCase();
-        
-        console.log('Current user:', updatedUser);
-        console.log('User role:', userRole);
-        console.log('Role comparison:', userRole, '===', 'ADMIN', '?', userRole === 'ADMIN');
         
         if (!userRole || userRole !== 'ADMIN') {
           console.warn('Access denied - User role:', userRole, 'Expected: ADMIN');
-          console.warn('Full user object:', JSON.stringify(updatedUser, null, 2));
           toast.error('Access denied. Admin only.');
-          // Esperar un momento antes de redirigir para que el usuario vea el mensaje
           setTimeout(() => {
             if (isMounted) {
               navigate('/dashboard');
@@ -144,18 +174,36 @@ export default function Users() {
         }
 
         // Usuario es admin, cargar usuarios
-        console.log('Usuario es admin, cargando lista de usuarios...');
         if (isMounted) {
           await loadUsers();
         }
       } catch (error) {
-        console.error('Error en verifyAndLoad:', error);
+        clearTimeout(timeoutId);
+        console.warn('Error o timeout verificando autenticación:', error);
+        
+        // Si hay error, verificar si hay usuario en el store de todas formas
+        const fallbackUser = useAuthStore.getState().user;
+        const fallbackAuth = useAuthStore.getState().isAuthenticated;
+        
         if (isMounted) {
-          toast.error('Error verificando autenticación');
-          navigate('/dashboard');
+          if (fallbackUser && fallbackAuth) {
+            const userRole = fallbackUser.role?.toUpperCase();
+            if (userRole === 'ADMIN') {
+              // Intentar cargar usuarios de todas formas
+              await loadUsers();
+            } else {
+              toast.error('Access denied. Admin only.');
+              navigate('/dashboard');
+            }
+          } else {
+            toast.error('Error verificando autenticación');
+            navigate('/login');
+          }
         }
       } finally {
-        isVerifying.current = false;
+        if (isMounted) {
+          isVerifying.current = false;
+        }
       }
     };
 
@@ -163,6 +211,9 @@ export default function Users() {
     
     return () => {
       isMounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
   }, []); // Solo ejecutar una vez al montar el componente
 
