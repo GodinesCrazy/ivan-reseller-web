@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { productService } from '../../services/product.service';
 import { z } from 'zod';
-import { ProductStatus } from '@prisma/client';
+// ProductStatus no existe como enum, usar string
 
 const router = Router();
 router.use(authenticate);
@@ -28,7 +28,7 @@ const updateProductSchema = createProductSchema.partial();
 router.get('/', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user?.role === 'ADMIN' ? undefined : req.user?.userId;
-    const status = req.query.status as ProductStatus | undefined;
+    const status = req.query.status as string | undefined;
     const products = await productService.getProducts(userId, status);
     
     // ✅ Mapear datos del backend al formato esperado por el frontend
@@ -63,7 +63,7 @@ router.get('/stats', async (req: Request, res: Response, next) => {
 // GET /api/products/:id - Obtener por ID
 router.get('/:id', async (req: Request, res: Response, next) => {
   try {
-    const product = await productService.getProductById(req.params.id);
+    const product = await productService.getProductById(Number(req.params.id));
     res.json(product);
   } catch (error) {
     next(error);
@@ -88,7 +88,7 @@ router.post('/', async (req: Request, res: Response, next) => {
 router.put('/:id', async (req: Request, res: Response, next) => {
   try {
     const data = updateProductSchema.parse(req.body);
-    const product = await productService.updateProduct(req.params.id, req.user!.userId, data);
+    const product = await productService.updateProduct(Number(req.params.id), req.user!.userId, data);
     res.json(product);
   } catch (error: any) {
     if (error.name === 'ZodError') {
@@ -116,7 +116,7 @@ router.patch('/:id/status', authorize('ADMIN'), async (req: Request, res: Respon
 router.delete('/:id', async (req: Request, res: Response, next) => {
   try {
     const isAdmin = req.user?.role === 'ADMIN';
-    const result = await productService.deleteProduct(req.params.id, req.user!.userId, isAdmin);
+    const result = await productService.deleteProduct(Number(req.params.id), req.user!.userId, isAdmin);
     res.json(result);
   } catch (error) {
     next(error);
