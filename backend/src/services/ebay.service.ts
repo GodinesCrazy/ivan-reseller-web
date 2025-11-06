@@ -26,12 +26,14 @@ export interface EbayProduct {
 }
 
 export interface EbayListingResponse {
-  itemId: string;
-  listingUrl: string;
-  fees: {
+  success: boolean;
+  itemId?: string;
+  listingUrl?: string;
+  fees?: {
     insertionFee: number;
     finalValueFee: number;
   };
+  error?: string;
 }
 
 export interface EBaySearchProduct {

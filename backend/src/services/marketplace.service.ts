@@ -70,9 +70,21 @@ export class MarketplaceService {
     try {
       const data = this.encrypt(JSON.stringify(credentials));
       await prisma.apiCredential.upsert({
-        where: { userId_apiName: { userId, apiName: marketplace } as any },
+        where: { 
+          userId_apiName_environment: {
+            userId: userId,
+            apiName: marketplace,
+            environment: 'production'
+          }
+        },
         update: { credentials: data, isActive: true },
-        create: { userId, apiName: marketplace, credentials: data, isActive: true },
+        create: { 
+          userId, 
+          apiName: marketplace, 
+          environment: 'production',
+          credentials: data, 
+          isActive: true 
+        },
       });
     } catch (error) {
       throw new AppError(`Failed to save marketplace credentials: ${error.message}`, 500);
@@ -206,7 +218,7 @@ export class MarketplaceService {
         images: Array.isArray(product.imageUrl) ? product.imageUrl : [product.imageUrl].filter(Boolean),
       };
 
-      const result = await ebayService.createListing(product.sku, ebayProduct);
+      const result = await ebayService.createListing(`IVAN-${product.id}`, ebayProduct);
 
       // Update product with marketplace info
       await this.updateProductMarketplaceInfo(product.id, 'ebay', {
@@ -314,7 +326,7 @@ export class MarketplaceService {
       }
 
       const amazonProduct: AmazonProduct = {
-        sku: product.sku || `IVAN-${product.id}`,
+        sku: `IVAN-${product.id}`,
         title: customData?.title || product.title,
         description: customData?.description || product.description || '',
         price: customData?.price || product.price,
@@ -404,7 +416,10 @@ export class MarketplaceService {
       }
 
       // Get active listings for this product
-      const listings = await prisma.marketplaceListing.findMany({ where: { productId } });
+      const listings = await prisma.marketplaceListing.findMany({ 
+        where: { productId },
+        select: { marketplace: true, listingId: true }
+      });
       const marketplaces = Array.from(new Set(listings.map(l => l.marketplace)));
       
       for (const marketplace of marketplaces) {
@@ -415,7 +430,7 @@ export class MarketplaceService {
           switch (marketplace) {
             case 'ebay':
               const ebayService = new EbayService(credentials.credentials);
-              await ebayService.updateInventoryQuantity(product.sku, newQuantity);
+              await ebayService.updateInventoryQuantity(`IVAN-${product.id}`, newQuantity);
               break;
 
             case 'mercadolibre':
