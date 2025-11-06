@@ -113,13 +113,32 @@ export class MercadoLibreService {
     }
 
     try {
-      const response = await axios.post(`${this.baseUrl}/oauth/token`, {
-        grant_type: 'refresh_token',
-        client_id: this.credentials.clientId,
-        client_secret: this.credentials.clientSecret,
-        refresh_token: this.credentials.refreshToken,
-      });
+      // ✅ Usar retry para refresh token (crítico para mantener sesión)
+      const result = await retryMarketplaceOperation(
+        () => axios.post(`${this.baseUrl}/oauth/token`, {
+          grant_type: 'refresh_token',
+          client_id: this.credentials.clientId,
+          client_secret: this.credentials.clientSecret,
+          refresh_token: this.credentials.refreshToken,
+        }),
+        'mercadolibre',
+        {
+          maxRetries: 3,
+          initialDelay: 1500,
+          onRetry: (attempt, error, delay) => {
+            logger.warn(`Retrying refreshAccessToken for MercadoLibre (attempt ${attempt})`, {
+              error: error.message,
+              delay,
+            });
+          },
+        }
+      );
 
+      if (!result.success || !result.data) {
+        throw new AppError(`Failed to refresh token after retries: ${result.error?.message || 'Unknown error'}`, 401);
+      }
+
+      const response = result.data;
       return {
         accessToken: response.data.access_token,
         expiresIn: response.data.expires_in,
@@ -161,8 +180,28 @@ export class MercadoLibreService {
         }),
       };
 
-      const response = await this.apiClient.post('/items', listingData);
-      
+      // ✅ Usar retry para crear listing
+      const result = await retryMarketplaceOperation(
+        () => this.apiClient.post('/items', listingData),
+        'mercadolibre',
+        {
+          maxRetries: 3,
+          onRetry: (attempt, error, delay) => {
+            logger.warn(`Retrying createListing for MercadoLibre (attempt ${attempt})`, {
+              productTitle: product.title,
+              error: error.message,
+              delay,
+            });
+          },
+        }
+      );
+
+      if (!result.success || !result.data) {
+        const errorMessage = result.error?.message || 'Unknown error';
+        throw new AppError(`Failed to create MercadoLibre listing after retries: ${errorMessage}`, 400);
+      }
+
+      const response = result.data;
       return {
         itemId: response.data.id,
         permalink: response.data.permalink,
@@ -183,7 +222,26 @@ export class MercadoLibreService {
     const site = siteId || this.credentials.siteId;
     
     try {
-      const response = await this.apiClient.get(`/sites/${site}/categories`);
+      const result = await retryMarketplaceOperation(
+        () => this.apiClient.get(`/sites/${site}/categories`),
+        'mercadolibre',
+        {
+          maxRetries: 2,
+          onRetry: (attempt, error, delay) => {
+            logger.warn(`Retrying getCategories for MercadoLibre (attempt ${attempt})`, {
+              site,
+              error: error.message,
+              delay,
+            });
+          },
+        }
+      );
+
+      if (!result.success || !result.data) {
+        throw new AppError(`Failed to get categories after retries: ${result.error?.message || 'Unknown error'}`, 400);
+      }
+
+      const response = result.data;
       return response.data;
     } catch (error: any) {
       throw new AppError(`MercadoLibre categories error: ${error.message}`, 400);

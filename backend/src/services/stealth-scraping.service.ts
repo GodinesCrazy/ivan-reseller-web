@@ -7,6 +7,7 @@ import { logger } from '../config/logger';
 import { selectorAdapter } from './selector-adapter.service';
 import { proxyManager } from './proxy-manager.service';
 import { apiAvailability } from './api-availability.service';
+import { retryScrapingOperation } from '../utils/retry.util';
 
 // Apply stealth plugin to make Puppeteer undetectable
 puppeteer.use(StealthPlugin());
@@ -473,6 +474,35 @@ export class StealthScrapingService {
    * Scrape AliExpress product with stealth mode
    */
   async scrapeAliExpressProduct(url: string, userId: number): Promise<EnhancedScrapedProduct> {
+    // ✅ Usar retry para scraping (puede fallar por bloqueos temporales)
+    const result = await retryScrapingOperation(
+      async () => {
+        return await this._scrapeAliExpressProductInternal(url, userId);
+      },
+      {
+        maxRetries: 5,
+        onRetry: (attempt, error, delay) => {
+          logger.warn(`Retrying scrapeAliExpressProduct (attempt ${attempt})`, {
+            url,
+            userId,
+            error: error.message,
+            delay,
+          });
+        },
+      }
+    );
+
+    if (!result.success || !result.data) {
+      throw new AppError(`Failed to scrape product after retries: ${result.error?.message || 'Unknown error'}`, 500);
+    }
+
+    return result.data;
+  }
+
+  /**
+   * Internal scraping method (wrapped by retry)
+   */
+  private async _scrapeAliExpressProductInternal(url: string, userId: number): Promise<EnhancedScrapedProduct> {
     // ✅ CHECK: Verify scraping API is available
     const capabilities = await apiAvailability.getCapabilities(userId);
     if (!capabilities.canScrapeAliExpress) {
@@ -483,108 +513,89 @@ export class StealthScrapingService {
       );
     }
 
-    let attempt = 0;
-    let lastError: Error | null = null;
-
-    while (attempt < this.config.maxRetries) {
-      try {
-        // Rotate proxy if needed
-        if (!this.currentProxy || this.shouldRotateProxy()) {
-          this.currentProxy = this.getNextProxy();
-          this.lastProxyRotation = new Date();
-          if (this.browser) {
-            await this.browser.close();
-            this.browser = null;
-          }
-        }
-
-        // Initialize browser if needed
-        if (!this.browser) {
-          await this.initializeBrowser(this.currentProxy || undefined);
-        }
-
-        const page = await this.browser!.newPage();
-
-        // Apply fingerprint
-        await this.applyFingerprint(page);
-
-        // Set timeout
-        page.setDefaultTimeout(this.config.timeout);
-
-        // Block unnecessary resources for faster loading
-        await page.setRequestInterception(true);
-        page.on('request', (request) => {
-          const resourceType = request.resourceType();
-          if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
-            request.abort();
-          } else {
-            request.continue();
-          }
-        });
-
-        logger.info(`Navigating to AliExpress product: ${url} (attempt ${attempt + 1})`);
-
-        // Navigate to page
-        await page.goto(url, {
-          waitUntil: 'networkidle2',
-          timeout: this.config.timeout,
-        });
-
-        // Simulate human behavior
-        await this.simulateHumanBehavior(page);
-
-        // Check for captcha
-        const hasCaptcha = await this.detectAndSolveCaptcha(page);
-        if (hasCaptcha) {
-          await this.randomDelay(2000, 4000);
-        }
-
-        // Extract product data
-        const productData = await this.extractProductData(page, url);
-
-        // Close page
-        await page.close();
-
-        // Enhance description with AI if available
-        if (this.AI_API_KEY && productData.title) {
-          try {
-            productData.description = await this.enhanceDescriptionWithAI(
-              productData.title,
-              productData.description
-            );
-          } catch (error) {
-            logger.warn('Failed to enhance description with AI:', error);
-          }
-        }
-
-        logger.info(`Successfully scraped product: ${productData.title}`);
-        return productData;
-
-      } catch (error) {
-        lastError = error as Error;
-        logger.error(`Scraping attempt ${attempt + 1} failed:`, error);
-
-        // Mark proxy as failed if error is proxy-related
-        if (this.currentProxy && this.isProxyError(error)) {
-          this.markProxyAsFailed(this.currentProxy);
-          this.currentProxy = null;
-        }
-
-        attempt++;
-
-        if (attempt < this.config.maxRetries) {
-          // Exponential backoff
-          const backoffDelay = Math.pow(2, attempt) * 1000;
-          logger.info(`Retrying in ${backoffDelay}ms...`);
-          await this.randomDelay(backoffDelay, backoffDelay + 1000);
-        }
+    // Rotate proxy if needed
+    if (!this.currentProxy || this.shouldRotateProxy()) {
+      this.currentProxy = this.getNextProxy();
+      this.lastProxyRotation = new Date();
+      if (this.browser) {
+        await this.browser.close();
+        this.browser = null;
       }
     }
 
-    throw new AppError(
-      `Failed to scrape product after ${this.config.maxRetries} attempts: ${lastError?.message}`,
-      500
-    );
+    // Initialize browser if needed
+    if (!this.browser) {
+      await this.initializeBrowser(this.currentProxy || undefined);
+    }
+
+    const page = await this.browser!.newPage();
+
+    try {
+      // Apply fingerprint
+      await this.applyFingerprint(page);
+
+      // Set timeout
+      page.setDefaultTimeout(this.config.timeout);
+
+      // Block unnecessary resources for faster loading
+      await page.setRequestInterception(true);
+      page.on('request', (request) => {
+        const resourceType = request.resourceType();
+        if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+          request.abort();
+        } else {
+          request.continue();
+        }
+      });
+
+      logger.info(`Navigating to AliExpress product: ${url}`);
+
+      // Navigate to page
+      await page.goto(url, {
+        waitUntil: 'networkidle2',
+        timeout: this.config.timeout,
+      });
+
+      // Simulate human behavior
+      await this.simulateHumanBehavior(page);
+
+      // Check for captcha
+      const hasCaptcha = await this.detectAndSolveCaptcha(page);
+      if (hasCaptcha) {
+        await this.randomDelay(2000, 4000);
+      }
+
+      // Extract product data
+      const productData = await this.extractProductData(page, url);
+
+      // Close page
+      await page.close();
+
+      // Enhance description with AI if available
+      if (this.AI_API_KEY && productData.title) {
+        try {
+          productData.description = await this.enhanceDescriptionWithAI(
+            productData.title,
+            productData.description
+          );
+        } catch (error) {
+          logger.warn('Failed to enhance description with AI:', error);
+        }
+      }
+
+      logger.info(`Successfully scraped product: ${productData.title}`);
+      return productData;
+    } catch (error) {
+      await page.close();
+      
+      // Mark proxy as failed if error is proxy-related
+      if (this.currentProxy && this.isProxyError(error)) {
+        this.markProxyAsFailed(this.currentProxy);
+        this.currentProxy = null;
+      }
+
+      throw error;
+    }
   }
 
   /**
