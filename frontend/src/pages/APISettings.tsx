@@ -364,6 +364,15 @@ export default function APISettings() {
         } else {
           credentials.environment = 'live';
         }
+      } else if (apiName === 'aliexpress') {
+        // AliExpress: asegurar que twoFactorEnabled sea boolean (false por defecto si no se proporciona)
+        if (credentials.twoFactorEnabled === undefined) {
+          credentials.twoFactorEnabled = false;
+        }
+        // Validar que email y password estén presentes
+        if (!credentials.email || !credentials.password) {
+          throw new Error('Email y Password son requeridos para AliExpress');
+        }
       }
 
       // Guardar credencial usando /api/credentials
