@@ -181,29 +181,92 @@ export default function APISettings() {
       const apisResponse = await api.get('/api/settings/apis');
       const apisData = apisResponse.data?.data || [];
       
-      // Convertir a formato de credenciales
+      // Cargar credenciales configuradas desde /api/credentials
+      const credsResponse = await api.get('/api/credentials');
+      const configuredApis = credsResponse.data?.data || [];
+      
+      // Crear un mapa de APIs configuradas por apiName-environment
+      const configuredMap = new Map(
+        configuredApis.map((c: any) => [`${c.apiName}-${c.environment}`, c])
+      );
+      
+      // Convertir a formato de credenciales, incluyendo todas las APIs disponibles
       const creds: APICredential[] = apisData
-        .filter((api: any) => api.status === 'configured')
-        .map((api: any) => ({
-          id: 0, // Se obtendrá del backend
-          userId: 0,
-          apiName: api.apiName || api.id,
-          isActive: api.isActive || false,
-          createdAt: api.lastUpdated || new Date().toISOString(),
-          updatedAt: api.lastUpdated || new Date().toISOString(),
-        }));
+        .flatMap((api: any) => {
+          // Si la API soporta ambientes, crear una entrada por ambiente
+          if (api.supportsEnvironments && api.environments) {
+            return Object.keys(api.environments).map((env: string) => {
+              const envData = api.environments[env];
+              const key = `${api.apiName}-${env}`;
+              const configured = configuredMap.get(key);
+              return {
+                id: configured ? 1 : 0, // ID temporal
+                userId: 0, // Se obtiene del backend
+                apiName: api.apiName,
+                environment: env,
+                isActive: configured?.isActive || envData.isActive || false,
+                createdAt: configured?.updatedAt || envData.lastUpdated || new Date().toISOString(),
+                updatedAt: configured?.updatedAt || envData.lastUpdated || new Date().toISOString(),
+              };
+            });
+          } else {
+            // API sin ambientes
+            const key = `${api.apiName}-production`;
+            const configured = configuredMap.get(key);
+            return {
+              id: configured ? 1 : 0,
+              userId: 0,
+              apiName: api.apiName,
+              environment: 'production',
+              isActive: configured?.isActive || api.isActive || false,
+              createdAt: configured?.updatedAt || api.lastUpdated || new Date().toISOString(),
+              updatedAt: configured?.updatedAt || api.lastUpdated || new Date().toISOString(),
+            };
+          }
+        });
       setCredentials(creds);
 
-      // Cargar estados de todas las APIs
-      const statusMap: Record<string, APIStatus> = {};
-      apisData.forEach((api: any) => {
-        statusMap[api.apiName || api.id] = {
-          apiName: api.apiName || api.id,
-          available: api.isActive && api.status === 'configured',
-          message: api.status === 'configured' ? undefined : 'No configurada',
-        };
-      });
-      setStatuses(statusMap);
+      // Cargar estados de todas las APIs desde /api/credentials/status
+      try {
+        const statusResponse = await api.get('/api/credentials/status');
+        const statusData = statusResponse.data?.data || {};
+        const statusMap: Record<string, APIStatus> = {};
+        
+        // Mapear estados de APIs
+        if (statusData.apis) {
+          statusData.apis.forEach((apiStatus: any) => {
+            statusMap[apiStatus.apiName] = {
+              apiName: apiStatus.apiName,
+              available: apiStatus.isAvailable || false,
+              message: apiStatus.message,
+              lastChecked: apiStatus.lastChecked,
+            };
+          });
+        }
+        setStatuses(statusMap);
+      } catch (statusErr) {
+        // Si falla, usar datos de /api/settings/apis
+        const statusMap: Record<string, APIStatus> = {};
+        apisData.forEach((api: any) => {
+          if (api.supportsEnvironments && api.environments) {
+            Object.keys(api.environments).forEach((env: string) => {
+              const envData = api.environments[env];
+              statusMap[`${api.apiName}-${env}`] = {
+                apiName: api.apiName,
+                available: envData.isActive && envData.status === 'configured',
+                message: envData.status === 'configured' ? undefined : 'No configurada',
+              };
+            });
+          } else {
+            statusMap[api.apiName] = {
+              apiName: api.apiName,
+              available: api.isActive && api.status === 'configured',
+              message: api.status === 'configured' ? undefined : 'No configurada',
+            };
+          }
+        });
+        setStatuses(statusMap);
+      }
     } catch (err: any) {
       console.error('Error loading credentials:', err);
       if (err.response?.status === 404) {
@@ -231,16 +294,64 @@ export default function APISettings() {
     setError(null);
     try {
       const apiDef = API_DEFINITIONS[apiName];
-      const credentials: Record<string, string> = {};
+      const credentials: Record<string, any> = {};
 
-      // Validar campos requeridos
+      // Mapear campos del frontend a los campos esperados por el backend
+      // El backend espera campos en camelCase (appId, devId, certId, etc.)
+      // pero el frontend usa UPPER_CASE (EBAY_APP_ID, etc.)
+      const fieldMapping: Record<string, string> = {
+        'EBAY_APP_ID': 'appId',
+        'EBAY_DEV_ID': 'devId',
+        'EBAY_CERT_ID': 'certId',
+        'EBAY_TOKEN': 'authToken',
+        'AMAZON_CLIENT_ID': 'clientId',
+        'AMAZON_CLIENT_SECRET': 'clientSecret',
+        'AMAZON_REFRESH_TOKEN': 'refreshToken',
+        'AMAZON_REGION': 'region',
+        'MERCADOLIBRE_CLIENT_ID': 'clientId',
+        'MERCADOLIBRE_CLIENT_SECRET': 'clientSecret',
+        'MERCADOLIBRE_REDIRECT_URI': 'redirectUri',
+        'GROQ_API_KEY': 'apiKey',
+        'SCRAPERAPI_KEY': 'apiKey',
+        'ZENROWS_API_KEY': 'apiKey',
+        'CAPTCHA_API_KEY': 'apiKey',
+        'PAYPAL_CLIENT_ID': 'clientId',
+        'PAYPAL_CLIENT_SECRET': 'clientSecret',
+        'PAYPAL_MODE': 'environment',
+        'ALIEXPRESS_APP_KEY': 'appKey',
+        'ALIEXPRESS_APP_SECRET': 'appSecret',
+      };
+
+      // Validar campos requeridos y mapear
       for (const field of apiDef.fields) {
         const value = formData[apiName]?.[field.key] || '';
         if (field.required && !value.trim()) {
           throw new Error(`El campo "${field.label}" es requerido`);
         }
         if (value.trim()) {
-          credentials[field.key] = value.trim();
+          // Mapear el nombre del campo al formato esperado por el backend
+          const backendKey = fieldMapping[field.key] || field.key.toLowerCase();
+          credentials[backendKey] = value.trim();
+        }
+      }
+
+      // Agregar campos específicos según el tipo de API
+      if (apiName === 'ebay') {
+        credentials.sandbox = false; // Por defecto production
+      } else if (apiName === 'amazon') {
+        credentials.sandbox = false;
+        // Si no se proporciona region, usar default
+        if (!credentials.region) {
+          credentials.region = 'us-east-1';
+        }
+      } else if (apiName === 'mercadolibre') {
+        credentials.sandbox = false;
+      } else if (apiName === 'paypal') {
+        // PayPal usa 'environment' en lugar de 'sandbox'
+        if (credentials.environment === 'sandbox') {
+          credentials.environment = 'sandbox';
+        } else {
+          credentials.environment = 'live';
         }
       }
 
@@ -262,7 +373,11 @@ export default function APISettings() {
       alert(`✅ Credenciales de ${apiDef.displayName} guardadas exitosamente`);
     } catch (err: any) {
       console.error('Error saving credentials:', err);
-      setError(err.response?.data?.message || err.message || 'Error al guardar credenciales');
+      const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Error al guardar credenciales';
+      setError(errorMessage);
+      if (err.response?.data?.details) {
+        setError(`${errorMessage}: ${JSON.stringify(err.response.data.details)}`);
+      }
     } finally {
       setSaving(null);
     }
@@ -272,13 +387,11 @@ export default function APISettings() {
     setTesting(apiName);
     setError(null);
     try {
-      // Probar conexión - usar endpoint de settings si existe
-      const response = await api.post('/api/credentials/test', {
-        apiName,
-      });
+      // Probar conexión usando el endpoint correcto: /api/credentials/:apiName/test
+      const response = await api.post(`/api/credentials/${apiName}/test`);
 
-      const status = response.data;
-      if (status.available) {
+      const status = response.data?.data || response.data;
+      if (status.isAvailable || status.available) {
         alert(`✅ Conexión exitosa con ${API_DEFINITIONS[apiName].displayName}`);
       } else {
         alert(`❌ Error de conexión: ${status.message || 'No disponible'}`);
@@ -297,20 +410,15 @@ export default function APISettings() {
   const handleToggle = async (apiName: string, currentActive: boolean) => {
     setError(null);
     try {
-      // Toggle activo/inactivo
-      const credential = getCredentialForAPI(apiName);
-      if (credential) {
-        await api.put(`/api/credentials/${apiName}`, {
-          isActive: !currentActive,
-        });
-      }
+      // Toggle activo/inactivo usando el endpoint correcto: /api/credentials/:apiName/toggle
+      await api.put(`/api/credentials/${apiName}/toggle`, {
+        environment: 'production', // Por defecto production
+      });
       
-      // Actualizar estado local
-      setCredentials(prev => prev.map(cred =>
-        cred.apiName === apiName ? { ...cred, isActive: !currentActive } : cred
-      ));
+      // Recargar credenciales para obtener el estado actualizado
+      await loadCredentials();
 
-      alert(`${currentActive ? '❌ Desactivada' : '✅ Activada'} ${API_DEFINITIONS[apiName].displayName}`);
+      alert(`${!currentActive ? '✅ Activada' : '❌ Desactivada'} ${API_DEFINITIONS[apiName].displayName}`);
     } catch (err: any) {
       console.error('Error toggling API:', err);
       setError(err.response?.data?.message || 'Error al cambiar estado');
@@ -325,7 +433,8 @@ export default function APISettings() {
     setDeleting(apiName);
     setError(null);
     try {
-      await api.delete(`/api/credentials/${apiName}`);
+      // Eliminar usando el endpoint correcto con query parameter para environment
+      await api.delete(`/api/credentials/${apiName}?environment=production`);
       
       // Recargar credenciales
       await loadCredentials();
@@ -333,7 +442,7 @@ export default function APISettings() {
       alert(`🗑️ Credenciales de ${API_DEFINITIONS[apiName].displayName} eliminadas`);
     } catch (err: any) {
       console.error('Error deleting credentials:', err);
-      setError(err.response?.data?.message || 'Error al eliminar credenciales');
+      setError(err.response?.data?.message || err.response?.data?.error || 'Error al eliminar credenciales');
     } finally {
       setDeleting(null);
     }

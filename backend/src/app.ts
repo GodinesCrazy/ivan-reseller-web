@@ -45,6 +45,9 @@ import costOptimizationRoutes from './api/routes/cost-optimization.routes';
 import aiImprovementsRoutes from './api/routes/ai-improvements.routes';
 import advancedReportsRoutes from './api/routes/advanced-reports.routes';
 import revenueChangeRoutes from './api/routes/revenue-change.routes';
+import financeRoutes from './api/routes/finance.routes';
+import dropshippingRoutes from './api/routes/dropshipping.routes';
+import regionalRoutes from './api/routes/regional.routes';
 // import adminRoutes from './api/routes/admin.routes'; // Temporarily disabled
 
 const app: Application = express();
@@ -130,6 +133,9 @@ app.use('/api/cost-optimization', costOptimizationRoutes);
 app.use('/api/ai-improvements', aiImprovementsRoutes);
 app.use('/api/advanced-reports', advancedReportsRoutes);
 app.use('/api/revenue-change', revenueChangeRoutes);
+app.use('/api/finance', financeRoutes);
+app.use('/api/dropshipping', dropshippingRoutes);
+app.use('/api/regional', regionalRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

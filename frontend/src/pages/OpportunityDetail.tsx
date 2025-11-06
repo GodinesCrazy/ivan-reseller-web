@@ -14,7 +14,7 @@ export default function OpportunityDetail() {
     (async () => {
       setLoading(true);
       try {
-        const { data } = await api.get(`/opportunities/${id}`);
+        const { data } = await api.get(`/api/opportunities/${id}`);
         setItem(data.item);
         setSnapshots(data.snapshots || []);
       } finally {

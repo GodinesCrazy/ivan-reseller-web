@@ -127,7 +127,7 @@ export default function AdminPanel() {
 
   const loadDashboard = async () => {
     try {
-      const response = await api.get('/admin/dashboard');
+      const response = await api.get('/api/admin/dashboard');
       setDashboardData(response.data.data);
     } catch (error) {
       toast.error('Error cargando dashboard');
@@ -137,7 +137,7 @@ export default function AdminPanel() {
   const onCreateUser = async (data: UserCreationForm) => {
     setIsLoading(true);
     try {
-      const response = await api.post('/admin/users', data);
+      const response = await api.post('/api/admin/users', data);
       toast.success('Usuario creado exitosamente. Credenciales enviadas por email.');
       reset();
       setShowCreateUser(false);
@@ -151,7 +151,7 @@ export default function AdminPanel() {
 
   const updateCommissions = async (userId: number, commissionRate: number, fixedMonthlyCost: number) => {
     try {
-      await api.put(`/admin/users/${userId}/commissions`, {
+      await api.put(`/api/admin/users/${userId}/commissions`, {
         userId,
         commissionRate,
         fixedMonthlyCost,
@@ -170,7 +170,7 @@ export default function AdminPanel() {
     if (!confirm('¿Estás seguro de procesar todos los cobros mensuales?')) return;
     
     try {
-      const response = await api.post('/admin/charges/monthly');
+      const response = await api.post('/api/admin/charges/monthly');
       toast.success(response.data.message);
       loadDashboard();
     } catch (error: any) {
