@@ -385,13 +385,26 @@ export default function APISettings() {
         }
       }
 
+      // Log para debugging (sin datos sensibles)
+      console.log(`[APISettings] Saving ${apiName}:`, {
+        apiName,
+        environment: 'production',
+        credentialKeys: Object.keys(credentials),
+        hasEmail: !!credentials.email,
+        hasPassword: !!credentials.password,
+        twoFactorEnabled: credentials.twoFactorEnabled,
+        twoFactorEnabledType: typeof credentials.twoFactorEnabled
+      });
+
       // Guardar credencial usando /api/credentials
-      await api.post('/api/credentials', {
+      const response = await api.post('/api/credentials', {
         apiName,
         environment: 'production', // Por defecto production
         credentials,
         isActive: true,
       });
+
+      console.log(`[APISettings] Save response for ${apiName}:`, response.data);
 
       // Recargar credenciales
       await loadCredentials();
