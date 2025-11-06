@@ -88,7 +88,7 @@ const apiSchemas = {
   aliexpress: z.object({
     email: z.string().email('Valid email is required'),
     password: z.string().min(1, 'Password is required'),
-    twoFactorEnabled: z.boolean(),
+    twoFactorEnabled: z.boolean().default(false),
     twoFactorSecret: z.string().optional(),
   }),
   email: z.object({
