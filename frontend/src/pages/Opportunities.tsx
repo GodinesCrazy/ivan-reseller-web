@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
+import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 type Marketplace = 'ebay' | 'amazon' | 'mercadolibre';
 
@@ -37,6 +39,7 @@ function TableSkeleton({ rows, columns }: { rows: number; columns: number }) {
 }
 
 export default function Opportunities() {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('organizador cocina');
   const [region, setRegion] = useState('us');
   const [maxItems, setMaxItems] = useState(5);
@@ -44,6 +47,7 @@ export default function Opportunities() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<OpportunityItem[]>([]);
+  const [publishing, setPublishing] = useState<Record<number, boolean>>({});
 
   const marketplacesParam = useMemo(() => marketplaces.join(','), [marketplaces]);
 
@@ -71,6 +75,51 @@ export default function Opportunities() {
 
   function toggleMarketplace(mp: Marketplace) {
     setMarketplaces(prev => prev.includes(mp) ? prev.filter(m => m !== mp) : [...prev, mp]);
+  }
+
+  async function createAndPublishProduct(item: OpportunityItem, targetMarketplace: Marketplace) {
+    const itemIndex = items.indexOf(item);
+    setPublishing(prev => ({ ...prev, [itemIndex]: true }));
+
+    try {
+      // 1. Crear producto desde la oportunidad
+      const productResponse = await api.post('/api/products', {
+        title: item.title,
+        aliexpressUrl: item.aliexpressUrl,
+        aliexpressPrice: item.costUsd,
+        suggestedPrice: item.suggestedPriceUsd,
+        imageUrl: item.image,
+        currency: 'USD',
+      });
+
+      const productId = productResponse.data?.id || productResponse.data?.product?.id;
+
+      if (!productId) {
+        throw new Error('No se pudo obtener el ID del producto creado');
+      }
+
+      // 2. Publicar a marketplace
+      const publishResponse = await api.post('/api/marketplace/publish', {
+        productId: Number(productId),
+        marketplace: targetMarketplace,
+      });
+
+      if (publishResponse.data?.success) {
+        toast.success(`Producto creado y publicado en ${targetMarketplace} exitosamente`);
+        // Opcional: redirigir a productos
+        setTimeout(() => {
+          navigate('/products');
+        }, 1500);
+      } else {
+        throw new Error(publishResponse.data?.error || 'Error al publicar');
+      }
+    } catch (error: any) {
+      console.error('Error creating/publishing product:', error);
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al crear o publicar producto';
+      toast.error(errorMessage);
+    } finally {
+      setPublishing(prev => ({ ...prev, [itemIndex]: false }));
+    }
   }
 
   return (
@@ -128,7 +177,7 @@ export default function Opportunities() {
                 <th className="text-right p-3">ROI %</th>
                 <th className="text-center p-3">Competencia</th>
                 <th className="text-center p-3">Marketplaces</th>
-                <th className="text-center p-3">Link</th>
+                <th className="text-center p-3">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -194,17 +243,32 @@ export default function Opportunities() {
                   </div>
                 </td>
                 <td className="p-3 text-center">
-                  <a 
-                    href={it.aliexpressUrl} 
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors text-xs font-medium"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                    Ver Producto
-                  </a>
+                  <div className="flex flex-col gap-2 items-center">
+                    <a 
+                      href={it.aliexpressUrl} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors text-xs font-medium"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      Ver
+                    </a>
+                    <div className="flex flex-wrap gap-1 justify-center">
+                      {it.targetMarketplaces?.map((mp) => (
+                        <button
+                          key={mp}
+                          onClick={() => createAndPublishProduct(it, mp as Marketplace)}
+                          disabled={publishing[idx]}
+                          className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium transition-colors"
+                          title={`Crear y publicar en ${mp}`}
+                        >
+                          {publishing[idx] ? '...' : mp === 'ebay' ? 'eBay' : mp === 'mercadolibre' ? 'ML' : 'AMZ'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </td>
               </tr>
             ))}
