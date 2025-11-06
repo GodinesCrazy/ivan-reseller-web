@@ -29,11 +29,57 @@ export class AdvancedMarketplaceScraper {
   async init(): Promise<void> {
     console.log('🚀 Iniciando navegador con evasión anti-bot...');
     
+    // Intentar encontrar Chromium del sistema (instalado por Nix)
+    const possiblePaths = [
+      '/nix/store/*/bin/chromium', // Nix store path (wildcard porque cambia)
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+    ];
+    
+    const fs = require('fs');
+    const { execSync } = require('child_process');
+    let executablePath: string | undefined = undefined;
+    
+    // Primero intentar encontrar Chromium usando 'which'
     try {
-      // En Railway/Linux, Puppeteer debe usar el Chrome que viene con el paquete
-      // No especificar executablePath para que use el Chrome descargado por Puppeteer
-      this.browser = await puppeteer.launch({
-        headless: 'new', // Usar nuevo modo headless
+      const chromiumPath = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null', { encoding: 'utf-8' }).trim();
+      if (chromiumPath && fs.existsSync(chromiumPath)) {
+        executablePath = chromiumPath;
+        console.log(`✅ Encontrado Chromium del sistema en: ${executablePath}`);
+      }
+    } catch (e) {
+      // 'which' no encontró Chromium, continuar con otras opciones
+    }
+    
+    // Si no se encontró, buscar en rutas comunes
+    if (!executablePath) {
+      for (const path of possiblePaths) {
+        if (path.includes('*')) {
+          // Para rutas con wildcard, intentar buscar en el store de Nix
+          try {
+            const nixStorePath = execSync('find /nix/store -name chromium -type f 2>/dev/null | head -1', { encoding: 'utf-8' }).trim();
+            if (nixStorePath && fs.existsSync(nixStorePath)) {
+              executablePath = nixStorePath;
+              console.log(`✅ Encontrado Chromium de Nix en: ${executablePath}`);
+              break;
+            }
+          } catch (e) {
+            // Continuar buscando
+          }
+        } else if (fs.existsSync(path)) {
+          executablePath = path;
+          console.log(`✅ Encontrado Chromium en: ${executablePath}`);
+          break;
+        }
+      }
+    }
+    
+    try {
+      // Configuración de lanzamiento
+      const launchOptions: any = {
+        headless: 'new',
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -45,26 +91,40 @@ export class AdvancedMarketplaceScraper {
           '--disable-web-security',
           '--disable-features=VizDisplayCompositor',
           '--window-size=1920,1080',
-          '--single-process', // Útil para contenedores con recursos limitados
+          '--single-process',
         ],
         ignoreDefaultArgs: ['--enable-automation'],
         ignoreHTTPSErrors: true,
-        // No especificar executablePath - dejar que Puppeteer use su Chrome descargado
-      });
-
+      };
+      
+      // Si encontramos Chromium del sistema, usarlo
+      if (executablePath) {
+        launchOptions.executablePath = executablePath;
+        console.log(`🔧 Usando Chromium del sistema: ${executablePath}`);
+      } else {
+        console.log('⚠️  Chromium del sistema no encontrado, Puppeteer usará su Chrome descargado');
+      }
+      
+      this.browser = await puppeteer.launch(launchOptions);
       console.log('✅ Navegador iniciado exitosamente');
     } catch (error: any) {
       console.error('❌ Error al iniciar navegador:', error.message);
       // Si falla, intentar sin algunas opciones avanzadas
       try {
-        this.browser = await puppeteer.launch({
+        const minimalOptions: any = {
           headless: true,
           args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
           ],
-        });
+        };
+        
+        if (executablePath) {
+          minimalOptions.executablePath = executablePath;
+        }
+        
+        this.browser = await puppeteer.launch(minimalOptions);
         console.log('✅ Navegador iniciado con configuración mínima');
       } catch (fallbackError: any) {
         console.error('❌ Error crítico al iniciar navegador:', fallbackError.message);
