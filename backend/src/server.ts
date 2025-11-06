@@ -49,6 +49,8 @@ async function ensureAdminUser() {
 async function runMigrations() {
   try {
     console.log('🔄 Running database migrations...');
+    console.log(`   DATABASE_URL: ${env.DATABASE_URL ? '✅ Configurada' : '❌ No configurada'}`);
+    
     await execAsync('npx prisma migrate deploy');
     console.log('✅ Migrations completed');
     
@@ -64,8 +66,15 @@ async function runMigrations() {
         await ensureAdminUser();
       }
     }
-  } catch (error) {
-    console.error('⚠️  Migration warning:', error);
+  } catch (error: any) {
+    console.error('⚠️  Migration error:', error.message);
+    if (error.message?.includes('P1000') || error.message?.includes('Authentication failed')) {
+      console.error('❌ ERROR DE AUTENTICACIÓN:');
+      console.error('   - Verifica que DATABASE_URL esté correctamente configurada en Railway');
+      console.error('   - Verifica que las credenciales de PostgreSQL sean correctas');
+      console.error('   - Asegúrate de que los servicios Postgres y ivan-reseller-web estén conectados');
+    }
+    throw error; // Re-lanzar para que startServer lo capture
   }
 }
 
@@ -81,8 +90,23 @@ async function startServer() {
     
     // Test database connection
     console.log('🔌 Conectando a la base de datos...');
-    await prisma.$connect();
-    console.log('✅ Database connected');
+    try {
+      await prisma.$connect();
+      console.log('✅ Database connected');
+    } catch (dbError: any) {
+      console.error('❌ ERROR DE CONEXIÓN A LA BASE DE DATOS:');
+      console.error(`   Mensaje: ${dbError.message}`);
+      if (dbError.message?.includes('P1000') || dbError.message?.includes('Authentication failed')) {
+        console.error('');
+        console.error('🔧 SOLUCIÓN:');
+        console.error('   1. Ve a Railway Dashboard → Postgres → Variables');
+        console.error('   2. Copia el valor de DATABASE_URL');
+        console.error('   3. Ve a ivan-reseller-web → Variables');
+        console.error('   4. Actualiza DATABASE_URL con el valor copiado');
+        console.error('');
+      }
+      throw dbError;
+    }
     
     // Asegurar que el usuario admin existe (verificación final)
     // No bloqueamos el inicio del servidor si esto falla
