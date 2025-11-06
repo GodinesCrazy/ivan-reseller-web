@@ -5,8 +5,8 @@ nixPkgs = ["nodejs-20_x", "npm", "chromium", "chromedriver"]
 cmds = [
   "npm install",
   "npx prisma generate",
-  # Forzar descarga de Chrome para Puppeteer
-  "PUPPETEER_SKIP_DOWNLOAD=false node -e \"require('puppeteer').launch({headless: true}).then(b => b.close())\" || echo 'Puppeteer Chrome download attempted'"
+  # Forzar descarga de Chrome para Puppeteer durante el build
+  "PUPPETEER_SKIP_DOWNLOAD=false node -e \"const p=require('puppeteer');p.launch({headless:true}).then(b=>{console.log('Chrome downloaded');b.close()}).catch(e=>{console.log('Chrome download error:',e.message);process.exit(0)})\" || true"
 ]
 
 [phases.build]
