@@ -96,7 +96,7 @@ export class CommissionService {
     await prisma.activity.create({
       data: {
         userId: commission.userId,
-        type: 'COMMISSION_SCHEDULED',
+        action: 'COMMISSION_SCHEDULED',
         description: `Comisión de $${commission.amount} programada para ${scheduledDate.toLocaleDateString()}`,
         metadata: JSON.stringify({ commissionId: id }),
       },
@@ -139,7 +139,7 @@ export class CommissionService {
     await prisma.activity.create({
       data: {
         userId: commission.userId,
-        type: 'COMMISSION_PAID',
+        action: 'COMMISSION_PAID',
         description: `Comisión de $${commission.amount} pagada`,
         metadata: JSON.stringify({ 
           commissionId: id,
