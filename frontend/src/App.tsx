@@ -34,17 +34,32 @@ function App() {
   // Validar token al iniciar la app (solo una vez)
   useEffect(() => {
     let isMounted = true;
+    let timeoutId: NodeJS.Timeout;
     
     const validateToken = async () => {
       try {
-        await checkAuth();
+        // Timeout de 5 segundos - si tarda más, continuar de todas formas
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error('Timeout'));
+          }, 5000);
+        });
+
+        await Promise.race([
+          checkAuth(),
+          timeoutPromise
+        ]);
+        
+        clearTimeout(timeoutId);
         if (isMounted) {
           setIsInitialized(true);
         }
       } catch (error) {
-        console.error('Error validating token:', error);
+        clearTimeout(timeoutId);
+        console.warn('Error o timeout validando token, continuando:', error);
+        // Continuar aunque falle o haya timeout - permitir que la app cargue
         if (isMounted) {
-          setIsInitialized(true); // Continuar aunque falle
+          setIsInitialized(true);
         }
       }
     };
@@ -53,6 +68,9 @@ function App() {
     
     return () => {
       isMounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
   }, []); // Solo ejecutar una vez al montar
 
