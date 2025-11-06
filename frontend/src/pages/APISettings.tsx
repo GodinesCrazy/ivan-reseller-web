@@ -146,13 +146,15 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
   },
   aliexpress: {
     name: 'aliexpress',
-    displayName: 'AliExpress API',
-    description: 'Búsqueda y tracking de productos',
+    displayName: 'AliExpress Auto-Purchase',
+    description: 'Credenciales de AliExpress para compra automática (usa automatización con navegador)',
     icon: '🛍️',
-    docsUrl: 'https://developers.aliexpress.com/',
+    docsUrl: null, // No tiene API oficial
     fields: [
-      { key: 'ALIEXPRESS_APP_KEY', label: 'App Key', required: true, type: 'text', placeholder: '12345678' },
-      { key: 'ALIEXPRESS_APP_SECRET', label: 'App Secret', required: true, type: 'password', placeholder: 'abc123def456...' },
+      { key: 'email', label: 'Email / Username', required: true, type: 'text', placeholder: 'tu-email@ejemplo.com', helpText: 'Email o username de tu cuenta de AliExpress' },
+      { key: 'password', label: 'Password', required: true, type: 'password', placeholder: 'Tu contraseña de AliExpress', helpText: 'Contraseña de tu cuenta de AliExpress' },
+      { key: 'twoFactorEnabled', label: '2FA Habilitado', required: false, type: 'text', placeholder: 'true o false', helpText: 'Marca "true" si tu cuenta tiene autenticación de dos factores activada' },
+      { key: 'twoFactorSecret', label: '2FA Secret (TOTP)', required: false, type: 'password', placeholder: 'Solo si tienes 2FA', helpText: 'Secret para generar códigos TOTP si tienes 2FA habilitado' },
     ],
   },
 };
@@ -318,8 +320,11 @@ export default function APISettings() {
         'PAYPAL_CLIENT_ID': 'clientId',
         'PAYPAL_CLIENT_SECRET': 'clientSecret',
         'PAYPAL_MODE': 'environment',
-        'ALIEXPRESS_APP_KEY': 'appKey',
-        'ALIEXPRESS_APP_SECRET': 'appSecret',
+        // AliExpress usa email/password, no appKey/appSecret
+        'email': 'email',
+        'password': 'password',
+        'twoFactorEnabled': 'twoFactorEnabled',
+        'twoFactorSecret': 'twoFactorSecret',
       };
 
       // Validar campos requeridos y mapear
