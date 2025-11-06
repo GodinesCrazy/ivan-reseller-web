@@ -1,6 +1,6 @@
 import app from './app';
 import { env } from './config/env';
-import { prisma } from './config/database';
+import { prisma, connectWithRetry } from './config/database';
 import { redis, isRedisAvailable } from './config/redis';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -46,35 +46,58 @@ async function ensureAdminUser() {
   }
 }
 
-async function runMigrations() {
-  try {
-    console.log('🔄 Running database migrations...');
-    console.log(`   DATABASE_URL: ${env.DATABASE_URL ? '✅ Configurada' : '❌ No configurada'}`);
-    
-    await execAsync('npx prisma migrate deploy');
-    console.log('✅ Migrations completed');
-    
-    // Intentar ejecutar seed completo
-    if (env.NODE_ENV === 'production') {
-      try {
-        console.log('🌱 Seeding database...');
-        await execAsync('npx tsx prisma/seed.ts');
-        console.log('✅ Database seeded');
-      } catch (seedError) {
-        console.log('ℹ️  Seed completo falló, verificando usuario admin...');
-        // Aunque el seed falle, verificamos que el admin exista
-        await ensureAdminUser();
+async function runMigrations(maxRetries = 3): Promise<void> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Running database migrations... (attempt ${attempt + 1}/${maxRetries})`);
+      console.log(`   DATABASE_URL: ${env.DATABASE_URL ? '✅ Configurada' : '❌ No configurada'}`);
+      
+      await execAsync('npx prisma migrate deploy');
+      console.log('✅ Migrations completed');
+      
+      // Intentar ejecutar seed completo
+      if (env.NODE_ENV === 'production') {
+        try {
+          console.log('🌱 Seeding database...');
+          await execAsync('npx tsx prisma/seed.ts');
+          console.log('✅ Database seeded');
+        } catch (seedError: any) {
+          console.log('ℹ️  Seed completo falló, verificando usuario admin...');
+          console.log(`   Error: ${seedError.message?.substring(0, 100)}`);
+          // Aunque el seed falle, verificamos que el admin exista
+          await ensureAdminUser();
+        }
+      }
+      
+      return; // Éxito, salir de la función
+    } catch (error: any) {
+      const isLastAttempt = attempt === maxRetries - 1;
+      const isAuthError = error.message?.includes('P1000') || 
+                         error.message?.includes('Authentication failed') ||
+                         error.stderr?.includes('P1000') ||
+                         error.stderr?.includes('Authentication failed');
+      
+      if (isAuthError) {
+        console.error(`⚠️  Migration error (attempt ${attempt + 1}/${maxRetries}):`);
+        console.error(`   ${error.message || error.stderr || 'Unknown error'}`);
+        
+        if (isLastAttempt) {
+          console.error('');
+          console.error('❌ ERROR DE AUTENTICACIÓN PERSISTENTE:');
+          console.error('   - Verifica que DATABASE_URL esté correctamente configurada en Railway');
+          console.error('   - Verifica que las credenciales de PostgreSQL sean correctas');
+          console.error('   - Asegúrate de que los servicios Postgres y ivan-reseller-web estén conectados');
+          console.error('');
+          throw error;
+        } else {
+          console.log(`   Reintentando en 3 segundos...`);
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
+      } else {
+        // Si no es error de autenticación, lanzar inmediatamente
+        throw error;
       }
     }
-  } catch (error: any) {
-    console.error('⚠️  Migration error:', error.message);
-    if (error.message?.includes('P1000') || error.message?.includes('Authentication failed')) {
-      console.error('❌ ERROR DE AUTENTICACIÓN:');
-      console.error('   - Verifica que DATABASE_URL esté correctamente configurada en Railway');
-      console.error('   - Verifica que las credenciales de PostgreSQL sean correctas');
-      console.error('   - Asegúrate de que los servicios Postgres y ivan-reseller-web estén conectados');
-    }
-    throw error; // Re-lanzar para que startServer lo capture
   }
 }
 
@@ -88,21 +111,37 @@ async function startServer() {
     console.log('🔄 Ejecutando migraciones...');
     await runMigrations();
     
-    // Test database connection
+    // Test database connection with retry
     console.log('🔌 Conectando a la base de datos...');
     try {
-      await prisma.$connect();
-      console.log('✅ Database connected');
+      await connectWithRetry(5, 2000);
     } catch (dbError: any) {
       console.error('❌ ERROR DE CONEXIÓN A LA BASE DE DATOS:');
       console.error(`   Mensaje: ${dbError.message}`);
+      
+      // Mostrar información detallada del error
       if (dbError.message?.includes('P1000') || dbError.message?.includes('Authentication failed')) {
         console.error('');
-        console.error('🔧 SOLUCIÓN:');
-        console.error('   1. Ve a Railway Dashboard → Postgres → Variables');
-        console.error('   2. Copia el valor de DATABASE_URL');
-        console.error('   3. Ve a ivan-reseller-web → Variables');
-        console.error('   4. Actualiza DATABASE_URL con el valor copiado');
+        console.error('🔧 ERROR DE AUTENTICACIÓN DETECTADO:');
+        console.error('   Esto indica que las credenciales de PostgreSQL no son válidas.');
+        console.error('');
+        console.error('📋 VERIFICACIÓN:');
+        console.error(`   DATABASE_URL configurada: ${env.DATABASE_URL ? '✅ Sí' : '❌ No'}`);
+        if (env.DATABASE_URL) {
+          try {
+            const url = new URL(env.DATABASE_URL);
+            console.error(`   Host: ${url.hostname}`);
+            console.error(`   Port: ${url.port || '5432'}`);
+            console.error(`   Database: ${url.pathname.replace('/', '')}`);
+            console.error(`   User: ${url.username}`);
+          } catch (e) {
+            console.error('   ⚠️  No se pudo parsear DATABASE_URL');
+          }
+        }
+        console.error('');
+        console.error('🔧 SOLUCIÓN AUTOMÁTICA:');
+        console.error('   El código intentará múltiples formas de obtener DATABASE_URL.');
+        console.error('   Si el problema persiste, verifica las variables en Railway.');
         console.error('');
       }
       throw dbError;

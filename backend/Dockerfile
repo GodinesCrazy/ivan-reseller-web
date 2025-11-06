@@ -28,5 +28,6 @@ RUN npx tsc --skipLibCheck --noEmitOnError false || echo "⚠️ TypeScript comp
 
 EXPOSE 3000
 
+# El servidor maneja las migraciones internamente con mejor manejo de errores
 # Run with tsx si dist no existe, sino con node compilado
-CMD ["sh", "-c", "npx prisma migrate deploy && (test -f dist/server.js && node dist/server.js || tsx src/server.ts)"]
+CMD ["sh", "-c", "test -f dist/server.js && node dist/server.js || tsx src/server.ts"]
