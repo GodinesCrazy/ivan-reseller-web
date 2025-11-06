@@ -211,6 +211,7 @@ export class StealthScrapingService {
       ];
       const viewport = viewports[Math.floor(Math.random() * viewports.length)];
 
+      // En Railway/Linux, no especificar executablePath para usar Chrome de Puppeteer
       this.browser = await puppeteer.launch(launchOptions);
 
       // Create fingerprint
@@ -218,9 +219,25 @@ export class StealthScrapingService {
 
       logger.info('Browser initialized with stealth configuration');
       return this.browser;
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Failed to initialize browser:', error);
-      throw new AppError('Failed to initialize stealth browser', 500);
+      // Intentar con configuración mínima como fallback
+      try {
+        logger.info('Attempting browser launch with minimal configuration');
+        this.browser = await puppeteer.launch({
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+          ],
+        });
+        logger.info('Browser initialized with minimal configuration');
+        return this.browser;
+      } catch (fallbackError: any) {
+        logger.error('Failed to initialize browser with fallback:', fallbackError);
+        throw new AppError(`Failed to initialize stealth browser: ${fallbackError.message}`, 500);
+      }
     }
   }
 
