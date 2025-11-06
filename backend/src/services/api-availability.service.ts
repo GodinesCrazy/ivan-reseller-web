@@ -44,32 +44,8 @@ export class APIAvailabilityService {
   }
 
   /**
-   * Decrypt stored credential
-   */
-  private decrypt(encryptedText: string): string {
-    try {
-      const parts = encryptedText.split(':');
-      if (parts.length !== 3) return encryptedText; // Not encrypted
-
-      const iv = Buffer.from(parts[0], 'hex');
-      const authTag = Buffer.from(parts[1], 'hex');
-      const encrypted = Buffer.from(parts[2], 'hex');
-
-      const decipher = crypto.createDecipheriv('aes-256-gcm', ENCRYPTION_KEY, iv);
-      decipher.setAuthTag(authTag);
-
-      let decrypted = decipher.update(encrypted);
-      decrypted = Buffer.concat([decrypted, decipher.final()]);
-
-      return decrypted.toString();
-    } catch (error) {
-      logger.error('Failed to decrypt credential', error);
-      return encryptedText;
-    }
-  }
-
-  /**
    * Get API credentials from database for specific user
+   * Usa CredentialsManager para obtener credenciales desencriptadas correctamente
    */
   private async getUserCredentials(
     userId: number, 
@@ -77,23 +53,27 @@ export class APIAvailabilityService {
     environment: 'sandbox' | 'production' = 'production'
   ): Promise<Record<string, string> | null> {
     try {
-      const credential = await prisma.apiCredential.findUnique({
-        where: {
-          userId_apiName_environment: {
-            userId,
-            apiName,
-            environment
-          }
-        }
-      });
+      // Usar CredentialsManager que maneja correctamente la desencriptación
+      const { CredentialsManager } = await import('./credentials-manager.service');
+      const credentials = await CredentialsManager.getCredentials(
+        userId,
+        apiName as any,
+        environment
+      );
 
-      if (!credential || !credential.isActive) {
+      if (!credentials) {
         return null;
       }
 
-      // Decrypt and parse JSON credentials
-      const decrypted = this.decrypt(credential.credentials);
-      return JSON.parse(decrypted);
+      // Convertir a Record<string, string> para compatibilidad
+      const result: Record<string, string> = {};
+      for (const [key, value] of Object.entries(credentials)) {
+        if (value !== null && value !== undefined) {
+          result[key] = String(value);
+        }
+      }
+
+      return result;
     } catch (error) {
       logger.error(`Failed to get credentials for user ${userId}, API ${apiName}`, error);
       return null;
