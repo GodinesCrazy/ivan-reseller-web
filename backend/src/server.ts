@@ -5,7 +5,7 @@ import { redis, isRedisAvailable } from './config/redis';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { scheduledTasksService } from './services/scheduled-tasks.service';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 
 const execAsync = promisify(exec);
 const PORT = parseInt(env.PORT, 10);
