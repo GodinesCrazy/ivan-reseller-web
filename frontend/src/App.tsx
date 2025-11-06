@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@stores/authStore';
 const Login = lazy(() => import('@pages/Login'));
 const Dashboard = lazy(() => import('@pages/Dashboard'));
@@ -27,7 +27,8 @@ const HelpCenter = lazy(() => import('@pages/HelpCenter'));
 const WorkflowConfig = lazy(() => import('@pages/WorkflowConfig'));
 import Layout from '@components/layout/Layout';
 
-function App() {
+function AppContent() {
+  const location = useLocation();
   const { isAuthenticated, isCheckingAuth, checkAuth, token } = useAuthStore();
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -89,7 +90,16 @@ function App() {
 
   // Solo mostrar loading si hay token Y está verificando Y no estamos en login
   // Si no hay token o estamos en login, mostrar la app inmediatamente
-  const isLoginPage = window.location.pathname === '/login';
+  const isLoginPage = location.pathname === '/login';
+  
+  // Si estamos en login o no hay token, inicializar inmediatamente
+  useEffect(() => {
+    if (isLoginPage || !token) {
+      if (!isInitialized) {
+        setIsInitialized(true);
+      }
+    }
+  }, [isLoginPage, token, isInitialized]);
   
   if (!isLoginPage && token && !isInitialized && isCheckingAuth) {
     return (
@@ -100,14 +110,6 @@ function App() {
         </div>
       </div>
     );
-  }
-
-  // Si estamos en login o no hay token, mostrar inmediatamente
-  if (isLoginPage || !token) {
-    // Forzar inicialización si no está inicializado
-    if (!isInitialized) {
-      setIsInitialized(true);
-    }
   }
 
   return (
@@ -175,6 +177,10 @@ function App() {
       </Routes>
     </Suspense>
   );
+}
+
+function App() {
+  return <AppContent />;
 }
 
 export default App;
