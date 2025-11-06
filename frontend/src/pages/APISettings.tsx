@@ -333,14 +333,15 @@ export default function APISettings() {
         if (field.required && !value.trim()) {
           throw new Error(`El campo "${field.label}" es requerido`);
         }
-        if (value.trim()) {
+        // Incluir campos incluso si están vacíos para AliExpress (twoFactorEnabled puede ser false)
+        if (value.trim() || (apiName === 'aliexpress' && field.key === 'twoFactorEnabled')) {
           // Mapear el nombre del campo al formato esperado por el backend
           const backendKey = fieldMapping[field.key] || field.key.toLowerCase();
           
           // Manejar campos booleanos
           if (field.key === 'twoFactorEnabled') {
             credentials[backendKey] = value.trim().toLowerCase() === 'true' || value === true;
-          } else {
+          } else if (value.trim()) {
             credentials[backendKey] = value.trim();
           }
         }
@@ -369,9 +370,18 @@ export default function APISettings() {
         if (credentials.twoFactorEnabled === undefined) {
           credentials.twoFactorEnabled = false;
         }
-        // Validar que email y password estén presentes
+        // Validar que email y password estén presentes ANTES de enviar
         if (!credentials.email || !credentials.password) {
           throw new Error('Email y Password son requeridos para AliExpress');
+        }
+        // Validar formato de email
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(credentials.email)) {
+          throw new Error('El email debe tener un formato válido');
+        }
+        // Asegurar que twoFactorSecret solo se incluya si twoFactorEnabled es true
+        if (!credentials.twoFactorEnabled && credentials.twoFactorSecret) {
+          delete credentials.twoFactorSecret;
         }
       }
 
