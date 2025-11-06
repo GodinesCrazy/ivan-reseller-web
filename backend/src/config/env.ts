@@ -6,30 +6,75 @@ dotenv.config();
 // Debug: Mostrar información sobre DATABASE_URL antes de validar
 function getDatabaseUrl(): string {
   // Intentar múltiples nombres de variables comunes en Railway
-  const dbUrl = 
-    process.env.DATABASE_URL || 
-    process.env.POSTGRES_URL || 
-    process.env.POSTGRES_PRISMA_URL ||
-    process.env.DATABASE_PRISMA_URL ||
-    process.env.PGDATABASE ||
-    '';
+  // Railway puede usar diferentes nombres según la configuración
+  const possibleNames = [
+    'DATABASE_URL',
+    'POSTGRES_URL',
+    'POSTGRES_PRISMA_URL',
+    'DATABASE_PRISMA_URL',
+    'PGDATABASE',
+    'POSTGRES_URL_NON_POOLING',
+    'POSTGRES_URL_POOLING',
+  ];
+
+  let dbUrl = '';
+  let foundName = '';
+
+  for (const name of possibleNames) {
+    if (process.env[name]) {
+      dbUrl = process.env[name];
+      foundName = name;
+      break;
+    }
+  }
+
+  // Si no encontramos ninguna, buscar variables que contengan "DATABASE" o "POSTGRES"
+  if (!dbUrl) {
+    const dbRelatedVars = Object.keys(process.env).filter(
+      k => (k.includes('DATABASE') || k.includes('POSTGRES')) && 
+           process.env[k]?.startsWith('postgres')
+    );
+    
+    if (dbRelatedVars.length > 0) {
+      console.log(`⚠️  DATABASE_URL no encontrada, pero se encontraron variables relacionadas: ${dbRelatedVars.join(', ')}`);
+      // Intentar usar la primera que parezca válida
+      for (const varName of dbRelatedVars) {
+        const value = process.env[varName];
+        if (value && (value.startsWith('postgresql://') || value.startsWith('postgres://'))) {
+          dbUrl = value;
+          foundName = varName;
+          console.log(`   → Usando ${varName} como DATABASE_URL`);
+          break;
+        }
+      }
+    }
+  }
 
   if (dbUrl) {
-    // Mostrar información de debugging (sin mostrar la contraseña completa)
-    const url = new URL(dbUrl);
-    const maskedPassword = url.password ? 
-      (url.password.substring(0, 4) + '***' + url.password.substring(url.password.length - 4)) : 
-      '***';
-    const maskedUrl = `${url.protocol}//${url.username}:${maskedPassword}@${url.host}${url.pathname}`;
-    
-    console.log('🔍 DATABASE_URL encontrada:');
-    console.log(`   ${maskedUrl}`);
-    console.log(`   Host: ${url.hostname}`);
-    console.log(`   Port: ${url.port || '5432'}`);
-    console.log(`   Database: ${url.pathname.replace('/', '')}`);
+    try {
+      // Mostrar información de debugging (sin mostrar la contraseña completa)
+      const url = new URL(dbUrl);
+      const maskedPassword = url.password ? 
+        (url.password.substring(0, 4) + '***' + url.password.substring(url.password.length - 4)) : 
+        '***';
+      const maskedUrl = `${url.protocol}//${url.username}:${maskedPassword}@${url.host}${url.pathname}`;
+      
+      console.log('🔍 DATABASE_URL encontrada:');
+      console.log(`   Variable: ${foundName}`);
+      console.log(`   ${maskedUrl}`);
+      console.log(`   Host: ${url.hostname}`);
+      console.log(`   Port: ${url.port || '5432'}`);
+      console.log(`   Database: ${url.pathname.replace('/', '')}`);
+      console.log(`   User: ${url.username}`);
+    } catch (e) {
+      console.error('⚠️  No se pudo parsear DATABASE_URL:', e);
+    }
   } else {
     console.error('❌ ERROR: DATABASE_URL no encontrada');
-    console.error('   Variables disponibles:', Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('POSTGRES')));
+    const allDbVars = Object.keys(process.env).filter(
+      k => k.includes('DATABASE') || k.includes('POSTGRES') || k.includes('PG')
+    );
+    console.error(`   Variables relacionadas encontradas: ${allDbVars.length > 0 ? allDbVars.join(', ') : 'ninguna'}`);
   }
 
   return dbUrl;
@@ -66,9 +111,13 @@ const envSchema = z.object({
 });
 
 // Asegurar que DATABASE_URL esté en process.env
+// Esto es crítico para que Prisma funcione correctamente
 if (!process.env.DATABASE_URL && databaseUrl) {
   process.env.DATABASE_URL = databaseUrl;
+  console.log('✅ DATABASE_URL configurada desde variable alternativa');
 }
+
+// Si aún no tenemos DATABASE_URL, el schema de Zod fallará con un mensaje claro
 
 export const env = envSchema.parse(process.env);
 
