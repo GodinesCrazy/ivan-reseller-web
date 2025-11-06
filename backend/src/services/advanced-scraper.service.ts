@@ -85,7 +85,15 @@ export class AdvancedMarketplaceScraper {
         console.log('🛡️  CAPTCHA detectado, aplicando evasión...');
         const solved = await this.solveCaptcha(page);
         if (!solved) {
-          throw new Error('No se pudo evadir el CAPTCHA');
+          // Verificar nuevamente si el CAPTCHA sigue presente
+          const stillHasCaptcha = await this.checkForCaptcha(page);
+          if (stillHasCaptcha) {
+            // Lanzar error específico para CAPTCHA que requiere intervención manual
+            const captchaError: any = new Error('CAPTCHA_REQUIRED');
+            captchaError.code = 'CAPTCHA_REQUIRED';
+            captchaError.message = 'Se requiere resolver CAPTCHA manualmente. El sistema no pudo resolverlo automáticamente.';
+            throw captchaError;
+          }
         }
       }
 
