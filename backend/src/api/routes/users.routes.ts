@@ -57,8 +57,12 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = parseInt(req.params.id);
     
+    // Normalizar rol a mayúsculas para comparación case-insensitive
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    
     // Users can only view their own profile, unless they're admin
-    if (req.user?.role !== 'ADMIN' && req.user?.userId !== userId) {
+    if (!isAdmin && req.user?.userId !== userId) {
       return res.status(403).json({
         success: false,
         message: 'You can only view your own profile'
@@ -77,8 +81,12 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = parseInt(req.params.id);
     
+    // Normalizar rol a mayúsculas para comparación case-insensitive
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    
     // Users can only update their own profile, unless they're admin
-    if (req.user?.role !== 'ADMIN' && req.user?.userId !== userId) {
+    if (!isAdmin && req.user?.userId !== userId) {
       return res.status(403).json({
         success: false,
         message: 'You can only update your own profile'
@@ -88,7 +96,7 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
     const data = updateUserSchema.parse(req.body);
     
     // Only admins can change roles
-    if (data.role && req.user?.role !== 'ADMIN') {
+    if (data.role && !isAdmin) {
       delete data.role;
     }
 
@@ -122,8 +130,12 @@ router.get('/:id/stats', async (req: Request, res: Response, next: NextFunction)
   try {
     const userId = parseInt(req.params.id);
     
+    // Normalizar rol a mayúsculas para comparación case-insensitive
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    
     // Users can only view their own stats, unless they're admin
-    if (req.user?.role !== 'ADMIN' && req.user?.userId !== userId) {
+    if (!isAdmin && req.user?.userId !== userId) {
       return res.status(403).json({
         success: false,
         message: 'You can only view your own stats'

@@ -21,7 +21,10 @@ const createSaleSchema = z.object({
 // GET /api/sales - Listar ventas
 router.get('/', async (req: Request, res: Response, next) => {
   try {
-    const userId = req.user?.role === 'ADMIN' ? undefined : String(req.user?.userId || '');
+    // Normalizar rol a mayúsculas para comparación case-insensitive
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? undefined : String(req.user?.userId || '');
     const status = req.query.status as string | undefined;
     const sales = await saleService.getSales(userId, status as any);
     

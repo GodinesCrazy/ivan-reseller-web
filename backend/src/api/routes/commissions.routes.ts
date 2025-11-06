@@ -10,7 +10,10 @@ router.use(authenticate);
 // GET /api/commissions - Listar comisiones
 router.get('/', async (req: Request, res: Response, next) => {
   try {
-    const userId = req.user?.role === 'ADMIN' ? undefined : req.user?.userId;
+    // Normalizar rol a mayúsculas para comparación case-insensitive
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? undefined : req.user?.userId;
     const status = req.query.status as string | undefined;
     const commissions = await commissionService.getCommissions(userId, status);
     
@@ -35,7 +38,10 @@ router.get('/', async (req: Request, res: Response, next) => {
 // GET /api/commissions/stats - Estadísticas
 router.get('/stats', async (req: Request, res: Response, next) => {
   try {
-    const userId = req.user?.role === 'ADMIN' ? undefined : req.user?.userId;
+    // Normalizar rol a mayúsculas para comparación case-insensitive
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? undefined : req.user?.userId;
     const stats = await commissionService.getCommissionStats(userId ? String(userId) : undefined);
     
     // ✅ Mapear estadísticas al formato esperado por el frontend
