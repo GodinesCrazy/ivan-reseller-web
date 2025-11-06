@@ -409,14 +409,18 @@ export class AutopilotSystem extends EventEmitter {
   /**
    * Run a single complete cycle
    */
-  public async runSingleCycle(query?: string): Promise<CycleResult> {
+  public async runSingleCycle(query?: string, userId?: number, environment?: 'sandbox' | 'production'): Promise<CycleResult> {
     const cycleStart = Date.now();
+    
+    // ✅ Definir userId y environment
+    const currentUserId = userId || 1;
+    const userEnvironment = environment || 'sandbox';
     
     try {
       this.stats.currentStatus = 'running';
       this.emit('cycle:started', { timestamp: new Date(), query });
 
-      logger.info('Autopilot: Starting new cycle', { query });
+      logger.info('Autopilot: Starting new cycle', { query, userId: currentUserId, environment: userEnvironment });
 
       // 1. Select optimal query
       const selectedQuery = query || this.selectOptimalQuery();
@@ -424,8 +428,8 @@ export class AutopilotSystem extends EventEmitter {
 
       logger.info('Autopilot: Selected query', { query: selectedQuery, category });
 
-      // 2. Check available capital
-      const availableCapital = await this.getAvailableCapital();
+      // 2. Check available capital (con userId)
+      const availableCapital = await this.getAvailableCapital(currentUserId);
       
       if (availableCapital <= 0) {
         const result: CycleResult = {

@@ -53,7 +53,7 @@ export class ProductService {
     await prisma.activity.create({
       data: {
         userId,
-        type: 'PRODUCT_CREATED',
+        action: 'PRODUCT_CREATED',
         description: `Producto creado: ${product.title}`,
         metadata: JSON.stringify({ productId: product.id }),
       },
@@ -148,9 +148,9 @@ export class ProductService {
     await prisma.activity.create({
       data: {
         userId,
-        type: 'PRODUCT_UPDATED',
+        action: 'PRODUCT_UPDATED',
         description: `Producto actualizado: ${updated.title}`,
-        metadata: { productId: id },
+        metadata: JSON.stringify({ productId: id }),
       },
     });
 
@@ -178,7 +178,7 @@ export class ProductService {
     await prisma.activity.create({
       data: {
         userId: adminId,
-        type: 'PRODUCT_STATUS_CHANGED',
+        action: 'PRODUCT_STATUS_CHANGED',
         description: `Estado del producto "${product.title}" cambiado a ${status}`,
         metadata: { productId: id, newStatus: status },
       },
@@ -188,7 +188,7 @@ export class ProductService {
     await prisma.activity.create({
       data: {
         userId: product.userId,
-        type: 'PRODUCT_STATUS_CHANGED',
+        action: 'PRODUCT_STATUS_CHANGED',
         description: `Tu producto "${product.title}" ahora está ${status}`,
         metadata: { productId: id, newStatus: status },
       },
@@ -220,9 +220,9 @@ export class ProductService {
     await prisma.activity.create({
       data: {
         userId,
-        type: 'PRODUCT_DELETED',
+        action: 'PRODUCT_DELETED',
         description: `Producto eliminado: ${product.title}`,
-        metadata: { productId: id },
+        metadata: JSON.stringify({ productId: id }),
       },
     });
 

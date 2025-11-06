@@ -144,9 +144,9 @@ export class SaleService {
     await prisma.activity.create({
       data: {
         userId,
-        type: 'SALE_CREATED',
+        action: 'SALE_CREATED',
         description: `Venta registrada: ${sale.orderId} - $${sale.salePrice}`,
-        metadata: { saleId: sale.id, orderId: sale.orderId },
+        metadata: JSON.stringify({ saleId: sale.id, orderId: sale.orderId }),
       },
     });
 
@@ -361,9 +361,9 @@ export class SaleService {
     await prisma.activity.create({
       data: {
         userId: sale.userId,
-        type: 'SALE_STATUS_CHANGED',
+        action: 'SALE_STATUS_CHANGED',
         description: `Estado de venta ${sale.orderId} cambiado a ${status}`,
-        metadata: { saleId: id, newStatus: status },
+        metadata: JSON.stringify({ saleId: id, newStatus: status }),
       },
     });
 
