@@ -17,7 +17,23 @@ interface OpportunityItem {
   marketDemand: string;
   confidenceScore: number;
   targetMarketplaces: string[];
+  feesConsidered?: Record<string, number>;
   generatedAt: string;
+}
+
+// Componente de skeleton para tabla
+function TableSkeleton({ rows, columns }: { rows: number; columns: number }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex gap-2">
+          {Array.from({ length: columns }).map((_, j) => (
+            <div key={j} className="h-12 bg-gray-200 rounded animate-pulse flex-1" />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function Opportunities() {
@@ -104,34 +120,96 @@ export default function Opportunities() {
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="text-left p-3">Title</th>
-                <th className="text-right p-3">Cost (USD)</th>
-                <th className="text-right p-3">Suggested (USD)</th>
-                <th className="text-right p-3">Margin %</th>
+                <th className="text-center p-3">Imagen</th>
+                <th className="text-left p-3">Título</th>
+                <th className="text-right p-3">Costo (USD)</th>
+                <th className="text-right p-3">Precio Sugerido (USD)</th>
+                <th className="text-right p-3">Margen %</th>
                 <th className="text-right p-3">ROI %</th>
-                <th className="text-center p-3">Competition</th>
-                <th className="text-center p-3">Targets</th>
-                <th className="text-center p-3">Source</th>
+                <th className="text-center p-3">Competencia</th>
+                <th className="text-center p-3">Marketplaces</th>
+                <th className="text-center p-3">Link</th>
               </tr>
             </thead>
             <tbody>
               {items.map((it, idx) => (
-              <tr key={idx} className="border-t">
-                <td className="p-3">
-                  <div className="font-medium line-clamp-2">{it.title}</div>
-                  <div className="text-xs text-gray-500">Conf: {Math.round((it.confidenceScore || 0) * 100) / 100}%</div>
+              <tr key={idx} className="border-t hover:bg-gray-50">
+                <td className="p-3 text-center">
+                  {it.image ? (
+                    <img 
+                      src={it.image} 
+                      alt={it.title} 
+                      className="w-16 h-16 object-cover rounded border border-gray-200"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/64x64?text=No+Image';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-gray-100 rounded border border-gray-200 flex items-center justify-center text-xs text-gray-400">
+                      Sin imagen
+                    </div>
+                  )}
                 </td>
-                <td className="p-3 text-right">${it.costUsd.toFixed(2)}</td>
-                <td className="p-3 text-right">${it.suggestedPriceUsd.toFixed(2)}</td>
-                <td className="p-3 text-right">{Math.round(it.profitMargin * 100)}%</td>
-                <td className="p-3 text-right">{Math.round(it.roiPercentage)}%</td>
-                <td className="p-3 text-center capitalize">{it.competitionLevel}</td>
-                <td className="p-3 text-center">{(it.targetMarketplaces || []).join(', ')}</td>
-                <td className="p-3 text-center"><a className="text-primary-600 underline" href={it.aliexpressUrl} target="_blank" rel="noreferrer">AliExpress</a></td>
+                <td className="p-3">
+                  <div className="font-medium line-clamp-2 max-w-xs">{it.title}</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Confianza: {Math.round((it.confidenceScore || 0) * 100)}% | 
+                    ID: {it.productId || 'N/A'}
+                  </div>
+                  {it.feesConsidered && Object.keys(it.feesConsidered).length > 0 && (
+                    <div className="text-xs text-blue-600 mt-1 cursor-help" title={Object.entries(it.feesConsidered).map(([k, v]) => `${k}: $${v.toFixed(2)}`).join(', ')}>
+                      Fees: ${Object.values(it.feesConsidered).reduce((a, b) => a + b, 0).toFixed(2)}
+                    </div>
+                  )}
+                </td>
+                <td className="p-3 text-right font-semibold">${it.costUsd.toFixed(2)}</td>
+                <td className="p-3 text-right font-semibold text-green-600">${it.suggestedPriceUsd.toFixed(2)}</td>
+                <td className="p-3 text-right">
+                  <span className={`font-semibold ${it.profitMargin >= 0.3 ? 'text-green-600' : it.profitMargin >= 0.2 ? 'text-yellow-600' : 'text-red-600'}`}>
+                    {Math.round(it.profitMargin * 100)}%
+                  </span>
+                </td>
+                <td className="p-3 text-right">
+                  <span className={`font-semibold ${it.roiPercentage >= 50 ? 'text-green-600' : it.roiPercentage >= 30 ? 'text-yellow-600' : 'text-red-600'}`}>
+                    {Math.round(it.roiPercentage)}%
+                  </span>
+                </td>
+                <td className="p-3 text-center">
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                    it.competitionLevel === 'low' ? 'bg-green-100 text-green-800' :
+                    it.competitionLevel === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                    it.competitionLevel === 'high' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    {it.competitionLevel === 'unknown' ? 'N/A' : it.competitionLevel}
+                  </span>
+                </td>
+                <td className="p-3 text-center">
+                  <div className="flex flex-wrap gap-1 justify-center">
+                    {it.targetMarketplaces?.map((mp, i) => (
+                      <span key={i} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                        {mp}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+                <td className="p-3 text-center">
+                  <a 
+                    href={it.aliexpressUrl} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors text-xs font-medium"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    Ver Producto
+                  </a>
+                </td>
               </tr>
             ))}
               {items.length === 0 && (
-                <tr><td className="p-6 text-center text-gray-500" colSpan={8}>No results</td></tr>
+                <tr><td className="p-6 text-center text-gray-500" colSpan={9}>No se encontraron resultados</td></tr>
               )}
             </tbody>
           </table>
