@@ -71,23 +71,38 @@ async function runMigrations() {
 
 async function startServer() {
   try {
+    console.log('🚀 Iniciando servidor...');
+    console.log(`📦 Environment: ${env.NODE_ENV}`);
+    console.log(`🔌 Port: ${PORT}`);
+    
     // Run migrations before connecting
+    console.log('🔄 Ejecutando migraciones...');
     await runMigrations();
     
     // Test database connection
+    console.log('🔌 Conectando a la base de datos...');
     await prisma.$connect();
     console.log('✅ Database connected');
     
     // Asegurar que el usuario admin existe (verificación final)
-    await ensureAdminUser();
+    // No bloqueamos el inicio del servidor si esto falla
+    console.log('👤 Verificando usuario admin...');
+    ensureAdminUser().catch((error) => {
+      console.error('⚠️  Warning: No se pudo verificar/crear usuario admin:', error.message);
+      console.log('⚠️  El servidor continuará iniciando. El usuario admin puede no existir.');
+    });
 
     // Test Redis connection (only if configured)
     if (isRedisAvailable) {
+      console.log('🔌 Conectando a Redis...');
       await redis.ping();
       console.log('✅ Redis connected');
+    } else {
+      console.log('⚠️  Redis no configurado, continuando sin Redis');
     }
 
     // Start server
+    console.log('🌐 Iniciando servidor HTTP...');
     app.listen(PORT, '0.0.0.0', () => {
       console.log('');
       console.log('🚀 Ivan Reseller API Server');
