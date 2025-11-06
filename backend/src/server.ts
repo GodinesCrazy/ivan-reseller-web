@@ -52,7 +52,37 @@ async function runMigrations(maxRetries = 3): Promise<void> {
       console.log(`🔄 Running database migrations... (attempt ${attempt + 1}/${maxRetries})`);
       console.log(`   DATABASE_URL: ${env.DATABASE_URL ? '✅ Configurada' : '❌ No configurada'}`);
       
-      await execAsync('npx prisma migrate deploy');
+      const migrateResult = await execAsync('npx prisma migrate deploy', {
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+      });
+      
+      // Verificar si realmente se ejecutaron las migraciones
+      if (migrateResult.stdout) {
+        console.log('   Migration output:', migrateResult.stdout.substring(0, 300));
+      }
+      if (migrateResult.stderr && !migrateResult.stderr.includes('Tip:')) {
+        console.log('   Migration warnings:', migrateResult.stderr.substring(0, 200));
+      }
+      
+      // Verificar que las tablas existan después de las migraciones
+      try {
+        const tablesResult = await prisma.$queryRaw<Array<{tablename: string}>>`
+          SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('users', 'User');
+        `;
+        if (tablesResult.length === 0) {
+          console.log('⚠️  No se encontraron tablas después de las migraciones');
+          console.log('   Intentando usar prisma db push como alternativa...');
+          await execAsync('npx prisma db push --accept-data-loss', {
+            maxBuffer: 10 * 1024 * 1024,
+          });
+          console.log('✅ Schema aplicado con db push');
+        } else {
+          console.log(`✅ Tablas encontradas: ${tablesResult.map(t => t.tablename).join(', ')}`);
+        }
+      } catch (verifyError) {
+        console.log('⚠️  No se pudo verificar tablas, pero continuando...');
+      }
+      
       console.log('✅ Migrations completed');
       
       // Intentar ejecutar seed completo
