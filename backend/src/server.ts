@@ -64,15 +64,36 @@ async function runMigrations(maxRetries = 3): Promise<void> {
         console.log('   Migration warnings:', migrateResult.stderr.substring(0, 200));
       }
       
-      // Verificar que las tablas existan después de las migraciones
+      // Verificar que las tablas existan después de las migraciones con los nombres correctos
       try {
         await prisma.$connect(); // Asegurar conexión antes de verificar
         const tablesResult = await prisma.$queryRaw<Array<{tablename: string}>>`
-          SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('users', 'User', 'products', 'sales');
+          SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('users', 'User', 'products', 'Product', 'sales', 'Sale');
         `;
-        if (tablesResult.length === 0) {
+        
+        // Verificar si las tablas tienen los nombres correctos (minúsculas según @@map)
+        const correctTables = tablesResult.filter(t => 
+          ['users', 'products', 'sales', 'commissions', 'activities', 'api_credentials'].includes(t.tablename.toLowerCase())
+        );
+        const incorrectTables = tablesResult.filter(t => 
+          ['User', 'Product', 'Sale', 'Commission', 'Activity', 'ApiCredential'].includes(t.tablename)
+        );
+        
+        if (incorrectTables.length > 0 && correctTables.length === 0) {
+          console.log('⚠️  Tablas encontradas con nombres incorrectos (PascalCase):', incorrectTables.map(t => t.tablename).join(', '));
+          console.log('   Prisma espera nombres en minúsculas según @@map');
+          console.log('   Usando prisma db push para sincronizar el schema...');
+          try {
+            await execAsync('npx prisma db push --accept-data-loss --skip-generate', {
+              maxBuffer: 10 * 1024 * 1024,
+            });
+            console.log('✅ Schema sincronizado con db push');
+          } catch (dbPushError: any) {
+            console.error('⚠️  db push falló:', dbPushError.message?.substring(0, 200));
+            // Continuar de todas formas
+          }
+        } else if (tablesResult.length === 0) {
           console.log('⚠️  No se encontraron tablas después de las migraciones');
-          console.log('   Las migraciones pueden no haberse ejecutado correctamente');
           console.log('   Intentando usar prisma db push como alternativa...');
           try {
             await execAsync('npx prisma db push --accept-data-loss --skip-generate', {
@@ -81,14 +102,33 @@ async function runMigrations(maxRetries = 3): Promise<void> {
             console.log('✅ Schema aplicado con db push');
           } catch (dbPushError: any) {
             console.error('⚠️  db push también falló:', dbPushError.message?.substring(0, 200));
-            // Continuar de todas formas, puede que las tablas existan pero con otro nombre
           }
         } else {
           console.log(`✅ Tablas encontradas: ${tablesResult.map(t => t.tablename).join(', ')}`);
+          // Verificar si necesitamos sincronizar nombres
+          if (correctTables.length === 0 && incorrectTables.length > 0) {
+            console.log('   ⚠️  Las tablas tienen nombres incorrectos, sincronizando...');
+            try {
+              await execAsync('npx prisma db push --accept-data-loss --skip-generate', {
+                maxBuffer: 10 * 1024 * 1024,
+              });
+              console.log('✅ Schema sincronizado');
+            } catch (dbPushError: any) {
+              console.error('⚠️  No se pudo sincronizar:', dbPushError.message?.substring(0, 200));
+            }
+          }
         }
       } catch (verifyError: any) {
         console.log('⚠️  No se pudo verificar tablas:', verifyError.message?.substring(0, 100));
-        console.log('   Continuando de todas formas...');
+        console.log('   Intentando db push directamente...');
+        try {
+          await execAsync('npx prisma db push --accept-data-loss --skip-generate', {
+            maxBuffer: 10 * 1024 * 1024,
+          });
+          console.log('✅ Schema aplicado con db push');
+        } catch (dbPushError: any) {
+          console.error('⚠️  db push falló:', dbPushError.message?.substring(0, 200));
+        }
       }
       
       console.log('✅ Migrations completed');
