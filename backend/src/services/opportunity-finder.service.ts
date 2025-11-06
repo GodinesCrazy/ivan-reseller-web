@@ -62,6 +62,28 @@ class OpportunityFinderService {
     } catch (nativeError: any) {
       console.warn('⚠️  Scraping nativo falló, intentando bridge Python:', nativeError.message);
       
+      // Verificar si el error es por CAPTCHA que requiere intervención manual
+      const nativeMsg = String(nativeError?.message || '').toLowerCase();
+      const isCaptchaError = nativeError?.code === 'CAPTCHA_REQUIRED' || 
+                            nativeMsg.includes('captcha') || 
+                            nativeMsg.includes('no se pudo evadir');
+      
+      if (isCaptchaError) {
+        // Notificar al usuario que necesita resolver CAPTCHA manualmente
+        await notificationService.sendToUser(userId, {
+          type: 'USER_ACTION',
+          title: 'CAPTCHA detectado en AliExpress',
+          message: 'El scraping nativo detectó un CAPTCHA que requiere resolución manual. El sistema intentará usar el bridge Python como alternativa.',
+          priority: 'HIGH',
+          category: 'SYSTEM',
+          data: { source: 'aliexpress', step: 'scrape', method: 'native' },
+          actions: [
+            { id: 'open_captcha', label: 'Abrir CAPTCHA', url: '/api/captcha/stats', variant: 'primary' },
+            { id: 'continuar_luego', label: 'Continuar luego', action: 'dismiss', variant: 'secondary' }
+          ]
+        });
+      }
+      
       // PRIORIDAD 2: Fallback a bridge Python si el scraping nativo falla
       try {
         const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
