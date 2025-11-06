@@ -96,7 +96,7 @@ class OpportunityFinderService {
       const analysis = await competitorAnalyzer.analyzeCompetition(
         userId,
         product.title,
-        marketplaces,
+        marketplaces as ('ebay' | 'amazon' | 'mercadolibre')[],
         region
       );
 
@@ -120,7 +120,7 @@ class OpportunityFinderService {
           { shippingCost: 0, taxesPct: 0, otherCosts: 0 }
         );
         if (margin > best.margin) {
-          best = { margin, price: a.competitivePrice, mp: a.marketplace };
+          best = { margin, price: a.competitivePrice, mp: a.marketplace, currency: a.currency || 'USD' };
           bestBreakdown = breakdown as any;
         }
       }
