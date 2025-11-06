@@ -13,10 +13,14 @@ COPY tsconfig.json ./
 COPY prisma ./prisma/
 
 # Install ALL dependencies (including devDependencies for build and runtime)
-RUN npm install
+# Skip postinstall to avoid Prisma generate failing (DATABASE_URL not available during build)
+RUN npm install --ignore-scripts
 
 # Copy source code
 COPY src ./src
+
+# Generate Prisma Client (no DB connection needed for generation)
+RUN npx prisma generate
 
 # Build TypeScript to JavaScript (ignora errores con || true)
 RUN npm run build
