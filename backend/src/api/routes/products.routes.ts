@@ -27,7 +27,10 @@ const updateProductSchema = createProductSchema.partial();
 // GET /api/products - Listar productos
 router.get('/', async (req: Request, res: Response, next) => {
   try {
-    const userId = req.user?.role === 'ADMIN' ? undefined : req.user?.userId;
+    // Normalizar rol a mayúsculas para comparación case-insensitive
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? undefined : req.user?.userId;
     const status = req.query.status as string | undefined;
     const products = await productService.getProducts(userId, status);
     
@@ -52,7 +55,10 @@ router.get('/', async (req: Request, res: Response, next) => {
 // GET /api/products/stats - Estadísticas
 router.get('/stats', async (req: Request, res: Response, next) => {
   try {
-    const userId = req.user?.role === 'ADMIN' ? undefined : req.user?.userId;
+    // Normalizar rol a mayúsculas para comparación case-insensitive
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? undefined : req.user?.userId;
     const stats = await productService.getProductStats(userId);
     res.json(stats);
   } catch (error) {
@@ -115,7 +121,9 @@ router.patch('/:id/status', authorize('ADMIN'), async (req: Request, res: Respon
 // DELETE /api/products/:id - Eliminar producto
 router.delete('/:id', async (req: Request, res: Response, next) => {
   try {
-    const isAdmin = req.user?.role === 'ADMIN';
+    // Normalizar rol a mayúsculas para comparación case-insensitive
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
     const result = await productService.deleteProduct(Number(req.params.id), req.user!.userId, isAdmin);
     res.json(result);
   } catch (error) {
