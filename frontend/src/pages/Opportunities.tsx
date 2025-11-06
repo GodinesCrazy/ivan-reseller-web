@@ -114,7 +114,7 @@ export default function Opportunities() {
       <div className="overflow-auto bg-white border rounded">
         {loading ? (
           <div className="p-4">
-            <TableSkeleton rows={5} columns={8} />
+            <TableSkeleton rows={5} columns={9} />
           </div>
         ) : (
           <table className="min-w-full text-sm">
