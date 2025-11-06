@@ -177,20 +177,40 @@ export default function APISettings() {
     setLoading(true);
     setError(null);
     try {
-      // Cargar credenciales del usuario
-      const credsResponse = await api.get('/api/api-credentials');
-      setCredentials(credsResponse.data || []);
+      // Cargar lista de APIs disponibles desde /api/settings/apis
+      const apisResponse = await api.get('/api/settings/apis');
+      const apisData = apisResponse.data?.data || [];
+      
+      // Convertir a formato de credenciales
+      const creds: APICredential[] = apisData
+        .filter((api: any) => api.status === 'configured')
+        .map((api: any) => ({
+          id: 0, // Se obtendrá del backend
+          userId: 0,
+          apiName: api.apiName || api.id,
+          isActive: api.isActive || false,
+          createdAt: api.lastUpdated || new Date().toISOString(),
+          updatedAt: api.lastUpdated || new Date().toISOString(),
+        }));
+      setCredentials(creds);
 
       // Cargar estados de todas las APIs
-      const statusResponse = await api.get('/api/api-credentials/status/all');
       const statusMap: Record<string, APIStatus> = {};
-      (statusResponse.data || []).forEach((status: APIStatus) => {
-        statusMap[status.apiName] = status;
+      apisData.forEach((api: any) => {
+        statusMap[api.apiName || api.id] = {
+          apiName: api.apiName || api.id,
+          available: api.isActive && api.status === 'configured',
+          message: api.status === 'configured' ? undefined : 'No configurada',
+        };
       });
       setStatuses(statusMap);
     } catch (err: any) {
       console.error('Error loading credentials:', err);
-      setError(err.response?.data?.message || 'Error al cargar credenciales');
+      if (err.response?.status === 404) {
+        setError('Route not found. Verificando configuración del backend...');
+      } else {
+        setError(err.response?.data?.message || err.message || 'Error al cargar credenciales');
+      }
     } finally {
       setLoading(false);
     }
@@ -224,9 +244,10 @@ export default function APISettings() {
         }
       }
 
-      // Guardar credencial
-      await api.post('/api/api-credentials', {
+      // Guardar credencial usando /api/credentials
+      await api.post('/api/credentials', {
         apiName,
+        environment: 'production', // Por defecto production
         credentials,
         isActive: true,
       });
@@ -251,7 +272,8 @@ export default function APISettings() {
     setTesting(apiName);
     setError(null);
     try {
-      const response = await api.post('/api/api-credentials/status/check', {
+      // Probar conexión - usar endpoint de settings si existe
+      const response = await api.post('/api/credentials/test', {
         apiName,
       });
 
@@ -275,7 +297,13 @@ export default function APISettings() {
   const handleToggle = async (apiName: string, currentActive: boolean) => {
     setError(null);
     try {
-      await api.post(`/api/api-credentials/${apiName}/toggle`);
+      // Toggle activo/inactivo
+      const credential = getCredentialForAPI(apiName);
+      if (credential) {
+        await api.put(`/api/credentials/${apiName}`, {
+          isActive: !currentActive,
+        });
+      }
       
       // Actualizar estado local
       setCredentials(prev => prev.map(cred =>
@@ -297,7 +325,7 @@ export default function APISettings() {
     setDeleting(apiName);
     setError(null);
     try {
-      await api.delete(`/api/api-credentials/${apiName}`);
+      await api.delete(`/api/credentials/${apiName}`);
       
       // Recargar credenciales
       await loadCredentials();
