@@ -56,8 +56,10 @@ async function main() {
 
   console.log('✅ Usuario demo creado:', demo.username);
 
-  // Crear productos de ejemplo
-  const products = await Promise.all([
+  // Crear productos de ejemplo (con manejo de errores)
+  let products = [];
+  try {
+    products = await Promise.all([
     prisma.product.create({
       data: {
         title: 'Audífonos Bluetooth Premium',
@@ -99,10 +101,18 @@ async function main() {
     }),
   ]);
 
-  console.log(`✅ ${products.length} productos de ejemplo creados`);
+    console.log(`✅ ${products.length} productos de ejemplo creados`);
+  } catch (productError: any) {
+    console.warn('⚠️  Error creando productos de ejemplo:', productError.message?.substring(0, 200));
+    console.log('   Continuando sin productos de ejemplo...');
+    products = [];
+  }
 
-  // Crear ventas de ejemplo
-  const sales = await Promise.all([
+  // Crear ventas de ejemplo (solo si hay productos)
+  let sales = [];
+  if (products.length > 0) {
+    try {
+      sales = await Promise.all([
     prisma.sale.create({
       data: {
         orderId: 'ORD-2025-001',
@@ -135,10 +145,19 @@ async function main() {
     }),
   ]);
 
-  console.log(`✅ ${sales.length} ventas de ejemplo creadas`);
+      console.log(`✅ ${sales.length} ventas de ejemplo creadas`);
+    } catch (saleError: any) {
+      console.warn('⚠️  Error creando ventas de ejemplo:', saleError.message?.substring(0, 200));
+      console.log('   Continuando sin ventas de ejemplo...');
+      sales = [];
+    }
+  }
 
-  // Crear comisiones pendientes
-  const commissions = await Promise.all([
+  // Crear comisiones pendientes (solo si hay ventas)
+  let commissions = [];
+  if (sales.length > 0) {
+    try {
+      commissions = await Promise.all([
     prisma.commission.create({
       data: {
         saleId: sales[0].id,
@@ -158,7 +177,12 @@ async function main() {
     }),
   ]);
 
-  console.log(`✅ ${commissions.length} comisiones creadas`);
+      console.log(`✅ ${commissions.length} comisiones creadas`);
+    } catch (commissionError: any) {
+      console.warn('⚠️  Error creando comisiones de ejemplo:', commissionError.message?.substring(0, 200));
+      console.log('   Continuando sin comisiones de ejemplo...');
+    }
+  }
 
   console.log('\n🎉 Seed completado exitosamente!');
   console.log('\n📝 Credenciales de acceso:');
