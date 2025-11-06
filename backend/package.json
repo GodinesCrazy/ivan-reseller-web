@@ -15,7 +15,7 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:deploy": "prisma migrate deploy",
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate && node -e \"try{require('puppeteer').launch({headless:true}).then(b=>{console.log('✅ Puppeteer Chrome ready');b.close()}).catch(()=>{console.log('⚠️ Puppeteer Chrome will download on first use')})}catch(e){console.log('⚠️ Puppeteer not available')}\" || true",
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint src --ext .ts",
