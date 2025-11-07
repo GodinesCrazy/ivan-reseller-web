@@ -542,7 +542,7 @@ export class AdvancedMarketplaceScraper {
 
     try {
       // Estrategia 1: Esperar y recargar
-      await page.waitForTimeout(5000);
+      await new Promise(resolve => setTimeout(resolve, 5000));
       await page.reload({ waitUntil: 'networkidle2' });
 
       // Verificar si desapareció el CAPTCHA
@@ -572,7 +572,7 @@ export class AdvancedMarketplaceScraper {
         Math.random() * 1920,
         Math.random() * 1080
       );
-      await page.waitForTimeout(500 + Math.random() * 1000);
+      await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
     }
 
     // Scroll aleatorio
@@ -580,7 +580,7 @@ export class AdvancedMarketplaceScraper {
       window.scrollBy(0, Math.random() * 500);
     });
 
-    await page.waitForTimeout(2000);
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
   /**
@@ -622,28 +622,21 @@ export class AdvancedMarketplaceScraper {
 
   private async extractRunParamsFromPage(page: Page): Promise<any | null> {
     try {
-      const scriptContent = await page.evaluate(() => {
-        const scripts = Array.from(document.querySelectorAll('script'));
-        for (const script of scripts) {
-          const text = script.textContent || '';
-          if (text.includes('window.runParams')) {
-            return text;
-          }
-        }
-        return null;
-      });
-
-      if (!scriptContent) {
-        return null;
-      }
-
-      const match = scriptContent.match(/window\.runParams\s*=\s*(\{[\s\S]*?\});/);
+      const html = await page.content();
+      const match = html.match(/window\.runParams\s*=\s*(\{[\s\S]*?\});/);
       if (!match || match.length < 2) {
         return null;
       }
 
-      const jsonString = match[1];
-      return JSON.parse(jsonString);
+      const runParamsString = match[1];
+      try {
+        // Usar Function para evaluar el objeto (runParams contiene comillas simples y estructuras no JSON)
+        const runParams = Function(`"use strict";return (${runParamsString});`)();
+        return runParams;
+      } catch (evalError) {
+        console.log('⚠️  Error evaluando runParams con Function:', (evalError as Error).message);
+        return null;
+      }
     } catch (error) {
       console.log('⚠️  Error extrayendo runParams del HTML:', (error as Error).message);
       return null;
