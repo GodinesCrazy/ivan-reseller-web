@@ -48,6 +48,7 @@ import revenueChangeRoutes from './api/routes/revenue-change.routes';
 import financeRoutes from './api/routes/finance.routes';
 import dropshippingRoutes from './api/routes/dropshipping.routes';
 import regionalRoutes from './api/routes/regional.routes';
+import aiSuggestionsRoutes from './api/routes/ai-suggestions.routes';
 // import adminRoutes from './api/routes/admin.routes'; // Temporarily disabled
 
 const app: Application = express();
@@ -103,6 +104,7 @@ app.use('/api/dashboard', dashboardRoutes);
 
 // Additional API routes
 app.use('/api/opportunities', opportunitiesRoutes);
+app.use('/api/ai-suggestions', aiSuggestionsRoutes);
 app.use('/api/automation', automationRoutes);
 app.use('/api/autopilot', autopilotRoutes);
 app.use('/api/settings', settingsRoutes);
