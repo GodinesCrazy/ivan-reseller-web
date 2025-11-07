@@ -263,8 +263,13 @@ export class AISuggestionsService {
       // Convertir respuesta de IA a formato AISuggestion
       const suggestions = this.parseAISuggestions(aiResponse, businessData);
 
-      // Guardar sugerencias en BD
-      await this.saveSuggestions(userId, suggestions);
+      // Guardar sugerencias en BD (no crítico si falla)
+      try {
+        await this.saveSuggestions(userId, suggestions);
+      } catch (saveError: any) {
+        logger.warn('AISuggestions: Error guardando sugerencias (no crítico)', { error: saveError.message });
+        // Continuar y retornar sugerencias de todos modos
+      }
 
       return suggestions;
 
@@ -558,13 +563,21 @@ Las sugerencias deben ser:
         // Si la tabla no existe, solo loguear y continuar
         if (dbError.code === 'P2021' || dbError.message?.includes('does not exist') || dbError.message?.includes('ai_suggestions')) {
           logger.warn('AISuggestions: Tabla no existe aún, no se pueden guardar sugerencias. Ejecuta la migración.');
-          return;
+          return; // ✅ Salir silenciosamente, no es crítico
         }
-        throw dbError;
+        // Para otros errores de DB, loguear pero no lanzar
+        logger.warn('AISuggestions: Error de base de datos al guardar (no crítico)', { 
+          error: dbError.message, 
+          code: dbError.code 
+        });
+        return; // ✅ No lanzar error, solo loguear
       }
-    } catch (error) {
-      logger.error('AISuggestions: Error guardando sugerencias', { error, userId });
-      // No lanzar error, solo loguear
+    } catch (error: any) {
+      logger.error('AISuggestions: Error guardando sugerencias', { 
+        error: error?.message || String(error), 
+        userId 
+      });
+      // ✅ No lanzar error, solo loguear - guardar sugerencias no es crítico
     }
   }
 
