@@ -1144,7 +1144,7 @@ export class AdvancedMarketplaceScraper {
 
   private async tryDirectAliExpressLogin(page: Page, email: string, password: string, twoFactorSecret?: string | null): Promise<boolean> {
     try {
-      await page.goto('https://passport.aliexpress.com/mini_login.htm', { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await page.goto('https://passport.aliexpress.com/mini_login.htm?lang=en_US&appName=aebuyer&fromSite=main&returnURL=https%3A%2F%2Fwww.aliexpress.com%2F', { waitUntil: 'domcontentloaded', timeout: 45000 });
       await new Promise(resolve => setTimeout(resolve, 2000));
       await page.evaluate(() => {
         const doc = (globalThis as any).document;
@@ -1153,9 +1153,13 @@ export class AdvancedMarketplaceScraper {
           popup.parentElement.removeChild(popup);
         }
       });
-      const frame = page.mainFrame().childFrames().find(f => f.url().includes('login.alibaba.com') || f.url().includes('mini_login'));
+      let frame = page.mainFrame().childFrames().find(f => f.name() === 'alibaba-login-box' || f.url().includes('login.alibaba.com'));
+      if (!frame) {
+        await page.waitForSelector('iframe[name="alibaba-login-box"], iframe[src*="login.alibaba.com"]', { timeout: 10000 }).catch(() => {});
+        frame = page.mainFrame().childFrames().find(f => f.name() === 'alibaba-login-box' || f.url().includes('login.alibaba.com'));
+      }
       const target = frame || page.mainFrame();
-      await target.waitForSelector('input[name="loginId"], input#fm-login-id', { timeout: 5000 });
+      await target.waitForSelector('input[name="loginId"], input#fm-login-id', { timeout: 10000 });
       await target.evaluate(() => {
         const doc = (globalThis as any).document;
         const switchBtn = doc?.querySelector('.fm-switch-mode, .switch-btn, a[data-spm*="password"]');
@@ -1163,7 +1167,7 @@ export class AdvancedMarketplaceScraper {
           (switchBtn as any).click?.();
         }
       });
-      await target.waitForSelector('input[name="loginId"], input#fm-login-id', { timeout: 5000 });
+      await target.waitForSelector('input[name="loginId"], input#fm-login-id', { timeout: 10000 });
       await target.evaluate(() => {
         const doc = (globalThis as any).document;
         doc?.querySelectorAll('input').forEach((input: any) => { input.value = ''; });
@@ -1171,7 +1175,7 @@ export class AdvancedMarketplaceScraper {
       await target.type('input[name="loginId"], input#fm-login-id', email, { delay: 50 }).catch(() => {});
       await target.type('input[name="password"], input#fm-login-password', password, { delay: 50 }).catch(() => {});
       await target.click('button[type="submit"], .fm-button, .next-btn-primary').catch(() => {});
-      await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+      await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
       const cookies = await page.cookies();
       if (cookies.some(c => c.name.toLowerCase().includes('xman')) || cookies.some(c => c.name === 'intl_locale')) {
         return true;
