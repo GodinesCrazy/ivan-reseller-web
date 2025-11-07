@@ -29,6 +29,20 @@ interface ScrapedProduct {
   availability: string;
 }
 
+enum AliExpressLoginState {
+  LOGGED_IN = 'LOGGED_IN',
+  LOGIN_FORM = 'LOGIN_FORM',
+  HOME_LOGGED_OUT = 'HOME_LOGGED_OUT',
+  CAPTCHA = 'CAPTCHA',
+  LOGIN_IFRAME = 'LOGIN_IFRAME',
+  UNKNOWN = 'UNKNOWN',
+}
+
+interface AliExpressDetectionResult {
+  state: AliExpressLoginState;
+  details?: string;
+}
+
 export class AdvancedMarketplaceScraper {
   private browser: Browser | null = null;
   private isLoggedIn = false;
@@ -694,126 +708,88 @@ export class AdvancedMarketplaceScraper {
   }
 
   private async ensureAliExpressLogin(userId: number): Promise<void> {
-    if (!this.browser) {
-      await this.init();
-    }
+     if (!this.browser) {
+       await this.init();
+     }
+ 
+     if (this.isLoggedIn && this.loggedInUserId === userId) {
+       return;
+     }
+ 
+     const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', 'production');
+     if (!credentials) {
+       console.warn('⚠️  AliExpress credentials not configured for user', userId);
+       return;
+     }
+ 
+     const { email, password, twoFactorEnabled, twoFactorSecret } = credentials as AliExpressCredentials;
+     if (!email || !password) {
+       console.warn('⚠️  AliExpress credentials incomplete for user', userId);
+       return;
+     }
+ 
+     const loginPage = await this.browser!.newPage();
+ 
+     try {
+       await this.setupRealBrowser(loginPage);
+       console.log('🔐 Navigating to AliExpress login page');
+       await loginPage.goto(this.loginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
-    if (this.isLoggedIn && this.loggedInUserId === userId) {
-      return;
-    }
+       let context: FrameLike = (await this.waitForAliExpressLoginFrame(loginPage)) || loginPage;
+       let attempts = 0;
+       let lastState: AliExpressLoginState = AliExpressLoginState.UNKNOWN;
 
-    const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', 'production');
-    if (!credentials) {
-      console.warn('⚠️  AliExpress credentials not configured for user', userId);
-      return;
-    }
+       while (attempts < 8) {
+         attempts += 1;
+         await this.handleAliExpressPopups(context);
+         const detection = await this.detectAliExpressState(context);
+         lastState = detection.state;
+         console.log(`🔐 AliExpress state [${attempts}]: ${detection.state}${detection.details ? ` (${detection.details})` : ''}`);
 
-    const { email, password, twoFactorEnabled } = credentials as AliExpressCredentials;
-    if (!email || !password) {
-      console.warn('⚠️  AliExpress credentials incomplete for user', userId);
-      return;
-    }
+         switch (detection.state) {
+           case AliExpressLoginState.LOGGED_IN:
+             await this.persistAliExpressSession(loginPage, userId, {
+               email,
+               password,
+               twoFactorEnabled: !!twoFactorEnabled,
+               twoFactorSecret,
+             });
+             return;
+           case AliExpressLoginState.LOGIN_FORM: {
+             const success = await this.runAliExpressLoginForm(context, email, password);
+             if (!success) {
+               console.warn('⚠️  Login form interaction failed, reloading frame context');
+             }
+             break;
+           }
+           case AliExpressLoginState.HOME_LOGGED_OUT:
+             await this.openLoginFromHeader(loginPage);
+             break;
+           case AliExpressLoginState.LOGIN_IFRAME:
+             context = (await this.waitForAliExpressLoginFrame(loginPage)) || context;
+             break;
+           case AliExpressLoginState.CAPTCHA:
+             console.warn('⚠️  AliExpress captcha detected. Manual resolution required.');
+             await this.captureAliExpressSnapshot(loginPage, 'captcha-detected');
+             return;
+           case AliExpressLoginState.UNKNOWN:
+           default:
+             console.warn('⚠️  AliExpress state unknown, retrying...');
+             break;
+         }
 
-    const loginPage = await this.browser!.newPage();
+         await new Promise(resolve => setTimeout(resolve, 1500));
+         context = (await this.waitForAliExpressLoginFrame(loginPage)) || loginPage;
+       }
 
-    try {
-      await this.setupRealBrowser(loginPage);
-      console.log('🔐 Navigating to AliExpress login page');
-      await loginPage.goto(this.loginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-      await this.handleAliExpressPopups(loginPage);
-
-      let context: FrameLike | null = await this.waitForAliExpressLoginFrame(loginPage);
-
-      if (!context) {
-        console.log('⚠️  Login iframe not found, attempting to open login from header');
-        await this.openLoginFromHeader(loginPage);
-        await this.handleAliExpressPopups(loginPage);
-        context = await this.waitForAliExpressLoginFrame(loginPage);
-      }
-
-      const frameContext: FrameLike = context || loginPage;
-      await this.handleAliExpressPopups(frameContext);
-      await this.switchToPasswordLogin(frameContext);
-
-      const emailTyped = await this.typeIntoField(frameContext, [
-        'input#fm-login-id',
-        'input[name="fm-login-id"]',
-        'input[name="loginId"]',
-        'input[name="loginKey"]',
-        'input[data-email="true"]',
-        'input[data-placeholder*="Email"]',
-        'input[data-placeholder*="correo"]',
-      ], email);
-
-      const passwordTyped = await this.typeIntoField(frameContext, [
-        'input#fm-login-password',
-        'input[name="fm-login-password"]',
-        'input[name="password"]',
-        'input[type="password"]',
-        'input[data-placeholder*="Password"]',
-        'input[data-placeholder*="contraseña"]',
-      ], password);
-
-      if (!emailTyped || !passwordTyped) {
-        console.warn('⚠️  Unable to find login fields on AliExpress login page');
-        const snippet = await frameContext.evaluate(() => {
-          const doc = (globalThis as any).document;
-          return doc?.body?.innerText?.slice(0, 500) || null;
-        });
-        console.warn('⚠️  Login page snippet:', snippet);
-      }
-
-      const loginClicked = await this.clickIfExists(frameContext, [
-        'button[type="submit"]',
-        '.login-submit',
-        '.sign-btn',
-        '.next-btn-primary',
-        '.login-button',
-        '#login-button',
-        'button[data-spm-anchor-id*="submit"]',
-        'button[class*="fm-button"]',
-      ]);
-
-      if (!loginClicked) {
-        console.warn('⚠️  Login button not found on AliExpress login page');
-      }
-
-      await Promise.race([
-        frameContext.waitForFunction(() => !(globalThis as any).document?.location?.href.includes('login'), { timeout: 15000 }).catch(() => null),
-        new Promise((resolve) => setTimeout(resolve, 7000)),
-      ]);
-
-      const finalUrl = loginPage.url();
-      if (finalUrl.includes('login') || finalUrl.includes('passport')) {
-        console.warn('⚠️  AliExpress login may have failed, still on login page');
-      } else {
-        console.log('✅ AliExpress login successful');
-        this.isLoggedIn = true;
-        this.loggedInUserId = userId;
-
-        const storedCookies = await loginPage.cookies();
-        try {
-          await CredentialsManager.saveCredentials(userId, 'aliexpress', {
-            email,
-            password,
-            twoFactorEnabled: !!twoFactorEnabled,
-            cookies: storedCookies,
-          } as any);
-          console.log(`✅ Stored ${storedCookies.length} AliExpress cookies for user ${userId}`);
-        } catch (storeError) {
-          console.warn('⚠️  Unable to store AliExpress cookies:', (storeError as Error).message);
-        }
-      }
-
-      if (twoFactorEnabled) {
-        console.warn('⚠️  AliExpress account has 2FA enabled. Manual intervention may be required.');
-      }
-    } catch (error: any) {
-      console.error('❌ Error performing AliExpress login:', error?.message || error);
-    } finally {
-      await loginPage.close().catch(() => {});
-    }
-  }
+       console.warn(`⚠️  Unable to authenticate on AliExpress after ${attempts} steps. Last state: ${lastState}`);
+       await this.captureAliExpressSnapshot(loginPage, `login-failed-${Date.now()}`);
+     } catch (error: any) {
+       console.error('❌ Error performing AliExpress login:', error?.message || error);
+     } finally {
+       await loginPage.close().catch(() => {});
+     }
+   }
 
   private async waitForAliExpressLoginFrame(page: Page): Promise<Frame | null> {
     try {
@@ -860,6 +836,153 @@ export class AdvancedMarketplaceScraper {
       'button[data-role="password"]',
       'button[data-type="password"]',
     ]);
+  }
+
+  private async detectAliExpressState(context: FrameLike): Promise<AliExpressDetectionResult> {
+    try {
+      const info = await context.evaluate(() => {
+        const doc = (globalThis as any).document;
+        if (!doc) {
+          return {
+            hasLoginInputs: false,
+            hasCaptcha: false,
+            hasLoginLink: false,
+            hasAccountMenu: false,
+            bodySnippet: '',
+          };
+        }
+
+        const hasLoginInputs = Boolean(doc.querySelector('input#fm-login-id, input[name="fm-login-id"], input[name="loginId"], input[name="loginKey"]') &&
+          doc.querySelector('input#fm-login-password, input[name="fm-login-password"], input[name="password"], input[type="password"]') &&
+          doc.querySelector('button[type="submit"], .login-submit, .next-btn-primary, .fm-button'));
+
+        const hasCaptcha = Boolean(doc.querySelector('#nc_1_n1z, .nc-container, .captcha-container, .baxia-container'));
+
+        const hasLoginLink = Boolean(doc.querySelector('a.sign-btn, button.header-signin-btn, a[data-role="login"], a[href*="/login"], a[data-spm-anchor-id*="login"]'));
+
+        const hasAccountMenu = Boolean(doc.querySelector('a[href*="logout"], .my-account, .account-brief, .nav-user-account .account-name, .user-account-info, .myaccount-info'));
+
+        const bodySnippet = (doc.body?.innerText || '').slice(0, 200);
+
+        return {
+          hasLoginInputs,
+          hasCaptcha,
+          hasLoginLink,
+          hasAccountMenu,
+          bodySnippet,
+        };
+      });
+
+      if (info.hasAccountMenu) {
+        return { state: AliExpressLoginState.LOGGED_IN };
+      }
+      if (info.hasCaptcha) {
+        return { state: AliExpressLoginState.CAPTCHA };
+      }
+      if (info.hasLoginInputs) {
+        return { state: AliExpressLoginState.LOGIN_FORM };
+      }
+      if (info.hasLoginLink) {
+        return { state: AliExpressLoginState.HOME_LOGGED_OUT };
+      }
+
+      return { state: AliExpressLoginState.UNKNOWN, details: info.bodySnippet };
+    } catch (error) {
+      console.warn('⚠️  detectAliExpressState error:', (error as Error).message);
+      return { state: AliExpressLoginState.UNKNOWN, details: 'evaluation-error' };
+    }
+  }
+
+  private async runAliExpressLoginForm(context: FrameLike, email: string, password: string): Promise<boolean> {
+    await this.handleAliExpressPopups(context);
+    await this.switchToPasswordLogin(context);
+
+    const emailTyped = await this.typeIntoField(context, [
+      'input#fm-login-id',
+      'input[name="fm-login-id"]',
+      'input[name="loginId"]',
+      'input[name="loginKey"]',
+      'input[data-email="true"]',
+      'input[data-placeholder*="Email"]',
+      'input[data-placeholder*="correo"]',
+    ], email);
+
+    const passwordTyped = await this.typeIntoField(context, [
+      'input#fm-login-password',
+      'input[name="fm-login-password"]',
+      'input[name="password"]',
+      'input[type="password"]',
+      'input[data-placeholder*="Password"]',
+      'input[data-placeholder*="contraseña"]',
+    ], password);
+
+    if (!emailTyped || !passwordTyped) {
+      console.warn('⚠️  Unable to locate login fields inside AliExpress login form');
+      return false;
+    }
+
+    const loginClicked = await this.clickIfExists(context, [
+      'button[type="submit"]',
+      '.login-submit',
+      '.sign-btn',
+      '.next-btn-primary',
+      '.login-button',
+      '#login-button',
+      'button[data-spm-anchor-id*="submit"]',
+      'button[class*="fm-button"]',
+    ]);
+
+    if (!loginClicked) {
+      console.warn('⚠️  Login submit button not found on AliExpress login form');
+      return false;
+    }
+
+    await Promise.race([
+      context.waitForFunction(() => {
+        const w = (globalThis as any).window;
+        return !w?.location?.href?.includes('login');
+      }, { timeout: 15000 }).catch(() => null),
+      new Promise((resolve) => setTimeout(resolve, 7000)),
+    ]);
+
+    return true;
+  }
+
+  private async persistAliExpressSession(page: Page, userId: number, creds: Partial<AliExpressCredentials>): Promise<void> {
+    try {
+      const storedCookies = await page.cookies();
+      const payload: AliExpressCredentials = {
+        email: creds.email || '',
+        password: creds.password || '',
+        twoFactorEnabled: !!creds.twoFactorEnabled,
+        twoFactorSecret: creds.twoFactorSecret,
+        cookies: storedCookies,
+      } as AliExpressCredentials;
+
+      await CredentialsManager.saveCredentials(userId, 'aliexpress', payload);
+      this.isLoggedIn = true;
+      this.loggedInUserId = userId;
+      console.log(`✅ Stored ${storedCookies.length} AliExpress cookies for user ${userId}`);
+      if (payload.twoFactorEnabled) {
+        console.warn('ℹ️  AliExpress account uses 2FA. Ensure TOTP codes are up to date for future sessions.');
+      }
+    } catch (error) {
+      console.warn('⚠️  Unable to persist AliExpress session:', (error as Error).message);
+    }
+  }
+
+  private async captureAliExpressSnapshot(page: Page, label: string): Promise<void> {
+    try {
+      const url = page.url();
+      const title = await page.title().catch(() => 'unknown');
+      const snippet = await page.evaluate(() => {
+        const doc = (globalThis as any).document;
+        return doc?.body?.innerText?.slice(0, 200) || '';
+      }).catch(() => '');
+      console.log(`📸 AliExpress snapshot [${label}] url=${url} title="${title}" snippet="${snippet.replace(/\s+/g, ' ').trim()}"`);
+    } catch (error) {
+      console.warn('⚠️  Unable to capture AliExpress snapshot:', (error as Error).message);
+    }
   }
 
   private async typeIntoField(context: FrameLike, selectors: string[], value: string): Promise<boolean> {
