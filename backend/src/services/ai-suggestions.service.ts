@@ -263,12 +263,15 @@ export class AISuggestionsService {
       // Convertir respuesta de IA a formato AISuggestion
       const suggestions = this.parseAISuggestions(aiResponse, businessData);
 
-      // Guardar sugerencias en BD (no crítico si falla)
-      try {
-        await this.saveSuggestions(userId, suggestions);
-      } catch (saveError: any) {
-        logger.warn('AISuggestions: Error guardando sugerencias (no crítico)', { error: saveError.message });
-        // Continuar y retornar sugerencias de todos modos
+      // Guardar sugerencias en BD (no crítico si falla, pero intentar guardar)
+      if (suggestions.length > 0) {
+        try {
+          await this.saveSuggestions(userId, suggestions);
+          logger.info(`AISuggestions: ${suggestions.length} sugerencias guardadas para usuario ${userId}`);
+        } catch (saveError: any) {
+          logger.warn('AISuggestions: Error guardando sugerencias (no crítico)', { error: saveError.message });
+          // Continuar y retornar sugerencias de todos modos
+        }
       }
 
       return suggestions;
@@ -496,6 +499,16 @@ Las sugerencias deben ser:
         ],
         createdAt: new Date().toISOString()
       });
+    }
+
+    // ✅ Guardar sugerencias de fallback también
+    if (suggestions.length > 0) {
+      try {
+        await this.saveSuggestions(userId, suggestions);
+        logger.info(`AISuggestions: ${suggestions.length} sugerencias de fallback guardadas para usuario ${userId}`);
+      } catch (saveError: any) {
+        logger.warn('AISuggestions: Error guardando sugerencias de fallback (no crítico)', { error: saveError.message });
+      }
     }
 
     return suggestions;
