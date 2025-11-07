@@ -67,7 +67,7 @@ export class AdvancedMarketplaceScraper {
     // ESTRATEGIA 3: Buscar en el store de Nix (instalado por Nixpacks)
     if (!executablePath) {
       try {
-        const nixStorePath = execSync('find /nix/store -maxdepth 5 -type f -name chromium 2>/dev/null | head -1', { encoding: 'utf-8', timeout: 10000 }).trim();
+        const nixStorePath = execSync("find /nix/store -path '*chromium-*/bin/chromium' -type f -perm -u=x 2>/dev/null | head -1", { encoding: 'utf-8', timeout: 10000 }).trim();
         if (nixStorePath && fs.existsSync(nixStorePath)) {
           executablePath = nixStorePath;
           console.log(`✅ Encontrado Chromium en Nix store: ${executablePath}`);
