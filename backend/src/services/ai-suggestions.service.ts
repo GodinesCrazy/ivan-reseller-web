@@ -131,7 +131,7 @@ export class AISuggestionsService {
       id: p.id,
       title: p.title,
       category: p.category || 'General',
-      price: p.price || 0,
+      price: (p as any).price || 0,
       sales: p.sales.length,
       profit: p.sales.reduce((sum, s) => sum + (s.netProfit || s.grossProfit || 0), 0)
     }));
@@ -142,7 +142,7 @@ export class AISuggestionsService {
     const recentOpportunities = await prisma.opportunity.count({
       where: {
         userId,
-        generatedAt: {
+        createdAt: {
           gte: thirtyDaysAgo
         }
       }
@@ -517,47 +517,48 @@ Las sugerencias deben ser:
             }
           });
 
-        if (existing) {
-          await prisma.aISuggestion.update({
-            where: { id: existing.id },
-            data: {
-              type: suggestion.type,
-              priority: suggestion.priority,
-              description: suggestion.description,
-              impactRevenue: suggestion.impact.revenue,
-              impactTime: suggestion.impact.time,
-              difficulty: suggestion.impact.difficulty,
-              confidence: suggestion.confidence,
-              estimatedTime: suggestion.estimatedTime,
-              requirements: JSON.stringify(suggestion.requirements),
-              steps: JSON.stringify(suggestion.steps),
-              relatedProducts: suggestion.relatedProducts ? JSON.stringify(suggestion.relatedProducts) : null,
-              metrics: suggestion.metrics ? JSON.stringify(suggestion.metrics) : null,
-              updatedAt: new Date()
-            }
-          });
-        } else {
-          await prisma.aISuggestion.create({
-            data: {
-              userId,
-              type: suggestion.type,
-              priority: suggestion.priority,
-              title: suggestion.title,
-              description: suggestion.description,
-              impactRevenue: suggestion.impact.revenue,
-              impactTime: suggestion.impact.time,
-              difficulty: suggestion.impact.difficulty,
-              confidence: suggestion.confidence,
-              actionable: suggestion.actionable,
-              implemented: suggestion.implemented,
-              estimatedTime: suggestion.estimatedTime,
-              requirements: JSON.stringify(suggestion.requirements),
-              steps: JSON.stringify(suggestion.steps),
-              relatedProducts: suggestion.relatedProducts ? JSON.stringify(suggestion.relatedProducts) : null,
-              metrics: suggestion.metrics ? JSON.stringify(suggestion.metrics) : null,
-              createdAt: new Date()
-            }
-          });
+          if (existing) {
+            await prisma.aISuggestion.update({
+              where: { id: existing.id },
+              data: {
+                type: suggestion.type,
+                priority: suggestion.priority,
+                description: suggestion.description,
+                impactRevenue: suggestion.impact.revenue,
+                impactTime: suggestion.impact.time,
+                difficulty: suggestion.impact.difficulty,
+                confidence: suggestion.confidence,
+                estimatedTime: suggestion.estimatedTime,
+                requirements: JSON.stringify(suggestion.requirements),
+                steps: JSON.stringify(suggestion.steps),
+                relatedProducts: suggestion.relatedProducts ? JSON.stringify(suggestion.relatedProducts) : null,
+                metrics: suggestion.metrics ? JSON.stringify(suggestion.metrics) : null,
+                updatedAt: new Date()
+              }
+            });
+          } else {
+            await prisma.aISuggestion.create({
+              data: {
+                userId,
+                type: suggestion.type,
+                priority: suggestion.priority,
+                title: suggestion.title,
+                description: suggestion.description,
+                impactRevenue: suggestion.impact.revenue,
+                impactTime: suggestion.impact.time,
+                difficulty: suggestion.impact.difficulty,
+                confidence: suggestion.confidence,
+                actionable: suggestion.actionable,
+                implemented: suggestion.implemented,
+                estimatedTime: suggestion.estimatedTime,
+                requirements: JSON.stringify(suggestion.requirements),
+                steps: JSON.stringify(suggestion.steps),
+                relatedProducts: suggestion.relatedProducts ? JSON.stringify(suggestion.relatedProducts) : null,
+                metrics: suggestion.metrics ? JSON.stringify(suggestion.metrics) : null,
+                createdAt: new Date()
+              }
+            });
+          }
         }
       } catch (dbError: any) {
         // Si la tabla no existe, solo loguear y continuar
@@ -620,11 +621,7 @@ Las sugerencias deben ser:
         requirements: typeof s.requirements === 'string' ? JSON.parse(s.requirements) : (s.requirements || []),
         steps: typeof s.steps === 'string' ? JSON.parse(s.steps) : (s.steps || []),
         relatedProducts: typeof s.relatedProducts === 'string' ? JSON.parse(s.relatedProducts) : (s.relatedProducts || undefined),
-        metrics: s.metrics ? (typeof s.metrics === 'string' ? JSON.parse(s.metrics) : {
-          currentValue: s.metrics.currentValue,
-          targetValue: s.metrics.targetValue,
-          unit: s.metrics.unit
-        }) : undefined,
+        metrics: s.metrics ? (typeof s.metrics === 'string' ? JSON.parse(s.metrics) : (s.metrics as any)) : undefined,
         createdAt: s.createdAt.toISOString()
       }));
       } catch (dbError: any) {
