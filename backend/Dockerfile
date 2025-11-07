@@ -6,7 +6,17 @@ RUN apk add --no-cache \
     python3 \
     make \
     g++ \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
     && ln -sf python3 /usr/bin/python
+
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    CHROMIUM_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
