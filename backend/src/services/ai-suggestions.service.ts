@@ -349,7 +349,13 @@ export class AISuggestionsService {
    * Construir prompt para IA
    */
   private buildPrompt(data: UserBusinessData, category?: string): string {
-    return `Analiza los siguientes datos de un negocio de dropshipping y genera sugerencias inteligentes y accionables.
+    return `Eres un consultor experto en DROPSHIPPING automatizado. Analiza los siguientes datos de un negocio de dropshipping que opera con AliExpress como proveedor y publica en marketplaces (eBay, Amazon, MercadoLibre).
+
+CONTEXTO DEL SISTEMA:
+- Este es un sistema automatizado de dropshipping
+- Fuente de productos: AliExpress (scraping automatizado)
+- Canales de venta: eBay, Amazon, MercadoLibre (publicación automatizada)
+- El sistema tiene: búsqueda de oportunidades, scraping, publicación automática, gestión de inventario virtual, cálculo de comisiones
 
 DATOS DEL NEGOCIO:
 - Ventas totales: ${data.totalSales}
@@ -359,26 +365,65 @@ DATOS DEL NEGOCIO:
 - Margen de ganancia promedio: ${data.averageProfitMargin.toFixed(1)}%
 - Mejor categoría: ${data.bestCategory}
 - Categoría con menor rendimiento: ${data.worstCategory}
-- Oportunidades recientes: ${data.recentOpportunities}
+- Oportunidades recientes encontradas: ${data.recentOpportunities}
 
 ${category ? `FILTRO: Genera solo sugerencias de tipo "${category}"` : 'GENERA SUGERENCIAS EN TODAS LAS CATEGORÍAS'}
 
-Genera entre 5-8 sugerencias en formato JSON:
+IMPORTANTE: Las sugerencias DEBEN ser ESPECÍFICAS para DROPSHIPPING automatizado, NO genéricas de e-commerce.
+
+TIPOS DE SUGERENCIAS ESPECÍFICAS PARA DROPSHIPPING:
+
+1. PRICING (Optimización de precios):
+   - Ajustar precios basándose en competencia de marketplaces específicos
+   - Implementar repricing automático según cambios en AliExpress
+   - Optimizar márgenes considerando fees de marketplaces
+   - Ejemplo: "Ajustar precios en eBay para competir con Amazon en categoría ${data.bestCategory}"
+
+2. INVENTORY (Gestión de inventario virtual):
+   - Sincronizar disponibilidad entre marketplaces
+   - Gestionar productos sin stock en AliExpress
+   - Automatizar pausa de listados cuando AliExpress no tiene stock
+   - Ejemplo: "Configurar sincronización automática de inventario entre eBay y MercadoLibre"
+
+3. MARKETING (Campañas específicas de marketplaces):
+   - Optimizar promociones en marketplaces específicos
+   - Mejorar visibilidad en búsquedas de eBay/Amazon/MercadoLibre
+   - Ejemplo: "Crear campaña promocional en MercadoLibre para productos de ${data.bestCategory}"
+
+4. LISTING (Optimización de listados):
+   - Mejorar títulos y descripciones para SEO de marketplaces
+   - Optimizar keywords para búsquedas en AliExpress
+   - Mejorar imágenes y especificaciones para conversión
+   - Ejemplo: "Optimizar títulos de productos en ${data.worstCategory} para mejorar ranking en búsquedas de eBay"
+
+5. OPTIMIZATION (Optimizaciones del flujo):
+   - Mejorar velocidad de publicación desde AliExpress
+   - Optimizar selección de productos rentables
+   - Mejorar filtrado de oportunidades
+   - Ejemplo: "Filtrar oportunidades de ${data.worstCategory} para enfocarse en ${data.bestCategory}"
+
+6. AUTOMATION (Automatizaciones del flujo):
+   - Automatizar publicación desde oportunidades encontradas
+   - Configurar reglas de auto-aprobación de productos
+   - Automatizar repricing según competencia
+   - Ejemplo: "Configurar auto-publicación de productos con margen >40% desde AliExpress a eBay"
+
+Genera entre 5-8 sugerencias ESPECÍFICAS DE DROPSHIPPING en formato JSON:
 {
   "suggestions": [
     {
       "type": "pricing|inventory|marketing|listing|optimization|automation",
       "priority": "high|medium|low",
-      "title": "Título claro y accionable",
-      "description": "Descripción detallada de la sugerencia",
+      "title": "Título específico de dropshipping (ej: 'Optimizar precios en eBay basándose en competencia de Amazon')",
+      "description": "Descripción detallada específica para dropshipping automatizado, mencionando AliExpress y marketplaces",
       "impactRevenue": número_estimado,
       "impactTime": número_horas_ahorradas,
       "difficulty": "easy|medium|hard",
       "confidence": número_0_100,
       "estimatedTime": "X minutos/horas",
-      "requirements": ["requisito1", "requisito2"],
-      "steps": ["paso1", "paso2", "paso3"],
-      "relatedProducts": ["producto1", "producto2"] (opcional),
+      "requirements": ["requisito específico de dropshipping"],
+      "steps": ["paso específico relacionado con AliExpress/marketplaces"],
+      "relatedProducts": ["producto específico si aplica"] (opcional),
       "metrics": {
         "currentValue": número,
         "targetValue": número,
@@ -388,12 +433,12 @@ Genera entre 5-8 sugerencias en formato JSON:
   ]
 }
 
-Las sugerencias deben ser:
-- Específicas y accionables
-- Basadas en los datos reales proporcionados
-- Con impacto medible (revenue, time)
-- Con pasos claros para implementar
-- Priorizadas según impacto potencial`;
+REGLAS ESTRICTAS:
+- NO generar sugerencias genéricas como "crear listados atractivos" o "mejorar sitio web"
+- SIEMPRE mencionar AliExpress, marketplaces (eBay/Amazon/MercadoLibre), o automatización
+- Las sugerencias deben ser accionables dentro del sistema de dropshipping
+- Basarse en los datos reales proporcionados (márgenes, categorías, ventas)
+- Priorizar sugerencias que mejoren el flujo automatizado AliExpress → Marketplaces`;
   }
 
   /**
@@ -464,16 +509,16 @@ Las sugerencias deben ser:
     
     const suggestions: AISuggestion[] = [];
 
-    // Sugerencia de pricing
+    // Sugerencia de pricing específica de dropshipping
     if (data.averageProfitMargin < 30) {
       suggestions.push({
         id: `fallback_${Date.now()}_1`,
         type: 'pricing',
         priority: 'high',
-        title: 'Optimizar precios para mejorar margen de ganancia',
-        description: `Tu margen promedio es ${data.averageProfitMargin.toFixed(1)}%. Considera ajustar precios para alcanzar al menos 40% de margen.`,
+        title: 'Optimizar precios en marketplaces basándose en competencia',
+        description: `Tu margen promedio es ${data.averageProfitMargin.toFixed(1)}%. Analiza precios de competencia en eBay, Amazon y MercadoLibre para productos similares y ajusta tus precios para alcanzar al menos 40% de margen manteniendo competitividad.`,
         impact: {
-          revenue: data.totalRevenue * 0.1,
+          revenue: data.totalRevenue * 0.15,
           time: 2,
           difficulty: 'easy'
         },
@@ -481,12 +526,13 @@ Las sugerencias deben ser:
         actionable: true,
         implemented: false,
         estimatedTime: '1-2 horas',
-        requirements: ['Acceso a configuración de precios', 'Análisis de competencia'],
+        requirements: ['Acceso a configuración de precios en marketplaces', 'API de marketplaces configurada'],
         steps: [
-          'Revisar precios de productos con menor margen',
-          'Analizar precios de competencia en marketplaces',
-          'Ajustar precios incrementando 10-15%',
-          'Monitorear impacto en ventas'
+          'Revisar productos con menor margen en el sistema',
+          'Buscar productos similares en eBay, Amazon y MercadoLibre',
+          'Comparar precios de competencia vs precio de AliExpress',
+          'Ajustar precios incrementando 10-15% manteniendo competitividad',
+          'Configurar reglas de repricing automático si está disponible'
         ],
         metrics: {
           currentValue: data.averageProfitMargin,
@@ -497,57 +543,60 @@ Las sugerencias deben ser:
       });
     }
 
-    // Sugerencia de inventory
+    // Sugerencia de inventory específica de dropshipping
     if (data.activeProducts < 10) {
       suggestions.push({
         id: `fallback_${Date.now()}_2`,
         type: 'inventory',
         priority: 'medium',
-        title: 'Expandir catálogo de productos',
-        description: `Tienes ${data.activeProducts} productos activos. Considera agregar más productos en categorías exitosas como ${data.bestCategory}.`,
+        title: 'Expandir catálogo desde AliExpress usando búsqueda de oportunidades',
+        description: `Tienes ${data.activeProducts} productos activos. Usa la función de búsqueda de oportunidades para encontrar productos rentables en AliExpress en la categoría ${data.bestCategory} y publicarlos automáticamente en tus marketplaces configurados.`,
         impact: {
-          revenue: data.totalRevenue * 0.2,
-          time: 5,
+          revenue: data.totalRevenue * 0.3,
+          time: 3,
           difficulty: 'medium'
         },
-        confidence: 75,
+        confidence: 80,
         actionable: true,
         implemented: false,
-        estimatedTime: '2-3 horas',
-        requirements: ['Acceso a búsqueda de oportunidades', 'Tiempo para investigación'],
+        estimatedTime: '1-2 horas',
+        requirements: ['Acceso a búsqueda de oportunidades', 'APIs de marketplaces configuradas', 'Credenciales de AliExpress'],
         steps: [
-          'Buscar oportunidades en categoría exitosa',
-          'Evaluar margen y competencia',
-          'Crear productos desde oportunidades seleccionadas',
-          'Publicar en marketplaces'
+          'Ir a la sección "Oportunidades" del dashboard',
+          `Buscar productos en AliExpress de la categoría ${data.bestCategory}`,
+          'Revisar oportunidades encontradas y filtrar por margen >40%',
+          'Seleccionar productos rentables y crear productos desde oportunidades',
+          'Publicar automáticamente en eBay, Amazon o MercadoLibre'
         ],
         createdAt: new Date().toISOString()
       });
     }
 
-    // Sugerencia de marketing
+    // Sugerencia de listing específica de dropshipping
     if (data.totalSales > 0 && data.totalSales < 20) {
       suggestions.push({
         id: `fallback_${Date.now()}_3`,
-        type: 'marketing',
+        type: 'listing',
         priority: 'medium',
-        title: 'Mejorar visibilidad de productos',
-        description: 'Optimiza títulos y descripciones de productos para mejorar su visibilidad en búsquedas.',
+        title: 'Optimizar títulos y descripciones para SEO en marketplaces',
+        description: `Tus productos tienen ${data.totalSales} ventas. Mejora los títulos y descripciones de tus listados en eBay, Amazon y MercadoLibre agregando keywords relevantes y detalles específicos del producto para mejorar su ranking en búsquedas y aumentar conversiones.`,
         impact: {
-          revenue: data.totalRevenue * 0.15,
-          time: 3,
+          revenue: data.totalRevenue * 0.25,
+          time: 2,
           difficulty: 'easy'
         },
-        confidence: 70,
+        confidence: 75,
         actionable: true,
         implemented: false,
         estimatedTime: '1-2 horas',
-        requirements: ['Acceso a edición de productos'],
+        requirements: ['Acceso a edición de productos', 'Productos publicados en marketplaces'],
         steps: [
-          'Revisar títulos de productos más vendidos',
-          'Agregar palabras clave relevantes',
-          'Mejorar descripciones con detalles del producto',
-          'Actualizar imágenes si es necesario'
+          'Revisar productos con menos ventas en el dashboard',
+          'Analizar títulos de productos similares exitosos en cada marketplace',
+          'Agregar keywords específicos de búsqueda (marca, modelo, características)',
+          'Mejorar descripciones con detalles técnicos del producto de AliExpress',
+          'Actualizar imágenes de alta calidad desde AliExpress si es necesario',
+          'Aplicar cambios en todos los marketplaces donde está publicado'
         ],
         createdAt: new Date().toISOString()
       });
