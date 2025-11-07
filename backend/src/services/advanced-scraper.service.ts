@@ -102,6 +102,7 @@ export class AdvancedMarketplaceScraper {
       '.header-user-avatar',
       'button[data-role="account-menu"]',
       'div[data-role="user-account"]',
+      'div.top-action-account',
     ],
     'login.accountDropdownLinks': [
       '.nav-user-account a[href*="account"][href*="login"]',
@@ -137,6 +138,9 @@ export class AdvancedMarketplaceScraper {
       '.top-login-btn',
       '.welcome-offer-login',
       '.user-account-info .sign-btn',
+      '.next-menu-item a[href*="login"]',
+      '.next-menu-item button[href*="login"]',
+      '.aliexpress-header-popover a[href*="login"]',
     ],
     'state.loginLink.text': [
       'a:contains("Sign in")',
@@ -171,6 +175,18 @@ export class AdvancedMarketplaceScraper {
       'button:contains("Maybe later")',
       'button:contains("Omitir")',
       '.passkey-dialog .close-button',
+      'button:contains("Skip")',
+      'button:contains("Usar después")',
+    ],
+    'modal.emailLoginSwitch': [
+      'a:contains("Sign in with password")',
+      'a:contains("Sign in with email")',
+      'button:contains("Sign in with password")',
+    ],
+    'modal.emailContinue': [
+      'button:contains("Continue")',
+      'button:contains("Continuar")',
+      'button.next-btn-primary',
     ],
   };
 
@@ -902,7 +918,11 @@ export class AdvancedMarketplaceScraper {
                console.warn('⚠️  Persisting UNKNOWN state, forcing direct login navigation');
                await loginPage.goto(this.fallbackLoginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
              } else {
-               await this.tryClickLoginByText(context);
+               const clicked = await this.tryClickLoginByText(context);
+               if (!clicked && attempts >= 2) {
+                 console.warn('⚠️  Login link not found via text, navigating to fallback login page');
+                 await loginPage.goto(this.fallbackLoginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
+               }
              }
              break;
            case AliExpressLoginState.REQUIRES_MANUAL_REVIEW:
@@ -956,6 +976,7 @@ export class AdvancedMarketplaceScraper {
 
   private async switchToPasswordLogin(context: FrameLike): Promise<void> {
     await this.clickIfExists(context, this.getAliExpressSelectors('login.switchPassword'), 'switch-password-login');
+    await this.clickIfExists(context, this.getAliExpressSelectors('modal.emailLoginSwitch'), 'modal-email-switch');
   }
 
   private async detectAliExpressState(context: FrameLike): Promise<AliExpressDetectionResult> {
@@ -1041,6 +1062,7 @@ export class AdvancedMarketplaceScraper {
   private async runAliExpressLoginForm(context: FrameLike, email: string, password: string): Promise<boolean> {
      await this.handleAliExpressPopups(context);
      await this.switchToPasswordLogin(context);
+     await this.clickIfExists(context, this.getAliExpressSelectors('modal.emailContinue'), 'modal-email-continue');
  
      const emailTyped = await this.typeIntoField(context, this.getAliExpressSelectors('login.email'), email, 'email');
 
@@ -1102,7 +1124,7 @@ export class AdvancedMarketplaceScraper {
     if (!clicked) {
       await context.evaluate(() => {
         const doc = (globalThis as any).document;
-         if (!doc) return;
+        if (!doc) return;
         const link = (Array.from(doc.querySelectorAll('a, button')) as any[]).find(el => {
           const text = (el.textContent || '').trim().toLowerCase();
           return text === 'sign in' || text === 'login' || text === 'iniciar sesión' || text === 'acceder';
@@ -1245,7 +1267,18 @@ export class AdvancedMarketplaceScraper {
   }
 
   private async openAccountMenu(context: FrameLike): Promise<void> {
-    await this.clickIfExists(context, this.getAliExpressSelectors('login.accountMenuBtn'), 'account-menu');
+    const selectors = this.getAliExpressSelectors('login.accountMenuBtn');
+    for (const selector of selectors) {
+      try {
+        if ((context as Page).hover) {
+          await (context as Page).hover(selector);
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      } catch {
+        // ignore hover errors
+      }
+    }
+    await this.clickIfExists(context, selectors, 'account-menu');
   }
 }
 
