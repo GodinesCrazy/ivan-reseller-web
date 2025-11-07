@@ -1,12 +1,13 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { Browser, Page } from 'puppeteer';
+import { Browser, Page, Protocol } from 'puppeteer';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import axios from 'axios';
 import { getChromiumLaunchConfig } from '../utils/chromium';
 import { CredentialsManager } from './credentials-manager.service';
 import type { AliExpressCredentials } from '../types/api-credentials.types';
+import { Cookie } from 'puppeteer';
 
 // Configurar Puppeteer con plugin stealth para evadir detección
 puppeteer.use(StealthPlugin());
@@ -103,6 +104,22 @@ export class AdvancedMarketplaceScraper {
     if (!this.browser) await this.init();
 
     console.log(`🔍 Scraping REAL AliExpress: "${query}"`);
+
+    const cookies = await this.fetchAliExpressCookies(userId);
+
+    if (cookies.length > 0) {
+      const context = this.browser!
+        .targets()
+        .find((target) => target.type() === 'page')?
+        .browserContext() || this.browser!.defaultBrowserContext();
+      const tempPage = await this.browser!.newPage();
+      await tempPage.setCookie(...cookies);
+      await tempPage.close();
+      console.log(`✅ Injected ${cookies.length} AliExpress cookies for user ${userId}`);
+      this.isLoggedIn = true;
+      this.loggedInUserId = userId;
+      return;
+    }
 
     await this.ensureAliExpressLogin(userId);
 
@@ -660,6 +677,22 @@ export class AdvancedMarketplaceScraper {
       return;
     }
 
+    const cookies = await this.fetchAliExpressCookies(userId);
+
+    if (cookies.length > 0) {
+      const context = this.browser!
+        .targets()
+        .find((target) => target.type() === 'page')?
+        .browserContext() || this.browser!.defaultBrowserContext();
+      const tempPage = await this.browser!.newPage();
+      await tempPage.setCookie(...cookies);
+      await tempPage.close();
+      console.log(`✅ Injected ${cookies.length} AliExpress cookies for user ${userId}`);
+      this.isLoggedIn = true;
+      this.loggedInUserId = userId;
+      return;
+    }
+
     const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', 'production');
     if (!credentials) {
       console.warn('⚠️  AliExpress credentials not configured for user', userId);
@@ -797,6 +830,19 @@ export class AdvancedMarketplaceScraper {
         console.log('✅ AliExpress login successful');
         this.isLoggedIn = true;
         this.loggedInUserId = userId;
+
+        const storedCookies = await context.cookies();
+        try {
+          await CredentialsManager.saveCredentials(userId, 'aliexpress', {
+            email,
+            password,
+            twoFactorEnabled: !!twoFactorEnabled,
+            cookies: storedCookies,
+          } as any);
+          console.log(`✅ Stored ${storedCookies.length} AliExpress cookies for user ${userId}`);
+        } catch (storeError) {
+          console.warn('⚠️  Unable to store AliExpress cookies:', (storeError as Error).message);
+        }
       }
 
       if (twoFactorEnabled) {
@@ -807,6 +853,31 @@ export class AdvancedMarketplaceScraper {
     } finally {
       await loginPage.close().catch(() => {});
     }
+  }
+
+  private async fetchAliExpressCookies(userId: number): Promise<Protocol.Network.Cookie[]> {
+    try {
+      const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', 'production');
+      if (!credentials) return [];
+      const cookiesRaw = (credentials as any).cookies;
+      if (!cookiesRaw) return [];
+
+      if (typeof cookiesRaw === 'string') {
+        try {
+          const parsed = JSON.parse(cookiesRaw);
+          if (Array.isArray(parsed)) {
+            return parsed as Protocol.Network.Cookie[];
+          }
+        } catch (error) {
+          console.warn('⚠️  Unable to parse AliExpress cookies JSON for user', userId, error);
+        }
+      } else if (Array.isArray(cookiesRaw)) {
+        return cookiesRaw as Protocol.Network.Cookie[];
+      }
+    } catch (error) {
+      console.warn('⚠️  Error fetching AliExpress cookies for user', userId, error);
+    }
+    return [];
   }
 }
 
