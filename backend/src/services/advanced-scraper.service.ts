@@ -1,6 +1,6 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { Browser, Page, Protocol } from 'puppeteer';
+import { Browser, Page, Protocol, Frame } from 'puppeteer';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import axios from 'axios';
@@ -33,6 +33,7 @@ export class AdvancedMarketplaceScraper {
   private browser: Browser | null = null;
   private isLoggedIn = false;
   private loggedInUserId: number | null = null;
+  private readonly loginUrl = 'https://login.aliexpress.com/?fromSite=52&foreSite=main&spm=a2g0o.home.1000002.2.650511a5TtU7UQ';
 
   async init(): Promise<void> {
     console.log('🚀 Iniciando navegador con evasión anti-bot...');
@@ -174,8 +175,16 @@ export class AdvancedMarketplaceScraper {
           }
         }
 
-        await page.waitForFunction(() => (window as any).runParams?.resultList?.length || (window as any).runParams?.mods?.itemList?.content?.length, { timeout: 15000 });
-        const runParams = await page.evaluate(() => (window as any).runParams);
+        await page.waitForFunction(() => {
+          const w = (globalThis as any).window;
+          const params = w?.runParams;
+          if (!params) return false;
+          return Boolean(params?.resultList?.length || params?.mods?.itemList?.content?.length);
+        }, { timeout: 15000 });
+        const runParams = await page.evaluate(() => {
+          const w = (globalThis as any).window;
+          return w?.runParams || null;
+        });
         const list =
           runParams?.mods?.itemList?.content ||
           runParams?.resultList ||
@@ -249,7 +258,8 @@ export class AdvancedMarketplaceScraper {
 
         let items: any = null;
         for (const selector of selectors) {
-          items = (document as any).querySelectorAll(selector);
+          const doc = (globalThis as any).document;
+          items = doc ? doc.querySelectorAll(selector) : [];
           if (items && items.length > 0) {
             console.log(`✅ Encontrados ${items.length} productos con selector: ${selector}`);
             break;
@@ -379,7 +389,8 @@ export class AdvancedMarketplaceScraper {
       await page.waitForSelector('.s-item', { timeout: 15000 });
 
       const products = await page.evaluate(() => {
-        const items = document.querySelectorAll('.s-item');
+        const doc = (globalThis as any).document;
+        const items = doc ? doc.querySelectorAll('.s-item') : [];
         const results: any[] = [];
 
         items.forEach((item, index) => {
@@ -394,8 +405,8 @@ export class AdvancedMarketplaceScraper {
             const title = titleElement?.textContent?.trim().replace('New listing', '') || '';
             const priceText = priceElement?.textContent?.trim() || '';
             const price = parseFloat(priceText.replace(/[^\d.]/g, '')) || 0;
-            const imageUrl = (imageElement as HTMLImageElement)?.src || '';
-            const productUrl = (linkElement as HTMLAnchorElement)?.href || '';
+            const imageUrl = (imageElement as any)?.src || '';
+            const productUrl = (linkElement as any)?.href || '';
 
             if (title && price > 0 && !title.toLowerCase().includes('shop on ebay')) {
               results.push({
@@ -467,7 +478,8 @@ export class AdvancedMarketplaceScraper {
       }
 
       const products = await page.evaluate(() => {
-        const items = document.querySelectorAll('[data-component-type="s-search-result"], .s-result-item');
+        const doc = (globalThis as any).document;
+        const items = doc ? doc.querySelectorAll('[data-component-type="s-search-result"], .s-result-item') : [];
         const results: any[] = [];
 
         items.forEach((item, index) => {
@@ -482,8 +494,8 @@ export class AdvancedMarketplaceScraper {
             const title = titleElement?.textContent?.trim() || '';
             const priceText = priceElement?.textContent?.trim() || '';
             const price = parseFloat(priceText.replace(/[^\d.]/g, '')) || 0;
-            const imageUrl = (imageElement as HTMLImageElement)?.src || '';
-            const productUrl = (linkElement as HTMLAnchorElement)?.href || '';
+            const imageUrl = (imageElement as any)?.src || '';
+            const productUrl = (linkElement as any)?.href || '';
 
             if (title && price > 0) {
               results.push({
@@ -612,7 +624,8 @@ export class AdvancedMarketplaceScraper {
 
     // Scroll aleatorio
     await page.evaluate(() => {
-      window.scrollBy(0, Math.random() * 500);
+      const w = (globalThis as any).window;
+      w?.scrollBy(0, Math.random() * 500);
     });
 
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -627,11 +640,13 @@ export class AdvancedMarketplaceScraper {
         let totalHeight = 0;
         const distance = 400;
         const timer = setInterval(() => {
-          const scrollHeight = document.body.scrollHeight;
-          window.scrollBy(0, distance);
+          const w = (globalThis as any).window;
+          if (!w) return;
+          const scrollHeight = w.document.body.scrollHeight;
+          w.scrollBy(0, distance);
           totalHeight += distance;
 
-          if (totalHeight >= scrollHeight - window.innerHeight) {
+          if (totalHeight >= scrollHeight - w.innerHeight) {
             clearInterval(timer);
             resolve();
           }
@@ -704,117 +719,68 @@ export class AdvancedMarketplaceScraper {
     try {
       await this.setupRealBrowser(loginPage);
       console.log('🔐 Navigating to AliExpress login page');
-      await loginPage.goto('https://login.aliexpress.com/?fromSite=52&foreSite=main', { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await loginPage.goto(this.loginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await this.handleAliExpressPopups(loginPage);
 
-      // Detect if login form is inside an iframe
-      await loginPage.waitForSelector('iframe', { timeout: 10000 }).catch(() => null);
-      const frames = loginPage.frames();
-      console.log('🔐 AliExpress login frames:', frames.map(f => f.url()));
-      const loginFrame = frames.find((frame) => {
-        const frameUrl = frame.url();
-        return frameUrl.includes('login.alibaba.com') || frameUrl.includes('passport.aliexpress.com') || frameUrl.includes('mini_login');
-      });
-      const context: any = loginFrame || loginPage;
+      let context: FrameLike | null = await this.waitForAliExpressLoginFrame(loginPage);
 
-      // Sometimes AliExpress shows QR login first - try switching to password login
-      const switchSelectors = [
-        '.switch-btn',
-        '.password-login',
-        '#login-switch',
-        '.login-switch',
-        'a[data-spm-anchor-id*="password"]',
-      ];
-      for (const selector of switchSelectors) {
-        try {
-          const switchElement = await context.$(selector);
-          if (switchElement) {
-            await switchElement.click();
-            await new Promise(resolve => setTimeout(resolve, 500));
-            break;
-          }
-        } catch {
-          // continue trying other selectors
-        }
+      if (!context) {
+        console.log('⚠️  Login iframe not found, attempting to open login from header');
+        await this.openLoginFromHeader(loginPage);
+        await this.handleAliExpressPopups(loginPage);
+        context = await this.waitForAliExpressLoginFrame(loginPage);
       }
 
-      const typeIntoField = async (selectors: string[], value: string) => {
-        for (const selector of selectors) {
-          try {
-            await context.waitForSelector(selector, { timeout: 5000 });
-            const element = await context.$(selector);
-            if (element) {
-              await context.evaluate((sel: string) => {
-                const el = document.querySelector(sel) as HTMLInputElement;
-                if (el) {
-                  el.value = '';
-                }
-              }, selector);
-              await element.click({ clickCount: 3 }).catch(() => {});
-              await element.type(value, { delay: 80 });
-              return true;
-            }
-          } catch {
-            // continue with next selector
-          }
-        }
-        return false;
-      };
+      const frameContext: FrameLike = context || loginPage;
+      await this.handleAliExpressPopups(frameContext);
+      await this.switchToPasswordLogin(frameContext);
 
-      const clickButton = async (selectors: string[]) => {
-        for (const selector of selectors) {
-          try {
-            const element = await context.$(selector);
-            if (element) {
-              await element.click();
-              return true;
-            }
-          } catch {
-            // continue with next selector
-          }
-        }
-        return false;
-      };
-
-      const emailTyped = await typeIntoField([
+      const emailTyped = await this.typeIntoField(frameContext, [
+        'input#fm-login-id',
+        'input[name="fm-login-id"]',
         'input[name="loginId"]',
-        'input[id="fm-login-id"]',
-        'input[type="text"]',
-        '#loginForm input[type="text"]',
-        '#fm-login-id',
+        'input[name="loginKey"]',
+        'input[data-email="true"]',
+        'input[data-placeholder*="Email"]',
+        'input[data-placeholder*="correo"]',
       ], email);
 
-      const passwordTyped = await typeIntoField([
+      const passwordTyped = await this.typeIntoField(frameContext, [
+        'input#fm-login-password',
+        'input[name="fm-login-password"]',
         'input[name="password"]',
-        'input[id="fm-login-password"]',
         'input[type="password"]',
-        '#loginForm input[type="password"]',
-        '#fm-login-password',
+        'input[data-placeholder*="Password"]',
+        'input[data-placeholder*="contraseña"]',
       ], password);
 
       if (!emailTyped || !passwordTyped) {
         console.warn('⚠️  Unable to find login fields on AliExpress login page');
-        const snippet = await context.evaluate(() => document?.body?.innerText?.slice(0, 500));
+        const snippet = await frameContext.evaluate(() => {
+          const doc = (globalThis as any).document;
+          return doc?.body?.innerText?.slice(0, 500) || null;
+        });
         console.warn('⚠️  Login page snippet:', snippet);
       }
 
-      const loginClicked = await clickButton([
+      const loginClicked = await this.clickIfExists(frameContext, [
         'button[type="submit"]',
         '.login-submit',
         '.sign-btn',
         '.next-btn-primary',
         '.login-button',
         '#login-button',
+        'button[data-spm-anchor-id*="submit"]',
+        'button[class*="fm-button"]',
       ]);
 
       if (!loginClicked) {
         console.warn('⚠️  Login button not found on AliExpress login page');
       }
 
-      // Wait for navigation or confirmation
       await Promise.race([
-        context.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => null),
-        new Promise((resolve) => setTimeout(resolve, 5000)),
+        frameContext.waitForFunction(() => !(globalThis as any).document?.location?.href.includes('login'), { timeout: 15000 }).catch(() => null),
+        new Promise((resolve) => setTimeout(resolve, 7000)),
       ]);
 
       const finalUrl = loginPage.url();
@@ -825,7 +791,7 @@ export class AdvancedMarketplaceScraper {
         this.isLoggedIn = true;
         this.loggedInUserId = userId;
 
-        const storedCookies = await context.cookies();
+        const storedCookies = await loginPage.cookies();
         try {
           await CredentialsManager.saveCredentials(userId, 'aliexpress', {
             email,
@@ -846,6 +812,107 @@ export class AdvancedMarketplaceScraper {
       console.error('❌ Error performing AliExpress login:', error?.message || error);
     } finally {
       await loginPage.close().catch(() => {});
+    }
+  }
+
+  private async waitForAliExpressLoginFrame(page: Page): Promise<Frame | null> {
+    try {
+      await page.waitForSelector('iframe', { timeout: 10000 }).catch(() => null);
+      const frames = page.frames();
+      console.log('🔐 AliExpress login frames:', frames.map(f => f.url()));
+      return frames.find((frame) => {
+        const frameUrl = frame.url();
+        return frameUrl.includes('login.alibaba.com') || frameUrl.includes('passport.aliexpress.com') || frameUrl.includes('mini_login') || frameUrl.includes('render-accounts.aliexpress.com');
+      }) || null;
+    } catch (error) {
+      console.warn('⚠️  Error locating AliExpress login iframe:', (error as Error).message);
+      return null;
+    }
+  }
+
+  private async openLoginFromHeader(page: Page): Promise<void> {
+    const selectors = [
+      'a[href*="login"]',
+      'a[data-role="login"]',
+      'a[data-spm-anchor-id*="login"]',
+      '.user-account .sign-btn',
+      '.nav-user-account .sign-btn',
+      'a.sign-btn',
+      'button.header-signin-btn',
+    ];
+
+    for (const selector of selectors) {
+      const clicked = await this.clickIfExists(page, [selector]);
+      if (clicked) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        return;
+      }
+    }
+  }
+
+  private async switchToPasswordLogin(context: FrameLike): Promise<void> {
+    await this.clickIfExists(context, [
+      '.switch-btn',
+      '.password-login',
+      '#login-switch',
+      '.login-switch',
+      'a[data-spm-anchor-id*="password"]',
+      'button[data-role="password"]',
+      'button[data-type="password"]',
+    ]);
+  }
+
+  private async typeIntoField(context: FrameLike, selectors: string[], value: string): Promise<boolean> {
+    for (const selector of selectors) {
+      try {
+        const handle = await context.waitForSelector(selector, { timeout: 5000 });
+        if (!handle) continue;
+        await context.evaluate((sel) => {
+          const doc = (globalThis as any).document;
+          const el = doc?.querySelector(sel) as any;
+          if (el) {
+            el.value = '';
+          }
+        }, selector);
+        await handle.click({ clickCount: 3 }).catch(() => {});
+        await handle.type(value, { delay: 80 });
+        return true;
+      } catch {
+        // continue with next selector
+      }
+    }
+    return false;
+  }
+
+  private async clickIfExists(context: FrameLike, selectors: string[]): Promise<boolean> {
+    for (const selector of selectors) {
+      try {
+        const element = await context.$(selector);
+        if (element) {
+          await element.click();
+          return true;
+        }
+      } catch {
+        // continue
+      }
+    }
+    return false;
+  }
+
+  private async handleAliExpressPopups(context: FrameLike): Promise<void> {
+    const popupSelectors = [
+      '#nav-global-cookie-banner .btn-accept',
+      '.cookie-banner button',
+      'button#onetrust-accept-btn-handler',
+      'button#acceptAll',
+      'button[data-role="accept"]',
+      'button[data-spm-anchor-id*="accept"]',
+      'a[data-role="close"]',
+      'button[aria-label="close"]',
+    ];
+
+    for (const selector of popupSelectors) {
+      await this.clickIfExists(context, [selector]);
     }
   }
 
@@ -876,3 +943,5 @@ export class AdvancedMarketplaceScraper {
 }
 
 export default AdvancedMarketplaceScraper;
+
+type FrameLike = Page | Frame;
