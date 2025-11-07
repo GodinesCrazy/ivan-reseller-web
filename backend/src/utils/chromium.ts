@@ -73,12 +73,12 @@ export async function resolveChromiumExecutable(): Promise<string> {
 
 export async function getChromiumLaunchConfig(extraArgs: string[] = []) {
   const executablePath = await resolveChromiumExecutable();
-  const args = Array.from(new Set([...(chromium.args || []), ...extraArgs]));
+  const args = Array.from(new Set([...(chromium.args || []), ...extraArgs, '--no-sandbox']));
 
   return {
     executablePath,
     args,
-    headless: typeof chromium.headless !== 'undefined' ? chromium.headless : 'new',
+    headless: true,
     defaultViewport: chromium.defaultViewport,
   };
 }
