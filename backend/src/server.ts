@@ -1,3 +1,4 @@
+import fs from 'fs';
 import app from './app';
 import { env } from './config/env';
 import { prisma, connectWithRetry } from './config/database';
@@ -9,6 +10,41 @@ import bcrypt from 'bcryptjs';
 
 const execAsync = promisify(exec);
 const PORT = parseInt(env.PORT, 10);
+
+function configureChromiumPath(): void {
+  if (!process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD) {
+    process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
+  }
+
+  const candidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    process.env.CHROMIUM_PATH,
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/local/bin/chromium',
+    '/usr/local/bin/chromium-browser',
+    '/app/.chromium/chromium',
+  ].filter(Boolean) as string[];
+
+  for (const candidate of candidates) {
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      const stats = fs.statSync(candidate);
+      if (stats.isFile()) {
+        process.env.PUPPETEER_EXECUTABLE_PATH = candidate;
+        process.env.CHROMIUM_PATH = candidate;
+        console.log(`✅ Chromium system path detected: ${candidate}`);
+        return;
+      }
+    } catch (error) {
+      // ignore and try next candidate
+    }
+  }
+
+  console.warn('⚠️  Chromium system path not found. Puppeteer will try to download Chrome.');
+}
+
+configureChromiumPath();
 
 async function ensureAdminUser() {
   try {
