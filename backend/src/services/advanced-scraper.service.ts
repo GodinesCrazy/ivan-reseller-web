@@ -677,18 +677,44 @@ export class AdvancedMarketplaceScraper {
     try {
       await this.setupRealBrowser(loginPage);
       console.log('🔐 Navigating to AliExpress login page');
-      await loginPage.goto('https://login.aliexpress.com/', { waitUntil: 'networkidle2', timeout: 30000 });
+      await loginPage.goto('https://login.aliexpress.com/?fromSite=52&foreSite=main', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Some login pages are embedded in an iframe
-      const loginFrame = loginPage.frames().find((frame) => {
+      // Detect if login form is inside an iframe
+      await loginPage.waitForSelector('iframe', { timeout: 10000 }).catch(() => null);
+      const frames = loginPage.frames();
+      console.log('🔐 AliExpress login frames:', frames.map(f => f.url()));
+      const loginFrame = frames.find((frame) => {
         const frameUrl = frame.url();
-        return frameUrl.includes('login.alibaba.com') || frameUrl.includes('passport.alibaba.com');
+        return frameUrl.includes('login.alibaba.com') || frameUrl.includes('passport.aliexpress.com') || frameUrl.includes('mini_login');
       });
       const context: any = loginFrame || loginPage;
+
+      // Sometimes AliExpress shows QR login first - try switching to password login
+      const switchSelectors = [
+        '.switch-btn',
+        '.password-login',
+        '#login-switch',
+        '.login-switch',
+        'a[data-spm-anchor-id*="password"]',
+      ];
+      for (const selector of switchSelectors) {
+        try {
+          const switchElement = await context.$(selector);
+          if (switchElement) {
+            await switchElement.click();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            break;
+          }
+        } catch {
+          // continue trying other selectors
+        }
+      }
 
       const typeIntoField = async (selectors: string[], value: string) => {
         for (const selector of selectors) {
           try {
+            await context.waitForSelector(selector, { timeout: 5000 });
             const element = await context.$(selector);
             if (element) {
               await context.evaluate((sel: string) => {
@@ -697,7 +723,7 @@ export class AdvancedMarketplaceScraper {
                   el.value = '';
                 }
               }, selector);
-              await element.click({ clickCount: 3 });
+              await element.click({ clickCount: 3 }).catch(() => {});
               await element.type(value, { delay: 80 });
               return true;
             }
@@ -727,18 +753,22 @@ export class AdvancedMarketplaceScraper {
         'input[name="loginId"]',
         'input[id="fm-login-id"]',
         'input[type="text"]',
-        '#loginForm input[type="text"]'
+        '#loginForm input[type="text"]',
+        '#fm-login-id',
       ], email);
 
       const passwordTyped = await typeIntoField([
         'input[name="password"]',
         'input[id="fm-login-password"]',
         'input[type="password"]',
-        '#loginForm input[type="password"]'
+        '#loginForm input[type="password"]',
+        '#fm-login-password',
       ], password);
 
       if (!emailTyped || !passwordTyped) {
         console.warn('⚠️  Unable to find login fields on AliExpress login page');
+        const snippet = await context.evaluate(() => document?.body?.innerText?.slice(0, 500));
+        console.warn('⚠️  Login page snippet:', snippet);
       }
 
       const loginClicked = await clickButton([
@@ -746,7 +776,8 @@ export class AdvancedMarketplaceScraper {
         '.login-submit',
         '.sign-btn',
         '.next-btn-primary',
-        '.login-button'
+        '.login-button',
+        '#login-button',
       ]);
 
       if (!loginClicked) {
@@ -755,7 +786,7 @@ export class AdvancedMarketplaceScraper {
 
       // Wait for navigation or confirmation
       await Promise.race([
-        context.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => null),
+        context.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => null),
         new Promise((resolve) => setTimeout(resolve, 5000)),
       ]);
 
