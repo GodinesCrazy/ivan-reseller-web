@@ -108,17 +108,29 @@ export class AdvancedMarketplaceScraper {
     const cookies = await this.fetchAliExpressCookies(userId);
 
     if (cookies.length > 0) {
-      const context = this.browser!
-        .targets()
-        .find((target) => target.type() === 'page')?
-        .browserContext() || this.browser!.defaultBrowserContext();
       const tempPage = await this.browser!.newPage();
-      await tempPage.setCookie(...cookies);
-      await tempPage.close();
-      console.log(`✅ Injected ${cookies.length} AliExpress cookies for user ${userId}`);
-      this.isLoggedIn = true;
-      this.loggedInUserId = userId;
-      return;
+      try {
+        await tempPage.goto('https://www.aliexpress.com', { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+        const mappedCookies = cookies.map((cookie) => ({
+          name: cookie.name,
+          value: cookie.value,
+          domain: cookie.domain.startsWith('.') ? cookie.domain : `.${cookie.domain.replace(/^[.]/, '')}`,
+          path: cookie.path || '/',
+          expires: cookie.expires && Number.isFinite(cookie.expires) ? Math.floor(cookie.expires) : undefined,
+          httpOnly: cookie.httpOnly,
+          secure: cookie.secure,
+          sameSite: cookie.sameSite as any,
+        }));
+        await tempPage.setCookie(...mappedCookies);
+        console.log(`✅ Injected ${cookies.length} AliExpress cookies for user ${userId}`);
+        this.isLoggedIn = true;
+        this.loggedInUserId = userId;
+        await tempPage.close();
+        return;
+      } catch (cookieError) {
+        console.warn('⚠️  Unable to inject AliExpress cookies:', (cookieError as Error).message);
+        await tempPage.close().catch(() => {});
+      }
     }
 
     await this.ensureAliExpressLogin(userId);
@@ -674,22 +686,6 @@ export class AdvancedMarketplaceScraper {
     }
 
     if (this.isLoggedIn && this.loggedInUserId === userId) {
-      return;
-    }
-
-    const cookies = await this.fetchAliExpressCookies(userId);
-
-    if (cookies.length > 0) {
-      const context = this.browser!
-        .targets()
-        .find((target) => target.type() === 'page')?
-        .browserContext() || this.browser!.defaultBrowserContext();
-      const tempPage = await this.browser!.newPage();
-      await tempPage.setCookie(...cookies);
-      await tempPage.close();
-      console.log(`✅ Injected ${cookies.length} AliExpress cookies for user ${userId}`);
-      this.isLoggedIn = true;
-      this.loggedInUserId = userId;
       return;
     }
 

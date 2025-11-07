@@ -52,7 +52,7 @@ export default function OtherCredentials() {
     try {
       const { data } = await api.get('/api/settings/apis');
       const definitions = (data?.data || [])
-        .filter((api: any) => api.category === 'automation')
+        .filter((api: any) => (api.category === 'automation' || (api.categories || []).includes('automation')))
         .map((api: any) => ({
           ...api,
           fields: (api.fields || []).map((field: any) =>
@@ -244,6 +244,7 @@ export default function OtherCredentials() {
         {apis.map((apiDef) => {
           const currentStatus = status[apiDef.apiName];
           const currentData = formData[apiDef.apiName] || {};
+          const supportsCookies = (apiDef.categories || [apiDef.category]).includes('automation');
 
           return (
             <div key={apiDef.apiName} className="border rounded-lg p-5 bg-white shadow-sm">
@@ -267,7 +268,7 @@ export default function OtherCredentials() {
                     {currentStatus?.configured ? 'Configured' : 'Not configured'}
                   </div>
                   {currentStatus?.lastUpdated && (
-                    <div className="text-gray-500 mt-1">Last updated: {new Date(currentStatus.lastUpdated).toLocaleString()}</div>
+                    <div className="text-gray-500 mt-1">Last updated: {currentStatus.lastUpdated ? new Date(currentStatus.lastUpdated).toLocaleString() : 'Never'}</div>
                   )}
                 </div>
               </div>
@@ -321,6 +322,23 @@ export default function OtherCredentials() {
                     </div>
                   );
                 })}
+
+                {supportsCookies && (
+                  <div className="md:col-span-2 flex flex-col gap-2">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      Session Cookies (JSON)
+                    </label>
+                    <textarea
+                      value={currentData.cookies || ''}
+                      onChange={(e) => handleInputChange(apiDef.apiName, 'cookies', e.target.value)}
+                      placeholder='[{"name":"X","value":"Y","domain":"aliexpress.com","path":"/","secure":true,"httpOnly":false,"expires":1893456000}]'
+                      className="w-full min-h-[120px] px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                    />
+                    <p className="text-xs text-gray-500">
+                      Paste exported cookies (JSON array) from your AliExpress session. Required for scraping login-protected pages.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-3 mt-6 border-t pt-4">
