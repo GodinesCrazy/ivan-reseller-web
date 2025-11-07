@@ -67,11 +67,7 @@ export class AdvancedMarketplaceScraper {
       try {
         const minimalOptions: any = {
           headless: true,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-          ],
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
         };
 
         if (executablePath) {
@@ -105,34 +101,49 @@ export class AdvancedMarketplaceScraper {
     const page = await this.browser!.newPage();
 
     try {
-      // Configurar página para parecer navegador real
       await this.setupRealBrowser(page);
 
       const searchUrl = `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(query)}.html`;
       console.log(`📡 Navegando a: ${searchUrl}`);
 
-      await page.goto(searchUrl, {
-        waitUntil: 'networkidle2',
-        timeout: 30000
-      });
+      await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-      // Verificar si hay CAPTCHA
-      const hasCaptcha = await this.checkForCaptcha(page);
-      if (hasCaptcha) {
-        console.log('🛡️  CAPTCHA detectado, aplicando evasión...');
-        const solved = await this.solveCaptcha(page);
-        if (!solved) {
-          // Verificar nuevamente si el CAPTCHA sigue presente
-          const stillHasCaptcha = await this.checkForCaptcha(page);
-          if (stillHasCaptcha) {
-            // Lanzar error específico para CAPTCHA que requiere intervención manual
-            const captchaError: any = new Error('CAPTCHA_REQUIRED');
-            captchaError.code = 'CAPTCHA_REQUIRED';
-            captchaError.message = 'Se requiere resolver CAPTCHA manualmente. El sistema no pudo resolverlo automáticamente.';
-            throw captchaError;
+      // Extraer runParams con los productos renderizados por la propia página
+      let products: any[] = [];
+      try {
+        await page.waitForFunction(() => (window as any).runParams?.resultList?.length || (window as any).runParams?.mods?.itemList?.content?.length, { timeout: 8000 });
+        const runParams = await page.evaluate(() => (window as any).runParams);
+        const list =
+          runParams?.mods?.itemList?.content ||
+          runParams?.resultList ||
+          runParams?.items ||
+          [];
+
+        if (Array.isArray(list) && list.length > 0) {
+          products = list.map((item: any) => ({
+            title: String(item.title || item.productTitle || '').trim().substring(0, 150),
+            price: Number(item.actSkuCalPrice || item.skuCalPrice || item.skuCalPrice || item.salePrice || 0),
+            imageUrl: (item.image?.imgUrl || item.imageUrl || '').replace(/^\//, 'https://'),
+            productUrl: (item.productUrl || item.detailUrl || '').startsWith('http') ? (item.productUrl || item.detailUrl) : `https:${item.productUrl || item.detailUrl || ''}`,
+            rating: Number(item.evaluationRate) || Number(item.evaluationScore) || 0,
+            reviewCount: Number(item.evaluationCount) || Number(item.reviewNum) || 0,
+            seller: item.storeName || 'AliExpress Vendor',
+            shipping: item.logistics?.desc || item.logisticsDesc || 'Varies',
+            availability: 'In stock',
+          })).filter((p: any) => p.title && p.price);
+
+          if (products.length > 0) {
+            console.log(`✅ Extraídos ${products.length} productos desde runParams`);
+            return products;
           }
         }
+        console.log('⚠️  runParams no retornó productos o estructura no reconocida');
+      } catch (runParamsError: any) {
+        console.log('⚠️  No se pudo analizar runParams:', runParamsError?.message || runParamsError);
       }
+
+      // Si runParams falló o no devolvió datos válidos, continuar con scraping DOM clásico
+      await page.waitForTimeout(4000);
 
       // ✅ Esperar a que carguen los productos con múltiples selectores alternativos
       let productsLoaded = false;
@@ -141,7 +152,7 @@ export class AdvancedMarketplaceScraper {
         '[data-item-id]',
         '.list--gallery--C2f2tvm',
         '.search-item-card',
-        '.item-card-wrapper-gallery'
+        '.item-card-wrapper-gallery',
       ];
 
       for (const selector of selectors) {
@@ -150,23 +161,19 @@ export class AdvancedMarketplaceScraper {
           productsLoaded = true;
           console.log(`✅ Productos encontrados con selector: ${selector}`);
           break;
-        } catch (e) {
-          // Continuar con el siguiente selector
+        } catch {
+          // continuar con el siguiente selector
         }
       }
 
       if (!productsLoaded) {
         console.warn('⚠️  No se encontraron productos con ningún selector, intentando extraer de todos modos...');
-        // Esperar un poco más para que cargue
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await page.waitForTimeout(3000);
       }
 
-      // Hacer scroll para cargar más productos
       await this.autoScroll(page);
 
-      // Extraer datos REALES con selectores múltiples y robustos
-      const products = await page.evaluate(() => {
-        // Intentar múltiples selectores para encontrar productos
+      const productsFromDom = await page.evaluate(() => {
         const selectors = [
           '.search-item-card-wrapper-gallery',
           '[data-item-id]',
@@ -174,7 +181,7 @@ export class AdvancedMarketplaceScraper {
           '.search-item-card',
           '.item-card-wrapper-gallery',
           '[class*="item-card"]',
-          '[class*="product-item"]'
+          '[class*="product-item"]',
         ];
 
         let items: any = null;
@@ -194,10 +201,9 @@ export class AdvancedMarketplaceScraper {
         const results: any[] = [];
 
         items.forEach((item: any, index: number) => {
-          if (index >= 20) return; // Limitar resultados
+          if (index >= 20) return;
 
           try {
-            // Selectores múltiples para título
             const titleSelectors = [
               '.multi--titleText--nXeOvyr',
               '[class*="titleText"]',
@@ -212,7 +218,6 @@ export class AdvancedMarketplaceScraper {
               if (titleElement) break;
             }
 
-            // Selectores múltiples para precio
             const priceSelectors = [
               '.multi--price-sale--U-S0jtj',
               '[class*="price-sale"]',
@@ -226,7 +231,6 @@ export class AdvancedMarketplaceScraper {
               if (priceElement) break;
             }
 
-            // Selectores múltiples para imagen
             const imageSelectors = [
               '.search-card-item--gallery--img',
               'img[src]',
@@ -240,16 +244,15 @@ export class AdvancedMarketplaceScraper {
               if (imageElement) break;
             }
 
-            // Link
             const linkElement = item.querySelector('a[href]');
 
-            const title = titleElement?.textContent?.trim() || 
+            const title = titleElement?.textContent?.trim() ||
                          (linkElement?.getAttribute('title') || '') ||
                          (linkElement?.textContent?.trim() || '');
             const priceText = priceElement?.textContent?.trim() || '';
             const price = parseFloat(priceText.replace(/[^\d.]/g, '')) || 0;
-            const imageUrl = imageElement?.src || 
-                           imageElement?.getAttribute('data-src') || 
+            const imageUrl = imageElement?.src ||
+                           imageElement?.getAttribute('data-src') ||
                            '';
             const productUrl = linkElement?.href || '';
 
@@ -257,10 +260,10 @@ export class AdvancedMarketplaceScraper {
               results.push({
                 title: title.substring(0, 150),
                 price,
-                imageUrl: imageUrl.startsWith('//') ? `https:${imageUrl}` : 
-                         imageUrl.startsWith('http') ? imageUrl : 
-                         imageUrl ? `https:${imageUrl}` : '',
-                productUrl: productUrl.startsWith('http') ? productUrl : 
+                imageUrl: imageUrl.startsWith('//') ? `https:${imageUrl}` :
+                          imageUrl.startsWith('http') ? imageUrl :
+                          imageUrl ? `https:${imageUrl}` : '',
+                productUrl: productUrl.startsWith('http') ? productUrl :
                            productUrl ? `https:${productUrl}` : '',
                 rating: 4.0 + Math.random() * 0.8,
                 reviewCount: Math.floor(Math.random() * 1000) + 50,
@@ -277,18 +280,8 @@ export class AdvancedMarketplaceScraper {
         return results;
       });
 
-      console.log(`✅ Extraídos ${products.length} productos REALES de AliExpress`);
-
-      if (!products || products.length === 0) {
-        console.log('⚠️  Fallback: intentando obtener productos vía API pública de AliExpress');
-        const fallbackProducts = await this.fetchAliExpressFallback(query);
-        if (fallbackProducts.length > 0) {
-          console.log(`✅ Fallback AliExpress API retornó ${fallbackProducts.length} productos`);
-          return fallbackProducts;
-        }
-      }
-
-      return products;
+      console.log(`✅ Extraídos ${productsFromDom.length} productos REALES de AliExpress`);
+      return productsFromDom;
 
     } catch (error) {
       console.error('❌ Error scraping AliExpress:', error);
@@ -596,48 +589,6 @@ export class AdvancedMarketplaceScraper {
     // 3. Scraping de sitios alternativos
 
     return [];
-  }
-
-  private async fetchAliExpressFallback(query: string): Promise<ScrapedProduct[]> {
-    try {
-      const url = `https://gpsfront.aliexpress.com/getRecomProductList.do?widget_id=5547572&platform=pc&limit=20&keyword=${encodeURIComponent(query)}`;
-      const { data } = await axios.get(url, { timeout: 10000 });
-      const list = data?.resultList || data?.result || data?.data || [];
-
-      if (!Array.isArray(list) || list.length === 0) {
-        console.log('⚠️  Fallback AliExpress API no retornó resultados');
-        return [];
-      }
-
-      return list
-        .map((item: any) => {
-          const title = item?.productTitle || item?.title || '';
-          const priceText = item?.salePrice || item?.productPrice || item?.price || '';
-          const price = typeof priceText === 'number' ? priceText : parseFloat(String(priceText).replace(/[^\\d.]/g, '')) || 0;
-          const imageUrl = item?.imageUrl || item?.productImage || '';
-          const productUrl = item?.productDetailUrl || item?.productUrl || item?.linkUrl || '';
-
-          if (!title || price <= 0) {
-            return null;
-          }
-
-          return {
-            title: String(title).substring(0, 150),
-            price,
-            imageUrl: imageUrl.startsWith('http') ? imageUrl : imageUrl ? `https:${imageUrl}` : '',
-            productUrl: productUrl.startsWith('http') ? productUrl : productUrl ? `https:${productUrl}` : '',
-            rating: Number(item?.evaluationScore) || 4.0 + Math.random() * 0.8,
-            reviewCount: Number(item?.reviewCount) || Number(item?.tradeNum) || Math.floor(Math.random() * 1000) + 50,
-            seller: item?.storeName || 'AliExpress Vendor',
-            shipping: item?.logisticsDesc || 'Varies',
-            availability: 'In stock',
-          } as any;
-        })
-        .filter(Boolean);
-    } catch (error: any) {
-      console.error('❌ Error en fallback AliExpress API:', error?.message || error);
-      return [];
-    }
   }
 }
 
