@@ -342,13 +342,103 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const { apiName } = req.params;
-    const { environment = 'production' } = req.body;
+    const { environment = 'production', credentials: tempCredentials } = req.body;
 
     // Validar environment
     if (environment !== 'sandbox' && environment !== 'production') {
       throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
     }
 
+    // ✅ Si se proporcionan credenciales temporales del formulario, validarlas primero
+    if (tempCredentials && typeof tempCredentials === 'object') {
+      // Validar formato de credenciales
+      const validation = CredentialsManager.validateCredentials(
+        apiName as ApiName,
+        tempCredentials
+      );
+
+      if (!validation.valid) {
+        return res.json({
+          success: true,
+          data: {
+            name: `${apiName} API`,
+            isConfigured: false,
+            isAvailable: false,
+            lastChecked: new Date(),
+            error: 'Invalid credentials format',
+            message: `Formato de credenciales inválido: ${validation.errors.join(', ')}`,
+            missingFields: validation.errors
+          }
+        });
+      }
+
+      // ✅ Si las credenciales son válidas, verificar que tengan los campos requeridos
+      // Convertir credenciales temporales al formato que espera getUserCredentials
+      const requiredFieldsMap: Record<string, string[]> = {
+        'ebay': ['EBAY_APP_ID', 'EBAY_DEV_ID', 'EBAY_CERT_ID'],
+        'amazon': ['AMAZON_SELLER_ID', 'AMAZON_CLIENT_ID', 'AMAZON_CLIENT_SECRET', 'AMAZON_REFRESH_TOKEN', 'AMAZON_ACCESS_KEY_ID', 'AMAZON_SECRET_ACCESS_KEY'],
+        'mercadolibre': ['MERCADOLIBRE_CLIENT_ID', 'MERCADOLIBRE_CLIENT_SECRET'],
+        'groq': ['GROQ_API_KEY'],
+        'scraperapi': ['SCRAPERAPI_KEY'],
+        'zenrows': ['ZENROWS_API_KEY'],
+        '2captcha': ['CAPTCHA_2CAPTCHA_KEY'],
+        'paypal': ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET'],
+        'aliexpress': ['ALIEXPRESS_EMAIL', 'ALIEXPRESS_PASSWORD'],
+      };
+
+      const requiredFields = requiredFieldsMap[apiName] || [];
+      const missingFields: string[] = [];
+
+      // Mapear credenciales del backend a nombres de campos requeridos
+      const fieldMapping: Record<string, Record<string, string>> = {
+        'ebay': { 'appId': 'EBAY_APP_ID', 'devId': 'EBAY_DEV_ID', 'certId': 'EBAY_CERT_ID' },
+        'amazon': { 'sellerId': 'AMAZON_SELLER_ID', 'clientId': 'AMAZON_CLIENT_ID', 'clientSecret': 'AMAZON_CLIENT_SECRET', 'refreshToken': 'AMAZON_REFRESH_TOKEN', 'awsAccessKeyId': 'AMAZON_ACCESS_KEY_ID', 'awsSecretAccessKey': 'AMAZON_SECRET_ACCESS_KEY' },
+        'mercadolibre': { 'clientId': 'MERCADOLIBRE_CLIENT_ID', 'clientSecret': 'MERCADOLIBRE_CLIENT_SECRET' },
+        'groq': { 'apiKey': 'GROQ_API_KEY' },
+        'scraperapi': { 'apiKey': 'SCRAPERAPI_KEY' },
+        'zenrows': { 'apiKey': 'ZENROWS_API_KEY' },
+        '2captcha': { 'apiKey': 'CAPTCHA_2CAPTCHA_KEY' },
+        'paypal': { 'clientId': 'PAYPAL_CLIENT_ID', 'clientSecret': 'PAYPAL_CLIENT_SECRET' },
+        'aliexpress': { 'email': 'ALIEXPRESS_EMAIL', 'password': 'ALIEXPRESS_PASSWORD' },
+      };
+
+      const mapping = fieldMapping[apiName] || {};
+      for (const requiredField of requiredFields) {
+        const backendKey = Object.keys(mapping).find(key => mapping[key] === requiredField);
+        if (!backendKey || !tempCredentials[backendKey] || String(tempCredentials[backendKey]).trim() === '') {
+          missingFields.push(requiredField);
+        }
+      }
+
+      if (missingFields.length > 0) {
+        return res.json({
+          success: true,
+          data: {
+            name: `${apiName} API`,
+            isConfigured: false,
+            isAvailable: false,
+            lastChecked: new Date(),
+            error: `Missing credentials: ${missingFields.join(', ')}`,
+            message: `Faltan credenciales requeridas: ${missingFields.join(', ')}`,
+            missingFields
+          }
+        });
+      }
+
+      // ✅ Si todas las credenciales están presentes, retornar éxito
+      return res.json({
+        success: true,
+        data: {
+          name: `${apiName} API`,
+          isConfigured: true,
+          isAvailable: true,
+          lastChecked: new Date(),
+          message: 'Credenciales válidas. Guarda las credenciales para activar la API.'
+        }
+      });
+    }
+
+    // Si no hay credenciales temporales, usar el método normal (buscar en DB)
     // Force re-check by clearing cache
     await apiAvailability.clearAPICache(userId, apiName);
 

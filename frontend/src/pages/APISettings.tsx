@@ -527,9 +527,86 @@ export default function APISettings() {
     setTesting(apiName);
     setError(null);
     try {
+      // ✅ Obtener credenciales del formulario si están presentes
+      const formKey = makeFormKey(apiName, environment);
+      const currentFormData = formData[formKey] || {};
+      
+      // ✅ Si hay datos en el formulario, prepararlos para el test
+      let testCredentials: any = null;
+      if (Object.keys(currentFormData).length > 0) {
+        const backendDef = backendApiDefinitions[apiName];
+        const supportsEnv = backendDef?.supportsEnvironments || false;
+        const currentEnvironment = environment;
+        const fieldsToUse = supportsEnv
+          ? backendDef?.environments?.[currentEnvironment]?.fields || []
+          : backendDef?.fields || [];
+
+        // Mapear campos del formulario a formato del backend
+        // Los campos del formulario vienen con keys como 'apiKey', 'clientId', etc. (del backend)
+        // No necesitamos mapear, solo usar directamente
+        const fieldMapping: Record<string, string> = {
+          // Mantener compatibilidad con nombres antiguos si existen
+          'EBAY_APP_ID': 'appId',
+          'EBAY_DEV_ID': 'devId',
+          'EBAY_CERT_ID': 'certId',
+          'AMAZON_SELLER_ID': 'sellerId',
+          'AMAZON_CLIENT_ID': 'clientId',
+          'AMAZON_CLIENT_SECRET': 'clientSecret',
+          'MERCADOLIBRE_CLIENT_ID': 'clientId',
+          'MERCADOLIBRE_CLIENT_SECRET': 'clientSecret',
+          'GROQ_API_KEY': 'apiKey',
+          'SCRAPERAPI_KEY': 'apiKey',
+          'ZENROWS_API_KEY': 'apiKey',
+          'CAPTCHA_API_KEY': 'apiKey',
+          'PAYPAL_CLIENT_ID': 'clientId',
+          'PAYPAL_CLIENT_SECRET': 'clientSecret',
+          'email': 'email',
+          'password': 'password',
+          'twoFactorEnabled': 'twoFactorEnabled',
+          'twoFactorSecret': 'twoFactorSecret',
+          // Los campos del backend ya vienen con nombres correctos
+          'appId': 'appId',
+          'devId': 'devId',
+          'certId': 'certId',
+          'sellerId': 'sellerId',
+          'clientId': 'clientId',
+          'clientSecret': 'clientSecret',
+          'apiKey': 'apiKey',
+        };
+
+        testCredentials = {};
+        for (const field of fieldsToUse) {
+          const fieldKey = field.key;
+          const rawValue = currentFormData[fieldKey] ?? (field.value !== undefined ? String(field.value) : '');
+          const value = typeof rawValue === 'string' ? rawValue : String(rawValue ?? '');
+          
+          if (value.trim() || (apiName === 'aliexpress' && fieldKey === 'twoFactorEnabled')) {
+            const backendKey = fieldMapping[fieldKey] || fieldKey;
+            if (fieldKey === 'twoFactorEnabled') {
+              testCredentials[backendKey] = value.trim().toLowerCase() === 'true';
+            } else if (value.trim()) {
+              testCredentials[backendKey] = value.trim();
+            }
+          }
+        }
+
+        // Agregar campos específicos según el tipo de API
+        if (apiName === 'ebay' || apiName === 'amazon' || apiName === 'mercadolibre') {
+          testCredentials.sandbox = environment === 'sandbox';
+        } else if (apiName === 'paypal') {
+          testCredentials.environment = environment === 'sandbox' ? 'sandbox' : 'live';
+        } else if (apiName === 'aliexpress') {
+          if (testCredentials.twoFactorEnabled === undefined) {
+            testCredentials.twoFactorEnabled = false;
+          }
+        }
+      }
+
       // Probar conexión usando el endpoint correcto: /api/credentials/:apiName/test
+      // ✅ Si hay credenciales en el formulario, enviarlas para test temporal
       const response = await api.post(`/api/credentials/${apiName}/test`, {
         environment,
+        ...(testCredentials && { credentials: testCredentials }), // Enviar credenciales del formulario si existen
       });
 
       const status = response.data?.data || response.data;
