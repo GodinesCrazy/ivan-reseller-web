@@ -48,19 +48,35 @@ class OpportunityFinderService {
     
     // PRIORIDAD 1: Scraping nativo local (Puppeteer) - más rápido y sin dependencias externas
     const scraper = new AdvancedMarketplaceScraper();
+    let scraperInitialized = false;
     try {
       console.log('🔍 Usando scraping nativo local (Puppeteer) para:', query);
+      
+      // ✅ Inicializar scraper explícitamente antes de usar
+      if (!scraper['browser']) {
+        console.log('🚀 Inicializando navegador...');
+        await scraper['init']();
+        scraperInitialized = true;
+      }
+      
       const items = await scraper.scrapeAliExpress(query);
       products = (items || []).slice(0, maxItems).map((p: any) => ({
         title: p.title,
         price: Number(p.price) || 0,
         productUrl: p.productUrl,
         imageUrl: p.imageUrl,
-        productId: p.productId,
+        productId: p.productId || p.productUrl?.split('/').pop()?.split('.html')[0],
       }));
-      console.log(`✅ Scraping nativo exitoso: ${products.length} productos encontrados`);
+      
+      if (products.length > 0) {
+        console.log(`✅ Scraping nativo exitoso: ${products.length} productos encontrados`);
+      } else {
+        console.warn('⚠️  Scraping nativo no encontró productos (puede ser selector incorrecto o página bloqueada)');
+      }
     } catch (nativeError: any) {
-      console.warn('⚠️  Scraping nativo falló, intentando bridge Python:', nativeError.message);
+      const errorMsg = nativeError?.message || String(nativeError);
+      console.error('❌ Error en scraping nativo:', errorMsg);
+      console.warn('⚠️  Scraping nativo falló, intentando bridge Python:', errorMsg);
       
       // Verificar si el error es por CAPTCHA que requiere intervención manual
       const nativeMsg = String(nativeError?.message || '').toLowerCase();
