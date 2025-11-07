@@ -59,7 +59,7 @@ class OpportunityFinderService {
         scraperInitialized = true;
       }
       
-      const items = await scraper.scrapeAliExpress(query);
+      const items = await scraper.scrapeAliExpress(userId, query);
       products = (items || []).slice(0, maxItems).map((p: any) => ({
         title: p.title,
         price: Number(p.price) || 0,
