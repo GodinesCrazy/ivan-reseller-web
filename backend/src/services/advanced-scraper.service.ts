@@ -1148,7 +1148,7 @@ export class AdvancedMarketplaceScraper {
       await new Promise(resolve => setTimeout(resolve, 2000));
       await page.evaluate(() => {
         const doc = (globalThis as any).document;
-        const popup = doc?.querySelector('.ui-window, .next-dialog, .aliexpress-quick-popup');
+        const popup = doc?.querySelector('.ui-window, .next-dialog, .aliexpress-quick-popup, #ui-mask');
         if (popup && popup.parentElement) {
           popup.parentElement.removeChild(popup);
         }
@@ -1159,7 +1159,11 @@ export class AdvancedMarketplaceScraper {
         frame = page.mainFrame().childFrames().find(f => f.name() === 'alibaba-login-box' || f.url().includes('login.alibaba.com'));
       }
       const target = frame || page.mainFrame();
-      await target.waitForSelector('input[name="loginId"], input#fm-login-id', { timeout: 10000 });
+      const formAvailable = await target.waitForSelector('input[name="loginId"], input#fm-login-id', { timeout: 10000 }).then(() => true).catch(() => false);
+      if (!formAvailable) {
+        console.warn('⚠️  mini_login form not accessible, attempting ajax fallback');
+        return await this.tryAliExpressAjaxLogin(page, email, password);
+      }
       await target.evaluate(() => {
         const doc = (globalThis as any).document;
         const switchBtn = doc?.querySelector('.fm-switch-mode, .switch-btn, a[data-spm*="password"]');
@@ -1180,9 +1184,62 @@ export class AdvancedMarketplaceScraper {
       if (cookies.some(c => c.name.toLowerCase().includes('xman')) || cookies.some(c => c.name === 'intl_locale')) {
         return true;
       }
-      return false;
+      console.warn('⚠️  Form login did not set expected cookies, trying ajax fallback');
+      return await this.tryAliExpressAjaxLogin(page, email, password);
     } catch (error) {
       console.warn('⚠️  Direct AliExpress login fallback failed:', (error as Error).message);
+      return await this.tryAliExpressAjaxLogin(page, email, password);
+    }
+  }
+
+  private async tryAliExpressAjaxLogin(page: Page, email: string, password: string): Promise<boolean> {
+    try {
+      const result = await page.evaluate(async ({ email, password }) => {
+        const payload = new URLSearchParams({
+          loginId: email,
+          password2: password,
+          keepLogin: 'true',
+          bizParams: '',
+          appName: 'aebuyer',
+          fromSite: 'main',
+          csessionid: '',
+          umidToken: '',
+          hsiz: '',
+          riskControlCode: '',
+          scene: '',
+        });
+        const response = await fetch('https://passport.aliexpress.com/mini_login/ajaxLogin.htm', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'accept': 'application/json, text/javascript, */*; q=0.01',
+            'x-requested-with': 'XMLHttpRequest',
+          },
+          body: payload.toString(),
+          credentials: 'include',
+        });
+        if (!response.ok) {
+          return { success: false, status: response.status };
+        }
+        const data = await response.json();
+        return data as any;
+      }, { email, password });
+
+      if (!result || result.content?.status === 'fail') {
+        console.warn('⚠️  Ajax login reported failure', result?.content || result);
+        return false;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const cookies = await page.cookies();
+      if (cookies.some(c => c.name.toLowerCase().includes('xman')) || cookies.some(c => c.name === 'intl_locale')) {
+        return true;
+      }
+
+      console.warn('⚠️  Ajax login succeeded but expected cookies missing');
+      return false;
+    } catch (error) {
+      console.warn('⚠️  Ajax login fallback failed:', (error as Error).message);
       return false;
     }
   }
