@@ -3,7 +3,7 @@ import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { PrismaClient } from '@prisma/client';
 import { AppError } from '../../middleware/error.middleware';
 import { apiAvailability } from '../../services/api-availability.service';
-import { CredentialsManager } from '../../services/credentials-manager.service';
+import { CredentialsManager, decryptCredentials } from '../../services/credentials-manager.service';
 import { supportsEnvironments } from '../../config/api-keys.config';
 import type { ApiName, ApiEnvironment } from '../../types/api-credentials.types';
 
@@ -73,27 +73,39 @@ router.get('/:apiName', async (req: Request, res: Response, next) => {
       throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
     }
 
-    // Usar CredentialsManager para obtener credenciales
-    const credentials = await CredentialsManager.getCredentials(
-      userId,
-      apiName as ApiName,
-      environment
-    );
+    const supportsEnv = supportsEnvironments(apiName);
 
-    if (!credentials) {
-      return res.status(404).json({ 
-        success: false,
-        error: `${apiName} credentials not found for ${environment} environment` 
+    const record = await prisma.apiCredential.findFirst({
+      where: {
+        userId,
+        apiName: apiName as ApiName,
+        environment: supportsEnv ? environment : 'production',
+      },
+    });
+
+    if (!record) {
+      return res.json({
+        success: true,
+        data: {
+          apiName,
+          environment,
+          credentials: null,
+          isActive: false,
+          supportsEnvironments: supportsEnv,
+        }
       });
     }
 
+    const credentials = decryptCredentials(record.credentials);
+ 
     res.json({ 
       success: true,
       data: {
         apiName,
         environment,
         credentials,
-        supportsEnvironments: supportsEnvironments(apiName),
+        isActive: record.isActive,
+        supportsEnvironments: supportsEnv,
       }
     });
   } catch (error) {
