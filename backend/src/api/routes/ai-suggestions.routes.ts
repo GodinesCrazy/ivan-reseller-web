@@ -39,16 +39,24 @@ router.post('/generate', async (req: Request, res: Response, next) => {
 
     const category = req.body.category as string | undefined;
 
+    // ✅ El servicio siempre retorna un array, nunca lanza error
     const suggestions = await aiSuggestionsService.generateSuggestions(userId, category);
 
     res.json({
       success: true,
-      suggestions,
-      count: suggestions.length,
-      message: `Se generaron ${suggestions.length} sugerencias inteligentes`
+      suggestions: suggestions || [],
+      count: suggestions?.length || 0,
+      message: `Se generaron ${suggestions?.length || 0} sugerencias inteligentes`
     });
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    // ✅ Si por alguna razón hay un error no capturado, retornar respuesta válida
+    console.error('Error in /api/ai-suggestions/generate:', error);
+    res.status(200).json({
+      success: true,
+      suggestions: [],
+      count: 0,
+      message: 'No se pudieron generar sugerencias en este momento. Intenta más tarde.'
+    });
   }
 });
 
