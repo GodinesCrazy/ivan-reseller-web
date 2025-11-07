@@ -194,9 +194,30 @@ export class AISuggestionsService {
       let groqCredentials: any = null;
       try {
         groqCredentials = await CredentialsManager.getCredentials(userId, 'groq', 'production');
+        
+        // ✅ Validar que las credenciales estén presentes y sean válidas
+        if (groqCredentials && groqCredentials.apiKey) {
+          // Limpiar espacios en blanco
+          groqCredentials.apiKey = String(groqCredentials.apiKey).trim();
+          
+          // Validar que la API key no esté vacía
+          if (!groqCredentials.apiKey || groqCredentials.apiKey.length < 10) {
+            logger.warn('AISuggestions: GROQ API key inválida (muy corta o vacía)', { 
+              apiKeyLength: groqCredentials.apiKey?.length || 0 
+            });
+            groqCredentials = null;
+          } else {
+            logger.info('AISuggestions: Credenciales GROQ obtenidas correctamente', { 
+              hasApiKey: !!groqCredentials.apiKey,
+              apiKeyPrefix: groqCredentials.apiKey.substring(0, 10) + '...',
+              model: groqCredentials.model || 'default'
+            });
+          }
+        }
       } catch (credError: any) {
         logger.warn('AISuggestions: Error obteniendo credenciales GROQ', { error: credError.message });
         // Continuar sin GROQ, usar fallback
+        groqCredentials = null;
       }
 
       if (!groqCredentials || !groqCredentials.apiKey) {
@@ -210,10 +231,20 @@ export class AISuggestionsService {
       // Llamar a GROQ API
       let response: any;
       try {
+        // ✅ Asegurar que la API key esté limpia
+        const cleanApiKey = String(groqCredentials.apiKey).trim();
+        const model = groqCredentials.model || 'llama-3.3-70b-versatile';
+        
+        logger.info('AISuggestions: Llamando a GROQ API', { 
+          model,
+          apiKeyPrefix: cleanApiKey.substring(0, 10) + '...',
+          promptLength: prompt.length
+        });
+
         response = await axios.post(
           'https://api.groq.com/openai/v1/chat/completions',
           {
-            model: groqCredentials.model || 'llama-3.3-70b-versatile',
+            model,
             messages: [
               {
                 role: 'system',
@@ -230,18 +261,39 @@ export class AISuggestionsService {
           },
           {
             headers: {
-              'Authorization': `Bearer ${groqCredentials.apiKey}`,
+              'Authorization': `Bearer ${cleanApiKey}`,
               'Content-Type': 'application/json'
             },
             timeout: 30000
           }
         );
-      } catch (apiError: any) {
-        logger.error('AISuggestions: Error llamando a GROQ API', { 
-          error: apiError.message, 
-          status: apiError.response?.status,
-          userId 
+        
+        logger.info('AISuggestions: Respuesta exitosa de GROQ API', { 
+          hasContent: !!response.data?.choices?.[0]?.message?.content 
         });
+      } catch (apiError: any) {
+        // ✅ Logging más detallado para diagnosticar el 401
+        const errorDetails: any = {
+          error: apiError.message,
+          status: apiError.response?.status,
+          statusText: apiError.response?.statusText,
+          userId,
+          apiKeyPrefix: groqCredentials.apiKey ? String(groqCredentials.apiKey).trim().substring(0, 10) + '...' : 'N/A'
+        };
+        
+        // Si hay respuesta del servidor, incluir más detalles
+        if (apiError.response) {
+          errorDetails.responseData = apiError.response.data;
+          errorDetails.responseHeaders = apiError.response.headers;
+        }
+        
+        logger.error('AISuggestions: Error llamando a GROQ API', errorDetails);
+        
+        // Si es 401, sugerir verificar la API key
+        if (apiError.response?.status === 401) {
+          logger.warn('AISuggestions: GROQ API retornó 401 (Unauthorized). Verifica que la API key sea válida y esté activa.');
+        }
+        
         return this.generateFallbackSuggestions(userId);
       }
 
