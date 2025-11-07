@@ -111,6 +111,34 @@ export class AdvancedMarketplaceScraper {
       // Extraer runParams con los productos renderizados por la propia página
       let products: any[] = [];
       try {
+        const runParamsFromScript = await this.extractRunParamsFromPage(page);
+        if (runParamsFromScript) {
+          const list =
+            runParamsFromScript?.mods?.itemList?.content ||
+            runParamsFromScript?.resultList ||
+            runParamsFromScript?.items ||
+            [];
+
+          if (Array.isArray(list) && list.length > 0) {
+            products = list.map((item: any) => ({
+              title: String(item.title || item.productTitle || '').trim().substring(0, 150),
+              price: Number(item.actSkuCalPrice || item.skuCalPrice || item.salePrice || 0),
+              imageUrl: (item.image?.imgUrl || item.imageUrl || '').replace(/^\//, 'https://'),
+              productUrl: (item.productUrl || item.detailUrl || '').startsWith('http') ? (item.productUrl || item.detailUrl) : `https:${item.productUrl || item.detailUrl || ''}`,
+              rating: Number(item.evaluationRate) || Number(item.evaluationScore) || 0,
+              reviewCount: Number(item.evaluationCount) || Number(item.reviewNum) || 0,
+              seller: item.storeName || 'AliExpress Vendor',
+              shipping: item.logistics?.desc || item.logisticsDesc || 'Varies',
+              availability: 'In stock',
+            })).filter((p: any) => p.title && p.price);
+
+            if (products.length > 0) {
+              console.log(`✅ Extraídos ${products.length} productos desde runParams (script)`);
+              return products;
+            }
+          }
+        }
+
         await page.waitForFunction(() => (window as any).runParams?.resultList?.length || (window as any).runParams?.mods?.itemList?.content?.length, { timeout: 15000 });
         const runParams = await page.evaluate(() => (window as any).runParams);
         const list =
@@ -122,7 +150,7 @@ export class AdvancedMarketplaceScraper {
         if (Array.isArray(list) && list.length > 0) {
           products = list.map((item: any) => ({
             title: String(item.title || item.productTitle || '').trim().substring(0, 150),
-            price: Number(item.actSkuCalPrice || item.skuCalPrice || item.skuCalPrice || item.salePrice || 0),
+            price: Number(item.actSkuCalPrice || item.skuCalPrice || item.salePrice || 0),
             imageUrl: (item.image?.imgUrl || item.imageUrl || '').replace(/^\//, 'https://'),
             productUrl: (item.productUrl || item.detailUrl || '').startsWith('http') ? (item.productUrl || item.detailUrl) : `https:${item.productUrl || item.detailUrl || ''}`,
             rating: Number(item.evaluationRate) || Number(item.evaluationScore) || 0,
@@ -133,7 +161,7 @@ export class AdvancedMarketplaceScraper {
           })).filter((p: any) => p.title && p.price);
 
           if (products.length > 0) {
-            console.log(`✅ Extraídos ${products.length} productos desde runParams`);
+            console.log(`✅ Extraídos ${products.length} productos desde runParams (window)`);
             return products;
           }
         }
@@ -590,6 +618,36 @@ export class AdvancedMarketplaceScraper {
     // 3. Scraping de sitios alternativos
 
     return [];
+  }
+
+  private async extractRunParamsFromPage(page: Page): Promise<any | null> {
+    try {
+      const scriptContent = await page.evaluate(() => {
+        const scripts = Array.from(document.querySelectorAll('script'));
+        for (const script of scripts) {
+          const text = script.textContent || '';
+          if (text.includes('window.runParams')) {
+            return text;
+          }
+        }
+        return null;
+      });
+
+      if (!scriptContent) {
+        return null;
+      }
+
+      const match = scriptContent.match(/window\.runParams\s*=\s*(\{[\s\S]*?\});/);
+      if (!match || match.length < 2) {
+        return null;
+      }
+
+      const jsonString = match[1];
+      return JSON.parse(jsonString);
+    } catch (error) {
+      console.log('⚠️  Error extrayendo runParams del HTML:', (error as Error).message);
+      return null;
+    }
   }
 }
 
