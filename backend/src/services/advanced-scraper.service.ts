@@ -890,6 +890,7 @@ export class AdvancedMarketplaceScraper {
          attempts += 1;
          await this.handleAliExpressPopups(loginPage);
          await this.handleAliExpressPopups(context);
+         context = await this.resolveAliExpressActiveContext(loginPage, context);
          const detection = await this.detectAliExpressState(context);
          lastState = detection.state;
          console.log(`🔐 AliExpress state [${attempts}]: ${detection.state}${detection.details ? ` (${detection.details})` : ''}`);
@@ -946,6 +947,7 @@ export class AdvancedMarketplaceScraper {
 
          await new Promise(resolve => setTimeout(resolve, 1500));
          context = (await this.waitForAliExpressLoginFrame(loginPage)) || loginPage;
+         context = await this.resolveAliExpressActiveContext(loginPage, context);
        }
 
        console.warn(`⚠️  Unable to authenticate on AliExpress after ${attempts} steps. Last state: ${lastState}`);
@@ -964,7 +966,7 @@ export class AdvancedMarketplaceScraper {
       console.log('🔐 AliExpress login frames:', frames.map(f => f.url()));
       return frames.find((frame) => {
         const frameUrl = frame.url();
-        return frameUrl.includes('login.alibaba.com') || frameUrl.includes('passport.aliexpress.com') || frameUrl.includes('mini_login') || frameUrl.includes('render-accounts.aliexpress.com');
+        return frameUrl.includes('login.alibaba.com') || frameUrl.includes('passport.aliexpress.com') || frameUrl.includes('mini_login') || frameUrl.includes('render-accounts.aliexpress.com') || frameUrl.includes('passkey');
       }) || null;
     } catch (error) {
       console.warn('⚠️  Error locating AliExpress login iframe:', (error as Error).message);
@@ -1011,6 +1013,7 @@ export class AdvancedMarketplaceScraper {
             hasAccountMenu: false,
             hasTextLoginLink: false,
             bodySnippet: '',
+            isEmpty: true,
           };
         }
 
@@ -1046,8 +1049,13 @@ export class AdvancedMarketplaceScraper {
           hasTextLoginLink,
           hasAccountMenu,
           bodySnippet,
+          isEmpty: false,
         };
       }, selectorCatalog);
+
+      if (info.isEmpty) {
+        return { state: AliExpressLoginState.REQUIRES_MANUAL_REVIEW, details: 'empty-frame' };
+      }
 
       if (info.hasAccountMenu) {
         return { state: AliExpressLoginState.LOGGED_IN };
@@ -1306,9 +1314,21 @@ export class AdvancedMarketplaceScraper {
   private async logAliExpressHtml(page: Page, context: FrameLike, label: string): Promise<void> {
     try {
       const pageHtml = await page.evaluate(() => (globalThis as any).document?.documentElement?.outerHTML || '').catch(() => '');
-      const contextHtml = await context.evaluate(() => (globalThis as any).document?.documentElement?.outerHTML || '').catch(() => '');
-      console.log(`📄 AliExpress HTML [${label}] page=${pageHtml.slice(0, 500)} ...`);
-      console.log(`📄 AliExpress HTML [${label}] context=${contextHtml.slice(0, 500)} ...`);
+      let contextHtml = '';
+      let contextUrl = 'main-page';
+      if (context !== page) {
+        try {
+          contextHtml = await context.evaluate(() => (globalThis as any).document?.documentElement?.outerHTML || '').catch(() => '');
+          // @ts-ignore
+          contextUrl = (context as Frame).url?.() || 'frame';
+        } catch {
+          contextHtml = '[unavailable]';
+        }
+      }
+      console.log(`📄 AliExpress HTML [${label}] page=${page.url()} snippet=${pageHtml.slice(0, 800)} ...`);
+      if (context !== page) {
+        console.log(`📄 AliExpress HTML [${label}] context=${contextUrl} snippet=${contextHtml.slice(0, 800)} ...`);
+      }
     } catch (error) {
       console.warn('⚠️  Unable to log AliExpress HTML:', (error as Error).message);
     }
@@ -1335,6 +1355,25 @@ export class AdvancedMarketplaceScraper {
       }
     }
     await this.clickIfExists(context, selectors, 'account-menu');
+  }
+
+  private async resolveAliExpressActiveContext(page: Page, current: FrameLike): Promise<FrameLike> {
+    try {
+      const frames = page.frames();
+      const candidate = frames.find(frame => {
+        const url = frame.url();
+        return url.includes('passkey') || url.includes('render-accounts.aliexpress.com') || url.includes('login.alibaba.com');
+      });
+      if (candidate) {
+        const hasDocument = await candidate.evaluate(() => Boolean((globalThis as any).document?.body)).catch(() => false);
+        if (hasDocument) {
+          return candidate;
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️  Error resolving active AliExpress context:', (error as Error).message);
+    }
+    return current;
   }
 }
 
