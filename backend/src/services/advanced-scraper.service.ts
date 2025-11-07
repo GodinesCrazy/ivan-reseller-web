@@ -36,6 +36,7 @@ enum AliExpressLoginState {
   CAPTCHA = 'CAPTCHA',
   LOGIN_IFRAME = 'LOGIN_IFRAME',
   UNKNOWN = 'UNKNOWN',
+  REQUIRES_MANUAL_REVIEW = 'REQUIRES_MANUAL_REVIEW',
 }
 
 interface AliExpressDetectionResult {
@@ -48,6 +49,7 @@ export class AdvancedMarketplaceScraper {
   private isLoggedIn = false;
   private loggedInUserId: number | null = null;
   private readonly loginUrl = 'https://login.aliexpress.com/?fromSite=52&foreSite=main&spm=a2g0o.home.1000002.2.650511a5TtU7UQ';
+  private readonly fallbackLoginUrl = 'https://passport.aliexpress.com/ac/vanstoken2?fromSite=main&lang=en_US&appName=ae_pc';
   private readonly aliExpressSelectorMap: Record<string, string[]> = {
     'login.email': [
       'input#fm-login-id',
@@ -107,6 +109,25 @@ export class AdvancedMarketplaceScraper {
       'button[aria-label="close"]',
       '.next-dialog .next-dialog-close',
       '.close-button',
+      'button:contains("Aceptar")',
+      'button:contains("Acepto")',
+      'button:contains("Aceptar todos")',
+      'button:contains("Accept")',
+    ],
+    'login.textLinks': [
+      'a:contains("Sign in")',
+      'a:contains("Iniciar sesión")',
+      'a:contains("Acceder")',
+      'button:contains("Sign in")',
+      'button:contains("Iniciar sesión")',
+      '.top-login-btn',
+      '.welcome-offer-login',
+    ],
+    'state.loginLink.text': [
+      'a:contains("Sign in")',
+      'a:contains("Login")',
+      'a:contains("Iniciar sesión")',
+      'a:contains("Acceder")',
     ],
     'state.captcha': [
       '#nc_1_n1z',
@@ -821,7 +842,7 @@ export class AdvancedMarketplaceScraper {
        let attempts = 0;
        let lastState: AliExpressLoginState = AliExpressLoginState.UNKNOWN;
 
-       while (attempts < 8) {
+       while (attempts < 10) {
          attempts += 1;
          await this.handleAliExpressPopups(context);
          const detection = await this.detectAliExpressState(context);
@@ -855,6 +876,17 @@ export class AdvancedMarketplaceScraper {
              await this.captureAliExpressSnapshot(loginPage, 'captcha-detected');
              return;
            case AliExpressLoginState.UNKNOWN:
+             if (attempts >= 4) {
+               console.warn('⚠️  Persisting UNKNOWN state, forcing direct login navigation');
+               await loginPage.goto(this.fallbackLoginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
+             } else {
+               await this.tryClickLoginByText(context);
+             }
+             break;
+           case AliExpressLoginState.REQUIRES_MANUAL_REVIEW:
+             console.warn('⚠️  AliExpress layout requires manual review. Capturing snapshot and stopping.');
+             await this.captureAliExpressSnapshot(loginPage, 'manual-review-required');
+             return;
            default:
              console.warn('⚠️  AliExpress state unknown, retrying...');
              break;
@@ -909,6 +941,7 @@ export class AdvancedMarketplaceScraper {
         loginLink: this.getAliExpressSelectors('state.loginLink'),
         accountMenu: this.getAliExpressSelectors('state.accountMenu'),
         captcha: this.getAliExpressSelectors('state.captcha'),
+        loginLinkText: this.getAliExpressSelectors('state.loginLink.text'),
       };
 
       const info = await context.evaluate((selectors) => {
@@ -919,17 +952,31 @@ export class AdvancedMarketplaceScraper {
             hasCaptcha: false,
             hasLoginLink: false,
             hasAccountMenu: false,
+            hasTextLoginLink: false,
             bodySnippet: '',
           };
         }
 
-        const matchesAny = (list: string[]) => list.some(sel => doc.querySelector(sel));
+        const matchesAny = (list: string[]) => list.some(sel => {
+          if (sel.includes(':contains(')) {
+            const raw = sel.replace(/:contains\(("|')(.*?)("|')\)/, '$2');
+            const text = raw.trim().toLowerCase();
+            const elements = Array.from(doc.querySelectorAll('*')) as any[];
+            return elements.some(el => {
+              const content = (el.textContent || '').trim().toLowerCase();
+              return content === text || content.includes(text);
+            });
+          }
+          return doc.querySelector(sel);
+        });
 
         const hasLoginInputs = matchesAny(selectors.email) && matchesAny(selectors.password) && matchesAny(selectors.submit);
 
         const hasCaptcha = matchesAny(selectors.captcha);
 
         const hasLoginLink = matchesAny(selectors.loginLink);
+
+        const hasTextLoginLink = matchesAny(selectors.loginLinkText);
 
         const hasAccountMenu = matchesAny(selectors.accountMenu);
 
@@ -939,6 +986,7 @@ export class AdvancedMarketplaceScraper {
           hasLoginInputs,
           hasCaptcha,
           hasLoginLink,
+          hasTextLoginLink,
           hasAccountMenu,
           bodySnippet,
         };
@@ -953,7 +1001,7 @@ export class AdvancedMarketplaceScraper {
       if (info.hasLoginInputs) {
         return { state: AliExpressLoginState.LOGIN_FORM };
       }
-      if (info.hasLoginLink) {
+      if (info.hasLoginLink || info.hasTextLoginLink) {
         return { state: AliExpressLoginState.HOME_LOGGED_OUT };
       }
 
@@ -1018,13 +1066,35 @@ export class AdvancedMarketplaceScraper {
     }
   }
 
+  private async tryClickLoginByText(context: FrameLike): Promise<boolean> {
+    const selectors = this.getAliExpressSelectors('login.textLinks');
+    if (selectors.length === 0) {
+      return false;
+    }
+    const clicked = await this.clickIfExists(context, selectors, 'login-text-link');
+    if (!clicked) {
+      await context.evaluate(() => {
+        const doc = (globalThis as any).document;
+         if (!doc) return;
+        const link = (Array.from(doc.querySelectorAll('a, button')) as any[]).find(el => {
+          const text = (el.textContent || '').trim().toLowerCase();
+          return text === 'sign in' || text === 'login' || text === 'iniciar sesión' || text === 'acceder';
+        });
+        if (link) {
+          (link as any).click?.();
+        }
+      });
+    }
+    return clicked;
+  }
+
   private async captureAliExpressSnapshot(page: Page, label: string): Promise<void> {
     try {
       const url = page.url();
       const title = await page.title().catch(() => 'unknown');
       const snippet = await page.evaluate(() => {
         const doc = (globalThis as any).document;
-        return doc?.body?.innerText?.slice(0, 200) || '';
+        return doc?.body?.innerText?.slice(0, 400) || '';
       }).catch(() => '');
       console.log(`📸 AliExpress snapshot [${label}] url=${url} title="${title}" snippet="${snippet.replace(/\s+/g, ' ').trim()}"`);
     } catch (error) {
@@ -1069,9 +1139,32 @@ export class AdvancedMarketplaceScraper {
     for (const selector of selectors) {
       try {
         console.log(`🔎 Trying click selector [${label}]: ${selector}`);
-        const element = await context.$(selector);
-        if (element) {
-          await element.click();
+        let success = false;
+        if (selector.includes(':contains(')) {
+          const raw = selector.replace(/:contains\(("|')(.*?)("|')\)/, '$2');
+          const text = raw.trim().toLowerCase();
+          success = await context.evaluate((searchText) => {
+            const doc = (globalThis as any).document;
+            if (!doc) return false;
+            const elements = Array.from(doc.querySelectorAll('a, button, span, div')) as any[];
+            const candidate = elements.find(el => {
+              const content = (el.textContent || '').trim().toLowerCase();
+              return content === searchText || content.includes(searchText);
+            });
+            if (candidate) {
+              (candidate as any).click?.();
+              return true;
+            }
+            return false;
+          }, text);
+        } else {
+          const element = await context.$(selector);
+          if (element) {
+            await element.click();
+            success = true;
+          }
+        }
+        if (success) {
           console.log(`✅ Clicked selector [${label}]: ${selector}`);
           return true;
         }
