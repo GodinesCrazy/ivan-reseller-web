@@ -927,12 +927,22 @@ export class AdvancedMarketplaceScraper {
                console.warn('⚠️  Persisting UNKNOWN state, forcing direct login navigation');
                await loginPage.goto(this.fallbackLoginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                await new Promise(resolve => setTimeout(resolve, 2000));
+               const fallbackSuccess = await this.tryDirectAliExpressLogin(loginPage, email, password, twoFactorEnabled ? twoFactorSecret : undefined);
+               if (fallbackSuccess) {
+                 await this.persistAliExpressSession(loginPage, userId, { email, password, twoFactorEnabled: !!twoFactorEnabled, twoFactorSecret });
+                 return;
+               }
              } else {
                const clicked = await this.tryClickLoginByText(context);
                if (!clicked && attempts >= 2) {
                  console.warn('⚠️  Login link not found via text, navigating to fallback login page');
                  await loginPage.goto(this.fallbackLoginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                  await new Promise(resolve => setTimeout(resolve, 2000));
+                 const fallbackSuccess = await this.tryDirectAliExpressLogin(loginPage, email, password, twoFactorEnabled ? twoFactorSecret : undefined);
+                 if (fallbackSuccess) {
+                   await this.persistAliExpressSession(loginPage, userId, { email, password, twoFactorEnabled: !!twoFactorEnabled, twoFactorSecret });
+                   return;
+                 }
                }
              }
              break;
@@ -1129,6 +1139,47 @@ export class AdvancedMarketplaceScraper {
       }
     } catch (error) {
       console.warn('⚠️  Unable to persist AliExpress session:', (error as Error).message);
+    }
+  }
+
+  private async tryDirectAliExpressLogin(page: Page, email: string, password: string, twoFactorSecret?: string | null): Promise<boolean> {
+    try {
+      await page.goto('https://passport.aliexpress.com/mini_login.htm', { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await page.evaluate(() => {
+        const doc = (globalThis as any).document;
+        const popup = doc?.querySelector('.ui-window, .next-dialog, .aliexpress-quick-popup');
+        if (popup && popup.parentElement) {
+          popup.parentElement.removeChild(popup);
+        }
+      });
+      const frame = page.mainFrame().childFrames().find(f => f.url().includes('login.alibaba.com') || f.url().includes('mini_login'));
+      const target = frame || page.mainFrame();
+      await target.waitForSelector('input[name="loginId"], input#fm-login-id', { timeout: 5000 });
+      await target.evaluate(() => {
+        const doc = (globalThis as any).document;
+        const switchBtn = doc?.querySelector('.fm-switch-mode, .switch-btn, a[data-spm*="password"]');
+        if (switchBtn) {
+          (switchBtn as any).click?.();
+        }
+      });
+      await target.waitForSelector('input[name="loginId"], input#fm-login-id', { timeout: 5000 });
+      await target.evaluate(() => {
+        const doc = (globalThis as any).document;
+        doc?.querySelectorAll('input').forEach((input: any) => { input.value = ''; });
+      });
+      await target.type('input[name="loginId"], input#fm-login-id', email, { delay: 50 }).catch(() => {});
+      await target.type('input[name="password"], input#fm-login-password', password, { delay: 50 }).catch(() => {});
+      await target.click('button[type="submit"], .fm-button, .next-btn-primary').catch(() => {});
+      await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+      const cookies = await page.cookies();
+      if (cookies.some(c => c.name.toLowerCase().includes('xman')) || cookies.some(c => c.name === 'intl_locale')) {
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.warn('⚠️  Direct AliExpress login fallback failed:', (error as Error).message);
+      return false;
     }
   }
 
