@@ -533,10 +533,23 @@ export default function APISettings() {
       });
 
       const status = response.data?.data || response.data;
-      if (status.isAvailable || status.available) {
-        alert(`✅ Conexión exitosa con ${API_DEFINITIONS[apiName].displayName}`);
+      const isAvailable = status.isAvailable || status.available || false;
+      const errorMessage = status.error || status.message || 'No disponible';
+      const missingFields = status.missingFields || [];
+
+      if (isAvailable) {
+        alert(`✅ Conexión exitosa con ${API_DEFINITIONS[apiName]?.displayName || apiName}`);
       } else {
-        alert(`❌ Error de conexión: ${status.message || 'No disponible'}`);
+        // Construir mensaje de error más descriptivo
+        let errorMsg = errorMessage;
+        if (missingFields && missingFields.length > 0) {
+          errorMsg = `Faltan credenciales: ${missingFields.join(', ')}`;
+        } else if (errorMessage === 'No disponible' || !errorMessage) {
+          errorMsg = status.isConfigured === false 
+            ? 'API no configurada. Por favor, guarda las credenciales primero.'
+            : 'No disponible. Verifica que las credenciales sean correctas.';
+        }
+        alert(`❌ Error de conexión: ${errorMsg}`);
       }
 
       // Actualizar estado
@@ -545,14 +558,32 @@ export default function APISettings() {
         [makeEnvKey(apiName, environment)]: {
           apiName,
           environment,
-          available: status.isAvailable || status.available || false,
-          message: status.message || status.error,
+          available: isAvailable,
+          message: errorMessage,
           lastChecked: status.lastChecked || status.checkedAt || new Date().toISOString(),
         },
       }));
     } catch (err: any) {
       console.error('Error testing API:', err);
-      setError(err.response?.data?.message || 'Error al probar conexión');
+      
+      // Manejar diferentes tipos de errores
+      let errorMsg = 'Error al probar conexión';
+      
+      if (err.response) {
+        // Error del servidor
+        errorMsg = err.response.data?.error || 
+                   err.response.data?.message || 
+                   `Error del servidor: ${err.response.status} ${err.response.statusText}`;
+      } else if (err.request) {
+        // Error de red (sin respuesta del servidor)
+        errorMsg = 'Error de conexión: No se pudo conectar con el servidor. Verifica tu conexión a internet.';
+      } else {
+        // Otro tipo de error
+        errorMsg = err.message || 'Error desconocido al probar la conexión';
+      }
+      
+      setError(errorMsg);
+      alert(`❌ ${errorMsg}`);
     } finally {
       setTesting(null);
     }

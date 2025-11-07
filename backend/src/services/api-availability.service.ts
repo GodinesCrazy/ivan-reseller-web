@@ -18,6 +18,7 @@ interface APIStatus {
   isAvailable: boolean;
   lastChecked: Date;
   error?: string;
+  message?: string;
   missingFields?: string[];
 }
 
@@ -133,7 +134,11 @@ export class APIAvailabilityService {
       };
 
       if (!validation.valid) {
-        status.error = `Missing credentials: ${validation.missing.join(', ')}`;
+        const missingList = validation.missing.join(', ');
+        status.error = `Missing credentials: ${missingList}`;
+        status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else {
+        status.message = 'API configurada correctamente';
       }
 
       this.cache.set(cacheKey, status);
@@ -199,7 +204,11 @@ export class APIAvailabilityService {
       };
 
       if (!validation.valid) {
-        status.error = `Missing credentials: ${validation.missing.join(', ')}`;
+        const missingList = validation.missing.join(', ');
+        status.error = `Missing credentials: ${missingList}`;
+        status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else {
+        status.message = 'API configurada correctamente';
       }
 
       this.cache.set(cacheKey, status);
@@ -256,7 +265,11 @@ export class APIAvailabilityService {
       };
 
       if (!validation.valid) {
-        status.error = `Missing credentials: ${validation.missing.join(', ')}`;
+        const missingList = validation.missing.join(', ');
+        status.error = `Missing credentials: ${missingList}`;
+        status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else {
+        status.message = 'API configurada correctamente';
       }
 
       this.cache.set(cacheKey, status);
@@ -311,7 +324,11 @@ export class APIAvailabilityService {
       };
 
       if (!validation.valid) {
-        status.error = `Missing credentials: ${validation.missing.join(', ')}`;
+        const missingList = validation.missing.join(', ');
+        status.error = `Missing credentials: ${missingList}`;
+        status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else {
+        status.message = 'API configurada correctamente';
       }
 
       this.cache.set(cacheKey, status);
@@ -366,7 +383,11 @@ export class APIAvailabilityService {
       };
 
       if (!validation.valid) {
-        status.error = `Missing credentials: ${validation.missing.join(', ')}`;
+        const missingList = validation.missing.join(', ');
+        status.error = `Missing credentials: ${missingList}`;
+        status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else {
+        status.message = 'API configurada correctamente';
       }
 
       this.cache.set(cacheKey, status);
@@ -421,7 +442,11 @@ export class APIAvailabilityService {
       };
 
       if (!validation.valid) {
-        status.error = `Missing credentials: ${validation.missing.join(', ')}`;
+        const missingList = validation.missing.join(', ');
+        status.error = `Missing credentials: ${missingList}`;
+        status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else {
+        status.message = 'API configurada correctamente';
       }
 
       this.cache.set(cacheKey, status);
@@ -476,7 +501,11 @@ export class APIAvailabilityService {
       };
 
       if (!validation.valid) {
-        status.error = `Missing credentials: ${validation.missing.join(', ')}`;
+        const missingList = validation.missing.join(', ');
+        status.error = `Missing credentials: ${missingList}`;
+        status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else {
+        status.message = 'API configurada correctamente';
       }
 
       this.cache.set(cacheKey, status);
@@ -531,7 +560,11 @@ export class APIAvailabilityService {
       };
 
       if (!validation.valid) {
-        status.error = `Missing credentials: ${validation.missing.join(', ')}`;
+        const missingList = validation.missing.join(', ');
+        status.error = `Missing credentials: ${missingList}`;
+        status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else {
+        status.message = 'API configurada correctamente';
       }
 
       this.cache.set(cacheKey, status);
@@ -586,7 +619,11 @@ export class APIAvailabilityService {
       };
 
       if (!validation.valid) {
-        status.error = `Missing credentials: ${validation.missing.join(', ')}`;
+        const missingList = validation.missing.join(', ');
+        status.error = `Missing credentials: ${missingList}`;
+        status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else {
+        status.message = 'API configurada correctamente';
       }
 
       this.cache.set(cacheKey, status);
