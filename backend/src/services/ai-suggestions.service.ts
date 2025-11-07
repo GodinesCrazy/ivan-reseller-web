@@ -433,14 +433,16 @@ Las sugerencias deben ser:
    */
   private async saveSuggestions(userId: number, suggestions: AISuggestion[]): Promise<void> {
     try {
-      for (const suggestion of suggestions) {
-        // Buscar si ya existe
-        const existing = await prisma.aISuggestion.findFirst({
-          where: {
-            userId,
-            title: suggestion.title
-          }
-        });
+      // ✅ Verificar si la tabla existe antes de guardar
+      try {
+        for (const suggestion of suggestions) {
+          // Buscar si ya existe
+          const existing = await prisma.aISuggestion.findFirst({
+            where: {
+              userId,
+              title: suggestion.title
+            }
+          });
 
         if (existing) {
           await prisma.aISuggestion.update({
@@ -484,6 +486,13 @@ Las sugerencias deben ser:
             }
           });
         }
+      } catch (dbError: any) {
+        // Si la tabla no existe, solo loguear y continuar
+        if (dbError.code === 'P2021' || dbError.message?.includes('does not exist') || dbError.message?.includes('ai_suggestions')) {
+          logger.warn('AISuggestions: Tabla no existe aún, no se pueden guardar sugerencias. Ejecuta la migración.');
+          return;
+        }
+        throw dbError;
       }
     } catch (error) {
       logger.error('AISuggestions: Error guardando sugerencias', { error, userId });
@@ -496,19 +505,21 @@ Las sugerencias deben ser:
    */
   async getSuggestions(userId: number, filter?: string): Promise<AISuggestion[]> {
     try {
-      const where: any = { userId, implemented: false };
-      if (filter && filter !== 'all') {
-        where.type = filter;
-      }
+      // ✅ Verificar si la tabla existe antes de consultar
+      try {
+        const where: any = { userId, implemented: false };
+        if (filter && filter !== 'all') {
+          where.type = filter;
+        }
 
-      const dbSuggestions = await prisma.aISuggestion.findMany({
-        where,
-        orderBy: [
-          { priority: 'desc' },
-          { confidence: 'desc' }
-        ],
-        take: 20
-      });
+        const dbSuggestions = await prisma.aISuggestion.findMany({
+          where,
+          orderBy: [
+            { priority: 'desc' },
+            { confidence: 'desc' }
+          ],
+          take: 20
+        });
 
       return dbSuggestions.map(s => ({
         id: String(s.id),
@@ -535,6 +546,14 @@ Las sugerencias deben ser:
         }) : undefined,
         createdAt: s.createdAt.toISOString()
       }));
+      } catch (dbError: any) {
+        // Si la tabla no existe (error P2021 o similar), retornar array vacío
+        if (dbError.code === 'P2021' || dbError.message?.includes('does not exist') || dbError.message?.includes('ai_suggestions')) {
+          logger.warn('AISuggestions: Tabla no existe aún, retornando array vacío. Ejecuta la migración.');
+          return [];
+        }
+        throw dbError;
+      }
     } catch (error) {
       logger.error('AISuggestions: Error obteniendo sugerencias', { error, userId });
       return [];
@@ -556,7 +575,12 @@ Las sugerencias deben ser:
           implementedAt: new Date()
         }
       });
-    } catch (error) {
+    } catch (error: any) {
+      // Si la tabla no existe, solo loguear
+      if (error.code === 'P2021' || error.message?.includes('does not exist') || error.message?.includes('ai_suggestions')) {
+        logger.warn('AISuggestions: Tabla no existe aún. Ejecuta la migración.');
+        return;
+      }
       logger.error('AISuggestions: Error marcando sugerencia como implementada', { error, userId, suggestionId });
       throw error;
     }
