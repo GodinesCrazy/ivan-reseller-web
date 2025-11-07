@@ -97,11 +97,25 @@ export default function AISuggestionsPanel() {
       });
       
       const newSuggestions = response.data?.suggestions || [];
-      setSuggestions(prev => [...newSuggestions, ...prev]);
-      toast.success(`✅ Se generaron ${newSuggestions.length} sugerencias inteligentes`);
       
-      // Recargar sugerencias para obtener todas
-      await loadSuggestions();
+      if (newSuggestions.length > 0) {
+        // ✅ Agregar nuevas sugerencias al estado actual
+        setSuggestions(prev => {
+          // Evitar duplicados por ID
+          const existingIds = new Set(prev.map(s => s.id));
+          const uniqueNew = newSuggestions.filter(s => !existingIds.has(s.id));
+          return [...uniqueNew, ...prev];
+        });
+        
+        toast.success(`✅ Se generaron ${newSuggestions.length} sugerencias inteligentes`);
+        
+        // ✅ Esperar un momento antes de recargar para asegurar que se guardaron
+        setTimeout(async () => {
+          await loadSuggestions();
+        }, 1000);
+      } else {
+        toast.warn('No se generaron nuevas sugerencias en este momento');
+      }
     } catch (error: any) {
       console.error('Error generating suggestions:', error);
       const errorMsg = error.response?.data?.error || error.message || 'Error al generar sugerencias';
