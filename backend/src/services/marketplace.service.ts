@@ -38,27 +38,54 @@ export interface PublishResult {
 export class MarketplaceService {
   /**
    * Get user's marketplace credentials
+   * @param userId - User ID
+   * @param marketplace - Marketplace name (ebay, mercadolibre, amazon)
+   * @param environment - Environment (sandbox/production). If not provided, uses user's workflow config
    */
-  async getCredentials(userId: number, marketplace: string): Promise<MarketplaceCredentials | null> {
+  async getCredentials(
+    userId: number, 
+    marketplace: string, 
+    environment?: 'sandbox' | 'production'
+  ): Promise<MarketplaceCredentials | null> {
     try {
-      const rec = await prisma.apiCredential.findFirst({
-        where: { userId, apiName: marketplace },
-      });
-      if (!rec) return null;
-      // Decrypt and parse credentials
-      let parsed: any = {};
-      try {
-        const decrypted = this.decrypt(rec.credentials);
-        parsed = JSON.parse(decrypted);
-      } catch {
-        try { parsed = JSON.parse(rec.credentials); } catch { parsed = {}; }
+      // ✅ Obtener environment del usuario si no se proporciona
+      let userEnvironment: 'sandbox' | 'production' = 'production';
+      if (!environment) {
+        const { workflowConfigService } = await import('./workflow-config.service');
+        userEnvironment = await workflowConfigService.getUserEnvironment(userId);
+      } else {
+        userEnvironment = environment;
       }
+
+      // ✅ Usar CredentialsManager para obtener credenciales desencriptadas correctamente
+      const { CredentialsManager } = await import('./credentials-manager.service');
+      const credentials = await CredentialsManager.getCredentials(
+        userId,
+        marketplace as any,
+        userEnvironment
+      );
+
+      if (!credentials) {
+        return null;
+      }
+
+      // ✅ Obtener registro de la DB para isActive
+      const rec = await prisma.apiCredential.findUnique({
+        where: {
+          userId_apiName_environment: {
+            userId,
+            apiName: marketplace,
+            environment: userEnvironment,
+          },
+        },
+      });
+
       return {
-        id: rec.id,
-        userId: rec.userId,
+        id: rec?.id,
+        userId: userId,
         marketplace: marketplace as any,
-        credentials: parsed,
-        isActive: rec.isActive,
+        credentials: credentials as any,
+        isActive: rec?.isActive ?? false,
       };
     } catch (error) {
       throw new AppError(`Failed to get marketplace credentials: ${error.message}`, 500);
@@ -99,10 +126,17 @@ export class MarketplaceService {
 
   /**
    * Test marketplace connection
+   * @param userId - User ID
+   * @param marketplace - Marketplace name
+   * @param environment - Environment (sandbox/production). If not provided, uses user's workflow config
    */
-  async testConnection(userId: number, marketplace: string): Promise<{ success: boolean; message: string }> {
+  async testConnection(
+    userId: number, 
+    marketplace: string,
+    environment?: 'sandbox' | 'production'
+  ): Promise<{ success: boolean; message: string }> {
     try {
-      const credentials = await this.getCredentials(userId, marketplace);
+      const credentials = await this.getCredentials(userId, marketplace, environment);
       if (!credentials) {
         return { success: false, message: 'No credentials found' };
       }
@@ -132,8 +166,15 @@ export class MarketplaceService {
 
   /**
    * Publish product to marketplace
+   * @param userId - User ID
+   * @param request - Publish request with productId, marketplace, and optional customData
+   * @param environment - Environment (sandbox/production). If not provided, uses user's workflow config
    */
-  async publishProduct(userId: number, request: PublishProductRequest): Promise<PublishResult> {
+  async publishProduct(
+    userId: number, 
+    request: PublishProductRequest,
+    environment?: 'sandbox' | 'production'
+  ): Promise<PublishResult> {
     try {
       // Get product from database
       const product = await prisma.product.findFirst({
@@ -165,10 +206,19 @@ export class MarketplaceService {
         throw new AppError('Product is missing required data (title, price). Please complete product information.', 400);
       }
 
-      // Get marketplace credentials
-      const credentials = await this.getCredentials(userId, request.marketplace);
+      // ✅ Obtener environment del usuario si no se proporciona
+      let userEnvironment: 'sandbox' | 'production' = 'production';
+      if (!environment) {
+        const { workflowConfigService } = await import('./workflow-config.service');
+        userEnvironment = await workflowConfigService.getUserEnvironment(userId);
+      } else {
+        userEnvironment = environment;
+      }
+
+      // Get marketplace credentials (con environment)
+      const credentials = await this.getCredentials(userId, request.marketplace, userEnvironment);
       if (!credentials || !credentials.isActive) {
-        throw new AppError(`${request.marketplace} credentials not found or inactive`, 400);
+        throw new AppError(`${request.marketplace} credentials not found or inactive for ${userEnvironment} environment`, 400);
       }
 
       // Publish to specific marketplace
@@ -196,11 +246,16 @@ export class MarketplaceService {
 
   /**
    * Publish to multiple marketplaces
+   * @param userId - User ID
+   * @param productId - Product ID
+   * @param marketplaces - Array of marketplace names
+   * @param environment - Environment (sandbox/production). If not provided, uses user's workflow config
    */
   async publishToMultipleMarketplaces(
     userId: number, 
     productId: number, 
-    marketplaces: string[]
+    marketplaces: string[],
+    environment?: 'sandbox' | 'production'
   ): Promise<PublishResult[]> {
     const results: PublishResult[] = [];
 
@@ -208,7 +263,7 @@ export class MarketplaceService {
       const result = await this.publishProduct(userId, {
         productId,
         marketplace: marketplace as any,
-      });
+      }, environment);
       results.push(result);
     }
 
@@ -448,9 +503,27 @@ export class MarketplaceService {
 
   /**
    * Sync inventory across marketplaces
+   * @param userId - User ID
+   * @param productId - Product ID
+   * @param newQuantity - New quantity
+   * @param environment - Environment (sandbox/production). If not provided, uses user's workflow config
    */
-  async syncInventory(userId: number, productId: number, newQuantity: number): Promise<void> {
+  async syncInventory(
+    userId: number, 
+    productId: number, 
+    newQuantity: number,
+    environment?: 'sandbox' | 'production'
+  ): Promise<void> {
     try {
+      // ✅ Obtener environment del usuario si no se proporciona
+      let userEnvironment: 'sandbox' | 'production' = 'production';
+      if (!environment) {
+        const { workflowConfigService } = await import('./workflow-config.service');
+        userEnvironment = await workflowConfigService.getUserEnvironment(userId);
+      } else {
+        userEnvironment = environment;
+      }
+
       // Get product marketplace listings
       const product = await prisma.product.findFirst({
         where: { id: productId, userId },
@@ -469,7 +542,7 @@ export class MarketplaceService {
       
       for (const marketplace of marketplaces) {
         try {
-          const credentials = await this.getCredentials(userId, marketplace);
+          const credentials = await this.getCredentials(userId, marketplace, userEnvironment);
           if (!credentials) continue;
 
           switch (marketplace) {

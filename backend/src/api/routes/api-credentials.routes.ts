@@ -342,21 +342,27 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const { apiName } = req.params;
+    const { environment = 'production' } = req.body;
+
+    // Validar environment
+    if (environment !== 'sandbox' && environment !== 'production') {
+      throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
+    }
 
     // Force re-check by clearing cache
     await apiAvailability.clearAPICache(userId, apiName);
 
-    // Check API status
+    // Check API status (con environment)
     let status;
     switch (apiName) {
       case 'ebay':
-        status = await apiAvailability.checkEbayAPI(userId);
+        status = await apiAvailability.checkEbayAPI(userId, environment);
         break;
       case 'amazon':
-        status = await apiAvailability.checkAmazonAPI(userId);
+        status = await apiAvailability.checkAmazonAPI(userId, environment);
         break;
       case 'mercadolibre':
-        status = await apiAvailability.checkMercadoLibreAPI(userId);
+        status = await apiAvailability.checkMercadoLibreAPI(userId, environment);
         break;
       case 'groq':
         status = await apiAvailability.checkGroqAPI(userId);
