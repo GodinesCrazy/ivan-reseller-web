@@ -8,6 +8,7 @@ import { selectorAdapter } from './selector-adapter.service';
 import { proxyManager } from './proxy-manager.service';
 import { apiAvailability } from './api-availability.service';
 import { retryScrapingOperation } from '../utils/retry.util';
+import { getChromiumLaunchConfig } from '../utils/chromium';
 
 // Apply stealth plugin to make Puppeteer undetectable
 puppeteer.use(StealthPlugin());
@@ -176,11 +177,17 @@ export class StealthScrapingService {
    * Initialize browser with stealth configuration
    */
   private async initializeBrowser(proxy?: ProxyConfig): Promise<Browser> {
-    // Intentar encontrar Chromium del sistema (instalado por Nix)
-    const fs = require('fs');
-    const { execSync } = require('child_process');
     let executablePath: string | undefined = process.env.PUPPETEER_EXECUTABLE_PATH;
-    
+
+    if (!executablePath) {
+      try {
+        const config = await getChromiumLaunchConfig();
+        executablePath = config.executablePath;
+      } catch (error) {
+        logger.warn('Chromium helper failed to resolve executable:', (error as Error).message);
+      }
+    }
+
     // Primero intentar encontrar Chromium usando 'which'
     if (!executablePath) {
       try {
@@ -208,27 +215,28 @@ export class StealthScrapingService {
     }
     
     try {
+      const chromiumConfig = await getChromiumLaunchConfig([
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process',
+      ]);
+
       const launchOptions: any = {
-        headless: true, // Changed to true for production
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu',
-          '--disable-blink-features=AutomationControlled',
-          '--disable-web-security',
-          '--disable-features=IsolateOrigins,site-per-process',
-        ],
+        headless: chromiumConfig.headless,
+        args: chromiumConfig.args,
+        executablePath: chromiumConfig.executablePath,
       };
 
-      // Si encontramos Chromium del sistema, usarlo
-      if (executablePath) {
-        launchOptions.executablePath = executablePath;
-        logger.info(`Using system Chromium: ${executablePath}`);
-      }
+      executablePath = launchOptions.executablePath;
+
+      logger.info(`Using system Chromium: ${launchOptions.executablePath}`);
 
       // Add proxy if provided
       if (proxy) {

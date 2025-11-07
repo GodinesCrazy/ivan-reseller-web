@@ -3,6 +3,7 @@ import puppeteer, { Browser, Page } from 'puppeteer-core';
 import { AppError } from '../middleware/error.middleware';
 import { stealthScrapingService, EnhancedScrapedProduct } from './stealth-scraping.service';
 import { logger } from '../config/logger';
+import { getChromiumLaunchConfig } from '../utils/chromium';
 
 export interface ScrapedProduct {
   title: string;
@@ -355,19 +356,18 @@ export class AdvancedScrapingService {
       args.push(`--proxy-server=${proxy}`);
     }
 
-    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-
     try {
+      const { executablePath, args: chromiumArgs, headless, defaultViewport } = await getChromiumLaunchConfig(args);
       this.browser = await puppeteer.launch({
-        headless: true,
-        args,
+        headless,
+        args: chromiumArgs,
         executablePath,
-        defaultViewport: { width: 1366, height: 768 },
+        defaultViewport: defaultViewport || { width: 1366, height: 768 },
       });
 
       return this.browser;
     } catch (error) {
-      // Fallback sin executable path
+      logger.warn('Chromium launch with resolved path failed, using default puppeteer launch');
       this.browser = await puppeteer.launch({
         headless: true,
         args,
