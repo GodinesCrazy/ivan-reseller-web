@@ -246,10 +246,10 @@ export class AISuggestionsService {
           {
             model,
             messages: [
-              {
-                role: 'system',
-                content: 'Eres un consultor experto en e-commerce y dropshipping. Genera sugerencias prácticas y accionables basadas en datos reales del negocio. Responde SOLO en formato JSON válido.'
-              },
+            {
+              role: 'system',
+              content: 'Eres un consultor experto en DROPSHIPPING automatizado. Especializado en optimización de flujos AliExpress → Marketplaces (eBay, Amazon, MercadoLibre). Genera sugerencias ESPECÍFICAS de dropshipping automatizado, NO genéricas de e-commerce. Todas las sugerencias deben estar relacionadas con: scraping de AliExpress, publicación en marketplaces, optimización de precios competitivos, gestión de inventario virtual, automatización del flujo. Responde SOLO en formato JSON válido.'
+            },
               {
                 role: 'user',
                 content: prompt
