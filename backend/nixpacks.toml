@@ -31,5 +31,5 @@ cmds = [
 ]
 
 [start]
-cmd = "sh ./start.sh"
+command = "sh ./start.sh"
 
