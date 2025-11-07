@@ -217,20 +217,30 @@ export class CredentialsManager {
     credentials: ApiCredentialsMap[T],
     environment: ApiEnvironment = 'production'
   ): Promise<void> {
+    // ✅ Limpiar y validar credenciales antes de validar con Zod
+    if (credentials && typeof credentials === 'object') {
+      const creds = credentials as any;
+      
+      // Limpiar API keys (eliminar espacios en blanco)
+      if (creds.apiKey && typeof creds.apiKey === 'string') {
+        creds.apiKey = creds.apiKey.trim();
+      }
+      
+      // Para AliExpress, asegurar que twoFactorEnabled sea boolean
+      if (apiName === 'aliexpress') {
+        if (typeof creds.twoFactorEnabled === 'string') {
+          creds.twoFactorEnabled = creds.twoFactorEnabled.toLowerCase() === 'true';
+        }
+        if (creds.twoFactorEnabled === undefined || creds.twoFactorEnabled === null) {
+          creds.twoFactorEnabled = false;
+        }
+      }
+    }
+    
     // Validar credenciales con Zod
     const schema = apiSchemas[apiName];
     if (schema) {
       try {
-        // Para AliExpress, asegurar que twoFactorEnabled sea boolean
-        if (apiName === 'aliexpress' && credentials) {
-          const aliexpressCreds = credentials as any;
-          if (typeof aliexpressCreds.twoFactorEnabled === 'string') {
-            aliexpressCreds.twoFactorEnabled = aliexpressCreds.twoFactorEnabled.toLowerCase() === 'true';
-          }
-          if (aliexpressCreds.twoFactorEnabled === undefined || aliexpressCreds.twoFactorEnabled === null) {
-            aliexpressCreds.twoFactorEnabled = false;
-          }
-        }
         schema.parse(credentials);
       } catch (error) {
         if (error instanceof z.ZodError) {
