@@ -111,7 +111,7 @@ export class AdvancedMarketplaceScraper {
       // Extraer runParams con los productos renderizados por la propia página
       let products: any[] = [];
       try {
-        await page.waitForFunction(() => (window as any).runParams?.resultList?.length || (window as any).runParams?.mods?.itemList?.content?.length, { timeout: 8000 });
+        await page.waitForFunction(() => (window as any).runParams?.resultList?.length || (window as any).runParams?.mods?.itemList?.content?.length, { timeout: 15000 });
         const runParams = await page.evaluate(() => (window as any).runParams);
         const list =
           runParams?.mods?.itemList?.content ||
@@ -168,7 +168,7 @@ export class AdvancedMarketplaceScraper {
 
       if (!productsLoaded) {
         console.warn('⚠️  No se encontraron productos con ningún selector, intentando extraer de todos modos...');
-        await page.waitForTimeout(3000);
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
 
       await this.autoScroll(page);
@@ -560,9 +560,9 @@ export class AdvancedMarketplaceScraper {
    */
   private async autoScroll(page: Page): Promise<void> {
     await page.evaluate(async () => {
-      await new Promise((resolve) => {
+      await new Promise<void>((resolve) => {
         let totalHeight = 0;
-        const distance = 100;
+        const distance = 400;
         const timer = setInterval(() => {
           const scrollHeight = document.body.scrollHeight;
           window.scrollBy(0, distance);
@@ -570,11 +570,12 @@ export class AdvancedMarketplaceScraper {
 
           if (totalHeight >= scrollHeight - window.innerHeight) {
             clearInterval(timer);
-            resolve(null);
+            resolve();
           }
-        }, 100);
+        }, 300);
       });
     });
+    await new Promise(resolve => setTimeout(resolve, 5000));
   }
 
   /**
