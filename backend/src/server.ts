@@ -1,4 +1,3 @@
-import fs from 'fs';
 import app from './app';
 import { env } from './config/env';
 import { prisma, connectWithRetry } from './config/database';
@@ -7,55 +6,10 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { scheduledTasksService } from './services/scheduled-tasks.service';
 import bcrypt from 'bcryptjs';
-import chromium from '@sparticuz/chromium';
+import { resolveChromiumExecutable } from './utils/chromium';
 
 const execAsync = promisify(exec);
 const PORT = parseInt(env.PORT, 10);
-
-async function configureChromiumPath(): Promise<void> {
-  if (!process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD) {
-    process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
-  }
-
-  const candidates = [
-    process.env.PUPPETEER_EXECUTABLE_PATH,
-    process.env.CHROMIUM_PATH,
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/usr/local/bin/chromium',
-    '/usr/local/bin/chromium-browser',
-    '/app/.chromium/chromium',
-  ].filter(Boolean) as string[];
-
-  for (const candidate of candidates) {
-    try {
-      fs.accessSync(candidate, fs.constants.X_OK);
-      const stats = fs.statSync(candidate);
-      if (stats.isFile()) {
-        process.env.PUPPETEER_EXECUTABLE_PATH = candidate;
-        process.env.CHROMIUM_PATH = candidate;
-        console.log(`✅ Chromium system path detected: ${candidate}`);
-        return;
-      }
-    } catch (error) {
-      // ignore and try next candidate
-    }
-  }
-
-  try {
-    const chromiumPath = await chromium.executablePath();
-    if (chromiumPath) {
-      process.env.PUPPETEER_EXECUTABLE_PATH = chromiumPath;
-      process.env.CHROMIUM_PATH = chromiumPath;
-      console.log(`✅ Chromium (Sparticuz) path detected: ${chromiumPath}`);
-      return;
-    }
-  } catch (error: any) {
-    console.warn(`⚠️  Sparticuz chromium path resolution failed: ${error?.message || error}`);
-  }
-
-  console.warn('⚠️  Chromium system path not found. Puppeteer will try to download Chrome.');
-}
 
 async function ensureAdminUser() {
   try {
@@ -228,7 +182,15 @@ async function runMigrations(maxRetries = 3): Promise<void> {
 
 async function startServer() {
   try {
-    await configureChromiumPath();
+    process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
+    try {
+      const chromiumPath = await resolveChromiumExecutable();
+      process.env.PUPPETEER_EXECUTABLE_PATH = chromiumPath;
+      process.env.CHROMIUM_PATH = chromiumPath;
+      console.log(`✅ Chromium executable ready at: ${chromiumPath}`);
+    } catch (error: any) {
+      console.warn('⚠️  Unable to resolve Chromium executable automatically:', error?.message || error);
+    }
     console.log('🚀 Iniciando servidor...');
     console.log(`📦 Environment: ${env.NODE_ENV}`);
     console.log(`🔌 Port: ${PORT}`);

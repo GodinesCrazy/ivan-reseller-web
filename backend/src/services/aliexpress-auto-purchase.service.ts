@@ -1,9 +1,10 @@
-import puppeteer from 'puppeteer-extra';
-import type { Browser, Page } from 'puppeteer';
+import puppeteer, { Browser } from 'puppeteer-core';
+import type { Page } from 'puppeteer';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { logger } from '../config/logger';
 import { AppError } from '../middleware/error.middleware';
 import { prisma } from '../config/database';
+import { getChromiumLaunchConfig } from '../utils/chromium';
 
 puppeteer.use(StealthPlugin());
 
@@ -64,16 +65,13 @@ export class AliExpressAutoPurchaseService {
       return this.browser;
     }
 
+    const { executablePath, args, defaultViewport, headless } = await getChromiumLaunchConfig();
+
     this.browser = await puppeteer.launch({
-      headless: false, // Set to false for debugging, true for production
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-web-security',
-        '--disable-features=IsolateOrigins,site-per-process',
-        '--window-size=1920,1080',
-      ],
+      headless: headless ?? false,
+      executablePath,
+      args,
+      defaultViewport,
     });
 
     return this.browser;

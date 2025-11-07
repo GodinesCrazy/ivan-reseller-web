@@ -3,6 +3,7 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Browser, Page } from 'puppeteer';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
+import { getChromiumLaunchConfig } from '../utils/chromium';
 
 // Configurar Puppeteer con plugin stealth para evadir detección
 puppeteer.use(StealthPlugin());
@@ -31,109 +32,28 @@ export class AdvancedMarketplaceScraper {
   async init(): Promise<void> {
     console.log('🚀 Iniciando navegador con evasión anti-bot...');
 
-    let executablePath: string | undefined = undefined;
+    const { executablePath, args: chromiumArgs, headless, defaultViewport } = await getChromiumLaunchConfig([
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--no-zygote',
+      '--disable-gpu',
+      '--disable-web-security',
+      '--disable-features=VizDisplayCompositor',
+      '--window-size=1920,1080',
+    ]);
 
-    const preferredPaths: string[] = [
-      process.env.PUPPETEER_EXECUTABLE_PATH || '',
-      process.env.CHROMIUM_PATH || '',
-      '/app/.chromium/chromium',
-      '/usr/bin/chromium',
-      '/usr/bin/chromium-browser',
-      '/usr/local/bin/chromium',
-      '/usr/local/bin/chromium-browser',
-    ];
-
-    for (const candidate of preferredPaths) {
-      if (candidate && fs.existsSync(candidate)) {
-        executablePath = candidate;
-        console.log(`✅ Chromium encontrado en ruta preferida: ${executablePath}`);
-        break;
-      }
-    }
-
-    // ESTRATEGIA 2: Buscar usando which si aún no tenemos ruta
-    if (!executablePath) {
-      try {
-        const chromiumPath = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null', { encoding: 'utf-8', timeout: 5000 }).trim();
-        if (chromiumPath && fs.existsSync(chromiumPath)) {
-          executablePath = chromiumPath;
-          console.log(`✅ Encontrado Chromium en PATH: ${executablePath}`);
-        }
-      } catch (e) {
-        console.log('⚠️  No se encontró Chromium mediante which');
-      }
-    }
-
-    // ESTRATEGIA 3: Buscar en el store de Nix (instalado por Nixpacks)
-    if (!executablePath) {
-      try {
-        const nixStorePath = execSync("find /nix/store -path '*chromium-*/bin/chromium' -type f -perm -u=x 2>/dev/null | head -1", { encoding: 'utf-8', timeout: 10000 }).trim();
-        if (nixStorePath && fs.existsSync(nixStorePath)) {
-          executablePath = nixStorePath;
-          console.log(`✅ Encontrado Chromium en Nix store: ${executablePath}`);
-        }
-      } catch (e) {
-        console.log('⚠️  No se encontró Chromium en Nix store');
-      }
-    }
-
-    // ESTRATEGIA 4: Forzar descarga de Chrome de Puppeteer si no encontramos Chromium
-    if (!executablePath) {
-      console.log('⚠️  Chromium del sistema no encontrado, forzando descarga de Chrome de Puppeteer...');
-
-      // Asegurar que PUPPETEER_SKIP_DOWNLOAD no esté bloqueando
-      if (process.env.PUPPETEER_SKIP_DOWNLOAD === 'true') {
-        delete process.env.PUPPETEER_SKIP_DOWNLOAD;
-      }
-
-      // Intentar descargar Chrome explícitamente
-      try {
-        console.log('📥 Descargando Chrome de Puppeteer...');
-        const puppeteerExecutablePath = await puppeteer.executablePath();
-        if (puppeteerExecutablePath && fs.existsSync(puppeteerExecutablePath)) {
-          executablePath = puppeteerExecutablePath;
-          console.log(`✅ Chrome de Puppeteer encontrado en: ${executablePath}`);
-        } else {
-          // Forzar descarga lanzando Puppeteer una vez
-          console.log('📥 Forzando descarga de Chrome...');
-          const testBrowser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
-          await testBrowser.close();
-          const downloadedPath = await puppeteer.executablePath();
-          if (downloadedPath && fs.existsSync(downloadedPath)) {
-            executablePath = downloadedPath;
-            console.log(`✅ Chrome descargado exitosamente en: ${executablePath}`);
-          }
-        }
-      } catch (downloadError: any) {
-        console.log(`⚠️  Error al descargar Chrome: ${downloadError.message}`);
-        // Continuar sin executablePath, Puppeteer intentará encontrarlo
-      }
-    }
-
-    if (!executablePath) {
-      const errorMessage = 'Chromium no encontrado después de intentar todas las estrategias (PATH, Nix, descarga).';
-      console.error(`❌ ${errorMessage}`);
-      throw new Error(errorMessage);
-    }
+    console.log(`✅ Chromium encontrado en ruta preferida: ${executablePath}`);
 
     try {
       const launchOptions: any = {
-        headless: 'new',
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu',
-          '--disable-web-security',
-          '--disable-features=VizDisplayCompositor',
-          '--window-size=1920,1080',
-        ],
+        headless,
+        args: ['--no-sandbox', ...chromiumArgs],
         ignoreDefaultArgs: ['--enable-automation'],
         ignoreHTTPSErrors: true,
         executablePath,
+        defaultViewport,
       };
 
       console.log(`🔧 Lanzando Chromium en: ${executablePath}`);
