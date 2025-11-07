@@ -1144,7 +1144,8 @@ export class AdvancedMarketplaceScraper {
 
   private async tryDirectAliExpressLogin(page: Page, email: string, password: string, twoFactorSecret?: string | null): Promise<boolean> {
     try {
-      await page.goto('https://passport.aliexpress.com/mini_login.htm?lang=en_US&appName=aebuyer&fromSite=main&returnURL=https%3A%2F%2Fwww.aliexpress.com%2F', { waitUntil: 'domcontentloaded', timeout: 45000 });
+      const loginUrl = 'https://passport.aliexpress.com/mini_login.htm?lang=en_US&appName=ae_pc_protection&fromSite=main&returnURL=https%3A%2F%2Fwww.aliexpress.com%2F';
+      await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
       await new Promise(resolve => setTimeout(resolve, 2000));
       await page.evaluate(() => {
         const doc = (globalThis as any).document;
@@ -1200,7 +1201,7 @@ export class AdvancedMarketplaceScraper {
           password2: password,
           keepLogin: 'true',
           bizParams: '',
-          appName: 'aebuyer',
+          appName: 'ae_pc_protection',
           fromSite: 'main',
           csessionid: '',
           umidToken: '',
@@ -1222,11 +1223,12 @@ export class AdvancedMarketplaceScraper {
           return { success: false, status: response.status };
         }
         const data = await response.json();
-        return data as any;
+        return { status: response.status, data };
       }, { email, password });
 
-      if (!result || result.content?.status === 'fail') {
-        console.warn('⚠️  Ajax login reported failure', result?.content || result);
+      const ajaxData: any = result?.data;
+      if (!ajaxData || ajaxData?.content?.status === 'fail') {
+        console.warn('⚠️  Ajax login reported failure', ajaxData?.content || ajaxData);
         return false;
       }
 
@@ -1236,7 +1238,7 @@ export class AdvancedMarketplaceScraper {
         return true;
       }
 
-      console.warn('⚠️  Ajax login succeeded but expected cookies missing');
+      console.warn('⚠️  Ajax login succeeded but expected cookies missing', ajaxData);
       return false;
     } catch (error) {
       console.warn('⚠️  Ajax login fallback failed:', (error as Error).message);
