@@ -48,6 +48,88 @@ export class AdvancedMarketplaceScraper {
   private isLoggedIn = false;
   private loggedInUserId: number | null = null;
   private readonly loginUrl = 'https://login.aliexpress.com/?fromSite=52&foreSite=main&spm=a2g0o.home.1000002.2.650511a5TtU7UQ';
+  private readonly aliExpressSelectorMap: Record<string, string[]> = {
+    'login.email': [
+      'input#fm-login-id',
+      'input[name="fm-login-id"]',
+      'input[name="loginId"]',
+      'input[name="loginKey"]',
+      'input[data-email="true"]',
+      'input[data-placeholder*="Email"]',
+      'input[data-placeholder*="correo"]',
+    ],
+    'login.password': [
+      'input#fm-login-password',
+      'input[name="fm-login-password"]',
+      'input[name="password"]',
+      'input[type="password"]',
+      'input[data-placeholder*="Password"]',
+      'input[data-placeholder*="contraseña"]',
+    ],
+    'login.submit': [
+      'button[type="submit"]',
+      '.login-submit',
+      '.sign-btn',
+      '.next-btn-primary',
+      '.login-button',
+      '#login-button',
+      'button[data-spm-anchor-id*="submit"]',
+      'button[class*="fm-button"]',
+    ],
+    'login.switchPassword': [
+      '.switch-btn',
+      '.password-login',
+      '#login-switch',
+      '.login-switch',
+      'a[data-spm-anchor-id*="password"]',
+      'button[data-role="password"]',
+      'button[data-type="password"]',
+    ],
+    'login.headerLink': [
+      'a[href*="login"]',
+      'a[data-role="login"]',
+      'a[data-spm-anchor-id*="login"]',
+      '.user-account .sign-btn',
+      '.nav-user-account .sign-btn',
+      'a.sign-btn',
+      'button.header-signin-btn',
+    ],
+    'popups.accept': [
+      '#nav-global-cookie-banner .btn-accept',
+      '.cookie-banner button',
+      'button#onetrust-accept-btn-handler',
+      'button#acceptAll',
+      'button[data-role="accept"]',
+      'button[data-spm-anchor-id*="accept"]',
+    ],
+    'popups.close': [
+      'a[data-role="close"]',
+      'button[aria-label="close"]',
+      '.next-dialog .next-dialog-close',
+      '.close-button',
+    ],
+    'state.captcha': [
+      '#nc_1_n1z',
+      '.nc-container',
+      '.captcha-container',
+      '.baxia-container',
+    ],
+    'state.accountMenu': [
+      'a[href*="logout"]',
+      '.my-account',
+      '.account-brief',
+      '.nav-user-account .account-name',
+      '.user-account-info',
+      '.myaccount-info',
+    ],
+    'state.loginLink': [
+      'a.sign-btn',
+      'button.header-signin-btn',
+      'a[data-role="login"]',
+      'a[href*="/login"]',
+      'a[data-spm-anchor-id*="login"]',
+    ],
+  };
 
   async init(): Promise<void> {
     console.log('🚀 Iniciando navegador con evasión anti-bot...');
@@ -807,40 +889,29 @@ export class AdvancedMarketplaceScraper {
   }
 
   private async openLoginFromHeader(page: Page): Promise<void> {
-    const selectors = [
-      'a[href*="login"]',
-      'a[data-role="login"]',
-      'a[data-spm-anchor-id*="login"]',
-      '.user-account .sign-btn',
-      '.nav-user-account .sign-btn',
-      'a.sign-btn',
-      'button.header-signin-btn',
-    ];
-
-    for (const selector of selectors) {
-      const clicked = await this.clickIfExists(page, [selector]);
-      if (clicked) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        return;
-      }
+    const selectors = this.getAliExpressSelectors('login.headerLink');
+    const clicked = await this.clickIfExists(page, selectors, 'open-login-header');
+    if (clicked) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
     }
   }
 
   private async switchToPasswordLogin(context: FrameLike): Promise<void> {
-    await this.clickIfExists(context, [
-      '.switch-btn',
-      '.password-login',
-      '#login-switch',
-      '.login-switch',
-      'a[data-spm-anchor-id*="password"]',
-      'button[data-role="password"]',
-      'button[data-type="password"]',
-    ]);
+    await this.clickIfExists(context, this.getAliExpressSelectors('login.switchPassword'), 'switch-password-login');
   }
 
   private async detectAliExpressState(context: FrameLike): Promise<AliExpressDetectionResult> {
     try {
-      const info = await context.evaluate(() => {
+      const selectorCatalog = {
+        email: this.getAliExpressSelectors('login.email'),
+        password: this.getAliExpressSelectors('login.password'),
+        submit: this.getAliExpressSelectors('login.submit'),
+        loginLink: this.getAliExpressSelectors('state.loginLink'),
+        accountMenu: this.getAliExpressSelectors('state.accountMenu'),
+        captcha: this.getAliExpressSelectors('state.captcha'),
+      };
+
+      const info = await context.evaluate((selectors) => {
         const doc = (globalThis as any).document;
         if (!doc) {
           return {
@@ -852,15 +923,15 @@ export class AdvancedMarketplaceScraper {
           };
         }
 
-        const hasLoginInputs = Boolean(doc.querySelector('input#fm-login-id, input[name="fm-login-id"], input[name="loginId"], input[name="loginKey"]') &&
-          doc.querySelector('input#fm-login-password, input[name="fm-login-password"], input[name="password"], input[type="password"]') &&
-          doc.querySelector('button[type="submit"], .login-submit, .next-btn-primary, .fm-button'));
+        const matchesAny = (list: string[]) => list.some(sel => doc.querySelector(sel));
 
-        const hasCaptcha = Boolean(doc.querySelector('#nc_1_n1z, .nc-container, .captcha-container, .baxia-container'));
+        const hasLoginInputs = matchesAny(selectors.email) && matchesAny(selectors.password) && matchesAny(selectors.submit);
 
-        const hasLoginLink = Boolean(doc.querySelector('a.sign-btn, button.header-signin-btn, a[data-role="login"], a[href*="/login"], a[data-spm-anchor-id*="login"]'));
+        const hasCaptcha = matchesAny(selectors.captcha);
 
-        const hasAccountMenu = Boolean(doc.querySelector('a[href*="logout"], .my-account, .account-brief, .nav-user-account .account-name, .user-account-info, .myaccount-info'));
+        const hasLoginLink = matchesAny(selectors.loginLink);
+
+        const hasAccountMenu = matchesAny(selectors.accountMenu);
 
         const bodySnippet = (doc.body?.innerText || '').slice(0, 200);
 
@@ -871,7 +942,7 @@ export class AdvancedMarketplaceScraper {
           hasAccountMenu,
           bodySnippet,
         };
-      });
+      }, selectorCatalog);
 
       if (info.hasAccountMenu) {
         return { state: AliExpressLoginState.LOGGED_IN };
@@ -894,59 +965,35 @@ export class AdvancedMarketplaceScraper {
   }
 
   private async runAliExpressLoginForm(context: FrameLike, email: string, password: string): Promise<boolean> {
-    await this.handleAliExpressPopups(context);
-    await this.switchToPasswordLogin(context);
+     await this.handleAliExpressPopups(context);
+     await this.switchToPasswordLogin(context);
+ 
+     const emailTyped = await this.typeIntoField(context, this.getAliExpressSelectors('login.email'), email, 'email');
 
-    const emailTyped = await this.typeIntoField(context, [
-      'input#fm-login-id',
-      'input[name="fm-login-id"]',
-      'input[name="loginId"]',
-      'input[name="loginKey"]',
-      'input[data-email="true"]',
-      'input[data-placeholder*="Email"]',
-      'input[data-placeholder*="correo"]',
-    ], email);
-
-    const passwordTyped = await this.typeIntoField(context, [
-      'input#fm-login-password',
-      'input[name="fm-login-password"]',
-      'input[name="password"]',
-      'input[type="password"]',
-      'input[data-placeholder*="Password"]',
-      'input[data-placeholder*="contraseña"]',
-    ], password);
-
-    if (!emailTyped || !passwordTyped) {
-      console.warn('⚠️  Unable to locate login fields inside AliExpress login form');
-      return false;
-    }
-
-    const loginClicked = await this.clickIfExists(context, [
-      'button[type="submit"]',
-      '.login-submit',
-      '.sign-btn',
-      '.next-btn-primary',
-      '.login-button',
-      '#login-button',
-      'button[data-spm-anchor-id*="submit"]',
-      'button[class*="fm-button"]',
-    ]);
-
-    if (!loginClicked) {
-      console.warn('⚠️  Login submit button not found on AliExpress login form');
-      return false;
-    }
-
-    await Promise.race([
-      context.waitForFunction(() => {
-        const w = (globalThis as any).window;
-        return !w?.location?.href?.includes('login');
-      }, { timeout: 15000 }).catch(() => null),
-      new Promise((resolve) => setTimeout(resolve, 7000)),
-    ]);
-
-    return true;
-  }
+     const passwordTyped = await this.typeIntoField(context, this.getAliExpressSelectors('login.password'), password, 'password');
+ 
+     if (!emailTyped || !passwordTyped) {
+       console.warn('⚠️  Unable to locate login fields inside AliExpress login form');
+       return false;
+     }
+ 
+     const loginClicked = await this.clickIfExists(context, this.getAliExpressSelectors('login.submit'), 'login-submit');
+ 
+     if (!loginClicked) {
+       console.warn('⚠️  Login submit button not found on AliExpress login form');
+       return false;
+     }
+ 
+     await Promise.race([
+       context.waitForFunction(() => {
+         const w = (globalThis as any).window;
+         return !w?.location?.href?.includes('login');
+       }, { timeout: 15000 }).catch(() => null),
+       new Promise((resolve) => setTimeout(resolve, 7000)),
+     ]);
+ 
+     return true;
+   }
 
   private async persistAliExpressSession(page: Page, userId: number, creds: Partial<AliExpressCredentials>): Promise<void> {
     try {
@@ -985,9 +1032,15 @@ export class AdvancedMarketplaceScraper {
     }
   }
 
-  private async typeIntoField(context: FrameLike, selectors: string[], value: string): Promise<boolean> {
+  private async typeIntoField(context: FrameLike, selectors: string[], value: string, label = 'field'): Promise<boolean> {
+    if (selectors.length === 0) {
+      console.warn(`⚠️  No selectors configured for ${label}`);
+      return false;
+    }
+
     for (const selector of selectors) {
       try {
+        console.log(`🔎 Trying selector for ${label}: ${selector}`);
         const handle = await context.waitForSelector(selector, { timeout: 5000 });
         if (!handle) continue;
         await context.evaluate((sel) => {
@@ -999,43 +1052,41 @@ export class AdvancedMarketplaceScraper {
         }, selector);
         await handle.click({ clickCount: 3 }).catch(() => {});
         await handle.type(value, { delay: 80 });
+        console.log(`✅ Selector success for ${label}: ${selector}`);
         return true;
-      } catch {
-        // continue with next selector
+      } catch (error) {
+        console.warn(`⚠️  Selector failed for ${label}: ${selector} -> ${(error as Error).message}`);
       }
     }
+    console.warn(`⚠️  All selectors failed for ${label}. Tried: ${selectors.join(', ')}`);
     return false;
   }
 
-  private async clickIfExists(context: FrameLike, selectors: string[]): Promise<boolean> {
+  private async clickIfExists(context: FrameLike, selectors: string[], label = 'click'): Promise<boolean> {
+    if (selectors.length === 0) {
+      return false;
+    }
     for (const selector of selectors) {
       try {
+        console.log(`🔎 Trying click selector [${label}]: ${selector}`);
         const element = await context.$(selector);
         if (element) {
           await element.click();
+          console.log(`✅ Clicked selector [${label}]: ${selector}`);
           return true;
         }
-      } catch {
-        // continue
+      } catch (error) {
+        console.warn(`⚠️  Click selector failed [${label}]: ${selector} -> ${(error as Error).message}`);
       }
     }
+    console.warn(`⚠️  No selectors succeeded for [${label}]. Tried: ${selectors.join(', ')}`);
     return false;
   }
 
   private async handleAliExpressPopups(context: FrameLike): Promise<void> {
-    const popupSelectors = [
-      '#nav-global-cookie-banner .btn-accept',
-      '.cookie-banner button',
-      'button#onetrust-accept-btn-handler',
-      'button#acceptAll',
-      'button[data-role="accept"]',
-      'button[data-spm-anchor-id*="accept"]',
-      'a[data-role="close"]',
-      'button[aria-label="close"]',
-    ];
-
-    for (const selector of popupSelectors) {
-      await this.clickIfExists(context, [selector]);
+    const acceptClicked = await this.clickIfExists(context, this.getAliExpressSelectors('popups.accept'), 'popup-accept');
+    if (!acceptClicked) {
+      await this.clickIfExists(context, this.getAliExpressSelectors('popups.close'), 'popup-close');
     }
   }
 
@@ -1062,6 +1113,14 @@ export class AdvancedMarketplaceScraper {
       console.warn('⚠️  Error fetching AliExpress cookies for user', userId, error);
     }
     return [];
+  }
+
+  private getAliExpressSelectors(key: string, fallback: string[] = []): string[] {
+    const selectors = this.aliExpressSelectorMap[key];
+    if (selectors && selectors.length > 0) {
+      return [...selectors];
+    }
+    return [...fallback];
   }
 }
 
