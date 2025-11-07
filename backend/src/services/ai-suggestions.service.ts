@@ -53,36 +53,38 @@ export class AISuggestionsService {
    * Obtener datos del negocio del usuario para análisis
    */
   private async getUserBusinessData(userId: number): Promise<UserBusinessData> {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        products: {
-          include: {
-            sales: {
-              where: {
-                status: 'DELIVERED'
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          products: {
+            include: {
+              sales: {
+                where: {
+                  status: 'DELIVERED'
+                }
               }
             }
-          }
-        },
-        sales: {
-          where: {
-            status: 'DELIVERED'
           },
-          include: {
-            product: {
-              select: {
-                category: true
+          sales: {
+            where: {
+              status: 'DELIVERED'
+            },
+            include: {
+              product: {
+                select: {
+                  category: true
+                }
               }
             }
           }
         }
-      }
-    });
+      });
 
-    if (!user) {
-      throw new Error('Usuario no encontrado');
-    }
+      if (!user) {
+        logger.warn('AISuggestions: Usuario no encontrado', { userId });
+        throw new Error('Usuario no encontrado');
+      }
 
     const totalSales = user.sales.length;
     const totalRevenue = user.sales.reduce((sum, s) => sum + (s.salePrice || 0), 0);
@@ -157,6 +159,10 @@ export class AISuggestionsService {
       products,
       recentOpportunities
     };
+    } catch (error: any) {
+      logger.error('AISuggestions: Error en getUserBusinessData', { error: error.message, userId });
+      throw error;
+    }
   }
 
   /**
@@ -164,46 +170,80 @@ export class AISuggestionsService {
    */
   async generateSuggestions(userId: number, category?: string): Promise<AISuggestion[]> {
     try {
-      // Obtener credenciales de GROQ
-      const groqCredentials = await CredentialsManager.getCredentials(userId, 'groq', 'production');
-      if (!groqCredentials || !groqCredentials.apiKey) {
-        logger.warn('AISuggestions: GROQ API no configurada');
-        return this.generateFallbackSuggestions(userId);
+      // ✅ Obtener datos del negocio primero (puede fallar si no hay datos)
+      let businessData: UserBusinessData;
+      try {
+        businessData = await this.getUserBusinessData(userId);
+      } catch (dataError: any) {
+        logger.error('AISuggestions: Error obteniendo datos del negocio', { error: dataError.message, userId });
+        // Si falla, usar datos por defecto
+        businessData = {
+          totalSales: 0,
+          totalRevenue: 0,
+          totalProfit: 0,
+          activeProducts: 0,
+          averageProfitMargin: 0,
+          bestCategory: 'General',
+          worstCategory: 'General',
+          products: [],
+          recentOpportunities: 0
+        };
       }
 
-      // Obtener datos del negocio
-      const businessData = await this.getUserBusinessData(userId);
+      // Obtener credenciales de GROQ
+      let groqCredentials: any = null;
+      try {
+        groqCredentials = await CredentialsManager.getCredentials(userId, 'groq', 'production');
+      } catch (credError: any) {
+        logger.warn('AISuggestions: Error obteniendo credenciales GROQ', { error: credError.message });
+        // Continuar sin GROQ, usar fallback
+      }
+
+      if (!groqCredentials || !groqCredentials.apiKey) {
+        logger.warn('AISuggestions: GROQ API no configurada, usando sugerencias de fallback');
+        return this.generateFallbackSuggestions(userId);
+      }
 
       // Generar prompt para IA
       const prompt = this.buildPrompt(businessData, category);
 
       // Llamar a GROQ API
-      const response = await axios.post(
-        'https://api.groq.com/openai/v1/chat/completions',
-        {
-          model: groqCredentials.model || 'llama-3.3-70b-versatile',
-          messages: [
-            {
-              role: 'system',
-              content: 'Eres un consultor experto en e-commerce y dropshipping. Genera sugerencias prácticas y accionables basadas en datos reales del negocio. Responde SOLO en formato JSON válido.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 2000,
-          response_format: { type: 'json_object' }
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${groqCredentials.apiKey}`,
-            'Content-Type': 'application/json'
+      let response: any;
+      try {
+        response = await axios.post(
+          'https://api.groq.com/openai/v1/chat/completions',
+          {
+            model: groqCredentials.model || 'llama-3.3-70b-versatile',
+            messages: [
+              {
+                role: 'system',
+                content: 'Eres un consultor experto en e-commerce y dropshipping. Genera sugerencias prácticas y accionables basadas en datos reales del negocio. Responde SOLO en formato JSON válido.'
+              },
+              {
+                role: 'user',
+                content: prompt
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 2000,
+            response_format: { type: 'json_object' }
           },
-          timeout: 30000
-        }
-      );
+          {
+            headers: {
+              'Authorization': `Bearer ${groqCredentials.apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 30000
+          }
+        );
+      } catch (apiError: any) {
+        logger.error('AISuggestions: Error llamando a GROQ API', { 
+          error: apiError.message, 
+          status: apiError.response?.status,
+          userId 
+        });
+        return this.generateFallbackSuggestions(userId);
+      }
 
       const content = response.data.choices[0]?.message?.content;
       if (!content) {
@@ -229,8 +269,19 @@ export class AISuggestionsService {
       return suggestions;
 
     } catch (error: any) {
-      logger.error('AISuggestions: Error generando sugerencias', { error: error.message, userId });
-      return this.generateFallbackSuggestions(userId);
+      logger.error('AISuggestions: Error generando sugerencias', { 
+        error: error.message, 
+        stack: error.stack,
+        userId 
+      });
+      // ✅ Asegurar que siempre retornamos algo, nunca lanzamos error
+      try {
+        return this.generateFallbackSuggestions(userId);
+      } catch (fallbackError: any) {
+        logger.error('AISuggestions: Error incluso en fallback', { error: fallbackError.message });
+        // Retornar array vacío como último recurso
+        return [];
+      }
     }
   }
 
@@ -332,7 +383,24 @@ Las sugerencias deben ser:
    * Generar sugerencias de fallback sin IA
    */
   private async generateFallbackSuggestions(userId: number): Promise<AISuggestion[]> {
-    const data = await this.getUserBusinessData(userId);
+    let data: UserBusinessData;
+    try {
+      data = await this.getUserBusinessData(userId);
+    } catch (error: any) {
+      logger.warn('AISuggestions: Error obteniendo datos para fallback, usando valores por defecto', { error: error.message });
+      // Usar datos por defecto si falla
+      data = {
+        totalSales: 0,
+        totalRevenue: 0,
+        totalProfit: 0,
+        activeProducts: 0,
+        averageProfitMargin: 0,
+        bestCategory: 'General',
+        worstCategory: 'General',
+        products: [],
+        recentOpportunities: 0
+      };
+    }
     
     const suggestions: AISuggestion[] = [];
 
