@@ -192,6 +192,15 @@ export class CredentialsManager {
 
       // Desencriptar y retornar
       const decrypted = decryptCredentials(credential.credentials);
+      
+      // ✅ Limpiar API keys después de desencriptar
+      if (decrypted && typeof decrypted === 'object') {
+        const creds = decrypted as any;
+        if (creds.apiKey && typeof creds.apiKey === 'string') {
+          creds.apiKey = creds.apiKey.trim();
+        }
+      }
+      
       return decrypted as ApiCredentialsMap[T];
     } catch (error) {
       console.error(`Error getting credentials for ${apiName}:`, error);
