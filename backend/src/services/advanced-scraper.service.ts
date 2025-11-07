@@ -7,7 +7,6 @@ import axios from 'axios';
 import { getChromiumLaunchConfig } from '../utils/chromium';
 import { CredentialsManager } from './credentials-manager.service';
 import type { AliExpressCredentials } from '../types/api-credentials.types';
-import { Cookie } from 'puppeteer';
 
 // Configurar Puppeteer con plugin stealth para evadir detección
 puppeteer.use(StealthPlugin());
@@ -125,10 +124,9 @@ export class AdvancedMarketplaceScraper {
         console.log(`✅ Injected ${cookies.length} AliExpress cookies for user ${userId}`);
         this.isLoggedIn = true;
         this.loggedInUserId = userId;
-        await tempPage.close();
-        return;
       } catch (cookieError) {
         console.warn('⚠️  Unable to inject AliExpress cookies:', (cookieError as Error).message);
+      } finally {
         await tempPage.close().catch(() => {});
       }
     }
