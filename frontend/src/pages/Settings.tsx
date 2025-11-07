@@ -411,12 +411,12 @@ export default function Settings() {
               </button>
 
               <button
-                onClick={() => navigate('/api-keys')}
+                onClick={() => navigate('/other-credentials')}
                 className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
               >
-                <Key className="w-6 h-6 text-primary-600 mb-2" />
-                <h3 className="font-semibold text-gray-900">Marketplace Keys</h3>
-                <p className="text-sm text-gray-600">Quick setup for eBay, MercadoLibre & Amazon</p>
+                <Lock className="w-6 h-6 text-primary-600 mb-2" />
+                <h3 className="font-semibold text-gray-900">Other Credentials</h3>
+                <p className="text-sm text-gray-600">Manage AliExpress login and non-API credentials</p>
               </button>
             </div>
 
