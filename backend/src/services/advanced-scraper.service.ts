@@ -141,6 +141,9 @@ export class AdvancedMarketplaceScraper {
       '.next-menu-item a[href*="login"]',
       '.next-menu-item button[href*="login"]',
       '.aliexpress-header-popover a[href*="login"]',
+      '.legacy-login a[href*="login"]',
+      '.legacy-login button:contains("Sign in")',
+      '.legacy-login .sign-btn',
     ],
     'state.loginLink.text': [
       'a:contains("Sign in")',
@@ -177,6 +180,9 @@ export class AdvancedMarketplaceScraper {
       '.passkey-dialog .close-button',
       'button:contains("Skip")',
       'button:contains("Usar después")',
+      '.ae-passkey-dialog button.next-btn-primary',
+      '.ae-passkey-dialog button[data-role="dismiss"]',
+      '.ae-passkey-dialog button[data-spm*="skip"]',
     ],
     'modal.emailLoginSwitch': [
       'a:contains("Sign in with password")',
@@ -1143,7 +1149,7 @@ export class AdvancedMarketplaceScraper {
       const title = await page.title().catch(() => 'unknown');
       const snippet = await page.evaluate(() => {
         const doc = (globalThis as any).document;
-        return doc?.body?.innerText?.slice(0, 400) || '';
+        return doc?.body?.innerText?.slice(0, 800) || '';
       }).catch(() => '');
       console.log(`📸 AliExpress snapshot [${label}] url=${url} title="${title}" snippet="${snippet.replace(/\s+/g, ' ').trim()}"`);
     } catch (error) {
@@ -1230,7 +1236,16 @@ export class AdvancedMarketplaceScraper {
     if (!acceptClicked) {
       await this.clickIfExists(context, this.getAliExpressSelectors('popups.close'), 'popup-close');
     }
-    await this.clickIfExists(context, this.getAliExpressSelectors('modal.passkey.dismiss'), 'passkey-dismiss');
+    const passkeyDismissed = await this.clickIfExists(context, this.getAliExpressSelectors('modal.passkey.dismiss'), 'passkey-dismiss');
+    if (!passkeyDismissed) {
+      await context.evaluate(() => {
+        const doc = (globalThis as any).document;
+        const dialog = doc?.querySelector('.ae-passkey-dialog, .passkey-dialog, [data-role="passkey-dialog"]');
+        if (dialog && dialog.parentElement) {
+          dialog.parentElement.removeChild(dialog);
+        }
+      }).catch(() => {});
+    }
   }
 
   private async fetchAliExpressCookies(userId: number): Promise<Protocol.Network.Cookie[]> {
