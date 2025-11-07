@@ -407,7 +407,7 @@ app.get('/api/search-opportunities', async (req, res) => {
         
         // Scraping real paralelo
         const [aliexpressProducts, ebayProducts] = await Promise.allSettled([
-          scraper.scrapeAliExpress(query as string),
+          scraper.scrapeAliExpress(1, query as string),
           scraper.scrapeEbay(query as string)
         ]);
 
