@@ -143,7 +143,7 @@ export class AdvancedMarketplaceScraper {
       }
 
       // Si runParams falló o no devolvió datos válidos, continuar con scraping DOM clásico
-      await page.waitForTimeout(4000);
+      await new Promise(resolve => setTimeout(resolve, 4000));
 
       // ✅ Esperar a que carguen los productos con múltiples selectores alternativos
       let productsLoaded = false;
