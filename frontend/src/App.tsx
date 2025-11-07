@@ -22,6 +22,7 @@ const Settings = lazy(() => import('@pages/Settings'));
 const APIConfiguration = lazy(() => import('@pages/APIConfiguration'));
 const APISettings = lazy(() => import('@pages/APISettings'));
 const APIKeys = lazy(() => import('@pages/APIKeys'));
+const OtherCredentials = lazy(() => import('@pages/OtherCredentials'));
 const AdminPanel = lazy(() => import('@pages/AdminPanel'));
 const HelpCenter = lazy(() => import('@pages/HelpCenter'));
 const WorkflowConfig = lazy(() => import('@pages/WorkflowConfig'));
@@ -164,6 +165,7 @@ function AppContent() {
         <Route path="api-config" element={<APIConfiguration />} />
         <Route path="api-settings" element={<APISettings />} />
         <Route path="api-keys" element={<APIKeys />} />
+        <Route path="other-credentials" element={<OtherCredentials />} />
         
         {/* Admin */}
         <Route path="admin" element={<AdminPanel />} />
