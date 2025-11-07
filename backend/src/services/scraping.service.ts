@@ -355,11 +355,13 @@ export class AdvancedScrapingService {
       args.push(`--proxy-server=${proxy}`);
     }
 
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+
     try {
       this.browser = await puppeteer.launch({
         headless: true,
         args,
-        executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', // Usar Chrome instalado
+        executablePath,
         defaultViewport: { width: 1366, height: 768 },
       });
 

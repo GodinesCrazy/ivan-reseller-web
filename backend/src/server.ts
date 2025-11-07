@@ -7,11 +7,12 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { scheduledTasksService } from './services/scheduled-tasks.service';
 import bcrypt from 'bcryptjs';
+import chromium from '@sparticuz/chromium';
 
 const execAsync = promisify(exec);
 const PORT = parseInt(env.PORT, 10);
 
-function configureChromiumPath(): void {
+async function configureChromiumPath(): Promise<void> {
   if (!process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD) {
     process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
   }
@@ -41,10 +42,20 @@ function configureChromiumPath(): void {
     }
   }
 
+  try {
+    const chromiumPath = await chromium.executablePath();
+    if (chromiumPath) {
+      process.env.PUPPETEER_EXECUTABLE_PATH = chromiumPath;
+      process.env.CHROMIUM_PATH = chromiumPath;
+      console.log(`✅ Chromium (Sparticuz) path detected: ${chromiumPath}`);
+      return;
+    }
+  } catch (error: any) {
+    console.warn(`⚠️  Sparticuz chromium path resolution failed: ${error?.message || error}`);
+  }
+
   console.warn('⚠️  Chromium system path not found. Puppeteer will try to download Chrome.');
 }
-
-configureChromiumPath();
 
 async function ensureAdminUser() {
   try {
@@ -217,6 +228,7 @@ async function runMigrations(maxRetries = 3): Promise<void> {
 
 async function startServer() {
   try {
+    await configureChromiumPath();
     console.log('🚀 Iniciando servidor...');
     console.log(`📦 Environment: ${env.NODE_ENV}`);
     console.log(`🔌 Port: ${PORT}`);
