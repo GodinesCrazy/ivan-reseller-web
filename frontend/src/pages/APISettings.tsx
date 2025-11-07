@@ -22,6 +22,7 @@ interface APICredential {
   id: number;
   userId: number;
   apiName: string;
+  environment: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -29,10 +30,15 @@ interface APICredential {
 
 interface APIStatus {
   apiName: string;
+  environment: string;
   available: boolean;
   message?: string;
   lastChecked?: string;
 }
+
+const makeEnvKey = (apiName: string, environment: string) => `${apiName}-${environment}`;
+
+const makeFormKey = (apiName: string, environment: string) => `${apiName}::${environment}`;
 
 interface APIDefinition {
   name: string;
@@ -149,7 +155,6 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
     displayName: 'AliExpress Auto-Purchase',
     description: 'Credenciales de AliExpress para compra automática (usa automatización con navegador)',
     icon: '🛍️',
-    docsUrl: null, // No tiene API oficial
     fields: [
       { key: 'email', label: 'Email / Username', required: true, type: 'text', placeholder: 'tu-email@ejemplo.com', helpText: 'Email o username de tu cuenta de AliExpress' },
       { key: 'password', label: 'Password', required: true, type: 'password', placeholder: 'Tu contraseña de AliExpress', helpText: 'Contraseña de tu cuenta de AliExpress' },
@@ -167,8 +172,10 @@ export default function APISettings() {
   const [testing, setTesting] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [expandedApi, setExpandedApi] = useState<string | null>(null);
+  const [selectedEnvironment, setSelectedEnvironment] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState<Record<string, Record<string, string>>>({});
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+  const [loadingEnvironment, setLoadingEnvironment] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -201,86 +208,105 @@ export default function APISettings() {
       
       // Crear un mapa de APIs configuradas por apiName-environment
       const configuredMap = new Map(
-        configuredApis.map((c: any) => [`${c.apiName}-${c.environment}`, c])
+        configuredApis.map((c: any) => [makeEnvKey(c.apiName, c.environment || 'production'), c])
       );
       
-      // Convertir a formato de credenciales, incluyendo todas las APIs disponibles
-      const creds: APICredential[] = apisData
-        .flatMap((api: any) => {
-          // Si la API soporta ambientes, crear una entrada por ambiente
-          if (api.supportsEnvironments && api.environments) {
-            return Object.keys(api.environments).map((env: string) => {
-              const envData = api.environments[env];
-              const key = `${api.apiName}-${env}`;
-              const configured = configuredMap.get(key);
-              return {
-                id: configured ? 1 : 0, // ID temporal
-                userId: 0, // Se obtiene del backend
-                apiName: api.apiName,
-                environment: env,
-                isActive: configured?.isActive || envData.isActive || false,
-                createdAt: configured?.updatedAt || envData.lastUpdated || new Date().toISOString(),
-                updatedAt: configured?.updatedAt || envData.lastUpdated || new Date().toISOString(),
-              };
-            });
-          } else {
-            // API sin ambientes
-            const key = `${api.apiName}-production`;
-            const configured = configuredMap.get(key);
-            return {
+      const defaultEnvSelection: Record<string, string> = {};
+      const creds: APICredential[] = [];
+      
+      apisData.forEach((api: any) => {
+        if (api.supportsEnvironments && api.environments) {
+          const envKeys = Object.keys(api.environments);
+          const preferredEnv = envKeys.find(env => configuredMap.has(makeEnvKey(api.apiName, env)))
+            || (envKeys.includes('production') ? 'production' : envKeys[0]);
+          defaultEnvSelection[api.apiName] = preferredEnv;
+          envKeys.forEach((env: string) => {
+            const envData = (api.environments?.[env] ?? {}) as any;
+            const key = makeEnvKey(api.apiName, env);
+            const configured = configuredMap.get(key) as any;
+            creds.push({
               id: configured ? 1 : 0,
               userId: 0,
               apiName: api.apiName,
-              environment: 'production',
-              isActive: configured?.isActive || api.isActive || false,
-              createdAt: configured?.updatedAt || api.lastUpdated || new Date().toISOString(),
-              updatedAt: configured?.updatedAt || api.lastUpdated || new Date().toISOString(),
-            };
-          }
-        });
-      setCredentials(creds);
-
-      // Cargar estados de todas las APIs desde /api/credentials/status
-      try {
-        const statusResponse = await api.get('/api/credentials/status');
-        const statusData = statusResponse.data?.data || {};
-        const statusMap: Record<string, APIStatus> = {};
-        
-        // Mapear estados de APIs
-        if (statusData.apis) {
-          statusData.apis.forEach((apiStatus: any) => {
-            statusMap[apiStatus.apiName] = {
-              apiName: apiStatus.apiName,
-              available: apiStatus.isAvailable || false,
-              message: apiStatus.message,
-              lastChecked: apiStatus.lastChecked,
-            };
+              environment: env,
+              isActive: configured?.isActive || envData.isActive || false,
+              createdAt: configured?.updatedAt || envData.lastUpdated || new Date().toISOString(),
+              updatedAt: configured?.updatedAt || envData.lastUpdated || new Date().toISOString(),
+            });
+          });
+        } else {
+          const key = makeEnvKey(api.apiName, 'production');
+          const configured = configuredMap.get(key) as any;
+          defaultEnvSelection[api.apiName] = 'production';
+          creds.push({
+            id: configured ? 1 : 0,
+            userId: 0,
+            apiName: api.apiName,
+            environment: 'production',
+            isActive: configured?.isActive || api.isActive || false,
+            createdAt: configured?.updatedAt || api.lastUpdated || new Date().toISOString(),
+            updatedAt: configured?.updatedAt || api.lastUpdated || new Date().toISOString(),
           });
         }
-        setStatuses(statusMap);
-      } catch (statusErr) {
-        // Si falla, usar datos de /api/settings/apis
-        const statusMap: Record<string, APIStatus> = {};
-        apisData.forEach((api: any) => {
-          if (api.supportsEnvironments && api.environments) {
-            Object.keys(api.environments).forEach((env: string) => {
-              const envData = api.environments[env];
-              statusMap[`${api.apiName}-${env}`] = {
-                apiName: api.apiName,
-                available: envData.isActive && envData.status === 'configured',
-                message: envData.status === 'configured' ? undefined : 'No configurada',
-              };
-            });
-          } else {
-            statusMap[api.apiName] = {
-              apiName: api.apiName,
-              available: api.isActive && api.status === 'configured',
-              message: api.status === 'configured' ? undefined : 'No configurada',
+      });
+      setCredentials(creds);
+      setFormData({});
+      setLoadingEnvironment({});
+      setSelectedEnvironment(prev => {
+        const next = { ...prev };
+        Object.entries(defaultEnvSelection).forEach(([apiName, env]) => {
+          if (!next[apiName]) {
+            next[apiName] = env;
+          }
+        });
+        return next;
+      });
+      
+      // Construir mapa de estados por entorno (simple, basado en activación)
+      const statusMap: Record<string, APIStatus> = {};
+      creds.forEach((cred) => {
+        statusMap[makeEnvKey(cred.apiName, cred.environment)] = {
+          apiName: cred.apiName,
+          environment: cred.environment,
+          available: cred.isActive,
+          message: cred.isActive ? undefined : 'No configurada',
+          lastChecked: undefined,
+        };
+      });
+      try {
+        const statusResponse = await api.get('/api/credentials/status');
+        const statusData = statusResponse.data?.data?.apis || statusResponse.data?.data || [];
+        const normalize = (value: string) => value?.toString().toLowerCase().replace(/[^a-z0-9]/g, '') || '';
+        const statusLookup = new Map<string, any>();
+        if (Array.isArray(statusData)) {
+          statusData.forEach((item: any) => {
+            const key = normalize(item.apiName || item.name);
+            if (key) {
+              statusLookup.set(key, item);
+            }
+          });
+        }
+
+        creds.forEach((cred) => {
+          const match = statusLookup.get(normalize(cred.apiName));
+          if (match) {
+            const available = match.isAvailable ?? match.available ?? cred.isActive;
+            const messageRaw = match.message ?? match.error;
+            const lastCheckedRaw = match.lastChecked ?? match.checkedAt ?? match.timestamp ?? null;
+            statusMap[makeEnvKey(cred.apiName, cred.environment)] = {
+              apiName: cred.apiName,
+              environment: cred.environment,
+              available: !!available,
+              message: messageRaw ? String(messageRaw) : undefined,
+              lastChecked: lastCheckedRaw ? String(lastCheckedRaw) : undefined,
             };
           }
         });
-        setStatuses(statusMap);
+      } catch (statusError) {
+        // Ignorar errores; mantendremos estado básico
       }
+
+      setStatuses(statusMap);
     } catch (err: any) {
       console.error('Error loading credentials:', err);
       if (err.response?.status === 404) {
@@ -293,11 +319,49 @@ export default function APISettings() {
     }
   };
 
-  const handleInputChange = (apiName: string, fieldKey: string, value: string) => {
+  const loadEnvironmentForm = async (apiName: string, environment: string, force = false) => {
+    const formKey = makeFormKey(apiName, environment);
+    if (!force && formData[formKey]) {
+      return;
+    }
+
+    setLoadingEnvironment(prev => ({ ...prev, [formKey]: true }));
+    try {
+      const { data } = await api.get(`/api/credentials/${apiName}`, {
+        params: { environment },
+      });
+
+      const creds = data?.data?.credentials || {};
+      const normalized: Record<string, string> = {};
+      Object.entries(creds || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) {
+          normalized[key] = '';
+        } else if (typeof value === 'boolean') {
+          normalized[key] = value ? 'true' : 'false';
+        } else {
+          normalized[key] = String(value);
+        }
+      });
+
+      setFormData(prev => ({ ...prev, [formKey]: normalized }));
+    } catch (error) {
+      setFormData(prev => ({ ...prev, [formKey]: prev[formKey] || {} }));
+    } finally {
+      setLoadingEnvironment(prev => ({ ...prev, [formKey]: false }));
+    }
+  };
+
+  const handleEnvironmentSelect = (apiName: string, environment: string) => {
+    setSelectedEnvironment(prev => ({ ...prev, [apiName]: environment }));
+    loadEnvironmentForm(apiName, environment, true);
+  };
+
+  const handleInputChange = (apiName: string, environment: string, fieldKey: string, value: string) => {
+    const formKey = makeFormKey(apiName, environment);
     setFormData(prev => ({
       ...prev,
-      [apiName]: {
-        ...(prev[apiName] || {}),
+      [formKey]: {
+        ...(prev[formKey] || {}),
         [fieldKey]: value,
       },
     }));
@@ -308,9 +372,15 @@ export default function APISettings() {
     setError(null);
     try {
       const apiDef = API_DEFINITIONS[apiName];
-      // Usar campos del backend si están disponibles, sino usar API_DEFINITIONS
       const backendDef = backendApiDefinitions[apiName];
-      const fieldsToUse = backendDef?.fields || apiDef.fields;
+      const supportsEnv = backendDef?.supportsEnvironments;
+      const currentEnvironment = supportsEnv
+        ? selectedEnvironment[apiName] || 'production'
+        : 'production';
+      const formKey = makeFormKey(apiName, currentEnvironment);
+      const fieldsToUse = supportsEnv
+        ? backendDef?.environments?.[currentEnvironment]?.fields || apiDef.fields
+        : backendDef?.fields || apiDef.fields;
       
       const credentials: Record<string, any> = {};
 
@@ -349,19 +419,25 @@ export default function APISettings() {
         const fieldKey = field.key;
         const fieldRequired = field.required !== undefined ? field.required : (field.required || false);
         const fieldLabel = field.label || fieldKey;
+
+        if (field.disabled) {
+          continue;
+        }
         
-        const value = formData[apiName]?.[fieldKey] || '';
-        if (fieldRequired && !value.trim()) {
+        const rawValue = formData[formKey]?.[fieldKey] ?? (field.value !== undefined && field.value !== null ? String(field.value) : '');
+        const value = typeof rawValue === 'string' ? rawValue : String(rawValue ?? '');
+
+        if (fieldRequired && !value.toString().trim()) {
           throw new Error(`El campo "${fieldLabel}" es requerido`);
         }
         // Incluir campos incluso si están vacíos para AliExpress (twoFactorEnabled puede ser false)
         if (value.trim() || (apiName === 'aliexpress' && fieldKey === 'twoFactorEnabled')) {
           // Mapear el nombre del campo al formato esperado por el backend
-          const backendKey = fieldMapping[fieldKey] || fieldKey.toLowerCase();
+          const backendKey = fieldMapping[fieldKey] || fieldKey;
           
           // Manejar campos booleanos
           if (fieldKey === 'twoFactorEnabled') {
-            credentials[backendKey] = value.trim().toLowerCase() === 'true' || value === true;
+            credentials[backendKey] = value.trim().toLowerCase() === 'true';
           } else if (value.trim()) {
             credentials[backendKey] = value.trim();
           }
@@ -370,15 +446,15 @@ export default function APISettings() {
 
       // Agregar campos específicos según el tipo de API
       if (apiName === 'ebay') {
-        credentials.sandbox = false; // Por defecto production
+        credentials.sandbox = currentEnvironment === 'sandbox';
       } else if (apiName === 'amazon') {
-        credentials.sandbox = false;
+        credentials.sandbox = currentEnvironment === 'sandbox';
         // Si no se proporciona region, usar default
         if (!credentials.region) {
           credentials.region = 'us-east-1';
         }
       } else if (apiName === 'mercadolibre') {
-        credentials.sandbox = false;
+        credentials.sandbox = currentEnvironment === 'sandbox';
       } else if (apiName === 'paypal') {
         // PayPal usa 'environment' en lugar de 'sandbox'
         if (credentials.environment === 'sandbox') {
@@ -409,7 +485,7 @@ export default function APISettings() {
       // Log para debugging (sin datos sensibles)
       console.log(`[APISettings] Saving ${apiName}:`, {
         apiName,
-        environment: 'production',
+        environment: currentEnvironment,
         credentialKeys: Object.keys(credentials),
         hasEmail: !!credentials.email,
         hasPassword: !!credentials.password,
@@ -420,7 +496,7 @@ export default function APISettings() {
       // Guardar credencial usando /api/credentials
       const response = await api.post('/api/credentials', {
         apiName,
-        environment: 'production', // Por defecto production
+        environment: currentEnvironment,
         credentials,
         isActive: true,
       });
@@ -431,7 +507,7 @@ export default function APISettings() {
       await loadCredentials();
 
       // Limpiar formulario
-      setFormData(prev => ({ ...prev, [apiName]: {} }));
+      setFormData(prev => ({ ...prev, [formKey]: {} }));
       setExpandedApi(null);
 
       alert(`✅ Credenciales de ${apiDef.displayName} guardadas exitosamente`);
@@ -447,12 +523,14 @@ export default function APISettings() {
     }
   };
 
-  const handleTest = async (apiName: string) => {
+  const handleTest = async (apiName: string, environment: string) => {
     setTesting(apiName);
     setError(null);
     try {
       // Probar conexión usando el endpoint correcto: /api/credentials/:apiName/test
-      const response = await api.post(`/api/credentials/${apiName}/test`);
+      const response = await api.post(`/api/credentials/${apiName}/test`, {
+        environment,
+      });
 
       const status = response.data?.data || response.data;
       if (status.isAvailable || status.available) {
@@ -462,7 +540,16 @@ export default function APISettings() {
       }
 
       // Actualizar estado
-      setStatuses(prev => ({ ...prev, [apiName]: status }));
+      setStatuses(prev => ({
+        ...prev,
+        [makeEnvKey(apiName, environment)]: {
+          apiName,
+          environment,
+          available: status.isAvailable || status.available || false,
+          message: status.message || status.error,
+          lastChecked: status.lastChecked || status.checkedAt || new Date().toISOString(),
+        },
+      }));
     } catch (err: any) {
       console.error('Error testing API:', err);
       setError(err.response?.data?.message || 'Error al probar conexión');
@@ -471,26 +558,26 @@ export default function APISettings() {
     }
   };
 
-  const handleToggle = async (apiName: string, currentActive: boolean) => {
+  const handleToggle = async (apiName: string, environment: string, currentActive: boolean) => {
     setError(null);
     try {
       // Toggle activo/inactivo usando el endpoint correcto: /api/credentials/:apiName/toggle
       await api.put(`/api/credentials/${apiName}/toggle`, {
-        environment: 'production', // Por defecto production
+        environment,
       });
       
       // Recargar credenciales para obtener el estado actualizado
       await loadCredentials();
 
-      alert(`${!currentActive ? '✅ Activada' : '❌ Desactivada'} ${API_DEFINITIONS[apiName].displayName}`);
+      alert(`${!currentActive ? '✅ Activada' : '❌ Desactivada'} ${API_DEFINITIONS[apiName].displayName} (${environment})`);
     } catch (err: any) {
       console.error('Error toggling API:', err);
       setError(err.response?.data?.message || 'Error al cambiar estado');
     }
   };
 
-  const handleDelete = async (apiName: string) => {
-    if (!confirm(`¿Estás seguro de eliminar las credenciales de ${API_DEFINITIONS[apiName].displayName}?`)) {
+  const handleDelete = async (apiName: string, environment: string) => {
+    if (!confirm(`¿Estás seguro de eliminar las credenciales de ${API_DEFINITIONS[apiName].displayName} (${environment})?`)) {
       return;
     }
 
@@ -498,12 +585,12 @@ export default function APISettings() {
     setError(null);
     try {
       // Eliminar usando el endpoint correcto con query parameter para environment
-      await api.delete(`/api/credentials/${apiName}?environment=production`);
+      await api.delete(`/api/credentials/${apiName}?environment=${environment}`);
       
       // Recargar credenciales
       await loadCredentials();
 
-      alert(`🗑️ Credenciales de ${API_DEFINITIONS[apiName].displayName} eliminadas`);
+      alert(`🗑️ Credenciales de ${API_DEFINITIONS[apiName].displayName} (${environment}) eliminadas`);
     } catch (err: any) {
       console.error('Error deleting credentials:', err);
       setError(err.response?.data?.message || err.response?.data?.error || 'Error al eliminar credenciales');
@@ -512,11 +599,12 @@ export default function APISettings() {
     }
   };
 
-  const getCredentialForAPI = (apiName: string): APICredential | undefined => {
-    return credentials.find(c => c.apiName === apiName);
+  const getCredentialForAPI = (apiName: string, environment: string): APICredential | undefined => {
+    return credentials.find(c => c.apiName === apiName && c.environment === environment);
   };
 
-  const getStatusIcon = (apiName: string, credential?: APICredential) => {
+  const getStatusIcon = (apiName: string, environment: string) => {
+    const credential = getCredentialForAPI(apiName, environment);
     if (!credential) {
       return <AlertTriangle className="w-5 h-5 text-gray-400" />;
     }
@@ -525,7 +613,7 @@ export default function APISettings() {
       return <XCircle className="w-5 h-5 text-red-500" />;
     }
 
-    const status = statuses[apiName];
+    const status = statuses[makeEnvKey(apiName, environment)];
     if (!status) {
       return <AlertTriangle className="w-5 h-5 text-yellow-500" />;
     }
@@ -535,11 +623,12 @@ export default function APISettings() {
       : <XCircle className="w-5 h-5 text-red-500" />;
   };
 
-  const getStatusText = (apiName: string, credential?: APICredential) => {
+  const getStatusText = (apiName: string, environment: string) => {
+    const credential = getCredentialForAPI(apiName, environment);
     if (!credential) return 'No configurada';
     if (!credential.isActive) return 'Desactivada';
     
-    const status = statuses[apiName];
+    const status = statuses[makeEnvKey(apiName, environment)];
     if (!status) return 'Estado desconocido';
     
     return status.available ? 'Disponible' : `Error: ${status.message || 'No disponible'}`;
@@ -584,15 +673,23 @@ export default function APISettings() {
       {/* API Cards */}
       <div className="grid gap-4">
         {Object.values(API_DEFINITIONS).map((apiDef) => {
-          const credential = getCredentialForAPI(apiDef.name);
+          const backendDef = backendApiDefinitions[apiDef.name];
+          const supportsEnv = backendDef?.supportsEnvironments && backendDef?.environments;
+          const envOptions: string[] = supportsEnv ? Object.keys(backendDef.environments) : ['production'];
+          const currentEnvironment = supportsEnv
+            ? selectedEnvironment[apiDef.name] || envOptions[0] || 'production'
+            : 'production';
+          const credential = getCredentialForAPI(apiDef.name, currentEnvironment);
+          const statusKey = makeEnvKey(apiDef.name, currentEnvironment);
           const isExpanded = expandedApi === apiDef.name;
           const isSaving = saving === apiDef.name;
           const isTesting = testing === apiDef.name;
           const isDeleting = deleting === apiDef.name;
-          
-          // Usar campos del backend si están disponibles, sino usar API_DEFINITIONS
-          const backendDef = backendApiDefinitions[apiDef.name];
-          const fieldsToUse = backendDef?.fields || apiDef.fields;
+          const formKey = makeFormKey(apiDef.name, currentEnvironment);
+
+          const fieldsToUse = supportsEnv
+            ? backendDef?.environments?.[currentEnvironment]?.fields || apiDef.fields
+            : backendDef?.fields || apiDef.fields;
           const displayName = backendDef?.name || apiDef.displayName;
           const description = backendDef?.description || apiDef.description;
 
@@ -621,15 +718,32 @@ export default function APISettings() {
                       )}
                     </h3>
                     <p className="text-sm text-gray-600">{description}</p>
+                    {supportsEnv && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {envOptions.map(env => (
+                          <button
+                            key={env}
+                            onClick={() => handleEnvironmentSelect(apiDef.name, env)}
+                            className={`px-2 py-1 rounded text-xs font-medium border ${
+                              currentEnvironment === env
+                                ? 'bg-blue-100 border-blue-400 text-blue-700'
+                                : 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            {env.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Status Badge */}
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2">
-                    {getStatusIcon(apiDef.name, credential)}
+                    {getStatusIcon(apiDef.name, currentEnvironment)}
                     <span className="text-sm font-medium text-gray-700">
-                      {getStatusText(apiDef.name, credential)}
+                      {getStatusText(apiDef.name, currentEnvironment)}
                     </span>
                   </div>
 
@@ -638,7 +752,7 @@ export default function APISettings() {
                     <div className="flex gap-2">
                       {/* Toggle Active */}
                       <button
-                        onClick={() => handleToggle(apiDef.name, credential.isActive)}
+                        onClick={() => handleToggle(apiDef.name, currentEnvironment, credential.isActive)}
                         className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                           credential.isActive
                             ? 'bg-green-100 text-green-700 hover:bg-green-200'
@@ -650,7 +764,7 @@ export default function APISettings() {
 
                       {/* Test Connection */}
                       <button
-                        onClick={() => handleTest(apiDef.name)}
+                        onClick={() => handleTest(apiDef.name, currentEnvironment)}
                         disabled={isTesting || !credential.isActive}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Probar conexión"
@@ -664,7 +778,13 @@ export default function APISettings() {
 
                       {/* Edit */}
                       <button
-                        onClick={() => setExpandedApi(isExpanded ? null : apiDef.name)}
+                        onClick={() => {
+                          const nextExpanded = isExpanded ? null : apiDef.name;
+                          if (!isExpanded) {
+                            loadEnvironmentForm(apiDef.name, currentEnvironment);
+                          }
+                          setExpandedApi(nextExpanded);
+                        }}
                         className="p-2 text-gray-600 hover:bg-gray-100 rounded"
                         title="Editar"
                       >
@@ -673,7 +793,7 @@ export default function APISettings() {
 
                       {/* Delete */}
                       <button
-                        onClick={() => handleDelete(apiDef.name)}
+                        onClick={() => handleDelete(apiDef.name, currentEnvironment)}
                         disabled={isDeleting}
                         className="p-2 text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Eliminar"
@@ -687,7 +807,13 @@ export default function APISettings() {
                     </div>
                   ) : (
                     <button
-                      onClick={() => setExpandedApi(isExpanded ? null : apiDef.name)}
+                      onClick={() => {
+                        const nextExpanded = isExpanded ? null : apiDef.name;
+                        if (!isExpanded) {
+                          loadEnvironmentForm(apiDef.name, currentEnvironment);
+                        }
+                        setExpandedApi(nextExpanded);
+                      }}
                       className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                     >
                       Configurar
@@ -700,6 +826,28 @@ export default function APISettings() {
               {isExpanded && (
                 <div className="border-t border-gray-200 p-4 bg-gray-50">
                   <div className="space-y-4">
+                    {supportsEnv && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-600">Entorno:</span>
+                        {envOptions.map(env => (
+                          <button
+                            key={env}
+                            onClick={() => handleEnvironmentSelect(apiDef.name, env)}
+                            className={`px-2 py-1 rounded text-xs font-medium border ${
+                              currentEnvironment === env
+                                ? 'bg-blue-100 border-blue-400 text-blue-700'
+                                : 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200'
+                            }`}
+                          >
+                            {env.toUpperCase()}
+                          </button>
+                        ))}
+                        {loadingEnvironment[formKey] && (
+                          <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                        )}
+                      </div>
+                    )}
+
                     {fieldsToUse.map((field: any) => {
                       // Normalizar campo del backend o del frontend
                       const fieldKey = field.key;
@@ -708,7 +856,10 @@ export default function APISettings() {
                       const fieldType = field.type === 'password' || field.type === 'email' ? field.type : 'text';
                       const fieldPlaceholder = field.placeholder || '';
                       const fieldHelpText = field.helpText;
-                      
+                      const showKey = `${formKey}:${fieldKey}`;
+                      const isDisabled = field.disabled || false;
+                      const defaultValue = field.value !== undefined && field.value !== null ? String(field.value) : '';
+
                       return (
                         <div key={fieldKey}>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -717,19 +868,22 @@ export default function APISettings() {
                           </label>
                           <div className="relative">
                             <input
-                              type={fieldType === 'password' && !showPasswords[fieldKey] ? 'password' : 'text'}
-                              value={formData[apiDef.name]?.[fieldKey] || ''}
-                              onChange={(e) => handleInputChange(apiDef.name, fieldKey, e.target.value)}
+                              type={fieldType === 'password' && !showPasswords[showKey] ? 'password' : 'text'}
+                              value={formData[formKey]?.[fieldKey] ?? defaultValue}
+                              onChange={(e) => handleInputChange(apiDef.name, currentEnvironment, fieldKey, e.target.value)}
                               placeholder={fieldPlaceholder}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              disabled={isDisabled}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                isDisabled ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'border-gray-300'
+                              }`}
                             />
                             {fieldType === 'password' && (
                               <button
                                 type="button"
-                                onClick={() => setShowPasswords(prev => ({ ...prev, [fieldKey]: !prev[fieldKey] }))}
+                                onClick={() => setShowPasswords(prev => ({ ...prev, [showKey]: !prev[showKey] }))}
                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                               >
-                                {showPasswords[fieldKey] ? (
+                                {showPasswords[showKey] ? (
                                   <EyeOff className="w-5 h-5" />
                                 ) : (
                                   <Eye className="w-5 h-5" />
@@ -765,7 +919,7 @@ export default function APISettings() {
                       <button
                         onClick={() => {
                           setExpandedApi(null);
-                          setFormData(prev => ({ ...prev, [apiDef.name]: {} }));
+                          setFormData(prev => ({ ...prev, [formKey]: {} }));
                         }}
                         className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
                       >
