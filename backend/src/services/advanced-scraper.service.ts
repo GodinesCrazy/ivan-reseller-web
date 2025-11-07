@@ -34,6 +34,7 @@ export class AdvancedMarketplaceScraper {
     let executablePath: string | undefined = undefined;
 
     const preferredPaths: string[] = [
+      process.env.PUPPETEER_EXECUTABLE_PATH || '',
       process.env.CHROMIUM_PATH || '',
       '/app/.chromium/chromium',
       '/usr/bin/chromium',
