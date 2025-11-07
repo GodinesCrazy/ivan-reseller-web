@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import api from '@services/api';
 import {
   Lightbulb,
   TrendingUp,
@@ -67,39 +68,62 @@ export default function AISuggestionsPanel() {
 
   useEffect(() => {
     loadSuggestions();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFilter]);
 
   const loadSuggestions = async () => {
     try {
-      // ✅ CARGAR DATOS REALES - Por ahora mostrar mensaje informativo
-      // TODO: Implementar endpoint de sugerencias IA cuando esté disponible
-      setSuggestions([]);
-      setAutomationRules([]);
-    } catch (error) {
+      const response = await api.get('/api/ai-suggestions', {
+        params: selectedFilter !== 'all' ? { filter: selectedFilter } : {}
+      });
+      
+      const suggestionsData = response.data?.suggestions || [];
+      setSuggestions(suggestionsData);
+      setAutomationRules([]); // TODO: Implementar reglas de automatización
+    } catch (error: any) {
       console.error('Error loading suggestions:', error);
+      // No mostrar error si es 404 o no hay sugerencias
+      if (error.response?.status !== 404) {
+        toast.error('Error al cargar sugerencias');
+      }
     }
   };
 
   const generateNewSuggestions = async () => {
     setIsGenerating(true);
     try {
-      // ✅ SOLICITAR SUGERENCIAS REALES
-      // TODO: Implementar endpoint cuando esté disponible
-      // Por ahora mostrar mensaje
-      toast.success('Sistema de sugerencias IA en desarrollo. Próximamente disponible.');
+      const response = await api.post('/api/ai-suggestions/generate', {
+        category: selectedFilter !== 'all' ? selectedFilter : undefined
+      });
+      
+      const newSuggestions = response.data?.suggestions || [];
+      setSuggestions(prev => [...newSuggestions, ...prev]);
+      toast.success(`✅ Se generaron ${newSuggestions.length} sugerencias inteligentes`);
+      
+      // Recargar sugerencias para obtener todas
+      await loadSuggestions();
     } catch (error: any) {
-      toast.error('Error al generar sugerencias');
+      console.error('Error generating suggestions:', error);
+      const errorMsg = error.response?.data?.error || error.message || 'Error al generar sugerencias';
+      toast.error(errorMsg);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const implementSuggestion = (suggestionId: string) => {
-    setSuggestions(prev =>
-      prev.map(s =>
-        s.id === suggestionId ? { ...s, implemented: true } : s
-      )
-    );
+  const implementSuggestion = async (suggestionId: string) => {
+    try {
+      await api.post(`/api/ai-suggestions/${suggestionId}/implement`);
+      setSuggestions(prev =>
+        prev.map(s =>
+          s.id === suggestionId ? { ...s, implemented: true } : s
+        )
+      );
+      toast.success('Sugerencia marcada como implementada');
+    } catch (error: any) {
+      console.error('Error implementing suggestion:', error);
+      toast.error('Error al marcar sugerencia como implementada');
+    }
   };
 
   const toggleAutomationRule = (ruleId: string) => {
