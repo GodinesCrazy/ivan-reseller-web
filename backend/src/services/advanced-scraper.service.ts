@@ -888,6 +888,7 @@ export class AdvancedMarketplaceScraper {
 
        while (attempts < 10) {
          attempts += 1;
+         await this.handleAliExpressPopups(loginPage);
          await this.handleAliExpressPopups(context);
          const detection = await this.detectAliExpressState(context);
          lastState = detection.state;
@@ -920,14 +921,17 @@ export class AdvancedMarketplaceScraper {
              await this.captureAliExpressSnapshot(loginPage, 'captcha-detected');
              return;
            case AliExpressLoginState.UNKNOWN:
+             await this.logAliExpressHtml(loginPage, context, `unknown-${attempts}`);
              if (attempts >= 4) {
                console.warn('⚠️  Persisting UNKNOWN state, forcing direct login navigation');
                await loginPage.goto(this.fallbackLoginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
+               await new Promise(resolve => setTimeout(resolve, 2000));
              } else {
                const clicked = await this.tryClickLoginByText(context);
                if (!clicked && attempts >= 2) {
                  console.warn('⚠️  Login link not found via text, navigating to fallback login page');
                  await loginPage.goto(this.fallbackLoginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
+                 await new Promise(resolve => setTimeout(resolve, 2000));
                }
              }
              break;
@@ -1240,10 +1244,36 @@ export class AdvancedMarketplaceScraper {
     if (!passkeyDismissed) {
       await context.evaluate(() => {
         const doc = (globalThis as any).document;
-        const dialog = doc?.querySelector('.ae-passkey-dialog, .passkey-dialog, [data-role="passkey-dialog"]');
-        if (dialog && dialog.parentElement) {
-          dialog.parentElement.removeChild(dialog);
-        }
+        if (!doc) return;
+        const removeDialogs = (root: any) => {
+          if (!root) return;
+          const dialogSelectors = ['.ae-passkey-dialog', '.passkey-dialog', '[data-role="passkey-dialog"]', '.next-dialog.passkey'];
+          dialogSelectors.forEach((sel) => {
+            root.querySelectorAll(sel).forEach((el: any) => {
+              if (el && el.parentElement) {
+                el.parentElement.removeChild(el);
+              }
+            });
+          });
+          const buttons = Array.from(root.querySelectorAll('button, a')) as any[];
+          buttons
+            .filter((btn) => {
+              const text = (btn.textContent || '').trim().toLowerCase();
+              return text.includes('passkey') || text.includes('create passkey');
+            })
+            .forEach((btn) => {
+              if (btn && btn.parentElement) {
+                btn.parentElement.removeChild(btn);
+              }
+            });
+        };
+        removeDialogs(doc);
+        const hosts = Array.from(doc.querySelectorAll('*')) as any[];
+        hosts
+          .filter((el) => el?.shadowRoot)
+          .forEach((host) => {
+            removeDialogs(host.shadowRoot);
+          });
       }).catch(() => {});
     }
   }
@@ -1271,6 +1301,17 @@ export class AdvancedMarketplaceScraper {
       console.warn('⚠️  Error fetching AliExpress cookies for user', userId, error);
     }
     return [];
+  }
+
+  private async logAliExpressHtml(page: Page, context: FrameLike, label: string): Promise<void> {
+    try {
+      const pageHtml = await page.evaluate(() => (globalThis as any).document?.documentElement?.outerHTML || '').catch(() => '');
+      const contextHtml = await context.evaluate(() => (globalThis as any).document?.documentElement?.outerHTML || '').catch(() => '');
+      console.log(`📄 AliExpress HTML [${label}] page=${pageHtml.slice(0, 500)} ...`);
+      console.log(`📄 AliExpress HTML [${label}] context=${contextHtml.slice(0, 500)} ...`);
+    } catch (error) {
+      console.warn('⚠️  Unable to log AliExpress HTML:', (error as Error).message);
+    }
   }
 
   private getAliExpressSelectors(key: string, fallback: string[] = []): string[] {
