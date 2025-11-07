@@ -96,6 +96,19 @@ export class AdvancedMarketplaceScraper {
       'a.sign-btn',
       'button.header-signin-btn',
     ],
+    'login.accountMenuBtn': [
+      '.nav-user-account',
+      '.nav-user-account .account',
+      '.header-user-avatar',
+      'button[data-role="account-menu"]',
+      'div[data-role="user-account"]',
+    ],
+    'login.accountDropdownLinks': [
+      '.nav-user-account a[href*="account"][href*="login"]',
+      '.nav-user-account a[href*="signin"]',
+      '.nav-user-account a[href*="register"]',
+      '.nav-user-account .sign-btn a',
+    ],
     'popups.accept': [
       '#nav-global-cookie-banner .btn-accept',
       '.cookie-banner button',
@@ -109,6 +122,7 @@ export class AdvancedMarketplaceScraper {
       'button[aria-label="close"]',
       '.next-dialog .next-dialog-close',
       '.close-button',
+      '.close-btn',
       'button:contains("Aceptar")',
       'button:contains("Acepto")',
       'button:contains("Aceptar todos")',
@@ -122,6 +136,7 @@ export class AdvancedMarketplaceScraper {
       'button:contains("Iniciar sesión")',
       '.top-login-btn',
       '.welcome-offer-login',
+      '.user-account-info .sign-btn',
     ],
     'state.loginLink.text': [
       'a:contains("Sign in")',
@@ -149,6 +164,13 @@ export class AdvancedMarketplaceScraper {
       'a[data-role="login"]',
       'a[href*="/login"]',
       'a[data-spm-anchor-id*="login"]',
+    ],
+    'modal.passkey.dismiss': [
+      'button:contains("Not now")',
+      'button:contains("Quizás más tarde")',
+      'button:contains("Maybe later")',
+      'button:contains("Omitir")',
+      '.passkey-dialog .close-button',
     ],
   };
 
@@ -921,7 +943,11 @@ export class AdvancedMarketplaceScraper {
   }
 
   private async openLoginFromHeader(page: Page): Promise<void> {
-    const selectors = this.getAliExpressSelectors('login.headerLink');
+    await this.openAccountMenu(page);
+    const selectors = [
+      ...this.getAliExpressSelectors('login.headerLink'),
+      ...this.getAliExpressSelectors('login.accountDropdownLinks'),
+    ];
     const clicked = await this.clickIfExists(page, selectors, 'open-login-header');
     if (clicked) {
       await new Promise(resolve => setTimeout(resolve, 1500));
@@ -1067,6 +1093,7 @@ export class AdvancedMarketplaceScraper {
   }
 
   private async tryClickLoginByText(context: FrameLike): Promise<boolean> {
+    await this.openAccountMenu(context);
     const selectors = this.getAliExpressSelectors('login.textLinks');
     if (selectors.length === 0) {
       return false;
@@ -1181,6 +1208,7 @@ export class AdvancedMarketplaceScraper {
     if (!acceptClicked) {
       await this.clickIfExists(context, this.getAliExpressSelectors('popups.close'), 'popup-close');
     }
+    await this.clickIfExists(context, this.getAliExpressSelectors('modal.passkey.dismiss'), 'passkey-dismiss');
   }
 
   private async fetchAliExpressCookies(userId: number): Promise<Protocol.Network.Cookie[]> {
@@ -1214,6 +1242,10 @@ export class AdvancedMarketplaceScraper {
       return [...selectors];
     }
     return [...fallback];
+  }
+
+  private async openAccountMenu(context: FrameLike): Promise<void> {
+    await this.clickIfExists(context, this.getAliExpressSelectors('login.accountMenuBtn'), 'account-menu');
   }
 }
 
