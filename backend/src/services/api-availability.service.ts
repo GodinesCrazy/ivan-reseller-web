@@ -96,9 +96,11 @@ export class APIAvailabilityService {
 
   /**
    * Check eBay API availability for specific user
+   * @param userId - User ID
+   * @param environment - Environment (sandbox/production). Defaults to 'production'
    */
-  async checkEbayAPI(userId: number): Promise<APIStatus> {
-    const cacheKey = this.getCacheKey(userId, 'ebay');
+  async checkEbayAPI(userId: number, environment: 'sandbox' | 'production' = 'production'): Promise<APIStatus> {
+    const cacheKey = this.getCacheKey(userId, `ebay-${environment}`);
     const cached = this.cache.get(cacheKey);
     if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
       return cached;
@@ -106,7 +108,7 @@ export class APIAvailabilityService {
 
     try {
       const requiredFields = ['EBAY_APP_ID', 'EBAY_DEV_ID', 'EBAY_CERT_ID'];
-      const credentials = await this.getUserCredentials(userId, 'ebay');
+      const credentials = await this.getUserCredentials(userId, 'ebay', environment);
       
       if (!credentials) {
         const status: APIStatus = {
@@ -151,9 +153,11 @@ export class APIAvailabilityService {
 
   /**
    * Check Amazon SP-API availability for specific user
+   * @param userId - User ID
+   * @param environment - Environment (sandbox/production). Defaults to 'production'
    */
-  async checkAmazonAPI(userId: number): Promise<APIStatus> {
-    const cacheKey = this.getCacheKey(userId, 'amazon');
+  async checkAmazonAPI(userId: number, environment: 'sandbox' | 'production' = 'production'): Promise<APIStatus> {
+    const cacheKey = this.getCacheKey(userId, `amazon-${environment}`);
     const cached = this.cache.get(cacheKey);
     if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
       return cached;
@@ -170,7 +174,7 @@ export class APIAvailabilityService {
         'AMAZON_REGION',
         'AMAZON_MARKETPLACE_ID'
       ];
-      const credentials = await this.getUserCredentials(userId, 'amazon');
+      const credentials = await this.getUserCredentials(userId, 'amazon', environment);
       
       if (!credentials) {
         const status: APIStatus = {
@@ -215,9 +219,11 @@ export class APIAvailabilityService {
 
   /**
    * Check MercadoLibre API availability for specific user
+   * @param userId - User ID
+   * @param environment - Environment (sandbox/production). Defaults to 'production'
    */
-  async checkMercadoLibreAPI(userId: number): Promise<APIStatus> {
-    const cacheKey = this.getCacheKey(userId, 'mercadolibre');
+  async checkMercadoLibreAPI(userId: number, environment: 'sandbox' | 'production' = 'production'): Promise<APIStatus> {
+    const cacheKey = this.getCacheKey(userId, `mercadolibre-${environment}`);
     const cached = this.cache.get(cacheKey);
     if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
       return cached;
@@ -225,7 +231,7 @@ export class APIAvailabilityService {
 
     try {
       const requiredFields = ['MERCADOLIBRE_CLIENT_ID', 'MERCADOLIBRE_CLIENT_SECRET'];
-      const credentials = await this.getUserCredentials(userId, 'mercadolibre');
+      const credentials = await this.getUserCredentials(userId, 'mercadolibre', environment);
       
       if (!credentials) {
         const status: APIStatus = {
