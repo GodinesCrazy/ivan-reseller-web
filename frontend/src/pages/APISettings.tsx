@@ -529,9 +529,34 @@ export default function APISettings() {
     try {
       // ✅ Obtener credenciales del formulario si están presentes
       const formKey = makeFormKey(apiName, environment);
-      const currentFormData = formData[formKey] || {};
+      let currentFormData = formData[formKey] || {};
       
-      // ✅ Si hay datos en el formulario, prepararlos para el test
+      // ✅ Si el formulario está vacío, intentar cargar las credenciales guardadas
+      if (Object.keys(currentFormData).length === 0) {
+        try {
+          const { data } = await api.get(`/api/credentials/${apiName}`, {
+            params: { environment },
+          });
+          const creds = data?.data?.credentials || {};
+          if (Object.keys(creds).length > 0) {
+            // Normalizar credenciales guardadas al formato del formulario
+            const normalized: Record<string, string> = {};
+            Object.entries(creds).forEach(([key, value]) => {
+              if (value !== undefined && value !== null) {
+                normalized[key] = typeof value === 'boolean' ? (value ? 'true' : 'false') : String(value);
+              }
+            });
+            currentFormData = normalized;
+            // Actualizar formData para futuras pruebas
+            setFormData(prev => ({ ...prev, [formKey]: normalized }));
+          }
+        } catch (loadError) {
+          // Si no se pueden cargar, continuar sin credenciales del formulario
+          console.warn('No se pudieron cargar credenciales para test:', loadError);
+        }
+      }
+      
+      // ✅ Si hay datos en el formulario (o cargados), prepararlos para el test
       let testCredentials: any = null;
       if (Object.keys(currentFormData).length > 0) {
         const backendDef = backendApiDefinitions[apiName];
