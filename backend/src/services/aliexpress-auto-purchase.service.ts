@@ -64,26 +64,9 @@ export class AliExpressAutoPurchaseService {
       return this.browser;
     }
 
-    // Try to find Chrome executable on Windows
-    const possiblePaths = [
-      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-      process.env.LOCALAPPDATA + '\\Google\\Chrome\\Application\\chrome.exe'
-    ];
-
-    let executablePath = undefined;
-    const fs = require('fs');
-    for (const path of possiblePaths) {
-      if (fs.existsSync(path)) {
-        executablePath = path;
-        logger.info(`Using Chrome at: ${path}`);
-        break;
-      }
-    }
-
     this.browser = await puppeteer.launch({
       headless: false, // Set to false for debugging, true for production
-      executablePath, // Use system Chrome if found
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',

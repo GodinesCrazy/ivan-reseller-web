@@ -179,17 +179,19 @@ export class StealthScrapingService {
     // Intentar encontrar Chromium del sistema (instalado por Nix)
     const fs = require('fs');
     const { execSync } = require('child_process');
-    let executablePath: string | undefined = undefined;
+    let executablePath: string | undefined = process.env.PUPPETEER_EXECUTABLE_PATH;
     
     // Primero intentar encontrar Chromium usando 'which'
-    try {
-      const chromiumPath = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null', { encoding: 'utf-8' }).trim();
-      if (chromiumPath && fs.existsSync(chromiumPath)) {
-        executablePath = chromiumPath;
-        logger.info(`Found system Chromium at: ${executablePath}`);
+    if (!executablePath) {
+      try {
+        const chromiumPath = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null', { encoding: 'utf-8' }).trim();
+        if (chromiumPath && fs.existsSync(chromiumPath)) {
+          executablePath = chromiumPath;
+          logger.info(`Found system Chromium at: ${executablePath}`);
+        }
+      } catch (e) {
+        // 'which' no encontró Chromium, continuar con otras opciones
       }
-    } catch (e) {
-      // 'which' no encontró Chromium, continuar con otras opciones
     }
     
     // Si no se encontró, buscar en el store de Nix
