@@ -378,15 +378,15 @@ model ManualAuthSession {
 
 model MarketplaceAuthStatus {
   id                    Int      @id @default(autoincrement())
-  userId                Int
+  userId                Int      @map("user_id")
   marketplace           String
-  status                String   @default("unknown") // healthy, refreshing, manual_required, error, unknown
+  status                String   @default("unknown")
   message               String?
-  requiresManual        Boolean  @default(false)
-  lastAutomaticAttempt  DateTime?
-  lastAutomaticSuccess  DateTime?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  requiresManual        Boolean  @default(false) @map("requires_manual")
+  lastAutomaticAttempt  DateTime? @map("last_automatic_attempt")
+  lastAutomaticSuccess  DateTime? @map("last_automatic_success")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
