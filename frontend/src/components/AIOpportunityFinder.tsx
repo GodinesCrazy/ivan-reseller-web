@@ -28,13 +28,18 @@ interface MarketOpportunity {
   product: string;
   category: string;
   marketplace: string;
+  targetMarketplaces: string[];
+  aliexpressUrl?: string;
+  image?: string;
   currentPrice: number;
   suggestedPrice: number;
   profitMargin: number;
-  competition: 'low' | 'medium' | 'high';
-  demand: 'low' | 'medium' | 'high';
+  competition: 'low' | 'medium' | 'high' | 'unknown';
+  demand: 'low' | 'medium' | 'high' | 'unknown';
   trend: 'rising' | 'stable' | 'declining';
   confidence: number;
+  estimatedFields: string[];
+  estimationNotes: string[];
   monthlySales: number;
   keywords: string[];
   suppliers: number;
@@ -59,6 +64,7 @@ export default function AIOpportunityFinder() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [opportunities, setOpportunities] = useState<MarketOpportunity[]>([]);
   const [insights, setInsights] = useState<AIInsight[]>([]);
+  const [importingId, setImportingId] = useState<string | null>(null);
   const [selectedFilters, setSelectedFilters] = useState({
     marketplace: 'all',
     competition: 'all',
@@ -93,6 +99,11 @@ export default function AIOpportunityFinder() {
         product: item.title || 'Producto sin título',
         category: 'General',
         marketplace: item.targetMarketplaces?.[0] || 'ebay',
+        targetMarketplaces: Array.isArray(item.targetMarketplaces) && item.targetMarketplaces.length > 0
+          ? item.targetMarketplaces
+          : ['ebay', 'amazon', 'mercadolibre'],
+        aliexpressUrl: item.aliexpressUrl,
+        image: item.image,
         currentPrice: item.costUsd || 0,
         suggestedPrice: item.suggestedPriceUsd || 0,
         profitMargin: (item.profitMargin || 0) * 100,
@@ -100,6 +111,8 @@ export default function AIOpportunityFinder() {
         demand: item.marketDemand || 'unknown',
         trend: 'stable',
         confidence: (item.confidenceScore || 0.5) * 100,
+        estimatedFields: item.estimatedFields || [],
+        estimationNotes: item.estimationNotes || [],
         monthlySales: 0,
         keywords: [],
         suppliers: 0,
@@ -209,6 +222,61 @@ export default function AIOpportunityFinder() {
       case 'stable': return <Target className="h-4 w-4 text-blue-600" />;
       case 'declining': return <TrendingUp className="h-4 w-4 text-red-600 rotate-180" />;
       default: return <Target className="h-4 w-4 text-gray-600" />;
+    }
+  };
+
+  const handleViewDetails = (opp: MarketOpportunity) => {
+    if (opp.aliexpressUrl) {
+      window.open(opp.aliexpressUrl, '_blank', 'noopener,noreferrer');
+    } else {
+      toast('No se encontró el enlace original del producto.', { icon: 'ℹ️' });
+    }
+  };
+
+  const handleImportProduct = async (opp: MarketOpportunity) => {
+    if (!opp.aliexpressUrl) {
+      toast.error('No se puede importar porque falta el enlace de AliExpress.');
+      return;
+    }
+
+    try {
+      setImportingId(opp.id);
+
+      const payload: Record<string, any> = {
+        title: opp.product,
+        aliexpressUrl: opp.aliexpressUrl,
+        aliexpressPrice: opp.currentPrice,
+        suggestedPrice: opp.suggestedPrice,
+        currency: 'USD',
+      };
+
+      if (opp.image && /^https?:\/\//i.test(opp.image)) {
+        payload.imageUrl = opp.image;
+      }
+
+      const productResponse = await api.post('/api/products', payload);
+      const productId = productResponse.data?.id || productResponse.data?.product?.id;
+      if (!productId) {
+        throw new Error('No se pudo obtener el ID del producto creado');
+      }
+
+      const marketplace = opp.targetMarketplaces?.[0] || opp.marketplace || 'ebay';
+      const publishResponse = await api.post('/api/marketplace/publish', {
+        productId: Number(productId),
+        marketplace,
+      });
+
+      if (publishResponse.data?.success) {
+        toast.success(`Producto importado y publicado en ${marketplace}`);
+      } else {
+        throw new Error(publishResponse.data?.error || 'Error al publicar');
+      }
+    } catch (error: any) {
+      console.error('Error importing product from AI finder:', error);
+      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Error al importar el producto';
+      toast.error(msg);
+    } finally {
+      setImportingId(null);
     }
   };
 
@@ -349,22 +417,60 @@ export default function AIOpportunityFinder() {
           </h2>
           
           {opportunities.map((opp) => (
-            <div key={opp.id} className="bg-white rounded-xl p-6 shadow-lg border border-gray-200 hover:shadow-xl transition-shadow">
-              <div className="flex items-start justify-between mb-4">
+            <div
+              key={opp.id}
+              className="bg-white rounded-xl p-6 shadow-lg border border-gray-200 hover:shadow-xl transition-shadow"
+            >
+              <div className="flex flex-col md:flex-row md:items-start md:space-x-4 mb-4">
+                <div className="w-full md:w-32 md:flex-shrink-0 mb-4 md:mb-0">
+                  {opp.image ? (
+                    <img
+                      src={opp.image}
+                      alt={opp.product}
+                      className="w-full h-24 object-cover rounded border border-gray-200"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/160x120?text=No+Image';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-24 bg-gray-100 border border-dashed border-gray-300 rounded flex items-center justify-center text-xs text-gray-500">
+                      Sin imagen
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex-1">
                   <div className="flex items-center space-x-2 mb-2">
-                    <h3 className="text-xl font-semibold text-gray-900">{opp.product}</h3>
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                    <h3 className="text-xl font-semibold text-gray-900">
+                      {opp.product}
+                    </h3>
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full capitalize">
                       {opp.marketplace}
                     </span>
                   </div>
                   <p className="text-sm text-gray-600 mb-3">{opp.category}</p>
-                  
+                  {opp.estimationNotes.length > 0 && (
+                    <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-2 rounded mb-3">
+                      {opp.estimationNotes.map((note, idx) => (
+                        <div key={idx}>* {note}</div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Métricas principales */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                     <div className="text-center">
-                      <p className="text-2xl font-bold text-green-600">${opp.profitMargin.toFixed(1)}%</p>
-                      <p className="text-xs text-gray-600">Margen</p>
+                      <p className="text-2xl font-bold text-green-600">
+                        {opp.profitMargin.toFixed(1)}%
+                      </p>
+                      <p className="text-xs text-gray-600 flex items-center justify-center gap-1">
+                        Margen
+                        {opp.estimatedFields.includes('profitMargin') && (
+                          <span className="uppercase text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-semibold">
+                            Estimado
+                          </span>
+                        )}
+                      </p>
                     </div>
                     <div className="text-center">
                       <p className="text-2xl font-bold text-blue-600">{opp.confidence}%</p>
@@ -380,13 +486,13 @@ export default function AIOpportunityFinder() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="text-right">
                   <div className="flex items-center space-x-2 mb-2">
                     {getTrendIcon(opp.trend)}
                     <span className="text-sm font-medium capitalize">{opp.trend}</span>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <div className={`px-2 py-1 rounded-full text-xs border ${getCompetitionColor(opp.competition)}`}>
                       Competencia {opp.competition}
@@ -406,7 +512,14 @@ export default function AIOpportunityFinder() {
                 </div>
                 <div className="text-center">
                   <p className="text-sm text-gray-600">Precio sugerido</p>
-                  <p className="text-lg font-semibold text-green-600">${opp.suggestedPrice}</p>
+                  <p className="text-lg font-semibold text-green-600 flex items-center justify-center gap-2">
+                    ${opp.suggestedPrice}
+                    {opp.estimatedFields.includes('suggestedPriceUsd') && (
+                      <span className="uppercase text-[9px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded-full font-semibold">
+                        Estimado
+                      </span>
+                    )}
+                  </p>
                 </div>
                 <div className="text-center">
                   <p className="text-sm text-gray-600">Ganancia potencial</p>
@@ -488,11 +601,18 @@ export default function AIOpportunityFinder() {
                 </div>
                 
                 <div className="flex space-x-2">
-                  <button className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                  <button
+                    onClick={() => handleViewDetails(opp)}
+                    className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
                     Ver detalles
                   </button>
-                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                    Importar producto
+                  <button
+                    onClick={() => handleImportProduct(opp)}
+                    disabled={importingId === opp.id}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {importingId === opp.id ? 'Importando...' : 'Importar producto'}
                   </button>
                 </div>
               </div>
