@@ -52,6 +52,7 @@ router.get('/apis', authenticate, async (req, res) => {
             { key: 'appId', label: 'App ID (Client ID)', required: true, type: 'text' },
             { key: 'devId', label: 'Dev ID', required: true, type: 'text' },
             { key: 'certId', label: 'Cert ID (Client Secret)', required: true, type: 'password' },
+            { key: 'redirectUri', label: 'Redirect URI (RuName)', required: true, type: 'text', placeholder: 'IvMart_IVANReseller-...' },
             { key: 'authToken', label: 'Auth Token', required: false, type: 'password' },
             { key: 'refreshToken', label: 'Refresh Token', required: false, type: 'password' },
             { key: 'sandbox', label: 'Sandbox Mode', required: true, type: 'boolean', value: true, disabled: true }
@@ -60,6 +61,7 @@ router.get('/apis', authenticate, async (req, res) => {
             { key: 'appId', label: 'App ID (Client ID)', required: true, type: 'text' },
             { key: 'devId', label: 'Dev ID', required: true, type: 'text' },
             { key: 'certId', label: 'Cert ID (Client Secret)', required: true, type: 'password' },
+            { key: 'redirectUri', label: 'Redirect URI (RuName)', required: true, type: 'text', placeholder: 'IvMart_IVANReseller-...' },
             { key: 'authToken', label: 'Auth Token', required: false, type: 'password' },
             { key: 'refreshToken', label: 'Refresh Token', required: false, type: 'password' },
             { key: 'sandbox', label: 'Sandbox Mode', required: true, type: 'boolean', value: false, disabled: true }
