@@ -380,7 +380,6 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       });
     }
 
-    // Build state info after resolving redirect target
     const userId = req.user!.userId;
     const ts = Date.now().toString();
     const nonce = crypto.randomBytes(8).toString('hex');
@@ -393,7 +392,8 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const appId = cred?.credentials?.appId || process.env.EBAY_APP_ID || '';
       const devId = cred?.credentials?.devId || process.env.EBAY_DEV_ID || '';
       const certId = cred?.credentials?.certId || process.env.EBAY_CERT_ID || '';
-      const sandbox = !!(cred?.credentials?.sandbox || (process.env.EBAY_SANDBOX === 'true'));
+      const resolvedEnv: 'sandbox' | 'production' = environment || (cred?.environment as any) || 'production';
+      const sandbox = resolvedEnv === 'sandbox';
       const ruName = typeof redirect_uri === 'string' && redirect_uri.length > 0
         ? redirect_uri
         : cred?.credentials?.redirectUri || process.env.EBAY_REDIRECT_URI || '';
@@ -401,7 +401,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         return res.status(400).json({ success: false, message: 'Missing eBay Redirect URI (RuName)' });
       }
       const redirB64 = Buffer.from(String(ruName)).toString('base64url');
-      const payload = [userId, marketplace, ts, nonce, redirB64].join('|');
+      const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv].join('|');
       const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
       const state = Buffer.from([payload, sig].join('|')).toString('base64url');
       const ebay = new EbayService({ appId, devId, certId, sandbox });
@@ -410,6 +410,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       authUrl = url.toString();
     } else if (marketplace === 'mercadolibre') {
       const cred = await marketplaceService.getCredentials(userId, 'mercadolibre', environment as any);
+      const resolvedEnv: 'sandbox' | 'production' = environment || (cred?.environment as any) || 'production';
       const clientId = cred?.credentials?.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '';
       const clientSecret = cred?.credentials?.clientSecret || process.env.MERCADOLIBRE_CLIENT_SECRET || '';
       const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLM';
@@ -420,7 +421,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         return res.status(400).json({ success: false, message: 'Missing MercadoLibre Redirect URI' });
       }
       const redirB64 = Buffer.from(String(callbackUrl)).toString('base64url');
-      const payload = [userId, marketplace, ts, nonce, redirB64].join('|');
+      const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv].join('|');
       const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
       const state = Buffer.from([payload, sig].join('|')).toString('base64url');
       const ml = new MercadoLibreService({ clientId, clientSecret, siteId });
