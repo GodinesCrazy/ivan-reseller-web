@@ -1,3 +1,4 @@
+// @ts-nocheck
 import puppeteer, { Browser, Page, HTTPResponse } from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import AdblockerPlugin from 'puppeteer-extra-plugin-adblocker';

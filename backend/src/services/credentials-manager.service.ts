@@ -34,6 +34,7 @@ const apiSchemas = {
     appId: z.string().min(1, 'App ID is required'),
     devId: z.string().min(1, 'Dev ID is required'),
     certId: z.string().min(1, 'Cert ID is required'),
+    token: z.string().optional(),
     authToken: z.string().optional(),
     refreshToken: z.string().optional(),
     sandbox: z.boolean(),
@@ -200,6 +201,14 @@ export class CredentialsManager {
         if (creds.apiKey && typeof creds.apiKey === 'string') {
           creds.apiKey = creds.apiKey.trim();
         }
+        if (apiName === 'ebay') {
+          if (creds.authToken && !creds.token) {
+            creds.token = creds.authToken;
+          }
+          if (typeof creds.sandbox === 'undefined') {
+            creds.sandbox = environment === 'sandbox';
+          }
+        }
       }
       
       return decrypted as ApiCredentialsMap[T];
@@ -225,6 +234,21 @@ export class CredentialsManager {
       // Limpiar API keys (eliminar espacios en blanco)
       if (creds.apiKey && typeof creds.apiKey === 'string') {
         creds.apiKey = creds.apiKey.trim();
+      }
+
+      if (apiName === 'ebay') {
+        if (creds.authToken && !creds.token) {
+          creds.token = creds.authToken;
+        }
+        if (creds.token && typeof creds.token === 'string') {
+          creds.token = creds.token.trim();
+        }
+        if (creds.authToken && typeof creds.authToken === 'string') {
+          creds.authToken = creds.authToken.trim();
+        }
+        if (creds.sandbox === undefined) {
+          creds.sandbox = environment === 'sandbox';
+        }
       }
       
       // Para AliExpress, asegurar que twoFactorEnabled sea boolean

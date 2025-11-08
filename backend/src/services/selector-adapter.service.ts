@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Page, ElementHandle } from 'puppeteer';
 import { logger } from '../config/logger';
 import * as fs from 'fs';

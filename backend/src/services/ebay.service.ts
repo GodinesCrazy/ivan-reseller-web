@@ -337,6 +337,7 @@ export class EbayService {
       const { response, publishResponse } = result.data;
 
       return {
+        success: true,
         itemId: publishResponse.data.listingId,
         listingUrl: `https://www.ebay.com/itm/${publishResponse.data.listingId}`,
         fees: {

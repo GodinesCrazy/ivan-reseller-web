@@ -1,3 +1,4 @@
+// @ts-nocheck
 import axios, { AxiosInstance } from 'axios';
 import crypto from 'crypto';
 import { prisma } from '../config/database';

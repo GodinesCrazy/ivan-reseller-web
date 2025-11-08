@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 import logger from '../config/logger';

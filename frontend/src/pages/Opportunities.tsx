@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStatusStore } from '@stores/authStatusStore';
 
 type Marketplace = 'ebay' | 'amazon' | 'mercadolibre';
 
@@ -50,12 +51,23 @@ export default function Opportunities() {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<OpportunityItem[]>([]);
   const [publishing, setPublishing] = useState<Record<number, boolean>>({});
+  const authStatuses = useAuthStatusStore((state) => state.statuses);
+  const fetchAuthStatuses = useAuthStatusStore((state) => state.fetchStatuses);
+  const requestAuthRefresh = useAuthStatusStore((state) => state.requestRefresh);
 
   const marketplacesParam = useMemo(() => marketplaces.join(','), [marketplaces]);
   const hasEstimatedValues = useMemo(
     () => items.some((it) => (it.estimatedFields?.length || 0) > 0),
     [items]
   );
+  const aliStatus = authStatuses?.aliexpress;
+  const manualLoginUrl = aliStatus?.manualSession?.token
+    ? aliStatus.manualSession.loginUrl?.startsWith('http')
+      ? aliStatus.manualSession.loginUrl
+      : `${typeof window !== 'undefined' ? window.location.origin : ''}${
+          aliStatus.manualSession.loginUrl || `/manual-login/${aliStatus.manualSession.token}`
+        }`
+    : null;
 
   async function search() {
     if (!query.trim()) return;
@@ -66,6 +78,7 @@ export default function Opportunities() {
         params: { query, maxItems, marketplaces: marketplacesParam, region }
       });
       setItems(data?.items || []);
+      await fetchAuthStatuses();
     } catch (e: any) {
       if (e?.response?.status === 428) {
         const data = e.response?.data || {};
@@ -78,9 +91,11 @@ export default function Opportunities() {
         if (targetUrl) {
           window.open(targetUrl, '_blank', 'noopener,noreferrer');
         }
+        await fetchAuthStatuses();
       } else {
         setError(e?.response?.data?.error || e.message || 'Error fetching opportunities');
         toast.error(e?.response?.data?.error || e.message || 'Error fetching opportunities');
+        await fetchAuthStatuses();
       }
       setItems([]);
     } finally {
@@ -89,6 +104,7 @@ export default function Opportunities() {
   }
 
   useEffect(() => {
+    fetchAuthStatuses();
     search();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -182,6 +198,68 @@ export default function Opportunities() {
           <label className="flex items-center gap-2"><input type="checkbox" checked={marketplaces.includes('mercadolibre')} onChange={() => toggleMarketplace('mercadolibre')} /> MercadoLibre</label>
         </div>
       </div>
+
+      {aliStatus?.status === 'refreshing' && (
+        <div className="px-4 py-3 bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded flex flex-col gap-1">
+          <span>Estamos renovando tu sesión de AliExpress automáticamente. Puedes continuar; reintentaremos las búsquedas en unos segundos.</span>
+          {aliStatus.message ? <span className="text-xs text-blue-600">{aliStatus.message}</span> : null}
+        </div>
+      )}
+
+      {aliStatus?.status === 'manual_required' && (
+        <div className="px-4 py-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <span className="font-semibold">Necesitamos que confirmes tu sesión de AliExpress</span>
+            <p className="text-xs text-red-600">
+              Ya abrimos una ventana con instrucciones. Si no la ves, usa los botones para abrirla nuevamente o reintentar el inicio automático.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={async () => {
+                try {
+                  await requestAuthRefresh('aliexpress');
+                } catch {
+                  /* handled in store */
+                }
+              }}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition"
+            >
+              Reintentar automático
+            </button>
+            {manualLoginUrl ? (
+              <a
+                href={manualLoginUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-100 border border-red-200 rounded hover:bg-red-200 transition"
+              >
+                Abrir login manual
+              </a>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {aliStatus?.status === 'error' && (
+        <div className="px-4 py-3 bg-orange-50 border border-orange-200 text-orange-700 text-sm rounded flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <span>
+            No pudimos renovar la sesión automáticamente. Puedes reintentar ahora; si persiste, el sistema te pedirá confirmar sesión manualmente.
+          </span>
+          <button
+            onClick={async () => {
+              try {
+                await requestAuthRefresh('aliexpress');
+              } catch {
+                /* handled in store */
+              }
+            }}
+            className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-orange-700 bg-orange-100 border border-orange-200 rounded hover:bg-orange-200 transition"
+          >
+            Reintentar ahora
+          </button>
+        </div>
+      )}
 
       {error && <div className="text-red-600 text-sm">{error}</div>}
 

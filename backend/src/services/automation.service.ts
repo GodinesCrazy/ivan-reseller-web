@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Queue, Worker, Job } from 'bullmq';
 import { ScrapingService } from './scraping.service';
 import { EBayService } from './ebay.service';

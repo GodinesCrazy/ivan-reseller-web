@@ -9,6 +9,7 @@ import { CredentialsManager } from './credentials-manager.service';
 import type { AliExpressCredentials } from '../types/api-credentials.types';
 import ManualAuthService from './manual-auth.service';
 import ManualAuthRequiredError from '../errors/manual-auth-required.error';
+import { marketplaceAuthStatusService } from './marketplace-auth-status.service';
 
 // Configurar Puppeteer con plugin stealth para evadir detección
 puppeteer.use(StealthPlugin());
@@ -288,6 +289,11 @@ export class AdvancedMarketplaceScraper {
         console.log(`✅ Injected ${cookies.length} AliExpress cookies for user ${userId}`);
         this.isLoggedIn = true;
         this.loggedInUserId = userId;
+        await marketplaceAuthStatusService.markHealthy(
+          userId,
+          'aliexpress',
+          'Sesión restaurada automáticamente usando cookies guardadas'
+        );
       } catch (cookieError) {
         console.warn('⚠️  Unable to inject AliExpress cookies:', (cookieError as Error).message);
       } finally {
@@ -1238,6 +1244,20 @@ export class AdvancedMarketplaceScraper {
     };
   }
 
+  async ensureAliExpressSession(userId: number): Promise<boolean> {
+    let result = false;
+    try {
+      if (!this.browser) {
+        await this.init();
+      }
+      await this.ensureAliExpressLogin(userId);
+      result = this.isLoggedIn && this.loggedInUserId === userId;
+      return result;
+    } finally {
+      await this.close().catch(() => {});
+    }
+  }
+
   private async ensureAliExpressLogin(userId: number): Promise<void> {
      if (!this.browser) {
        await this.init();
@@ -1259,7 +1279,12 @@ export class AdvancedMarketplaceScraper {
        return;
      }
  
-     const loginPage = await this.browser!.newPage();
+    await marketplaceAuthStatusService.markRefreshing(
+      userId,
+      'Intentando renovar sesión de AliExpress automáticamente'
+    );
+
+    const loginPage = await this.browser!.newPage();
  
      try {
        await this.setupRealBrowser(loginPage);
@@ -1356,6 +1381,12 @@ export class AdvancedMarketplaceScraper {
       if (error instanceof ManualAuthRequiredError) {
         throw error;
       }
+      await marketplaceAuthStatusService.markError(
+        userId,
+        'aliexpress',
+        error?.message || 'Error desconocido intentando iniciar sesión',
+        { lastAutomaticAttempt: new Date() }
+      );
       console.error('❌ Error performing AliExpress login:', error?.message || error);
      } finally {
        await loginPage.close().catch(() => {});
@@ -1530,6 +1561,11 @@ export class AdvancedMarketplaceScraper {
       if (payload.twoFactorEnabled) {
         console.warn('ℹ️  AliExpress account uses 2FA. Ensure TOTP codes are up to date for future sessions.');
       }
+      await marketplaceAuthStatusService.markHealthy(
+        userId,
+        'aliexpress',
+        'Sesión autenticada automáticamente'
+      );
     } catch (error) {
       console.warn('⚠️  Unable to persist AliExpress session:', (error as Error).message);
     }

@@ -16,6 +16,7 @@ import {
   Info
 } from 'lucide-react';
 import api from '../services/api';
+import { useAuthStatusStore } from '@stores/authStatusStore';
 
 // Tipos según backend
 interface APICredential {
@@ -39,6 +40,29 @@ interface APIStatus {
 const makeEnvKey = (apiName: string, environment: string) => `${apiName}-${environment}`;
 
 const makeFormKey = (apiName: string, environment: string) => `${apiName}::${environment}`;
+
+const STATUS_BADGE_STYLES: Record<string, { className: string; label: string }> = {
+  healthy: {
+    className: 'bg-green-100 border-green-200 text-green-700',
+    label: 'Sesión activa',
+  },
+  refreshing: {
+    className: 'bg-amber-100 border-amber-200 text-amber-700',
+    label: 'Renovando sesión…',
+  },
+  manual_required: {
+    className: 'bg-red-100 border-red-200 text-red-700',
+    label: 'Requiere acción manual',
+  },
+  error: {
+    className: 'bg-orange-100 border-orange-200 text-orange-700',
+    label: 'Error en reintento automático',
+  },
+  unknown: {
+    className: 'bg-gray-100 border-gray-200 text-gray-600',
+    label: 'Sin información',
+  },
+};
 
 interface APIDefinition {
   name: string;
@@ -177,10 +201,26 @@ export default function APISettings() {
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [loadingEnvironment, setLoadingEnvironment] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
+  const [marketplaceDiagnostics, setMarketplaceDiagnostics] = useState<Record<string, {
+    environment?: string;
+    issues: string[];
+    warnings: string[];
+    isActive?: boolean;
+    present?: boolean;
+  }>>({});
+  const authStatuses = useAuthStatusStore((state) => state.statuses);
+  const fetchAuthStatuses = useAuthStatusStore((state) => state.fetchStatuses);
+  const requestAuthRefresh = useAuthStatusStore((state) => state.requestRefresh);
 
   useEffect(() => {
     loadCredentials();
   }, []);
+
+  useEffect(() => {
+    if (!authStatuses || Object.keys(authStatuses).length === 0) {
+      fetchAuthStatuses();
+    }
+  }, [authStatuses, fetchAuthStatuses]);
 
   // Estado para almacenar las definiciones de APIs del backend
   const [backendApiDefinitions, setBackendApiDefinitions] = useState<Record<string, any>>({});
@@ -261,7 +301,43 @@ export default function APISettings() {
         });
         return next;
       });
-      
+
+      const marketplacesToCheck = ['ebay', 'amazon', 'mercadolibre'];
+      const diagPairs = await Promise.all(
+        marketplacesToCheck.map(async (mp) => {
+          try {
+            const { data } = await api.get('/api/marketplace/credentials', {
+              params: { marketplace: mp },
+            });
+            const payload = data?.data || {};
+            return [
+              mp,
+              {
+                environment: payload.environment,
+                issues: Array.isArray(payload.issues) ? payload.issues : [],
+                warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
+                isActive: payload.isActive,
+                present: payload.present,
+              },
+            ] as const;
+          } catch (diagError: any) {
+            console.warn(`No se pudo obtener diagnóstico de ${mp}:`, diagError?.message || diagError);
+            return [
+              mp,
+              {
+                environment: undefined,
+                issues: [`No se pudo obtener el estado de ${mp.toUpperCase()}.`],
+                warnings: [],
+                isActive: false,
+                present: false,
+              },
+            ] as const;
+          }
+        })
+      );
+      const diagMap = Object.fromEntries(diagPairs);
+      setMarketplaceDiagnostics(diagMap);
+
       // Construir mapa de estados por entorno (simple, basado en activación)
       const statusMap: Record<string, APIStatus> = {};
       creds.forEach((cred) => {
@@ -272,6 +348,24 @@ export default function APISettings() {
           message: cred.isActive ? undefined : 'No configurada',
           lastChecked: undefined,
         };
+
+        const diag = diagMap[cred.apiName];
+        if (diag) {
+          if (diag.issues?.length) {
+            statusMap[makeEnvKey(cred.apiName, cred.environment)] = {
+              apiName: cred.apiName,
+              environment: cred.environment,
+              available: false,
+              message: diag.issues[0],
+              lastChecked: undefined,
+            };
+          } else if (diag.warnings?.length) {
+            statusMap[makeEnvKey(cred.apiName, cred.environment)] = {
+              ...statusMap[makeEnvKey(cred.apiName, cred.environment)],
+              message: diag.warnings[0],
+            };
+          }
+        }
       });
       try {
         const statusResponse = await api.get('/api/credentials/status');
@@ -391,7 +485,7 @@ export default function APISettings() {
         'EBAY_APP_ID': 'appId',
         'EBAY_DEV_ID': 'devId',
         'EBAY_CERT_ID': 'certId',
-        'EBAY_TOKEN': 'authToken',
+        'EBAY_TOKEN': 'token',
         'AMAZON_CLIENT_ID': 'clientId',
         'AMAZON_CLIENT_SECRET': 'clientSecret',
         'AMAZON_REFRESH_TOKEN': 'refreshToken',
@@ -505,6 +599,8 @@ export default function APISettings() {
 
       // Recargar credenciales
       await loadCredentials();
+      await fetchAuthStatuses();
+      await fetchAuthStatuses();
 
       // Limpiar formulario
       setFormData(prev => ({ ...prev, [formKey]: {} }));
@@ -701,6 +797,7 @@ export default function APISettings() {
       
       // Recargar credenciales para obtener el estado actualizado
       await loadCredentials();
+      await fetchAuthStatuses();
 
       alert(`${!currentActive ? '✅ Activada' : '❌ Desactivada'} ${API_DEFINITIONS[apiName].displayName} (${environment})`);
     } catch (err: any) {
@@ -761,6 +858,16 @@ export default function APISettings() {
     if (!credential) return 'No configurada';
     if (!credential.isActive) return 'Desactivada';
     
+    const diag = marketplaceDiagnostics[apiName];
+    if (diag) {
+      if (diag.issues?.length) {
+        return diag.issues[0];
+      }
+      if (diag.warnings?.length) {
+        return diag.warnings[0];
+      }
+    }
+
     const status = statuses[makeEnvKey(apiName, environment)];
     if (!status) return 'Estado desconocido';
     
@@ -825,6 +932,12 @@ export default function APISettings() {
             : backendDef?.fields || apiDef.fields;
           const displayName = backendDef?.name || apiDef.displayName;
           const description = backendDef?.description || apiDef.description;
+          const diag = marketplaceDiagnostics[apiDef.name] || null;
+          const statusInfo = authStatuses?.[apiDef.name];
+          const badgeTheme =
+            statusInfo?.status && STATUS_BADGE_STYLES[statusInfo.status]
+              ? STATUS_BADGE_STYLES[statusInfo.status]
+              : STATUS_BADGE_STYLES.unknown;
 
           return (
             <div
@@ -851,6 +964,72 @@ export default function APISettings() {
                       )}
                     </h3>
                     <p className="text-sm text-gray-600">{description}</p>
+                    {['ebay', 'amazon', 'mercadolibre'].includes(apiDef.name) && diag && (
+                      <div className="mt-2 space-y-1 text-sm">
+                        {diag.issues?.length ? (
+                          <div className="px-3 py-2 bg-red-50 border border-red-200 text-red-700 rounded">
+                            <p className="font-semibold">Acción requerida</p>
+                            {diag.issues.map((issue, idx) => (
+                              <div key={idx}>• {issue}</div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {!diag.issues?.length && diag.warnings?.length ? (
+                          <div className="px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded">
+                            <p className="font-semibold">Aviso</p>
+                            {diag.warnings.map((warning, idx) => (
+                              <div key={idx}>• {warning}</div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+                    {statusInfo ? (
+                      <div className="mt-2 space-y-2 text-xs">
+                        <div
+                          className={`inline-flex items-center gap-2 px-3 py-1 border rounded-full font-semibold ${badgeTheme.className}`}
+                        >
+                          {badgeTheme.label}
+                        </div>
+                        {statusInfo.message ? (
+                          <p className="text-gray-500">{statusInfo.message}</p>
+                        ) : null}
+                        {apiDef.name === 'aliexpress' ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await requestAuthRefresh('aliexpress');
+                                } catch {
+                                  /* handled in store */
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 px-3 py-1 rounded border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition text-xs"
+                            >
+                              <RefreshCw className="w-3 h-3" />
+                              Reintentar automático
+                            </button>
+                            {statusInfo.manualSession?.token ? (
+                              <a
+                                href={
+                                  statusInfo.manualSession.loginUrl?.startsWith('http')
+                                    ? statusInfo.manualSession.loginUrl
+                                    : `${window.location.origin}${
+                                        statusInfo.manualSession.loginUrl ||
+                                        `/manual-login/${statusInfo.manualSession.token}`
+                                      }`
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-3 py-1 rounded border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition text-xs"
+                              >
+                                Abrir login manual
+                              </a>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {supportsEnv && (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {envOptions.map(env => (

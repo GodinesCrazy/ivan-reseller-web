@@ -50,7 +50,18 @@ export class CompetitorAnalyzerService {
             continue;
           }
 
-          const ebay = new EbayService(creds.credentials);
+          if (creds.issues?.length) {
+            console.warn('⚠️  Skipping eBay analysis - credential issues detected', {
+              userId,
+              issues: creds.issues,
+            });
+            continue;
+          }
+
+          const ebay = new EbayService({
+            ...(creds.credentials || {}),
+            sandbox: creds.environment === 'sandbox',
+          });
 
           const marketplaceMap: Record<string, string> = {
             us: 'EBAY_US', uk: 'EBAY_GB', de: 'EBAY_DE', es: 'EBAY_ES', fr: 'EBAY_FR', it: 'EBAY_IT', au: 'EBAY_AU', ca: 'EBAY_CA', mx: 'EBAY_MX'
@@ -107,6 +118,14 @@ export class CompetitorAnalyzerService {
             continue;
           }
 
+          if (rec.issues?.length) {
+            console.warn('⚠️  Skipping MercadoLibre analysis - credential issues detected', {
+              userId,
+              issues: rec.issues,
+            });
+            continue;
+          }
+
           siteId = rec.credentials.siteId || siteId;
           const mlCreds: any = { ...rec.credentials, siteId };
           const ml = new MercadoLibreService(mlCreds);
@@ -145,6 +164,14 @@ export class CompetitorAnalyzerService {
           const rec = await marketplace.getCredentials(userId, 'amazon');
           if (!rec || !rec.isActive || !rec.credentials) {
             console.warn('⚠️  Skipping Amazon analysis - credentials missing or inactive');
+            continue;
+          }
+
+          if (rec.issues?.length) {
+            console.warn('⚠️  Skipping Amazon analysis - credential issues detected', {
+              userId,
+              issues: rec.issues,
+            });
             continue;
           }
 

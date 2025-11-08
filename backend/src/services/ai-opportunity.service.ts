@@ -822,6 +822,9 @@ export class AIOpportunityEngine {
       const totalSales = categoryProducts.reduce((sum, p) => sum + p.sales.length, 0);
       const previousPeriodSales = 0; // TODO: Implementar comparación con período anterior
       
+      const seasonality: 'low' | 'medium' | 'high' =
+        totalSales > 50 ? 'high' : totalSales > 0 ? 'medium' : 'low';
+
       const trendData = {
         trend: totalSales > 0 ? 'rising' as const : 'stable' as const,
         confidence: Math.min(85, Math.max(50, categoryProducts.length * 5)),
@@ -830,7 +833,7 @@ export class AIOpportunityEngine {
           previous: previousPeriodSales * 100,
           change: previousPeriodSales > 0 ? ((totalSales - previousPeriodSales) / previousPeriodSales) * 100 : 0
         },
-        seasonality: 'medium' as const,
+        seasonality,
         topProducts: categoryProducts
           .slice(0, 5)
           .map(p => ({
