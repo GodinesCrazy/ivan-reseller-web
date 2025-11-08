@@ -21,6 +21,8 @@ interface OpportunityItem {
   targetMarketplaces: string[];
   feesConsidered?: Record<string, number>;
   generatedAt: string;
+  estimatedFields?: string[];
+  estimationNotes?: string[];
 }
 
 // Componente de skeleton para tabla
@@ -50,6 +52,10 @@ export default function Opportunities() {
   const [publishing, setPublishing] = useState<Record<number, boolean>>({});
 
   const marketplacesParam = useMemo(() => marketplaces.join(','), [marketplaces]);
+  const hasEstimatedValues = useMemo(
+    () => items.some((it) => (it.estimatedFields?.length || 0) > 0),
+    [items]
+  );
 
   async function search() {
     if (!query.trim()) return;
@@ -224,18 +230,68 @@ export default function Opportunities() {
                       Fees: ${Object.values(it.feesConsidered).reduce((a, b) => a + b, 0).toFixed(2)}
                     </div>
                   )}
+                  {it.estimationNotes?.length ? (
+                    <div className="text-xs text-amber-600 mt-1 space-y-1">
+                      {it.estimationNotes.map((note, noteIdx) => (
+                        <div key={noteIdx}>* {note}</div>
+                      ))}
+                    </div>
+                  ) : null}
                 </td>
-                <td className="p-3 text-right font-semibold">${it.costUsd.toFixed(2)}</td>
-                <td className="p-3 text-right font-semibold text-green-600">${it.suggestedPriceUsd.toFixed(2)}</td>
-                <td className="p-3 text-right">
-                  <span className={`font-semibold ${it.profitMargin >= 0.3 ? 'text-green-600' : it.profitMargin >= 0.2 ? 'text-yellow-600' : 'text-red-600'}`}>
-                    {Math.round(it.profitMargin * 100)}%
-                  </span>
+                <td className="p-3 text-right font-semibold">
+                  ${it.costUsd.toFixed(2)}
                 </td>
-                <td className="p-3 text-right">
-                  <span className={`font-semibold ${it.roiPercentage >= 50 ? 'text-green-600' : it.roiPercentage >= 30 ? 'text-yellow-600' : 'text-red-600'}`}>
-                    {Math.round(it.roiPercentage)}%
-                  </span>
+                <td className="p-3">
+                  <div className="flex items-center justify-end gap-2">
+                    <span className="font-semibold text-green-600">
+                      ${it.suggestedPriceUsd.toFixed(2)}
+                    </span>
+                    {it.estimatedFields?.includes('suggestedPriceUsd') && (
+                      <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 uppercase text-[10px] font-semibold">
+                        Estimado
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="p-3">
+                  <div className="flex items-center justify-end gap-2">
+                    <span
+                      className={`font-semibold ${
+                        it.profitMargin >= 0.3
+                          ? 'text-green-600'
+                          : it.profitMargin >= 0.2
+                          ? 'text-yellow-600'
+                          : 'text-red-600'
+                      }`}
+                    >
+                      {Math.round(it.profitMargin * 100)}%
+                    </span>
+                    {it.estimatedFields?.includes('profitMargin') && (
+                      <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 uppercase text-[10px] font-semibold">
+                        Estimado
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="p-3">
+                  <div className="flex items-center justify-end gap-2">
+                    <span
+                      className={`font-semibold ${
+                        it.roiPercentage >= 50
+                          ? 'text-green-600'
+                          : it.roiPercentage >= 30
+                          ? 'text-yellow-600'
+                          : 'text-red-600'
+                      }`}
+                    >
+                      {Math.round(it.roiPercentage)}%
+                    </span>
+                    {it.estimatedFields?.includes('roiPercentage') && (
+                      <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 uppercase text-[10px] font-semibold">
+                        Estimado
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="p-3 text-center">
                   <span className={`px-2 py-1 rounded text-xs font-medium ${
@@ -293,6 +349,11 @@ export default function Opportunities() {
           </table>
         )}
       </div>
+      {hasEstimatedValues && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded px-4 py-3">
+          <strong>Nota:</strong> Algunos valores se muestran como <span className="uppercase font-semibold">Estimado</span> porque faltan datos reales de los marketplaces de destino. Configura tus credenciales en <span className="font-semibold">Settings → API Settings</span> para obtener precios y márgenes exactos.
+        </div>
+      )}
     </div>
   );
 }

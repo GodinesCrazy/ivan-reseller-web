@@ -29,6 +29,8 @@ export interface OpportunityItem {
   targetMarketplaces: string[];
   feesConsidered: Record<string, number>;
   generatedAt: string;
+  estimatedFields?: string[];
+  estimationNotes?: string[];
 }
 
 class OpportunityFinderService {
@@ -149,39 +151,67 @@ class OpportunityFinderService {
     for (const product of products) {
       if (!product.title || !product.price || product.price <= 0) continue;
 
-      const analysis = await competitorAnalyzer.analyzeCompetition(
-        userId,
-        product.title,
-        marketplaces as ('ebay' | 'amazon' | 'mercadolibre')[],
-        region
-      );
+      let analysis: Record<string, any> = {};
+      try {
+        analysis = await competitorAnalyzer.analyzeCompetition(
+          userId,
+          product.title,
+          marketplaces as ('ebay' | 'amazon' | 'mercadolibre')[],
+          region
+        );
+      } catch (err: any) {
+        console.warn('⚠️  Competition analysis failed, using heuristic fallback:', err?.message || err);
+        analysis = {};
+      }
 
       // Agregar oportunidades solo si existe algún marketplace con datos reales
       const analyses = Object.values(analysis || {});
       const valid = analyses.find(a => a && a.listingsFound > 0 && a.competitivePrice > 0);
-      if (!valid) continue;
 
-      // 3) Calcular costos con el marketplace más favorable (max margen)
-      let best = { margin: -Infinity, price: 0, mp: (valid as any).marketplace, currency: (valid as any).currency || 'USD' } as { margin: number; price: number; mp: string; currency: string };
+      let best = { margin: -Infinity, price: 0, mp: valid?.marketplace || marketplaces[0], currency: valid?.currency || 'USD' } as { margin: number; price: number; mp: string; currency: string };
       let bestBreakdown: Record<string, number> = {};
-      for (const a of analyses) {
-        if (!a || a.listingsFound <= 0 || a.competitivePrice <= 0) continue;
-        const { breakdown, margin } = costCalculator.calculateAdvanced(
-          a.marketplace as any,
-          region,
-          a.competitivePrice,
-          product.price,
-          a.currency || 'USD',
-          'USD',
-          { shippingCost: 0, taxesPct: 0, otherCosts: 0 }
-        );
-        if (margin > best.margin) {
-          best = { margin, price: a.competitivePrice, mp: a.marketplace, currency: a.currency || 'USD' };
-          bestBreakdown = breakdown as any;
-        }
-      }
+      let estimatedFields: string[] = [];
+      const estimationNotes: string[] = [];
 
-      if (best.margin < this.minMargin) continue;
+      if (valid) {
+        // 3) Calcular costos con el marketplace más favorable (max margen)
+        for (const a of analyses) {
+          if (!a || a.listingsFound <= 0 || a.competitivePrice <= 0) continue;
+          const { breakdown, margin } = costCalculator.calculateAdvanced(
+            a.marketplace as any,
+            region,
+            a.competitivePrice,
+            product.price,
+            a.currency || 'USD',
+            'USD',
+            { shippingCost: 0, taxesPct: 0, otherCosts: 0 }
+          );
+          if (margin > best.margin) {
+            best = { margin, price: a.competitivePrice, mp: a.marketplace, currency: a.currency || 'USD' };
+            bestBreakdown = breakdown as any;
+          }
+        }
+
+        if (best.margin < this.minMargin) {
+          continue;
+        }
+      } else {
+        // No pudimos obtener datos de competencia, crear una estimación heurística
+        const fallbackPrice = product.price * 1.45;
+        const fallbackMargin = (fallbackPrice - product.price) / product.price;
+        if (fallbackMargin < this.minMargin) {
+          continue;
+        }
+        best = {
+          margin: fallbackMargin,
+          price: fallbackPrice,
+          mp: marketplaces[0],
+          currency: 'USD',
+        };
+        bestBreakdown = {};
+        estimatedFields = ['suggestedPriceUsd', 'profitMargin', 'roiPercentage'];
+        estimationNotes.push('Valores estimados por falta de datos de competencia real. Configura tus credenciales de Amazon, eBay o MercadoLibre para obtener precios exactos.');
+      }
 
       const opp: OpportunityItem = {
         productId: product.productId,
@@ -195,10 +225,12 @@ class OpportunityFinderService {
         roiPercentage: Math.round(best.margin * 100),
         competitionLevel: 'unknown',
         marketDemand: 'real',
-        confidenceScore: 0.5,
+        confidenceScore: valid ? 0.5 : 0.3,
         targetMarketplaces: marketplaces,
         feesConsidered: bestBreakdown,
         generatedAt: new Date().toISOString(),
+        estimatedFields,
+        estimationNotes,
       };
 
       opportunities.push(opp);
