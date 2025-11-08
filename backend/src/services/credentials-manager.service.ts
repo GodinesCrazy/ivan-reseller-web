@@ -22,7 +22,15 @@ const prisma = new PrismaClient();
 
 // Configuración de encriptación
 const ALGORITHM = 'aes-256-gcm';
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
+const RAW_ENCRYPTION_SECRET = (process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY.trim())
+  || (process.env.JWT_SECRET && process.env.JWT_SECRET.trim())
+  || 'ivan-reseller-default-secret';
+
+if (!process.env.ENCRYPTION_KEY && !process.env.JWT_SECRET) {
+  console.warn('⚠️  Using fallback encryption secret. Set ENCRYPTION_KEY for stronger security.');
+}
+
+const ENCRYPTION_KEY = crypto.createHash('sha256').update(RAW_ENCRYPTION_SECRET).digest('hex');
 const IV_LENGTH = 16;
 const TAG_LENGTH = 16;
 
@@ -128,7 +136,7 @@ const apiSchemas = {
  */
 function encryptCredentials(credentials: Record<string, any>): string {
   const iv = crypto.randomBytes(IV_LENGTH);
-  const key = Buffer.from(ENCRYPTION_KEY.slice(0, 64), 'hex');
+  const key = Buffer.from(ENCRYPTION_KEY, 'hex');
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
   
   const encrypted = Buffer.concat([
@@ -148,7 +156,7 @@ function encryptCredentials(credentials: Record<string, any>): string {
  */
 function decryptCredentials(encryptedData: string): Record<string, any> {
   const data = Buffer.from(encryptedData, 'base64');
-  const key = Buffer.from(ENCRYPTION_KEY.slice(0, 64), 'hex');
+  const key = Buffer.from(ENCRYPTION_KEY, 'hex');
   
   const iv = data.slice(0, IV_LENGTH);
   const tag = data.slice(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
