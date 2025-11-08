@@ -48,6 +48,239 @@ interface UserBusinessData {
   recentOpportunities: number;
 }
 
+const STOP_WORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'from',
+  'para',
+  'con',
+  'los',
+  'las',
+  'una',
+  'unos',
+  'unas',
+  'del',
+  'por',
+  'para',
+  'de',
+  'la',
+  'el',
+  'en',
+  'un',
+  'una',
+  'set',
+  'kit',
+  'pack',
+  'plus',
+  'pro',
+  'original',
+  'touch',
+  'smart',
+  'case',
+  'cover'
+]);
+
+const SEGMENT_KEYWORD_MAP: Record<string, string> = {
+  gaming: 'gaming & esports',
+  gamer: 'gaming & esports',
+  teclado: 'gaming & esports',
+  keyboard: 'gaming & esports',
+  mouse: 'gaming & esports',
+  pad: 'gaming & esports',
+  headset: 'audio & sound',
+  earbuds: 'audio & sound',
+  earphones: 'audio & sound',
+  bluetooth: 'audio & sound',
+  wireless: 'audio & sound',
+  kitchen: 'home & kitchen',
+  cocina: 'home & kitchen',
+  organizer: 'home & kitchen',
+  storage: 'home & kitchen',
+  hogar: 'home & kitchen',
+  home: 'home & kitchen',
+  decor: 'home & kitchen',
+  beauty: 'beauty & care',
+  skincare: 'beauty & care',
+  facial: 'beauty & care',
+  maquillaje: 'beauty & care',
+  serum: 'beauty & care',
+  fitness: 'fitness & wellness',
+  gym: 'fitness & wellness',
+  yoga: 'fitness & wellness',
+  deporte: 'fitness & wellness',
+  pet: 'pets',
+  perro: 'pets',
+  gato: 'pets',
+  mascota: 'pets',
+  baby: 'baby & kids',
+  bebe: 'baby & kids',
+  infantil: 'baby & kids',
+  kids: 'baby & kids',
+  auto: 'auto & moto',
+  car: 'auto & moto',
+  moto: 'auto & moto',
+  motorcycle: 'auto & moto',
+  phone: 'mobile accessories',
+  iphone: 'mobile accessories',
+  samsung: 'mobile accessories',
+  android: 'mobile accessories',
+  lighting: 'home improvement',
+  led: 'home improvement',
+  strip: 'home improvement',
+  lamp: 'home improvement',
+  garden: 'garden & outdoor',
+  outdoor: 'garden & outdoor',
+  camping: 'outdoor & travel',
+  travel: 'outdoor & travel',
+  laptop: 'computers & office',
+  office: 'computers & office',
+  smartwatch: 'wearables & smart devices',
+  watch: 'wearables & smart devices',
+  reloj: 'wearables & smart devices',
+  jewelry: 'fashion & accessories',
+  fashion: 'fashion & accessories',
+  ropa: 'fashion & accessories',
+  dress: 'fashion & accessories',
+  bag: 'fashion & accessories',
+  bolso: 'fashion & accessories'
+};
+
+const SEGMENT_PATTERNS: Array<{ segment: string; regex: RegExp }> = [
+  { segment: 'gaming & esports', regex: /(gaming|gamer|esports|mousepad|keyboard|rgb)/i },
+  { segment: 'home & kitchen', regex: /(kitchen|cocina|organizer|storage|hogar|pantry|cookware)/i },
+  { segment: 'beauty & care', regex: /(skincare|facial|maquillaje|beauty|serum|mascara|spa)/i },
+  { segment: 'fitness & wellness', regex: /(fitness|gym|yoga|pilates|resistance|band|deporte|workout)/i },
+  { segment: 'pets', regex: /(pet|perro|gato|mascota|cat|dog)/i },
+  { segment: 'baby & kids', regex: /(baby|beb[eé]|infantil|kids|toddler|newborn)/i },
+  { segment: 'auto & moto', regex: /(auto|car|moto|motocicleta|vehicle|carro)/i },
+  { segment: 'mobile accessories', regex: /(iphone|samsung|phone|case|charger|cable)/i },
+  { segment: 'computers & office', regex: /(laptop|notebook|office|desk|ergonomic|monitor)/i },
+  { segment: 'wearables & smart devices', regex: /(smartwatch|watch|tracker|wearable)/i },
+  { segment: 'fashion & accessories', regex: /(fashion|ropa|dress|bag|bolso|jewelry|accesorio)/i },
+  { segment: 'garden & outdoor', regex: /(garden|outdoor|plant|patio|camping|campamento)/i },
+  { segment: 'electronics & gadgets', regex: /(electronic|gadget|camera|drone|sensor|usb)/i }
+];
+
+interface SegmentStat {
+  key: string;
+  displayName: string;
+  count: number;
+  score: number;
+  avgMargin: number;
+  avgRoi: number;
+  avgProfitPerUnit: number;
+  avgSuggestedPrice: number;
+  marketplaces: Array<{ name: string; count: number }>;
+  sample: {
+    title: string;
+    aliexpressUrl?: string;
+    profitMargin: number;
+    roiPercentage: number;
+    marketplaces: string[];
+    keyword?: string;
+  };
+}
+
+interface HotProductSignal {
+  title: string;
+  aliexpressUrl?: string;
+  profitMargin: number;
+  roiPercentage: number;
+  suggestedPriceUsd: number;
+  costUsd: number;
+  marketplaces: string[];
+}
+
+interface WinningOperationSignal {
+  title: string;
+  marketplace: string;
+  totalProfit: number;
+  roi: number;
+  daysToComplete: number;
+  category?: string;
+}
+
+interface MarketplaceDemandSignal {
+  marketplace: string;
+  current: number;
+  previous: number;
+  changePct: number;
+  trend: 'up' | 'down' | 'stable';
+}
+
+interface DataDrivenSignals {
+  segments: SegmentStat[];
+  hotProducts: HotProductSignal[];
+  winningOperations: WinningOperationSignal[];
+  marketplaceDemand: MarketplaceDemandSignal[];
+  confidenceNotes: string[];
+}
+
+function extractSegmentsFromTitle(title: string): string[] {
+  const normalized = title.toLowerCase();
+  const segments = new Set<string>();
+
+  for (const rule of SEGMENT_PATTERNS) {
+    if (rule.regex.test(normalized)) {
+      segments.add(rule.segment);
+    }
+  }
+
+  const words = normalized
+    .replace(/[^a-z0-9áéíóúüñ\s]/gi, ' ')
+    .split(/\s+/)
+    .filter((word) => word && word.length >= 3 && !STOP_WORDS.has(word));
+
+  for (const word of words) {
+    const mapped = SEGMENT_KEYWORD_MAP[word];
+    if (mapped) {
+      segments.add(mapped);
+    }
+  }
+
+  return Array.from(segments);
+}
+
+function parseMarketplaceArray(raw: any): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map((mp) => String(mp));
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map((mp) => String(mp));
+      }
+    } catch {
+      return [raw];
+    }
+  }
+  return [];
+}
+
+function calculateTrend(current: number, previous: number): { trend: 'up' | 'down' | 'stable'; changePct: number } {
+  if (previous <= 0 && current > 0) {
+    return { trend: 'up', changePct: 100 };
+  }
+  if (previous === 0 && current === 0) {
+    return { trend: 'stable', changePct: 0 };
+  }
+  const changePct = ((current - previous) / (previous === 0 ? current || 1 : previous)) * 100;
+  if (changePct > 15) return { trend: 'up', changePct };
+  if (changePct < -15) return { trend: 'down', changePct };
+  return { trend: 'stable', changePct };
+}
+
+function formatSegmentName(segment: string): string {
+  return segment
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 export class AISuggestionsService {
   /**
    * Obtener datos del negocio del usuario para análisis
@@ -165,10 +398,605 @@ export class AISuggestionsService {
     }
   }
 
+  private async analyzeMarketSignals(
+    userId: number,
+    businessData: UserBusinessData
+  ): Promise<DataDrivenSignals> {
+    const now = new Date();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const currentStart = new Date(now.getTime() - 14 * dayMs);
+    const previousStart = new Date(currentStart.getTime() - 14 * dayMs);
+    const operationsStart = new Date(now.getTime() - 90 * dayMs);
+
+    const [
+      recentOpportunities,
+      previousOpportunities,
+      userRecentOpportunities,
+      userOperations
+    ] = await Promise.all([
+      prisma.opportunity.findMany({
+        where: { createdAt: { gte: currentStart } },
+        select: {
+          title: true,
+          costUsd: true,
+          suggestedPriceUsd: true,
+          profitMargin: true,
+          roiPercentage: true,
+          confidenceScore: true,
+          marketDemand: true,
+          targetMarketplaces: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 300,
+      }),
+      prisma.opportunity.findMany({
+        where: {
+          createdAt: {
+            gte: previousStart,
+            lt: currentStart,
+          },
+        },
+        select: {
+          targetMarketplaces: true,
+        },
+        take: 300,
+      }),
+      prisma.opportunity.findMany({
+        where: {
+          userId,
+          createdAt: { gte: currentStart },
+        },
+        select: {
+          title: true,
+        },
+        take: 50,
+      }),
+      prisma.successfulOperation.findMany({
+        where: {
+          userId,
+          createdAt: { gte: operationsStart },
+        },
+        include: {
+          product: {
+            select: {
+              title: true,
+              category: true,
+              suggestedPrice: true,
+              aliexpressPrice: true,
+              finalPrice: true,
+            },
+          },
+          sale: {
+            select: {
+              marketplace: true,
+            },
+          },
+        },
+        orderBy: [{ totalProfit: 'desc' }, { createdAt: 'desc' }],
+        take: 25,
+      }),
+    ]);
+
+    let operations = userOperations;
+    if (!operations.length) {
+      operations = await prisma.successfulOperation.findMany({
+        where: {
+          createdAt: { gte: operationsStart },
+        },
+        include: {
+          product: {
+            select: {
+              title: true,
+              category: true,
+              suggestedPrice: true,
+              aliexpressPrice: true,
+              finalPrice: true,
+            },
+          },
+          sale: {
+            select: {
+              marketplace: true,
+            },
+          },
+        },
+        orderBy: [{ totalProfit: 'desc' }, { createdAt: 'desc' }],
+        take: 25,
+      });
+    }
+
+    type MutableSegmentStat = {
+      key: string;
+      displayName: string;
+      count: number;
+      score: number;
+      marginSum: number;
+      roiSum: number;
+      profitSum: number;
+      suggestedSum: number;
+      marketplaces: Map<string, number>;
+      sample?: SegmentStat['sample'];
+    };
+
+    const segmentMap = new Map<string, MutableSegmentStat>();
+    const hotProducts: HotProductSignal[] = [];
+    const currentDemandMap = new Map<string, number>();
+
+    for (const opp of recentOpportunities) {
+      const segments = extractSegmentsFromTitle(opp.title);
+      if (!segments.length) continue;
+
+      const marketplaces = parseMarketplaceArray(opp.targetMarketplaces);
+      if (!marketplaces.length) {
+        marketplaces.push('ebay');
+      }
+
+      const margin = typeof opp.profitMargin === 'number' ? opp.profitMargin : 0;
+      const roi = typeof opp.roiPercentage === 'number' ? opp.roiPercentage : 0;
+      const confidence =
+        typeof opp.confidenceScore === 'number' ? opp.confidenceScore : 0;
+      const baseScore =
+        margin * 120 + roi + confidence * 80 + (opp.marketDemand === 'real' ? 15 : 0);
+      const profitPerUnit = Math.max(
+        0,
+        (opp.suggestedPriceUsd || 0) - (opp.costUsd || 0)
+      );
+      const keyword = segments[0];
+
+      for (const marketplace of marketplaces) {
+        currentDemandMap.set(
+          marketplace,
+          (currentDemandMap.get(marketplace) || 0) + 1
+        );
+      }
+
+      for (const segment of segments) {
+        const key = segment;
+        let stat = segmentMap.get(key);
+        if (!stat) {
+          stat = {
+            key,
+            displayName: formatSegmentName(segment),
+            count: 0,
+            score: 0,
+            marginSum: 0,
+            roiSum: 0,
+            profitSum: 0,
+            suggestedSum: 0,
+            marketplaces: new Map<string, number>(),
+          };
+          segmentMap.set(key, stat);
+        }
+
+        stat.count += 1;
+        stat.score += baseScore;
+        stat.marginSum += margin;
+        stat.roiSum += roi;
+        stat.profitSum += profitPerUnit;
+        stat.suggestedSum += opp.suggestedPriceUsd || 0;
+        for (const marketplace of marketplaces) {
+          stat.marketplaces.set(
+            marketplace,
+            (stat.marketplaces.get(marketplace) || 0) + 1
+          );
+        }
+        if (!stat.sample || margin > stat.sample.profitMargin) {
+          stat.sample = {
+            title: opp.title,
+            profitMargin: margin,
+            roiPercentage: roi,
+            marketplaces,
+            keyword,
+          };
+        }
+      }
+
+      if (margin >= 0.3) {
+        hotProducts.push({
+          title: opp.title,
+          profitMargin: margin,
+          roiPercentage: roi,
+          suggestedPriceUsd: opp.suggestedPriceUsd || 0,
+          costUsd: opp.costUsd || 0,
+          marketplaces,
+        });
+      }
+    }
+
+    const previousDemandMap = new Map<string, number>();
+    for (const opp of previousOpportunities) {
+      const marketplaces = parseMarketplaceArray(opp.targetMarketplaces);
+      for (const marketplace of marketplaces) {
+        previousDemandMap.set(
+          marketplace,
+          (previousDemandMap.get(marketplace) || 0) + 1
+        );
+      }
+    }
+
+    const segments = Array.from(segmentMap.values())
+      .map<SegmentStat>((stat) => ({
+        key: stat.key,
+        displayName: stat.displayName,
+        count: stat.count,
+        score: stat.score,
+        avgMargin: stat.count ? stat.marginSum / stat.count : 0,
+        avgRoi: stat.count ? stat.roiSum / stat.count : 0,
+        avgProfitPerUnit: stat.count ? stat.profitSum / stat.count : 0,
+        avgSuggestedPrice: stat.count ? stat.suggestedSum / stat.count : 0,
+        marketplaces: Array.from(stat.marketplaces.entries())
+          .sort((a, b) => b[1] - a[1])
+          .map(([name, count]) => ({ name, count })),
+        sample:
+          stat.sample || {
+            title: '',
+            profitMargin: 0,
+            roiPercentage: 0,
+            marketplaces: [],
+          },
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
+
+    const hotProductSignals = hotProducts
+      .sort((a, b) => {
+        const marginDiff = b.profitMargin - a.profitMargin;
+        if (Math.abs(marginDiff) > 0.02) {
+          return marginDiff;
+        }
+        return b.roiPercentage - a.roiPercentage;
+      })
+      .slice(0, 6);
+
+    const marketplacesSeen = new Set<string>([
+      ...currentDemandMap.keys(),
+      ...previousDemandMap.keys(),
+    ]);
+
+    const marketplaceDemand: MarketplaceDemandSignal[] = Array.from(
+      marketplacesSeen.values()
+    )
+      .map((marketplace) => {
+        const current = currentDemandMap.get(marketplace) || 0;
+        const previous = previousDemandMap.get(marketplace) || 0;
+        const { trend, changePct } = calculateTrend(current, previous);
+        return {
+          marketplace,
+          current,
+          previous,
+          changePct: Math.round(changePct * 10) / 10,
+          trend,
+        };
+      })
+      .sort((a, b) => b.current - a.current);
+
+    const winningOperations: WinningOperationSignal[] = operations
+      .map((op) => {
+        const totalProfit = op.totalProfit || op.expectedProfit || 0;
+        const investment =
+          op.product?.aliexpressPrice ||
+          op.product?.suggestedPrice ||
+          op.product?.finalPrice ||
+          1;
+        const roi =
+          investment > 0 ? (totalProfit / investment) * 100 : op.profitAccuracy || 0;
+        return {
+          title: op.product?.title || 'Producto sin título',
+          marketplace: op.sale?.marketplace || 'marketplace',
+          totalProfit: Math.round(totalProfit * 100) / 100,
+          roi: Math.round(roi * 10) / 10,
+          daysToComplete: op.daysToComplete || 0,
+          category: op.product?.category || undefined,
+        };
+      })
+      .filter((op) => op.totalProfit > 0)
+      .sort((a, b) => b.totalProfit - a.totalProfit)
+      .slice(0, 5);
+
+    const confidenceNotes: string[] = [];
+    if (segments.length) {
+      const top = segments[0];
+      confidenceNotes.push(
+        `Segmento ${top.displayName} generó ${top.count} oportunidades con margen promedio ${Math.round(
+          top.avgMargin * 100
+        )}% y ROI ${Math.round(top.avgRoi)}%.`
+      );
+    }
+
+    for (const demand of marketplaceDemand.slice(0, 2)) {
+      if (demand.trend === 'up') {
+        confidenceNotes.push(
+          `${demand.marketplace} muestra incremento de demanda del ${demand.changePct.toFixed(
+            1
+          )}% en las últimas 2 semanas.`
+        );
+      } else if (demand.trend === 'down') {
+        confidenceNotes.push(
+          `${demand.marketplace} redujo demanda ${Math.abs(demand.changePct).toFixed(
+            1
+          )}% respecto al período anterior.`
+        );
+      }
+    }
+
+    if (winningOperations.length) {
+      const op = winningOperations[0];
+      confidenceNotes.push(
+        `Operación exitosa "${op.title}" en ${op.marketplace} alcanzó ROI ${op.roi}% con ganancia $${op.totalProfit.toFixed(
+          2
+        )}.`
+      );
+    }
+
+    if (businessData.bestCategory) {
+      confidenceNotes.push(
+        `Mejor categoría histórica del negocio: ${businessData.bestCategory}.`
+      );
+    }
+
+    if (userRecentOpportunities.length === 0 && recentOpportunities.length > 0) {
+      confidenceNotes.push(
+        'Tus oportunidades recientes están vacías: aprovecha los segmentos detectados para cargar nuevos productos.'
+      );
+    }
+
+    return {
+      segments,
+      hotProducts: hotProductSignals,
+      winningOperations,
+      marketplaceDemand,
+      confidenceNotes,
+    };
+  }
+
+  private buildDataDrivenSuggestions(
+    userId: number,
+    signals: DataDrivenSignals,
+    businessData: UserBusinessData,
+    category?: string
+  ): AISuggestion[] {
+    const suggestions: AISuggestion[] = [];
+    const filterType = category && category !== 'all' ? category : null;
+    let counter = 0;
+
+    const pushSuggestion = (suggestion: AISuggestion) => {
+      if (!filterType || suggestion.type === filterType) {
+        suggestions.push(suggestion);
+      }
+    };
+
+    const makeId = (prefix: string) => `${prefix}_${Date.now()}_${counter++}`;
+
+    signals.segments.slice(0, 3).forEach((segment) => {
+      const mainMarketplace = segment.marketplaces[0]?.name || 'ebay';
+      const avgMarginPct = Math.round(segment.avgMargin * 100);
+      const roiPct = Math.round(segment.avgRoi);
+      const estimatedRevenue = Math.max(
+        60,
+        Math.round(segment.avgProfitPerUnit * Math.max(6, segment.count))
+      );
+      const confidence = Math.min(
+        95,
+        Math.max(60, Math.round((segment.score / (segment.count || 1)) || 60))
+      );
+      const priority: 'high' | 'medium' =
+        segment.avgMargin >= 0.4 || roiPct >= 50 ? 'high' : 'medium';
+
+      pushSuggestion({
+        id: makeId('segment'),
+        type: 'inventory',
+        priority,
+        title: `Expandir catálogo en ${segment.displayName} orientado a ${mainMarketplace}`,
+        description: `En las últimas 2 semanas detectamos ${segment.count} oportunidades en ${segment.displayName} con margen promedio ${avgMarginPct}% y ROI ${roiPct}%. Aprovecha el impulso publicando nuevos productos desde AliExpress hacia ${mainMarketplace}.`,
+        impact: {
+          revenue: estimatedRevenue,
+          time: 3,
+          difficulty: 'medium',
+        },
+        confidence,
+        actionable: true,
+        implemented: false,
+        estimatedTime: '90 minutos',
+        requirements: [
+          'Credenciales activas de AliExpress y marketplaces',
+          'Workflow de publicación configurado en modo asistido o automático',
+          `Listado de palabras clave relacionadas con "${segment.sample.keyword || segment.displayName}"`,
+        ],
+        steps: [
+          'Ir a Oportunidades → Buscar y usar las palabras clave del segmento detectado.',
+          `Filtrar productos con margen mínimo ${Math.max(35, avgMarginPct - 5)}% y ROI > ${Math.max(
+            40,
+            roiPct - 5
+          )}%.`,
+          `Crear productos desde las oportunidades de mayor confianza y lanzar publicación en ${mainMarketplace}.`,
+          'Activar seguimiento de ventas para retroalimentar el motor de IA (Reports → Tracking).',
+        ],
+        relatedProducts: segment.sample.title ? [segment.sample.title] : undefined,
+        metrics: {
+          currentValue: avgMarginPct,
+          targetValue: Math.min(95, avgMarginPct + 8),
+          unit: '%',
+        },
+        createdAt: new Date().toISOString(),
+      });
+    });
+
+    signals.hotProducts.slice(0, 2).forEach((product) => {
+      const marginPct = Math.round(product.profitMargin * 100);
+      const targetPrice = product.suggestedPriceUsd || 0;
+      const profitUnit = Math.max(0, targetPrice - product.costUsd);
+      const expectedRevenue = Math.max(50, Math.round(profitUnit * 8));
+      const confidence = Math.min(
+        92,
+        Math.max(55, Math.round(marginPct + product.roiPercentage / 2))
+      );
+      pushSuggestion({
+        id: makeId('pricing'),
+        type: 'pricing',
+        priority: marginPct >= 40 ? 'high' : 'medium',
+        title: `Optimizar pricing para "${product.title.slice(0, 70)}" en ${product.marketplaces.join(', ')}`,
+        description: `El producto presenta un margen del ${marginPct}% con ROI ${Math.round(
+          product.roiPercentage
+        )}%. Ajusta el precio de venta a $${targetPrice.toFixed(
+          2
+        )} USD y programa repricing automático para permanecer competitivo en ${product.marketplaces.join(
+          ', '
+        )}.`,
+        impact: {
+          revenue: expectedRevenue,
+          time: 1,
+          difficulty: 'easy',
+        },
+        confidence,
+        actionable: true,
+        implemented: false,
+        estimatedTime: '45 minutos',
+        requirements: [
+          'Listado publicado en el marketplace objetivo',
+          'Configuración de marketplace en modo sandbox/prod correcta',
+          'Datos de fees actualizados (Settings → Fees)',
+        ],
+        steps: [
+          'Comparar precio actual vs top competidores.',
+          'Ajustar el precio en Products → Editar y reflejar el margen objetivo.',
+          'Configurar regla de repricing automático con margen mínimo 5% inferior al promedio.',
+          'Monitorear conversiones durante 48h y registrar resultados en Reports.',
+        ],
+        relatedProducts: [product.title],
+        metrics: {
+          currentValue: marginPct,
+          targetValue: Math.min(95, marginPct + 7),
+          unit: '%',
+        },
+        createdAt: new Date().toISOString(),
+      });
+    });
+
+    signals.winningOperations.slice(0, 2).forEach((operation) => {
+      const confidence = Math.min(90, Math.max(60, Math.round(operation.roi)));
+      const expectedRevenue = Math.max(70, Math.round(operation.totalProfit * 2));
+      pushSuggestion({
+        id: makeId('automation'),
+        type: 'automation',
+        priority: operation.roi >= 60 ? 'high' : 'medium',
+        title: `Automatizar relanzamiento de "${operation.title}" en ${operation.marketplace}`,
+        description: `La última operación completó en ${operation.daysToComplete} días con ROI ${operation.roi}% y beneficio $${operation.totalProfit.toFixed(
+          2
+        )}. Configura una regla para repostear automáticamente cuando el ROI proyectado supere ${Math.max(
+          40,
+          Math.round(operation.roi * 0.8)
+        )}%.`,
+        impact: {
+          revenue: expectedRevenue,
+          time: 2,
+          difficulty: 'medium',
+        },
+        confidence,
+        actionable: true,
+        implemented: false,
+        estimatedTime: '120 minutos',
+        requirements: [
+          'Workflow stagePublish en modo asistido o automático',
+          'Stock disponible en proveedor AliExpress',
+          'Reglas de profit threshold definidas',
+        ],
+        steps: [
+          'Ir a Automation → Reglas y crear regla "Replicar éxito".',
+          `Definir condición: ROI previsto ≥ ${Math.max(
+            40,
+            Math.round(operation.roi * 0.8)
+          )}% y margen ≥ 30%`,
+          `Acción: publicar automáticamente en ${operation.marketplace} con sincronización de inventario cada 6h.`,
+          'Programar revisión semanal para ajustar umbrales.',
+        ],
+        relatedProducts: [operation.title],
+        metrics: {
+          currentValue: operation.roi,
+          targetValue: Math.min(120, operation.roi + 15),
+          unit: '%',
+        },
+        createdAt: new Date().toISOString(),
+      });
+    });
+
+    const trendingMarketplace = signals.marketplaceDemand.find((item) => item.trend === 'up');
+    if (trendingMarketplace) {
+      pushSuggestion({
+        id: makeId('marketing'),
+        type: 'marketing',
+        priority: 'medium',
+        title: `Impulsar visibilidad en ${trendingMarketplace.marketplace}`,
+        description: `${trendingMarketplace.marketplace} incrementó la demanda ${trendingMarketplace.changePct.toFixed(
+          1
+        )}% comparado con el período anterior. Lanza campaña promocional enfocada en los segmentos con mayor margen detectados.`,
+        impact: {
+          revenue: Math.max(80, Math.round((signals.segments[0]?.avgProfitPerUnit || 10) * 10)),
+          time: 2,
+          difficulty: 'medium',
+        },
+        confidence: 70,
+        actionable: true,
+        implemented: false,
+        estimatedTime: '75 minutos',
+        requirements: [
+          `Credenciales válidas de ${trendingMarketplace.marketplace}`,
+          'Listado de productos con margen ≥ 35%',
+          'Presupuesto promocional configurado en marketplace',
+        ],
+        steps: [
+          `Identificar 5 productos prioritarios dentro de ${signals.segments[0]?.displayName || 'los segmentos detectados'}.`,
+          `Crear campaña promocional destacando envío y ROI proyectado.`,
+          'Configurar métricas de seguimiento y revisar a los 3 días.',
+          'Registrar aprendizaje en Reports → Insights para retroalimentar la IA.',
+        ],
+        metrics: {
+          currentValue: trendingMarketplace.current,
+          targetValue: trendingMarketplace.current + Math.max(5, Math.round(trendingMarketplace.current * 0.2)),
+          unit: 'listings',
+        },
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    if (signals.confidenceNotes.length) {
+      pushSuggestion({
+        id: makeId('optimization'),
+        type: 'optimization',
+        priority: 'medium',
+        title: 'Actualizar tablero de inteligencia con señales recientes',
+        description: `Resumen de señales detectadas por la IA:\n- ${signals.confidenceNotes.join(
+          '\n- '
+        )}\nUtiliza estos datos para ajustar tu estrategia de búsqueda, pricing y automatización.`,
+        impact: {
+          revenue: 40,
+          time: 1,
+          difficulty: 'easy',
+        },
+        confidence: 65,
+        actionable: true,
+        implemented: false,
+        estimatedTime: '30 minutos',
+        requirements: [
+          'Revisar Dashboard → Inteligencia antes de la siguiente búsqueda',
+          'Documentar ajustes en Notas del usuario',
+        ],
+        steps: [
+          'Registrar en tu plan semanal las acciones priorizadas por la IA.',
+          'Alinear filtros de búsqueda en oportunidades con los segmentos destacados.',
+          'Ajustar reglas de automatización según los ROI detectados.',
+        ],
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    return suggestions;
+  }
+
   /**
    * Generar sugerencias IA usando GROQ
    */
   async generateSuggestions(userId: number, category?: string): Promise<AISuggestion[]> {
+    let dataDrivenSuggestions: AISuggestion[] = [];
     try {
       // ✅ Obtener datos del negocio primero (puede fallar si no hay datos)
       let businessData: UserBusinessData;
@@ -188,6 +1016,17 @@ export class AISuggestionsService {
           products: [],
           recentOpportunities: 0
         };
+      }
+
+      let signals: DataDrivenSignals | null = null;
+      try {
+        signals = await this.analyzeMarketSignals(userId, businessData);
+        dataDrivenSuggestions = this.buildDataDrivenSuggestions(userId, signals, businessData, category);
+      } catch (signalsError: any) {
+        logger.warn('AISuggestions: No se pudieron analizar señales de mercado', {
+          error: signalsError?.message || signalsError,
+          userId,
+        });
       }
 
       // Obtener credenciales de GROQ
@@ -222,11 +1061,21 @@ export class AISuggestionsService {
 
       if (!groqCredentials || !groqCredentials.apiKey) {
         logger.warn('AISuggestions: GROQ API no configurada, usando sugerencias de fallback');
+        if (dataDrivenSuggestions.length) {
+          try {
+            await this.saveSuggestions(userId, dataDrivenSuggestions);
+          } catch (storeError: any) {
+            logger.warn('AISuggestions: No se pudieron guardar sugerencias data-driven', {
+              error: storeError?.message || storeError,
+            });
+          }
+          return dataDrivenSuggestions;
+        }
         return this.generateFallbackSuggestions(userId);
       }
 
       // Generar prompt para IA
-      const prompt = this.buildPrompt(businessData, category);
+      const prompt = this.buildPrompt(businessData, signals || undefined, category);
 
       // Llamar a GROQ API
       let response: any;
@@ -313,20 +1162,40 @@ export class AISuggestionsService {
       }
 
       // Convertir respuesta de IA a formato AISuggestion
-      const suggestions = this.parseAISuggestions(aiResponse, businessData);
+      const aiSuggestions = this.parseAISuggestions(aiResponse, businessData);
 
-      // Guardar sugerencias en BD (no crítico si falla, pero intentar guardar)
-      if (suggestions.length > 0) {
+      const mergedSuggestions: AISuggestion[] = [];
+      const seenTitles = new Set<string>();
+
+      const merge = (list: AISuggestion[]) => {
+        for (const suggestion of list) {
+          const key = suggestion.title.toLowerCase();
+          if (seenTitles.has(key)) continue;
+          seenTitles.add(key);
+          mergedSuggestions.push(suggestion);
+        }
+      };
+
+      merge(dataDrivenSuggestions);
+      merge(aiSuggestions);
+
+      if (!mergedSuggestions.length) {
+        merge(await this.generateFallbackSuggestions(userId));
+      }
+
+      const finalSuggestions = mergedSuggestions.slice(0, 10);
+
+      if (finalSuggestions.length > 0) {
         try {
-          await this.saveSuggestions(userId, suggestions);
-          logger.info(`AISuggestions: ${suggestions.length} sugerencias guardadas para usuario ${userId}`);
+          await this.saveSuggestions(userId, finalSuggestions);
+          logger.info(`AISuggestions: ${finalSuggestions.length} sugerencias guardadas para usuario ${userId}`);
         } catch (saveError: any) {
           logger.warn('AISuggestions: Error guardando sugerencias (no crítico)', { error: saveError.message });
           // Continuar y retornar sugerencias de todos modos
         }
       }
 
-      return suggestions;
+      return finalSuggestions;
 
     } catch (error: any) {
       logger.error('AISuggestions: Error generando sugerencias', { 
@@ -336,6 +1205,9 @@ export class AISuggestionsService {
       });
       // ✅ Asegurar que siempre retornamos algo, nunca lanzamos error
       try {
+        if (dataDrivenSuggestions.length) {
+          return dataDrivenSuggestions;
+        }
         return this.generateFallbackSuggestions(userId);
       } catch (fallbackError: any) {
         logger.error('AISuggestions: Error incluso en fallback', { error: fallbackError.message });
@@ -348,7 +1220,59 @@ export class AISuggestionsService {
   /**
    * Construir prompt para IA
    */
-  private buildPrompt(data: UserBusinessData, category?: string): string {
+  private buildPrompt(data: UserBusinessData, signals?: DataDrivenSignals, category?: string): string {
+    const segmentSummary = signals?.segments?.length
+      ? signals.segments
+          .slice(0, 5)
+          .map((segment, index) => {
+            const marketplaces = segment.marketplaces.slice(0, 2).map((m) => m.name).join(', ') || 'N/A';
+            return `${index + 1}. ${segment.displayName}: margen promedio ${Math.round(
+              segment.avgMargin * 100
+            )}%, ROI ${Math.round(segment.avgRoi)}%, marketplaces clave: ${marketplaces}`;
+          })
+          .join('\n')
+      : 'No se detectaron segmentos destacados en las últimas 2 semanas.';
+
+    const hotProductsSummary = signals?.hotProducts?.length
+      ? signals.hotProducts
+          .slice(0, 4)
+          .map(
+            (product, index) =>
+              `${index + 1}. ${product.title} → margen ${Math.round(product.profitMargin * 100)}%, ROI ${Math.round(
+                product.roiPercentage
+              )}%, marketplaces sugeridos: ${product.marketplaces.join(', ')}`
+          )
+          .join('\n')
+      : 'Sin productos destacados con ROI alto en las últimas 2 semanas.';
+
+    const marketplaceDemandSummary = signals?.marketplaceDemand?.length
+      ? signals.marketplaceDemand
+          .slice(0, 4)
+          .map(
+            (item) =>
+              `• ${item.marketplace}: demanda actual ${item.current}, cambio ${item.changePct.toFixed(
+                1
+              )}% (${item.trend})`
+          )
+          .join('\n')
+      : 'No hay variaciones significativas de demanda por marketplace.';
+
+    const operationsSummary = signals?.winningOperations?.length
+      ? signals.winningOperations
+          .slice(0, 3)
+          .map(
+            (op, index) =>
+              `${index + 1}. ${op.title} en ${op.marketplace} → ROI ${op.roi}% con beneficio $${op.totalProfit.toFixed(
+                2
+              )}`
+          )
+          .join('\n')
+      : 'Sin operaciones exitosas recientes registradas.';
+
+    const notesSummary = signals?.confidenceNotes?.length
+      ? signals.confidenceNotes.map((note) => `- ${note}`).join('\n')
+      : '- Sin notas adicionales.';
+
     return `Eres un consultor experto en DROPSHIPPING automatizado. Analiza los siguientes datos de un negocio de dropshipping que opera con AliExpress como proveedor y publica en marketplaces (eBay, Amazon, MercadoLibre).
 
 CONTEXTO DEL SISTEMA:
@@ -366,6 +1290,22 @@ DATOS DEL NEGOCIO:
 - Mejor categoría: ${data.bestCategory}
 - Categoría con menor rendimiento: ${data.worstCategory}
 - Oportunidades recientes encontradas: ${data.recentOpportunities}
+
+SEÑALES RECIENTES DETECTADAS (últimos 14 días):
+Segmentos con mayor margen:
+${segmentSummary}
+
+Productos con mejor ROI:
+${hotProductsSummary}
+
+Demanda por marketplace:
+${marketplaceDemandSummary}
+
+Operaciones exitosas:
+${operationsSummary}
+
+Notas de confianza IA:
+${notesSummary}
 
 ${category ? `FILTRO: Genera solo sugerencias de tipo "${category}"` : 'GENERA SUGERENCIAS EN TODAS LAS CATEGORÍAS'}
 

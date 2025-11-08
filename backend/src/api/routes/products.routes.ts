@@ -15,12 +15,15 @@ const createProductSchema = z.object({
   aliexpressUrl: z.string().url(),
   aliexpressPrice: z.number().positive(),
   suggestedPrice: z.number().positive(),
-  currency: z.string().default('USD'),
+  finalPrice: z.number().positive().optional(),
+  currency: z.string().optional(),
   imageUrl: z.string().url().optional(),
+  imageUrls: z.array(z.string().url()).optional(),
   category: z.string().optional(),
   tags: z.array(z.string()).optional(),
   shippingCost: z.number().optional(),
   estimatedDeliveryDays: z.number().optional(),
+  productData: z.record(z.any()).optional(),
 });
 
 const updateProductSchema = createProductSchema.partial();
@@ -42,7 +45,7 @@ router.get('/', async (req: Request, res: Response, next) => {
       description: product.description || '',
       status: product.status,
       marketplace: product.marketplace || product.publishedMarketplace || 'unknown',
-      price: product.suggestedPrice || product.price || product.aliexpressPrice || 0,
+      price: product.finalPrice || product.suggestedPrice || product.aliexpressPrice || 0,
       profit: product.profit || 0,
       createdAt: product.createdAt?.toISOString() || new Date().toISOString()
     }));
