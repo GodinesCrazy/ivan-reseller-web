@@ -102,15 +102,20 @@ export default function Opportunities() {
     setPublishing(prev => ({ ...prev, [itemIndex]: true }));
 
     try {
-      // 1. Crear producto desde la oportunidad
-      const productResponse = await api.post('/api/products', {
+      const payload: Record<string, any> = {
         title: item.title,
         aliexpressUrl: item.aliexpressUrl,
         aliexpressPrice: item.costUsd,
         suggestedPrice: item.suggestedPriceUsd,
-        imageUrl: item.image,
         currency: 'USD',
-      });
+      };
+
+      if (item.image && /^https?:\/\//i.test(item.image)) {
+        payload.imageUrl = item.image;
+      }
+
+      // 1. Crear producto desde la oportunidad
+      const productResponse = await api.post('/api/products', payload);
 
       const productId = productResponse.data?.id || productResponse.data?.product?.id;
 
@@ -205,14 +210,21 @@ export default function Opportunities() {
               <tr key={idx} className="border-t hover:bg-gray-50">
                 <td className="p-3 text-center">
                   {it.image ? (
-                    <img 
-                      src={it.image} 
-                      alt={it.title} 
-                      className="w-16 h-16 object-cover rounded border border-gray-200"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/64x64?text=No+Image';
-                      }}
-                    />
+                    <a
+                      href={it.aliexpressUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Abrir en AliExpress"
+                    >
+                      <img 
+                        src={it.image} 
+                        alt={it.title} 
+                        className="w-16 h-16 object-cover rounded border border-gray-200 hover:opacity-90 transition"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = 'https://via.placeholder.com/64x64?text=No+Image';
+                        }}
+                      />
+                    </a>
                   ) : (
                     <div className="w-16 h-16 bg-gray-100 rounded border border-gray-200 flex items-center justify-center text-xs text-gray-400">
                       Sin imagen
@@ -220,7 +232,15 @@ export default function Opportunities() {
                   )}
                 </td>
                 <td className="p-3">
-                  <div className="font-medium line-clamp-2 max-w-xs">{it.title}</div>
+                  <a
+                    href={it.aliexpressUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium line-clamp-2 max-w-xs text-primary-600 hover:underline"
+                    title="Abrir producto en AliExpress"
+                  >
+                    {it.title}
+                  </a>
                   <div className="text-xs text-gray-500 mt-1">
                     Confianza: {Math.round((it.confidenceScore || 0) * 100)}% | 
                     ID: {it.productId || 'N/A'}
@@ -314,17 +334,6 @@ export default function Opportunities() {
                 </td>
                 <td className="p-3 text-center">
                   <div className="flex flex-col gap-2 items-center">
-                    <a 
-                      href={it.aliexpressUrl} 
-                      target="_blank" 
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors text-xs font-medium"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                      Ver
-                    </a>
                     <div className="flex flex-wrap gap-1 justify-center">
                       {it.targetMarketplaces?.map((mp) => (
                         <button
