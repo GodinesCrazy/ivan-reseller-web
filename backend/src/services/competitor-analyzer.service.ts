@@ -43,17 +43,14 @@ export class CompetitorAnalyzerService {
     for (const mp of targetMarketplaces) {
       try {
         if (mp === 'ebay') {
-          // Try user credentials; fallback to env
-          let ebay: EbayService | null = null;
-          try {
-            const marketplace = new MarketplaceService();
-            const creds = await marketplace.getCredentials(userId, 'ebay');
-            if (creds?.credentials) {
-              ebay = new EbayService(creds.credentials);
-            }
-          } catch {}
-          if (!ebay) ebay = EbayService.fromEnv();
-          if (!ebay) continue;
+          const marketplace = new MarketplaceService();
+          const creds = await marketplace.getCredentials(userId, 'ebay');
+          if (!creds || !creds.isActive || !creds.credentials) {
+            console.warn('⚠️  Skipping eBay analysis - credentials missing or inactive');
+            continue;
+          }
+
+          const ebay = new EbayService(creds.credentials);
 
           const marketplaceMap: Record<string, string> = {
             us: 'EBAY_US', uk: 'EBAY_GB', de: 'EBAY_DE', es: 'EBAY_ES', fr: 'EBAY_FR', it: 'EBAY_IT', au: 'EBAY_AU', ca: 'EBAY_CA', mx: 'EBAY_MX'
@@ -102,15 +99,16 @@ export class CompetitorAnalyzerService {
         } else if (mp === 'mercadolibre') {
           const regionToSite: Record<string, string> = { mx: 'MLM', ar: 'MLA', br: 'MLB', cl: 'MLC', co: 'MCO', uy: 'MLU', pe: 'MPE' };
           let siteId = regionToSite[region] || 'MLM';
-          let mlCreds: any = { clientId: '', clientSecret: '', siteId };
-          try {
-            const marketplace = new MarketplaceService();
-            const rec = await marketplace.getCredentials(userId, 'mercadolibre');
-            if (rec?.credentials) {
-              siteId = rec.credentials.siteId || siteId;
-              mlCreds = { ...mlCreds, ...rec.credentials, siteId };
-            }
-          } catch {}
+
+          const marketplace = new MarketplaceService();
+          const rec = await marketplace.getCredentials(userId, 'mercadolibre');
+          if (!rec || !rec.isActive || !rec.credentials) {
+            console.warn('⚠️  Skipping MercadoLibre analysis - credentials missing or inactive');
+            continue;
+          }
+
+          siteId = rec.credentials.siteId || siteId;
+          const mlCreds: any = { ...rec.credentials, siteId };
           const ml = new MercadoLibreService(mlCreds);
           const res = await ml.searchProducts({ siteId, q: productTitle, limit: 20 });
           const prices = res.map(r => r.price).filter(v => isFinite(v) && v > 0).sort((a, b) => a - b);
@@ -143,22 +141,20 @@ export class CompetitorAnalyzerService {
           };
         } else if (mp === 'amazon') {
           const config = AmazonService.getMarketplaceConfig(region.toUpperCase() === 'UK' ? 'UK' : (region.toUpperCase() === 'DE' ? 'DE' : 'US'));
+          const marketplace = new MarketplaceService();
+          const rec = await marketplace.getCredentials(userId, 'amazon');
+          if (!rec || !rec.isActive || !rec.credentials) {
+            console.warn('⚠️  Skipping Amazon analysis - credentials missing or inactive');
+            continue;
+          }
+
           const amazon = new AmazonService();
-          let creds = {
-            clientId: process.env.AMAZON_CLIENT_ID || '',
-            clientSecret: process.env.AMAZON_CLIENT_SECRET || '',
-            refreshToken: process.env.AMAZON_REFRESH_TOKEN || '',
-            region: config.region as any,
-            marketplace: config.marketplaceId as any,
+          const creds = {
+            ...rec.credentials,
+            region: config.region,
+            marketplace: config.marketplaceId,
           } as any;
-          try {
-            const marketplace = new MarketplaceService();
-            const rec = await marketplace.getCredentials(userId, 'amazon');
-            if (rec?.credentials) {
-              creds = { ...creds, ...rec.credentials, region: config.region, marketplace: config.marketplaceId };
-            }
-          } catch {}
-          await amazon.setCredentials(creds as any);
+          await amazon.setCredentials(creds);
           const res: any[] = await amazon.searchCatalog({ keywords: productTitle, marketplaceId: config.marketplaceId, limit: 10 });
           const prices = res.map(r => r.price || 0).filter(v => isFinite(v) && v > 0).sort((a, b) => a - b);
           const listingsFound = prices.length;
