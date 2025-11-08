@@ -61,7 +61,21 @@ export default function Opportunities() {
       });
       setItems(data?.items || []);
     } catch (e: any) {
-      setError(e?.response?.data?.error || e.message || 'Error fetching opportunities');
+      if (e?.response?.status === 428) {
+        const data = e.response?.data || {};
+        const manualPath = data.manualUrl || (data.token ? `/manual-login/${data.token}` : null);
+        const targetUrl = manualPath
+          ? (manualPath.startsWith('http') ? manualPath : `${window.location.origin}${manualPath}`)
+          : data.loginUrl;
+        setError('Se requiere iniciar sesión en AliExpress. Abre la ventana y guarda la sesión.');
+        toast.warning('Necesitamos que inicies sesión manualmente en AliExpress. Se abrirá una ventana con instrucciones.');
+        if (targetUrl) {
+          window.open(targetUrl, '_blank', 'noopener,noreferrer');
+        }
+      } else {
+        setError(e?.response?.data?.error || e.message || 'Error fetching opportunities');
+        toast.error(e?.response?.data?.error || e.message || 'Error fetching opportunities');
+      }
       setItems([]);
     } finally {
       setLoading(false);

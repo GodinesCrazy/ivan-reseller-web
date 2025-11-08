@@ -49,6 +49,7 @@ import financeRoutes from './api/routes/finance.routes';
 import dropshippingRoutes from './api/routes/dropshipping.routes';
 import regionalRoutes from './api/routes/regional.routes';
 import aiSuggestionsRoutes from './api/routes/ai-suggestions.routes';
+import manualAuthRoutes from './api/routes/manual-auth.routes';
 // import adminRoutes from './api/routes/admin.routes'; // Temporarily disabled
 
 const app: Application = express();
@@ -138,6 +139,7 @@ app.use('/api/revenue-change', revenueChangeRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/dropshipping', dropshippingRoutes);
 app.use('/api/regional', regionalRoutes);
+app.use('/api/manual-auth', manualAuthRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

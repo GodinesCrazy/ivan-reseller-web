@@ -44,6 +44,7 @@ model User {
   marketplaceListings  MarketplaceListing[]
   opportunities        Opportunity[]
   aiSuggestions        AISuggestion[]
+  manualAuthSessions   ManualAuthSession[]
 
   @@map("users")
 }
@@ -354,4 +355,22 @@ model AISuggestion {
 
   @@unique([userId, title])
   @@map("ai_suggestions")
+}
+
+model ManualAuthSession {
+  id          Int      @id @default(autoincrement())
+  token       String   @unique
+  provider    String
+  userId      Int
+  status      String   @default("pending")
+  cookies     Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  expiresAt   DateTime?
+  completedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, provider, status])
+  @@map("manual_auth_sessions")
 }

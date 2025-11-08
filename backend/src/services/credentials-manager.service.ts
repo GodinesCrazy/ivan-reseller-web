@@ -90,6 +90,7 @@ const apiSchemas = {
     password: z.string().min(1, 'Password is required'),
     twoFactorEnabled: z.boolean().default(false),
     twoFactorSecret: z.string().optional(),
+    cookies: z.array(z.any()).optional(),
   }),
   email: z.object({
     host: z.string().min(1, 'SMTP Host is required'),
@@ -233,6 +234,18 @@ export class CredentialsManager {
         }
         if (creds.twoFactorEnabled === undefined || creds.twoFactorEnabled === null) {
           creds.twoFactorEnabled = false;
+        }
+        if (typeof creds.cookies === 'string') {
+          try {
+            const parsed = JSON.parse(creds.cookies);
+            if (Array.isArray(parsed)) {
+              creds.cookies = parsed;
+            } else {
+              delete creds.cookies;
+            }
+          } catch {
+            delete creds.cookies;
+          }
         }
       }
     }

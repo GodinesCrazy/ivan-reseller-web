@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
 import opportunityFinder from '../../services/opportunity-finder.service';
+import ManualAuthRequiredError from '../../errors/manual-auth-required.error';
 import { notificationService } from '../../services/notification.service';
 import opportunityPersistence from '../../services/opportunity.service';
 
@@ -12,6 +13,8 @@ router.use(authenticate);
 // GET /api/opportunities
 // query params: query, maxItems, marketplaces (csv), region
 router.get('/', async (req, res) => {
+  let progressTimer: NodeJS.Timeout | null = null;
+  let warnTimer: NodeJS.Timeout | null = null;
   try {
     const userId = req.user?.userId;
     if (!userId) {
@@ -41,7 +44,7 @@ router.get('/', async (req, res) => {
     const startTs = Date.now();
     const intervalMs = parseInt(process.env.OPPORTUNITY_PROGRESS_INTERVAL_MS || '30000', 10);
     const warnMs = parseInt(process.env.OPPORTUNITY_PROGRESS_WARN_MS || '300000', 10); // 5 min por defecto
-    const progressTimer = setInterval(() => {
+    progressTimer = setInterval(() => {
       try {
         const elapsedMs = Date.now() - startTs;
         notificationService.sendToUser(userId, {
@@ -56,7 +59,7 @@ router.get('/', async (req, res) => {
     }, Math.max(10000, intervalMs));
 
     // Aviso único a los 5 minutos con recomendación
-    const warnTimer = setTimeout(() => {
+    warnTimer = setTimeout(() => {
       try {
         const elapsedMs = Date.now() - startTs;
         notificationService.sendToUser(userId, {
@@ -90,8 +93,8 @@ router.get('/', async (req, res) => {
       ]
     } as any);
 
-    clearInterval(progressTimer);
-    clearTimeout(warnTimer);
+    if (progressTimer) clearInterval(progressTimer);
+    if (warnTimer) clearTimeout(warnTimer);
 
     return res.json({
       success: true,
@@ -103,6 +106,42 @@ router.get('/', async (req, res) => {
       data_source: 'real_analysis'
     });
   } catch (error) {
+    if (progressTimer) clearInterval(progressTimer);
+    if (warnTimer) clearTimeout(warnTimer);
+
+    if (error instanceof ManualAuthRequiredError) {
+      const userId = req.user?.userId;
+      const manualPath = `/manual-login/${error.token}`;
+      if (userId) {
+        try {
+          notificationService.sendToUser(userId, {
+            type: 'USER_ACTION',
+            title: 'Se requiere iniciar sesión en AliExpress',
+            message: 'Abre la ventana de autenticación para completar el inicio de sesión y vuelve a intentar la búsqueda.',
+            priority: 'HIGH',
+            category: 'AUTH',
+            actions: [
+              { id: 'manual_login', label: 'Iniciar sesión ahora', url: manualPath, variant: 'primary' },
+            ],
+            data: {
+              provider: error.provider,
+              token: error.token,
+              expiresAt: error.expiresAt,
+            },
+          } as any);
+        } catch {}
+      }
+      return res.status(428).json({
+        success: false,
+        error: 'manual_login_required',
+        provider: error.provider,
+        token: error.token,
+        loginUrl: error.loginUrl,
+        manualUrl: manualPath,
+        expiresAt: error.expiresAt,
+      });
+    }
+
     console.error('Error in /api/opportunities:', error);
     try {
       const userId = req.user?.userId;

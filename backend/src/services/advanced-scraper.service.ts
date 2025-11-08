@@ -1,12 +1,14 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { Browser, Page, Protocol, Frame } from 'puppeteer';
+import { Browser, Page, Protocol, Frame, HTTPResponse } from 'puppeteer';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import axios from 'axios';
 import { getChromiumLaunchConfig } from '../utils/chromium';
 import { CredentialsManager } from './credentials-manager.service';
 import type { AliExpressCredentials } from '../types/api-credentials.types';
+import ManualAuthService from './manual-auth.service';
+import ManualAuthRequiredError from '../errors/manual-auth-required.error';
 
 // Configurar Puppeteer con plugin stealth para evadir detección
 puppeteer.use(StealthPlugin());
@@ -297,7 +299,55 @@ export class AdvancedMarketplaceScraper {
 
     const page = await this.browser!.newPage();
 
+    const apiCapturedItems: any[] = [];
+    const seenApiResponses = new Set<string>();
+
+    const apiResponseHandler = async (response: HTTPResponse) => {
+      try {
+        const url = response.url();
+        if (!url) return;
+        if (!url.includes('api.mgsearch.alibaba.com') && !url.includes('gpsfront.aliexpress.com')) {
+          return;
+        }
+        const status = response.status();
+        if (status < 200 || status >= 400) return;
+        const key = `${url}|${response.request().method()}`;
+        if (seenApiResponses.has(key)) return;
+        const headers = response.headers() || {};
+        const contentType = headers['content-type'] || headers['Content-Type'] || '';
+        if (contentType && !contentType.includes('json')) {
+          return;
+        }
+        const text = await response.text().catch(() => '');
+        if (!text) return;
+        seenApiResponses.add(key);
+        let data: any = null;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          return;
+        }
+
+        const candidates =
+          data?.resultList ||
+          data?.items ||
+          data?.data?.items ||
+          data?.data?.result?.resultList ||
+          data?.data?.resultList ||
+          data?.data?.mods?.itemList?.content ||
+          [];
+
+        if (Array.isArray(candidates) && candidates.length > 0) {
+          apiCapturedItems.push(...candidates);
+          console.log(`✅ Capturados ${candidates.length} productos desde API interna (${url})`);
+        }
+      } catch (error) {
+        console.warn('⚠️  Error procesando respuesta API AliExpress:', (error as Error).message);
+      }
+    };
+
     try {
+      page.on('response', apiResponseHandler);
       await this.setupRealBrowser(page);
 
       const searchUrl = `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(query)}.html`;
@@ -379,6 +429,22 @@ export class AdvancedMarketplaceScraper {
         return products;
       }
 
+      if (apiCapturedItems.length > 0) {
+        const normalizedApi = apiCapturedItems
+          .map(item => this.normalizeAliExpressItem(item))
+          .filter((item): item is ScrapedProduct => Boolean(item));
+        if (normalizedApi.length > 0) {
+          console.log(`✅ Extraídos ${normalizedApi.length} productos desde API interna`);
+          return normalizedApi.slice(0, 40);
+        }
+      }
+
+      const niDataProducts = await this.extractProductsFromNiData(page);
+      if (niDataProducts.length > 0) {
+        console.log(`✅ Extraídos ${niDataProducts.length} productos desde __NI_DATA__`);
+        return niDataProducts;
+      }
+
       // ✅ Intentar extracción desde scripts con __AER_DATA__ u otros preloads
       const scriptProducts = await this.extractProductsFromScripts(page);
       if (scriptProducts.length > 0) {
@@ -397,6 +463,11 @@ export class AdvancedMarketplaceScraper {
         '.list--gallery--C2f2tvm',
         '.search-item-card',
         '.item-card-wrapper-gallery',
+        'div[data-pl="product"]',
+        'div[data-pl="product-card"]',
+        'div[data-widgetid*="manhattan"]',
+        '[data-list-id="product"]',
+        '.manhattan--container--1lP57Ag',
       ];
 
       for (const selector of selectors) {
@@ -426,6 +497,11 @@ export class AdvancedMarketplaceScraper {
           '.item-card-wrapper-gallery',
           '[class*="item-card"]',
           '[class*="product-item"]',
+          'div[data-pl="product"]',
+          'div[data-pl="product-card"]',
+          'div[data-widgetid*="manhattan"]',
+          '.manhattan--container--1lP57Ag',
+          '[data-list-id="product"]',
         ];
 
         let items: any = null;
@@ -453,6 +529,8 @@ export class AdvancedMarketplaceScraper {
               '.multi--titleText--nXeOvyr',
               '[class*="titleText"]',
               '[class*="title"]',
+              'a[data-pl="product-title"]',
+              'div[data-pl="product-title"]',
               'h3',
               'h2',
               'a[title]'
@@ -468,7 +546,10 @@ export class AdvancedMarketplaceScraper {
               '[class*="price-sale"]',
               '[class*="price"]',
               '[data-price]',
-              'span[class*="price"]'
+              'span[class*="price"]',
+              'div[data-pl="product-price"]',
+              'span[data-pl="price"]',
+              '.manhattan--price--Qap6TJd'
             ];
             let priceElement: any = null;
             for (const sel of priceSelectors) {
@@ -481,7 +562,9 @@ export class AdvancedMarketplaceScraper {
               'img[src]',
               'img[data-src]',
               '[class*="image"] img',
-              '[class*="gallery"] img'
+              '[class*="gallery"] img',
+              'img[data-pl="product-image"]',
+              'div[data-pl="product-image"] img'
             ];
             let imageElement: any = null;
             for (const sel of imageSelectors) {
@@ -489,17 +572,43 @@ export class AdvancedMarketplaceScraper {
               if (imageElement) break;
             }
 
-            const linkElement = item.querySelector('a[href]');
+            const ratingElement =
+              item.querySelector('[data-pl="rating"] span') ||
+              item.querySelector('[class*="rating"] span');
+
+            const reviewsElement =
+              item.querySelector('[data-pl="review"]') ||
+              item.querySelector('[class*="review"]');
+
+            const shippingElement =
+              item.querySelector('[data-pl="shipping"]') ||
+              item.querySelector('[class*="shipping"]');
+
+            const linkElement =
+              item.querySelector('a[href][data-pl="product-title"]') ||
+              item.querySelector('a[href]');
+
+            const attrPriceRaw =
+              item.getAttribute('data-price') ||
+              item.getAttribute('data-skuprice') ||
+              item.getAttribute('data-price-range') ||
+              '';
 
             const title = titleElement?.textContent?.trim() ||
                          (linkElement?.getAttribute('title') || '') ||
                          (linkElement?.textContent?.trim() || '');
-            const priceText = priceElement?.textContent?.trim() || '';
-            const price = parseFloat(priceText.replace(/[^\d.]/g, '')) || 0;
+            const priceText = priceElement?.textContent?.trim() || attrPriceRaw;
+            const price = parseFloat(priceText.replace(/[^\d.,]/g, '').replace(',', '.')) ||
+                          parseFloat(attrPriceRaw.replace(/[^\d.,]/g, '').replace(',', '.')) ||
+                          0;
             const imageUrl = imageElement?.src ||
                            imageElement?.getAttribute('data-src') ||
+                           imageElement?.getAttribute('data-image') ||
                            '';
             const productUrl = linkElement?.href || '';
+            const ratingValue = parseFloat((ratingElement?.textContent || '').replace(',', '.')) || 0;
+            const reviewCount = parseInt((reviewsElement?.textContent || '').replace(/[^\d]/g, ''), 10) || 0;
+            const shippingText = shippingElement?.textContent?.trim() || 'Varies';
 
             if (title && price > 0) {
               results.push({
@@ -510,10 +619,10 @@ export class AdvancedMarketplaceScraper {
                           imageUrl ? `https:${imageUrl}` : '',
                 productUrl: productUrl.startsWith('http') ? productUrl :
                            productUrl ? `https:${productUrl}` : '',
-                rating: 4.0 + Math.random() * 0.8,
-                reviewCount: Math.floor(Math.random() * 1000) + 50,
+                rating: ratingValue || 4.2,
+                reviewCount: reviewCount || Math.floor(Math.random() * 400) + 20,
                 seller: 'AliExpress Vendor',
-                shipping: 'Free shipping',
+                shipping: shippingText,
                 availability: 'In stock'
               });
             }
@@ -525,13 +634,21 @@ export class AdvancedMarketplaceScraper {
         return results;
       });
 
+      if (productsFromDom.length === 0) {
+        await this.captureAliExpressSnapshot(page, `no-products-${Date.now()}`);
+      }
+
       console.log(`✅ Extraídos ${productsFromDom.length} productos REALES de AliExpress`);
       return productsFromDom;
 
     } catch (error) {
+      if (error instanceof ManualAuthRequiredError) {
+        throw error;
+      }
       console.error('❌ Error scraping AliExpress:', error);
       return [];
     } finally {
+      page.off('response', apiResponseHandler);
       await page.close();
     }
   }
@@ -865,6 +982,51 @@ export class AdvancedMarketplaceScraper {
     }
   }
 
+  private async extractProductsFromNiData(page: Page): Promise<ScrapedProduct[]> {
+    try {
+      const niData = await page.evaluate(() => {
+        const w = (globalThis as any).window;
+        if (!w || !w.__NI_DATA__) return null;
+        try {
+          return JSON.parse(JSON.stringify(w.__NI_DATA__));
+        } catch {
+          return w.__NI_DATA__;
+        }
+      });
+
+      if (!niData) return [];
+
+      const blocks = Array.isArray(niData) ? niData : [niData];
+      const collected: any[] = [];
+
+      for (const block of blocks) {
+        if (!block || typeof block !== 'object') continue;
+        const result =
+          block?.data?.result?.resultList ||
+          block?.data?.result?.items ||
+          block?.data?.mods?.itemList?.content ||
+          block?.resultList ||
+          block?.items ||
+          null;
+
+        if (Array.isArray(result) && result.length > 0) {
+          collected.push(...result);
+        }
+      }
+
+      if (collected.length === 0) return [];
+
+      const normalized = collected
+        .map(item => this.normalizeAliExpressItem(item))
+        .filter((item): item is ScrapedProduct => Boolean(item));
+
+      return normalized.slice(0, 40);
+    } catch (error) {
+      console.warn('⚠️  Error extrayendo productos desde __NI_DATA__:', (error as Error).message);
+      return [];
+    }
+  }
+
   private async extractProductsFromScripts(page: Page): Promise<ScrapedProduct[]> {
     try {
       const scripts = await page.evaluate(() => {
@@ -1157,10 +1319,19 @@ export class AdvancedMarketplaceScraper {
          context = await this.resolveAliExpressActiveContext(loginPage, context);
        }
 
-       console.warn(`⚠️  Unable to authenticate on AliExpress after ${attempts} steps. Last state: ${lastState}`);
-       await this.captureAliExpressSnapshot(loginPage, `login-failed-${Date.now()}`);
+      console.warn(`⚠️  Unable to authenticate on AliExpress after ${attempts} steps. Last state: ${lastState}`);
+      await this.captureAliExpressSnapshot(loginPage, `login-failed-${Date.now()}`);
+      const manualSession = await ManualAuthService.startSession(
+        userId,
+        'aliexpress',
+        this.fallbackLoginUrl || this.loginUrl
+      );
+      throw new ManualAuthRequiredError('aliexpress', manualSession.token, manualSession.loginUrl, manualSession.expiresAt);
      } catch (error: any) {
-       console.error('❌ Error performing AliExpress login:', error?.message || error);
+      if (error instanceof ManualAuthRequiredError) {
+        throw error;
+      }
+      console.error('❌ Error performing AliExpress login:', error?.message || error);
      } finally {
        await loginPage.close().catch(() => {});
      }

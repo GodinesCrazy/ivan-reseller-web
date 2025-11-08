@@ -1,6 +1,7 @@
 import scraperBridge from './scraper-bridge.service';
 import notificationService from './notification.service';
 import { AdvancedMarketplaceScraper } from './advanced-scraper.service';
+import ManualAuthRequiredError from '../errors/manual-auth-required.error';
 import competitorAnalyzer from './competitor-analyzer.service';
 import costCalculator from './cost-calculator.service';
 import opportunityPersistence from './opportunity.service';
@@ -74,6 +75,9 @@ class OpportunityFinderService {
         console.warn('⚠️  Scraping nativo no encontró productos (puede ser selector incorrecto o página bloqueada)');
       }
     } catch (nativeError: any) {
+      if (nativeError instanceof ManualAuthRequiredError) {
+        throw nativeError;
+      }
       const errorMsg = nativeError?.message || String(nativeError);
       console.error('❌ Error en scraping nativo:', errorMsg);
       console.warn('⚠️  Scraping nativo falló, intentando bridge Python:', errorMsg);

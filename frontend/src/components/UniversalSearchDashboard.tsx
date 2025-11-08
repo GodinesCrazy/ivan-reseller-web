@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Search, TrendingUp, DollarSign, AlertCircle, ExternalLink, Clock, Target } from 'lucide-react';
 import api from '@services/api';
+import { toast } from 'sonner';
 
 interface SearchOpportunity {
   id: string;
@@ -140,11 +141,22 @@ const UniversalSearchDashboard: React.FC = () => {
 
       setSearchResults(searchResultsData);
     } catch (err: any) {
-      setError('Error al buscar oportunidades. Intenta nuevamente.');
       console.error('Search error:', err);
-      // Si el error es de respuesta, mostrar más detalles
-      if (err.response?.data?.error) {
-        setError(`Error: ${err.response.data.error}`);
+      if (err?.response?.status === 428) {
+        const data = err.response?.data || {};
+        const manualPath = data.manualUrl || (data.token ? `/manual-login/${data.token}` : null);
+        const targetUrl = manualPath
+          ? (manualPath.startsWith('http') ? manualPath : `${window.location.origin}${manualPath}`)
+          : data.loginUrl;
+        setError('Se requiere iniciar sesión en AliExpress para continuar.');
+        toast.warning('Abre la ventana de login de AliExpress, guarda la sesión y vuelve a intentar.');
+        if (targetUrl) {
+          window.open(targetUrl, '_blank', 'noopener,noreferrer');
+        }
+      } else {
+        const message = err?.response?.data?.error || err.message || 'Error al buscar oportunidades. Intenta nuevamente.';
+        setError(message);
+        toast.error(message);
       }
     } finally {
       setIsLoading(false);
