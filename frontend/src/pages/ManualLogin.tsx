@@ -54,19 +54,29 @@ export default function ManualLogin() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [cookiesText, setCookiesText] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [renewing, setRenewing] = useState(false);
 
   useEffect(() => {
     const loadSession = async () => {
-      if (!token) return;
+      if (!token) {
+        setLoading(false);
+        setLoadError('session_not_found');
+        return;
+      }
       try {
         const response = await fetch(`/api/manual-auth/${token}`);
         const data = await response.json();
-        if (!data.success) {
-          throw new Error(data.error || 'No se pudo cargar la sesión');
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'session_not_found');
         }
         setSession(data);
+        setLoadError(null);
       } catch (error: any) {
-        toast.error(error.message || 'Error al cargar la sesión de autenticación');
+        const message = error?.message || 'session_not_found';
+        setLoadError(message);
+        setSession(null);
+        toast.error(message === 'session_not_found' ? 'La sesión ha expirado. Solicita una nueva.' : message);
       } finally {
         setLoading(false);
       }
@@ -74,6 +84,31 @@ export default function ManualLogin() {
 
     loadSession();
   }, [token]);
+
+  const provider = session?.provider || 'aliexpress';
+
+  const handleRequestNewSession = async () => {
+    setRenewing(true);
+    try {
+      const response = await fetch('/api/manual-auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ provider }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || data.message || 'No se pudo generar una nueva sesión');
+      }
+      toast.success('Se generó una nueva sesión. Abriendo ventana...');
+      window.location.replace(`/manual-login/${data.token}`);
+    } catch (error: any) {
+      toast.error(error.message || 'Error creando nueva sesión. Inténtalo nuevamente.');
+    } finally {
+      setRenewing(false);
+    }
+  };
 
   const expiresLabel = useMemo(() => {
     if (!session?.expiresAt) return null;
@@ -108,7 +143,7 @@ export default function ManualLogin() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          provider: session?.provider || 'aliexpress',
+          provider,
           cookies: parsedCookies,
         }),
       });
@@ -117,7 +152,7 @@ export default function ManualLogin() {
         throw new Error(data.message || data.error || 'No se pudo guardar la sesión');
       }
       toast.success('Sesión guardada correctamente. Vuelve a la plataforma y reintenta la búsqueda.');
-      setSession(prev => prev ? { ...prev, status: 'completed', completedAt: new Date().toISOString() } : prev);
+      setSession((prev) => (prev ? { ...prev, status: 'completed', completedAt: new Date().toISOString() } : prev));
       setCookiesText('');
     } catch (error: any) {
       toast.error(error.message || 'Error al guardar la sesión');
@@ -134,10 +169,30 @@ export default function ManualLogin() {
     );
   }
 
-  if (!session) {
+  const renderRenewButton = (
+    <button
+      onClick={handleRequestNewSession}
+      disabled={renewing}
+      className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+    >
+      {renewing ? 'Generando nueva sesión…' : 'Generar nueva sesión'}
+    </button>
+  );
+
+  if (!session || loadError === 'session_not_found') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-600">
-        Sesión no encontrada o expirada.
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center text-gray-600">
+        <p>La sesión no existe o ha expirado.</p>
+        {renderRenewButton}
+      </div>
+    );
+  }
+
+  if (session.status === 'expired') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center text-gray-600">
+        <p>⚠️ Esta sesión ha expirado. Solicita una nueva para continuar.</p>
+        {renderRenewButton}
       </div>
     );
   }
