@@ -522,7 +522,7 @@ export class AdvancedMarketplaceScraper {
         const results: any[] = [];
 
         items.forEach((item: any, index: number) => {
-          if (index >= 20) return;
+          if (index >= 40) return;
 
           try {
             const titleSelectors = [
@@ -586,6 +586,7 @@ export class AdvancedMarketplaceScraper {
 
             const linkElement =
               item.querySelector('a[href][data-pl="product-title"]') ||
+              item.querySelector('a[href*="/item/"]') ||
               item.querySelector('a[href]');
 
             const attrPriceRaw =
@@ -594,13 +595,37 @@ export class AdvancedMarketplaceScraper {
               item.getAttribute('data-price-range') ||
               '';
 
-            const title = titleElement?.textContent?.trim() ||
-                         (linkElement?.getAttribute('title') || '') ||
-                         (linkElement?.textContent?.trim() || '');
-            const priceText = priceElement?.textContent?.trim() || attrPriceRaw;
-            const price = parseFloat(priceText.replace(/[^\d.,]/g, '').replace(',', '.')) ||
-                          parseFloat(attrPriceRaw.replace(/[^\d.,]/g, '').replace(',', '.')) ||
-                          0;
+            const fullText = item.textContent ? String(item.textContent) : '';
+
+            let title = titleElement?.textContent?.trim() ||
+                        (linkElement?.getAttribute('title') || '') ||
+                        (linkElement?.textContent?.trim() || '');
+            if (!title && fullText) {
+              const textLines = fullText
+                .split('\n')
+                .map((line: string) => line.trim())
+                .filter((line: string) => line.length > 0);
+              title = textLines[0] || '';
+            }
+
+            const priceCandidates: string[] = [];
+            if (priceElement?.textContent) priceCandidates.push(priceElement.textContent);
+            if (attrPriceRaw) priceCandidates.push(attrPriceRaw);
+            const priceFromDataset = item.getAttribute('data-orig-price');
+            if (priceFromDataset) priceCandidates.push(priceFromDataset);
+
+            if (priceCandidates.length === 0 && fullText) {
+              const regexPrices = fullText.match(/(\d+[.,]\d+|\d+)/g);
+              if (regexPrices) {
+                priceCandidates.push(...regexPrices);
+              }
+            }
+
+            const parsedPrices = priceCandidates
+              .map(p => parseFloat(String(p).replace(/[^\d.,]/g, '').replace(/,/g, '.')))
+              .filter(p => Number.isFinite(p) && p > 0);
+            const price = parsedPrices.length > 0 ? Math.min(...parsedPrices) : 0;
+
             const imageUrl = imageElement?.src ||
                            imageElement?.getAttribute('data-src') ||
                            imageElement?.getAttribute('data-image') ||
