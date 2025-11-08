@@ -375,7 +375,18 @@ export class AdvancedMarketplaceScraper {
         console.log('⚠️  No se pudo analizar runParams:', runParamsError?.message || runParamsError);
       }
 
-      // Si runParams falló o no devolvió datos válidos, continuar con scraping DOM clásico
+      if (products.length > 0) {
+        return products;
+      }
+
+      // ✅ Intentar extracción desde scripts con __AER_DATA__ u otros preloads
+      const scriptProducts = await this.extractProductsFromScripts(page);
+      if (scriptProducts.length > 0) {
+        console.log(`✅ Extraídos ${scriptProducts.length} productos desde scripts embebidos`);
+        return scriptProducts;
+      }
+
+      // Si todo lo anterior falló, intentar con scraping DOM clásico
       await new Promise(resolve => setTimeout(resolve, 4000));
 
       // ✅ Esperar a que carguen los productos con múltiples selectores alternativos
@@ -852,6 +863,192 @@ export class AdvancedMarketplaceScraper {
       console.log('⚠️  Error extrayendo runParams del HTML:', (error as Error).message);
       return null;
     }
+  }
+
+  private async extractProductsFromScripts(page: Page): Promise<ScrapedProduct[]> {
+    try {
+      const scripts = await page.evaluate(() => {
+        const doc = (globalThis as any).document;
+        if (!doc) return [];
+        return Array.from(doc.querySelectorAll('script')).map((script: any) => ({
+          type: script.type || '',
+          text: (script.textContent || '').trim(),
+        }));
+      });
+
+      for (const script of scripts) {
+        if (!script.text) continue;
+
+        let data: any = null;
+
+        if (script.type && script.type.includes('json')) {
+          try {
+            data = JSON.parse(script.text);
+          } catch {
+            continue;
+          }
+        } else {
+          const aerMatch = script.text.match(/window\.__AER_DATA__\s*=\s*(\{[\s\S]*?\});/);
+          if (aerMatch && aerMatch[1]) {
+            try {
+              data = JSON.parse(aerMatch[1]);
+            } catch {
+              try {
+                data = Function(`"use strict";return (${aerMatch[1]});`)();
+              } catch {
+                data = null;
+              }
+            }
+          }
+
+          if (!data) {
+            const initMatch = script.text.match(/window\.__INIT_DATA__\s*=\s*(\{[\s\S]*?\});/);
+            if (initMatch && initMatch[1]) {
+              try {
+                data = JSON.parse(initMatch[1]);
+              } catch {
+                try {
+                  data = Function(`"use strict";return (${initMatch[1]});`)();
+                } catch {
+                  data = null;
+                }
+              }
+            }
+          }
+        }
+
+        if (!data) continue;
+
+        const productArray = this.findProductArrayDeep(data);
+        if (productArray && productArray.length > 0) {
+          const normalized = productArray
+            .map(item => this.normalizeAliExpressItem(item))
+            .filter((item): item is ScrapedProduct => Boolean(item));
+
+          if (normalized.length > 0) {
+            return normalized.slice(0, 40);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️  Error extrayendo productos desde scripts:', (error as Error).message);
+    }
+    return [];
+  }
+
+  private findProductArrayDeep(data: any, visited = new Set<any>()): any[] | null {
+    if (!data || typeof data !== 'object') return null;
+
+    if (visited.has(data)) {
+      return null;
+    }
+    visited.add(data);
+
+    if (Array.isArray(data)) {
+      if (
+        data.length > 0 &&
+        data.every(item => typeof item === 'object') &&
+        data.some(item => item && (item.productId || item.productUrl || item.title || item.productTitle))
+      ) {
+        return data;
+      }
+      for (const entry of data) {
+        const found = this.findProductArrayDeep(entry, visited);
+        if (found && found.length > 0) return found;
+      }
+      return null;
+    }
+
+    for (const key of Object.keys(data)) {
+      const value = (data as any)[key];
+      if (!value) continue;
+      if (typeof value === 'object') {
+        const found = this.findProductArrayDeep(value, visited);
+        if (found && found.length > 0) return found;
+      }
+    }
+    return null;
+  }
+
+  private normalizeAliExpressItem(item: any): ScrapedProduct | null {
+    if (!item || typeof item !== 'object') return null;
+
+    const title =
+      item.title ||
+      item.productTitle ||
+      item.subject ||
+      item.name ||
+      item.seoTitle ||
+      '';
+
+    const priceValue =
+      item.salePrice ||
+      item.displayPrice ||
+      item.price ||
+      item.priceText ||
+      (item.prices && item.prices.sale) ||
+      (item.prices && item.prices.original) ||
+      (item.sku && item.sku.price);
+
+    const price =
+      typeof priceValue === 'number'
+        ? priceValue
+        : parseFloat(String(priceValue || '').replace(/[^\d.]/g, '')) || 0;
+
+    const image =
+      item.imageUrl ||
+      item.productImage ||
+      item.image ||
+      item.pic ||
+      (Array.isArray(item.imageUrlList) ? item.imageUrlList[0] : null) ||
+      (Array.isArray(item.images) ? item.images[0] : null) ||
+      '';
+
+    const url =
+      item.productUrl ||
+      item.detailUrl ||
+      item.itemDetailUrl ||
+      item.targetUrl ||
+      item.url ||
+      '';
+
+    if (!title || price <= 0 || !url) {
+      return null;
+    }
+
+    const rating =
+      item.ratingScore ||
+      item.evaluationRate ||
+      item.starRating ||
+      item.feedbackScore ||
+      item.averageStar ||
+      0;
+
+    const reviewCount =
+      item.evaluationCount ||
+      item.reviewCount ||
+      item.feedbackCount ||
+      item.commentCount ||
+      item.numberOfOrders ||
+      0;
+
+    return {
+      title: String(title).trim().substring(0, 150),
+      price,
+      imageUrl: image
+        ? image.startsWith('//')
+          ? `https:${image}`
+          : image.startsWith('http')
+          ? image
+          : `https:${image}`
+        : '',
+      productUrl: url.startsWith('http') ? url : `https:${url}`,
+      rating: Number(rating) || 0,
+      reviewCount: Number(reviewCount) || 0,
+      seller: item.storeName || item.sellerName || 'AliExpress Vendor',
+      shipping: item.logisticsDesc || item.shipping || 'Varies',
+      availability: item.availability || 'In stock',
+    };
   }
 
   private async ensureAliExpressLogin(userId: number): Promise<void> {
