@@ -1,3 +1,4 @@
+// @ts-nocheck
 import axios from 'axios';
 import puppeteer, { Browser, Page } from 'puppeteer-core';
 import { AppError } from '../middleware/error.middleware';

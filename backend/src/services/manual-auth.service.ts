@@ -1,5 +1,6 @@
 import { PrismaClient, ManualAuthSession } from '@prisma/client';
 import crypto from 'crypto';
+import { marketplaceAuthStatusService } from './marketplace-auth-status.service';
 
 const prisma = new PrismaClient();
 
@@ -44,6 +45,12 @@ export class ManualAuthService {
       },
     });
 
+    await marketplaceAuthStatusService.markManualRequired(
+      userId,
+      provider,
+      'Sesión manual requerida para completar el login'
+    );
+
     return { token, loginUrl, expiresAt };
   }
 
@@ -61,6 +68,12 @@ export class ManualAuthService {
         completedAt: new Date(),
       },
     });
+
+    await marketplaceAuthStatusService.markHealthy(
+      updated.userId,
+      updated.provider,
+      'Sesión manual completada correctamente'
+    );
 
     return updated;
   }

@@ -171,7 +171,17 @@ router.get('/credentials', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid marketplace' });
     }
     const cred = await marketplaceService.getCredentials(req.user!.userId, marketplace);
-    res.json({ success: true, data: { marketplace, isActive: !!cred?.isActive, present: !!cred } });
+    res.json({
+      success: true,
+      data: {
+        marketplace,
+        isActive: !!cred?.isActive,
+        present: !!cred,
+        environment: cred?.environment,
+        issues: cred?.issues || [],
+        warnings: cred?.warnings || [],
+      },
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to get credentials', error: error.message });
   }
@@ -250,7 +260,12 @@ router.get('/credentials/:marketplace', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      data: maskedCredentials,
+      data: {
+        ...maskedCredentials,
+        environment: credentials.environment,
+        issues: credentials.issues || [],
+        warnings: credentials.warnings || [],
+      },
     });
   } catch (error: any) {
     res.status(500).json({

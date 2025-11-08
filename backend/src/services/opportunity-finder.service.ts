@@ -5,6 +5,7 @@ import ManualAuthRequiredError from '../errors/manual-auth-required.error';
 import competitorAnalyzer from './competitor-analyzer.service';
 import costCalculator from './cost-calculator.service';
 import opportunityPersistence from './opportunity.service';
+import MarketplaceService from './marketplace.service';
 
 export interface OpportunityFilters {
   query: string;
@@ -45,6 +46,31 @@ class OpportunityFinderService {
       ? filters.marketplaces
       : ['ebay', 'amazon', 'mercadolibre'];
     const region = filters.region || 'us';
+
+    const credentialDiagnostics: Record<string, { issues: string[]; warnings: string[] }> = {};
+    const marketplaceService = new MarketplaceService();
+
+    for (const mp of marketplaces) {
+      try {
+        const status = await marketplaceService.getCredentials(userId, mp);
+        if (!status || !status.credentials || !status.isActive) {
+          credentialDiagnostics[mp] = {
+            issues: [`No encontramos credenciales activas de ${mp} para tu usuario.`],
+            warnings: [],
+          };
+          continue;
+        }
+        credentialDiagnostics[mp] = {
+          issues: status.issues || [],
+          warnings: status.warnings || [],
+        };
+      } catch (credError: any) {
+        credentialDiagnostics[mp] = {
+          issues: [`Error leyendo credenciales de ${mp}: ${credError?.message || String(credError)}`],
+          warnings: [],
+        };
+      }
+    }
 
     // 1) Scrape AliExpress: PRIMERO usar scraping nativo local (Puppeteer) → fallback a bridge Python
     let products: Array<{ title: string; price: number; productUrl: string; imageUrl?: string; productId?: string }>= [];
@@ -210,7 +236,21 @@ class OpportunityFinderService {
         };
         bestBreakdown = {};
         estimatedFields = ['suggestedPriceUsd', 'profitMargin', 'roiPercentage'];
-        estimationNotes.push('Valores estimados por falta de datos de competencia real. Configura tus credenciales de Amazon, eBay o MercadoLibre para obtener precios exactos.');
+        estimationNotes.push('Valores estimados por falta de datos de competencia real. Configura o valida tus credenciales de Amazon, eBay o MercadoLibre para obtener precios exactos.');
+        for (const mp of marketplaces) {
+          const diag = credentialDiagnostics[mp];
+          if (diag?.issues?.length) {
+            estimationNotes.push(...diag.issues.map(issue => `[${mp}] ${issue}`));
+          }
+          if (diag?.warnings?.length) {
+            estimationNotes.push(...diag.warnings.map(warning => `[${mp}] ${warning}`));
+          }
+        }
+      }
+
+      const selectedDiag = credentialDiagnostics[best.mp];
+      if (selectedDiag?.warnings?.length) {
+        estimationNotes.push(...selectedDiag.warnings.map(warning => `[${best.mp}] ${warning}`));
       }
 
       const opp: OpportunityItem = {

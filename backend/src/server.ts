@@ -5,6 +5,7 @@ import { redis, isRedisAvailable } from './config/redis';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { scheduledTasksService } from './services/scheduled-tasks.service';
+import { aliExpressAuthMonitor } from './services/ali-auth-monitor.service';
 import bcrypt from 'bcryptjs';
 import { resolveChromiumExecutable } from './utils/chromium';
 
@@ -267,6 +268,7 @@ async function startServer() {
       console.log('  - Financial alerts: Daily at 6:00 AM');
       console.log('  - Commission processing: Daily at 2:00 AM');
       console.log('');
+      aliExpressAuthMonitor.start();
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
@@ -277,17 +279,23 @@ async function startServer() {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
+  aliExpressAuthMonitor.stop();
   await scheduledTasksService.shutdown();
   await prisma.$disconnect();
-  await redis.quit();
+  if (isRedisAvailable) {
+    await redis.quit();
+  }
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down gracefully...');
+  aliExpressAuthMonitor.stop();
   await scheduledTasksService.shutdown();
   await prisma.$disconnect();
-  await redis.quit();
+  if (isRedisAvailable) {
+    await redis.quit();
+  }
   process.exit(0);
 });
 

@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 import { prisma } from '../config/database';
 import { env } from '../config/env';
 import { AppError } from '../middleware/error.middleware';
@@ -113,10 +113,19 @@ export class AuthService {
     // Normalizar rol a mayúsculas para consistencia
     const normalizedRole = role.toUpperCase();
     
+    const secret: Secret = env.JWT_SECRET as string;
+    if (!secret) {
+      throw new AppError('JWT secret not configured', 500);
+    }
+
+    const signOptions: SignOptions = {
+      expiresIn: (env.JWT_EXPIRES_IN || '1h') as SignOptions['expiresIn'],
+    };
+
     return jwt.sign(
       { userId, username, role: normalizedRole },
-      env.JWT_SECRET,
-      { expiresIn: env.JWT_EXPIRES_IN }
+      secret,
+      signOptions
     );
   }
 

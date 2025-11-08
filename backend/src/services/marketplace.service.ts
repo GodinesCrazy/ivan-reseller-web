@@ -13,6 +13,9 @@ export interface MarketplaceCredentials {
   marketplace: 'ebay' | 'mercadolibre' | 'amazon';
   credentials: any;
   isActive: boolean;
+  environment: 'sandbox' | 'production';
+  issues?: string[];
+  warnings?: string[];
 }
 
 export interface PublishProductRequest {
@@ -43,49 +46,118 @@ export class MarketplaceService {
    * @param environment - Environment (sandbox/production). If not provided, uses user's workflow config
    */
   async getCredentials(
-    userId: number, 
-    marketplace: string, 
+    userId: number,
+    marketplace: string,
     environment?: 'sandbox' | 'production'
   ): Promise<MarketplaceCredentials | null> {
     try {
-      // ✅ Obtener environment del usuario si no se proporciona
-      let userEnvironment: 'sandbox' | 'production' = 'production';
+      const { workflowConfigService } = await import('./workflow-config.service');
+      const { CredentialsManager } = await import('./credentials-manager.service');
+
+      const preferredEnvironment: 'sandbox' | 'production' = environment
+        ? environment
+        : await workflowConfigService.getUserEnvironment(userId);
+
+      const environmentsToTry: Array<'sandbox' | 'production'> = [preferredEnvironment];
       if (!environment) {
-        const { workflowConfigService } = await import('./workflow-config.service');
-        userEnvironment = await workflowConfigService.getUserEnvironment(userId);
-      } else {
-        userEnvironment = environment;
+        environmentsToTry.push(preferredEnvironment === 'production' ? 'sandbox' : 'production');
+      } else if (!environmentsToTry.includes(environment)) {
+        environmentsToTry.push(environment);
       }
 
-      // ✅ Usar CredentialsManager para obtener credenciales desencriptadas correctamente
-      const { CredentialsManager } = await import('./credentials-manager.service');
-      const credentials = await CredentialsManager.getCredentials(
-        userId,
-        marketplace as any,
-        userEnvironment
-      );
+      let resolvedEnv: 'sandbox' | 'production' | null = null;
+      let resolvedRecord: any = null;
+      let resolvedCredentials: any = null;
+      const warnings: string[] = [];
+      const issues: string[] = [];
 
-      if (!credentials) {
+      for (const env of environmentsToTry) {
+        const record = await prisma.apiCredential.findUnique({
+          where: {
+            userId_apiName_environment: {
+              userId,
+              apiName: marketplace,
+              environment: env,
+            },
+          },
+        });
+
+        if (!record || record.isActive === false) {
+          continue;
+        }
+
+        const creds = await CredentialsManager.getCredentials(
+          userId,
+          marketplace as any,
+          env
+        );
+
+        if (creds) {
+          resolvedEnv = env;
+          resolvedRecord = record;
+          resolvedCredentials = creds;
+          if (env !== preferredEnvironment) {
+            warnings.push(`Se utilizaron credenciales de ${env} porque ${preferredEnvironment} no está disponible.`);
+          }
+          break;
+        }
+      }
+
+      if (!resolvedEnv || !resolvedCredentials) {
         return null;
       }
 
-      // ✅ Obtener registro de la DB para isActive
-      const rec = await prisma.apiCredential.findUnique({
-        where: {
-          userId_apiName_environment: {
-            userId,
-            apiName: marketplace,
-            environment: userEnvironment,
-          },
-        },
-      });
+      // Normalizar campos por marketplace
+      if (marketplace === 'ebay') {
+        const ebayCreds = resolvedCredentials as any;
+        if (ebayCreds && typeof ebayCreds === 'object') {
+          if (!ebayCreds.token && ebayCreds.authToken) {
+            ebayCreds.token = ebayCreds.authToken;
+          }
+          if (resolvedEnv) {
+            ebayCreds.sandbox = resolvedEnv === 'sandbox';
+          }
+          if (!ebayCreds.token && !ebayCreds.refreshToken) {
+            issues.push('Falta token OAuth de eBay. Completa la autorización en Settings → API Settings.');
+          }
+        }
+      }
+
+      if (marketplace === 'amazon') {
+        const amazonCreds = resolvedCredentials as any;
+        if (resolvedEnv) {
+          amazonCreds.sandbox = resolvedEnv === 'sandbox';
+        }
+        const requiredFields = ['clientId', 'clientSecret', 'refreshToken', 'awsAccessKeyId', 'awsSecretAccessKey', 'marketplaceId'];
+        for (const field of requiredFields) {
+          if (!amazonCreds?.[field]) {
+            issues.push(`Falta el campo ${field} en las credenciales de Amazon.`);
+          }
+        }
+      }
+
+      if (marketplace === 'mercadolibre') {
+        const mlCreds = resolvedCredentials as any;
+        if (resolvedEnv) {
+          mlCreds.sandbox = resolvedEnv === 'sandbox';
+        }
+        const requiredFields = ['clientId', 'clientSecret', 'accessToken', 'refreshToken'];
+        for (const field of requiredFields) {
+          if (!mlCreds?.[field]) {
+            issues.push(`Falta el campo ${field} en las credenciales de MercadoLibre.`);
+          }
+        }
+      }
 
       return {
-        id: rec?.id,
-        userId: userId,
+        id: resolvedRecord?.id,
+        userId,
         marketplace: marketplace as any,
-        credentials: credentials as any,
-        isActive: rec?.isActive ?? false,
+        credentials: resolvedCredentials as any,
+        isActive: resolvedRecord?.isActive ?? false,
+        environment: resolvedEnv,
+        issues: issues.length ? issues : undefined,
+        warnings: warnings.length ? warnings : undefined,
       };
     } catch (error) {
       throw new AppError(`Failed to get marketplace credentials: ${error.message}`, 500);
@@ -141,9 +213,16 @@ export class MarketplaceService {
         return { success: false, message: 'No credentials found' };
       }
 
+       if (credentials.issues?.length) {
+        return { success: false, message: credentials.issues.join(' ') };
+      }
+
       switch (marketplace) {
         case 'ebay':
-          const ebayService = new EbayService(credentials.credentials as EbayCredentials);
+          const ebayService = new EbayService({
+            ...(credentials.credentials as EbayCredentials),
+            sandbox: credentials.environment === 'sandbox',
+          });
           return await ebayService.testConnection();
 
         case 'mercadolibre':
@@ -221,10 +300,17 @@ export class MarketplaceService {
         throw new AppError(`${request.marketplace} credentials not found or inactive for ${userEnvironment} environment`, 400);
       }
 
+      if (credentials.issues?.length) {
+        throw new AppError(credentials.issues.join(' '), 400);
+      }
+
       // Publish to specific marketplace
       switch (request.marketplace) {
         case 'ebay':
-          return await this.publishToEbay(product, credentials.credentials, request.customData);
+          return await this.publishToEbay(product, {
+            ...(credentials.credentials as EbayCredentials),
+            sandbox: credentials.environment === 'sandbox',
+          }, request.customData);
 
         case 'mercadolibre':
           return await this.publishToMercadoLibre(product, credentials.credentials, request.customData);
@@ -543,11 +629,14 @@ export class MarketplaceService {
       for (const marketplace of marketplaces) {
         try {
           const credentials = await this.getCredentials(userId, marketplace, userEnvironment);
-          if (!credentials) continue;
+          if (!credentials || credentials.issues?.length) continue;
 
           switch (marketplace) {
             case 'ebay':
-              const ebayService = new EbayService(credentials.credentials);
+              const ebayService = new EbayService({
+                ...(credentials.credentials as EbayCredentials),
+                sandbox: credentials.environment === 'sandbox',
+              });
               await ebayService.updateInventoryQuantity(`IVAN-${product.id}`, newQuantity);
               break;
 

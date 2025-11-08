@@ -45,6 +45,7 @@ model User {
   opportunities        Opportunity[]
   aiSuggestions        AISuggestion[]
   manualAuthSessions   ManualAuthSession[]
+  marketplaceAuthStatuses MarketplaceAuthStatus[]
 
   @@map("users")
 }
@@ -373,4 +374,23 @@ model ManualAuthSession {
 
   @@index([userId, provider, status])
   @@map("manual_auth_sessions")
+}
+
+model MarketplaceAuthStatus {
+  id                    Int      @id @default(autoincrement())
+  userId                Int
+  marketplace           String
+  status                String   @default("unknown") // healthy, refreshing, manual_required, error, unknown
+  message               String?
+  requiresManual        Boolean  @default(false)
+  lastAutomaticAttempt  DateTime?
+  lastAutomaticSuccess  DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, marketplace])
+  @@index([marketplace, status])
+  @@map("marketplace_auth_status")
 }

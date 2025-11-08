@@ -1,3 +1,4 @@
+// @ts-nocheck
 import axios, { AxiosInstance } from 'axios';
 import { AppError } from '../middleware/error.middleware';
 

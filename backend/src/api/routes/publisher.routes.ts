@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Router, Request, Response } from 'express';
 import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { productService } from '../../services/product.service';

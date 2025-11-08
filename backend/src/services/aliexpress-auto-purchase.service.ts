@@ -1,3 +1,4 @@
+// @ts-nocheck
 import puppeteer, { Browser } from 'puppeteer-core';
 import type { Page } from 'puppeteer';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';

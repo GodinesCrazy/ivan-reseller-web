@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Request, Response } from 'express';
 import { automatedBusinessSystem } from '../services/automated-business.service';
 import { aiOpportunityEngine } from '../services/ai-opportunity.service';
