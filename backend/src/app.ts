@@ -54,6 +54,7 @@ import authStatusRoutes from './api/routes/auth-status.routes';
 // import adminRoutes from './api/routes/admin.routes'; // Temporarily disabled
 
 const app: Application = express();
+app.set('trust proxy', 1);
 
 // ====================================
 // MIDDLEWARE

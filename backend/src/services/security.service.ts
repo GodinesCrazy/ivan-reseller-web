@@ -140,6 +140,13 @@ export class SecureCredentialManager {
    */
   private initializeEncryption(): void {
     const keyPath = this.config.storage.encryptionKeyPath;
+    const envSecret = (process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY.trim())
+      || (process.env.JWT_SECRET && process.env.JWT_SECRET.trim());
+
+    if (envSecret) {
+      this.encryptionKey = this.deriveKeyFromSecret(envSecret);
+      return;
+    }
     
     if (existsSync(keyPath)) {
       // Cargar clave existente
@@ -150,6 +157,10 @@ export class SecureCredentialManager {
       writeFileSync(keyPath, this.encryptionKey, { mode: 0o600 }); // Solo lectura para owner
       console.log('🔐 Nueva clave de encriptación generada');
     }
+  }
+
+  private deriveKeyFromSecret(secret: string): Buffer {
+    return crypto.createHash('sha256').update(secret).digest().subarray(0, this.config.encryption.keyLength);
   }
 
   /**
