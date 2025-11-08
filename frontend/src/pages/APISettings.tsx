@@ -97,6 +97,7 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
       { key: 'EBAY_APP_ID', label: 'App ID (Client ID)', required: true, type: 'text', placeholder: 'YourAppI-YourApp-PRD-...' },
       { key: 'EBAY_DEV_ID', label: 'Dev ID', required: true, type: 'text', placeholder: 'Your-DevI-PRD-...' },
       { key: 'EBAY_CERT_ID', label: 'Cert ID (Client Secret)', required: true, type: 'password', placeholder: 'PRD-...' },
+      { key: 'EBAY_REDIRECT_URI', label: 'Redirect URI (RuName)', required: true, type: 'text', placeholder: 'IvMart_IvanRese-IvanMart... (RuName)' },
       { key: 'EBAY_TOKEN', label: 'User Token (opcional)', required: false, type: 'password', placeholder: 'v^1.1#i^1#...' },
     ],
   },
@@ -490,6 +491,7 @@ export default function APISettings() {
         'EBAY_APP_ID': 'appId',
         'EBAY_DEV_ID': 'devId',
         'EBAY_CERT_ID': 'certId',
+        'EBAY_REDIRECT_URI': 'redirectUri',
         'EBAY_TOKEN': 'token',
         'AMAZON_CLIENT_ID': 'clientId',
         'AMAZON_CLIENT_SECRET': 'clientSecret',
@@ -675,6 +677,7 @@ export default function APISettings() {
           'EBAY_APP_ID': 'appId',
           'EBAY_DEV_ID': 'devId',
           'EBAY_CERT_ID': 'certId',
+          'EBAY_REDIRECT_URI': 'redirectUri',
           'AMAZON_SELLER_ID': 'sellerId',
           'AMAZON_CLIENT_ID': 'clientId',
           'AMAZON_CLIENT_SECRET': 'clientSecret',
@@ -796,10 +799,19 @@ export default function APISettings() {
     setOauthing(apiName);
     setError(null);
     try {
-      const redirectUri = window.location.origin + window.location.pathname;
+      const credentialResponse = await api.get(`/api/credentials/${apiName}`, {
+        params: { environment },
+      });
+      const storedCreds = credentialResponse.data?.data?.credentials || {};
+      const ruName = storedCreds.redirectUri || storedCreds.ruName || storedCreds.RuName;
+      if (!ruName) {
+        alert('⚠️ Debes completar y guardar el campo "Redirect URI (RuName)" antes de autorizar.');
+        return;
+      }
+
       const { data } = await api.get(`/api/marketplace/auth-url/${apiName}`, {
         params: {
-          redirect_uri: redirectUri,
+          redirect_uri: ruName,
           environment,
         },
       });
