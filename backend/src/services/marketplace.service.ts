@@ -394,14 +394,19 @@ export class MarketplaceService {
         }
       }
 
+      const price = this.resolveListingPrice(product, customData?.price);
+      if (price <= 0) {
+        throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
+      }
+
       const ebayProduct: EbayProduct = {
         title: customData?.title || product.title,
         description: customData?.description || product.description || '',
         categoryId,
-        startPrice: customData?.price || product.price,
-        quantity: customData?.quantity || product.stock || 1,
+        startPrice: price,
+        quantity: this.resolveListingQuantity(product, customData?.quantity),
         condition: 'NEW',
-        images: Array.isArray(product.imageUrl) ? product.imageUrl : [product.imageUrl].filter(Boolean),
+        images: this.parseImageUrls(product.images),
       };
 
       const result = await ebayService.createListing(`IVAN-${product.id}`, ebayProduct);
@@ -450,14 +455,19 @@ export class MarketplaceService {
         categoryId = await mlService.predictCategory(product.title);
       }
 
+      const price = this.resolveListingPrice(product, customData?.price);
+      if (price <= 0) {
+        throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
+      }
+
       const mlProduct: MLProduct = {
         title: customData?.title || product.title,
         description: customData?.description || product.description || '',
         categoryId,
-        price: customData?.price || product.price,
-        quantity: customData?.quantity || product.stock || 1,
+        price,
+        quantity: this.resolveListingQuantity(product, customData?.quantity),
         condition: 'new',
-        images: Array.isArray(product.imageUrl) ? product.imageUrl : [product.imageUrl].filter(Boolean),
+        images: this.parseImageUrls(product.images),
         shipping: {
           mode: 'me2',
           freeShipping: false,
@@ -511,14 +521,20 @@ export class MarketplaceService {
         category = categories[0]?.categoryId || 'default';
       }
 
+      const metadata = this.parseProductMetadata(product);
+      const price = this.resolveListingPrice(product, customData?.price);
+      if (price <= 0) {
+        throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
+      }
+
       const amazonProduct: AmazonProduct = {
         sku: `IVAN-${product.id}`,
         title: customData?.title || product.title,
         description: customData?.description || product.description || '',
-        price: customData?.price || product.price,
-        currency: 'USD', // Should be configurable based on marketplace
-        quantity: customData?.quantity || product.stock || 1,
-        images: product.images ? JSON.parse(product.images) : [],
+        price,
+        currency: (metadata?.currency || 'USD').toUpperCase(),
+        quantity: this.resolveListingQuantity(product, customData?.quantity),
+        images: this.parseImageUrls(product.images),
         category,
         brand: product.brand || 'Generic',
         manufacturer: product.manufacturer || product.brand || 'Generic',
@@ -674,6 +690,87 @@ export class MarketplaceService {
     } catch (error) {
       throw new AppError(`Failed to get marketplace stats: ${error.message}`, 500);
     }
+  }
+
+  private parseProductMetadata(product: any): Record<string, any> {
+    const raw = product?.productData;
+    if (!raw) return {};
+    if (typeof raw === 'object' && raw !== null) {
+      return raw as any;
+    }
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  }
+
+  private parseImageUrls(value: any): string[] {
+    if (!value) return [];
+
+    if (Array.isArray(value)) {
+      return value.filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return [];
+      if (trimmed.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            return parsed.filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
+          }
+        } catch {
+          // fallback handled below
+        }
+      }
+      if (/^https?:\/\//i.test(trimmed)) {
+        return [trimmed];
+      }
+    }
+
+    return [];
+  }
+
+  private resolveListingPrice(product: any, override?: number): number {
+    if (typeof override === 'number' && override > 0) {
+      return override;
+    }
+    const metadata = this.parseProductMetadata(product);
+    if (typeof metadata?.price === 'number' && metadata.price > 0) {
+      return metadata.price;
+    }
+    if (typeof product?.finalPrice === 'number' && product.finalPrice > 0) {
+      return product.finalPrice;
+    }
+    if (typeof product?.suggestedPrice === 'number' && product.suggestedPrice > 0) {
+      return product.suggestedPrice;
+    }
+    if (typeof product?.aliexpressPrice === 'number' && product.aliexpressPrice > 0) {
+      return Math.round(product.aliexpressPrice * 1.45 * 100) / 100;
+    }
+    return 0;
+  }
+
+  private resolveListingQuantity(product: any, override?: number): number {
+    if (typeof override === 'number' && override > 0) {
+      return override;
+    }
+    const metadata = this.parseProductMetadata(product);
+    if (typeof metadata?.quantity === 'number' && metadata.quantity > 0) {
+      return metadata.quantity;
+    }
+    if (typeof metadata?.stock === 'number' && metadata.stock > 0) {
+      return metadata.stock;
+    }
+    return 1;
   }
 
   // Encryption helpers (AES-256-GCM base64)

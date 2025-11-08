@@ -10,12 +10,15 @@ export interface CreateProductDto {
   aliexpressUrl: string;
   aliexpressPrice: number;
   suggestedPrice: number;
-  currency?: string;
+  finalPrice?: number;
   imageUrl?: string;
+  imageUrls?: string[];
   category?: string;
+  currency?: string;
   tags?: string[];
   shippingCost?: number;
   estimatedDeliveryDays?: number;
+  productData?: Record<string, any>;
 }
 
 export interface UpdateProductDto {
@@ -23,21 +26,92 @@ export interface UpdateProductDto {
   description?: string;
   aliexpressPrice?: number;
   suggestedPrice?: number;
+  finalPrice?: number;
   imageUrl?: string;
+  imageUrls?: string[];
   category?: string;
+  currency?: string;
   tags?: string[];
   shippingCost?: number;
   estimatedDeliveryDays?: number;
+  productData?: Record<string, any>;
+}
+
+function buildImagePayload(primary?: string, additional?: string[]): string {
+  const urls = new Set<string>();
+
+  const addUrl = (value?: string) => {
+    if (!value) return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    // Asegurar que sea URL absoluta http/https
+    if (!/^https?:\/\//i.test(trimmed)) return;
+    urls.add(trimmed);
+  };
+
+  addUrl(primary);
+  if (Array.isArray(additional)) {
+    for (const extra of additional) {
+      addUrl(extra);
+    }
+  }
+
+  if (urls.size === 0) {
+    return JSON.stringify([]);
+  }
+
+  return JSON.stringify(Array.from(urls));
+}
+
+function mergeProductMetadata(dto: CreateProductDto | UpdateProductDto): Record<string, any> | undefined {
+  const meta: Record<string, any> = {};
+  if (dto.currency) meta.currency = dto.currency;
+  if (dto.tags?.length) meta.tags = dto.tags;
+  if (typeof dto.shippingCost === 'number') meta.shippingCost = dto.shippingCost;
+  if (typeof dto.estimatedDeliveryDays === 'number') meta.estimatedDeliveryDays = dto.estimatedDeliveryDays;
+  if (dto.productData && Object.keys(dto.productData).length) {
+    meta.sourceData = dto.productData;
+  }
+
+  return Object.keys(meta).length ? meta : undefined;
 }
 
 export class ProductService {
   async createProduct(userId: number, data: CreateProductDto) {
+    const {
+      imageUrl,
+      imageUrls,
+      tags,
+      shippingCost,
+      estimatedDeliveryDays,
+      currency,
+      productData,
+      finalPrice,
+      ...rest
+    } = data;
+
+    const imagesPayload = buildImagePayload(imageUrl, imageUrls);
+    const metadata = mergeProductMetadata(data) || {};
+    if (!metadata.currency) {
+      metadata.currency = currency || 'USD';
+    }
+
+    const metadataPayload = Object.keys(metadata).length ? JSON.stringify(metadata) : null;
+
     const product = await prisma.product.create({
       data: {
-        ...data,
         userId,
+        aliexpressUrl: rest.aliexpressUrl,
+        title: rest.title,
+        description: rest.description || null,
+        aliexpressPrice: rest.aliexpressPrice,
+        suggestedPrice: rest.suggestedPrice,
+        finalPrice: finalPrice ?? rest.suggestedPrice,
+        category: rest.category || null,
+        images: imagesPayload,
+        productData: metadataPayload,
         status: 'PENDING',
-        currency: data.currency || 'USD',
+        isPublished: false,
       },
       include: {
         user: {
@@ -131,9 +205,62 @@ export class ProductService {
       throw new AppError('No tienes permiso para editar este producto', 403);
     }
 
+    const {
+      imageUrl,
+      imageUrls,
+      tags,
+      shippingCost,
+      estimatedDeliveryDays,
+      currency,
+      productData,
+      ...rest
+    } = data;
+
+    const updateData: any = {};
+
+    if (typeof rest.title === 'string') updateData.title = rest.title;
+    if (typeof rest.description === 'string') updateData.description = rest.description;
+    if (typeof rest.aliexpressPrice === 'number') updateData.aliexpressPrice = rest.aliexpressPrice;
+    if (typeof rest.suggestedPrice === 'number') updateData.suggestedPrice = rest.suggestedPrice;
+    if (typeof rest.finalPrice === 'number') {
+      updateData.finalPrice = rest.finalPrice;
+    } else if (typeof rest.suggestedPrice === 'number') {
+      updateData.finalPrice = rest.suggestedPrice;
+    }
+    if (typeof rest.category === 'string') updateData.category = rest.category;
+
+    if (imageUrl || imageUrls?.length) {
+      updateData.images = buildImagePayload(imageUrl, imageUrls);
+    }
+
+    const newMeta = mergeProductMetadata({
+      imageUrl,
+      imageUrls,
+      tags,
+      shippingCost,
+      estimatedDeliveryDays,
+      currency,
+      productData,
+    });
+
+    if (newMeta) {
+      let currentMeta: Record<string, any> = {};
+      if (typeof product.productData === 'string' && product.productData.trim()) {
+        try {
+          const parsed = JSON.parse(product.productData);
+          if (parsed && typeof parsed === 'object') {
+            currentMeta = parsed;
+          }
+        } catch {
+          currentMeta = {};
+        }
+      }
+      updateData.productData = JSON.stringify({ ...currentMeta, ...newMeta });
+    }
+
     const updated = await prisma.product.update({
       where: { id },
-      data,
+      data: updateData,
       include: {
         user: {
           select: {
