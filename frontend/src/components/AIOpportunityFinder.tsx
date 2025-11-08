@@ -146,7 +146,38 @@ export default function AIOpportunityFinder() {
       setInsights(realInsights);
     } catch (error: any) {
       console.error('Error searching opportunities:', error);
-      toast.error(error.response?.data?.error || 'Error al buscar oportunidades');
+      if (error?.response?.status === 428) {
+        const data = error.response?.data || {};
+        const manualPath = data.manualUrl || (data.token ? `/manual-login/${data.token}` : null);
+        const targetUrl = manualPath
+          ? (manualPath.startsWith('http') ? manualPath : `${window.location.origin}${manualPath}`)
+          : data.loginUrl;
+        toast.custom((t) => (
+          <div className="space-y-2 text-sm">
+            <p className="font-semibold text-gray-900">Se requiere iniciar sesión en AliExpress</p>
+            <p className="text-gray-700 text-xs">Abriremos la página de autenticación. Una vez que guardes la sesión, vuelve a intentar.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if (targetUrl) window.open(targetUrl, '_blank', 'noopener,noreferrer');
+                  toast.dismiss(t.id);
+                }}
+                className="px-3 py-1 bg-blue-600 text-white rounded text-xs"
+              >
+                Abrir login
+              </button>
+              <button
+                onClick={() => toast.dismiss(t.id)}
+                className="px-3 py-1 border border-gray-300 rounded text-xs"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        ));
+      } else {
+        toast.error(error.response?.data?.error || 'Error al buscar oportunidades');
+      }
       setOpportunities([]);
       setInsights([]);
     } finally {

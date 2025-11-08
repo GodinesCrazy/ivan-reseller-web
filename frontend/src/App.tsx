@@ -26,6 +26,7 @@ const OtherCredentials = lazy(() => import('@pages/OtherCredentials'));
 const AdminPanel = lazy(() => import('@pages/AdminPanel'));
 const HelpCenter = lazy(() => import('@pages/HelpCenter'));
 const WorkflowConfig = lazy(() => import('@pages/WorkflowConfig'));
+const ManualLogin = lazy(() => import('@pages/ManualLogin'));
 import Layout from '@components/layout/Layout';
 
 function AppContent() {
@@ -121,6 +122,7 @@ function AppContent() {
         path="/login"
         element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />}
       />
+      <Route path="/manual-login/:token" element={<ManualLogin />} />
 
       {/* Protected routes */}
       <Route
