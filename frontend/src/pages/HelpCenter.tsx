@@ -487,20 +487,30 @@ function APIsCredenciales() {
               </div>
             </div>
             <p className="text-gray-700 mb-3">
-              Publica en eBay a nivel mundial
+              Publica en eBay a nivel mundial. Necesitarás credenciales <strong>Sandbox</strong> para pruebas y <strong>Production</strong> para publicar en vivo.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-2">
+            <div className="bg-white border rounded-lg p-4 space-y-3">
               <div className="text-sm">
-                <strong>Campos requeridos:</strong> App ID, Dev ID, Cert ID
+                <strong>Campos requeridos (ambos entornos):</strong> App ID (Client ID), Dev ID, Cert ID (Client Secret), Redirect URI (RuName)
               </div>
               <div className="text-sm">
-                <strong>Campos opcionales:</strong> Auth Token
+                <strong>Campos generados automáticamente tras OAuth:</strong> Auth Token (Access Token) y Refresh Token
               </div>
-              <div className="text-sm text-gray-600">
-                <strong>Obtener en:</strong> 
-                <a href="https://developer.ebay.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
-                  developer.ebay.com <ExternalLink className="w-3 h-3 inline" />
-                </a>
+              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
+                <div className="font-semibold text-gray-900">Pasos para obtener las claves:</div>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Ingresa a <a href="https://developer.ebay.com/my/keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">developer.ebay.com <ExternalLink className="w-3 h-3 inline" /></a> y selecciona el conjunto de claves (<em>Keyset</em>) <strong>Sandbox</strong>.</li>
+                  <li>Copia los valores <strong>App ID</strong>, <strong>Dev ID</strong> y <strong>Cert ID</strong> y pégalos en <code>Settings → Configuración de APIs → eBay (Sandbox)</code>.</li>
+                  <li>En la misma página de eBay haz clic en <em>User Tokens</em> y, dentro de <em>Your eBay Sign-in Settings</em>, registra un <strong>Redirect URL name (RuName)</strong> apuntando a:<br />
+                    <code className="block bg-gray-100 rounded px-2 py-1 mt-1">https://ivan-reseller-web.vercel.app/api/marketplace-oauth/oauth/callback/ebay</code>
+                  </li>
+                  <li>Copia el nombre generado (ej. <code>Ivan_Marty-...</code>) y pégalo en el campo <strong>Redirect URI (RuName)</strong> del panel. Guarda.</li>
+                  <li>Presiona el botón <strong>OAuth</strong>. Se abrirá la ventana oficial de eBay Sandbox. Inicia sesión con tu cuenta Sandbox y acepta los permisos. El sistema guardará automáticamente el <em>Auth Token</em> y el <em>Refresh Token</em>.</li>
+                  <li>Repite los mismos pasos en el keyset <strong>Production</strong> para publicar en el entorno real. Asegúrate de registrar nuevamente el RuName (puedes reutilizar el mismo) y autorizar con tu cuenta comercial.</li>
+                </ol>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 text-xs text-blue-700 rounded p-3">
+                <strong>Tip:</strong> Si ves el mensaje “Falta token OAuth de eBay”, revisa que el RuName sea el mismo que aparece en eBay Developer y vuelve a ejecutar el flujo OAuth desde el botón dedicado.
               </div>
             </div>
           </div>

@@ -73,7 +73,10 @@ class OpportunityFinderService {
     }
 
     // 1) Scrape AliExpress: PRIMERO usar scraping nativo local (Puppeteer) → fallback a bridge Python
-    let products: Array<{ title: string; price: number; productUrl: string; imageUrl?: string; productId?: string }>= [];
+    let products: Array<{ title: string; price: number; productUrl: string; imageUrl?: string; productId?: string }> = [];
+    let manualAuthPending = false;
+    let manualAuthError: ManualAuthRequiredError | null = null;
+    let nativeErrorForLogs: any = null;
     
     // PRIORIDAD 1: Scraping nativo local (Puppeteer) - más rápido y sin dependencias externas
     const scraper = new AdvancedMarketplaceScraper();
@@ -103,36 +106,41 @@ class OpportunityFinderService {
         console.warn('⚠️  Scraping nativo no encontró productos (puede ser selector incorrecto o página bloqueada)');
       }
     } catch (nativeError: any) {
+      nativeErrorForLogs = nativeError;
       if (nativeError instanceof ManualAuthRequiredError) {
-        throw nativeError;
+        manualAuthPending = true;
+        manualAuthError = nativeError;
+        console.warn('⚠️  AliExpress requiere autenticación manual. Usaremos datos públicos temporales.');
+      } else {
+        const errorMsg = nativeError?.message || String(nativeError);
+        console.error('❌ Error en scraping nativo:', errorMsg);
+        console.warn('⚠️  Scraping nativo falló, intentando bridge Python:', errorMsg);
+
+        const nativeMsg = String(nativeError?.message || '').toLowerCase();
+        const isCaptchaError = nativeError?.code === 'CAPTCHA_REQUIRED' ||
+          nativeMsg.includes('captcha') ||
+          nativeMsg.includes('no se pudo evadir');
+
+        if (isCaptchaError) {
+          await notificationService.sendToUser(userId, {
+            type: 'USER_ACTION',
+            title: 'CAPTCHA detectado en AliExpress',
+            message: 'El scraping nativo detectó un CAPTCHA que requiere resolución manual. El sistema intentará usar el bridge Python como alternativa.',
+            priority: 'HIGH',
+            category: 'SYSTEM',
+            data: { source: 'aliexpress', step: 'scrape', method: 'native' },
+            actions: [
+              { id: 'open_captcha', label: 'Abrir CAPTCHA', url: '/api/captcha/stats', variant: 'primary' },
+              { id: 'continuar_luego', label: 'Continuar luego', action: 'dismiss', variant: 'secondary' }
+            ]
+          });
+        }
       }
-      const errorMsg = nativeError?.message || String(nativeError);
-      console.error('❌ Error en scraping nativo:', errorMsg);
-      console.warn('⚠️  Scraping nativo falló, intentando bridge Python:', errorMsg);
-      
-      // Verificar si el error es por CAPTCHA que requiere intervención manual
-      const nativeMsg = String(nativeError?.message || '').toLowerCase();
-      const isCaptchaError = nativeError?.code === 'CAPTCHA_REQUIRED' || 
-                            nativeMsg.includes('captcha') || 
-                            nativeMsg.includes('no se pudo evadir');
-      
-      if (isCaptchaError) {
-        // Notificar al usuario que necesita resolver CAPTCHA manualmente
-        await notificationService.sendToUser(userId, {
-          type: 'USER_ACTION',
-          title: 'CAPTCHA detectado en AliExpress',
-          message: 'El scraping nativo detectó un CAPTCHA que requiere resolución manual. El sistema intentará usar el bridge Python como alternativa.',
-          priority: 'HIGH',
-          category: 'SYSTEM',
-          data: { source: 'aliexpress', step: 'scrape', method: 'native' },
-          actions: [
-            { id: 'open_captcha', label: 'Abrir CAPTCHA', url: '/api/captcha/stats', variant: 'primary' },
-            { id: 'continuar_luego', label: 'Continuar luego', action: 'dismiss', variant: 'secondary' }
-          ]
-        });
-      }
-      
-      // PRIORIDAD 2: Fallback a bridge Python si el scraping nativo falla
+    } finally {
+      await scraper.close().catch(() => {});
+    }
+
+    if (!products || products.length === 0) {
       try {
         const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
         products = (items || []).map((p: any) => ({
@@ -144,7 +152,6 @@ class OpportunityFinderService {
         }));
         console.log(`✅ Bridge Python exitoso: ${products.length} productos encontrados`);
       } catch (bridgeError: any) {
-        // Notificar si el bridge reporta necesidad de CAPTCHA manual
         const msg = String(bridgeError?.message || '').toLowerCase();
         if (bridgeError?.code === 'CAPTCHA_REQUIRED' || msg.includes('captcha')) {
           await notificationService.sendToUser(userId, {
@@ -161,16 +168,22 @@ class OpportunityFinderService {
           });
         }
         console.error('❌ Ambos métodos de scraping fallaron:', {
-          native: nativeError.message,
+          native: nativeErrorForLogs?.message,
           bridge: bridgeError.message
         });
-        products = []; // No se encontraron productos
+        if (manualAuthPending && manualAuthError) {
+          throw manualAuthError;
+        }
+        return [];
       }
-    } finally {
-      await scraper.close().catch(() => {});
     }
 
-    if (!products || products.length === 0) return [];
+    if (!products || products.length === 0) {
+      if (manualAuthPending && manualAuthError) {
+        throw manualAuthError;
+      }
+      return [];
+    }
 
     // 2) Analizar competencia real (placeholder hasta integrar servicios específicos)
     const opportunities: OpportunityItem[] = [];
@@ -236,7 +249,7 @@ class OpportunityFinderService {
         };
         bestBreakdown = {};
         estimatedFields = ['suggestedPriceUsd', 'profitMargin', 'roiPercentage'];
-        estimationNotes.push('Valores estimados por falta de datos de competencia real. Configura o valida tus credenciales de Amazon, eBay o MercadoLibre para obtener precios exactos.');
+        estimationNotes.push('Valores estimados por falta de datos de competencia real. Configura tus credenciales de Amazon, eBay o MercadoLibre para obtener precios exactos.');
         for (const mp of marketplaces) {
           const diag = credentialDiagnostics[mp];
           if (diag?.issues?.length) {
@@ -246,6 +259,10 @@ class OpportunityFinderService {
             estimationNotes.push(...diag.warnings.map(warning => `[${mp}] ${warning}`));
           }
         }
+      }
+
+      if (manualAuthPending) {
+        estimationNotes.push('Sesión de AliExpress pendiente de confirmación. Completa el login manual desde la barra superior para obtener datos completos.');
       }
 
       const selectedDiag = credentialDiagnostics[best.mp];
