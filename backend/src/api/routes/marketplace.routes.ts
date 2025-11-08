@@ -370,14 +370,6 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
   try {
     const { marketplace } = req.params;
     const { redirect_uri, environment: envParam } = req.query;
-    
-    if (!redirect_uri || typeof redirect_uri !== 'string') {
-      return res.status(400).json({
-        success: false,
-        message: 'redirect_uri is required',
-      });
-    }
-
     const requestedEnv = typeof envParam === 'string' ? envParam.toLowerCase() : undefined;
     const environment = requestedEnv && ['sandbox', 'production'].includes(requestedEnv) ? requestedEnv : undefined;
 
@@ -388,26 +380,32 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       });
     }
 
-    // Build state with HMAC to map callback to user
+    // Build state info after resolving redirect target
     const userId = req.user!.userId;
     const ts = Date.now().toString();
     const nonce = crypto.randomBytes(8).toString('hex');
     const secret = process.env.ENCRYPTION_KEY || 'default-key';
-    const redirB64 = Buffer.from(String(redirect_uri)).toString('base64url');
-    const payload = `${userId}|${marketplace}|${ts}|${nonce}|${redirB64}`;
-    const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
-    const state = Buffer.from(`${payload}|${sig}`).toString('base64url');
 
-    let authUrl: string;
+    let authUrl = '';
+
     if (marketplace === 'ebay') {
-      // Prefer stored creds; fallback to env
       const cred = await marketplaceService.getCredentials(userId, 'ebay', environment as any);
       const appId = cred?.credentials?.appId || process.env.EBAY_APP_ID || '';
       const devId = cred?.credentials?.devId || process.env.EBAY_DEV_ID || '';
       const certId = cred?.credentials?.certId || process.env.EBAY_CERT_ID || '';
       const sandbox = !!(cred?.credentials?.sandbox || (process.env.EBAY_SANDBOX === 'true'));
+      const ruName = typeof redirect_uri === 'string' && redirect_uri.length > 0
+        ? redirect_uri
+        : cred?.credentials?.redirectUri || process.env.EBAY_REDIRECT_URI || '';
+      if (!ruName) {
+        return res.status(400).json({ success: false, message: 'Missing eBay Redirect URI (RuName)' });
+      }
+      const redirB64 = Buffer.from(String(ruName)).toString('base64url');
+      const payload = [userId, marketplace, ts, nonce, redirB64].join('|');
+      const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+      const state = Buffer.from([payload, sig].join('|')).toString('base64url');
       const ebay = new EbayService({ appId, devId, certId, sandbox });
-      const url = new URL(ebay.getAuthUrl(String(redirect_uri)));
+      const url = new URL(ebay.getAuthUrl(String(ruName)));
       url.searchParams.set('state', state);
       authUrl = url.toString();
     } else if (marketplace === 'mercadolibre') {
@@ -415,23 +413,32 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const clientId = cred?.credentials?.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '';
       const clientSecret = cred?.credentials?.clientSecret || process.env.MERCADOLIBRE_CLIENT_SECRET || '';
       const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLM';
+      const callbackUrl = typeof redirect_uri === 'string' && redirect_uri.length > 0
+        ? redirect_uri
+        : cred?.credentials?.redirectUri || process.env.MERCADOLIBRE_REDIRECT_URI || '';
+      if (!callbackUrl) {
+        return res.status(400).json({ success: false, message: 'Missing MercadoLibre Redirect URI' });
+      }
+      const redirB64 = Buffer.from(String(callbackUrl)).toString('base64url');
+      const payload = [userId, marketplace, ts, nonce, redirB64].join('|');
+      const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+      const state = Buffer.from([payload, sig].join('|')).toString('base64url');
       const ml = new MercadoLibreService({ clientId, clientSecret, siteId });
-      const url = new URL(ml.getAuthUrl(String(redirect_uri)));
+      const url = new URL(ml.getAuthUrl(String(callbackUrl)));
       url.searchParams.set('state', state);
       authUrl = url.toString();
-    } else {
-      throw new Error('Marketplace not supported');
     }
 
     res.json({
       success: true,
-      data: { authUrl },
+      data: {
+        authUrl,
+      },
     });
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      message: 'Failed to generate auth URL',
-      error: error.message,
+      message: error.message || 'Failed to get auth URL',
     });
   }
 });
