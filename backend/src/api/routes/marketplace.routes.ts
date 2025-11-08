@@ -369,7 +369,7 @@ router.get('/stats', async (req: Request, res: Response) => {
 router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
   try {
     const { marketplace } = req.params;
-    const { redirect_uri } = req.query;
+    const { redirect_uri, environment: envParam } = req.query;
     
     if (!redirect_uri || typeof redirect_uri !== 'string') {
       return res.status(400).json({
@@ -377,6 +377,9 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         message: 'redirect_uri is required',
       });
     }
+
+    const requestedEnv = typeof envParam === 'string' ? envParam.toLowerCase() : undefined;
+    const environment = requestedEnv && ['sandbox', 'production'].includes(requestedEnv) ? requestedEnv : undefined;
 
     if (!['ebay', 'mercadolibre'].includes(marketplace)) {
       return res.status(400).json({
@@ -398,7 +401,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
     let authUrl: string;
     if (marketplace === 'ebay') {
       // Prefer stored creds; fallback to env
-      const cred = await marketplaceService.getCredentials(userId, 'ebay');
+      const cred = await marketplaceService.getCredentials(userId, 'ebay', environment as any);
       const appId = cred?.credentials?.appId || process.env.EBAY_APP_ID || '';
       const devId = cred?.credentials?.devId || process.env.EBAY_DEV_ID || '';
       const certId = cred?.credentials?.certId || process.env.EBAY_CERT_ID || '';
@@ -408,7 +411,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       url.searchParams.set('state', state);
       authUrl = url.toString();
     } else if (marketplace === 'mercadolibre') {
-      const cred = await marketplaceService.getCredentials(userId, 'mercadolibre');
+      const cred = await marketplaceService.getCredentials(userId, 'mercadolibre', environment as any);
       const clientId = cred?.credentials?.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '';
       const clientSecret = cred?.credentials?.clientSecret || process.env.MERCADOLIBRE_CLIENT_SECRET || '';
       const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLM';

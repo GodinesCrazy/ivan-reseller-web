@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
   Settings,
-  Key,
   Globe,
   CheckCircle,
   XCircle,
@@ -13,7 +12,9 @@ import {
   Trash2,
   TestTube,
   Loader2,
-  Info
+  Info,
+  Link2,
+  Pencil
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuthStatusStore } from '@stores/authStatusStore';
@@ -71,6 +72,7 @@ interface APIDefinition {
   fields: APIField[];
   icon: string;
   docsUrl?: string;
+  supportsOAuth?: boolean;
 }
 
 interface APIField {
@@ -90,6 +92,7 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
     description: 'Publicar y gestionar productos en eBay',
     icon: '🛒',
     docsUrl: 'https://developer.ebay.com/api-docs/static/gs_trading-api-intro.html',
+    supportsOAuth: true,
     fields: [
       { key: 'EBAY_APP_ID', label: 'App ID (Client ID)', required: true, type: 'text', placeholder: 'YourAppI-YourApp-PRD-...' },
       { key: 'EBAY_DEV_ID', label: 'Dev ID', required: true, type: 'text', placeholder: 'Your-DevI-PRD-...' },
@@ -116,6 +119,7 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
     description: 'Publicar productos en MercadoLibre',
     icon: '💛',
     docsUrl: 'https://developers.mercadolibre.com/',
+    supportsOAuth: true,
     fields: [
       { key: 'MERCADOLIBRE_CLIENT_ID', label: 'Client ID (App ID)', required: true, type: 'text', placeholder: '1234567890123456' },
       { key: 'MERCADOLIBRE_CLIENT_SECRET', label: 'Client Secret', required: true, type: 'password', placeholder: 'abcdefghijklmnop...' },
@@ -208,6 +212,7 @@ export default function APISettings() {
     isActive?: boolean;
     present?: boolean;
   }>>({});
+  const [oauthing, setOauthing] = useState<string | null>(null);
   const authStatuses = useAuthStatusStore((state) => state.statuses);
   const fetchAuthStatuses = useAuthStatusStore((state) => state.fetchStatuses);
   const requestAuthRefresh = useAuthStatusStore((state) => state.requestRefresh);
@@ -787,6 +792,36 @@ export default function APISettings() {
     }
   };
 
+  const handleOAuth = async (apiName: string, environment: string) => {
+    setOauthing(apiName);
+    setError(null);
+    try {
+      const redirectUri = window.location.origin + window.location.pathname;
+      const { data } = await api.get(`/api/marketplace/auth-url/${apiName}`, {
+        params: {
+          redirect_uri: redirectUri,
+          environment,
+        },
+      });
+      const authUrl = data?.data?.authUrl || data?.authUrl || data?.url;
+      if (authUrl) {
+        window.open(authUrl, '_blank', 'noopener,noreferrer');
+        setTimeout(() => {
+          loadCredentials();
+          fetchAuthStatuses();
+        }, 4000);
+      } else {
+        alert('❌ No recibimos una URL de autorización OAuth para este marketplace.');
+      }
+    } catch (err: any) {
+      console.error('Error iniciando OAuth:', err);
+      const message = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Error iniciando OAuth';
+      alert(`❌ ${message}`);
+    } finally {
+      setOauthing(null);
+    }
+  };
+
   const handleToggle = async (apiName: string, environment: string, currentActive: boolean) => {
     setError(null);
     try {
@@ -1074,6 +1109,28 @@ export default function APISettings() {
                         {credential.isActive ? 'ON' : 'OFF'}
                       </button>
 
+                      {/* OAuth Authorization */}
+                      {apiDef.supportsOAuth && (
+                        <button
+                          onClick={() => handleOAuth(apiDef.name, currentEnvironment)}
+                          disabled={oauthing === apiDef.name}
+                          className="px-3 py-1 rounded text-sm font-medium border border-blue-200 text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                          title="Autorizar OAuth"
+                        >
+                          {oauthing === apiDef.name ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Autorizando…
+                            </>
+                          ) : (
+                            <>
+                              <Link2 className="w-4 h-4" />
+                              OAuth
+                            </>
+                          )}
+                        </button>
+                      )}
+ 
                       {/* Test Connection */}
                       <button
                         onClick={() => handleTest(apiDef.name, currentEnvironment)}
@@ -1100,7 +1157,7 @@ export default function APISettings() {
                         className="p-2 text-gray-600 hover:bg-gray-100 rounded"
                         title="Editar"
                       >
-                        <Key className="w-5 h-5" />
+                        <Pencil className="w-5 h-5" />
                       </button>
 
                       {/* Delete */}
