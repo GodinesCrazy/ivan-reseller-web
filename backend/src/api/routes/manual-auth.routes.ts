@@ -3,6 +3,7 @@ import { z } from 'zod';
 import ManualAuthService from '../../services/manual-auth.service';
 import { authenticate } from '../../middleware/auth.middleware';
 import { CredentialsManager } from '../../services/credentials-manager.service';
+import { marketplaceAuthStatusService } from '../../services/marketplace-auth-status.service';
 
 const router = Router();
 
@@ -108,6 +109,49 @@ router.post('/:token/complete', async (req, res) => {
 
   await CredentialsManager.saveCredentials(session.userId, 'aliexpress', mergedCreds, 'production');
   await ManualAuthService.completeSession(token, cookies);
+
+  return res.json({ success: true });
+});
+
+router.post('/save-cookies', authenticate, async (req, res) => {
+  const schema = z.object({
+    cookies: z.union([
+      z.string().transform((value, ctx) => {
+        try {
+          const parsed = JSON.parse(value);
+          return parsed;
+        } catch (error) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Formato de cookies inválido' });
+          return z.NEVER;
+        }
+      }),
+      z.array(z.any()),
+    ]),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, error: 'invalid_payload', details: parsed.error.flatten() });
+  }
+
+  const cookies = Array.isArray(parsed.data.cookies) ? parsed.data.cookies : [];
+  if (cookies.length === 0) {
+    return res.status(400).json({ success: false, error: 'cookies_required', message: 'Debes pegar las cookies en formato JSON.' });
+  }
+
+  const userId = req.user!.userId;
+  const existingCreds = await CredentialsManager.getCredentials(userId, 'aliexpress', 'production');
+  if (!existingCreds || !(existingCreds as any).email || !(existingCreds as any).password) {
+    return res.status(400).json({ success: false, error: 'missing_credentials', message: 'Configura email y password en la tarjeta de AliExpress antes de guardar cookies.' });
+  }
+
+  const mergedCreds = {
+    ...(existingCreds as any),
+    cookies,
+  };
+
+  await CredentialsManager.saveCredentials(userId, 'aliexpress', mergedCreds, 'production');
+  await marketplaceAuthStatusService.markHealthy(userId, 'aliexpress', 'Cookies guardadas manualmente');
 
   return res.json({ success: true });
 });
