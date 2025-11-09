@@ -14,10 +14,12 @@ import {
   Loader2,
   Info,
   Link2,
-  Pencil
+  Pencil,
+  ClipboardPaste
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuthStatusStore } from '@stores/authStatusStore';
+import { toast } from 'sonner';
 
 // Tipos según backend
 interface APICredential {
@@ -876,6 +878,33 @@ export default function APISettings() {
     }
   };
 
+  const handleManualCookies = async () => {
+    const raw = window.prompt('Pega aquí el JSON generado con document.cookie (ver instrucciones).');
+    if (!raw) {
+      return;
+    }
+    let parsed: any;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      toast.error('El formato no es JSON válido. Asegúrate de copiar el resultado del snippet.');
+      return;
+    }
+    if (!Array.isArray(parsed)) {
+      toast.error('Las cookies deben ser un arreglo JSON.');
+      return;
+    }
+    try {
+      await api.post('/api/manual-auth/save-cookies', { cookies: parsed });
+      toast.success('Cookies guardadas correctamente. La sesión se actualizará en segundos.');
+      await requestAuthRefresh('aliexpress');
+      await loadCredentials();
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'No se pudieron guardar las cookies.';
+      toast.error(message);
+    }
+  };
+
   const getCredentialForAPI = (apiName: string, environment: string): APICredential | undefined => {
     return credentials.find(c => c.apiName === apiName && c.environment === environment);
   };
@@ -1055,6 +1084,14 @@ export default function APISettings() {
                             >
                               <RefreshCw className="w-3 h-3" />
                               Reintentar automático
+                            </button>
+                            <button
+                              onClick={handleManualCookies}
+                              className="inline-flex items-center gap-1 px-3 py-1 rounded border border-green-200 text-green-700 bg-green-50 hover:bg-green-100 transition text-xs"
+                              title="Pega el JSON de cookies generado desde la consola de AliExpress"
+                            >
+                              <ClipboardPaste className="w-3 h-3" />
+                              Guardar cookies manualmente
                             </button>
                             {statusInfo.manualSession?.token ? (
                               <a
