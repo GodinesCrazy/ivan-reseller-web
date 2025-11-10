@@ -20,6 +20,7 @@ router.use(marketplaceRateLimit);
 const publishProductSchema = z.object({
   productId: z.number(),
   marketplace: z.enum(['ebay', 'mercadolibre', 'amazon']),
+  environment: z.enum(['sandbox', 'production']).optional(),
   customData: z.object({
     categoryId: z.string().optional(),
     price: z.number().optional(),
@@ -32,6 +33,7 @@ const publishProductSchema = z.object({
 const multipleMarketplacesSchema = z.object({
   productId: z.number(),
   marketplaces: z.array(z.enum(['ebay', 'mercadolibre', 'amazon'])),
+  environment: z.enum(['sandbox', 'production']).optional(),
 });
 
 const credentialsSchema = z.object({
@@ -68,11 +70,15 @@ router.post('/publish', marketplaceRateLimit, async (req: Request, res: Response
   try {
     const data = publishProductSchema.parse(req.body);
     
-    const result = await marketplaceService.publishProduct(req.user!.userId, {
-      productId: data.productId,
-      marketplace: data.marketplace,
-      customData: data.customData,
-    });
+    const result = await marketplaceService.publishProduct(
+      req.user!.userId,
+      {
+        productId: data.productId,
+        marketplace: data.marketplace,
+        customData: data.customData,
+      },
+      data.environment
+    );
 
     if (result.success) {
       res.status(201).json({
@@ -115,7 +121,8 @@ router.post('/publish-multiple', async (req: Request, res: Response) => {
     const results = await marketplaceService.publishToMultipleMarketplaces(
       req.user!.userId,
       data.productId,
-      data.marketplaces
+      data.marketplaces,
+      data.environment
     );
 
     const successCount = results.filter(r => r.success).length;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -54,6 +54,12 @@ export default function Opportunities() {
   const authStatuses = useAuthStatusStore((state) => state.statuses);
   const fetchAuthStatuses = useAuthStatusStore((state) => state.fetchStatuses);
   const requestAuthRefresh = useAuthStatusStore((state) => state.requestRefresh);
+  const [envStatusLoaded, setEnvStatusLoaded] = useState(false);
+  const [marketplaceEnvStatus, setMarketplaceEnvStatus] = useState<Record<Marketplace, { sandbox: boolean; production: boolean }>>({
+    ebay: { sandbox: false, production: false },
+    amazon: { sandbox: false, production: false },
+    mercadolibre: { sandbox: false, production: false },
+  });
 
   const marketplacesParam = useMemo(() => marketplaces.join(','), [marketplaces]);
   const hasEstimatedValues = useMemo(
@@ -103,8 +109,37 @@ export default function Opportunities() {
     }
   }
 
+  const loadMarketplaceEnvStatus = useCallback(async () => {
+    try {
+      const response = await api.get('/api/api-credentials');
+      const entries = response.data?.data || [];
+      const normalized: Record<Marketplace, { sandbox: boolean; production: boolean }> = {
+        ebay: { sandbox: false, production: false },
+        amazon: { sandbox: false, production: false },
+        mercadolibre: { sandbox: false, production: false },
+      };
+
+      entries.forEach((entry: any) => {
+        const apiName = entry.apiName;
+        if (!apiName) return;
+        if (normalized[apiName as Marketplace]) {
+          const env = entry.environment === 'sandbox' ? 'sandbox' : 'production';
+          if (entry.isActive) {
+            normalized[apiName as Marketplace][env] = true;
+          }
+        }
+      });
+
+      setMarketplaceEnvStatus(normalized);
+      setEnvStatusLoaded(true);
+    } catch (error: any) {
+      console.error('Error loading marketplace statuses:', error?.message || error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchAuthStatuses();
+    loadMarketplaceEnvStatus();
     search();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -113,11 +148,56 @@ export default function Opportunities() {
     setMarketplaces(prev => prev.includes(mp) ? prev.filter(m => m !== mp) : [...prev, mp]);
   }
 
+  const resolveEnvironmentForMarketplace = async (marketplace: Marketplace): Promise<'sandbox' | 'production' | null> => {
+    if (!envStatusLoaded) {
+      await loadMarketplaceEnvStatus();
+    }
+
+    const status = marketplaceEnvStatus[marketplace];
+    if (!status) {
+      toast.error(`No se pudo determinar el entorno para ${marketplace}`);
+      return null;
+    }
+
+    const available = Object.entries(status).filter(([, active]) => active) as Array<['sandbox' | 'production', boolean]>;
+    if (available.length === 0) {
+      toast.error(`No hay credenciales activas de ${marketplace} en sandbox ni producción.`);
+      return null;
+    }
+
+    if (available.length === 1) {
+      return available[0][0];
+    }
+
+    const choice = window.prompt(`Selecciona el entorno para ${marketplace} (escribe "sandbox" o "production")`, 'production');
+    if (!choice) {
+      toast.info('Operación cancelada por el usuario.');
+      return null;
+    }
+    const normalizedChoice = choice.toLowerCase();
+    if (normalizedChoice !== 'sandbox' && normalizedChoice !== 'production') {
+      toast.error('Valor inválido. Debes escribir "sandbox" o "production".');
+      return null;
+    }
+    if (!status[normalizedChoice as 'sandbox' | 'production']) {
+      toast.error(`No hay credenciales activas en ${normalizedChoice} para ${marketplace}.`);
+      return null;
+    }
+
+    return normalizedChoice as 'sandbox' | 'production';
+  };
+
   async function createAndPublishProduct(item: OpportunityItem, targetMarketplace: Marketplace) {
     const itemIndex = items.indexOf(item);
-    setPublishing(prev => ({ ...prev, [itemIndex]: true }));
 
     try {
+      const environment = await resolveEnvironmentForMarketplace(targetMarketplace);
+      if (!environment) {
+        return;
+      }
+
+      setPublishing(prev => ({ ...prev, [itemIndex]: true }));
+
       const payload: Record<string, any> = {
         title: item.title,
         aliexpressUrl: item.aliexpressUrl,
@@ -143,10 +223,11 @@ export default function Opportunities() {
       const publishResponse = await api.post('/api/marketplace/publish', {
         productId: Number(productId),
         marketplace: targetMarketplace,
+        environment,
       });
 
       if (publishResponse.data?.success) {
-        toast.success(`Producto creado y publicado en ${targetMarketplace} exitosamente`);
+        toast.success(`Publicado en ${targetMarketplace} (${environment}) exitosamente`);
         // Opcional: redirigir a productos
         setTimeout(() => {
           navigate('/products');
@@ -294,9 +375,9 @@ export default function Opportunities() {
                       rel="noreferrer"
                       title="Abrir en AliExpress"
                     >
-                      <img 
-                        src={it.image} 
-                        alt={it.title} 
+                      <img
+                        src={it.image}
+                        alt={it.title}
                         className="w-16 h-16 object-cover rounded border border-gray-200 hover:opacity-90 transition"
                         onError={(e) => {
                           (e.target as HTMLImageElement).src = 'https://via.placeholder.com/64x64?text=No+Image';
@@ -320,7 +401,7 @@ export default function Opportunities() {
                     {it.title}
                   </a>
                   <div className="text-xs text-gray-500 mt-1">
-                    Confianza: {Math.round((it.confidenceScore || 0) * 100)}% | 
+                    Confianza: {Math.round((it.confidenceScore || 0) * 100)}% |
                     ID: {it.productId || 'N/A'}
                   </div>
                   {it.feesConsidered && Object.keys(it.feesConsidered).length > 0 && (
