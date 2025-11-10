@@ -346,10 +346,14 @@ export class MarketplaceService {
     const results: PublishResult[] = [];
 
     for (const marketplace of marketplaces) {
-      const result = await this.publishProduct(userId, {
-        productId,
-        marketplace: marketplace as any,
-      }, environment);
+      const result = await this.publishProduct(
+        userId,
+        {
+          productId,
+          marketplace: marketplace as any,
+        },
+        environment
+      );
       results.push(result);
     }
 
