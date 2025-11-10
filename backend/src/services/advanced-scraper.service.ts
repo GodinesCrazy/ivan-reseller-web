@@ -1839,58 +1839,88 @@ export class AdvancedMarketplaceScraper {
       await this.clickIfExists(context, this.getAliExpressSelectors('popups.close'), 'popup-close');
     }
 
-    await context.evaluate(() => {
-      const doc = (globalThis as any).document;
-      if (!doc) return;
+    await context
+      .evaluate(() => {
+        const doc = (globalThis as any).document;
+        if (!doc) return;
 
-      const clickByText = (root: any, texts: string[]) => {
-        const buttons = Array.from(root.querySelectorAll('button, a')) as any[];
-        buttons.forEach((btn) => {
-          const text = (btn.textContent || '').trim().toLowerCase();
-          if (!text) return;
-          if (texts.includes(text)) {
-            btn.click?.();
-          }
+        const clickByText = (root: any, texts: string[]) => {
+          const buttons = Array.from(root.querySelectorAll('button, a, div')) as any[];
+          buttons.forEach((btn) => {
+            const text = (btn.textContent || '').trim().toLowerCase();
+            if (!text) return;
+            if (texts.some((t) => text.includes(t))) {
+              btn.click?.();
+            }
+          });
+        };
+
+        const normalized = (values: string[]) =>
+          values.map((text) => text.toLowerCase().trim()).filter(Boolean);
+
+        const acceptTexts = normalized([
+          'accept',
+          'accept all',
+          'allow all',
+          'agree',
+          'aceptar',
+          'aceptar todas',
+          'aceptar todo',
+          'permitir',
+          'allow',
+          'allow cookies',
+          'consent',
+        ]);
+        const skipTexts = normalized([
+          'not now',
+          'maybe later',
+          'later',
+          'skip',
+          'usar después',
+          'no ahora',
+          'quizás más tarde',
+          'omitir',
+          'passkey',
+          'recordar más tarde',
+        ]);
+
+        clickByText(doc, acceptTexts);
+        clickByText(doc, skipTexts);
+
+        const shadowHosts = Array.from(doc.querySelectorAll('*')).filter((el: any) => el?.shadowRoot);
+        shadowHosts.forEach((host: any) => {
+          try {
+            clickByText(host.shadowRoot, acceptTexts);
+            clickByText(host.shadowRoot, skipTexts);
+          } catch {}
         });
-      };
 
-      const normalized = (values: string[]) =>
-        values.map((text) => text.toLowerCase().trim()).filter(Boolean);
-
-      const acceptTexts = normalized([
-        'accept all',
-        'accept all cookies',
-        'allow all',
-        'agree',
-        'i agree',
-        'aceptar todo',
-        'aceptar todas',
-        'aceptar todas las cookies',
-        'permitir todo',
-      ]);
-      const skipTexts = normalized([
-        'not now',
-        'maybe later',
-        'later',
-        'skip',
-        'usar después',
-        'no ahora',
-        'quizás más tarde',
-        'omitir',
-        'recordar más tarde',
-      ]);
-
-      clickByText(doc, acceptTexts);
-      clickByText(doc, skipTexts);
-
-      const shadowHosts = Array.from(doc.querySelectorAll('*')).filter((el: any) => el?.shadowRoot);
-      shadowHosts.forEach((host: any) => {
-        try {
-          clickByText(host.shadowRoot, acceptTexts);
-          clickByText(host.shadowRoot, skipTexts);
-        } catch {}
-      });
-    }).catch(() => {});
+        // Forzar eliminación de overlays persistentes
+        const overlays = Array.from(doc.querySelectorAll('div')) as any[];
+        overlays
+          .filter((el) => {
+            const style = (globalThis as any).getComputedStyle?.(el);
+            if (!style) return false;
+            const isFixed = style.position === 'fixed' || style.position === 'sticky';
+            const hasHighZ = Number(style.zIndex || '0') >= 1000;
+            const coversWholeScreen =
+              parseInt(style.width || '0', 10) >= (globalThis as any).innerWidth * 0.8 &&
+              parseInt(style.height || '0', 10) >= (globalThis as any).innerHeight * 0.8;
+            const text = (el.textContent || '').toLowerCase();
+            return (
+              isFixed &&
+              hasHighZ &&
+              coversWholeScreen &&
+              (text.includes('cookie') || text.includes('passkey') || text.includes('consent'))
+            );
+          })
+          .forEach((el) => {
+            try {
+              el.parentElement?.removeChild(el);
+            } catch {}
+          });
+      })
+      .catch(() => {});
 
     const passkeyDismissed = await this.clickIfExists(context, this.getAliExpressSelectors('modal.passkey.dismiss'), 'passkey-dismiss');
     if (!passkeyDismissed) {
