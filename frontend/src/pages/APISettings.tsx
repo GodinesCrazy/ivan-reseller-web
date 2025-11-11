@@ -810,6 +810,20 @@ export default function APISettings() {
         alert('⚠️ Debes completar y guardar el campo "Redirect URI (RuName)" antes de autorizar.');
         return;
       }
+      if (apiName === 'ebay') {
+        const missing = ['appId', 'devId', 'certId'].filter((field) => !String(storedCreds[field] || '').trim());
+        if (missing.length) {
+          alert('⚠️ Completa y guarda App ID, Dev ID y Cert ID antes de autorizar con OAuth.');
+          return;
+        }
+      }
+      if (apiName === 'mercadolibre') {
+        const missing = ['clientId', 'clientSecret'].filter((field) => !String(storedCreds[field] || '').trim());
+        if (missing.length) {
+          alert('⚠️ Completa y guarda Client ID y Client Secret antes de autorizar con OAuth.');
+          return;
+        }
+      }
 
       const { data } = await api.get(`/api/marketplace/auth-url/${apiName}`, {
         params: {
@@ -820,6 +834,7 @@ export default function APISettings() {
       const authUrl = data?.data?.authUrl || data?.authUrl || data?.url;
       if (authUrl) {
         window.open(authUrl, '_blank', 'noopener,noreferrer');
+        toast.info('Se abrió la ventana oficial de OAuth. Completa el login y vuelve para refrescar el estado.');
         setTimeout(() => {
           loadCredentials();
           fetchAuthStatuses();
@@ -1160,11 +1175,21 @@ export default function APISettings() {
 
                       {/* OAuth Authorization */}
                       {apiDef.supportsOAuth && (
+                        (() => {
+                          const requiresBaseCreds =
+                            diag?.issues?.some((issue) =>
+                              issue.toLowerCase().includes('faltan credenciales')
+                            ) ?? false;
+                          const oauthDisabled = oauthing === apiDef.name || requiresBaseCreds;
+                          const oauthTitle = requiresBaseCreds
+                            ? 'Completa y guarda las credenciales requeridas antes de autorizar.'
+                            : 'Autorizar OAuth';
+                          return (
                         <button
                           onClick={() => handleOAuth(apiDef.name, currentEnvironment)}
-                          disabled={oauthing === apiDef.name}
+                          disabled={oauthDisabled}
                           className="px-3 py-1 rounded text-sm font-medium border border-blue-200 text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                          title="Autorizar OAuth"
+                          title={oauthTitle}
                         >
                           {oauthing === apiDef.name ? (
                             <>
@@ -1178,6 +1203,8 @@ export default function APISettings() {
                             </>
                           )}
                         </button>
+                          );
+                        })()
                       )}
  
                       {/* Test Connection */}

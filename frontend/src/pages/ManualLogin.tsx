@@ -57,6 +57,15 @@ export default function ManualLogin() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [renewing, setRenewing] = useState(false);
 
+  async function parseJsonResponse(response: Response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return await response.json();
+    }
+    const text = await response.text();
+    throw new Error(text && text.trim() ? text : 'Respuesta inesperada del servidor');
+  }
+
   useEffect(() => {
     const loadSession = async () => {
       if (!token) {
@@ -66,7 +75,7 @@ export default function ManualLogin() {
       }
       try {
         const response = await fetch(`/api/manual-auth/${token}`);
-        const data = await response.json();
+        const data = await parseJsonResponse(response);
         if (!response.ok || !data.success) {
           throw new Error(data.error || 'session_not_found');
         }
@@ -97,7 +106,7 @@ export default function ManualLogin() {
         },
         body: JSON.stringify({ provider }),
       });
-      const data = await response.json();
+      const data = await parseJsonResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.error || data.message || 'No se pudo generar una nueva sesión');
       }
@@ -147,7 +156,7 @@ export default function ManualLogin() {
           cookies: parsedCookies,
         }),
       });
-      const data = await response.json();
+      const data = await parseJsonResponse(response);
       if (!response.ok || !data.success) {
         throw new Error(data.message || data.error || 'No se pudo guardar la sesión');
       }
