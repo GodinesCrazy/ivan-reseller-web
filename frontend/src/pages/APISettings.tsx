@@ -1459,7 +1459,11 @@ export default function APISettings() {
             <div className="space-y-4 px-6 py-5">
               <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
                 <li>En otra pestaña abre <span className="font-medium">AliExpress</span> e inicia sesión.</li>
-                <li>Presiona <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">F12</code>, ve a <span className="font-medium">Console</span> y pega el siguiente snippet. Presiona Enter para copiar las cookies.</li>
+                <li>
+                  Presiona <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">F12</code>, ve a <span className="font-medium">Console</span>.
+                  Si Chrome muestra un aviso, escribe <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">allow pasting</code> y presiona Enter.
+                  Luego pega el siguiente snippet y presiona Enter para copiar las cookies.
+                </li>
                 <li>Vuelve aquí, pega el JSON generado y pulsa <span className="font-medium">Guardar sesión</span>.</li>
               </ol>
 
