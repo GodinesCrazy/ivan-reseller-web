@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { useAuthStore } from '@stores/authStore';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
+const baseHasApiSuffix = /\/api$/i.test(API_URL);
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -17,6 +18,19 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    if (config.url) {
+      if (baseHasApiSuffix && config.url.startsWith('/api/')) {
+        config.url = config.url.replace(/^\/api\//, '/');
+      } else if (baseHasApiSuffix && config.url === '/api') {
+        config.url = '/';
+      }
+
+      if (!config.url.startsWith('/') && !/^https?:\/\//i.test(config.url)) {
+        config.url = `/${config.url}`;
+      }
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
