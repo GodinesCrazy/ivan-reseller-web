@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import api from '../services/api';
 
 interface SessionInfo {
   success: boolean;
@@ -57,15 +58,6 @@ export default function ManualLogin() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [renewing, setRenewing] = useState(false);
 
-  async function parseJsonResponse(response: Response) {
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      return await response.json();
-    }
-    const text = await response.text();
-    throw new Error(text && text.trim() ? text : 'Respuesta inesperada del servidor');
-  }
-
   useEffect(() => {
     const loadSession = async () => {
       if (!token) {
@@ -74,10 +66,10 @@ export default function ManualLogin() {
         return;
       }
       try {
-        const response = await fetch(`/api/manual-auth/${token}`);
-        const data = await parseJsonResponse(response);
-        if (!response.ok || !data.success) {
-          throw new Error(data.error || 'session_not_found');
+        const response = await api.get(`/api/manual-auth/${token}`);
+        const data = response.data;
+        if (!data?.success) {
+          throw new Error(data?.error || data?.message || 'session_not_found');
         }
         setSession(data);
         setLoadError(null);
@@ -99,16 +91,10 @@ export default function ManualLogin() {
   const handleRequestNewSession = async () => {
     setRenewing(true);
     try {
-      const response = await fetch('/api/manual-auth', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ provider }),
-      });
-      const data = await parseJsonResponse(response);
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || data.message || 'No se pudo generar una nueva sesión');
+      const response = await api.post('/api/manual-auth', { provider });
+      const data = response.data;
+      if (!data?.success || !data?.token) {
+        throw new Error(data?.error || data?.message || 'No se pudo generar una nueva sesión');
       }
       toast.success('Se generó una nueva sesión. Abriendo ventana...');
       window.location.replace(`/manual-login/${data.token}`);
@@ -146,19 +132,13 @@ export default function ManualLogin() {
     }
     setSaving(true);
     try {
-      const response = await fetch(`/api/manual-auth/${token}/complete`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          provider,
-          cookies: parsedCookies,
-        }),
+      const response = await api.post(`/api/manual-auth/${token}/complete`, {
+        provider,
+        cookies: parsedCookies,
       });
-      const data = await parseJsonResponse(response);
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || data.error || 'No se pudo guardar la sesión');
+      const data = response.data;
+      if (!data?.success) {
+        throw new Error(data?.message || data?.error || 'No se pudo guardar la sesión');
       }
       toast.success('Sesión guardada correctamente. Vuelve a la plataforma y reintenta la búsqueda.');
       setSession((prev) => (prev ? { ...prev, status: 'completed', completedAt: new Date().toISOString() } : prev));
