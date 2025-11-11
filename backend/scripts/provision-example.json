@@ -1,0 +1,32 @@
+{
+  "//": "Ejemplo de estructura para scripts/provision-credentials.ts",
+  "globals": [
+    {
+      "apiName": "scraperapi",
+      "environment": "production",
+      "owner": "admin",
+      "credentials": {
+        "apiKey": "REEMPLAZAR_CON_API_KEY"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "cona",
+      "credentials": [
+        {
+          "apiName": "aliexpress",
+          "environment": "production",
+          "scope": "user",
+          "credentials": {
+            "email": "usuario@ejemplo.com",
+            "password": "REEMPLAZAR",
+            "twoFactorEnabled": false,
+            "cookies": []
+          }
+        }
+      ]
+    }
+  ]
+}
+

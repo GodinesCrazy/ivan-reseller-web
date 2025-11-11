@@ -5,6 +5,7 @@ import { financialAlertsService } from './financial-alerts.service';
 import { prisma } from '../config/database';
 import { PayPalPayoutService } from './paypal-payout.service';
 import { notificationService } from './notification.service';
+import { aliExpressAuthMonitor } from './ali-auth-monitor.service';
 
 /**
  * Scheduled Tasks Service
@@ -13,8 +14,10 @@ import { notificationService } from './notification.service';
 export class ScheduledTasksService {
   private financialAlertsQueue: Queue | null = null;
   private commissionProcessingQueue: Queue | null = null;
+  private authHealthQueue: Queue | null = null;
   private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
+  private authHealthWorker: Worker | null = null;
 
   constructor() {
     if (isRedisAvailable) {
@@ -35,6 +38,10 @@ export class ScheduledTasksService {
     });
 
     this.commissionProcessingQueue = new Queue('commission-processing', {
+      connection: redis
+    });
+
+    this.authHealthQueue = new Queue('ali-auth-health', {
       connection: redis
     });
   }
@@ -71,6 +78,18 @@ export class ScheduledTasksService {
       }
     );
 
+    this.authHealthWorker = new Worker(
+      'ali-auth-health',
+      async (job) => {
+        logger.info('Scheduled Tasks: Running AliExpress auth health check', { jobId: job.id });
+        return await this.runAliExpressHealthCheck();
+      },
+      {
+        connection: redis,
+        concurrency: 1
+      }
+    );
+
     // Event listeners
     this.financialAlertsWorker.on('completed', (job) => {
       logger.info('Scheduled Tasks: Financial alerts check completed', { jobId: job.id });
@@ -93,13 +112,24 @@ export class ScheduledTasksService {
         error: err.message
       });
     });
+
+    this.authHealthWorker.on('completed', (job) => {
+      logger.info('Scheduled Tasks: AliExpress auth health check completed', { jobId: job.id });
+    });
+
+    this.authHealthWorker.on('failed', (job, err) => {
+      logger.error('Scheduled Tasks: AliExpress auth health check failed', {
+        jobId: job?.id,
+        error: err.message
+      });
+    });
   }
 
   /**
    * Programar tareas recurrentes
    */
   private scheduleTasks(): void {
-    if (!isRedisAvailable || !this.financialAlertsQueue || !this.commissionProcessingQueue) {
+    if (!isRedisAvailable || !this.financialAlertsQueue || !this.commissionProcessingQueue || !this.authHealthQueue) {
       return;
     }
 
@@ -129,7 +159,155 @@ export class ScheduledTasksService {
       }
     );
 
+    // Verificación de AliExpress: cada día a las 4:00 AM
+    this.authHealthQueue.add(
+      'daily-aliexpress-auth-health',
+      {},
+      {
+        repeat: {
+          pattern: '0 4 * * *' // 4:00 AM todos los días
+        },
+        removeOnComplete: 5,
+        removeOnFail: 5
+      }
+    );
+
     logger.info('Scheduled Tasks: Tasks scheduled successfully');
+  }
+
+  private async runAliExpressHealthCheck(): Promise<{
+    processed: number;
+    success: number;
+    manualRequired: Array<{ userId: number; username: string; reason?: string }>;
+    skipped: Array<{ userId: number; username: string; reason?: string }>;
+    errors: Array<{ userId: number; username: string; error: string }>;
+  }> {
+    const credentials = await prisma.apiCredential.findMany({
+      where: {
+        apiName: 'aliexpress',
+        scope: 'user',
+        isActive: true,
+      },
+      select: {
+        userId: true,
+        user: {
+          select: {
+            username: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    const uniqueUsers = new Map<number, { username: string }>();
+    credentials.forEach((entry) => {
+      const username = entry.user?.username || `user-${entry.userId}`;
+      uniqueUsers.set(entry.userId, { username });
+    });
+
+    const manualRequired: Array<{ userId: number; username: string; reason?: string }> = [];
+    const skipped: Array<{ userId: number; username: string; reason?: string }> = [];
+    const errors: Array<{ userId: number; username: string; error: string }> = [];
+    let success = 0;
+
+    for (const [userId, meta] of uniqueUsers.entries()) {
+      try {
+        const result = await aliExpressAuthMonitor.refreshNow(userId, {
+          force: true,
+          reason: 'daily-health-check',
+        });
+
+        if (result?.success) {
+          success += 1;
+          continue;
+        }
+
+        const reason = (result && 'reason' in result && typeof result.reason === 'string') ? result.reason : undefined;
+
+        if (result?.manualRequired || reason === 'manual_required' || reason === 'missing' || reason === 'expired') {
+          manualRequired.push({ userId, username: meta.username, reason });
+        } else if (result?.skipped) {
+          skipped.push({ userId, username: meta.username, reason });
+        } else {
+          errors.push({
+            userId,
+            username: meta.username,
+            error: reason || 'unknown-state',
+          });
+        }
+      } catch (error: any) {
+        errors.push({
+          userId,
+          username: meta.username,
+          error: error?.message || String(error),
+        });
+      }
+    }
+
+    const totalProcessed = uniqueUsers.size;
+
+    if (totalProcessed === 0) {
+      notificationService.sendToRole('ADMIN', {
+        type: 'SYSTEM_ALERT',
+        title: 'Reporte diario AliExpress',
+        message: 'No se encontraron usuarios con credenciales personales de AliExpress activas para verificar.',
+        priority: 'NORMAL',
+        category: 'SYSTEM',
+      });
+
+      return {
+        processed: 0,
+        success: 0,
+        manualRequired,
+        skipped,
+        errors,
+      };
+    }
+
+    const summaryLines = [
+      `Usuarios verificados: ${totalProcessed}`,
+      `• Sesión saludable: ${success}`,
+      `• Acción manual requerida: ${manualRequired.length}`,
+      `• Saltados: ${skipped.length}`,
+      `• Errores: ${errors.length}`,
+    ];
+
+    if (manualRequired.length > 0) {
+      summaryLines.push(
+        `👤 Manual: ${manualRequired
+          .map((item) => `${item.username}${item.reason ? ` (${item.reason})` : ''}`)
+          .join(', ')}`
+      );
+    }
+
+    if (errors.length > 0) {
+      summaryLines.push(
+        `⚠️ Errores: ${errors
+          .map((item) => `${item.username}: ${item.error}`)
+          .join('; ')}`
+      );
+    }
+
+    const priority =
+      manualRequired.length > 0 || errors.length > 0
+        ? 'HIGH'
+        : 'NORMAL';
+
+    notificationService.sendToRole('ADMIN', {
+      type: 'SYSTEM_ALERT',
+      title: 'Reporte diario AliExpress',
+      message: summaryLines.join('\n'),
+      priority,
+      category: 'SYSTEM',
+    });
+
+    return {
+      processed: totalProcessed,
+      success,
+      manualRequired,
+      skipped,
+      errors,
+    };
   }
 
   /**
@@ -404,11 +582,17 @@ export class ScheduledTasksService {
     if (this.commissionProcessingWorker) {
       await this.commissionProcessingWorker.close();
     }
+    if (this.authHealthWorker) {
+      await this.authHealthWorker.close();
+    }
     if (this.financialAlertsQueue) {
       await this.financialAlertsQueue.close();
     }
     if (this.commissionProcessingQueue) {
       await this.commissionProcessingQueue.close();
+    }
+    if (this.authHealthQueue) {
+      await this.authHealthQueue.close();
     }
   }
 }

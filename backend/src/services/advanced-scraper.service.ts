@@ -66,7 +66,13 @@ export class AdvancedMarketplaceScraper {
       'input[placeholder*="correo"]',
       'input[data-role="username"]',
       'input[class*="login-email"]',
-      'input[id*="loginId"]'
+      'input[id*="loginId"]',
+      'input[id="email"]',
+      'input[name*="email"]',
+      'input[autocomplete="username"]',
+      'input[data-testid*="email"]',
+      'input[aria-label*="email"]',
+      'input[data-model-key*="loginId"]'
     ],
     'login.password': [
       'input#fm-login-password',
@@ -77,7 +83,12 @@ export class AdvancedMarketplaceScraper {
       'input[data-placeholder*="contraseña"]',
       'input[placeholder*="Password"]',
       'input[data-role="password"]',
-      'input[class*="login-password"]'
+      'input[class*="login-password"]',
+      'input[name*="pass"]',
+      'input[autocomplete="current-password"]',
+      'input[data-testid*="password"]',
+      'input[aria-label*="password"]',
+      'input[data-model-key*="password"]'
     ],
     'login.submit': [
       'button[type="submit"]',
@@ -89,7 +100,11 @@ export class AdvancedMarketplaceScraper {
       'button[data-spm-anchor-id*="submit"]',
       'button[class*="fm-button"]',
       'button[class*="login-submit"]',
-      'button[data-role="submit"]'
+      'button[data-role="submit"]',
+      'button[data-testid*="sign"]',
+      'button[data-testid*="login"]',
+      'button[data-action*="signin"]',
+      'button[name="login"]'
     ],
     'login.switchPassword': [
       '.switch-btn',
@@ -99,6 +114,11 @@ export class AdvancedMarketplaceScraper {
       'a[data-spm-anchor-id*="password"]',
       'button[data-role="password"]',
       'button[data-type="password"]',
+      'button[data-testid*="password-login"]',
+      'button[data-testid*="switch-to-password"]',
+      'button[data-action*="password"]',
+      'button:contains("Password login")',
+      'button:contains("Use password")'
     ],
     'login.headerLink': [
       'a[href*="login"]',
@@ -108,6 +128,8 @@ export class AdvancedMarketplaceScraper {
       '.nav-user-account .sign-btn',
       'a.sign-btn',
       'button.header-signin-btn',
+      'button[data-testid*="header-signin"]',
+      'button[data-testid*="sign-in-button"]',
     ],
     'login.accountMenuBtn': [
       '.nav-user-account',
@@ -132,7 +154,9 @@ export class AdvancedMarketplaceScraper {
       'button[data-spm-anchor-id*="accept"]',
       'button[data-testid*="accept"]',
       'button[class*="gdpr"]',
-      'button[class*="cookie-accept"]'
+      'button[class*="cookie-accept"]',
+      'button:contains("Accept all")',
+      'button:contains("Aceptar todo")'
     ],
     'popups.close': [
       'a[data-role="close"]',
@@ -141,7 +165,9 @@ export class AdvancedMarketplaceScraper {
       '.close-button',
       '.close-btn',
       'button[data-role="close"]',
-      'button[data-action="close"]'
+      'button[data-action="close"]',
+      'button[data-testid*="close"]',
+      'button:contains("Close")'
     ],
     'login.textLinks': [
       'a:contains("Sign in")',
@@ -158,6 +184,7 @@ export class AdvancedMarketplaceScraper {
       '.legacy-login a[href*="login"]',
       '.legacy-login button:contains("Sign in")',
       '.legacy-login .sign-btn',
+      'button[data-testid*="sign"]',
     ],
     'state.loginLink.text': [
       'a:contains("Sign in")',
@@ -204,13 +231,18 @@ export class AdvancedMarketplaceScraper {
       'a:contains("Sign in with email")',
       'button:contains("Sign in with password")',
       'button[data-role="password-login"]',
-      'button[data-testid*="password-login"]'
+      'button[data-testid*="password-login"]',
+      'button:contains("Use email")',
+      'button:contains("Email login")',
+      'button[data-testid*="email-login"]'
     ],
     'modal.emailContinue': [
       'button:contains("Continue")',
       'button:contains("Continuar")',
       'button.next-btn-primary',
-      'button[data-role="continue"]'
+      'button[data-role="continue"]',
+      'button[data-testid*="continue"]',
+      'button[data-testid*="next"]'
     ],
   };
 
@@ -1420,7 +1452,16 @@ export class AdvancedMarketplaceScraper {
       console.log('🔐 AliExpress login frames:', frames.map(f => f.url()));
       return frames.find((frame) => {
         const frameUrl = frame.url();
-        return frameUrl.includes('login.alibaba.com') || frameUrl.includes('passport.aliexpress.com') || frameUrl.includes('mini_login') || frameUrl.includes('render-accounts.aliexpress.com') || frameUrl.includes('passkey');
+        return (
+          frameUrl.includes('login.alibaba.com') ||
+          frameUrl.includes('passport.aliexpress.com') ||
+          frameUrl.includes('mini_login') ||
+          frameUrl.includes('render-accounts.aliexpress.com') ||
+          frameUrl.includes('accounts.aliexpress.com') ||
+          frameUrl.includes('seller-passport.aliexpress.com') ||
+          frameUrl.includes('aeu.aliexpress.com') ||
+          frameUrl.includes('passkey')
+        );
       }) || null;
     } catch (error) {
       console.warn('⚠️  Error locating AliExpress login iframe:', (error as Error).message);
@@ -1791,6 +1832,77 @@ export class AdvancedMarketplaceScraper {
       }
     }
     console.warn(`⚠️  All selectors failed for ${label}. Tried: ${selectors.join(', ')}`);
+    try {
+      const fallbackSuccess = await context.evaluate(
+        ({ value, label }) => {
+          const doc = (globalThis as any).document;
+          if (!doc) return false;
+          const lower = (text: string | null | undefined) => (text || '').toLowerCase();
+          const isEmail = label === 'email';
+          const isPassword = label === 'password';
+          const candidates = Array.from(doc.querySelectorAll('input, textarea, div[contenteditable="true"]')) as any[];
+          const filtered = candidates.filter((input: any) => {
+            const type = lower(input.getAttribute('type'));
+            const name = lower(input.getAttribute('name'));
+            const placeholder = lower(input.getAttribute('placeholder'));
+            const ariaLabel = lower(input.getAttribute('aria-label'));
+            const dataTestId = lower(input.getAttribute('data-testid'));
+            if (isEmail) {
+              return (
+                type === 'text' ||
+                type === 'email' ||
+                placeholder.includes('mail') ||
+                placeholder.includes('correo') ||
+                name.includes('mail') ||
+                ariaLabel.includes('mail') ||
+                dataTestId.includes('email')
+              );
+            }
+            if (isPassword) {
+              return (
+                type === 'password' ||
+                placeholder.includes('contraseña') ||
+                placeholder.includes('password') ||
+                name.includes('pass') ||
+                ariaLabel.includes('password') ||
+                dataTestId.includes('pass')
+              );
+            }
+            return false;
+          });
+          const target = filtered.find((input: any) => !input.disabled && input.offsetParent !== null) || filtered[0];
+          if (!target) {
+            return false;
+          }
+          target.focus?.();
+          try {
+            if (target.isContentEditable) {
+              target.textContent = '';
+              target.dispatchEvent(new Event('input', { bubbles: true }));
+              target.textContent = value;
+              target.dispatchEvent(new Event('input', { bubbles: true }));
+              target.dispatchEvent(new Event('change', { bubbles: true }));
+            } else {
+              target.value = '';
+              target.dispatchEvent(new Event('input', { bubbles: true }));
+              target.value = value;
+              target.dispatchEvent(new Event('input', { bubbles: true }));
+              target.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          } catch (error) {
+            (target as any).setAttribute('value', value);
+          }
+          return true;
+        },
+        { value, label }
+      );
+      if (fallbackSuccess) {
+        console.log(`✅ Heuristic fallback success for ${label}`);
+        return true;
+      }
+    } catch (error) {
+      console.warn(`⚠️  Heuristic fallback failed for ${label}: ${(error as Error).message}`);
+    }
     return false;
   }
 
@@ -2030,7 +2142,15 @@ export class AdvancedMarketplaceScraper {
       const frames = page.frames();
       const candidate = frames.find(frame => {
         const url = frame.url();
-        return url.includes('passkey') || url.includes('render-accounts.aliexpress.com') || url.includes('login.alibaba.com');
+        return (
+          url.includes('passkey') ||
+          url.includes('render-accounts.aliexpress.com') ||
+          url.includes('login.alibaba.com') ||
+          url.includes('passport.aliexpress.com') ||
+          url.includes('accounts.aliexpress.com') ||
+          url.includes('seller-passport.aliexpress.com') ||
+          url.includes('aeu.aliexpress.com')
+        );
       });
       if (candidate) {
         const hasDocument = await candidate.evaluate(() => Boolean((globalThis as any).document?.body)).catch(() => false);
