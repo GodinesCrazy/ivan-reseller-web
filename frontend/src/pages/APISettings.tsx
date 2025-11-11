@@ -216,6 +216,10 @@ export default function APISettings() {
     present?: boolean;
   }>>({});
   const [oauthing, setOauthing] = useState<string | null>(null);
+  const [manualCookieModalOpen, setManualCookieModalOpen] = useState(false);
+  const [manualCookieInput, setManualCookieInput] = useState('');
+  const [manualCookieError, setManualCookieError] = useState<string | null>(null);
+  const [manualCookieSaving, setManualCookieSaving] = useState(false);
   const authStatuses = useAuthStatusStore((state) => state.statuses);
   const fetchAuthStatuses = useAuthStatusStore((state) => state.fetchStatuses);
   const requestAuthRefresh = useAuthStatusStore((state) => state.requestRefresh);
@@ -893,30 +897,73 @@ export default function APISettings() {
     }
   };
 
-  const handleManualCookies = async () => {
-    const raw = window.prompt('Pega aquí el JSON generado con document.cookie (ver instrucciones).');
-    if (!raw) {
+  const cookieSnippet = `copy(JSON.stringify(
+  document.cookie.split(';').map(c => {
+    const [name, ...rest] = c.trim().split('=');
+    return { name, value: rest.join('='), domain: '.aliexpress.com', path: '/' };
+  })
+))`;
+
+  const openManualCookieModal = () => {
+    setManualCookieInput('');
+    setManualCookieError(null);
+    setManualCookieModalOpen(true);
+  };
+
+  const closeManualCookieModal = () => {
+    if (!manualCookieSaving) {
+      setManualCookieModalOpen(false);
+    }
+  };
+
+  const handleCopySnippet = async () => {
+    try {
+      await navigator.clipboard.writeText(cookieSnippet);
+      toast.success('Snippet copiado al portapapeles.');
+    } catch (error) {
+      console.error('No se pudo copiar el snippet:', error);
+      toast.error('No fue posible copiar automáticamente. Copia manualmente el texto.');
+    }
+  };
+
+  const handleManualCookiesSave = async () => {
+    if (!manualCookieInput.trim()) {
+      setManualCookieError('Pega el JSON de cookies generado en la consola de AliExpress.');
       return;
     }
+
     let parsed: any;
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(manualCookieInput);
     } catch (error) {
-      toast.error('El formato no es JSON válido. Asegúrate de copiar el resultado del snippet.');
+      setManualCookieError('Formato inválido. Asegúrate de pegar el JSON sin modificarlo.');
       return;
     }
+
     if (!Array.isArray(parsed)) {
-      toast.error('Las cookies deben ser un arreglo JSON.');
+      setManualCookieError('El contenido debe ser un arreglo JSON de cookies.');
       return;
     }
+
+    setManualCookieSaving(true);
+    setManualCookieError(null);
+
     try {
       await api.post('/api/manual-auth/save-cookies', { cookies: parsed });
       toast.success('Cookies guardadas correctamente. La sesión se actualizará en segundos.');
+      setManualCookieModalOpen(false);
+      setManualCookieInput('');
       await requestAuthRefresh('aliexpress');
       await loadCredentials();
     } catch (err: any) {
-      const message = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'No se pudieron guardar las cookies.';
-      toast.error(message);
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        'No se pudieron guardar las cookies.';
+      setManualCookieError(message);
+    } finally {
+      setManualCookieSaving(false);
     }
   };
 
@@ -1101,7 +1148,7 @@ export default function APISettings() {
                               Reintentar automático
                             </button>
                             <button
-                              onClick={handleManualCookies}
+                              onClick={openManualCookieModal}
                               className="inline-flex items-center gap-1 px-3 py-1 rounded border border-green-200 text-green-700 bg-green-50 hover:bg-green-100 transition text-xs"
                               title="Pega el JSON de cookies generado desde la consola de AliExpress"
                             >
@@ -1394,6 +1441,89 @@ export default function APISettings() {
           </div>
         </div>
       </div>
+
+      {manualCookieModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-800">Guardar cookies de AliExpress manualmente</h2>
+              <button
+                onClick={closeManualCookieModal}
+                className="text-gray-500 hover:text-gray-700"
+                disabled={manualCookieSaving}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+              <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
+                <li>En otra pestaña abre <span className="font-medium">AliExpress</span> e inicia sesión.</li>
+                <li>Presiona <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">F12</code>, ve a <span className="font-medium">Console</span> y pega el siguiente snippet. Presiona Enter para copiar las cookies.</li>
+                <li>Vuelve aquí, pega el JSON generado y pulsa <span className="font-medium">Guardar sesión</span>.</li>
+              </ol>
+
+              <div className="rounded border border-gray-200 bg-gray-50 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">Snippet para copiar en la consola</span>
+                  <button
+                    onClick={handleCopySnippet}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+                    type="button"
+                  >
+                    Copiar
+                  </button>
+                </div>
+                <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-800">
+{cookieSnippet}
+                </pre>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">Pega aquí el JSON generado</label>
+                <textarea
+                  value={manualCookieInput}
+                  onChange={(event) => {
+                    setManualCookieInput(event.target.value);
+                    if (manualCookieError) setManualCookieError(null);
+                  }}
+                  rows={6}
+                  className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring focus:ring-blue-200"
+                  placeholder='[{"name":"aep_usuc_f","value":"...","domain":".aliexpress.com","path":"/"}, … ]'
+                  disabled={manualCookieSaving}
+                />
+                {manualCookieError ? (
+                  <p className="mt-2 text-sm text-red-600">{manualCookieError}</p>
+                ) : (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Debe ser el resultado directo del snippet. No edites ni alteres el contenido.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-6 py-4">
+              <button
+                onClick={closeManualCookieModal}
+                className="rounded px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={manualCookieSaving}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleManualCookiesSave}
+                className="inline-flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={manualCookieSaving}
+                type="button"
+              >
+                {manualCookieSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Guardar sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
