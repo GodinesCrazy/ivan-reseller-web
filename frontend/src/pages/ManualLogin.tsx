@@ -212,10 +212,6 @@ export default function ManualLogin() {
             <div className="p-4 bg-green-50 border border-green-200 text-green-700 rounded">
               ✅ Sesión guardada correctamente. Puedes cerrar esta ventana.
             </div>
-          ) : session.status === 'expired' ? (
-            <div className="p-4 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded">
-              ⚠️ Esta sesión ha expirado. Solicita una nueva desde la plataforma.
-            </div>
           ) : (
             <div className="space-y-6">
               <section className="space-y-2">

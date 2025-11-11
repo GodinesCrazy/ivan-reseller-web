@@ -6,13 +6,10 @@
 
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
-import crypto from 'crypto';
-
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY 
-  ? Buffer.from(process.env.ENCRYPTION_KEY, 'hex')
-  : crypto.randomBytes(32);
+import { supportsEnvironments } from '../config/api-keys.config';
 
 interface APIStatus {
+  apiName: string;
   name: string;
   isConfigured: boolean;
   isAvailable: boolean;
@@ -20,6 +17,7 @@ interface APIStatus {
   error?: string;
   message?: string;
   missingFields?: string[];
+  environment?: 'sandbox' | 'production';
 }
 
 interface APICapabilities {
@@ -113,9 +111,11 @@ export class APIAvailabilityService {
       
       if (!credentials) {
         const status: APIStatus = {
+          apiName: 'ebay',
           name: 'eBay Trading API',
           isConfigured: false,
           isAvailable: false,
+          environment,
           lastChecked: new Date(),
           error: 'eBay API not configured for this user'
         };
@@ -126,18 +126,32 @@ export class APIAvailabilityService {
       const validation = this.hasRequiredFields(credentials, requiredFields);
 
       const status: APIStatus = {
+        apiName: 'ebay',
         name: 'eBay Trading API',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
+        environment,
         lastChecked: new Date(),
         missingFields: validation.missing
       };
+
+      const tokenLike =
+        credentials['token'] ||
+        credentials['authToken'] ||
+        credentials['accessToken'];
+      const refreshToken = credentials['refreshToken'];
+
+      if (!tokenLike && !refreshToken) {
+        status.isAvailable = false;
+        status.error = 'Falta token OAuth de eBay';
+        status.message = 'Completa la autorización OAuth para este entorno.';
+      }
 
       if (!validation.valid) {
         const missingList = validation.missing.join(', ');
         status.error = `Missing credentials: ${missingList}`;
         status.message = `Faltan credenciales requeridas: ${missingList}`;
-      } else {
+      } else if (!status.error) {
         status.message = 'API configurada correctamente';
       }
 
@@ -145,9 +159,11 @@ export class APIAvailabilityService {
       return status;
     } catch (error) {
       const status: APIStatus = {
+        apiName: 'ebay',
         name: 'eBay Trading API',
         isConfigured: false,
         isAvailable: false,
+        environment,
         lastChecked: new Date(),
         error: error instanceof Error ? error.message : 'Unknown error'
       };
@@ -183,9 +199,11 @@ export class APIAvailabilityService {
       
       if (!credentials) {
         const status: APIStatus = {
+          apiName: 'amazon',
           name: 'Amazon SP-API',
           isConfigured: false,
           isAvailable: false,
+          environment,
           lastChecked: new Date(),
           error: 'Amazon API not configured for this user'
         };
@@ -196,9 +214,11 @@ export class APIAvailabilityService {
       const validation = this.hasRequiredFields(credentials, requiredFields);
 
       const status: APIStatus = {
+        apiName: 'amazon',
         name: 'Amazon SP-API',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
+        environment,
         lastChecked: new Date(),
         missingFields: validation.missing
       };
@@ -215,9 +235,11 @@ export class APIAvailabilityService {
       return status;
     } catch (error) {
       const status: APIStatus = {
+        apiName: 'amazon',
         name: 'Amazon SP-API',
         isConfigured: false,
         isAvailable: false,
+        environment,
         lastChecked: new Date(),
         error: error instanceof Error ? error.message : 'Unknown error'
       };
@@ -244,9 +266,11 @@ export class APIAvailabilityService {
       
       if (!credentials) {
         const status: APIStatus = {
+          apiName: 'mercadolibre',
           name: 'MercadoLibre API',
           isConfigured: false,
           isAvailable: false,
+          environment,
           lastChecked: new Date(),
           error: 'MercadoLibre API not configured for this user'
         };
@@ -257,9 +281,11 @@ export class APIAvailabilityService {
       const validation = this.hasRequiredFields(credentials, requiredFields);
 
       const status: APIStatus = {
+        apiName: 'mercadolibre',
         name: 'MercadoLibre API',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
+        environment,
         lastChecked: new Date(),
         missingFields: validation.missing
       };
@@ -276,9 +302,11 @@ export class APIAvailabilityService {
       return status;
     } catch (error) {
       const status: APIStatus = {
+        apiName: 'mercadolibre',
         name: 'MercadoLibre API',
         isConfigured: false,
         isAvailable: false,
+        environment,
         lastChecked: new Date(),
         error: error instanceof Error ? error.message : 'Unknown error'
       };
@@ -303,6 +331,7 @@ export class APIAvailabilityService {
       
       if (!credentials) {
         const status: APIStatus = {
+          apiName: 'groq',
           name: 'GROQ AI API',
           isConfigured: false,
           isAvailable: false,
@@ -316,6 +345,7 @@ export class APIAvailabilityService {
       const validation = this.hasRequiredFields(credentials, requiredFields);
 
       const status: APIStatus = {
+        apiName: 'groq',
         name: 'GROQ AI API',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
@@ -335,6 +365,7 @@ export class APIAvailabilityService {
       return status;
     } catch (error) {
       const status: APIStatus = {
+        apiName: 'groq',
         name: 'GROQ AI API',
         isConfigured: false,
         isAvailable: false,
@@ -362,6 +393,7 @@ export class APIAvailabilityService {
       
       if (!credentials) {
         const status: APIStatus = {
+          apiName: 'scraperapi',
           name: 'ScraperAPI',
           isConfigured: false,
           isAvailable: false,
@@ -375,6 +407,7 @@ export class APIAvailabilityService {
       const validation = this.hasRequiredFields(credentials, requiredFields);
 
       const status: APIStatus = {
+        apiName: 'scraperapi',
         name: 'ScraperAPI',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
@@ -394,6 +427,7 @@ export class APIAvailabilityService {
       return status;
     } catch (error) {
       const status: APIStatus = {
+        apiName: 'scraperapi',
         name: 'ScraperAPI',
         isConfigured: false,
         isAvailable: false,
@@ -421,6 +455,7 @@ export class APIAvailabilityService {
       
       if (!credentials) {
         const status: APIStatus = {
+          apiName: 'zenrows',
           name: 'ZenRows',
           isConfigured: false,
           isAvailable: false,
@@ -434,6 +469,7 @@ export class APIAvailabilityService {
       const validation = this.hasRequiredFields(credentials, requiredFields);
 
       const status: APIStatus = {
+        apiName: 'zenrows',
         name: 'ZenRows',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
@@ -453,6 +489,7 @@ export class APIAvailabilityService {
       return status;
     } catch (error) {
       const status: APIStatus = {
+        apiName: 'zenrows',
         name: 'ZenRows',
         isConfigured: false,
         isAvailable: false,
@@ -480,6 +517,7 @@ export class APIAvailabilityService {
       
       if (!credentials) {
         const status: APIStatus = {
+          apiName: '2captcha',
           name: '2Captcha',
           isConfigured: false,
           isAvailable: false,
@@ -493,6 +531,7 @@ export class APIAvailabilityService {
       const validation = this.hasRequiredFields(credentials, requiredFields);
 
       const status: APIStatus = {
+        apiName: '2captcha',
         name: '2Captcha',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
@@ -512,6 +551,7 @@ export class APIAvailabilityService {
       return status;
     } catch (error) {
       const status: APIStatus = {
+        apiName: '2captcha',
         name: '2Captcha',
         isConfigured: false,
         isAvailable: false,
@@ -539,6 +579,7 @@ export class APIAvailabilityService {
       
       if (!credentials) {
         const status: APIStatus = {
+          apiName: 'paypal',
           name: 'PayPal Payouts API',
           isConfigured: false,
           isAvailable: false,
@@ -552,6 +593,7 @@ export class APIAvailabilityService {
       const validation = this.hasRequiredFields(credentials, requiredFields);
 
       const status: APIStatus = {
+        apiName: 'paypal',
         name: 'PayPal Payouts API',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
@@ -571,6 +613,7 @@ export class APIAvailabilityService {
       return status;
     } catch (error) {
       const status: APIStatus = {
+        apiName: 'paypal',
         name: 'PayPal Payouts API',
         isConfigured: false,
         isAvailable: false,
@@ -598,6 +641,7 @@ export class APIAvailabilityService {
       
       if (!credentials) {
         const status: APIStatus = {
+          apiName: 'aliexpress',
           name: 'AliExpress Auto-Purchase',
           isConfigured: false,
           isAvailable: false,
@@ -611,6 +655,7 @@ export class APIAvailabilityService {
       const validation = this.hasRequiredFields(credentials, requiredFields);
 
       const status: APIStatus = {
+        apiName: 'aliexpress',
         name: 'AliExpress Auto-Purchase',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
@@ -630,6 +675,7 @@ export class APIAvailabilityService {
       return status;
     } catch (error) {
       const status: APIStatus = {
+        apiName: 'aliexpress',
         name: 'AliExpress Auto-Purchase',
         isConfigured: false,
         isAvailable: false,
@@ -645,10 +691,20 @@ export class APIAvailabilityService {
    * Get all API statuses for specific user
    */
   async getAllAPIStatus(userId: number): Promise<APIStatus[]> {
-    const statuses = await Promise.all([
-      this.checkEbayAPI(userId),
-      this.checkAmazonAPI(userId),
-      this.checkMercadoLibreAPI(userId),
+    const [
+      ebayProduction,
+      amazonProduction,
+      mercadolibreProduction,
+      groq,
+      scraper,
+      zenrows,
+      captcha,
+      paypal,
+      aliexpress
+    ] = await Promise.all([
+      this.checkEbayAPI(userId, 'production'),
+      this.checkAmazonAPI(userId, 'production'),
+      this.checkMercadoLibreAPI(userId, 'production'),
       this.checkGroqAPI(userId),
       this.checkScraperAPI(userId),
       this.checkZenRowsAPI(userId),
@@ -657,6 +713,46 @@ export class APIAvailabilityService {
       this.checkAliExpressAPI(userId)
     ]);
 
+    const statuses: APIStatus[] = [
+      ebayProduction,
+      amazonProduction,
+      mercadolibreProduction,
+      groq,
+      scraper,
+      zenrows,
+      captcha,
+      paypal,
+      aliexpress
+    ];
+
+    if (supportsEnvironments('ebay')) {
+      const index = statuses.findIndex((status) => status.apiName === 'ebay');
+      const sandboxStatus = await this.checkEbayAPI(userId, 'sandbox');
+      if (index >= 0) {
+        statuses.splice(index + 1, 0, sandboxStatus);
+      } else {
+        statuses.unshift(sandboxStatus);
+      }
+    }
+    if (supportsEnvironments('amazon')) {
+      const index = statuses.findIndex((status) => status.apiName === 'amazon');
+      const sandboxStatus = await this.checkAmazonAPI(userId, 'sandbox');
+      if (index >= 0) {
+        statuses.splice(index + 1, 0, sandboxStatus);
+      } else {
+        statuses.push(sandboxStatus);
+      }
+    }
+    if (supportsEnvironments('mercadolibre')) {
+      const index = statuses.findIndex((status) => status.apiName === 'mercadolibre');
+      const sandboxStatus = await this.checkMercadoLibreAPI(userId, 'sandbox');
+      if (index >= 0) {
+        statuses.splice(index + 1, 0, sandboxStatus);
+      } else {
+        statuses.push(sandboxStatus);
+      }
+    }
+
     return statuses;
   }
 
@@ -664,28 +760,28 @@ export class APIAvailabilityService {
    * Get system capabilities based on configured APIs for specific user
    */
   async getCapabilities(userId: number): Promise<APICapabilities> {
-    const [ebay, amazon, mercadolibre, groq, scraperapi, zenrows, captcha, paypal, aliexpress] = 
-      await Promise.all([
-        this.checkEbayAPI(userId),
-        this.checkAmazonAPI(userId),
-        this.checkMercadoLibreAPI(userId),
-        this.checkGroqAPI(userId),
-        this.checkScraperAPI(userId),
-        this.checkZenRowsAPI(userId),
-        this.check2CaptchaAPI(userId),
-        this.checkPayPalAPI(userId),
-        this.checkAliExpressAPI(userId)
-      ]);
+    const statuses = await this.getAllAPIStatus(userId);
+    const byApi = (api: string) => statuses.filter((status) => status.apiName === api);
+
+    const ebayStatuses = byApi('ebay');
+    const amazonStatuses = byApi('amazon');
+    const mercadolibreStatuses = byApi('mercadolibre');
+    const scraperapi = byApi('scraperapi')[0];
+    const zenrows = byApi('zenrows')[0];
+    const groq = byApi('groq')[0];
+    const captcha = byApi('2captcha')[0];
+    const paypal = byApi('paypal')[0];
+    const aliexpress = byApi('aliexpress')[0];
 
     return {
-      canPublishToEbay: ebay.isAvailable,
-      canPublishToAmazon: amazon.isAvailable,
-      canPublishToMercadoLibre: mercadolibre.isAvailable,
-      canScrapeAliExpress: scraperapi.isAvailable || zenrows.isAvailable,
-      canUseAI: groq.isAvailable,
-      canSolveCaptchas: captcha.isAvailable,
-      canPayCommissions: paypal.isAvailable,
-      canAutoPurchaseAliExpress: aliexpress.isAvailable
+      canPublishToEbay: ebayStatuses.some((status) => status.isAvailable),
+      canPublishToAmazon: amazonStatuses.some((status) => status.isAvailable),
+      canPublishToMercadoLibre: mercadolibreStatuses.some((status) => status.isAvailable),
+      canScrapeAliExpress: Boolean(scraperapi?.isAvailable || zenrows?.isAvailable),
+      canUseAI: Boolean(groq?.isAvailable),
+      canSolveCaptchas: Boolean(captcha?.isAvailable),
+      canPayCommissions: Boolean(paypal?.isAvailable),
+      canAutoPurchaseAliExpress: Boolean(aliexpress?.isAvailable)
     };
   }
 
@@ -707,8 +803,14 @@ export class APIAvailabilityService {
    * Clear specific API cache for specific user
    */
   clearAPICache(userId: number, apiName: string): void {
-    const cacheKey = this.getCacheKey(userId, apiName.toLowerCase());
-    this.cache.delete(cacheKey);
+    const prefix = `user_${userId}_${apiName.toLowerCase()}`;
+    const keysToDelete: string[] = [];
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(prefix)) {
+        keysToDelete.push(key);
+      }
+    }
+    keysToDelete.forEach(key => this.cache.delete(key));
     logger.info(`Cache cleared for user ${userId}, API: ${apiName}`);
   }
 

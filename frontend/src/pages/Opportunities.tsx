@@ -6,6 +6,24 @@ import { useAuthStatusStore } from '@stores/authStatusStore';
 
 type Marketplace = 'ebay' | 'amazon' | 'mercadolibre';
 
+type EnvironmentKey = 'sandbox' | 'production';
+
+interface EnvStatus {
+  isConfigured: boolean;
+  isAvailable: boolean;
+  message?: string;
+  error?: string;
+}
+
+type MarketplaceEnvStatusMap = Record<EnvironmentKey, EnvStatus>;
+
+const createEmptyEnvStatus = (): EnvStatus => ({
+  isConfigured: false,
+  isAvailable: false,
+  message: undefined,
+  error: undefined,
+});
+
 interface OpportunityItem {
   productId?: string;
   title: string;
@@ -55,10 +73,11 @@ export default function Opportunities() {
   const fetchAuthStatuses = useAuthStatusStore((state) => state.fetchStatuses);
   const requestAuthRefresh = useAuthStatusStore((state) => state.requestRefresh);
   const [envStatusLoaded, setEnvStatusLoaded] = useState(false);
-  const [marketplaceEnvStatus, setMarketplaceEnvStatus] = useState<Record<Marketplace, { sandbox: boolean; production: boolean }>>({
-    ebay: { sandbox: false, production: false },
-    amazon: { sandbox: false, production: false },
-    mercadolibre: { sandbox: false, production: false },
+  const [workflowEnvironment, setWorkflowEnvironment] = useState<EnvironmentKey | null>(null);
+  const [marketplaceEnvStatus, setMarketplaceEnvStatus] = useState<Record<Marketplace, MarketplaceEnvStatusMap>>({
+    ebay: { sandbox: createEmptyEnvStatus(), production: createEmptyEnvStatus() },
+    amazon: { sandbox: createEmptyEnvStatus(), production: createEmptyEnvStatus() },
+    mercadolibre: { sandbox: createEmptyEnvStatus(), production: createEmptyEnvStatus() },
   });
 
   const marketplacesParam = useMemo(() => marketplaces.join(','), [marketplaces]);
@@ -110,36 +129,59 @@ export default function Opportunities() {
   }
 
   const loadMarketplaceEnvStatus = useCallback(async () => {
-    try {
-      const response = await api.get('/api/api-credentials');
-      const entries = response.data?.data || [];
-      const normalized: Record<Marketplace, { sandbox: boolean; production: boolean }> = {
-        ebay: { sandbox: false, production: false },
-        amazon: { sandbox: false, production: false },
-        mercadolibre: { sandbox: false, production: false },
-      };
+    const createNormalizedState = (): Record<Marketplace, MarketplaceEnvStatusMap> => ({
+      ebay: { sandbox: createEmptyEnvStatus(), production: createEmptyEnvStatus() },
+      amazon: { sandbox: createEmptyEnvStatus(), production: createEmptyEnvStatus() },
+      mercadolibre: { sandbox: createEmptyEnvStatus(), production: createEmptyEnvStatus() },
+    });
 
-      entries.forEach((entry: any) => {
-        const apiName = entry.apiName;
-        if (!apiName) return;
-        if (normalized[apiName as Marketplace]) {
-          const env = entry.environment === 'sandbox' ? 'sandbox' : 'production';
-          if (entry.isActive) {
-            normalized[apiName as Marketplace][env] = true;
-          }
+    try {
+      const response = await api.get('/api/api-credentials/status');
+      const statuses: any[] = response.data?.data?.apis || [];
+      const normalized = createNormalizedState();
+
+      statuses.forEach((entry) => {
+        const apiName = entry?.apiName as Marketplace | undefined;
+        if (!apiName || !normalized[apiName]) {
+          return;
         }
+
+        const environment: EnvironmentKey =
+          entry?.environment === 'sandbox' ? 'sandbox' : 'production';
+
+        normalized[apiName][environment] = {
+          isConfigured: Boolean(entry?.isConfigured),
+          isAvailable: Boolean(entry?.isAvailable),
+          message: entry?.message || undefined,
+          error: entry?.error || undefined,
+        };
       });
 
       setMarketplaceEnvStatus(normalized);
-      setEnvStatusLoaded(true);
     } catch (error: any) {
       console.error('Error loading marketplace statuses:', error?.message || error);
+      toast.error('No se pudieron cargar los estados de credenciales. Verifica tu conexión.');
+    } finally {
+      setEnvStatusLoaded(true);
+    }
+  }, []);
+
+  const loadWorkflowEnvironment = useCallback(async () => {
+    try {
+      const response = await api.get('/api/workflow/environment');
+      const env = response.data?.environment;
+      if (env === 'sandbox' || env === 'production') {
+        setWorkflowEnvironment(env);
+      }
+    } catch (error: any) {
+      console.error('Error loading workflow environment:', error?.message || error);
     }
   }, []);
 
   useEffect(() => {
     fetchAuthStatuses();
     loadMarketplaceEnvStatus();
+    loadWorkflowEnvironment();
     search();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -148,7 +190,9 @@ export default function Opportunities() {
     setMarketplaces(prev => prev.includes(mp) ? prev.filter(m => m !== mp) : [...prev, mp]);
   }
 
-  const resolveEnvironmentForMarketplace = async (marketplace: Marketplace): Promise<'sandbox' | 'production' | null> => {
+  const resolveEnvironmentForMarketplace = async (
+    marketplace: Marketplace
+  ): Promise<EnvironmentKey | null> => {
     if (!envStatusLoaded) {
       await loadMarketplaceEnvStatus();
     }
@@ -159,32 +203,72 @@ export default function Opportunities() {
       return null;
     }
 
-    const available = Object.entries(status).filter(([, active]) => active) as Array<['sandbox' | 'production', boolean]>;
+    const entries = Object.entries(status) as Array<[EnvironmentKey, EnvStatus]>;
+    const available = entries.filter(([, info]) => info.isAvailable);
+    const preferredEnv = workflowEnvironment && status[workflowEnvironment];
+
+    if (preferredEnv?.isAvailable && workflowEnvironment) {
+      return workflowEnvironment;
+    }
+
     if (available.length === 0) {
-      toast.error(`No hay credenciales activas de ${marketplace} en sandbox ni producción.`);
+      const details = entries
+        .map(([env, info]) => {
+          if (info.isConfigured) {
+            return `${env}: ${info.error || info.message || 'Configura OAuth y vuelve a intentar.'}`;
+          }
+          return `${env}: Sin credenciales activas.`;
+        })
+        .join(' • ');
+
+      toast.error(
+        `No hay credenciales listas para ${marketplace}. ${details || ''}`.trim()
+      );
       return null;
     }
 
     if (available.length === 1) {
-      return available[0][0];
+      const selected = available[0][0];
+      if (workflowEnvironment && workflowEnvironment !== selected) {
+        toast.info(
+          `Usaremos ${selected} para ${marketplace} porque ${workflowEnvironment} no está disponible.`
+        );
+      }
+      return selected;
     }
 
-    const choice = window.prompt(`Selecciona el entorno para ${marketplace} (escribe "sandbox" o "production")`, 'production');
+    if (workflowEnvironment && status[workflowEnvironment]?.isConfigured) {
+      const preferred = status[workflowEnvironment];
+      if (preferred?.isAvailable) {
+        return workflowEnvironment;
+      }
+    }
+
+    const defaultPromptValue = workflowEnvironment || 'production';
+    const choice = window.prompt(
+      `Selecciona el entorno para ${marketplace} (sandbox/production). Preferencia actual: ${defaultPromptValue}`,
+      defaultPromptValue
+    );
     if (!choice) {
       toast.info('Operación cancelada por el usuario.');
       return null;
     }
+
     const normalizedChoice = choice.toLowerCase();
     if (normalizedChoice !== 'sandbox' && normalizedChoice !== 'production') {
       toast.error('Valor inválido. Debes escribir "sandbox" o "production".');
       return null;
     }
-    if (!status[normalizedChoice as 'sandbox' | 'production']) {
-      toast.error(`No hay credenciales activas en ${normalizedChoice} para ${marketplace}.`);
+
+    const selectedInfo = status[normalizedChoice as EnvironmentKey];
+    if (!selectedInfo?.isAvailable) {
+      toast.error(
+        `No hay credenciales disponibles en ${normalizedChoice} para ${marketplace}.`
+      );
       return null;
     }
 
-    return normalizedChoice as 'sandbox' | 'production';
+    return normalizedChoice as EnvironmentKey;
   };
 
   async function createAndPublishProduct(item: OpportunityItem, targetMarketplace: Marketplace) {
@@ -241,6 +325,9 @@ export default function Opportunities() {
       toast.error(errorMessage);
     } finally {
       setPublishing(prev => ({ ...prev, [itemIndex]: false }));
+      loadMarketplaceEnvStatus().catch(() => {
+        /* silent */
+      });
     }
   }
 

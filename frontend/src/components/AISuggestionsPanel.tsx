@@ -76,8 +76,9 @@ export default function AISuggestionsPanel() {
       const response = await api.get('/api/ai-suggestions', {
         params: selectedFilter !== 'all' ? { filter: selectedFilter } : {}
       });
-      
-      const suggestionsData = response.data?.suggestions || [];
+      const suggestionsData: AISuggestion[] = Array.isArray(response.data?.suggestions)
+        ? response.data.suggestions
+        : [];
       setSuggestions(suggestionsData);
       setAutomationRules([]); // TODO: Implementar reglas de automatización
     } catch (error: any) {
@@ -96,7 +97,9 @@ export default function AISuggestionsPanel() {
         category: selectedFilter !== 'all' ? selectedFilter : undefined
       });
       
-      const newSuggestions = response.data?.suggestions || [];
+      const newSuggestions: AISuggestion[] = Array.isArray(response.data?.suggestions)
+        ? response.data.suggestions
+        : [];
       
       if (newSuggestions.length > 0) {
         // ✅ Agregar nuevas sugerencias al estado actual
@@ -114,7 +117,7 @@ export default function AISuggestionsPanel() {
           await loadSuggestions();
         }, 1000);
       } else {
-        toast.warn('No se generaron nuevas sugerencias en este momento');
+        toast('No se generaron nuevas sugerencias en este momento', { icon: 'ℹ️' });
       }
     } catch (error: any) {
       console.error('Error generating suggestions:', error);
