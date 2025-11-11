@@ -286,7 +286,9 @@ export class AdvancedMarketplaceScraper {
 
     const cookies = await this.fetchAliExpressCookies(userId);
 
-    if (cookies.length > 0) {
+    const hasManualCookies = cookies.length > 0;
+
+    if (hasManualCookies) {
       const tempPage = await this.browser!.newPage();
       try {
         await tempPage.goto('https://www.aliexpress.com', { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
@@ -315,8 +317,11 @@ export class AdvancedMarketplaceScraper {
         await tempPage.close().catch(() => {});
       }
     }
-
-    await this.ensureAliExpressLogin(userId);
+    if (!hasManualCookies) {
+      await this.ensureAliExpressLogin(userId);
+    } else {
+      console.log('✅ Using manual AliExpress session without automated login attempt');
+    }
 
     const page = await this.browser!.newPage();
 
