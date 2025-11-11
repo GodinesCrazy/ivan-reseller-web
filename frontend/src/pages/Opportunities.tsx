@@ -136,7 +136,7 @@ export default function Opportunities() {
     });
 
     try {
-      const response = await api.get('/api/api-credentials/status');
+      const response = await api.get('/api/credentials/status');
       const statuses: any[] = response.data?.data?.apis || [];
       const normalized = createNormalizedState();
 
