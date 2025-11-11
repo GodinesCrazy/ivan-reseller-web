@@ -19,17 +19,32 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuthStatusStore } from '@stores/authStatusStore';
+import { useAuthStore } from '@stores/authStore';
 import { toast } from 'sonner';
 
 // Tipos según backend
 interface APICredential {
   id: number;
-  userId: number;
   apiName: string;
   environment: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  scope: 'user' | 'global';
+  ownerUserId?: number | null;
+  sharedByUserId?: number | null;
+  owner?: {
+    id: number;
+    username: string;
+    role: string;
+    fullName?: string | null;
+  } | null;
+  sharedBy?: {
+    id: number;
+    username: string;
+    role: string;
+    fullName?: string | null;
+  } | null;
 }
 
 interface APIStatus {
@@ -220,6 +235,11 @@ export default function APISettings() {
   const [manualCookieInput, setManualCookieInput] = useState('');
   const [manualCookieError, setManualCookieError] = useState<string | null>(null);
   const [manualCookieSaving, setManualCookieSaving] = useState(false);
+  const authUser = useAuthStore((state) => state.user);
+  const isAdmin = authUser?.role === 'ADMIN';
+  const currentUserId = authUser?.id ?? null;
+  const [scopeSelection, setScopeSelection] = useState<Record<string, 'user' | 'global'>>({});
+  const [maskedScopes, setMaskedScopes] = useState<Record<string, boolean>>({});
   const authStatuses = useAuthStatusStore((state) => state.statuses);
   const fetchAuthStatuses = useAuthStatusStore((state) => state.fetchStatuses);
   const requestAuthRefresh = useAuthStatusStore((state) => state.requestRefresh);
@@ -256,14 +276,56 @@ export default function APISettings() {
       
       // Cargar credenciales configuradas desde /api/credentials
       const credsResponse = await api.get('/api/credentials');
-      const configuredApis = credsResponse.data?.data || [];
+      const configuredApisRaw: any[] = Array.isArray(credsResponse.data?.data)
+        ? credsResponse.data.data
+        : [];
       
-      // Crear un mapa de APIs configuradas por apiName-environment
-      const configuredMap = new Map(
-        configuredApis.map((c: any) => [makeEnvKey(c.apiName, c.environment || 'production'), c])
-      );
+      // Crear un mapa de APIs configuradas por apiName-environment priorizando credenciales personales del usuario actual
+      const configuredMap = new Map<string, any>();
+      configuredApisRaw.forEach((record: any) => {
+        const env = record.environment || 'production';
+        const key = makeEnvKey(record.apiName, env);
+        const ownerId = record.ownerUserId ?? record.userId ?? null;
+        const existing = configuredMap.get(key);
+        if (!existing) {
+          configuredMap.set(key, record);
+          return;
+        }
+
+        const existingOwnerId = existing.ownerUserId ?? existing.userId ?? null;
+        const existingScope = existing.scope || 'user';
+        const recordScope = record.scope || 'user';
+        const recordIsPersonal = recordScope === 'user' && ownerId !== null && ownerId === currentUserId;
+        const existingIsPersonal =
+          existingScope === 'user' && existingOwnerId !== null && existingOwnerId === currentUserId;
+
+        // Preferir credencial personal del usuario actual
+        if (!existingIsPersonal && recordIsPersonal) {
+          configuredMap.set(key, record);
+          return;
+        }
+
+        // Si ambas son del mismo tipo, conservar la más reciente
+        if (
+          existingScope === recordScope &&
+          (record.updatedAt && (!existing.updatedAt || new Date(record.updatedAt).getTime() > new Date(existing.updatedAt).getTime()))
+        ) {
+          configuredMap.set(key, record);
+          return;
+        }
+
+        // Si ninguna es personal y no hay personal disponible, preferir la más reciente
+        if (!existingIsPersonal && !recordIsPersonal) {
+          const existingUpdated = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+          const recordUpdated = record.updatedAt ? new Date(record.updatedAt).getTime() : 0;
+          if (recordUpdated > existingUpdated) {
+            configuredMap.set(key, record);
+          }
+        }
+      });
       
       const defaultEnvSelection: Record<string, string> = {};
+      const newScopeSelection: Record<string, 'user' | 'global'> = {};
       const creds: APICredential[] = [];
       
       apisData.forEach((api: any) => {
@@ -276,34 +338,48 @@ export default function APISettings() {
             const envData = (api.environments?.[env] ?? {}) as any;
             const key = makeEnvKey(api.apiName, env);
             const configured = configuredMap.get(key) as any;
+            const scope = (configured?.scope as 'user' | 'global') || 'user';
+            newScopeSelection[key] = scope;
             creds.push({
-              id: configured ? 1 : 0,
-              userId: 0,
+              id: configured?.id ?? 0,
               apiName: api.apiName,
               environment: env,
-              isActive: configured?.isActive || envData.isActive || false,
+              isActive: configured?.isActive ?? envData.isActive ?? false,
               createdAt: configured?.updatedAt || envData.lastUpdated || new Date().toISOString(),
               updatedAt: configured?.updatedAt || envData.lastUpdated || new Date().toISOString(),
+              scope,
+              ownerUserId: configured?.ownerUserId ?? configured?.userId ?? null,
+              sharedByUserId: configured?.sharedByUserId ?? null,
+              owner: configured?.owner ?? null,
+              sharedBy: configured?.sharedBy ?? null,
             });
           });
         } else {
           const key = makeEnvKey(api.apiName, 'production');
           const configured = configuredMap.get(key) as any;
           defaultEnvSelection[api.apiName] = 'production';
+          const scope = (configured?.scope as 'user' | 'global') || 'user';
+          newScopeSelection[key] = scope;
           creds.push({
-            id: configured ? 1 : 0,
-            userId: 0,
+            id: configured?.id ?? 0,
             apiName: api.apiName,
             environment: 'production',
-            isActive: configured?.isActive || api.isActive || false,
+            isActive: configured?.isActive ?? api.isActive ?? false,
             createdAt: configured?.updatedAt || api.lastUpdated || new Date().toISOString(),
             updatedAt: configured?.updatedAt || api.lastUpdated || new Date().toISOString(),
+            scope,
+            ownerUserId: configured?.ownerUserId ?? configured?.userId ?? null,
+            sharedByUserId: configured?.sharedByUserId ?? null,
+            owner: configured?.owner ?? null,
+            sharedBy: configured?.sharedBy ?? null,
           });
         }
       });
       setCredentials(creds);
       setFormData({});
       setLoadingEnvironment({});
+      setMaskedScopes({});
+      setScopeSelection(newScopeSelection);
       setSelectedEnvironment(prev => {
         const next = { ...prev };
         Object.entries(defaultEnvSelection).forEach(([apiName, env]) => {
@@ -425,7 +501,12 @@ export default function APISettings() {
     }
   };
 
-  const loadEnvironmentForm = async (apiName: string, environment: string, force = false) => {
+  const loadEnvironmentForm = async (
+    apiName: string,
+    environment: string,
+    force = false,
+    scopeOverride?: 'user' | 'global'
+  ) => {
     const formKey = makeFormKey(apiName, environment);
     if (!force && formData[formKey]) {
       return;
@@ -433,11 +514,33 @@ export default function APISettings() {
 
     setLoadingEnvironment(prev => ({ ...prev, [formKey]: true }));
     try {
+      const scopeKey = makeEnvKey(apiName, environment);
+      const effectiveScope = scopeOverride || scopeSelection[scopeKey] || 'user';
       const { data } = await api.get(`/api/credentials/${apiName}`, {
-        params: { environment },
+        params: { environment, scope: effectiveScope },
       });
 
       const creds = data?.data?.credentials || {};
+      const responseScope = data?.data?.scope as 'user' | 'global' | undefined;
+      const masked = !!data?.data?.masked;
+
+      if (responseScope) {
+        setScopeSelection(prev => ({
+          ...prev,
+          [scopeKey]: responseScope,
+        }));
+      }
+
+      setMaskedScopes(prev => {
+        const next = { ...prev };
+        if (masked) {
+          next[formKey] = true;
+        } else {
+          delete next[formKey];
+        }
+        return next;
+      });
+
       const normalized: Record<string, string> = {};
       Object.entries(creds || {}).forEach(([key, value]) => {
         if (value === undefined || value === null) {
@@ -459,7 +562,30 @@ export default function APISettings() {
 
   const handleEnvironmentSelect = (apiName: string, environment: string) => {
     setSelectedEnvironment(prev => ({ ...prev, [apiName]: environment }));
-    loadEnvironmentForm(apiName, environment, true);
+    const scopeKey = makeEnvKey(apiName, environment);
+    const credential = getCredentialForAPI(apiName, environment);
+    const scopeForEnv = credential?.scope || scopeSelection[scopeKey] || 'user';
+    setScopeSelection(prev => ({ ...prev, [scopeKey]: scopeForEnv }));
+    loadEnvironmentForm(apiName, environment, true, scopeForEnv);
+  };
+
+  const handleScopeChange = (apiName: string, environment: string, scope: 'user' | 'global') => {
+    if (!isAdmin) {
+      return;
+    }
+    const scopeKey = makeEnvKey(apiName, environment);
+    setScopeSelection(prev => ({ ...prev, [scopeKey]: scope }));
+    // Limpiar datos del formulario para evitar inconsistencias
+    setFormData(prev => {
+      const formKey = makeFormKey(apiName, environment);
+      if (!prev[formKey]) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[formKey];
+      return next;
+    });
+    loadEnvironmentForm(apiName, environment, true, scope);
   };
 
   const handleInputChange = (apiName: string, environment: string, fieldKey: string, value: string) => {
@@ -479,10 +605,21 @@ export default function APISettings() {
     try {
       const apiDef = API_DEFINITIONS[apiName];
       const backendDef = backendApiDefinitions[apiName];
+      const credential = getCredentialForAPI(apiName, selectedEnvironment[apiName] || 'production');
       const supportsEnv = backendDef?.supportsEnvironments;
       const currentEnvironment = supportsEnv
         ? selectedEnvironment[apiName] || 'production'
         : 'production';
+      const scopeKey = makeEnvKey(apiName, currentEnvironment);
+      const currentScope =
+        scopeSelection[scopeKey] ||
+        credential?.scope ||
+        'user';
+      if (!isAdmin && currentScope === 'global') {
+        setSaving(null);
+        setError('Estas credenciales son globales y solo el administrador puede modificarlas.');
+        return;
+      }
       const formKey = makeFormKey(apiName, currentEnvironment);
       const fieldsToUse = supportsEnv
         ? backendDef?.environments?.[currentEnvironment]?.fields || apiDef.fields
@@ -597,7 +734,8 @@ export default function APISettings() {
         hasEmail: !!credentials.email,
         hasPassword: !!credentials.password,
         twoFactorEnabled: credentials.twoFactorEnabled,
-        twoFactorEnabledType: typeof credentials.twoFactorEnabled
+        twoFactorEnabledType: typeof credentials.twoFactorEnabled,
+        scope: currentScope,
       });
 
       // Guardar credencial usando /api/credentials
@@ -606,6 +744,7 @@ export default function APISettings() {
         environment: currentEnvironment,
         credentials,
         isActive: true,
+        scope: currentScope,
       });
 
       console.log(`[APISettings] Save response for ${apiName}:`, response.data);
@@ -636,6 +775,11 @@ export default function APISettings() {
     setTesting(apiName);
     setError(null);
     try {
+      const scopeKey = makeEnvKey(apiName, environment);
+      const currentScope =
+        scopeSelection[scopeKey] ||
+        getCredentialForAPI(apiName, environment)?.scope ||
+        'user';
       // ✅ Obtener credenciales del formulario si están presentes
       const formKey = makeFormKey(apiName, environment);
       let currentFormData = formData[formKey] || {};
@@ -644,7 +788,7 @@ export default function APISettings() {
       if (Object.keys(currentFormData).length === 0) {
         try {
           const { data } = await api.get(`/api/credentials/${apiName}`, {
-            params: { environment },
+            params: { environment, scope: currentScope },
           });
           const creds = data?.data?.credentials || {};
           if (Object.keys(creds).length > 0) {
@@ -741,6 +885,7 @@ export default function APISettings() {
       // ✅ Si hay credenciales en el formulario, enviarlas para test temporal
       const response = await api.post(`/api/credentials/${apiName}/test`, {
         environment,
+        scope: currentScope,
         ...(testCredentials && { credentials: testCredentials }), // Enviar credenciales del formulario si existen
       });
 
@@ -805,8 +950,18 @@ export default function APISettings() {
     setOauthing(apiName);
     setError(null);
     try {
+      const scopeKey = makeEnvKey(apiName, environment);
+      const currentScope =
+        scopeSelection[scopeKey] ||
+        getCredentialForAPI(apiName, environment)?.scope ||
+        'user';
+      if (!isAdmin && currentScope === 'global') {
+        alert('Estas credenciales son compartidas por el administrador. Solicita que el administrador ejecute la autorización OAuth.');
+        setOauthing(null);
+        return;
+      }
       const credentialResponse = await api.get(`/api/credentials/${apiName}`, {
-        params: { environment },
+        params: { environment, scope: currentScope },
       });
       const storedCreds = credentialResponse.data?.data?.credentials || {};
       const ruName = storedCreds.redirectUri || storedCreds.ruName || storedCreds.RuName;
@@ -858,9 +1013,19 @@ export default function APISettings() {
   const handleToggle = async (apiName: string, environment: string, currentActive: boolean) => {
     setError(null);
     try {
+      const scopeKey = makeEnvKey(apiName, environment);
+      const scope =
+        getCredentialForAPI(apiName, environment)?.scope ||
+        scopeSelection[scopeKey] ||
+        'user';
+      if (!isAdmin && scope === 'global') {
+        alert('Solo el administrador puede activar o desactivar credenciales globales.');
+        return;
+      }
       // Toggle activo/inactivo usando el endpoint correcto: /api/credentials/:apiName/toggle
       await api.put(`/api/credentials/${apiName}/toggle`, {
         environment,
+        scope,
       });
       
       // Recargar credenciales para obtener el estado actualizado
@@ -882,8 +1047,18 @@ export default function APISettings() {
     setDeleting(apiName);
     setError(null);
     try {
+      const scopeKey = makeEnvKey(apiName, environment);
+      const scope =
+        getCredentialForAPI(apiName, environment)?.scope ||
+        scopeSelection[scopeKey] ||
+        'user';
+      if (!isAdmin && scope === 'global') {
+        alert('Solo el administrador puede eliminar credenciales globales.');
+        setDeleting(null);
+        return;
+      }
       // Eliminar usando el endpoint correcto con query parameter para environment
-      await api.delete(`/api/credentials/${apiName}?environment=${environment}`);
+      await api.delete(`/api/credentials/${apiName}?environment=${environment}&scope=${scope}`);
       
       // Recargar credenciales
       await loadCredentials();
@@ -1064,6 +1239,13 @@ export default function APISettings() {
           const isTesting = testing === apiDef.name;
           const isDeleting = deleting === apiDef.name;
           const formKey = makeFormKey(apiDef.name, currentEnvironment);
+          const scopeKey = makeEnvKey(apiDef.name, currentEnvironment);
+          const currentScope =
+            scopeSelection[scopeKey] ||
+            credential?.scope ||
+            'user';
+          const isGlobalScope = currentScope === 'global';
+          const isReadOnly = (!isAdmin && isGlobalScope) || !!maskedScopes[formKey];
 
           const fieldsToUse = supportsEnv
             ? backendDef?.environments?.[currentEnvironment]?.fields || apiDef.fields
@@ -1102,6 +1284,27 @@ export default function APISettings() {
                       )}
                     </h3>
                     <p className="text-sm text-gray-600">{description}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                      <span
+                        className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border ${
+                          isGlobalScope
+                            ? 'bg-purple-50 border-purple-200 text-purple-700'
+                            : 'bg-gray-100 border-gray-200 text-gray-600'
+                        }`}
+                      >
+                        {isGlobalScope ? 'Compartida (global)' : 'Personal'}
+                      </span>
+                      {isGlobalScope && credential?.owner ? (
+                        <span className="text-gray-500">
+                          Administrada por {credential.owner.fullName || credential.owner.username}
+                        </span>
+                      ) : null}
+                      {!isGlobalScope && credential?.sharedBy ? (
+                        <span className="text-gray-500">
+                          Actualizada por {credential.sharedBy.fullName || credential.sharedBy.username}
+                        </span>
+                      ) : null}
+                    </div>
                     {['ebay', 'amazon', 'mercadolibre'].includes(apiDef.name) && diag && (
                       <div className="mt-2 space-y-1 text-sm">
                         {diag.issues?.length ? (
@@ -1211,11 +1414,12 @@ export default function APISettings() {
                       {/* Toggle Active */}
                       <button
                         onClick={() => handleToggle(apiDef.name, currentEnvironment, credential.isActive)}
+                        disabled={!isAdmin && isGlobalScope}
                         className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                           credential.isActive
                             ? 'bg-green-100 text-green-700 hover:bg-green-200'
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
+                        } ${!isAdmin && isGlobalScope ? 'opacity-60 cursor-not-allowed' : ''}`}
                       >
                         {credential.isActive ? 'ON' : 'OFF'}
                       </button>
@@ -1340,6 +1544,50 @@ export default function APISettings() {
                       </div>
                     )}
 
+                    {isAdmin && (
+                      <div className="flex flex-col gap-2">
+                        <span className="text-sm font-medium text-gray-600">Alcance:</span>
+                        <div className="inline-flex rounded border border-gray-200 overflow-hidden w-fit">
+                          <button
+                            onClick={() => handleScopeChange(apiDef.name, currentEnvironment, 'user')}
+                            className={`px-3 py-1 text-sm font-medium transition ${
+                              currentScope === 'user'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-white text-gray-600 hover:bg-gray-100'
+                            }`}
+                          >
+                            Personal
+                          </button>
+                          <button
+                            onClick={() => handleScopeChange(apiDef.name, currentEnvironment, 'global')}
+                            className={`px-3 py-1 text-sm font-medium transition ${
+                              currentScope === 'global'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-white text-gray-600 hover:bg-gray-100'
+                            }`}
+                          >
+                            Compartida
+                          </button>
+                        </div>
+                        {currentScope === 'user' && credential?.sharedBy ? (
+                          <p className="text-xs text-gray-500">
+                            Última actualización por {credential.sharedBy.fullName || credential.sharedBy.username}
+                          </p>
+                        ) : null}
+                        {currentScope === 'global' && credential?.owner ? (
+                          <p className="text-xs text-gray-500">
+                            Administrada por {credential.owner.fullName || credential.owner.username}
+                          </p>
+                        ) : null}
+                      </div>
+                    )}
+
+                    {!isAdmin && isGlobalScope && (
+                      <div className="px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded text-sm">
+                        Estas credenciales son compartidas por el administrador. Se aplican automáticamente y no es necesario editarlas.
+                      </div>
+                    )}
+
                     {fieldsToUse.map((field: any) => {
                       // Normalizar campo del backend o del frontend
                       const fieldKey = field.key;
@@ -1351,6 +1599,7 @@ export default function APISettings() {
                       const showKey = `${formKey}:${fieldKey}`;
                       const isDisabled = field.disabled || false;
                       const defaultValue = field.value !== undefined && field.value !== null ? String(field.value) : '';
+                      const inputDisabled = isDisabled || isReadOnly;
 
                       return (
                         <div key={fieldKey}>
@@ -1364,9 +1613,9 @@ export default function APISettings() {
                               value={formData[formKey]?.[fieldKey] ?? defaultValue}
                               onChange={(e) => handleInputChange(apiDef.name, currentEnvironment, fieldKey, e.target.value)}
                               placeholder={fieldPlaceholder}
-                              disabled={isDisabled}
+                              disabled={inputDisabled}
                               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                isDisabled ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'border-gray-300'
+                                inputDisabled ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'border-gray-300'
                               }`}
                             />
                             {fieldType === 'password' && (
@@ -1393,7 +1642,7 @@ export default function APISettings() {
                     <div className="flex gap-2 pt-2">
                       <button
                         onClick={() => handleSave(apiDef.name)}
-                        disabled={isSaving}
+                        disabled={isSaving || isReadOnly}
                         className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isSaving ? (

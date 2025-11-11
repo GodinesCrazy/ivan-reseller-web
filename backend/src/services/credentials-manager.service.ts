@@ -8,7 +8,7 @@
  * - Soportar ambientes sandbox/production
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type CredentialScope } from '@prisma/client';
 import crypto from 'crypto';
 import { z } from 'zod';
 import type { 
@@ -177,63 +177,137 @@ function decryptCredentials(encryptedData: string): Record<string, any> {
  * Servicio de gestión de credenciales
  */
 export class CredentialsManager {
+  private static normalizeCredential(
+    apiName: ApiName,
+    credential: Record<string, any>,
+    environment: ApiEnvironment
+  ): void {
+    if (!credential || typeof credential !== 'object') {
+      return;
+    }
+
+    const creds = credential as any;
+
+    if (creds.apiKey && typeof creds.apiKey === 'string') {
+      creds.apiKey = creds.apiKey.trim();
+    }
+
+    if (apiName === 'ebay') {
+      if (creds.authToken && !creds.token) {
+        creds.token = creds.authToken;
+      }
+      if (typeof creds.sandbox === 'undefined') {
+        creds.sandbox = environment === 'sandbox';
+      }
+    }
+  }
+
   /**
    * Obtener credenciales de una API para un usuario
    */
   static async getCredentials<T extends ApiName>(
     userId: number,
     apiName: T,
-    environment: ApiEnvironment = 'production'
+    environment: ApiEnvironment = 'production',
+    options: {
+      includeGlobal?: boolean;
+    } = {}
   ): Promise<ApiCredentialsMap[T] | null> {
     try {
-      // Buscar credenciales en la base de datos
-      const credential = await prisma.apiCredential.findFirst({
-        where: {
-          userId,
-          apiName,
-          environment: supportsEnvironments(apiName) ? environment : 'production',
-          isActive: true,
-        },
-      });
-
-      if (!credential) {
-        return null;
-      }
-
-      // Desencriptar y retornar
-      const decrypted = decryptCredentials(credential.credentials);
-      
-      // ✅ Limpiar API keys después de desencriptar
-      if (decrypted && typeof decrypted === 'object') {
-        const creds = decrypted as any;
-        if (creds.apiKey && typeof creds.apiKey === 'string') {
-          creds.apiKey = creds.apiKey.trim();
-        }
-        if (apiName === 'ebay') {
-          if (creds.authToken && !creds.token) {
-            creds.token = creds.authToken;
-          }
-          if (typeof creds.sandbox === 'undefined') {
-            creds.sandbox = environment === 'sandbox';
-          }
-        }
-      }
-      
-      return decrypted as ApiCredentialsMap[T];
+      const entry = await this.getCredentialEntry(userId, apiName, environment, options);
+      return entry?.credentials ?? null;
     } catch (error) {
       console.error(`Error getting credentials for ${apiName}:`, error);
       return null;
     }
   }
 
+  static async getCredentialEntry<T extends ApiName>(
+    userId: number,
+    apiName: T,
+    environment: ApiEnvironment = 'production',
+    options: {
+      includeGlobal?: boolean;
+    } = {}
+  ): Promise<{
+    id: number;
+    credentials: ApiCredentialsMap[T];
+    scope: CredentialScope;
+    ownerUserId: number;
+    sharedByUserId: number | null;
+    isActive: boolean;
+  } | null> {
+    const finalEnvironment = supportsEnvironments(apiName) ? environment : 'production';
+
+    // Buscar credenciales específicas del usuario (scope user)
+    const personalCredential = await prisma.apiCredential.findFirst({
+      where: {
+        userId,
+        apiName,
+        environment: finalEnvironment,
+        scope: 'user',
+        isActive: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    if (personalCredential) {
+      const decrypted = decryptCredentials(personalCredential.credentials);
+      this.normalizeCredential(apiName, decrypted, finalEnvironment);
+      return {
+        id: personalCredential.id,
+        credentials: decrypted as ApiCredentialsMap[T],
+        scope: 'user',
+        ownerUserId: personalCredential.userId,
+        sharedByUserId: personalCredential.sharedById ?? null,
+        isActive: personalCredential.isActive,
+      };
+    }
+
+    if (options.includeGlobal === false) {
+      return null;
+    }
+
+    // Buscar credenciales globales
+    const sharedCredential = await prisma.apiCredential.findFirst({
+      where: {
+        scope: 'global',
+        apiName,
+        environment: finalEnvironment,
+        isActive: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    if (!sharedCredential) {
+      return null;
+    }
+
+    const decrypted = decryptCredentials(sharedCredential.credentials);
+    this.normalizeCredential(apiName, decrypted, finalEnvironment);
+
+    return {
+      id: sharedCredential.id,
+      credentials: decrypted as ApiCredentialsMap[T],
+      scope: 'global',
+      ownerUserId: sharedCredential.userId,
+      sharedByUserId: sharedCredential.sharedById ?? sharedCredential.userId ?? null,
+      isActive: sharedCredential.isActive,
+    };
+  }
+
   /**
    * Guardar credenciales de una API para un usuario
    */
   static async saveCredentials<T extends ApiName>(
-    userId: number,
+    ownerUserId: number,
     apiName: T,
     credentials: ApiCredentialsMap[T],
-    environment: ApiEnvironment = 'production'
+    environment: ApiEnvironment = 'production',
+    options: {
+      scope?: CredentialScope;
+      sharedByUserId?: number | null;
+    } = {}
   ): Promise<void> {
     // ✅ Limpiar y validar credenciales antes de validar con Zod
     if (credentials && typeof credentials === 'object') {
@@ -298,6 +372,11 @@ export class CredentialsManager {
 
     // Determinar ambiente correcto
     const finalEnvironment = supportsEnvironments(apiName) ? environment : 'production';
+    const scope: CredentialScope = options.scope ?? 'user';
+    const sharedById =
+      scope === 'global'
+        ? options.sharedByUserId ?? ownerUserId
+        : options.sharedByUserId ?? null;
 
     // Encriptar credenciales
     const encrypted = encryptCredentials(credentials);
@@ -305,22 +384,27 @@ export class CredentialsManager {
     // Guardar en la base de datos
     await prisma.apiCredential.upsert({
       where: {
-        userId_apiName_environment: {
-          userId,
+        userId_apiName_environment_scope: {
+          userId: ownerUserId,
           apiName,
           environment: finalEnvironment,
+          scope,
         },
       },
       create: {
-        userId,
+        userId: ownerUserId,
         apiName,
         environment: finalEnvironment,
         credentials: encrypted,
         isActive: true,
+        scope,
+        sharedById,
       },
       update: {
         credentials: encrypted,
         updatedAt: new Date(),
+        scope,
+        sharedById,
       },
     });
   }
@@ -329,18 +413,20 @@ export class CredentialsManager {
    * Eliminar credenciales de una API para un usuario
    */
   static async deleteCredentials(
-    userId: number,
+    ownerUserId: number,
     apiName: ApiName,
-    environment: ApiEnvironment = 'production'
+    environment: ApiEnvironment = 'production',
+    scope: CredentialScope = 'user'
   ): Promise<void> {
     const finalEnvironment = supportsEnvironments(apiName) ? environment : 'production';
 
     await prisma.apiCredential.delete({
       where: {
-        userId_apiName_environment: {
-          userId,
+        userId_apiName_environment_scope: {
+          userId: ownerUserId,
           apiName,
           environment: finalEnvironment,
+          scope,
         },
       },
     });
@@ -352,61 +438,148 @@ export class CredentialsManager {
   static async hasCredentials(
     userId: number,
     apiName: ApiName,
-    environment: ApiEnvironment = 'production'
+    environment: ApiEnvironment = 'production',
+    options: {
+      scope?: CredentialScope;
+      includeGlobal?: boolean;
+    } = {}
   ): Promise<boolean> {
-    const finalEnvironment = supportsEnvironments(apiName) ? environment : 'production';
-
-    const count = await prisma.apiCredential.count({
-      where: {
-        userId,
-        apiName,
-        environment: finalEnvironment,
-        isActive: true,
-      },
+    const entry = await this.getCredentialEntry(userId, apiName, environment, {
+      includeGlobal: options.includeGlobal,
     });
 
-    return count > 0;
+    if (!entry) {
+      return false;
+    }
+
+    if (options.scope && entry.scope !== options.scope) {
+      return false;
+    }
+
+    return entry.isActive;
   }
 
   /**
    * Listar todas las APIs configuradas para un usuario
    */
-  static async listConfiguredApis(userId: number): Promise<{
+  static async listConfiguredApis(userId: number): Promise<Array<{
+    id: number;
     apiName: ApiName;
     environment: ApiEnvironment;
     isActive: boolean;
     updatedAt: Date;
-  }[]> {
+    scope: CredentialScope;
+    ownerUserId: number;
+    sharedByUserId: number | null;
+    owner: {
+      id: number;
+      username: string;
+      role: string;
+      fullName?: string | null;
+    } | null;
+    sharedBy: {
+      id: number;
+      username: string;
+      role: string;
+      fullName?: string | null;
+    } | null;
+  }>> {
     const credentials = await prisma.apiCredential.findMany({
-      where: { userId },
-      select: {
-        apiName: true,
-        environment: true,
-        isActive: true,
-        updatedAt: true,
+      where: {
+        OR: [
+          { userId, scope: 'user' },
+          { scope: 'global' },
+        ],
       },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            role: true,
+            fullName: true,
+          },
+        },
+        sharedBy: {
+          select: {
+            id: true,
+            username: true,
+            role: true,
+            fullName: true,
+          },
+        },
+      },
+      orderBy: [
+        { scope: 'asc' },
+        { apiName: 'asc' },
+        { environment: 'asc' },
+      ],
     });
 
-    return credentials as any[];
+    return credentials.map((credential) => {
+      const owner =
+        credential.scope === 'user'
+          ? credential.user
+          : credential.sharedBy ?? credential.user;
+
+      return {
+        id: credential.id,
+        apiName: credential.apiName as ApiName,
+        environment: credential.environment as ApiEnvironment,
+        isActive: credential.isActive,
+        updatedAt: credential.updatedAt,
+        scope: credential.scope,
+        ownerUserId: credential.userId,
+        sharedByUserId: credential.sharedById ?? null,
+        owner: owner
+          ? {
+              id: owner.id,
+              username: owner.username,
+              role: owner.role,
+              fullName: owner.fullName,
+            }
+          : null,
+        sharedBy:
+          credential.scope === 'user' && credential.sharedBy
+            ? {
+                id: credential.sharedBy.id,
+                username: credential.sharedBy.username,
+                role: credential.sharedBy.role,
+                fullName: credential.sharedBy.fullName,
+              }
+            : credential.scope === 'global'
+            ? credential.user
+              ? {
+                  id: credential.user.id,
+                  username: credential.user.username,
+                  role: credential.user.role,
+                  fullName: credential.user.fullName,
+                }
+              : null
+            : null,
+      };
+    });
   }
 
   /**
    * Activar/desactivar credenciales
    */
   static async toggleCredentials(
-    userId: number,
+    ownerUserId: number,
     apiName: ApiName,
     environment: ApiEnvironment,
+    scope: CredentialScope,
     isActive: boolean
   ): Promise<void> {
     const finalEnvironment = supportsEnvironments(apiName) ? environment : 'production';
 
     await prisma.apiCredential.update({
       where: {
-        userId_apiName_environment: {
-          userId,
+        userId_apiName_environment_scope: {
+          userId: ownerUserId,
           apiName,
           environment: finalEnvironment,
+          scope,
         },
       },
       data: { isActive },

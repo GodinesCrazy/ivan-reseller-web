@@ -591,24 +591,14 @@ class AmazonService {
    */
   private async saveCredentials(credentials: AmazonCredentials): Promise<void> {
     try {
-      const encryptedData = this.encryptCredentials(JSON.stringify(credentials));
-      await prisma.apiCredential.upsert({
-        where: { 
-          userId_apiName_environment: { 
-            userId: 1, 
-            apiName: 'amazon',
-            environment: 'production'
-          } 
-        },
-        update: { credentials: encryptedData, isActive: true },
-        create: { 
-          userId: 1, 
-          apiName: 'amazon', 
-          environment: 'production',
-          credentials: encryptedData, 
-          isActive: true 
-        },
-      });
+      const { CredentialsManager } = await import('./credentials-manager.service');
+      await CredentialsManager.saveCredentials(
+        1,
+        'amazon',
+        credentials,
+        'production',
+        { scope: 'global', sharedByUserId: 1 }
+      );
     } catch (e) {
       console.warn('Failed to persist Amazon credentials', e);
     }

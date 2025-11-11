@@ -21,22 +21,51 @@ router.get('/apis', authenticate, async (req, res) => {
 
     // Obtener APIs configuradas del usuario
     const configured = await CredentialsManager.listConfiguredApis(userId);
-    const configuredMap = new Map(
-      configured.map(c => [`${c.apiName}-${c.environment}`, c])
-    );
+    const configuredMap = new Map<string, Awaited<typeof configured>[number]>();
+
+    configured.forEach((record) => {
+      const key = `${record.apiName}-${record.environment}`;
+      const existing = configuredMap.get(key);
+      if (!existing) {
+        configuredMap.set(key, record);
+        return;
+      }
+
+      const recordIsPersonal = record.scope === 'user' && record.ownerUserId === userId;
+      const existingIsPersonal = existing.scope === 'user' && existing.ownerUserId === userId;
+
+      if (!existingIsPersonal && recordIsPersonal) {
+        configuredMap.set(key, record);
+        return;
+      }
+
+      if (!existingIsPersonal && !recordIsPersonal) {
+        const existingUpdated = existing.updatedAt?.getTime?.() ?? new Date(existing.updatedAt).getTime();
+        const recordUpdated = record.updatedAt?.getTime?.() ?? new Date(record.updatedAt).getTime();
+        if (recordUpdated > existingUpdated) {
+          configuredMap.set(key, record);
+        }
+      }
+    });
 
     // Helper para crear definición de ambiente
     const createEnvironmentDef = (
       apiName: string,
       environment: 'sandbox' | 'production',
       fields: any[]
-    ) => ({
-      status: configuredMap.has(`${apiName}-${environment}`) ? 'configured' : 'not_configured',
-      isActive: configuredMap.get(`${apiName}-${environment}`)?.isActive || false,
-      endpoint: getApiEndpoint(apiName.toUpperCase(), environment),
-      lastUpdated: configuredMap.get(`${apiName}-${environment}`)?.updatedAt?.toISOString() || null,
-      fields
-    });
+    ) => {
+      const entry = configuredMap.get(`${apiName}-${environment}`);
+      return {
+        status: entry ? 'configured' : 'not_configured',
+        isActive: entry?.isActive || false,
+        endpoint: getApiEndpoint(apiName.toUpperCase(), environment),
+        lastUpdated: entry?.updatedAt ? new Date(entry.updatedAt as any).toISOString() : null,
+        scope: entry?.scope || 'user',
+        ownerUserId: entry?.ownerUserId ?? null,
+        sharedByUserId: entry?.sharedByUserId ?? null,
+        fields
+      };
+    };
 
     // Definir todas las APIs disponibles
     const apis = [

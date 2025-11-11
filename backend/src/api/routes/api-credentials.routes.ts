@@ -1,15 +1,46 @@
 import { Router, Request, Response } from 'express';
 import { authenticate, authorize } from '../../middleware/auth.middleware';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, CredentialScope } from '@prisma/client';
 import { AppError } from '../../middleware/error.middleware';
 import { apiAvailability } from '../../services/api-availability.service';
-import { CredentialsManager, decryptCredentials } from '../../services/credentials-manager.service';
+import { CredentialsManager } from '../../services/credentials-manager.service';
 import { supportsEnvironments } from '../../config/api-keys.config';
 import type { ApiName, ApiEnvironment } from '../../types/api-credentials.types';
 
 const router = Router();
 const prisma = new PrismaClient();
 router.use(authenticate);
+
+function resolveTargetUserId(req: Request, provided: any): number {
+  const actorId = req.user!.userId;
+  const actorRole = req.user!.role?.toUpperCase() || 'USER';
+
+  if (provided === undefined || provided === null || provided === '') {
+    return actorId;
+  }
+
+  const parsed = Number(provided);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    throw new AppError('targetUserId must be a valid numeric value', 400);
+  }
+
+  if (parsed !== actorId && actorRole !== 'ADMIN') {
+    throw new AppError('No tienes permisos para administrar credenciales de otro usuario', 403);
+  }
+
+  return parsed;
+}
+
+const normalizeScope = (value: any, actorRole: string): CredentialScope => {
+  const normalized = typeof value === 'string' ? value.toLowerCase() : value;
+  if (normalized === 'global') {
+    if (actorRole !== 'ADMIN') {
+      throw new AppError('Solo los administradores pueden administrar credenciales globales', 403);
+    }
+    return 'global';
+  }
+  return 'user';
+};
 
 // GET /api/api-credentials - Listar APIs configuradas del usuario
 router.get('/', async (req: Request, res: Response, next) => {
@@ -18,15 +49,21 @@ router.get('/', async (req: Request, res: Response, next) => {
     
     // Usar CredentialsManager para listar APIs configuradas
     const apis = await CredentialsManager.listConfiguredApis(userId);
+    const personalCount = apis.filter(
+      (api) => api.scope === 'user' && api.owner?.id === userId
+    ).length;
+    const sharedCount = apis.filter((api) => api.scope === 'global').length;
 
-    res.json({ 
+    res.json({
       success: true,
       data: apis,
       summary: {
         total: apis.length,
-        active: apis.filter(a => a.isActive).length,
-        inactive: apis.filter(a => !a.isActive).length,
-      }
+        personal: personalCount,
+        shared: sharedCount,
+        active: apis.filter((a) => a.isActive).length,
+        inactive: apis.filter((a) => !a.isActive).length,
+      },
     });
   } catch (error) {
     next(error);
@@ -65,8 +102,11 @@ router.get('/status', async (req: Request, res: Response, next) => {
 router.get('/:apiName', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
+    const role = req.user!.role?.toUpperCase() || 'USER';
+    const targetUserId = resolveTargetUserId(req, req.query.targetUserId);
     const { apiName } = req.params;
     const environment = (req.query.environment as ApiEnvironment) || 'production';
+    const includeGlobal = req.query.includeGlobal !== 'false';
 
     // Validar environment
     if (environment !== 'sandbox' && environment !== 'production') {
@@ -75,15 +115,14 @@ router.get('/:apiName', async (req: Request, res: Response, next) => {
 
     const supportsEnv = supportsEnvironments(apiName);
 
-    const record = await prisma.apiCredential.findFirst({
-      where: {
-        userId,
-        apiName: apiName as ApiName,
-        environment: supportsEnv ? environment : 'production',
-      },
-    });
+    const entry = await CredentialsManager.getCredentialEntry(
+      targetUserId,
+      apiName as ApiName,
+      supportsEnv ? environment : 'production',
+      { includeGlobal }
+    );
 
-    if (!record) {
+    if (!entry) {
       return res.json({
         success: true,
         data: {
@@ -96,7 +135,8 @@ router.get('/:apiName', async (req: Request, res: Response, next) => {
       });
     }
 
-    const credentials = decryptCredentials(record.credentials);
+    const shouldMaskCredentials = entry.scope === 'global' && role !== 'ADMIN';
+    const credentials = shouldMaskCredentials ? {} : entry.credentials;
  
     res.json({ 
       success: true,
@@ -104,8 +144,12 @@ router.get('/:apiName', async (req: Request, res: Response, next) => {
         apiName,
         environment,
         credentials,
-        isActive: record.isActive,
+        isActive: entry.isActive,
         supportsEnvironments: supportsEnv,
+        scope: entry.scope,
+        ownerUserId: entry.ownerUserId,
+        sharedByUserId: entry.sharedByUserId,
+        masked: shouldMaskCredentials,
       }
     });
   } catch (error) {
@@ -116,8 +160,26 @@ router.get('/:apiName', async (req: Request, res: Response, next) => {
 // POST /api/api-credentials - Crear o actualizar credenciales de API
 router.post('/', async (req: Request, res: Response, next) => {
   try {
-    const userId = req.user!.userId;
-    const { apiName, credentials, environment = 'production', isActive = true } = req.body;
+    const actorId = req.user!.userId;
+    const actorRole = req.user!.role?.toUpperCase() || 'USER';
+    const {
+      apiName,
+      credentials,
+      environment = 'production',
+      isActive = true,
+      targetUserId: targetUserIdRaw,
+      scope: scopeRaw,
+    } = req.body;
+
+    const targetUserId = resolveTargetUserId(req, targetUserIdRaw);
+    const scope = normalizeScope(scopeRaw, actorRole);
+    const ownerUserId = scope === 'global' ? actorId : targetUserId;
+    const sharedByUserId =
+      scope === 'global'
+        ? actorId
+        : actorRole === 'ADMIN' && ownerUserId !== actorId
+        ? actorId
+        : null;
 
     // Validar apiName
     if (!apiName || typeof apiName !== 'string') {
@@ -136,7 +198,7 @@ router.post('/', async (req: Request, res: Response, next) => {
     }
 
     // Log para debugging (sin datos sensibles)
-    console.log(`[API Credentials] Saving ${apiName} for user ${userId}:`, {
+    console.log(`[API Credentials] Saving ${apiName} for owner ${ownerUserId} (target ${targetUserId}):`, {
       apiName,
       environment: env,
       hasCredentials: !!credentials,
@@ -167,32 +229,50 @@ router.post('/', async (req: Request, res: Response, next) => {
 
     // Guardar credenciales usando CredentialsManager
     await CredentialsManager.saveCredentials(
-      userId,
+      ownerUserId,
       apiName as ApiName,
       credentials,
-      env
+      env,
+      {
+        scope,
+        sharedByUserId,
+      }
     );
 
     // Actualizar isActive si es necesario
     if (isActive !== undefined) {
       await CredentialsManager.toggleCredentials(
-        userId,
+        ownerUserId,
         apiName as ApiName,
         env,
+        scope,
         isActive
       );
     }
 
     // Clear cache for this API
-    await apiAvailability.clearAPICache(userId, apiName);
+    if (scope === 'global' && actorRole === 'ADMIN') {
+      const users = await prisma.user.findMany({ select: { id: true } });
+      for (const user of users) {
+        await apiAvailability.clearAPICache(user.id, apiName);
+      }
+    } else {
+      await apiAvailability.clearAPICache(targetUserId, apiName);
+    }
 
     // Log activity
     await prisma.activity.create({
       data: {
-        userId,
+        userId: actorId,
         action: 'API_CREDENTIAL_UPDATED',
-        description: `API credentials updated: ${apiName} (${env})`,
-        metadata: JSON.stringify({ apiName, environment: env, isActive }),
+        description: `API credentials updated: ${apiName} (${env}) [${scope}]`,
+        metadata: JSON.stringify({
+          apiName,
+          environment: env,
+          isActive,
+          scope,
+          targetUserId,
+        }),
       },
     });
 
@@ -204,6 +284,7 @@ router.post('/', async (req: Request, res: Response, next) => {
         environment: env,
         isActive,
         supportsEnvironments: supportsEnvironments(apiName),
+        scope,
       }
     });
   } catch (error: any) {
@@ -221,9 +302,16 @@ router.post('/', async (req: Request, res: Response, next) => {
 // PUT /api/api-credentials/:apiName/toggle - Activar/desactivar API
 router.put('/:apiName/toggle', async (req: Request, res: Response, next) => {
   try {
-    const userId = req.user!.userId;
+    const actorId = req.user!.userId;
+    const actorRole = req.user!.role?.toUpperCase() || 'USER';
     const { apiName } = req.params;
-    const { environment = 'production' } = req.body;
+    const {
+      environment = 'production',
+      targetUserId: targetUserIdRaw,
+      scope: scopeRaw,
+    } = req.body;
+    const targetUserId = resolveTargetUserId(req, targetUserIdRaw);
+    const requestedScope = scopeRaw ? normalizeScope(scopeRaw, actorRole) : undefined;
 
     // Validar environment
     const env = environment as ApiEnvironment;
@@ -231,40 +319,62 @@ router.put('/:apiName/toggle', async (req: Request, res: Response, next) => {
       throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
     }
 
-    // Verificar que existan credenciales
-    const hasCredentials = await CredentialsManager.hasCredentials(
-      userId,
+    const entry = await CredentialsManager.getCredentialEntry(
+      targetUserId,
       apiName as ApiName,
-      env
+      env,
+      { includeGlobal: true }
     );
 
-    if (!hasCredentials) {
+    if (!entry) {
       throw new AppError(`${apiName} credentials not found for ${env} environment`, 404);
     }
 
-    // Obtener estado actual
-    const apis = await CredentialsManager.listConfiguredApis(userId);
-    const current = apis.find(a => a.apiName === apiName && a.environment === env);
-    const newState = !current?.isActive;
+    if (requestedScope && entry.scope !== requestedScope) {
+      throw new AppError(
+        `The requested scope (${requestedScope}) does not match the stored credential scope (${entry.scope}).`,
+        400
+      );
+    }
+
+    if (entry.scope === 'global' && actorRole !== 'ADMIN') {
+      throw new AppError('Solo los administradores pueden activar/desactivar credenciales globales', 403);
+    }
+
+    const newState = !entry.isActive;
 
     // Toggle estado
     await CredentialsManager.toggleCredentials(
-      userId,
+      entry.ownerUserId,
       apiName as ApiName,
       env,
+      entry.scope,
       newState
     );
 
     // Clear cache
-    await apiAvailability.clearAPICache(userId, apiName);
+    if (entry.scope === 'global' && actorRole === 'ADMIN') {
+      const users = await prisma.user.findMany({ select: { id: true } });
+      for (const user of users) {
+        await apiAvailability.clearAPICache(user.id, apiName);
+      }
+    } else {
+      await apiAvailability.clearAPICache(targetUserId, apiName);
+    }
 
     // Log activity
     await prisma.activity.create({
       data: {
-        userId,
+        userId: actorId,
         action: 'API_CREDENTIAL_TOGGLED',
-        description: `API ${apiName} (${env}) ${newState ? 'activated' : 'deactivated'}`,
-        metadata: JSON.stringify({ apiName, environment: env, isActive: newState }),
+        description: `API ${apiName} (${env}) ${newState ? 'activated' : 'deactivated'} [${entry.scope}]`,
+        metadata: JSON.stringify({
+          apiName,
+          environment: env,
+          isActive: newState,
+          scope: entry.scope,
+          targetUserId,
+        }),
       },
     });
 
@@ -285,46 +395,73 @@ router.put('/:apiName/toggle', async (req: Request, res: Response, next) => {
 // DELETE /api/api-credentials/:apiName - Eliminar credenciales
 router.delete('/:apiName', async (req: Request, res: Response, next) => {
   try {
-    const userId = req.user!.userId;
+    const actorId = req.user!.userId;
+    const actorRole = req.user!.role?.toUpperCase() || 'USER';
     const { apiName } = req.params;
     const environment = (req.query.environment as ApiEnvironment) || 'production';
+    const targetUserId = resolveTargetUserId(req, req.query.targetUserId);
+    const scopeParam = req.query.scope;
+    const requestedScope =
+      scopeParam !== undefined ? normalizeScope(scopeParam, actorRole) : undefined;
 
     // Validar environment
     if (environment !== 'sandbox' && environment !== 'production') {
       throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
     }
 
-    // Verificar que existan credenciales
-    const hasCredentials = await CredentialsManager.hasCredentials(
-      userId,
+    const entry = await CredentialsManager.getCredentialEntry(
+      targetUserId,
       apiName as ApiName,
-      environment
+      environment,
+      { includeGlobal: true }
     );
 
-    if (!hasCredentials) {
+    if (!entry) {
       throw new AppError(
         `${apiName} credentials not found for ${environment} environment`,
         404
       );
     }
 
-    // Eliminar usando CredentialsManager
+    if (requestedScope && entry.scope !== requestedScope) {
+      throw new AppError(
+        `The requested scope (${requestedScope}) does not match the stored credential scope (${entry.scope}).`,
+        400
+      );
+    }
+
+    if (entry.scope === 'global' && actorRole !== 'ADMIN') {
+      throw new AppError('Solo los administradores pueden eliminar credenciales globales', 403);
+    }
+
     await CredentialsManager.deleteCredentials(
-      userId,
+      entry.ownerUserId,
       apiName as ApiName,
-      environment
+      environment,
+      entry.scope
     );
 
-    // Clear cache
-    await apiAvailability.clearAPICache(userId, apiName);
+    if (entry.scope === 'global' && actorRole === 'ADMIN') {
+      const users = await prisma.user.findMany({ select: { id: true } });
+      for (const user of users) {
+        await apiAvailability.clearAPICache(user.id, apiName);
+      }
+    } else {
+      await apiAvailability.clearAPICache(targetUserId, apiName);
+    }
 
     // Log activity
     await prisma.activity.create({
       data: {
-        userId,
+        userId: actorId,
         action: 'API_CREDENTIAL_DELETED',
-        description: `API credentials deleted: ${apiName} (${environment})`,
-        metadata: JSON.stringify({ apiName, environment }),
+        description: `API credentials deleted: ${apiName} (${environment}) [${entry.scope}]`,
+        metadata: JSON.stringify({
+          apiName,
+          environment,
+          scope: entry.scope,
+          targetUserId,
+        }),
       },
     });
 

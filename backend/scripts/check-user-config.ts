@@ -1,5 +1,5 @@
-import { prisma } from '../src/config/database';
 import '../src/config/env';
+import { prisma } from '../src/config/database';
 import { CredentialsManager } from '../src/services/credentials-manager.service';
 import { marketplaceAuthStatusService } from '../src/services/marketplace-auth-status.service';
 import type { ApiName, ApiEnvironment } from '../src/types/api-credentials.types';
@@ -101,6 +101,9 @@ async function main() {
   console.log('🔐 APIs configuradas:', configuredApis.map(item => ({
     apiName: item.apiName,
     environment: item.environment,
+    scope: item.scope,
+    ownerUserId: item.ownerUserId,
+    sharedByUserId: item.sharedByUserId,
     isActive: item.isActive,
     updatedAt: item.updatedAt,
   })));
