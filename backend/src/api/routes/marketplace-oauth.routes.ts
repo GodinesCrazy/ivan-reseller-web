@@ -46,6 +46,11 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       const devId = cred?.credentials?.devId || process.env.EBAY_DEV_ID || '';
       const certId = cred?.credentials?.certId || process.env.EBAY_CERT_ID || '';
       const sandbox = !!(cred?.credentials?.sandbox || (process.env.EBAY_SANDBOX === 'true'));
+      if (!appId || !devId || !certId) {
+        return res
+          .status(400)
+          .send('<html><body>Base credentials missing. Please save App ID, Dev ID and Cert ID before authorizing.</body></html>');
+      }
       const ebay = new EbayService({ appId, devId, certId, sandbox });
       const tokens = await ebay.exchangeCodeForToken(code, redirectUri);
       const newCreds = { ...(cred?.credentials || {}), token: tokens.token, refreshToken: tokens.refreshToken };
@@ -55,6 +60,11 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       const clientId = cred?.credentials?.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '';
       const clientSecret = cred?.credentials?.clientSecret || process.env.MERCADOLIBRE_CLIENT_SECRET || '';
       const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLM';
+      if (!clientId || !clientSecret) {
+        return res
+          .status(400)
+          .send('<html><body>Base credentials missing. Please save Client ID and Client Secret before authorizing.</body></html>');
+      }
       const ml = new MercadoLibreService({ clientId, clientSecret, siteId });
       const tokens = await ml.exchangeCodeForToken(code, redirectUri);
       const newCreds = { ...(cred?.credentials || {}), accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, userId: tokens.userId };
