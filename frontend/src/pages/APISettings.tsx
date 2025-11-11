@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Settings,
   Globe,
@@ -15,7 +15,10 @@ import {
   Info,
   Link2,
   Pencil,
-  ClipboardPaste
+  ClipboardPaste,
+  Clock,
+  Sparkles,
+  CheckCircle2
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuthStatusStore } from '@stores/authStatusStore';
@@ -235,6 +238,17 @@ export default function APISettings() {
   const [manualCookieInput, setManualCookieInput] = useState('');
   const [manualCookieError, setManualCookieError] = useState<string | null>(null);
   const [manualCookieSaving, setManualCookieSaving] = useState(false);
+  const [manualSessionToken, setManualSessionToken] = useState<string | null>(null);
+  const [manualSessionStatus, setManualSessionStatus] = useState<'idle' | 'pending' | 'completed' | 'expired'>('idle');
+  const [manualSessionError, setManualSessionError] = useState<string | null>(null);
+  const [manualSessionExpiresAt, setManualSessionExpiresAt] = useState<string | null>(null);
+  const [manualSessionLoginUrl, setManualSessionLoginUrl] = useState<string | null>(null);
+  const [manualSessionLoading, setManualSessionLoading] = useState(false);
+  const manualSessionPollRef = useRef<number | null>(null);
+  const apiBaseUrl = useMemo(() => {
+    const base = api.defaults.baseURL || window.location.origin;
+    return base.replace(/\/+$/, '');
+  }, []);
   const authUser = useAuthStore((state) => state.user);
   const isAdmin = authUser?.role === 'ADMIN';
   const currentUserId = authUser?.id ?? null;
@@ -1072,16 +1086,200 @@ export default function APISettings() {
     }
   };
 
-  const cookieSnippet = `copy(JSON.stringify(
+  const automatedCookieSnippet = useMemo(() => {
+    if (!manualSessionToken) {
+      return '';
+    }
+    const endpoint = `${apiBaseUrl}/manual-auth/${manualSessionToken}/complete`;
+    return `(async () => {
+  const endpoint = '${endpoint}';
+  const provider = 'aliexpress';
+
+  const normalizeExpires = (value) => {
+    if (!value) return null;
+    if (typeof value === 'number') {
+      if (value <= 0) return null;
+      const ms = value > 1e12 ? value : value * 1000;
+      return new Date(ms).toISOString();
+    }
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString();
+  };
+
+  async function collectCookies() {
+    if (window.cookieStore && window.cookieStore.getAll) {
+      const list = await window.cookieStore.getAll();
+      return list.map((cookie) => ({
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain || location.hostname.replace(/^www\\./, '.'),
+        path: cookie.path || '/',
+        expires: normalizeExpires(cookie.expires ?? cookie.expirationDate ?? cookie.expiry ?? null),
+        sameSite: cookie.sameSite || 'unspecified',
+        secure: !!cookie.secure,
+        httpOnly: !!cookie.httpOnly,
+      }));
+    }
+
+    return document.cookie.split(';').map(raw => {
+      const [name, ...rest] = raw.trim().split('=');
+      return {
+        name,
+        value: rest.join('='),
+        domain: location.hostname.replace(/^www\\./, '.'),
+        path: '/',
+        expires: null,
+      };
+    });
+  }
+
+  const cookies = await collectCookies();
+  if (!cookies.length) {
+    throw new Error('No se encontraron cookies en esta pestaña.');
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    mode: 'cors',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, cookies })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error('Error enviando cookies: ' + response.status + ' ' + text);
+  }
+
+  console.log('✅ Cookies enviadas. Vuelve a la plataforma para confirmar.');
+})();`;
+  }, [apiBaseUrl, manualSessionToken]);
+
+  const fallbackCookieSnippet = `copy(JSON.stringify(
   document.cookie.split(';').map(c => {
     const [name, ...rest] = c.trim().split('=');
     return { name, value: rest.join('='), domain: '.aliexpress.com', path: '/' };
   })
 ))`;
 
+  const manualSessionExpiresLabel = useMemo(() => {
+    if (!manualSessionExpiresAt) {
+      return null;
+    }
+    const expiresAt = new Date(manualSessionExpiresAt).getTime();
+    if (Number.isNaN(expiresAt)) {
+      return null;
+    }
+    const diffMs = expiresAt - Date.now();
+    if (diffMs <= 0) {
+      return 'Expirado';
+    }
+    const totalMinutes = Math.floor(diffMs / 60000);
+    if (totalMinutes >= 60) {
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return `${hours}h ${minutes}m`;
+    }
+    return `${Math.max(totalMinutes, 1)}m`;
+  }, [manualSessionExpiresAt]);
+
+  const manualSessionStatusDisplay = useMemo(() => {
+    switch (manualSessionStatus) {
+      case 'completed':
+        return {
+          icon: <CheckCircle2 className="h-5 w-5 text-green-600" />,
+          text: 'Cookies recibidas automáticamente. Esta ventana se cerrará en unos segundos.',
+          textClass: 'text-green-700',
+        };
+      case 'expired':
+        return {
+          icon: <XCircle className="h-5 w-5 text-red-600" />,
+          text: 'El token expiró. Genera uno nuevo y repite el proceso.',
+          textClass: 'text-red-700',
+        };
+      case 'pending':
+        return {
+          icon: <Clock className="h-5 w-5 text-amber-600" />,
+          text: 'Esperando que envíes las cookies desde la pestaña de AliExpress.',
+          textClass: 'text-amber-700',
+        };
+      default:
+        return {
+          icon: <Clock className="h-5 w-5 text-gray-500" />,
+          text: 'Preparando sesión manual…',
+          textClass: 'text-gray-600',
+        };
+    }
+  }, [manualSessionStatus]);
+
+  const cleanupManualSessionPolling = () => {
+    if (manualSessionPollRef.current !== null) {
+      window.clearInterval(manualSessionPollRef.current);
+      manualSessionPollRef.current = null;
+    }
+  };
+
+  const pollManualSessionStatus = async (token: string) => {
+    try {
+      const response = await api.get(`/api/manual-auth/${token}`);
+      const status = response.data?.status as 'pending' | 'completed' | 'expired' | undefined;
+      if (!status) {
+        return;
+      }
+      if (status === 'completed') {
+        setManualSessionStatus('completed');
+        cleanupManualSessionPolling();
+        toast.success('Cookies recibidas correctamente. Actualizando credenciales…');
+        await loadCredentials();
+        setTimeout(() => {
+          setManualCookieModalOpen(false);
+        }, 1500);
+      } else if (status === 'expired') {
+        setManualSessionStatus('expired');
+        cleanupManualSessionPolling();
+        toast.error('La sesión manual expiró. Solicita un nuevo token.');
+      } else {
+        setManualSessionStatus('pending');
+      }
+    } catch (error) {
+      console.error('Error polling manual session:', error);
+      setManualSessionError('No se pudo verificar el estado de la sesión manual.');
+    }
+  };
+
+  const startManualSession = async () => {
+    setManualSessionLoading(true);
+    setManualSessionError(null);
+    setManualSessionStatus('idle');
+    try {
+      const response = await api.post('/api/manual-auth', { provider: 'aliexpress' });
+      const token = response.data?.token as string | undefined;
+      if (token) {
+        setManualSessionToken(token);
+        setManualSessionStatus('pending');
+        setManualSessionLoginUrl(response.data?.loginUrl ?? null);
+        setManualSessionExpiresAt(response.data?.expiresAt ?? null);
+        cleanupManualSessionPolling();
+        pollManualSessionStatus(token);
+        manualSessionPollRef.current = window.setInterval(() => {
+          pollManualSessionStatus(token);
+        }, 5000);
+      } else {
+        setManualSessionError('No se pudo crear la sesión manual. Intenta nuevamente.');
+      }
+    } catch (error: any) {
+      console.error('Error creando sesión manual:', error);
+      setManualSessionError(error.response?.data?.message || 'No se pudo iniciar la sesión manual.');
+    } finally {
+      setManualSessionLoading(false);
+    }
+  };
+
   const openManualCookieModal = () => {
     setManualCookieInput('');
     setManualCookieError(null);
+    setManualSessionStatus('idle');
+    setManualSessionError(null);
     setManualCookieModalOpen(true);
   };
 
@@ -1091,15 +1289,47 @@ export default function APISettings() {
     }
   };
 
-  const handleCopySnippet = async () => {
+  const handleCopyAutomatedSnippet = async () => {
+    if (!automatedCookieSnippet) {
+      toast.error('Primero genera una sesión manual para obtener el snippet.');
+      return;
+    }
     try {
-      await navigator.clipboard.writeText(cookieSnippet);
-      toast.success('Snippet copiado al portapapeles.');
+      await navigator.clipboard.writeText(automatedCookieSnippet);
+      toast.success('Snippet automatizado copiado al portapapeles.');
     } catch (error) {
-      console.error('No se pudo copiar el snippet:', error);
+      console.error('No se pudo copiar el snippet automatizado:', error);
       toast.error('No fue posible copiar automáticamente. Copia manualmente el texto.');
     }
   };
+
+  const handleCopyFallbackSnippet = async () => {
+    try {
+      await navigator.clipboard.writeText(fallbackCookieSnippet);
+      toast.success('Snippet manual copiado.');
+    } catch (error) {
+      console.error('No se pudo copiar el snippet manual:', error);
+      toast.error('No fue posible copiar automáticamente. Copia manualmente el texto.');
+    }
+  };
+
+  useEffect(() => {
+    if (manualCookieModalOpen) {
+      startManualSession();
+    } else {
+      cleanupManualSessionPolling();
+      setManualSessionToken(null);
+      setManualSessionStatus('idle');
+      setManualSessionError(null);
+      setManualSessionExpiresAt(null);
+      setManualSessionLoginUrl(null);
+    }
+
+    return () => {
+      cleanupManualSessionPolling();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manualCookieModalOpen]);
 
   const handleManualCookiesSave = async () => {
     if (!manualCookieInput.trim()) {
@@ -1126,6 +1356,8 @@ export default function APISettings() {
     try {
       await api.post('/api/manual-auth/save-cookies', { cookies: parsed });
       toast.success('Cookies guardadas correctamente. La sesión se actualizará en segundos.');
+      cleanupManualSessionPolling();
+      setManualSessionStatus('completed');
       setManualCookieModalOpen(false);
       setManualCookieInput('');
       await requestAuthRefresh('aliexpress');
@@ -1705,22 +1937,91 @@ export default function APISettings() {
               </button>
             </div>
 
-            <div className="space-y-4 px-6 py-5">
-              <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
-                <li>En otra pestaña abre <span className="font-medium">AliExpress</span> e inicia sesión.</li>
-                <li>
-                  Presiona <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">F12</code>, ve a <span className="font-medium">Console</span>.
-                  Si Chrome muestra un aviso, escribe <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">allow pasting</code> y presiona Enter.
-                  Luego pega el siguiente snippet y presiona Enter para copiar las cookies.
-                </li>
-                <li>Vuelve aquí, pega el JSON generado y pulsa <span className="font-medium">Guardar sesión</span>.</li>
-              </ol>
+            <div className="space-y-5 px-6 py-5">
+              <div className="rounded border border-blue-200 bg-blue-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2 text-blue-800">
+                    <Sparkles className="h-5 w-5" />
+                    <span className="text-sm font-semibold">Automatiza el guardado de las cookies</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {manualSessionExpiresLabel ? (
+                      <span className="flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                        <Clock className="h-4 w-4" />
+                        Expira en {manualSessionExpiresLabel}
+                      </span>
+                    ) : null}
+                    <button
+                      onClick={startManualSession}
+                      className="inline-flex items-center gap-2 rounded border border-blue-400 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      type="button"
+                      disabled={manualSessionLoading}
+                    >
+                      {manualSessionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                      {manualSessionToken ? 'Reiniciar token' : 'Generar token'}
+                    </button>
+                  </div>
+                </div>
+                <ol className="mt-3 list-decimal list-inside space-y-1 text-xs text-blue-800">
+                  <li>
+                    Abre la pestaña de AliExpress con tu cuenta. Puedes usar el botón{' '}
+                    <span className="font-semibold">Abrir login de AliExpress</span>.
+                  </li>
+                  <li>
+                    Presiona <code className="rounded bg-blue-100 px-1 py-0.5 text-[11px]">F12</code>, entra a{' '}
+                    <span className="font-semibold">Console</span> y escribe{' '}
+                    <code className="rounded bg-blue-100 px-1 py-0.5 text-[11px]">allow pasting</code> si Chrome lo pide.
+                  </li>
+                  <li>Pega el snippet automático, presiona Enter y espera el mensaje de confirmación.</li>
+                  <li>Vuelve a esta ventana: detectaremos el envío en cuanto llegue.</li>
+                </ol>
+                {manualSessionLoginUrl ? (
+                  <div className="mt-3">
+                    <button
+                      onClick={() => window.open(manualSessionLoginUrl, '_blank', 'noopener')}
+                      className="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700"
+                      type="button"
+                    >
+                      <Link2 className="h-4 w-4" />
+                      Abrir login de AliExpress
+                    </button>
+                  </div>
+                ) : null}
+              </div>
 
-              <div className="rounded border border-gray-200 bg-gray-50 p-3">
+              <div className="flex items-start justify-between rounded border border-gray-200 bg-gray-50 px-3 py-2">
+                <div className={`flex items-center gap-2 text-sm ${manualSessionStatusDisplay.textClass}`}>
+                  {manualSessionStatusDisplay.icon}
+                  <span>{manualSessionStatusDisplay.text}</span>
+                </div>
+                {manualSessionError ? (
+                  <span className="ml-4 text-xs text-red-600">{manualSessionError}</span>
+                ) : null}
+              </div>
+
+              <div className="rounded border border-emerald-300 bg-emerald-50 p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">Snippet para copiar en la consola</span>
+                  <span className="text-sm font-semibold text-emerald-700">Snippet automático (recomendado)</span>
                   <button
-                    onClick={handleCopySnippet}
+                    onClick={handleCopyAutomatedSnippet}
+                    className="inline-flex items-center gap-2 rounded bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    disabled={!automatedCookieSnippet}
+                  >
+                    <ClipboardPaste className="h-4 w-4" />
+                    Copiar snippet
+                  </button>
+                </div>
+                <pre className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap text-[11px] leading-5 text-emerald-900">
+{automatedCookieSnippet || 'Generando token y snippet...'}
+                </pre>
+              </div>
+
+              <div className="rounded border border-gray-200 bg-white p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-gray-700">Snippet manual (solo si falla el automático)</span>
+                  <button
+                    onClick={handleCopyFallbackSnippet}
                     className="text-xs font-semibold text-blue-600 hover:text-blue-800"
                     type="button"
                   >
@@ -1728,12 +2029,12 @@ export default function APISettings() {
                   </button>
                 </div>
                 <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-gray-800">
-{cookieSnippet}
+{fallbackCookieSnippet}
                 </pre>
               </div>
 
               <div>
-                <label className="text-sm font-medium text-gray-700">Pega aquí el JSON generado</label>
+                <label className="text-sm font-medium text-gray-700">Pega aquí el JSON generado (solo modo manual)</label>
                 <textarea
                   value={manualCookieInput}
                   onChange={(event) => {
@@ -1749,7 +2050,7 @@ export default function APISettings() {
                   <p className="mt-2 text-sm text-red-600">{manualCookieError}</p>
                 ) : (
                   <p className="mt-2 text-xs text-gray-500">
-                    Debe ser el resultado directo del snippet. No edites ni alteres el contenido.
+                    Usa este campo solo si el método automático no funcionó y copiaste el JSON manualmente.
                   </p>
                 )}
               </div>
