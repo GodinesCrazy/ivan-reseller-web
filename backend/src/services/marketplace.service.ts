@@ -6,6 +6,7 @@ import { prisma } from '../config/database';
 import { retryMarketplaceOperation } from '../utils/retry.util';
 import logger from '../config/logger';
 import crypto from 'crypto';
+import type { CredentialScope } from '@prisma/client';
 
 export interface MarketplaceCredentials {
   id?: number;
@@ -14,6 +15,7 @@ export interface MarketplaceCredentials {
   credentials: any;
   isActive: boolean;
   environment: 'sandbox' | 'production';
+  scope?: CredentialScope;
   issues?: string[];
   warnings?: string[];
 }
@@ -66,44 +68,40 @@ export class MarketplaceService {
       }
 
       let resolvedEnv: 'sandbox' | 'production' | null = null;
-      let resolvedRecord: any = null;
+      let resolvedEntry: Awaited<ReturnType<typeof CredentialsManager.getCredentialEntry>> | null = null;
       let resolvedCredentials: any = null;
+      let resolvedScope: CredentialScope | null = null;
       const warnings: string[] = [];
       const issues: string[] = [];
 
       for (const env of environmentsToTry) {
-        const record = await prisma.apiCredential.findUnique({
-          where: {
-            userId_apiName_environment: {
-              userId,
-              apiName: marketplace,
-              environment: env,
-            },
-          },
-        });
-
-        if (!record || record.isActive === false) {
-          continue;
-        }
-
-        const creds = await CredentialsManager.getCredentials(
+        const entry = await CredentialsManager.getCredentialEntry(
           userId,
           marketplace as any,
           env
         );
 
+        if (!entry || entry.isActive === false) {
+          continue;
+        }
+
+        const creds = entry.credentials;
         if (creds) {
           resolvedEnv = env;
-          resolvedRecord = record;
+          resolvedEntry = entry;
           resolvedCredentials = creds;
+          resolvedScope = entry.scope;
           if (env !== preferredEnvironment) {
             warnings.push(`Se utilizaron credenciales de ${env} porque ${preferredEnvironment} no está disponible.`);
+          }
+          if (entry.scope === 'global') {
+            warnings.push('Se utilizaron credenciales globales compartidas por un administrador.');
           }
           break;
         }
       }
 
-      if (!resolvedEnv || !resolvedCredentials) {
+      if (!resolvedEnv || !resolvedCredentials || !resolvedEntry) {
         return null;
       }
 
@@ -150,12 +148,13 @@ export class MarketplaceService {
       }
 
       return {
-        id: resolvedRecord?.id,
+        id: resolvedEntry?.id,
         userId,
         marketplace: marketplace as any,
         credentials: resolvedCredentials as any,
-        isActive: resolvedRecord?.isActive ?? false,
+        isActive: resolvedEntry?.isActive ?? false,
         environment: resolvedEnv,
+        scope: resolvedScope ?? 'user',
         issues: issues.length ? issues : undefined,
         warnings: warnings.length ? warnings : undefined,
       };
@@ -171,26 +170,16 @@ export class MarketplaceService {
     try {
       // ✅ Obtener environment del usuario si no se proporciona
       const { workflowConfigService } = await import('./workflow-config.service');
+      const { CredentialsManager } = await import('./credentials-manager.service');
       const userEnvironment = environment || await workflowConfigService.getUserEnvironment(userId);
-      
-      const data = this.encrypt(JSON.stringify(credentials));
-      await prisma.apiCredential.upsert({
-        where: { 
-          userId_apiName_environment: {
-            userId: userId,
-            apiName: marketplace,
-            environment: userEnvironment
-          }
-        },
-        update: { credentials: data, isActive: true },
-        create: { 
-          userId, 
-          apiName: marketplace, 
-          environment: userEnvironment,
-          credentials: data, 
-          isActive: true 
-        },
-      });
+
+      await CredentialsManager.saveCredentials(
+        userId,
+        marketplace as any,
+        credentials,
+        userEnvironment,
+        { scope: 'user' }
+      );
     } catch (error) {
       throw new AppError(`Failed to save marketplace credentials: ${error.message}`, 500);
     }

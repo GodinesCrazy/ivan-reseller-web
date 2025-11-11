@@ -57,6 +57,7 @@ class AliExpressAuthMonitor {
         where: {
           apiName: 'aliexpress',
           isActive: true,
+          scope: 'user',
         },
         select: {
           userId: true,

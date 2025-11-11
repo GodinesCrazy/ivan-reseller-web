@@ -220,24 +220,28 @@ export class AdminService {
       // Asociar credenciales al usuario en la base de datos
       await prisma.apiCredential.upsert({
         where: {
-          userId_apiName_environment: {
-            userId: userId,
+          userId_apiName_environment_scope: {
+            userId,
             apiName: apiConfig.marketplace,
-            environment: 'production'
-          }
+            environment: apiConfig.environment || 'production',
+            scope: 'user',
+          },
         },
         update: {
           credentials: credentialId, // ID de las credenciales encriptadas
           isActive: true,
-          updatedAt: new Date()
+          updatedAt: new Date(),
+          sharedById: adminId,
         },
         create: {
-          userId: userId,
+          userId,
           apiName: apiConfig.marketplace,
           environment: apiConfig.environment || 'production',
           credentials: credentialId,
-          isActive: true
-        }
+          isActive: true,
+          scope: 'user',
+          sharedById: adminId,
+        },
       });
 
       credentialIds.push(credentialId);

@@ -46,6 +46,7 @@ model User {
   aiSuggestions        AISuggestion[]
   manualAuthSessions   ManualAuthSession[]
   marketplaceAuthStatuses MarketplaceAuthStatus[]
+  sharedCredentials    ApiCredential[] @relation("SharedCredentialOwner")
 
   @@map("users")
 }
@@ -59,12 +60,20 @@ model ApiCredential {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  scope       CredentialScope @default(user)
+  sharedById  Int?
 
   // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sharedBy  User? @relation("SharedCredentialOwner", fields: [sharedById], references: [id], onDelete: SetNull)
 
-  @@unique([userId, apiName, environment])
+  @@unique([userId, apiName, environment, scope])
   @@map("api_credentials")
+}
+
+enum CredentialScope {
+  user
+  global
 }
 
 model Product {
