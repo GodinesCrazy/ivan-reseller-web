@@ -110,8 +110,8 @@ export default function APIConfigurationPage() {
   const handleSaveAPI = async (apiId: number, apiName: string) => {
     setSaving(apiId);
     try {
-      const api = apis.find(a => a.id === apiId);
-      if (!api) {
+      const apiConfig = apis.find(a => a.id === apiId);
+      if (!apiConfig) {
         throw new Error('API not found');
       }
 
@@ -170,7 +170,7 @@ export default function APIConfigurationPage() {
       // Usar endpoint unificado /api/credentials
       const response = await api.post('/api/credentials', {
         apiName: mappedApiName,
-        environment: api.environment || 'production',
+        environment: apiConfig.environment || 'production',
         credentials: processedCredentials,
         isActive: true
       });

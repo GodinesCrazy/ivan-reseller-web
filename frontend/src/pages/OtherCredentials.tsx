@@ -8,6 +8,7 @@ interface OtherAPIDefinition {
   apiName: string;
   description: string;
   category: string;
+  categories?: string[];
   fields: OtherAPIField[];
   documentation?: string | null;
   status: 'configured' | 'not_configured';
@@ -134,7 +135,7 @@ export default function OtherCredentials() {
     setError(null);
     try {
       const currentData = formData[apiDef.apiName] || {};
-      const processed = { ...currentData };
+      const processed: Record<string, any> = { ...currentData };
 
       if (processed.twoFactorEnabled !== undefined) {
         processed.twoFactorEnabled = String(processed.twoFactorEnabled).toLowerCase() === 'true';
@@ -183,7 +184,7 @@ export default function OtherCredentials() {
       };
 
       if (hasData) {
-        const processed = { ...currentData } as any;
+        const processed: Record<string, any> = { ...currentData };
         if (processed.twoFactorEnabled !== undefined) {
           processed.twoFactorEnabled = String(processed.twoFactorEnabled).toLowerCase() === 'true';
         }

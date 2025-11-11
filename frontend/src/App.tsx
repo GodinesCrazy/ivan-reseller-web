@@ -37,7 +37,7 @@ function AppContent() {
   // Validar token al iniciar la app (solo si hay token)
   useEffect(() => {
     let isMounted = true;
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     
     const validateToken = async () => {
       // Si no hay token, mostrar login inmediatamente
@@ -60,12 +60,16 @@ function AppContent() {
           checkAuth(),
           timeoutPromise
         ]);
-        clearTimeout(timeoutId);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
         if (isMounted) {
           setIsInitialized(true);
         }
       } catch (error) {
-        clearTimeout(timeoutId);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
         console.warn('Error o timeout validando token, continuando:', error);
         // Si falla, limpiar token inválido y continuar
         if (isMounted) {
@@ -79,7 +83,9 @@ function AppContent() {
     
     return () => {
       isMounted = false;
-      clearTimeout(timeoutId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
   }, []); // Solo ejecutar una vez al montar
 

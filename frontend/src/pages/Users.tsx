@@ -95,7 +95,7 @@ export default function Users() {
     hasInitialized.current = true;
     
     let isMounted = true;
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     
     const verifyAndLoad = async () => {
       try {
@@ -137,7 +137,9 @@ export default function Users() {
           timeoutPromise
         ]) as boolean;
         
-        clearTimeout(timeoutId);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
         
         if (!isMounted) return;
         
@@ -178,7 +180,9 @@ export default function Users() {
           await loadUsers();
         }
       } catch (error) {
-        clearTimeout(timeoutId);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
         console.warn('Error o timeout verificando autenticación:', error);
         
         // Si hay error, verificar si hay usuario en el store de todas formas
