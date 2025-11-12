@@ -296,10 +296,7 @@ export class MarketplaceService {
       // Publish to specific marketplace
       switch (request.marketplace) {
         case 'ebay':
-          return await this.publishToEbay(product, {
-            ...(credentials.credentials as EbayCredentials),
-            sandbox: credentials.environment === 'sandbox',
-          }, request.customData);
+          return await this.publishToEbay(product, credentials, request.customData);
 
         case 'mercadolibre':
           return await this.publishToMercadoLibre(product, credentials.credentials, request.customData);
@@ -353,12 +350,43 @@ export class MarketplaceService {
    * Publish to eBay
    */
   private async publishToEbay(
-    product: any, 
-    credentials: EbayCredentials, 
+    product: any,
+    credentialEntry: MarketplaceCredentials,
     customData?: any
   ): Promise<PublishResult> {
     try {
-      const ebayService = new EbayService(credentials);
+      const ebayCreds = {
+        ...(credentialEntry.credentials as EbayCredentials),
+        sandbox: credentialEntry.environment === 'sandbox',
+      };
+
+      const ebayService = new EbayService(
+        ebayCreds,
+        {
+          onCredentialsUpdate: async (updatedCreds) => {
+            try {
+              const { CredentialsManager } = await import('./credentials-manager.service');
+              const { sandbox, ...persistable } = updatedCreds;
+              await CredentialsManager.saveCredentials(
+                credentialEntry.userId,
+                'ebay',
+                {
+                  ...persistable,
+                  sandbox: sandbox,
+                },
+                credentialEntry.environment,
+                { scope: credentialEntry.scope || 'user' }
+              );
+            } catch (error) {
+              logger.warn('Failed to persist refreshed eBay token', {
+                userId: credentialEntry.userId,
+                environment: credentialEntry.environment,
+                error: (error as Error).message,
+              });
+            }
+          },
+        }
+      );
 
       // Suggest category if not provided (con retry)
       let categoryId = customData?.categoryId;

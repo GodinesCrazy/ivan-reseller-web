@@ -93,18 +93,24 @@ export interface ArbitrageOpportunity {
   trend: 'rising' | 'stable' | 'declining';
 }
 
+interface EbayServiceOptions {
+  onCredentialsUpdate?: (creds: EbayCredentials & { sandbox: boolean }) => Promise<void>;
+}
+
 export class EbayService {
   private credentials?: EbayCredentials;
   private apiClient: AxiosInstance;
   private baseUrl: string;
   private accessToken?: string;
   private tokenExpiry?: Date;
+  private onCredentialsUpdate?: EbayServiceOptions['onCredentialsUpdate'];
 
-  constructor(credentials?: EbayCredentials) {
+  constructor(credentials?: EbayCredentials, options: EbayServiceOptions = {}) {
     this.credentials = credentials;
     this.baseUrl = credentials?.sandbox 
       ? 'https://api.sandbox.ebay.com' 
       : 'https://api.ebay.com';
+    this.onCredentialsUpdate = options.onCredentialsUpdate;
     
     this.apiClient = axios.create({
       baseURL: this.baseUrl,
@@ -125,6 +131,68 @@ export class EbayService {
       }
       return config;
     });
+  }
+
+  private async persistUpdatedCredentials(): Promise<void> {
+    if (!this.credentials || !this.onCredentialsUpdate) {
+      return;
+    }
+
+    try {
+      await this.onCredentialsUpdate({
+        ...this.credentials,
+        sandbox: !!this.credentials.sandbox,
+      });
+    } catch (error) {
+      logger.warn('Failed to persist updated eBay credentials after token refresh', {
+        error: (error as Error).message,
+      });
+    }
+  }
+
+  private async ensureAccessToken(force = false): Promise<void> {
+    if (!this.credentials) {
+      throw new AppError('eBay credentials not configured', 400);
+    }
+
+    const now = new Date();
+    if (!force && this.credentials.token && this.tokenExpiry && this.tokenExpiry > now) {
+      return;
+    }
+
+    if (this.credentials.refreshToken) {
+      const { token, expiresIn } = await this.refreshAccessToken();
+      this.credentials.token = token;
+      this.accessToken = token;
+      this.tokenExpiry = new Date(Date.now() + Math.max(expiresIn - 60, 60) * 1000);
+      await this.persistUpdatedCredentials();
+      return;
+    }
+
+    if (!this.credentials.token) {
+      throw new AppError('Falta token OAuth de eBay. Reautoriza en Settings → API Settings → eBay.', 400);
+    }
+  }
+
+  private async withAuthRetry<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      await this.ensureAccessToken();
+      return await operation();
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const message = error?.response?.data?.errors?.[0]?.message || error.message;
+
+      if (status === 401 || /token/i.test(message)) {
+        logger.warn('eBay API reported authentication error, attempting token refresh', {
+          status,
+          message,
+        });
+        await this.ensureAccessToken(true);
+        return await operation();
+      }
+
+      throw error;
+    }
   }
 
   /**
@@ -242,31 +310,29 @@ export class EbayService {
    * Create or update inventory item
    */
   async createInventoryItem(sku: string, product: EbayProduct): Promise<any> {
-    if (!this.credentials.token) {
-      throw new AppError('eBay token required for API calls', 401);
-    }
-
     try {
-      const inventoryData = {
-        availability: {
-          shipToLocationAvailability: {
-            quantity: product.quantity,
+      return await this.withAuthRetry(async () => {
+        const inventoryData = {
+          availability: {
+            shipToLocationAvailability: {
+              quantity: product.quantity,
+            },
           },
-        },
-        condition: product.condition || 'NEW',
-        product: {
-          title: product.title,
-          description: product.description,
-          imageUrls: product.images,
-          aspects: {
-            Brand: ['Generic'],
-            Type: ['Product'],
+          condition: product.condition || 'NEW',
+          product: {
+            title: product.title,
+            description: product.description,
+            imageUrls: product.images,
+            aspects: {
+              Brand: ['Generic'],
+              Type: ['Product'],
+            },
           },
-        },
-      };
+        };
 
-      const response = await this.apiClient.put(`/sell/inventory/v1/inventory_item/${sku}`, inventoryData);
-      return response.data;
+        const response = await this.apiClient.put(`/sell/inventory/v1/inventory_item/${sku}`, inventoryData);
+        return response.data;
+      });
     } catch (error: any) {
       throw new AppError(`eBay inventory creation error: ${error.response?.data?.errors?.[0]?.message || error.message}`, 400);
     }
@@ -276,75 +342,71 @@ export class EbayService {
    * Create eBay listing from inventory item
    */
   async createListing(sku: string, product: EbayProduct): Promise<EbayListingResponse> {
-    if (!this.credentials.token) {
-      throw new AppError('eBay token required for API calls', 401);
-    }
-
     try {
-      // First create inventory item
-      await this.createInventoryItem(sku, product);
+      return await this.withAuthRetry(async () => {
+        // First create inventory item
+        await this.createInventoryItem(sku, product);
 
-      // Then create the listing
-      const listingData = {
-        categoryId: product.categoryId,
-        merchantLocationKey: 'default_location',
-        pricingSummary: {
-          price: {
-            currency: 'USD',
-            value: product.startPrice.toString(),
-          },
-        },
-        quantityLimitPerBuyer: 10,
-        listingPolicies: {
-          fulfillmentPolicyId: 'default_fulfillment',
-          paymentPolicyId: 'default_payment',
-          returnPolicyId: 'default_return',
-        },
-        ...(product.buyItNowPrice && {
+        const listingData = {
+          categoryId: product.categoryId,
+          merchantLocationKey: 'default_location',
           pricingSummary: {
             price: {
               currency: 'USD',
-              value: product.buyItNowPrice.toString(),
+              value: product.startPrice.toString(),
             },
           },
-        }),
-      };
-
-      // ✅ Usar retry para crear listing y publicar
-      const result = await retryMarketplaceOperation(
-        async () => {
-          const response = await this.apiClient.post(`/sell/inventory/v1/inventory_item/${sku}/offer`, listingData);
-          const publishResponse = await this.apiClient.post(`/sell/inventory/v1/offer/${response.data.offerId}/publish`);
-          return { response, publishResponse };
-        },
-        'ebay',
-        {
-          maxRetries: 3,
-          onRetry: (attempt, error, delay) => {
-            logger.warn(`Retrying createListing for eBay (attempt ${attempt})`, {
-              sku,
-              error: error.message,
-              delay,
-            });
+          quantityLimitPerBuyer: 10,
+          listingPolicies: {
+            fulfillmentPolicyId: 'default_fulfillment',
+            paymentPolicyId: 'default_payment',
+            returnPolicyId: 'default_return',
           },
+          ...(product.buyItNowPrice && {
+            pricingSummary: {
+              price: {
+                currency: 'USD',
+                value: product.buyItNowPrice.toString(),
+              },
+            },
+          }),
+        };
+
+        const result = await retryMarketplaceOperation(
+          async () => {
+            const response = await this.apiClient.post(`/sell/inventory/v1/inventory_item/${sku}/offer`, listingData);
+            const publishResponse = await this.apiClient.post(`/sell/inventory/v1/offer/${response.data.offerId}/publish`);
+            return { publishResponse };
+          },
+          'ebay',
+          {
+            maxRetries: 3,
+            onRetry: (attempt, error, delay) => {
+              logger.warn(`Retrying createListing for eBay (attempt ${attempt})`, {
+                sku,
+                error: error.message,
+                delay,
+              });
+            },
+          }
+        );
+
+        if (!result.success || !result.data) {
+          throw new AppError(`Failed to create eBay listing after retries: ${result.error?.message || 'Unknown error'}`, 400);
         }
-      );
 
-      if (!result.success || !result.data) {
-        throw new AppError(`Failed to create eBay listing after retries: ${result.error?.message || 'Unknown error'}`, 400);
-      }
+        const { publishResponse } = result.data;
 
-      const { response, publishResponse } = result.data;
-
-      return {
-        success: true,
-        itemId: publishResponse.data.listingId,
-        listingUrl: `https://www.ebay.com/itm/${publishResponse.data.listingId}`,
-        fees: {
-          insertionFee: 0, // eBay API doesn't provide this in response
-          finalValueFee: 0, // This is calculated on sale
-        },
-      };
+        return {
+          success: true,
+          itemId: publishResponse.data.listingId,
+          listingUrl: `https://www.ebay.com/itm/${publishResponse.data.listingId}`,
+          fees: {
+            insertionFee: 0,
+            finalValueFee: 0,
+          },
+        };
+      });
     } catch (error: any) {
       throw new AppError(`eBay listing creation error: ${error.response?.data?.errors?.[0]?.message || error.message}`, 400);
     }
@@ -355,33 +417,35 @@ export class EbayService {
    */
   async getCategories(parentId?: string): Promise<any[]> {
     try {
-      const params = new URLSearchParams({
-        CategorySiteID: '0', // US site
-        DetailLevel: 'ReturnAll',
-        ...(parentId && { CategoryParent: parentId }),
-      });
+      return await this.withAuthRetry(async () => {
+        const params = new URLSearchParams({
+          CategorySiteID: '0',
+          DetailLevel: 'ReturnAll',
+          ...(parentId && { CategoryParent: parentId }),
+        });
 
-      const result = await retryMarketplaceOperation(
-        () => this.apiClient.get(`/ws/api.dll?callname=GetCategories&${params.toString()}`),
-        'ebay',
-        {
-          maxRetries: 2,
-          onRetry: (attempt, error, delay) => {
-            logger.warn(`Retrying getCategories for eBay (attempt ${attempt})`, {
-              parentId,
-              error: error.message,
-              delay,
-            });
-          },
+        const result = await retryMarketplaceOperation(
+          () => this.apiClient.get(`/ws/api.dll?callname=GetCategories&${params.toString()}`),
+          'ebay',
+          {
+            maxRetries: 2,
+            onRetry: (attempt, error, delay) => {
+              logger.warn(`Retrying getCategories for eBay (attempt ${attempt})`, {
+                parentId,
+                error: error.message,
+                delay,
+              });
+            },
+          }
+        );
+
+        if (!result.success || !result.data) {
+          throw new AppError(`Failed to get categories after retries: ${result.error?.message || 'Unknown error'}`, 400);
         }
-      );
 
-      if (!result.success || !result.data) {
-        throw new AppError(`Failed to get categories after retries: ${result.error?.message || 'Unknown error'}`, 400);
-      }
-
-      const response = result.data;
-      return response.data.CategoryArray?.Category || [];
+        const response = result.data;
+        return response.data.CategoryArray?.Category || [];
+      });
     } catch (error: any) {
       throw new AppError(`eBay categories fetch error: ${error.message}`, 400);
     }
@@ -392,38 +456,34 @@ export class EbayService {
    */
   async suggestCategory(productTitle: string): Promise<string> {
     try {
-      const result = await retryMarketplaceOperation(
-        () => this.apiClient.get(`/commerce/taxonomy/v1/category_tree/0/get_category_suggestions`, {
-          params: { q: productTitle },
-        }),
-        'ebay',
-        {
-          maxRetries: 2,
-          onRetry: (attempt, error, delay) => {
-            logger.warn(`Retrying suggestCategory for eBay (attempt ${attempt})`, {
-              productTitle,
-              error: error.message,
-              delay,
-            });
-          },
+      return await this.withAuthRetry(async () => {
+        const result = await retryMarketplaceOperation(
+          () => this.apiClient.get(`/commerce/taxonomy/v1/category_tree/0/get_category_suggestions`, {
+            params: { q: productTitle },
+          }),
+          'ebay',
+          {
+            maxRetries: 2,
+            onRetry: (attempt, error, delay) => {
+              logger.warn(`Retrying suggestCategory for eBay (attempt ${attempt})`, {
+                productTitle,
+                error: error.message,
+                delay,
+              });
+            },
+          }
+        );
+
+        if (!result.success || !result.data) {
+          throw new AppError(`Failed to get category suggestions after retries: ${result.error?.message || 'Unknown error'}`, 400);
         }
-      );
 
-      if (!result.success || !result.data) {
-        console.warn('eBay category suggestion failed after retries, using default');
-        return '267';
-      }
-
-      const response = result.data;
-      const suggestions = response.data.categorySuggestions;
-      if (suggestions && suggestions.length > 0) {
-        return suggestions[0].category.categoryId;
-      }
-
-      return '267'; // Default to "Everything Else" category
+        const response = result.data;
+        const suggestions = response.data.suggestions || [];
+        return suggestions[0]?.category?.categoryId || '267';
+      });
     } catch (error: any) {
-      console.warn('eBay category suggestion failed, using default:', error.message);
-      return '267'; // Default category
+      throw new AppError(`eBay category suggestion error: ${error.message}`, 400);
     }
   }
 
