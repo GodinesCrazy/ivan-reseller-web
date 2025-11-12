@@ -1251,46 +1251,78 @@ export default function APISettings() {
       }
       
       const authUrl = data?.data?.authUrl || data?.authUrl || data?.url;
-      if (authUrl) {
-        // Validar que el App ID no esté vacío antes de abrir OAuth
-        if (apiName === 'ebay' && !storedCreds.appId?.trim()) {
-          alert('❌ Error: El App ID está vacío. Por favor, verifica que hayas guardado correctamente las credenciales de eBay.');
-          setOauthing(null);
-          return;
-        }
-        
-        // Abrir ventana de OAuth
-        const oauthWindow = window.open(authUrl, '_blank', 'noopener,noreferrer');
-        
-        if (!oauthWindow) {
-          alert('⚠️ No se pudo abrir la ventana de OAuth. Por favor, permite ventanas emergentes para este sitio.');
-          setOauthing(null);
-          return;
-        }
-        
-        toast.info('Se abrió la ventana oficial de OAuth. Completa el login y vuelve para refrescar el estado.');
-        
-        // Monitorear si la ventana se cierra
-        const checkInterval = setInterval(() => {
-          if (oauthWindow.closed) {
-            clearInterval(checkInterval);
-            // Esperar un momento y luego verificar si las credenciales se actualizaron
-            setTimeout(async () => {
-              try {
-                await fetchAuthStatuses();
-                await loadCredentials();
-              } catch (err) {
-                console.warn('Error al recargar credenciales después de OAuth:', err);
-              }
-            }, 2000);
-          }
-        }, 1000);
-        
-        // Limpiar intervalo después de 5 minutos
-        setTimeout(() => clearInterval(checkInterval), 300000);
-      } else {
-        alert('❌ No recibimos una URL de autorización OAuth para este marketplace.');
+      
+      // Logging para debugging
+      console.log('[APISettings] OAuth response:', {
+        success: data.success,
+        hasAuthUrl: !!authUrl,
+        authUrlLength: authUrl?.length,
+        authUrlPreview: authUrl ? authUrl.substring(0, 100) + '...' : 'N/A',
+        hasWarning: !!data.warning,
+      });
+      
+      if (!authUrl || !authUrl.trim()) {
+        console.error('[APISettings] No authUrl received from backend');
+        alert('❌ Error: No se recibió la URL de autorización del servidor. Por favor, intenta de nuevo o contacta al administrador.');
+        setError('No se recibió la URL de autorización');
+        setOauthing(null);
+        return;
       }
+      
+      // Validar que la URL sea válida
+      try {
+        new URL(authUrl);
+      } catch (urlError: any) {
+        console.error('[APISettings] Invalid authUrl received:', {
+          authUrl,
+          error: urlError.message,
+        });
+        alert(`❌ Error: La URL de autorización recibida no es válida: ${urlError.message}`);
+        setError('URL de autorización inválida');
+        setOauthing(null);
+        return;
+      }
+      
+      // Validar que el App ID no esté vacío antes de abrir OAuth
+      if (apiName === 'ebay' && !storedCreds.appId?.trim()) {
+        alert('❌ Error: El App ID está vacío. Por favor, verifica que hayas guardado correctamente las credenciales de eBay.');
+        setOauthing(null);
+        return;
+      }
+      
+      // Abrir ventana de OAuth
+      console.log('[APISettings] Opening OAuth window with URL:', authUrl.substring(0, 100) + '...');
+      const oauthWindow = window.open(authUrl, '_blank', 'noopener,noreferrer');
+      
+      if (!oauthWindow) {
+        console.error('[APISettings] Failed to open OAuth window - popup blocked?');
+        alert('⚠️ No se pudo abrir la ventana de OAuth. Por favor, permite ventanas emergentes para este sitio.');
+        setOauthing(null);
+        return;
+      }
+      
+      console.log('[APISettings] OAuth window opened successfully');
+      
+      toast.info('Se abrió la ventana oficial de OAuth. Completa el login y vuelve para refrescar el estado.');
+      
+      // Monitorear si la ventana se cierra
+      const checkInterval = setInterval(() => {
+        if (oauthWindow.closed) {
+          clearInterval(checkInterval);
+          // Esperar un momento y luego verificar si las credenciales se actualizaron
+          setTimeout(async () => {
+            try {
+              await fetchAuthStatuses();
+              await loadCredentials();
+            } catch (err) {
+              console.warn('Error al recargar credenciales después de OAuth:', err);
+            }
+          }, 2000);
+        }
+      }, 1000);
+      
+      // Limpiar intervalo después de 5 minutos
+      setTimeout(() => clearInterval(checkInterval), 300000);
     } catch (err: any) {
       console.error('Error iniciando OAuth:', err);
       const message = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Error iniciando OAuth';

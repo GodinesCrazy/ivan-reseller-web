@@ -483,10 +483,30 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const state = Buffer.from([payload, sig].join('|')).toString('base64url');
       
       // Usar el App ID limpiado
-      const ebay = new EbayService({ appId: finalAppId, devId: devId.trim(), certId: certId.trim(), sandbox });
-      const url = new URL(ebay.getAuthUrl(String(ruName.trim())));
-      url.searchParams.set('state', state);
-      authUrl = url.toString();
+      try {
+        const ebay = new EbayService({ appId: finalAppId, devId: devId.trim(), certId: certId.trim(), sandbox });
+        const baseAuthUrl = ebay.getAuthUrl(String(ruName.trim()));
+        const url = new URL(baseAuthUrl);
+        url.searchParams.set('state', state);
+        authUrl = url.toString();
+        
+        // Logging para debugging
+        console.log('[eBay OAuth] Generated auth URL:', {
+          sandbox,
+          appId: finalAppId.substring(0, 20) + '...',
+          redirectUri: ruName.substring(0, 30) + '...',
+          authUrlLength: authUrl.length,
+          authUrlPreview: authUrl.substring(0, 100) + '...',
+        });
+      } catch (urlError: any) {
+        console.error('[eBay OAuth] Error generating auth URL:', {
+          error: urlError.message,
+          stack: urlError.stack,
+          appId: finalAppId.substring(0, 20) + '...',
+          redirectUri: ruName.substring(0, 30) + '...',
+        });
+        throw new Error(`Error al generar URL de autorización: ${urlError.message}`);
+      }
       
       // Si hay advertencia de formato, incluirla en la respuesta pero no bloquear
       if (formatWarning) {
@@ -514,6 +534,29 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       authUrl = url.toString();
     }
 
+    // Validar que authUrl se haya generado correctamente
+    if (!authUrl || !authUrl.trim()) {
+      console.error('[eBay OAuth] authUrl is empty after generation');
+      return res.status(500).json({
+        success: false,
+        message: 'Error: No se pudo generar la URL de autorización. Verifica los logs del servidor.',
+      });
+    }
+    
+    // Validar que la URL sea válida
+    try {
+      new URL(authUrl);
+    } catch (urlError: any) {
+      console.error('[eBay OAuth] Invalid authUrl generated:', {
+        authUrl,
+        error: urlError.message,
+      });
+      return res.status(500).json({
+        success: false,
+        message: `Error: La URL de autorización generada no es válida: ${urlError.message}`,
+      });
+    }
+    
     // Incluir advertencia si existe (solo para eBay)
     const responseData: any = {
       success: true,
@@ -526,6 +569,13 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       responseData.warning = formatWarning;
       responseData.message = 'URL de autorización generada. Revisa la advertencia sobre el formato del App ID si el OAuth falla.';
     }
+    
+    console.log('[eBay OAuth] Returning auth URL response:', {
+      success: responseData.success,
+      hasAuthUrl: !!responseData.data.authUrl,
+      authUrlLength: responseData.data.authUrl?.length,
+      hasWarning: !!responseData.warning,
+    });
     
     res.json(responseData);
   } catch (error: any) {
