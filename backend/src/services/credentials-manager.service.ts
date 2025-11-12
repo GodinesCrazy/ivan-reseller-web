@@ -252,16 +252,21 @@ export class CredentialsManager {
     });
 
     if (personalCredential) {
-      const decrypted = decryptCredentials(personalCredential.credentials);
-      this.normalizeCredential(apiName, decrypted, finalEnvironment);
-      return {
-        id: personalCredential.id,
-        credentials: decrypted as ApiCredentialsMap[T],
-        scope: 'user',
-        ownerUserId: personalCredential.userId,
-        sharedByUserId: personalCredential.sharedById ?? null,
-        isActive: personalCredential.isActive,
-      };
+      try {
+        const decrypted = decryptCredentials(personalCredential.credentials);
+        this.normalizeCredential(apiName, decrypted, finalEnvironment);
+        return {
+          id: personalCredential.id,
+          credentials: decrypted as ApiCredentialsMap[T],
+          scope: 'user',
+          ownerUserId: personalCredential.userId,
+          sharedByUserId: personalCredential.sharedById ?? null,
+          isActive: personalCredential.isActive,
+        };
+      } catch (error) {
+        console.warn(`[CredentialsManager] Unable to decrypt personal credentials for ${apiName} (${finalEnvironment})`, error);
+        return null;
+      }
     }
 
     if (options.includeGlobal === false) {
@@ -283,17 +288,22 @@ export class CredentialsManager {
       return null;
     }
 
-    const decrypted = decryptCredentials(sharedCredential.credentials);
-    this.normalizeCredential(apiName, decrypted, finalEnvironment);
+    try {
+      const decrypted = decryptCredentials(sharedCredential.credentials);
+      this.normalizeCredential(apiName, decrypted, finalEnvironment);
 
-    return {
-      id: sharedCredential.id,
-      credentials: decrypted as ApiCredentialsMap[T],
-      scope: 'global',
-      ownerUserId: sharedCredential.userId,
-      sharedByUserId: sharedCredential.sharedById ?? sharedCredential.userId ?? null,
-      isActive: sharedCredential.isActive,
-    };
+      return {
+        id: sharedCredential.id,
+        credentials: decrypted as ApiCredentialsMap[T],
+        scope: 'global',
+        ownerUserId: sharedCredential.userId,
+        sharedByUserId: sharedCredential.sharedById ?? sharedCredential.userId ?? null,
+        isActive: sharedCredential.isActive,
+      };
+    } catch (error) {
+      console.warn(`[CredentialsManager] Unable to decrypt shared credentials for ${apiName} (${finalEnvironment})`, error);
+      return null;
+    }
   }
 
   /**
