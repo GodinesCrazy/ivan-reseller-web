@@ -73,9 +73,93 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       return res.status(400).send('<html><body>Marketplace not supported</body></html>');
     }
 
-    res.send('<html><body>Authorization completed. You can close this window.</body></html>');
+    res.send(`
+      <html>
+        <head>
+          <title>Autorización completada</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+            .success { color: green; font-size: 18px; margin: 20px 0; }
+            .error { color: red; font-size: 18px; margin: 20px 0; }
+            .info { color: #666; font-size: 14px; margin-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="success">✅ Autorización completada exitosamente</div>
+          <div class="info">Puedes cerrar esta ventana y regresar a la aplicación.</div>
+          <script>
+            setTimeout(() => {
+              if (window.opener) {
+                window.opener.postMessage({ type: 'oauth_success', marketplace: '${req.params.marketplace}' }, '*');
+              }
+            }, 1000);
+          </script>
+        </body>
+      </html>
+    `);
   } catch (e: any) {
-    res.status(500).send(`<html><body>OAuth error: ${e?.message || 'Unknown'}</body></html>`);
+    const errorMessage = e?.message || 'Unknown error';
+    const isUnauthorizedClient = errorMessage.toLowerCase().includes('unauthorized_client') || 
+                                 errorMessage.toLowerCase().includes('oauth client was not found');
+    
+    let userFriendlyMessage = 'Error al completar la autorización OAuth.';
+    let troubleshooting = '';
+    
+    if (isUnauthorizedClient) {
+      userFriendlyMessage = '❌ Error: El App ID de eBay no fue encontrado o no es válido.';
+      troubleshooting = `
+        <div style="text-align: left; max-width: 600px; margin: 20px auto; padding: 15px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 5px;">
+          <h3 style="margin-top: 0;">Posibles causas:</h3>
+          <ul>
+            <li>El <strong>App ID</strong> que ingresaste no existe en eBay Developer Portal</li>
+            <li>El <strong>App ID</strong> es de <strong>Production</strong> pero estás usando <strong>Sandbox</strong> (o viceversa)</li>
+            <li>El <strong>App ID</strong> no está correctamente registrado en tu cuenta de eBay Developer</li>
+            <li>El <strong>Redirect URI (RuName)</strong> no coincide con el registrado en eBay Developer Portal</li>
+          </ul>
+          <h3>¿Qué hacer?</h3>
+          <ol>
+            <li>Ve a <a href="https://developer.ebay.com" target="_blank">eBay Developer Portal</a></li>
+            <li>Verifica que tu aplicación esté creada y activa</li>
+            <li>Confirma que el <strong>App ID</strong>, <strong>Dev ID</strong> y <strong>Cert ID</strong> sean correctos</li>
+            <li>Verifica que el <strong>Redirect URI (RuName)</strong> coincida exactamente</li>
+            <li>Si estás usando <strong>Sandbox</strong>, asegúrate de usar credenciales de Sandbox</li>
+            <li>Si estás usando <strong>Production</strong>, asegúrate de usar credenciales de Production</li>
+          </ol>
+        </div>
+      `;
+    }
+    
+    res.status(500).send(`
+      <html>
+        <head>
+          <title>Error de autorización</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            .error { color: red; font-size: 18px; margin: 20px 0; text-align: center; }
+            .details { color: #666; font-size: 12px; margin-top: 10px; text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="error">${userFriendlyMessage}</div>
+          <div class="details">Error técnico: ${errorMessage}</div>
+          ${troubleshooting}
+          <div style="text-align: center; margin-top: 30px;">
+            <button onclick="window.close()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
+              Cerrar ventana
+            </button>
+          </div>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ 
+                type: 'oauth_error', 
+                marketplace: '${req.params.marketplace}',
+                error: '${errorMessage.replace(/'/g, "\\'")}'
+              }, '*');
+            }
+          </script>
+        </body>
+      </html>
+    `);
   }
 });
 
