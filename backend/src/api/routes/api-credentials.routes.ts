@@ -31,8 +31,23 @@ function resolveTargetUserId(req: Request, provided: any): number {
   return parsed;
 }
 
-const normalizeScope = (value: any, actorRole: string): CredentialScope => {
+// APIs que deben ser únicamente personales (no pueden ser globales)
+const PERSONAL_ONLY_APIS: ApiName[] = ['ebay', 'amazon', 'mercadolibre', 'paypal'];
+
+const normalizeScope = (value: any, actorRole: string, apiName?: string): CredentialScope => {
   const normalized = typeof value === 'string' ? value.toLowerCase() : value;
+  
+  // Si la API es de marketplace o PayPal, forzar scope 'user'
+  if (apiName && PERSONAL_ONLY_APIS.includes(apiName as ApiName)) {
+    if (normalized === 'global') {
+      throw new AppError(
+        `Las credenciales de ${apiName} deben ser personales. Cada usuario debe usar sus propias credenciales de vendedor.`,
+        400
+      );
+    }
+    return 'user';
+  }
+  
   if (normalized === 'global') {
     if (actorRole !== 'ADMIN') {
       throw new AppError('Solo los administradores pueden administrar credenciales globales', 403);
@@ -172,7 +187,7 @@ router.post('/', async (req: Request, res: Response, next) => {
     } = req.body;
 
     const targetUserId = resolveTargetUserId(req, targetUserIdRaw);
-    const scope = normalizeScope(scopeRaw, actorRole);
+    const scope = normalizeScope(scopeRaw, actorRole, apiName);
     const ownerUserId = scope === 'global' ? actorId : targetUserId;
     const sharedByUserId =
       scope === 'global'
@@ -311,7 +326,7 @@ router.put('/:apiName/toggle', async (req: Request, res: Response, next) => {
       scope: scopeRaw,
     } = req.body;
     const targetUserId = resolveTargetUserId(req, targetUserIdRaw);
-    const requestedScope = scopeRaw ? normalizeScope(scopeRaw, actorRole) : undefined;
+    const requestedScope = scopeRaw ? normalizeScope(scopeRaw, actorRole, apiName) : undefined;
 
     // Validar environment
     const env = environment as ApiEnvironment;
@@ -402,7 +417,7 @@ router.delete('/:apiName', async (req: Request, res: Response, next) => {
     const targetUserId = resolveTargetUserId(req, req.query.targetUserId);
     const scopeParam = req.query.scope;
     const requestedScope =
-      scopeParam !== undefined ? normalizeScope(scopeParam, actorRole) : undefined;
+      scopeParam !== undefined ? normalizeScope(scopeParam, actorRole, apiName) : undefined;
 
     // Validar environment
     if (environment !== 'sandbox' && environment !== 'production') {
