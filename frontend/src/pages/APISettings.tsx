@@ -635,15 +635,20 @@ export default function APISettings() {
     const scopeKey = makeEnvKey(apiName, environment);
     setScopeSelection(prev => ({ ...prev, [scopeKey]: scope }));
     // Limpiar datos del formulario para evitar inconsistencias
+    // Pero mantener los valores por defecto de los campos si existen
     setFormData(prev => {
       const formKey = makeFormKey(apiName, environment);
-      if (!prev[formKey]) {
-        return prev;
-      }
       const next = { ...prev };
-      delete next[formKey];
+      // Si cambiamos a modo personal, limpiar el formulario pero mantener estructura
+      if (scope === 'user') {
+        delete next[formKey];
+      } else {
+        // Si cambiamos a modo global, también limpiar
+        delete next[formKey];
+      }
       return next;
     });
+    // Cargar el formulario con el nuevo scope
     loadEnvironmentForm(apiName, environment, true, scope);
   };
 
