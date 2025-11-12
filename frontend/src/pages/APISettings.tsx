@@ -56,6 +56,7 @@ interface APIStatus {
   available: boolean;
   message?: string;
   lastChecked?: string;
+  optional?: boolean;
 }
 
 const makeEnvKey = (apiName: string, environment: string) => `${apiName}-${environment}`;
@@ -246,6 +247,7 @@ export default function APISettings() {
   const [manualSessionLoading, setManualSessionLoading] = useState(false);
   const manualSessionPollRef = useRef<number | null>(null);
   const lastHandledManualTokenRef = useRef<string | null>(null);
+  const [auditSummary, setAuditSummary] = useState<any | null>(null);
   const apiBaseUrl = useMemo(() => {
     const base = api.defaults.baseURL || window.location.origin;
     return base.replace(/\/+$/, '');
@@ -480,9 +482,23 @@ export default function APISettings() {
         const statusLookup = new Map<string, any>();
         if (Array.isArray(statusData)) {
           statusData.forEach((item: any) => {
-            const key = normalize(item.apiName || item.name);
-            if (key) {
-              statusLookup.set(key, item);
+            const normalizedName = normalize(item.apiName || item.name);
+            if (normalizedName) {
+              statusLookup.set(normalizedName, item);
+              const env = typeof item.environment === 'string' ? item.environment : 'production';
+                const apiNameRaw = (item.apiName || item.name || normalizedName) as string;
+                const apiNameKey = apiNameRaw.toLowerCase();
+                const envKey = makeEnvKey(apiNameKey, env);
+              const messageValue = item.message ?? item.error;
+              statusMap[envKey] = {
+                  apiName: apiNameKey,
+                environment: env,
+                available: Boolean(item.isAvailable ?? item.available),
+                message:
+                  messageValue !== undefined && messageValue !== null ? String(messageValue) : undefined,
+                lastChecked: item.lastChecked ? String(item.lastChecked) : undefined,
+                optional: Boolean(item.isOptional),
+              };
             }
           });
         }
@@ -493,17 +509,27 @@ export default function APISettings() {
             const available = match.isAvailable ?? match.available ?? cred.isActive;
             const messageRaw = match.message ?? match.error;
             const lastCheckedRaw = match.lastChecked ?? match.checkedAt ?? match.timestamp ?? null;
-            statusMap[makeEnvKey(cred.apiName, cred.environment)] = {
+            const key = makeEnvKey(cred.apiName, cred.environment);
+            statusMap[key] = {
+              ...statusMap[key],
               apiName: cred.apiName,
               environment: cred.environment,
               available: !!available,
-              message: messageRaw ? String(messageRaw) : undefined,
-              lastChecked: lastCheckedRaw ? String(lastCheckedRaw) : undefined,
+              message: messageRaw ? String(messageRaw) : statusMap[key]?.message,
+              lastChecked: lastCheckedRaw ? String(lastCheckedRaw) : statusMap[key]?.lastChecked,
+              optional: statusMap[key]?.optional ?? Boolean(match.isOptional),
             };
           }
         });
       } catch (statusError) {
         // Ignorar errores; mantendremos estado básico
+      }
+
+      try {
+        const auditResponse = await api.get('/api/config-audit');
+        setAuditSummary(auditResponse.data?.data || null);
+      } catch (auditError) {
+        setAuditSummary(null);
       }
 
       setStatuses(statusMap);
@@ -1418,7 +1444,12 @@ export default function APISettings() {
 
   const getStatusIcon = (apiName: string, environment: string) => {
     const credential = getCredentialForAPI(apiName, environment);
+    const status = statuses[makeEnvKey(apiName, environment)];
+
     if (!credential) {
+      if (status?.optional) {
+        return <AlertTriangle className="w-5 h-5 text-amber-500" />;
+      }
       return <AlertTriangle className="w-5 h-5 text-gray-400" />;
     }
     
@@ -1426,19 +1457,30 @@ export default function APISettings() {
       return <XCircle className="w-5 h-5 text-red-500" />;
     }
 
-    const status = statuses[makeEnvKey(apiName, environment)];
     if (!status) {
       return <AlertTriangle className="w-5 h-5 text-yellow-500" />;
     }
 
-    return status.available 
-      ? <CheckCircle className="w-5 h-5 text-green-500" />
-      : <XCircle className="w-5 h-5 text-red-500" />;
+    if (!status.available) {
+      if (status.optional) {
+        return <AlertTriangle className="w-5 h-5 text-amber-500" />;
+      }
+      return <XCircle className="w-5 h-5 text-red-500" />;
+    }
+
+    return <CheckCircle className="w-5 h-5 text-green-500" />;
   };
 
   const getStatusText = (apiName: string, environment: string) => {
     const credential = getCredentialForAPI(apiName, environment);
-    if (!credential) return 'No configurada';
+    const status = statuses[makeEnvKey(apiName, environment)];
+
+    if (!credential) {
+      if (status?.optional) {
+        return status.message || 'Opcional (sin configurar)';
+      }
+      return 'No configurada';
+    }
     if (!credential.isActive) return 'Desactivada';
     
     const diag = marketplaceDiagnostics[apiName];
@@ -1451,11 +1493,32 @@ export default function APISettings() {
       }
     }
 
-    const status = statuses[makeEnvKey(apiName, environment)];
     if (!status) return 'Estado desconocido';
     
+    if (status.optional && !status.available) {
+      return status.message || 'Opcional (configura para mayor precisión)';
+    }
+
     return status.available ? 'Disponible' : `Error: ${status.message || 'No disponible'}`;
   };
+
+  const optionalCoverage = useMemo(() => {
+    if (!auditSummary?.optionalApis) return [];
+    return (auditSummary.optionalApis as Array<any>).map((entry) => {
+      const configured = entry.environments?.some((env: any) => env?.summary);
+      const errors =
+        entry.environments
+          ?.filter((env: any) => env?.error)
+          ?.map((env: any) => `${env.environment}: ${env.error}`) ?? [];
+      return {
+        apiName: entry.apiName,
+        configured,
+        errors,
+      };
+    });
+  }, [auditSummary]);
+
+  const missingOptional = optionalCoverage.filter(item => !item.configured);
 
   if (loading) {
     return (
@@ -1477,6 +1540,20 @@ export default function APISettings() {
         <p className="text-gray-600">
           Configura tus credenciales para las APIs de marketplaces y servicios. Las credenciales se guardan encriptadas.
         </p>
+        {missingOptional.length > 0 && (
+          <div className="mt-4 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            <div className="font-semibold">
+              Algunas fuentes opcionales todavía no están configuradas. Puedes operar igual, pero la precisión será mayor cuando completes:
+            </div>
+            <ul className="list-disc list-inside space-y-1">
+              {missingOptional.map(item => (
+                <li key={item.apiName}>
+                  {item.apiName} {item.errors.length ? `- ${item.errors.join(' | ')}` : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* Error Global */}
