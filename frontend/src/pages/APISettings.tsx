@@ -1244,6 +1244,12 @@ export default function APISettings() {
         return;
       }
       
+      // Mostrar advertencia si existe (pero no bloquear)
+      if (data.warning) {
+        console.warn('[APISettings] OAuth warning:', data.warning);
+        toast.warning(data.warning, { duration: 8000 });
+      }
+      
       const authUrl = data?.data?.authUrl || data?.authUrl || data?.url;
       if (authUrl) {
         // Validar que el App ID no esté vacío antes de abrir OAuth
