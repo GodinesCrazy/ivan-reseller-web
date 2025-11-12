@@ -1291,17 +1291,59 @@ export default function APISettings() {
       }
       
       // Abrir ventana de OAuth
-      console.log('[APISettings] Opening OAuth window with URL:', authUrl.substring(0, 100) + '...');
-      const oauthWindow = window.open(authUrl, '_blank', 'noopener,noreferrer');
+      console.log('[APISettings] Opening OAuth window with URL:', {
+        url: authUrl.substring(0, 100) + '...',
+        fullUrl: authUrl,
+        urlLength: authUrl.length,
+      });
       
-      if (!oauthWindow) {
-        console.error('[APISettings] Failed to open OAuth window - popup blocked?');
-        alert('⚠️ No se pudo abrir la ventana de OAuth. Por favor, permite ventanas emergentes para este sitio.');
-        setOauthing(null);
-        return;
+      let oauthWindow: Window | null = null;
+      try {
+        oauthWindow = window.open(authUrl, '_blank', 'noopener,noreferrer');
+        console.log('[APISettings] window.open() result:', {
+          oauthWindow: !!oauthWindow,
+          oauthWindowType: typeof oauthWindow,
+        });
+      } catch (openError: any) {
+        console.error('[APISettings] Error calling window.open():', {
+          error: openError.message,
+          stack: openError.stack,
+        });
       }
       
-      console.log('[APISettings] OAuth window opened successfully');
+      if (!oauthWindow || oauthWindow.closed) {
+        console.error('[APISettings] Failed to open OAuth window - popup blocked or closed immediately', {
+          oauthWindow: !!oauthWindow,
+          closed: oauthWindow?.closed,
+        });
+        
+        // Intentar abrir en la misma ventana como fallback
+        const userConfirmed = confirm(
+          '⚠️ No se pudo abrir la ventana de OAuth (puede estar bloqueada por el navegador).\n\n' +
+          '¿Deseas abrir la página de autorización de eBay en esta misma ventana?\n\n' +
+          'Nota: Después de autorizar, deberás volver manualmente a esta página.'
+        );
+        
+        if (userConfirmed) {
+          window.location.href = authUrl;
+          return; // No continuar con el monitoreo si abrimos en la misma ventana
+        } else {
+          // Si el usuario cancela, mostrar instrucciones
+          alert(
+            'Para autorizar con eBay:\n\n' +
+            '1. Permite ventanas emergentes para este sitio en la configuración de tu navegador\n' +
+            '2. O copia esta URL y ábrela manualmente:\n\n' +
+            authUrl.substring(0, 200) + '...'
+          );
+          setOauthing(null);
+          return;
+        }
+      }
+      
+      console.log('[APISettings] OAuth window opened successfully', {
+        oauthWindow: !!oauthWindow,
+        closed: oauthWindow.closed,
+      });
       
       toast.info('Se abrió la ventana oficial de OAuth. Completa el login y vuelve para refrescar el estado.');
       
