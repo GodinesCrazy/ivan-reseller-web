@@ -614,7 +614,7 @@ export default function APISettings() {
   };
 
   const handleScopeChange = (apiName: string, environment: string, scope: 'user' | 'global') => {
-    if (!isAdmin) {
+    if (!isAdmin && scope === 'global') {
       return;
     }
     const scopeKey = makeEnvKey(apiName, environment);
@@ -771,6 +771,8 @@ export default function APISettings() {
       }
 
       // Log para debugging (sin datos sensibles)
+      const scopeToPersist = isAdmin ? currentScope : 'user';
+
       console.log(`[APISettings] Saving ${apiName}:`, {
         apiName,
         environment: currentEnvironment,
@@ -779,7 +781,7 @@ export default function APISettings() {
         hasPassword: !!credentials.password,
         twoFactorEnabled: credentials.twoFactorEnabled,
         twoFactorEnabledType: typeof credentials.twoFactorEnabled,
-        scope: currentScope,
+        scope: scopeToPersist,
       });
 
       // Guardar credencial usando /api/credentials
@@ -788,10 +790,15 @@ export default function APISettings() {
         environment: currentEnvironment,
         credentials,
         isActive: true,
-        scope: currentScope,
+        scope: scopeToPersist,
       });
 
       console.log(`[APISettings] Save response for ${apiName}:`, response.data);
+
+      setScopeSelection(prev => ({
+        ...prev,
+        [scopeKey]: scopeToPersist,
+      }));
 
       // Recargar credenciales
       await loadCredentials();
@@ -1587,12 +1594,14 @@ export default function APISettings() {
           const isDeleting = deleting === apiDef.name;
           const formKey = makeFormKey(apiDef.name, currentEnvironment);
           const scopeKey = makeEnvKey(apiDef.name, currentEnvironment);
-          const currentScope =
+          const resolvedScope =
             scopeSelection[scopeKey] ||
             credential?.scope ||
             'user';
+          const currentScope = !isAdmin && resolvedScope === 'global' ? 'global' : resolvedScope;
           const isGlobalScope = currentScope === 'global';
-          const isReadOnly = (!isAdmin && isGlobalScope) || !!maskedScopes[formKey];
+          const isReadOnly =
+            (!isAdmin && isGlobalScope && scopeSelection[scopeKey] !== 'user') || !!maskedScopes[formKey];
 
           const fieldsToUse = supportsEnv
             ? backendDef?.environments?.[currentEnvironment]?.fields || apiDef.fields
@@ -1930,8 +1939,17 @@ export default function APISettings() {
                     )}
 
                     {!isAdmin && isGlobalScope && (
-                      <div className="px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded text-sm">
-                        Estas credenciales son compartidas por el administrador. Se aplican automáticamente y no es necesario editarlas.
+                      <div className="px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded text-sm space-y-2">
+                        <p>
+                          Estas credenciales son compartidas por el administrador. Si prefieres usar tus propias claves,
+                          crea una versión personal.
+                        </p>
+                        <button
+                          onClick={() => handleScopeChange(apiDef.name, currentEnvironment, 'user')}
+                          className="inline-flex items-center gap-2 px-3 py-1 rounded bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition"
+                        >
+                          Usar mis credenciales personales
+                        </button>
                       </div>
                     )}
 
