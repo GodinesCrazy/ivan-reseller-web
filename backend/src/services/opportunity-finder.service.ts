@@ -6,6 +6,10 @@ import competitorAnalyzer from './competitor-analyzer.service';
 import costCalculator from './cost-calculator.service';
 import opportunityPersistence from './opportunity.service';
 import MarketplaceService from './marketplace.service';
+import {
+  DEFAULT_COMPARATOR_MARKETPLACES,
+  OPTIONAL_MARKETPLACES,
+} from '../config/marketplaces.config';
 
 export interface OpportunityFilters {
   query: string;
@@ -42,35 +46,48 @@ class OpportunityFinderService {
     if (!query) return [];
 
     const maxItems = Math.min(Math.max(filters.maxItems || 10, 1), 10);
-    const marketplaces = (filters.marketplaces && filters.marketplaces.length > 0)
+    const requestedMarketplaces = (filters.marketplaces && filters.marketplaces.length > 0)
       ? filters.marketplaces
-      : ['ebay', 'amazon', 'mercadolibre'];
+      : DEFAULT_COMPARATOR_MARKETPLACES;
     const region = filters.region || 'us';
 
     const credentialDiagnostics: Record<string, { issues: string[]; warnings: string[] }> = {};
     const marketplaceService = new MarketplaceService();
 
-    for (const mp of marketplaces) {
+    const usableMarketplaces: Array<'ebay' | 'amazon' | 'mercadolibre'> = [];
+
+    for (const mp of requestedMarketplaces) {
       try {
         const status = await marketplaceService.getCredentials(userId, mp);
         if (!status || !status.credentials || !status.isActive) {
+          const optional = OPTIONAL_MARKETPLACES.includes(mp as any);
           credentialDiagnostics[mp] = {
-            issues: [`No encontramos credenciales activas de ${mp} para tu usuario.`],
-            warnings: [],
+            issues: optional ? [] : [`No encontramos credenciales activas de ${mp} para tu usuario.`],
+            warnings: optional
+              ? [`${mp} es opcional. Configúralo para mejorar la precisión.`]
+              : [],
           };
           continue;
         }
+        usableMarketplaces.push(mp);
         credentialDiagnostics[mp] = {
           issues: status.issues || [],
           warnings: status.warnings || [],
         };
       } catch (credError: any) {
         credentialDiagnostics[mp] = {
-          issues: [`Error leyendo credenciales de ${mp}: ${credError?.message || String(credError)}`],
-          warnings: [],
+          issues: OPTIONAL_MARKETPLACES.includes(mp as any)
+            ? []
+            : [`Error leyendo credenciales de ${mp}: ${credError?.message || String(credError)}`],
+          warnings: OPTIONAL_MARKETPLACES.includes(mp as any)
+            ? [`${mp} es opcional. Error al validar: ${credError?.message || String(credError)}`]
+            : [],
         };
       }
     }
+
+    const marketplaces: Array<'ebay' | 'amazon' | 'mercadolibre'> =
+      usableMarketplaces.length > 0 ? usableMarketplaces : requestedMarketplaces;
 
     // 1) Scrape AliExpress: PRIMERO usar scraping nativo local (Puppeteer) → fallback a bridge Python
     let products: Array<{ title: string; price: number; productUrl: string; imageUrl?: string; productId?: string }> = [];

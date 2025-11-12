@@ -7,6 +7,7 @@
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { supportsEnvironments } from '../config/api-keys.config';
+import { OPTIONAL_MARKETPLACES } from '../config/marketplaces.config';
 
 interface APIStatus {
   apiName: string;
@@ -18,6 +19,7 @@ interface APIStatus {
   message?: string;
   missingFields?: string[];
   environment?: 'sandbox' | 'production';
+  isOptional?: boolean;
 }
 
 interface APICapabilities {
@@ -184,6 +186,7 @@ export class APIAvailabilityService {
       return cached;
     }
 
+    const isOptional = OPTIONAL_MARKETPLACES.includes('amazon');
     try {
       const requiredFields = [
         'AMAZON_SELLER_ID',
@@ -196,7 +199,6 @@ export class APIAvailabilityService {
         'AMAZON_MARKETPLACE_ID'
       ];
       const credentials = await this.getUserCredentials(userId, 'amazon', environment);
-      
       if (!credentials) {
         const status: APIStatus = {
           apiName: 'amazon',
@@ -205,7 +207,10 @@ export class APIAvailabilityService {
           isAvailable: false,
           environment,
           lastChecked: new Date(),
-          error: 'Amazon API not configured for this user'
+          isOptional,
+          message: isOptional
+            ? 'Opcional: agrega credenciales de Amazon para mejorar la comparación de precios.'
+            : 'Amazon API not configured for this user',
         };
         this.cache.set(cacheKey, status);
         return status;
@@ -220,13 +225,18 @@ export class APIAvailabilityService {
         isAvailable: validation.valid,
         environment,
         lastChecked: new Date(),
-        missingFields: validation.missing
+        missingFields: validation.missing,
+        isOptional,
       };
 
       if (!validation.valid) {
         const missingList = validation.missing.join(', ');
-        status.error = `Missing credentials: ${missingList}`;
-        status.message = `Faltan credenciales requeridas: ${missingList}`;
+        if (isOptional) {
+          status.message = `Opcional: faltan campos (${missingList}). La precisión será menor hasta que los completes.`;
+        } else {
+          status.error = `Missing credentials: ${missingList}`;
+          status.message = `Faltan credenciales requeridas: ${missingList}`;
+        }
       } else {
         status.message = 'API configurada correctamente';
       }
@@ -241,7 +251,8 @@ export class APIAvailabilityService {
         isAvailable: false,
         environment,
         lastChecked: new Date(),
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isOptional,
       };
       this.cache.set(cacheKey, status);
       return status;
@@ -260,10 +271,10 @@ export class APIAvailabilityService {
       return cached;
     }
 
+    const isOptional = OPTIONAL_MARKETPLACES.includes('mercadolibre');
     try {
       const requiredFields = ['MERCADOLIBRE_CLIENT_ID', 'MERCADOLIBRE_CLIENT_SECRET'];
       const credentials = await this.getUserCredentials(userId, 'mercadolibre', environment);
-      
       if (!credentials) {
         const status: APIStatus = {
           apiName: 'mercadolibre',
@@ -272,7 +283,10 @@ export class APIAvailabilityService {
           isAvailable: false,
           environment,
           lastChecked: new Date(),
-          error: 'MercadoLibre API not configured for this user'
+          isOptional,
+          message: isOptional
+            ? 'Opcional: agrega credenciales de MercadoLibre para ampliar la cobertura regional.'
+            : 'MercadoLibre API not configured for this user',
         };
         this.cache.set(cacheKey, status);
         return status;
@@ -287,13 +301,18 @@ export class APIAvailabilityService {
         isAvailable: validation.valid,
         environment,
         lastChecked: new Date(),
-        missingFields: validation.missing
+        missingFields: validation.missing,
+        isOptional,
       };
 
       if (!validation.valid) {
         const missingList = validation.missing.join(', ');
-        status.error = `Missing credentials: ${missingList}`;
-        status.message = `Faltan credenciales requeridas: ${missingList}`;
+        if (isOptional) {
+          status.message = `Opcional: faltan campos (${missingList}). Configúralos para mejorar la precisión regional.`;
+        } else {
+          status.error = `Missing credentials: ${missingList}`;
+          status.message = `Faltan credenciales requeridas: ${missingList}`;
+        }
       } else {
         status.message = 'API configurada correctamente';
       }
@@ -308,7 +327,8 @@ export class APIAvailabilityService {
         isAvailable: false,
         environment,
         lastChecked: new Date(),
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isOptional,
       };
       this.cache.set(cacheKey, status);
       return status;
