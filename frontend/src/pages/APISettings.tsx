@@ -1222,6 +1222,28 @@ export default function APISettings() {
           environment,
         },
       });
+      
+      // Verificar si hay errores en la respuesta
+      if (!data.success) {
+        const errorMsg = data.message || 'Error al generar URL de autorización';
+        const errorCode = data.code || '';
+        const hint = data.hint || '';
+        
+        let fullMessage = errorMsg;
+        if (hint) {
+          fullMessage += `\n\n💡 ${hint}`;
+        }
+        
+        if (errorCode === 'INVALID_APP_ID_FORMAT') {
+          fullMessage += `\n\n📋 Verifica en eBay Developer Portal que el App ID sea correcto para el ambiente ${environment === 'sandbox' ? 'Sandbox' : 'Production'}.`;
+        }
+        
+        alert(`❌ ${fullMessage}`);
+        setError(errorMsg);
+        setOauthing(null);
+        return;
+      }
+      
       const authUrl = data?.data?.authUrl || data?.authUrl || data?.url;
       if (authUrl) {
         // Validar que el App ID no esté vacío antes de abrir OAuth
