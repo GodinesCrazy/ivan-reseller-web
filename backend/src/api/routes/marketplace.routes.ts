@@ -404,8 +404,58 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const ruName = typeof redirect_uri === 'string' && redirect_uri.length > 0
         ? redirect_uri
         : cred?.credentials?.redirectUri || process.env.EBAY_REDIRECT_URI || '';
-      if (!ruName) {
-        return res.status(400).json({ success: false, message: 'Missing eBay Redirect URI (RuName)' });
+      
+      // Validaciones antes de generar URL de OAuth
+      if (!appId || !appId.trim()) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'El App ID de eBay es requerido. Por favor, guarda las credenciales primero.',
+          code: 'MISSING_APP_ID'
+        });
+      }
+      
+      if (!devId || !devId.trim()) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'El Dev ID de eBay es requerido. Por favor, guarda las credenciales primero.',
+          code: 'MISSING_DEV_ID'
+        });
+      }
+      
+      if (!certId || !certId.trim()) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'El Cert ID de eBay es requerido. Por favor, guarda las credenciales primero.',
+          code: 'MISSING_CERT_ID'
+        });
+      }
+      
+      if (!ruName || !ruName.trim()) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'El Redirect URI (RuName) de eBay es requerido. Por favor, guarda las credenciales primero.',
+          code: 'MISSING_REDIRECT_URI'
+        });
+      }
+      
+      // Validar formato del App ID según el ambiente
+      const appIdUpper = appId.trim().toUpperCase();
+      if (sandbox && !appIdUpper.startsWith('SBX-')) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `⚠️ Advertencia: El App ID "${appId.substring(0, 20)}..." no parece ser de Sandbox (debería empezar con "SBX-"). Verifica que estés usando las credenciales correctas para el ambiente Sandbox.`,
+          code: 'INVALID_APP_ID_FORMAT',
+          hint: 'Los App IDs de Sandbox deben empezar con "SBX-"'
+        });
+      }
+      
+      if (!sandbox && appIdUpper.startsWith('SBX-')) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `⚠️ Advertencia: El App ID "${appId.substring(0, 20)}..." parece ser de Sandbox (empieza con "SBX-"), pero estás usando el ambiente Production. Verifica que estés usando las credenciales correctas.`,
+          code: 'INVALID_APP_ID_FORMAT',
+          hint: 'Los App IDs de Production no deben empezar con "SBX-"'
+        });
       }
       const redirB64 = Buffer.from(String(ruName)).toString('base64url');
       const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv].join('|');
