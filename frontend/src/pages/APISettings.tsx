@@ -730,9 +730,26 @@ export default function APISettings() {
           continue;
         }
         
-        const rawValue = formData[formKey]?.[fieldKey] ?? (field.value !== undefined && field.value !== null ? String(field.value) : '');
-        const value = typeof rawValue === 'string' ? rawValue : String(rawValue ?? '');
+        // Obtener valor del formulario, o del campo por defecto, o cadena vacía
+        // Primero intentar obtener de formData (valor editado por el usuario)
+        const rawValue = formData[formKey]?.[fieldKey];
+        // Si no hay valor en formData, usar el defaultValue del campo (puede venir del backend o del input)
+        const defaultValue = field.value !== undefined && field.value !== null ? String(field.value) : '';
+        // Determinar el valor final: priorizar formData, luego defaultValue
+        // Nota: Si rawValue es una cadena vacía '', aún así es un valor válido que el usuario puede haber ingresado
+        let value: string;
+        if (rawValue !== undefined && rawValue !== null) {
+          // Si hay un valor en formData (incluso si es cadena vacía), usarlo
+          value = typeof rawValue === 'string' ? rawValue : String(rawValue);
+        } else if (defaultValue) {
+          // Si no hay valor en formData pero hay defaultValue, usarlo
+          value = defaultValue;
+        } else {
+          // Si no hay ninguno, usar cadena vacía
+          value = '';
+        }
 
+        // Validar campo requerido: debe tener un valor no vacío después de trim
         if (fieldRequired && !value.toString().trim()) {
           throw new Error(`El campo "${fieldLabel}" es requerido`);
         }
