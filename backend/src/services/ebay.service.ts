@@ -127,7 +127,7 @@ export class EbayService {
     // Add request interceptor for authentication
     this.apiClient.interceptors.request.use((config) => {
       if (this.credentials?.token) {
-        config.headers['X-EBAY-API-IAF-TOKEN'] = this.credentials.token;
+        config.headers['Authorization'] = `Bearer ${this.credentials.token}`;
       }
       return config;
     });

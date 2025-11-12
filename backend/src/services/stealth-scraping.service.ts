@@ -10,6 +10,7 @@ import { proxyManager } from './proxy-manager.service';
 import { apiAvailability } from './api-availability.service';
 import { retryScrapingOperation } from '../utils/retry.util';
 import { getChromiumLaunchConfig } from '../utils/chromium';
+import { resolvePrice } from '../utils/currency.utils';
 
 // Apply stealth plugin to make Puppeteer undetectable
 puppeteer.use(StealthPlugin());
@@ -51,6 +52,8 @@ export interface EnhancedScrapedProduct {
   description: string;
   price: number;
   currency: string;
+  sourcePrice?: number;
+  sourceCurrency?: string;
   originalPrice?: number;
   discount?: number;
   images: string[];
@@ -697,13 +700,28 @@ export class StealthScrapingService {
 
     const priceElement = await selectorAdapter.findElement(page, 'productPrice');
     const priceText = await selectorAdapter.extractText(priceElement) || '0';
-    const priceMatch = priceText.match(/[\d,.]+/);
-    const price = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;
+
+    const priceResolution = resolvePrice({
+      raw: priceText,
+      textHints: [priceText],
+    });
+
+    const price = priceResolution.amountInBase;
+    const baseCurrency = priceResolution.baseCurrency;
+    const sourcePrice = priceResolution.amount;
+    const sourceCurrency = priceResolution.sourceCurrency;
 
     const originalPriceElement = await selectorAdapter.findElement(page, 'originalPrice');
-    const originalPriceText = await selectorAdapter.extractText(originalPriceElement) || '0';
-    const originalPriceMatch = originalPriceText.match(/[\d,.]+/);
-    const originalPrice = originalPriceMatch ? parseFloat(originalPriceMatch[0].replace(/,/g, '')) : undefined;
+    const originalPriceText = await selectorAdapter.extractText(originalPriceElement) || '';
+    let originalPrice: number | undefined;
+    if (originalPriceText) {
+      const originalResolution = resolvePrice({
+        raw: originalPriceText,
+        itemCurrencyHints: [sourceCurrency],
+        textHints: [originalPriceText, priceText],
+      });
+      originalPrice = originalResolution.amountInBase > 0 ? originalResolution.amountInBase : undefined;
+    }
 
     // Extract images using adaptive selector
     const imageElements = await selectorAdapter.findElements(page, 'productImages');
@@ -755,12 +773,6 @@ export class StealthScrapingService {
       ? Math.round(((originalPrice - price) / originalPrice) * 100)
       : undefined;
 
-    // Get currency from price text (fallback logic)
-    const currency = priceText.includes('$') ? 'USD' 
-      : priceText.includes('€') ? 'EUR'
-      : priceText.includes('£') ? 'GBP'
-      : 'USD';
-
     // Enhance description with AI (optional)
     const enhancedDescription = await this.enhanceDescriptionWithAI(title, description);
 
@@ -768,7 +780,9 @@ export class StealthScrapingService {
       title,
       description: enhancedDescription,
       price,
-      currency,
+      currency: baseCurrency,
+      sourcePrice,
+      sourceCurrency,
       originalPrice,
       discount,
       images,

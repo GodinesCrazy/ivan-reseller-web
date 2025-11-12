@@ -10,6 +10,7 @@ import type { AliExpressCredentials } from '../types/api-credentials.types';
 import ManualAuthService from './manual-auth.service';
 import ManualAuthRequiredError from '../errors/manual-auth-required.error';
 import { marketplaceAuthStatusService } from './marketplace-auth-status.service';
+import { resolvePrice, resolvePriceRange } from '../utils/currency.utils';
 
 // Configurar Puppeteer con plugin stealth para evadir detección
 puppeteer.use(StealthPlugin());
@@ -22,7 +23,16 @@ puppeteer.use(StealthPlugin());
 interface ScrapedProduct {
   title: string;
   price: number;
+  currency: string;
+  sourcePrice?: number;
+  sourceCurrency?: string;
   originalPrice?: number;
+  priceMin?: number;
+  priceMax?: number;
+  priceMinSource?: number;
+  priceMaxSource?: number;
+  priceRangeSourceCurrency?: string;
+  priceSource?: string;
   imageUrl: string;
   productUrl: string;
   rating: number;
@@ -666,49 +676,193 @@ export class AdvancedMarketplaceScraper {
               title = textLines[0] || '';
             }
 
-            const priceCandidates: string[] = [];
-            if (priceElement?.textContent) priceCandidates.push(priceElement.textContent);
-            if (attrPriceRaw) priceCandidates.push(attrPriceRaw);
-            const priceFromDataset = item.getAttribute('data-orig-price');
-            if (priceFromDataset) priceCandidates.push(priceFromDataset);
+            const priceCandidates: unknown[] = [
+              item.actSkuCalPrice,
+              item.skuCalPrice,
+              item.salePrice,
+              item.displayPrice,
+              item.priceValue,
+              item.price,
+              item.tradePrice,
+              item.discountPrice,
+              item.minPrice,
+              item.maxPrice,
+              item.appSalePrice,
+              item.appSalePriceMin,
+              item.appSalePriceMax,
+              item.priceText,
+              item.salePriceText,
+              item.displayPriceText,
+            ];
 
-            if (priceCandidates.length === 0 && fullText) {
-              const regexPrices = fullText.match(/(\d+[.,]\d+|\d+)/g);
-              if (regexPrices) {
-                priceCandidates.push(...regexPrices);
+            const currencyHints: unknown[] = [
+              item.currency,
+              item.currencyCode,
+              item.tradeCurrency,
+              item.displayCurrency,
+              item.targetCurrency,
+              item.originalCurrency,
+              item.appSaleCurrency,
+              item.localCurrency,
+              item.currencySymbol,
+              item.prices?.currency,
+              item.prices?.currencyCode,
+              item.priceModule?.currency,
+              item.priceModule?.currencyCode,
+            ];
+
+            const textHints: Array<string | undefined | null> = [
+              item.priceText,
+              item.salePriceText,
+              item.displayPriceText,
+              item.displayPrice,
+              item.discountPriceText,
+              item.priceDescription,
+              item.currencySymbol ? String(item.currencySymbol) : null,
+              item.priceModule?.formattedPrice,
+              item.priceModule?.formatedPrice,
+              item.priceModule?.priceRangeText,
+              item.multiPriceDisplay,
+            ];
+
+            const rangeCandidates: unknown[] = [
+              [item.minPrice, item.maxPrice],
+              [item.appSalePriceMin, item.appSalePriceMax],
+              item.priceRange,
+              item.activityPriceRange,
+              item.priceModule?.priceRange,
+              item.priceModule?.activityPriceRange,
+              item.priceModule?.minActivityPrice,
+              item.priceModule?.maxActivityPrice,
+              item.priceModule?.minPrice,
+              item.priceModule?.maxPrice,
+              item.priceModule?.minAmount,
+              item.priceModule?.maxAmount,
+              item.skuPriceRange,
+              item.skuActivityAmount,
+            ];
+
+            const priceRangeInfo = resolvePriceRange({
+              rawRange: rangeCandidates,
+              itemCurrencyHints: currencyHints,
+              textHints,
+            });
+
+            let resolvedPrice:
+              | {
+                  amount: number;
+                  sourceCurrency: string;
+                  amountInBase: number;
+                  baseCurrency: string;
+                }
+              | null = null;
+
+            if (priceRangeInfo && priceRangeInfo.maxAmountInBase > 0) {
+              resolvedPrice = {
+                amount: priceRangeInfo.maxAmount,
+                sourceCurrency: priceRangeInfo.currency,
+                amountInBase: priceRangeInfo.maxAmountInBase,
+                baseCurrency: priceRangeInfo.baseCurrency,
+              };
+            }
+
+            if (!resolvedPrice) {
+              for (const candidate of priceCandidates) {
+                if (candidate === undefined || candidate === null || candidate === '') {
+                  continue;
+                }
+                const hints = [...textHints, typeof candidate === 'string' ? candidate : null];
+                const resolution = resolvePrice({
+                  raw: candidate,
+                  itemCurrencyHints: currencyHints,
+                  textHints: hints,
+                });
+                if (resolution.amount > 0 && resolution.amountInBase > 0) {
+                  resolvedPrice = resolution;
+                  break;
+                }
               }
             }
 
-            const parsedPrices = priceCandidates
-              .map(p => parseFloat(String(p).replace(/[^\d.,]/g, '').replace(/,/g, '.')))
-              .filter(p => Number.isFinite(p) && p > 0);
-            const price = parsedPrices.length > 0 ? Math.min(...parsedPrices) : 0;
-
-            const imageUrl = imageElement?.src ||
-                           imageElement?.getAttribute('data-src') ||
-                           imageElement?.getAttribute('data-image') ||
-                           '';
-            const productUrl = linkElement?.href || '';
-            const ratingValue = parseFloat((ratingElement?.textContent || '').replace(',', '.')) || 0;
-            const reviewCount = parseInt((reviewsElement?.textContent || '').replace(/[^\d]/g, ''), 10) || 0;
-            const shippingText = shippingElement?.textContent?.trim() || 'Varies';
-
-            if (title && price > 0) {
-              results.push({
-                title: title.substring(0, 150),
-                price,
-                imageUrl: imageUrl.startsWith('//') ? `https:${imageUrl}` :
-                          imageUrl.startsWith('http') ? imageUrl :
-                          imageUrl ? `https:${imageUrl}` : '',
-                productUrl: productUrl.startsWith('http') ? productUrl :
-                           productUrl ? `https:${productUrl}` : '',
-                rating: ratingValue || 4.2,
-                reviewCount: reviewCount || Math.floor(Math.random() * 400) + 20,
-                seller: 'AliExpress Vendor',
-                shipping: shippingText,
-                availability: 'In stock'
-              });
+            if (!resolvedPrice || resolvedPrice.amountInBase <= 0) {
+              return null;
             }
+
+            const price = resolvedPrice.amountInBase;
+            const baseCurrency = resolvedPrice.baseCurrency;
+            const sourcePrice = resolvedPrice.amount;
+            const sourceCurrency = resolvedPrice.sourceCurrency;
+
+            const priceMinBase = priceRangeInfo ? priceRangeInfo.minAmountInBase : price;
+            const priceMaxBase = priceRangeInfo ? priceRangeInfo.maxAmountInBase : price;
+            const priceMinSource = priceRangeInfo ? priceRangeInfo.minAmount : sourcePrice;
+            const priceMaxSource = priceRangeInfo ? priceRangeInfo.maxAmount : sourcePrice;
+            const priceRangeSourceCurrency = priceRangeInfo ? priceRangeInfo.currency : sourceCurrency;
+            const priceSource = priceRangeInfo ? 'range:max' : 'single';
+
+            const image =
+              item.imageUrl ||
+              item.productImage ||
+              item.image ||
+              item.pic ||
+              (Array.isArray(item.imageUrlList) ? item.imageUrlList[0] : null) ||
+              (Array.isArray(item.images) ? item.images[0] : null) ||
+              '';
+
+            const url =
+              item.productUrl ||
+              item.detailUrl ||
+              item.itemDetailUrl ||
+              item.targetUrl ||
+              item.url ||
+              '';
+
+            if (!title || price <= 0 || !url) {
+              return null;
+            }
+
+            const rating =
+              item.ratingScore ||
+              item.evaluationRate ||
+              item.starRating ||
+              item.feedbackScore ||
+              item.averageStar ||
+              0;
+
+            const reviewCount =
+              item.evaluationCount ||
+              item.reviewCount ||
+              item.feedbackCount ||
+              item.commentCount ||
+              item.numberOfOrders ||
+              0;
+
+            return {
+              title: String(title).trim().substring(0, 150),
+              price,
+              currency: baseCurrency,
+              sourcePrice,
+              sourceCurrency,
+              priceMin: priceMinBase,
+              priceMax: priceMaxBase,
+              priceMinSource,
+              priceMaxSource,
+              priceRangeSourceCurrency,
+              priceSource,
+              imageUrl: image
+                ? image.startsWith('//')
+                  ? `https:${image}`
+                  : image.startsWith('http')
+                  ? image
+                  : `https:${image}`
+                : '',
+              productUrl: url.startsWith('http') ? url : `https:${url}`,
+              rating: Number(rating) || 0,
+              reviewCount: Number(reviewCount) || 0,
+              seller: item.storeName || item.sellerName || 'AliExpress Vendor',
+              shipping: item.logisticsDesc || item.shipping || 'Varies',
+              availability: item.availability || 'In stock',
+            };
           } catch (error) {
             console.error('Error extracting product:', error);
           }
@@ -1226,19 +1380,129 @@ export class AdvancedMarketplaceScraper {
       item.seoTitle ||
       '';
 
-    const priceValue =
-      item.salePrice ||
-      item.displayPrice ||
-      item.price ||
-      item.priceText ||
-      (item.prices && item.prices.sale) ||
-      (item.prices && item.prices.original) ||
-      (item.sku && item.sku.price);
+    const priceCandidates: unknown[] = [
+      item.actSkuCalPrice,
+      item.skuCalPrice,
+      item.salePrice,
+      item.displayPrice,
+      item.priceValue,
+      item.price,
+      item.tradePrice,
+      item.discountPrice,
+      item.minPrice,
+      item.maxPrice,
+      item.appSalePrice,
+      item.appSalePriceMin,
+      item.appSalePriceMax,
+      item.priceText,
+      item.salePriceText,
+      item.displayPriceText,
+    ];
 
-    const price =
-      typeof priceValue === 'number'
-        ? priceValue
-        : parseFloat(String(priceValue || '').replace(/[^\d.]/g, '')) || 0;
+    const currencyHints: unknown[] = [
+      item.currency,
+      item.currencyCode,
+      item.tradeCurrency,
+      item.displayCurrency,
+      item.targetCurrency,
+      item.originalCurrency,
+      item.appSaleCurrency,
+      item.localCurrency,
+      item.currencySymbol,
+      item.prices?.currency,
+      item.prices?.currencyCode,
+      item.priceModule?.currency,
+      item.priceModule?.currencyCode,
+    ];
+
+    const textHints: Array<string | undefined | null> = [
+      item.priceText,
+      item.salePriceText,
+      item.displayPriceText,
+      item.displayPrice,
+      item.discountPriceText,
+      item.priceDescription,
+      item.currencySymbol ? String(item.currencySymbol) : null,
+      item.priceModule?.formattedPrice,
+      item.priceModule?.formatedPrice,
+      item.priceModule?.priceRangeText,
+      item.multiPriceDisplay,
+    ];
+
+    const rangeCandidates: unknown[] = [
+      [item.minPrice, item.maxPrice],
+      [item.appSalePriceMin, item.appSalePriceMax],
+      item.priceRange,
+      item.activityPriceRange,
+      item.priceModule?.priceRange,
+      item.priceModule?.activityPriceRange,
+      item.priceModule?.minActivityPrice,
+      item.priceModule?.maxActivityPrice,
+      item.priceModule?.minPrice,
+      item.priceModule?.maxPrice,
+      item.priceModule?.minAmount,
+      item.priceModule?.maxAmount,
+      item.skuPriceRange,
+      item.skuActivityAmount,
+    ];
+
+    const priceRangeInfo = resolvePriceRange({
+      rawRange: rangeCandidates,
+      itemCurrencyHints: currencyHints,
+      textHints,
+    });
+
+    let resolvedPrice:
+      | {
+          amount: number;
+          sourceCurrency: string;
+          amountInBase: number;
+          baseCurrency: string;
+        }
+      | null = null;
+
+    if (priceRangeInfo && priceRangeInfo.maxAmountInBase > 0) {
+      resolvedPrice = {
+        amount: priceRangeInfo.maxAmount,
+        sourceCurrency: priceRangeInfo.currency,
+        amountInBase: priceRangeInfo.maxAmountInBase,
+        baseCurrency: priceRangeInfo.baseCurrency,
+      };
+    }
+
+    if (!resolvedPrice) {
+      for (const candidate of priceCandidates) {
+        if (candidate === undefined || candidate === null || candidate === '') {
+          continue;
+        }
+        const hints = [...textHints, typeof candidate === 'string' ? candidate : null];
+        const resolution = resolvePrice({
+          raw: candidate,
+          itemCurrencyHints: currencyHints,
+          textHints: hints,
+        });
+        if (resolution.amount > 0 && resolution.amountInBase > 0) {
+          resolvedPrice = resolution;
+          break;
+        }
+      }
+    }
+
+    if (!resolvedPrice || resolvedPrice.amountInBase <= 0) {
+      return null;
+    }
+
+    const price = resolvedPrice.amountInBase;
+    const baseCurrency = resolvedPrice.baseCurrency;
+    const sourcePrice = resolvedPrice.amount;
+    const sourceCurrency = resolvedPrice.sourceCurrency;
+
+    const priceMinBase = priceRangeInfo ? priceRangeInfo.minAmountInBase : price;
+    const priceMaxBase = priceRangeInfo ? priceRangeInfo.maxAmountInBase : price;
+    const priceMinSource = priceRangeInfo ? priceRangeInfo.minAmount : sourcePrice;
+    const priceMaxSource = priceRangeInfo ? priceRangeInfo.maxAmount : sourcePrice;
+    const priceRangeSourceCurrency = priceRangeInfo ? priceRangeInfo.currency : sourceCurrency;
+    const priceSource = priceRangeInfo ? 'range:max' : 'single';
 
     const image =
       item.imageUrl ||
@@ -1280,6 +1544,15 @@ export class AdvancedMarketplaceScraper {
     return {
       title: String(title).trim().substring(0, 150),
       price,
+      currency: baseCurrency,
+      sourcePrice,
+      sourceCurrency,
+      priceMin: priceMinBase,
+      priceMax: priceMaxBase,
+      priceMinSource,
+      priceMaxSource,
+      priceRangeSourceCurrency,
+      priceSource,
       imageUrl: image
         ? image.startsWith('//')
           ? `https:${image}`

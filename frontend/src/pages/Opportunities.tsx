@@ -31,7 +31,12 @@ interface OpportunityItem {
   aliexpressUrl: string;
   image?: string;
   costUsd: number;
+  costAmount: number;
+  costCurrency: string;
+  baseCurrency: string;
   suggestedPriceUsd: number;
+  suggestedPriceAmount: number;
+  suggestedPriceCurrency: string;
   profitMargin: number; // 0-1
   roiPercentage: number; // 0-100
   competitionLevel: 'low' | 'medium' | 'high' | 'unknown';
@@ -43,6 +48,19 @@ interface OpportunityItem {
   estimatedFields?: string[];
   estimationNotes?: string[];
 }
+
+const formatMoney = (value: number, currency: string) => {
+  if (!Number.isFinite(value)) return '—';
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(2)}`;
+  }
+};
 
 // Componente de skeleton para tabla
 function TableSkeleton({ rows, columns }: { rows: number; columns: number }) {
@@ -442,8 +460,8 @@ export default function Opportunities() {
               <tr>
                 <th className="text-center p-3">Imagen</th>
                 <th className="text-left p-3">Título</th>
-                <th className="text-right p-3">Costo (USD)</th>
-                <th className="text-right p-3">Precio Sugerido (USD)</th>
+                <th className="text-right p-3">Costo</th>
+                <th className="text-right p-3">Precio sugerido</th>
                 <th className="text-right p-3">Margen %</th>
                 <th className="text-right p-3">ROI %</th>
                 <th className="text-center p-3">Competencia</th>
@@ -505,13 +523,27 @@ export default function Opportunities() {
                   ) : null}
                 </td>
                 <td className="p-3 text-right font-semibold">
-                  ${it.costUsd.toFixed(2)}
+                  <div className="flex flex-col items-end gap-0.5">
+                    <span>{formatMoney(it.costUsd, it.baseCurrency)}</span>
+                    {it.costCurrency && it.costCurrency !== it.baseCurrency ? (
+                      <span className="text-xs text-gray-500">
+                        ({formatMoney(it.costAmount, it.costCurrency)})
+                      </span>
+                    ) : null}
+                  </div>
                 </td>
                 <td className="p-3">
                   <div className="flex items-center justify-end gap-2">
-                    <span className="font-semibold text-green-600">
-                      ${it.suggestedPriceUsd.toFixed(2)}
-                    </span>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className="font-semibold text-green-600">
+                        {formatMoney(it.suggestedPriceUsd, it.baseCurrency)}
+                      </span>
+                      {it.suggestedPriceCurrency && it.suggestedPriceCurrency !== it.baseCurrency ? (
+                        <span className="text-xs text-gray-500">
+                          ({formatMoney(it.suggestedPriceAmount, it.suggestedPriceCurrency)})
+                        </span>
+                      ) : null}
+                    </div>
                     {it.estimatedFields?.includes('suggestedPriceUsd') && (
                       <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 uppercase text-[10px] font-semibold">
                         Estimado

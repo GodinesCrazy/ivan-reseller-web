@@ -11,6 +11,8 @@ export interface ScrapedProduct {
   description: string;
   price: number;
   currency: string;
+  sourcePrice?: number;
+  sourceCurrency?: string;
   images: string[];
   category?: string;
   specs?: Record<string, any>;
@@ -127,6 +129,8 @@ export class AdvancedScrapingService {
       description: enhanced.description,
       price: enhanced.price,
       currency: enhanced.currency,
+      sourcePrice: enhanced.sourcePrice,
+      sourceCurrency: enhanced.sourceCurrency,
       images: enhanced.images,
       category: enhanced.category,
       specs: enhanced.specs,
