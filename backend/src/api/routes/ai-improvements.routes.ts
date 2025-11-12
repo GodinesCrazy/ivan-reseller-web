@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
 import { aiImprovementsService } from '../../services/ai-improvements.service';
+import { prisma } from '../../config/database';
 
 const router = Router();
 router.use(authenticate);
@@ -58,7 +59,7 @@ router.get('/optimize-pricing/:productId', async (req: Request, res: Response, n
     const productId = parseInt(req.params.productId);
 
     // Verificar que el usuario tiene acceso al producto
-    const product = await require('../../config/database').prisma.product.findUnique({
+    const product = await prisma.product.findUnique({
       where: { id: productId },
       select: { userId: true }
     });
@@ -93,7 +94,7 @@ router.get('/predict-demand/:productId', async (req: Request, res: Response, nex
     const productId = parseInt(req.params.productId);
 
     // Verificar que el usuario tiene acceso al producto
-    const product = await require('../../config/database').prisma.product.findUnique({
+    const product = await prisma.product.findUnique({
       where: { id: productId },
       select: { userId: true }
     });
