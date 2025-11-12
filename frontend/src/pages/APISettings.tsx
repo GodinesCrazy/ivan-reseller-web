@@ -560,24 +560,39 @@ export default function APISettings() {
     try {
       const scopeKey = makeEnvKey(apiName, environment);
       const effectiveScope = scopeOverride || scopeSelection[scopeKey] || 'user';
+      
+      // Si el usuario ha seleccionado explícitamente 'user', no incluir credenciales globales
+      const includeGlobal = scopeOverride !== 'user' && scopeSelection[scopeKey] !== 'user';
+      
       const { data } = await api.get(`/api/credentials/${apiName}`, {
-        params: { environment, scope: effectiveScope },
+        params: { environment, scope: effectiveScope, includeGlobal: includeGlobal ? 'true' : 'false' },
       });
 
       const creds = data?.data?.credentials || {};
       const responseScope = data?.data?.scope as 'user' | 'global' | undefined;
       const masked = !!data?.data?.masked;
 
-      if (responseScope) {
+      // Solo actualizar scopeSelection si no hay un scopeOverride explícito
+      // Esto evita que se sobrescriba cuando el usuario selecciona 'user'
+      if (responseScope && !scopeOverride) {
         setScopeSelection(prev => ({
           ...prev,
           [scopeKey]: responseScope,
         }));
+      } else if (scopeOverride) {
+        // Si hay un scopeOverride, mantenerlo
+        setScopeSelection(prev => ({
+          ...prev,
+          [scopeKey]: scopeOverride,
+        }));
       }
 
+      // No marcar como masked si el usuario ha seleccionado explícitamente 'user'
+      // Esto permite que el usuario edite incluso si hay credenciales globales
+      const userSelectedPersonal = scopeOverride === 'user' || scopeSelection[scopeKey] === 'user';
       setMaskedScopes(prev => {
         const next = { ...prev };
-        if (masked) {
+        if (masked && !userSelectedPersonal) {
           next[formKey] = true;
         } else {
           delete next[formKey];
@@ -1598,13 +1613,15 @@ export default function APISettings() {
           const explicitScope = scopeSelection[scopeKey];
           const credentialScope = credential?.scope || 'user';
           // Para usuarios no admin: si han seleccionado 'user' explícitamente, respetar eso; si no, usar la credencial existente
-          const resolvedScope = explicitScope || credentialScope;
-          // currentScope debe respetar la selección explícita del usuario
-          const currentScope = explicitScope || (!isAdmin && credentialScope === 'global' ? 'global' : credentialScope);
+          // currentScope debe respetar la selección explícita del usuario: si explicitScope existe, usarlo; si no, usar credentialScope
+          const currentScope = explicitScope !== undefined ? explicitScope : credentialScope;
           const isGlobalScope = currentScope === 'global';
           // isReadOnly: deshabilitar solo si es global Y el usuario no ha seleccionado 'user' explícitamente
-          const isReadOnly =
-            (!isAdmin && isGlobalScope && explicitScope !== 'user') || !!maskedScopes[formKey];
+          // Si explicitScope === 'user', entonces NO debe ser readonly, incluso si hay una credencial global
+          // Si el usuario ha seleccionado explícitamente 'user', siempre permitir edición
+          const isReadOnly = explicitScope === 'user' 
+            ? false 
+            : ((!isAdmin && isGlobalScope) || !!maskedScopes[formKey]);
 
           const fieldsToUse = supportsEnv
             ? backendDef?.environments?.[currentEnvironment]?.fields || apiDef.fields
