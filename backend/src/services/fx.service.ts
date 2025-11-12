@@ -14,7 +14,7 @@ class FXService {
   private rates: Rates = {};
   private lastUpdated: Date | null = null;
   private providerEnabled = (process.env.FX_PROVIDER_ENABLED || 'true').toLowerCase() !== 'false';
-  private providerUrl = process.env.FX_PROVIDER_URL || 'https://api.exchangerate.host/latest';
+  private providerUrl = process.env.FX_PROVIDER_URL || 'https://open.er-api.com/v6/latest/{base}';
   private providerSymbols = process.env.FX_PROVIDER_SYMBOLS;
   private refreshInFlight: Promise<void> | null = null;
 
@@ -110,7 +110,7 @@ class FXService {
 
   private buildProviderUrl(base: string): string {
     if (!this.providerUrl) {
-      return `https://api.exchangerate.host/latest?base=${base}`;
+      return `https://open.er-api.com/v6/latest/${base}`;
     }
 
     if (this.providerUrl.includes('{base}')) {
@@ -146,31 +146,55 @@ class FXService {
       const url = this.buildProviderUrl(targetBase);
       const response = await axios.get(url, { timeout: 10_000 });
       const data = response.data;
-      if (!data || typeof data !== 'object' || !data.rates) {
+      if (!data || typeof data !== 'object') {
+        throw new Error('Empty FX provider response');
+      }
+
+      let providerBase = targetBase;
+      let timestamp: Date | null = null;
+      let rates: Rates | null = null;
+
+      if (Array.isArray((data as any).rates) || typeof (data as any).rates === 'object') {
+        providerBase = (data.base || data.base_code || targetBase || this.base).toUpperCase();
+        if (data.time_last_update_unix) {
+          timestamp = new Date(data.time_last_update_unix * 1000);
+        } else if (data.date) {
+          timestamp = new Date(data.date);
+        } else if (data.time_last_update_utc) {
+          timestamp = new Date(data.time_last_update_utc);
+        }
+        rates = data.rates as Rates;
+      } else if (data.conversion_rates) {
+        providerBase = (data.base_code || targetBase || this.base).toUpperCase();
+        if (data.time_last_update_unix) {
+          timestamp = new Date(data.time_last_update_unix * 1000);
+        }
+        rates = data.conversion_rates as Rates;
+      }
+
+      if (!rates) {
+        if (data.result && data.result !== 'success' && data.error_type) {
+          throw new Error(`${data.error_type}`);
+        }
         throw new Error('Invalid FX provider response');
       }
 
-      const providerBase = (data.base || targetBase || this.base).toUpperCase();
-      const timestamp = data.time_last_update_unix
-        ? new Date(data.time_last_update_unix * 1000)
-        : data.date
-        ? new Date(data.date)
-        : new Date();
-
-      this.setRates(data.rates, {
+      this.setRates(rates, {
         base: providerBase,
         replace: true,
-        timestamp,
+        timestamp: timestamp ?? undefined,
       });
 
       logger.info('FXService: rates refreshed from provider', {
         base: providerBase,
+        providerUrl: this.providerUrl,
         lastUpdated: this.lastUpdated?.toISOString(),
       });
     })()
       .catch((error: any) => {
         logger.error('FXService: failed to refresh rates', {
           base: targetBase,
+          providerUrl: this.providerUrl,
           error: error?.message || String(error),
         });
         throw error;
@@ -187,7 +211,10 @@ class FXService {
     const f = from.toUpperCase();
     const t = to.toUpperCase();
     if (f === t) return amount;
-    if (!this.rates[f] || !this.rates[t]) return amount;
+    if (!this.rates[f] || !this.rates[t]) {
+      logger.warn('FXService: missing rate for conversion', { from: f, to: t });
+      return amount;
+    }
     const amountInBase = amount / this.rates[f];
     return amountInBase * this.rates[t];
   }
