@@ -245,10 +245,12 @@ export default function APISettings() {
   const [manualSessionLoginUrl, setManualSessionLoginUrl] = useState<string | null>(null);
   const [manualSessionLoading, setManualSessionLoading] = useState(false);
   const manualSessionPollRef = useRef<number | null>(null);
+  const lastHandledManualTokenRef = useRef<string | null>(null);
   const apiBaseUrl = useMemo(() => {
     const base = api.defaults.baseURL || window.location.origin;
     return base.replace(/\/+$/, '');
   }, []);
+  const apiBaseHasApiSuffix = useMemo(() => /\/api$/i.test(apiBaseUrl), [apiBaseUrl]);
   const authUser = useAuthStore((state) => state.user);
   const isAdmin = authUser?.role === 'ADMIN';
   const currentUserId = authUser?.id ?? null;
@@ -257,6 +259,8 @@ export default function APISettings() {
   const authStatuses = useAuthStatusStore((state) => state.statuses);
   const fetchAuthStatuses = useAuthStatusStore((state) => state.fetchStatuses);
   const requestAuthRefresh = useAuthStatusStore((state) => state.requestRefresh);
+  const pendingManualSession = useAuthStatusStore((state) => state.pendingManualSession);
+  const markManualHandled = useAuthStatusStore((state) => state.markManualHandled);
 
   useEffect(() => {
     loadCredentials();
@@ -1090,7 +1094,8 @@ export default function APISettings() {
     if (!manualSessionToken) {
       return '';
     }
-    const endpoint = `${apiBaseUrl}/manual-auth/${manualSessionToken}/complete`;
+    const endpointBase = apiBaseHasApiSuffix ? apiBaseUrl : `${apiBaseUrl}/api`;
+    const endpoint = `${endpointBase}/manual-auth/${manualSessionToken}/complete`;
     return `(async () => {
   const endpoint = '${endpoint}';
   const provider = 'aliexpress';
@@ -1153,7 +1158,7 @@ export default function APISettings() {
 
   console.log('✅ Cookies enviadas. Vuelve a la plataforma para confirmar.');
 })();`;
-  }, [apiBaseUrl, manualSessionToken]);
+  }, [apiBaseUrl, apiBaseHasApiSuffix, manualSessionToken]);
 
   const fallbackCookieSnippet = `copy(JSON.stringify(
   document.cookie.split(';').map(c => {
@@ -1315,7 +1320,15 @@ export default function APISettings() {
 
   useEffect(() => {
     if (manualCookieModalOpen) {
-      startManualSession();
+      cleanupManualSessionPolling();
+      if (manualSessionToken) {
+        pollManualSessionStatus(manualSessionToken);
+        manualSessionPollRef.current = window.setInterval(() => {
+          pollManualSessionStatus(manualSessionToken);
+        }, 5000);
+      } else {
+        startManualSession();
+      }
     } else {
       cleanupManualSessionPolling();
       setManualSessionToken(null);
@@ -1328,8 +1341,33 @@ export default function APISettings() {
     return () => {
       cleanupManualSessionPolling();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manualCookieModalOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manualCookieModalOpen, manualSessionToken]);
+
+  useEffect(() => {
+    if (
+      pendingManualSession &&
+      pendingManualSession.token &&
+      lastHandledManualTokenRef.current !== pendingManualSession.token
+    ) {
+      lastHandledManualTokenRef.current = pendingManualSession.token;
+      setManualCookieInput('');
+      setManualCookieError(null);
+      setManualSessionToken(pendingManualSession.token);
+      setManualSessionStatus('pending');
+      setManualSessionError(null);
+      setManualSessionExpiresAt(pendingManualSession.expiresAt ?? null);
+      setManualSessionLoginUrl(
+        pendingManualSession.loginUrl?.startsWith('http')
+          ? pendingManualSession.loginUrl
+          : pendingManualSession.loginUrl
+          ? `${window.location.origin}${pendingManualSession.loginUrl}`
+          : null
+      );
+      setManualCookieModalOpen(true);
+      markManualHandled(pendingManualSession.token);
+    }
+  }, [pendingManualSession, markManualHandled]);
 
   const handleManualCookiesSave = async () => {
     if (!manualCookieInput.trim()) {

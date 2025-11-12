@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { LogOut, RefreshCcw, ShieldCheck, ShieldAlert, Loader2, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@stores/authStore';
@@ -38,7 +38,6 @@ export default function Navbar() {
   const loadingStatus = useAuthStatusStore((state) => state.loading);
   const fetchStatuses = useAuthStatusStore((state) => state.fetchStatuses);
   const pendingManualSession = useAuthStatusStore((state) => state.pendingManualSession);
-  const markManualHandled = useAuthStatusStore((state) => state.markManualHandled);
   const requestRefresh = useAuthStatusStore((state) => state.requestRefresh);
 
   useEffect(() => {
@@ -47,22 +46,25 @@ export default function Navbar() {
     return () => clearInterval(interval);
   }, [fetchStatuses]);
 
+  const lastToastTokenRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (pendingManualSession) {
-      const { token, loginUrl } = pendingManualSession;
-      const url = loginUrl?.startsWith('http')
-        ? loginUrl
-        : `${window.location.origin}${loginUrl || `/manual-login/${token}`}`;
-      try {
-        window.open(url, '_blank', 'noopener,noreferrer');
-        toast.info('Abrimos la ventana para confirmar tu sesión en AliExpress. Sigue las instrucciones y vuelve cuando termines.');
-      } catch (error) {
-        console.error('No se pudo abrir la ventana de autenticación manual', error);
-      } finally {
-        markManualHandled(token);
-      }
+    if (pendingManualSession && pendingManualSession.token !== lastToastTokenRef.current) {
+      lastToastTokenRef.current = pendingManualSession.token;
+      toast.info(
+        <div className="flex flex-col gap-2">
+          <span>AliExpress necesita que confirmes la sesión manual.</span>
+          <a
+            href="/api-settings"
+            className="inline-flex w-fit items-center gap-1 rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+          >
+            Abrir configuración
+          </a>
+        </div>,
+        { duration: 8000 }
+      );
     }
-  }, [pendingManualSession, markManualHandled]);
+  }, [pendingManualSession]);
 
   const aliStatus = statuses.aliexpress;
   const statusKey = aliStatus?.status || 'unknown';
@@ -79,10 +81,20 @@ export default function Navbar() {
   return (
     <nav className="bg-white shadow-sm border-b border-gray-200">
       <div className="px-8 py-4 flex justify-between items-center">
-        <div className="flex items-center space-x-4">
-          <div>
-            <h1 className="text-2xl font-bold text-primary-600">Ivan Reseller</h1>
-            <span className="text-sm text-gray-500">Dropshipping Platform</span>
+        <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-3">
+            <div className="h-12 w-12 rounded-2xl overflow-hidden border border-blue-100 shadow-md bg-white">
+              <img
+                src="/brand-logo.png"
+                alt="Logotipo Ivan Reseller"
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-primary-600 leading-tight">Ivan Reseller</h1>
+              <span className="text-sm text-gray-500">Inteligencia para oportunidades</span>
+            </div>
           </div>
 
           <div className="hidden md:flex flex-col">

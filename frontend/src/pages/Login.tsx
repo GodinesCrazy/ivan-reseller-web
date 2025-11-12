@@ -43,10 +43,20 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-md">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900">Ivan Reseller</h2>
-          <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
+      <div className="max-w-md w-full space-y-8 p-10 bg-white rounded-2xl shadow-xl border border-gray-100">
+        <div className="text-center flex flex-col items-center space-y-4">
+          <div className="h-16 w-16 rounded-3xl overflow-hidden shadow-lg ring-2 ring-primary-200/60">
+            <img
+              src="/brand-logo.png"
+              alt="Logotipo Ivan Reseller"
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          </div>
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900">Ivan Reseller</h2>
+            <p className="mt-1 text-sm text-gray-600">Ingresá para detectar oportunidades de negocio</p>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-6">
