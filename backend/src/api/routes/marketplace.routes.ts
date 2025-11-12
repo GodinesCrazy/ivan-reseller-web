@@ -393,6 +393,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
     const secret = process.env.ENCRYPTION_KEY || 'default-key';
 
     let authUrl = '';
+    let formatWarning: string | null = null; // Advertencia de formato del App ID (solo para eBay)
 
     if (marketplace === 'ebay') {
       const cred = await marketplaceService.getCredentials(userId, 'ebay', environment as any);
@@ -438,33 +439,59 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         });
       }
       
-      // Validar formato del App ID según el ambiente
-      const appIdUpper = appId.trim().toUpperCase();
+      // Validar formato del App ID según el ambiente (solo como advertencia, no bloqueante)
+      // Limpiar el App ID de espacios y caracteres especiales
+      const cleanedAppId = appId.trim().replace(/[\s\u200B-\u200D\uFEFF]/g, ''); // Remover espacios y caracteres invisibles
+      const appIdUpper = cleanedAppId.toUpperCase();
+      
+      // Logging para debugging
+      console.log('[eBay OAuth] Validating App ID:', {
+        original: appId,
+        cleaned: cleanedAppId,
+        upper: appIdUpper,
+        sandbox,
+        environment: resolvedEnv,
+        startsWithSBX: appIdUpper.startsWith('SBX-'),
+        appIdLength: cleanedAppId.length,
+        firstChars: cleanedAppId.substring(0, 10),
+      });
+      
+      // Solo mostrar advertencia, no bloquear
+      // Algunos App IDs de eBay pueden tener formatos diferentes o pueden ser válidos aunque no empiecen con SBX-
       if (sandbox && !appIdUpper.startsWith('SBX-')) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `⚠️ Advertencia: El App ID "${appId.substring(0, 20)}..." no parece ser de Sandbox (debería empezar con "SBX-"). Verifica que estés usando las credenciales correctas para el ambiente Sandbox.`,
-          code: 'INVALID_APP_ID_FORMAT',
-          hint: 'Los App IDs de Sandbox deben empezar con "SBX-"'
+        formatWarning = `⚠️ Advertencia: El App ID no parece ser de Sandbox (típicamente empiezan con "SBX-"). Si el error persiste, verifica en eBay Developer Portal que el App ID sea correcto para Sandbox.`;
+        console.warn('[eBay OAuth] App ID format warning for Sandbox:', {
+          appId: cleanedAppId.substring(0, 20) + '...',
+          expectedPrefix: 'SBX-',
+          actualPrefix: cleanedAppId.substring(0, 4),
         });
       }
       
       if (!sandbox && appIdUpper.startsWith('SBX-')) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `⚠️ Advertencia: El App ID "${appId.substring(0, 20)}..." parece ser de Sandbox (empieza con "SBX-"), pero estás usando el ambiente Production. Verifica que estés usando las credenciales correctas.`,
-          code: 'INVALID_APP_ID_FORMAT',
-          hint: 'Los App IDs de Production no deben empezar con "SBX-"'
+        formatWarning = `⚠️ Advertencia: El App ID parece ser de Sandbox (empieza con "SBX-"), pero estás usando Production. Si el error persiste, verifica que estés usando las credenciales correctas.`;
+        console.warn('[eBay OAuth] App ID format warning for Production:', {
+          appId: cleanedAppId.substring(0, 20) + '...',
+          detectedPrefix: 'SBX-',
         });
       }
+      
+      // Usar el App ID limpiado para continuar
+      const finalAppId = cleanedAppId;
       const redirB64 = Buffer.from(String(ruName)).toString('base64url');
       const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv].join('|');
       const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
       const state = Buffer.from([payload, sig].join('|')).toString('base64url');
-      const ebay = new EbayService({ appId, devId, certId, sandbox });
-      const url = new URL(ebay.getAuthUrl(String(ruName)));
+      
+      // Usar el App ID limpiado
+      const ebay = new EbayService({ appId: finalAppId, devId: devId.trim(), certId: certId.trim(), sandbox });
+      const url = new URL(ebay.getAuthUrl(String(ruName.trim())));
       url.searchParams.set('state', state);
       authUrl = url.toString();
+      
+      // Si hay advertencia de formato, incluirla en la respuesta pero no bloquear
+      if (formatWarning) {
+        console.log('[eBay OAuth] Format warning (non-blocking):', formatWarning);
+      }
     } else if (marketplace === 'mercadolibre') {
       const cred = await marketplaceService.getCredentials(userId, 'mercadolibre', environment as any);
       const resolvedEnv: 'sandbox' | 'production' = environment || (cred?.environment as any) || 'production';
@@ -487,12 +514,20 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       authUrl = url.toString();
     }
 
-    res.json({
+    // Incluir advertencia si existe (solo para eBay)
+    const responseData: any = {
       success: true,
       data: {
         authUrl,
       },
-    });
+    };
+    
+    if (marketplace === 'ebay' && formatWarning) {
+      responseData.warning = formatWarning;
+      responseData.message = 'URL de autorización generada. Revisa la advertencia sobre el formato del App ID si el OAuth falla.';
+    }
+    
+    res.json(responseData);
   } catch (error: any) {
     res.status(500).json({
       success: false,
