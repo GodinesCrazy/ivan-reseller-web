@@ -559,10 +559,14 @@ export default function APISettings() {
     setLoadingEnvironment(prev => ({ ...prev, [formKey]: true }));
     try {
       const scopeKey = makeEnvKey(apiName, environment);
-      const effectiveScope = scopeOverride || scopeSelection[scopeKey] || 'user';
       
-      // Si el usuario ha seleccionado explícitamente 'user', no incluir credenciales globales
-      const includeGlobal = scopeOverride !== 'user' && scopeSelection[scopeKey] !== 'user';
+      // APIs de marketplaces y PayPal deben ser únicamente personales
+      const PERSONAL_ONLY_APIS = ['ebay', 'amazon', 'mercadolibre', 'paypal'];
+      const isPersonalOnly = PERSONAL_ONLY_APIS.includes(apiName);
+      
+      // Para APIs personales, siempre usar scope 'user' y no incluir globales
+      const effectiveScope = isPersonalOnly ? 'user' : (scopeOverride || scopeSelection[scopeKey] || 'user');
+      const includeGlobal = isPersonalOnly ? false : (scopeOverride !== 'user' && scopeSelection[scopeKey] !== 'user');
       
       const { data } = await api.get(`/api/credentials/${apiName}`, {
         params: { environment, scope: effectiveScope, includeGlobal: includeGlobal ? 'true' : 'false' },
@@ -600,7 +604,7 @@ export default function APISettings() {
         return next;
       });
 
-      const normalized: Record<string, string> = {};
+      let normalized: Record<string, string> = {};
       
       // Si hay credenciales, normalizarlas
       if (creds && Object.keys(creds).length > 0) {
@@ -613,12 +617,10 @@ export default function APISettings() {
             normalized[key] = String(value);
           }
         });
-      } else {
-        // Si no hay credenciales (modo personal sin credenciales guardadas),
-        // inicializar con valores vacíos pero preservar la estructura
-        // Los valores por defecto se mostrarán en el input a través de field.value
-        normalized = {};
       }
+      // Si no hay credenciales (modo personal sin credenciales guardadas),
+      // normalized queda como objeto vacío {}
+      // Los valores por defecto se mostrarán en el input a través de field.value
 
       setFormData(prev => ({ ...prev, [formKey]: normalized }));
     } catch (error) {
@@ -684,16 +686,34 @@ export default function APISettings() {
         ? selectedEnvironment[apiName] || 'production'
         : 'production';
       const scopeKey = makeEnvKey(apiName, currentEnvironment);
+      
+      // APIs de marketplaces y PayPal deben ser únicamente personales
+      const PERSONAL_ONLY_APIS = ['ebay', 'amazon', 'mercadolibre', 'paypal'];
+      const isPersonalOnly = PERSONAL_ONLY_APIS.includes(apiName);
+      
       // Para usuarios no admin, siempre usar 'user' si han seleccionado explícitamente 'user'
       // o si no hay credencial existente
       const explicitScope = scopeSelection[scopeKey];
-      const currentScope = explicitScope !== undefined 
-        ? explicitScope 
-        : (!isAdmin ? 'user' : (credential?.scope || 'user'));
+      let currentScope: 'user' | 'global';
+      
+      if (isPersonalOnly) {
+        // Forzar scope 'user' para APIs de marketplaces y PayPal
+        currentScope = 'user';
+      } else {
+        currentScope = explicitScope !== undefined 
+          ? explicitScope 
+          : (!isAdmin ? 'user' : (credential?.scope || 'user'));
+      }
       
       if (!isAdmin && currentScope === 'global') {
         setSaving(null);
         setError('Estas credenciales son globales y solo el administrador puede modificarlas.');
+        return;
+      }
+      
+      if (isPersonalOnly && currentScope === 'global') {
+        setSaving(null);
+        setError('Las credenciales de marketplaces y PayPal deben ser personales. Cada usuario debe usar sus propias credenciales.');
         return;
       }
       const formKey = makeFormKey(apiName, currentEnvironment);
@@ -1683,13 +1703,21 @@ export default function APISettings() {
           const isDeleting = deleting === apiDef.name;
           const formKey = makeFormKey(apiDef.name, currentEnvironment);
           const scopeKey = makeEnvKey(apiDef.name, currentEnvironment);
+          
+          // APIs de marketplaces y PayPal deben ser únicamente personales
+          const PERSONAL_ONLY_APIS = ['ebay', 'amazon', 'mercadolibre', 'paypal'];
+          const isPersonalOnly = PERSONAL_ONLY_APIS.includes(apiDef.name);
+          
           // Si el usuario ha seleccionado explícitamente 'user', usar eso; de lo contrario, usar la credencial existente o 'user' por defecto
           const explicitScope = scopeSelection[scopeKey];
           const credentialScope = credential?.scope || 'user';
-          // Para usuarios no admin: si han seleccionado 'user' explícitamente, respetar eso; si no, usar la credencial existente
-          // currentScope debe respetar la selección explícita del usuario: si explicitScope existe, usarlo; si no, usar credentialScope
-          const currentScope = explicitScope !== undefined ? explicitScope : credentialScope;
-          const isGlobalScope = currentScope === 'global';
+          
+          // Para APIs personales, siempre usar scope 'user'
+          // Para otras APIs, respetar la selección explícita del usuario o usar la credencial existente
+          const currentScope = isPersonalOnly 
+            ? 'user' 
+            : (explicitScope !== undefined ? explicitScope : credentialScope);
+          const isGlobalScope = isPersonalOnly ? false : (currentScope === 'global');
           // isReadOnly: deshabilitar solo si es global Y el usuario no ha seleccionado 'user' explícitamente
           // Si explicitScope === 'user', entonces NO debe ser readonly, incluso si hay una credencial global
           // Si el usuario ha seleccionado explícitamente 'user', siempre permitir edición
@@ -1994,43 +2022,54 @@ export default function APISettings() {
                       </div>
                     )}
 
-                    {isAdmin && (
-                      <div className="flex flex-col gap-2">
-                        <span className="text-sm font-medium text-gray-600">Alcance:</span>
-                        <div className="inline-flex rounded border border-gray-200 overflow-hidden w-fit">
-                          <button
-                            onClick={() => handleScopeChange(apiDef.name, currentEnvironment, 'user')}
-                            className={`px-3 py-1 text-sm font-medium transition ${
-                              currentScope === 'user'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-white text-gray-600 hover:bg-gray-100'
-                            }`}
-                          >
-                            Personal
-                          </button>
-                          <button
-                            onClick={() => handleScopeChange(apiDef.name, currentEnvironment, 'global')}
-                            className={`px-3 py-1 text-sm font-medium transition ${
-                              currentScope === 'global'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-white text-gray-600 hover:bg-gray-100'
-                            }`}
-                          >
-                            Compartida
-                          </button>
+                    {isAdmin && (() => {
+                      // APIs de marketplaces y PayPal deben ser únicamente personales
+                      const PERSONAL_ONLY_APIS = ['ebay', 'amazon', 'mercadolibre', 'paypal'];
+                      const isPersonalOnly = PERSONAL_ONLY_APIS.includes(apiDef.name);
+                      
+                      // Solo mostrar selector de scope si la API puede ser global
+                      if (isPersonalOnly) {
+                        return null; // No mostrar selector para APIs que deben ser personales
+                      }
+                      
+                      return (
+                        <div className="flex flex-col gap-2">
+                          <span className="text-sm font-medium text-gray-600">Alcance:</span>
+                          <div className="inline-flex rounded border border-gray-200 overflow-hidden w-fit">
+                            <button
+                              onClick={() => handleScopeChange(apiDef.name, currentEnvironment, 'user')}
+                              className={`px-3 py-1 text-sm font-medium transition ${
+                                currentScope === 'user'
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-white text-gray-600 hover:bg-gray-100'
+                              }`}
+                            >
+                              Personal
+                            </button>
+                            <button
+                              onClick={() => handleScopeChange(apiDef.name, currentEnvironment, 'global')}
+                              className={`px-3 py-1 text-sm font-medium transition ${
+                                currentScope === 'global'
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-white text-gray-600 hover:bg-gray-100'
+                              }`}
+                            >
+                              Compartida
+                            </button>
+                          </div>
+                          {currentScope === 'user' && credential?.sharedBy ? (
+                            <p className="text-xs text-gray-500">
+                              Última actualización por {credential.sharedBy.fullName || credential.sharedBy.username}
+                            </p>
+                          ) : null}
+                          {currentScope === 'global' && credential?.owner ? (
+                            <p className="text-xs text-gray-500">
+                              Administrada por {credential.owner.fullName || credential.owner.username}
+                            </p>
+                          ) : null}
                         </div>
-                        {currentScope === 'user' && credential?.sharedBy ? (
-                          <p className="text-xs text-gray-500">
-                            Última actualización por {credential.sharedBy.fullName || credential.sharedBy.username}
-                          </p>
-                        ) : null}
-                        {currentScope === 'global' && credential?.owner ? (
-                          <p className="text-xs text-gray-500">
-                            Administrada por {credential.owner.fullName || credential.owner.username}
-                          </p>
-                        ) : null}
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {!isAdmin && isGlobalScope && explicitScope !== 'user' && (
                       <div className="px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded text-sm space-y-2">
