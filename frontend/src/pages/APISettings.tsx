@@ -1594,14 +1594,17 @@ export default function APISettings() {
           const isDeleting = deleting === apiDef.name;
           const formKey = makeFormKey(apiDef.name, currentEnvironment);
           const scopeKey = makeEnvKey(apiDef.name, currentEnvironment);
-          const resolvedScope =
-            scopeSelection[scopeKey] ||
-            credential?.scope ||
-            'user';
-          const currentScope = !isAdmin && resolvedScope === 'global' ? 'global' : resolvedScope;
+          // Si el usuario ha seleccionado explícitamente 'user', usar eso; de lo contrario, usar la credencial existente o 'user' por defecto
+          const explicitScope = scopeSelection[scopeKey];
+          const credentialScope = credential?.scope || 'user';
+          // Para usuarios no admin: si han seleccionado 'user' explícitamente, respetar eso; si no, usar la credencial existente
+          const resolvedScope = explicitScope || credentialScope;
+          // currentScope debe respetar la selección explícita del usuario
+          const currentScope = explicitScope || (!isAdmin && credentialScope === 'global' ? 'global' : credentialScope);
           const isGlobalScope = currentScope === 'global';
+          // isReadOnly: deshabilitar solo si es global Y el usuario no ha seleccionado 'user' explícitamente
           const isReadOnly =
-            (!isAdmin && isGlobalScope && scopeSelection[scopeKey] !== 'user') || !!maskedScopes[formKey];
+            (!isAdmin && isGlobalScope && explicitScope !== 'user') || !!maskedScopes[formKey];
 
           const fieldsToUse = supportsEnv
             ? backendDef?.environments?.[currentEnvironment]?.fields || apiDef.fields
@@ -1938,7 +1941,7 @@ export default function APISettings() {
                       </div>
                     )}
 
-                    {!isAdmin && isGlobalScope && (
+                    {!isAdmin && isGlobalScope && explicitScope !== 'user' && (
                       <div className="px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded text-sm space-y-2">
                         <p>
                           Estas credenciales son compartidas por el administrador. Si prefieres usar tus propias claves,
@@ -1950,6 +1953,12 @@ export default function APISettings() {
                         >
                           Usar mis credenciales personales
                         </button>
+                      </div>
+                    )}
+                    {!isAdmin && explicitScope === 'user' && credential?.scope === 'global' && (
+                      <div className="px-3 py-2 bg-green-50 border border-green-200 text-green-700 rounded text-sm">
+                        <p className="font-medium">✓ Modo personal activado</p>
+                        <p className="text-xs mt-1">Ahora puedes ingresar tus propias credenciales. Se guardarán como personales.</p>
                       </div>
                     )}
 
