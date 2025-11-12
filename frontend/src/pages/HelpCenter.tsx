@@ -150,14 +150,14 @@ function InicioRapido() {
           <div className="flex-1">
             <h3 className="text-xl font-semibold text-gray-900 mb-2">Acceder al Sistema</h3>
             <div className="space-y-3 text-gray-700">
-              <p><strong>URL:</strong> <code className="bg-blue-100 px-2 py-1 rounded">http://localhost:5173</code></p>
-              <div>
-                <strong>Credenciales por defecto:</strong>
-                <div className="mt-2 bg-white p-3 rounded-lg border border-blue-200">
-                  <div>Email: <code className="text-blue-600">admin@ivanreseller.com</code></div>
-                  <div>Password: <code className="text-blue-600">admin123</code></div>
-                </div>
-              </div>
+              <p>
+                <strong>URL:</strong>{' '}
+                <code className="bg-blue-100 px-2 py-1 rounded">https://ivan-reseller-web.vercel.app/login</code>
+              </p>
+              <p>
+                Las credenciales son provistas por el administrador. Si no recuerdas tu contraseña, usa la opción
+                <strong> “Forgot password”</strong> o contacta al equipo de soporte.
+              </p>
             </div>
           </div>
         </div>
@@ -420,7 +420,60 @@ function APIsCredenciales() {
       {/* APIs Disponibles */}
       <div>
         <h3 className="text-2xl font-bold text-gray-900 mb-4">🌐 APIs Disponibles</h3>
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 text-sm mb-4">
+          <p className="font-semibold mb-1">Resumen rápido</p>
+          <ul className="space-y-1">
+            <li>
+              <strong>Críticas:</strong> AliExpress (origen), eBay (comparador), ScraperAPI o ZenRows (anti-bloqueo) y Groq
+              (IA). Si faltan, el sistema no podrá evaluar oportunidades con precisión.
+            </li>
+            <li>
+              <strong>Opcionales:</strong> Amazon y MercadoLibre. Son recomendadas para mejorar la cobertura, pero si no las
+              configuras sólo verás avisos ámbar y seguiremos trabajando con las fuentes disponibles.
+            </li>
+          </ul>
+        </div>
         <div className="space-y-4">
+          {/* AliExpress */}
+          <div className="border rounded-xl p-6 bg-gradient-to-r from-red-50 via-orange-50 to-amber-50">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900">AliExpress Auto-Purchase</h4>
+                <span className="text-sm text-red-500 font-medium">Fuente primaria (obligatoria)</span>
+              </div>
+            </div>
+            <p className="text-gray-700 mb-3">
+              Necesitamos email, password y cookies vigentes para automatizar la navegación. El formulario de “Other
+              Credentials” y la tarjeta de AliExpress en `Settings → Configuración de APIs` trabajan juntos.
+            </p>
+            <div className="bg-white border rounded-lg p-4 space-y-3 text-sm text-gray-700">
+              <div className="font-semibold text-gray-900">Campos obligatorios</div>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Email / Username</li>
+                <li>Password</li>
+                <li>Cookies de sesión (se capturan con el snippet automático)</li>
+              </ul>
+              <div className="font-semibold text-gray-900 pt-2 border-t">Cómo guardar las cookies</div>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>En la tarjeta AliExpress, pulsa <strong>Guardar cookies manualmente</strong>.</li>
+                <li>Haz clic en <strong>Abrir login de AliExpress</strong> y asegúrate de que tu cuenta esté iniciada.</li>
+                <li>
+                  En la pestaña de AliExpress abre la consola (<code>F12 → Console</code>), escribe{' '}
+                  <code>allow pasting</code> (o <code>void 0</code> en Edge) y presiona Enter.
+                </li>
+                <li>
+                  Copia el <strong>Snippet automático</strong> del modal y pégalo en esa consola. Cuando veas{' '}
+                  <code>✅ Cookies enviadas. Vuelve a la plataforma para confirmar.</code>, regresa al panel: la tarjeta se
+                  actualizará a “Sesión activa”.
+                </li>
+              </ol>
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded p-3 text-xs">
+                <strong>Tip:</strong> El snippet sólo funciona si lo ejecutas en la pestaña <em>de AliExpress</em>. Si ves
+                “No se encontraron cookies en esta pestaña”, significa que lo ejecutaste en la pestaña del panel.
+              </div>
+            </div>
+          </div>
+
           {/* GROQ */}
           <div className="border rounded-xl p-6 bg-gradient-to-r from-purple-50 to-pink-50">
             <div className="flex items-start justify-between mb-3">
@@ -453,7 +506,7 @@ function APIsCredenciales() {
             <div className="flex items-start justify-between mb-3">
               <div>
                 <h4 className="text-lg font-semibold text-gray-900">MercadoLibre API</h4>
-                <span className="text-sm text-yellow-600 font-medium">Marketplace principal</span>
+                <span className="text-sm text-yellow-600 font-medium">Opcional (mejora cobertura regional)</span>
               </div>
               <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
                 Recomendada
@@ -520,7 +573,7 @@ function APIsCredenciales() {
             <div className="flex items-start justify-between mb-3">
               <div>
                 <h4 className="text-lg font-semibold text-gray-900">Amazon API</h4>
-                <span className="text-sm text-orange-600 font-medium">Marketplace premium</span>
+                <span className="text-sm text-orange-600 font-medium">Opcional (marketplace premium)</span>
               </div>
             </div>
             <p className="text-gray-700 mb-3">
