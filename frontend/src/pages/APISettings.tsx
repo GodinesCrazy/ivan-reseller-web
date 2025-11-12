@@ -771,22 +771,39 @@ export default function APISettings() {
         // El defaultValue puede venir de field.value (del backend cuando se cargan credenciales)
         const defaultValue = field.value !== undefined && field.value !== null ? String(field.value) : '';
         
-        // Determinar el valor final: priorizar formData, luego defaultValue
-        // IMPORTANTE: El input muestra: value={formData[formKey]?.[fieldKey] ?? defaultValue}
-        // Por lo tanto, el valor visible en el input es rawValue si existe, o defaultValue si no
-        // Necesitamos usar el mismo valor que el input está mostrando
+        // Si no hay valor en formData ni defaultValue, intentar leer el valor directamente del input del DOM
+        // Esto es necesario porque el input puede mostrar un valor que no está en formData
         let value: string;
         if (rawValue !== undefined && rawValue !== null) {
           // Si hay un valor en formData (incluso si es cadena vacía), usarlo
-          // Esto es lo que el usuario ve/editó
           value = typeof rawValue === 'string' ? rawValue : String(rawValue);
         } else if (defaultValue) {
           // Si no hay valor en formData pero hay defaultValue, usarlo
-          // Este es el valor que el input está mostrando cuando formData está vacío
           value = defaultValue;
         } else {
-          // Si no hay ninguno, usar cadena vacía
-          value = '';
+          // Si no hay ninguno, intentar leer el valor del input del DOM
+          // Esto captura el valor visible en el input aunque no esté en formData
+          // Esto es especialmente útil cuando el usuario ve un valor pero no lo ha editado
+          try {
+            // Buscar el input usando atributos data- para identificarlo de forma única
+            const inputSelector = `input[data-form-key="${formKey}"][data-field-key="${fieldKey}"]`;
+            const inputElement = document.querySelector(inputSelector) as HTMLInputElement;
+            if (inputElement) {
+              const domValue = inputElement.value?.trim() || '';
+              if (domValue) {
+                value = domValue;
+                console.log(`[APISettings] Valor leído del DOM para ${fieldLabel}:`, domValue.substring(0, 20) + '...');
+              } else {
+                value = '';
+              }
+            } else {
+              value = '';
+            }
+          } catch (error) {
+            // Si falla al leer del DOM, usar cadena vacía
+            console.warn(`[APISettings] Error al leer valor del DOM para ${fieldLabel}:`, error);
+            value = '';
+          }
         }
 
         // Log para debugging (solo para campos requeridos que fallan)
@@ -2118,6 +2135,8 @@ export default function APISettings() {
                               onChange={(e) => handleInputChange(apiDef.name, currentEnvironment, fieldKey, e.target.value)}
                               placeholder={fieldPlaceholder}
                               disabled={inputDisabled}
+                              data-form-key={formKey}
+                              data-field-key={fieldKey}
                               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                                 inputDisabled ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'border-gray-300'
                               }`}
