@@ -601,15 +601,24 @@ export default function APISettings() {
       });
 
       const normalized: Record<string, string> = {};
-      Object.entries(creds || {}).forEach(([key, value]) => {
-        if (value === undefined || value === null) {
-          normalized[key] = '';
-        } else if (typeof value === 'boolean') {
-          normalized[key] = value ? 'true' : 'false';
-        } else {
-          normalized[key] = String(value);
-        }
-      });
+      
+      // Si hay credenciales, normalizarlas
+      if (creds && Object.keys(creds).length > 0) {
+        Object.entries(creds).forEach(([key, value]) => {
+          if (value === undefined || value === null) {
+            normalized[key] = '';
+          } else if (typeof value === 'boolean') {
+            normalized[key] = value ? 'true' : 'false';
+          } else {
+            normalized[key] = String(value);
+          }
+        });
+      } else {
+        // Si no hay credenciales (modo personal sin credenciales guardadas),
+        // inicializar con valores vacíos pero preservar la estructura
+        // Los valores por defecto se mostrarán en el input a través de field.value
+        normalized = {};
+      }
 
       setFormData(prev => ({ ...prev, [formKey]: normalized }));
     } catch (error) {
@@ -738,25 +747,47 @@ export default function APISettings() {
         // Obtener valor del formulario, o del campo por defecto, o cadena vacía
         // Primero intentar obtener de formData (valor editado por el usuario)
         const rawValue = formData[formKey]?.[fieldKey];
-        // Si no hay valor en formData, usar el defaultValue del campo (puede venir del backend o del input)
+        // Si no hay valor en formData, usar el defaultValue del campo (puede venir del backend)
+        // El defaultValue puede venir de field.value (del backend cuando se cargan credenciales)
         const defaultValue = field.value !== undefined && field.value !== null ? String(field.value) : '';
+        
         // Determinar el valor final: priorizar formData, luego defaultValue
-        // Nota: Si rawValue es una cadena vacía '', aún así es un valor válido que el usuario puede haber ingresado
+        // IMPORTANTE: El input muestra: value={formData[formKey]?.[fieldKey] ?? defaultValue}
+        // Por lo tanto, el valor visible en el input es rawValue si existe, o defaultValue si no
+        // Necesitamos usar el mismo valor que el input está mostrando
         let value: string;
         if (rawValue !== undefined && rawValue !== null) {
           // Si hay un valor en formData (incluso si es cadena vacía), usarlo
+          // Esto es lo que el usuario ve/editó
           value = typeof rawValue === 'string' ? rawValue : String(rawValue);
         } else if (defaultValue) {
           // Si no hay valor en formData pero hay defaultValue, usarlo
+          // Este es el valor que el input está mostrando cuando formData está vacío
           value = defaultValue;
         } else {
           // Si no hay ninguno, usar cadena vacía
           value = '';
         }
 
-        // Validar campo requerido: debe tener un valor no vacío después de trim
+        // Log para debugging (solo para campos requeridos que fallan)
         if (fieldRequired && !value.toString().trim()) {
-          throw new Error(`El campo "${fieldLabel}" es requerido`);
+          console.warn(`[APISettings] Campo requerido vacío: ${fieldLabel}`, {
+            fieldKey,
+            rawValue,
+            defaultValue,
+            formDataKey: formData[formKey]?.[fieldKey],
+            formKey,
+            fieldValue: field.value,
+          });
+        }
+
+        // Validar campo requerido: debe tener un valor no vacío después de trim
+        // Si el campo es requerido y el valor está vacío después de trim, lanzar error
+        if (fieldRequired) {
+          const trimmedValue = value.toString().trim();
+          if (!trimmedValue) {
+            throw new Error(`El campo "${fieldLabel}" es requerido`);
+          }
         }
         // Incluir campos incluso si están vacíos para AliExpress (twoFactorEnabled puede ser false)
         if (value.trim() || (apiName === 'aliexpress' && fieldKey === 'twoFactorEnabled')) {
