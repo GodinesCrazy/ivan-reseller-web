@@ -771,39 +771,40 @@ export default function APISettings() {
         // El defaultValue puede venir de field.value (del backend cuando se cargan credenciales)
         const defaultValue = field.value !== undefined && field.value !== null ? String(field.value) : '';
         
-        // Si no hay valor en formData ni defaultValue, intentar leer el valor directamente del input del DOM
-        // Esto es necesario porque el input puede mostrar un valor que no está en formData
+        // Intentar leer el valor directamente del input del DOM PRIMERO
+        // Esto captura el valor visible en el input aunque no esté en formData
+        // Esto es especialmente útil cuando el usuario ve un valor pero no lo ha editado
+        let domValue: string = '';
+        try {
+          // Buscar el input usando atributos data- para identificarlo de forma única
+          const inputSelector = `input[data-form-key="${formKey}"][data-field-key="${fieldKey}"]`;
+          const inputElement = document.querySelector(inputSelector) as HTMLInputElement;
+          if (inputElement) {
+            domValue = inputElement.value || '';
+            if (domValue && domValue.trim()) {
+              console.log(`[APISettings] Valor leído del DOM para ${fieldLabel}:`, domValue.substring(0, 30) + (domValue.length > 30 ? '...' : ''));
+            }
+          }
+        } catch (error) {
+          // Si falla al leer del DOM, continuar con otros métodos
+          console.warn(`[APISettings] Error al leer valor del DOM para ${fieldLabel}:`, error);
+        }
+        
+        // Determinar el valor final: priorizar formData, luego DOM, luego defaultValue
         let value: string;
-        if (rawValue !== undefined && rawValue !== null) {
-          // Si hay un valor en formData (incluso si es cadena vacía), usarlo
+        if (rawValue !== undefined && rawValue !== null && String(rawValue).trim()) {
+          // Si hay un valor en formData (y no está vacío), usarlo
           value = typeof rawValue === 'string' ? rawValue : String(rawValue);
-        } else if (defaultValue) {
-          // Si no hay valor en formData pero hay defaultValue, usarlo
+        } else if (domValue && domValue.trim()) {
+          // Si no hay valor en formData pero hay valor en el DOM, usarlo
+          value = domValue;
+          console.log(`[APISettings] Usando valor del DOM para ${fieldLabel} (no estaba en formData)`);
+        } else if (defaultValue && defaultValue.trim()) {
+          // Si no hay valor en formData ni DOM pero hay defaultValue, usarlo
           value = defaultValue;
         } else {
-          // Si no hay ninguno, intentar leer el valor del input del DOM
-          // Esto captura el valor visible en el input aunque no esté en formData
-          // Esto es especialmente útil cuando el usuario ve un valor pero no lo ha editado
-          try {
-            // Buscar el input usando atributos data- para identificarlo de forma única
-            const inputSelector = `input[data-form-key="${formKey}"][data-field-key="${fieldKey}"]`;
-            const inputElement = document.querySelector(inputSelector) as HTMLInputElement;
-            if (inputElement) {
-              const domValue = inputElement.value?.trim() || '';
-              if (domValue) {
-                value = domValue;
-                console.log(`[APISettings] Valor leído del DOM para ${fieldLabel}:`, domValue.substring(0, 20) + '...');
-              } else {
-                value = '';
-              }
-            } else {
-              value = '';
-            }
-          } catch (error) {
-            // Si falla al leer del DOM, usar cadena vacía
-            console.warn(`[APISettings] Error al leer valor del DOM para ${fieldLabel}:`, error);
-            value = '';
-          }
+          // Si no hay ninguno, usar cadena vacía
+          value = '';
         }
 
         // Log para debugging (solo para campos requeridos que fallan)
@@ -812,9 +813,21 @@ export default function APISettings() {
             fieldKey,
             rawValue,
             defaultValue,
+            domValue,
             formDataKey: formData[formKey]?.[fieldKey],
             formKey,
             fieldValue: field.value,
+            finalValue: value,
+            valueType: typeof value,
+            valueLength: value?.length,
+          });
+        } else if (fieldRequired && value.toString().trim()) {
+          // Log cuando el campo requerido SÍ tiene valor (para debugging)
+          console.log(`[APISettings] Campo requerido ${fieldLabel} tiene valor:`, {
+            fieldKey,
+            valueLength: value.length,
+            valuePreview: value.substring(0, 20) + (value.length > 20 ? '...' : ''),
+            source: rawValue !== undefined && rawValue !== null ? 'formData' : (domValue ? 'DOM' : 'defaultValue'),
           });
         }
 
@@ -827,6 +840,7 @@ export default function APISettings() {
           }
         }
         // Incluir campos incluso si están vacíos para AliExpress (twoFactorEnabled puede ser false)
+        // IMPORTANTE: Para campos requeridos, siempre incluirlos si tienen valor (incluso si está vacío, la validación ya falló antes)
         if (value.trim() || (apiName === 'aliexpress' && fieldKey === 'twoFactorEnabled')) {
           // Mapear el nombre del campo al formato esperado por el backend
           const backendKey = fieldMapping[fieldKey] || fieldKey;
@@ -836,7 +850,12 @@ export default function APISettings() {
             credentials[backendKey] = value.trim().toLowerCase() === 'true';
           } else if (value.trim()) {
             credentials[backendKey] = value.trim();
+            console.log(`[APISettings] Agregando campo ${fieldKey} -> ${backendKey} con valor (longitud: ${value.trim().length})`);
           }
+        } else if (fieldRequired) {
+          // Si es un campo requerido pero está vacío, ya deberíamos haber lanzado un error antes
+          // Pero por si acaso, agregar logging adicional
+          console.error(`[APISettings] ERROR: Campo requerido ${fieldLabel} está vacío pero no se lanzó error de validación`);
         }
       }
 
@@ -881,10 +900,25 @@ export default function APISettings() {
       // Log para debugging (sin datos sensibles)
       const scopeToPersist = isAdmin ? currentScope : 'user';
 
+      // Verificar que redirectUri esté presente si es eBay
+      if (apiName === 'ebay' && !credentials.redirectUri) {
+        console.error(`[APISettings] ERROR: redirectUri no está en credentials para eBay`, {
+          credentialKeys: Object.keys(credentials),
+          credentials: Object.keys(credentials).reduce((acc, key) => {
+            acc[key] = key.includes('password') || key.includes('token') || key.includes('secret') || key.includes('cert') 
+              ? '[HIDDEN]' 
+              : credentials[key];
+            return acc;
+          }, {} as Record<string, any>),
+        });
+      }
+
       console.log(`[APISettings] Saving ${apiName}:`, {
         apiName,
         environment: currentEnvironment,
         credentialKeys: Object.keys(credentials),
+        hasRedirectUri: !!credentials.redirectUri,
+        redirectUriLength: credentials.redirectUri?.length || 0,
         hasEmail: !!credentials.email,
         hasPassword: !!credentials.password,
         twoFactorEnabled: credentials.twoFactorEnabled,
