@@ -670,10 +670,13 @@ export default function APISettings() {
         ? selectedEnvironment[apiName] || 'production'
         : 'production';
       const scopeKey = makeEnvKey(apiName, currentEnvironment);
-      const currentScope =
-        scopeSelection[scopeKey] ||
-        credential?.scope ||
-        'user';
+      // Para usuarios no admin, siempre usar 'user' si han seleccionado explícitamente 'user'
+      // o si no hay credencial existente
+      const explicitScope = scopeSelection[scopeKey];
+      const currentScope = explicitScope !== undefined 
+        ? explicitScope 
+        : (!isAdmin ? 'user' : (credential?.scope || 'user'));
+      
       if (!isAdmin && currentScope === 'global') {
         setSaving(null);
         setError('Estas credenciales son globales y solo el administrador puede modificarlas.');
@@ -797,9 +800,14 @@ export default function APISettings() {
         twoFactorEnabled: credentials.twoFactorEnabled,
         twoFactorEnabledType: typeof credentials.twoFactorEnabled,
         scope: scopeToPersist,
+        explicitScope,
+        currentScope,
+        isAdmin,
+        scopeSelection: scopeSelection[scopeKey],
       });
 
       // Guardar credencial usando /api/credentials
+      console.log(`[APISettings] Sending request to save ${apiName} with scope:`, scopeToPersist);
       const response = await api.post('/api/credentials', {
         apiName,
         environment: currentEnvironment,
@@ -809,22 +817,35 @@ export default function APISettings() {
       });
 
       console.log(`[APISettings] Save response for ${apiName}:`, response.data);
+      
+      if (!response.data?.success) {
+        throw new Error(response.data?.error || response.data?.message || 'Error desconocido al guardar');
+      }
 
       setScopeSelection(prev => ({
         ...prev,
         [scopeKey]: scopeToPersist,
       }));
 
-      // Recargar credenciales
-      await loadCredentials();
-      await fetchAuthStatuses();
-      await fetchAuthStatuses();
+      // Recargar credenciales (con timeout para evitar que se quede colgado)
+      try {
+        await Promise.race([
+          Promise.all([
+            loadCredentials(),
+            fetchAuthStatuses(),
+          ]),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
+        ]);
+      } catch (reloadError) {
+        console.warn('Error al recargar credenciales después de guardar:', reloadError);
+        // Continuar aunque falle la recarga
+      }
 
       // Limpiar formulario
       setFormData(prev => ({ ...prev, [formKey]: {} }));
       setExpandedApi(null);
 
-      alert(`✅ Credenciales de ${apiDef.displayName} guardadas exitosamente`);
+      toast.success(`✅ Credenciales de ${apiDef.displayName} guardadas exitosamente`);
     } catch (err: any) {
       console.error('Error saving credentials:', err);
       const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Error al guardar credenciales';
