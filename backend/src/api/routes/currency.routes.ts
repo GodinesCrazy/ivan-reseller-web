@@ -13,10 +13,20 @@ router.get('/rates', (_req, res) => {
 router.post('/rates', authorize('ADMIN'), (req, res) => {
   try {
     const rates = req.body?.rates || {};
-    fxService.setRates(rates);
+    const base = typeof req.body?.base === 'string' ? req.body.base : undefined;
+    fxService.setRates(rates, { base, replace: req.body?.replace !== false });
     return res.json({ success: true, ...fxService.getRates() });
   } catch (e: any) {
     return res.status(400).json({ success: false, error: e.message || 'Invalid rates' });
+  }
+});
+
+router.post('/rates/refresh', authorize('ADMIN'), async (_req, res) => {
+  try {
+    await fxService.refreshRates();
+    return res.json({ success: true, ...fxService.getRates() });
+  } catch (error: any) {
+    return res.status(502).json({ success: false, error: error?.message || 'Unable to refresh rates' });
   }
 });
 

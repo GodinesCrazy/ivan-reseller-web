@@ -6,6 +6,7 @@ import { prisma } from '../config/database';
 import { PayPalPayoutService } from './paypal-payout.service';
 import { notificationService } from './notification.service';
 import { aliExpressAuthMonitor } from './ali-auth-monitor.service';
+import fxService from './fx.service';
 
 /**
  * Scheduled Tasks Service
@@ -15,9 +16,11 @@ export class ScheduledTasksService {
   private financialAlertsQueue: Queue | null = null;
   private commissionProcessingQueue: Queue | null = null;
   private authHealthQueue: Queue | null = null;
+  private fxRatesQueue: Queue | null = null;
   private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
+  private fxRatesWorker: Worker | null = null;
 
   constructor() {
     if (isRedisAvailable) {
@@ -44,6 +47,12 @@ export class ScheduledTasksService {
     this.authHealthQueue = new Queue('ali-auth-health', {
       connection: redis
     });
+
+    if (fxService.isProviderEnabled()) {
+      this.fxRatesQueue = new Queue('fx-rates-refresh', {
+        connection: redis
+      });
+    }
   }
 
   /**
@@ -90,6 +99,21 @@ export class ScheduledTasksService {
       }
     );
 
+    if (this.fxRatesQueue) {
+      this.fxRatesWorker = new Worker(
+        'fx-rates-refresh',
+        async (job) => {
+          logger.info('Scheduled Tasks: Refreshing FX rates', { jobId: job.id });
+          await fxService.refreshRates();
+          return fxService.getRates();
+        },
+        {
+          connection: redis,
+          concurrency: 1
+        }
+      );
+    }
+
     // Event listeners
     this.financialAlertsWorker.on('completed', (job) => {
       logger.info('Scheduled Tasks: Financial alerts check completed', { jobId: job.id });
@@ -123,6 +147,19 @@ export class ScheduledTasksService {
         error: err.message
       });
     });
+
+    if (this.fxRatesWorker) {
+      this.fxRatesWorker.on('completed', (job) => {
+        logger.info('Scheduled Tasks: FX rates refresh completed', { jobId: job.id });
+      });
+
+      this.fxRatesWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: FX rates refresh failed', {
+          jobId: job?.id,
+          error: err.message,
+        });
+      });
+    }
   }
 
   /**
@@ -171,6 +208,20 @@ export class ScheduledTasksService {
         removeOnFail: 5
       }
     );
+
+    if (this.fxRatesQueue) {
+      this.fxRatesQueue.add(
+        'daily-fx-refresh',
+        {},
+        {
+          repeat: {
+            pattern: process.env.FX_REFRESH_CRON || '0 1 * * *', // 1:00 AM todos los días por defecto
+          },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
 
     logger.info('Scheduled Tasks: Tasks scheduled successfully');
   }
@@ -585,6 +636,9 @@ export class ScheduledTasksService {
     if (this.authHealthWorker) {
       await this.authHealthWorker.close();
     }
+    if (this.fxRatesWorker) {
+      await this.fxRatesWorker.close();
+    }
     if (this.financialAlertsQueue) {
       await this.financialAlertsQueue.close();
     }
@@ -593,6 +647,9 @@ export class ScheduledTasksService {
     }
     if (this.authHealthQueue) {
       await this.authHealthQueue.close();
+    }
+    if (this.fxRatesQueue) {
+      await this.fxRatesQueue.close();
     }
   }
 }
