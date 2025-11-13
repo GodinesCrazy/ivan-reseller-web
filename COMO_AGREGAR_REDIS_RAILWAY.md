@@ -20,23 +20,48 @@ Esta es la forma más fácil y recomendada. Railway crea automáticamente la var
 2. Selecciona **"Database"**
 3. Selecciona **"Redis"**
 
-### **Paso 3: Railway Configura Automáticamente**
+### **Paso 3: Railway Crea el Servicio Redis**
 
-Railway hará lo siguiente automáticamente:
-- ✅ Crea un servicio Redis
-- ✅ Crea la variable de entorno `REDIS_URL` en tu servicio backend
-- ✅ Conecta el backend con Redis automáticamente
+Railway creará:
+- ✅ Un servicio Redis
+- ✅ Variables de entorno en el servicio Redis (REDIS_URL, REDIS_PASSWORD, etc.)
 
-**No necesitas hacer nada más.** El sistema detectará `REDIS_URL` y comenzará a usarlo.
+**⚠️ IMPORTANTE:** Railway NO conecta automáticamente Redis al backend. Necesitas agregar una "Variable Reference" manualmente.
 
-### **Paso 4: Verificar que Funciona**
+### **Paso 4: Agregar Variable Reference (CRÍTICO)**
+
+**Este paso es necesario para conectar Redis al backend:**
+
+1. Ve a tu servicio **backend** (`ivan-reseller-web`) en Railway
+2. Click en **"Variables"** (en el menú lateral)
+3. Click en **"+ New Variable"**
+4. En el campo **"Name"**, escribe: `REDIS_URL`
+5. En el campo **"Value"**, NO escribas nada directamente. En su lugar:
+   - Busca un botón o enlace que diga **"Reference from Service"** o
+   - Busca un icono de cadena/enlace 🔗 o
+   - Si ves un dropdown o selector, úsalo
+6. Selecciona el servicio **"Redis"** de la lista
+7. Selecciona la variable **"REDIS_URL"** del servicio Redis
+8. Railway mostrará algo como: `{{Redis.REDIS_URL}}`
+9. Click en **"Add"** o **"Save"**
+
+**Alternativa si no ves la opción de referencia:**
+1. Ve a **Redis** → **Variables** → `REDIS_URL`
+2. Click en el ojo 👁️ para ver el valor
+3. Click en copiar 📋 para copiar el valor completo
+4. Ve a **backend** → **Variables** → **"+ New Variable"**
+5. **Name:** `REDIS_URL`
+6. **Value:** Pega el valor que copiaste
+7. Click en **"Add"**
+
+### **Paso 5: Verificar que Funciona**
 
 1. Ve a tu servicio backend en Railway
 2. Click en **"Variables"** (en el menú lateral)
-3. Deberías ver `REDIS_URL` listada (Railway la crea automáticamente)
-4. El valor será algo como: `redis://default:password@redis.railway.internal:6379`
+3. Deberías ver `REDIS_URL` listada ahora
+4. El valor será algo como: `redis://default:password@redis.railway.internal:6379` o `{{Redis.REDIS_URL}}`
 
-### **Paso 5: Verificar en los Logs**
+### **Paso 6: Verificar en los Logs**
 
 1. Ve a tu servicio backend → **"Deployments"** → Click en el último deployment
 2. O ve a **"Logs"** en tiempo real
