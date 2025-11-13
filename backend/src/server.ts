@@ -14,9 +14,16 @@ const PORT = parseInt(env.PORT, 10);
 
 async function ensureAdminUser() {
   try {
-    // Verificar si existe el usuario admin
+    // Verificar si existe el usuario admin (especificar campos explícitamente para evitar errores con columna plan)
     const adminExists = await prisma.user.findUnique({
       where: { username: 'admin' },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        isActive: true,
+      },
     });
 
     if (!adminExists) {

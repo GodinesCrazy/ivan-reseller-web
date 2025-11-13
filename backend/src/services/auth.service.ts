@@ -56,25 +56,82 @@ export class AuthService {
   }
 
   async login(username: string, password: string) {
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { username },
+    // Trim whitespace from inputs
+    const trimmedUsername = username?.trim();
+    const trimmedPassword = password?.trim();
+
+    if (!trimmedUsername || !trimmedPassword) {
+      throw new AppError('Username and password are required', 400);
+    }
+
+    console.log(`[Auth] Login attempt - input: "${trimmedUsername}"`);
+
+    // Try to find user by username (exact match first)
+    // Especificar campos explícitamente para evitar errores si falta el campo 'plan'
+    let user = await prisma.user.findUnique({
+      where: { username: trimmedUsername },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        password: true,
+        fullName: true,
+        role: true,
+        isActive: true,
+        lastLoginAt: true,
+        // plan puede no existir en la BD, no lo incluimos en select
+      },
     });
 
+    // If not found, try case-insensitive search by username or email
     if (!user) {
+      const allUsers = await prisma.user.findMany({
+        where: { isActive: true },
+        select: { id: true, username: true, email: true },
+      });
+      
+      const lowerInput = trimmedUsername.toLowerCase();
+      const foundUser = allUsers.find(
+        u => u.username.toLowerCase() === lowerInput || u.email.toLowerCase() === lowerInput
+      );
+      
+      if (foundUser) {
+        user = await prisma.user.findUnique({
+          where: { id: foundUser.id },
+          select: {
+            id: true,
+            username: true,
+            email: true,
+            password: true,
+            fullName: true,
+            role: true,
+            isActive: true,
+            lastLoginAt: true,
+            // plan puede no existir en la BD, no lo incluimos en select
+          },
+        });
+      }
+    }
+
+    if (!user) {
+      console.warn(`[Auth] Login failed: User not found - input: "${trimmedUsername}"`);
       throw new AppError('Invalid credentials', 401);
     }
 
     if (!user.isActive) {
+      console.warn(`[Auth] Login failed: Account disabled - username: "${user.username}"`);
       throw new AppError('Account is disabled', 403);
     }
 
     // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await bcrypt.compare(trimmedPassword, user.password);
 
     if (!isPasswordValid) {
+      console.warn(`[Auth] Login failed: Invalid password - username: "${user.username}"`);
       throw new AppError('Invalid credentials', 401);
     }
+
+    console.log(`[Auth] Login successful - username: "${user.username}", email: "${user.email}"`);
 
     // Update last login
     await prisma.user.update({

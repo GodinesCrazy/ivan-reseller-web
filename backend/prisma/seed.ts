@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
@@ -9,55 +10,73 @@ async function main() {
   // Crear usuario admin por defecto
   const adminPassword = bcrypt.hashSync('admin123', 10);
   
-  const admin = await prisma.user.upsert({
+  // Verificar si existe primero para evitar problemas con columna plan
+  const existingAdmin = await prisma.user.findUnique({
     where: { username: 'admin' },
-    update: {
-      password: adminPassword,
-      role: 'ADMIN',
-      isActive: true,
-    },
-    create: {
-      username: 'admin',
-      email: 'admin@ivanreseller.com',
-      password: adminPassword,
-      role: 'ADMIN',
-      commissionRate: 0.15, // ✅ 15% comisión por defecto
-      fixedMonthlyCost: 17.0, // ✅ $17 costo fijo mensual
-      balance: 0,
-      totalEarnings: 0,
-      isActive: true,
-    },
+    select: { id: true },
   });
+  
+  const admin = existingAdmin
+    ? await prisma.user.update({
+        where: { id: existingAdmin.id },
+        data: {
+          password: adminPassword,
+          role: 'ADMIN',
+          isActive: true,
+        },
+      })
+    : await prisma.user.create({
+        data: {
+          username: 'admin',
+          email: 'admin@ivanreseller.com',
+          password: adminPassword,
+          role: 'ADMIN',
+          commissionRate: 0.15, // ✅ 15% comisión por defecto
+          fixedMonthlyCost: 17.0, // ✅ $17 costo fijo mensual
+          balance: 0,
+          totalEarnings: 0,
+          isActive: true,
+        },
+      });
 
   console.log('✅ Usuario admin creado:', admin.username);
 
   // Crear usuario demo
   const demoPassword = bcrypt.hashSync('demo123', 10);
   
-  const demo = await prisma.user.upsert({
+  // Verificar si existe primero para evitar problemas con columna plan
+  const existingDemo = await prisma.user.findUnique({
     where: { username: 'demo' },
-    update: {
-      password: demoPassword,
-      role: 'USER',
-      isActive: true,
-    },
-    create: {
-      username: 'demo',
-      email: 'demo@ivanreseller.com',
-      password: demoPassword,
-      role: 'USER',
-      commissionRate: 0.15, // ✅ 15% comisión por defecto
-      fixedMonthlyCost: 17.0, // ✅ $17 costo fijo mensual
-      balance: 0,
-      totalEarnings: 0,
-      isActive: true,
-    },
+    select: { id: true },
   });
+  
+  const demo = existingDemo
+    ? await prisma.user.update({
+        where: { id: existingDemo.id },
+        data: {
+          password: demoPassword,
+          role: 'USER',
+          isActive: true,
+        },
+      })
+    : await prisma.user.create({
+        data: {
+          username: 'demo',
+          email: 'demo@ivanreseller.com',
+          password: demoPassword,
+          role: 'USER',
+          commissionRate: 0.15, // ✅ 15% comisión por defecto
+          fixedMonthlyCost: 17.0, // ✅ $17 costo fijo mensual
+          balance: 0,
+          totalEarnings: 0,
+          isActive: true,
+        },
+      });
 
   console.log('✅ Usuario demo creado:', demo.username);
 
   // Crear productos de ejemplo (con manejo de errores)
-  let products = [];
+  let products: Array<{ id: number }> = [];
   try {
     products = await Promise.all([
     prisma.product.create({
@@ -109,7 +128,7 @@ async function main() {
   }
 
   // Crear ventas de ejemplo (solo si hay productos)
-  let sales = [];
+  let sales: Array<{ id: number }> = [];
   if (products.length > 0) {
     try {
       sales = await Promise.all([
@@ -154,7 +173,7 @@ async function main() {
   }
 
   // Crear comisiones pendientes (solo si hay ventas)
-  let commissions = [];
+  let commissions: Array<{ id: number }> = [];
   if (sales.length > 0) {
     try {
       commissions = await Promise.all([
