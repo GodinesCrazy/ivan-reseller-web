@@ -188,6 +188,7 @@ class OpportunityFinderService {
         console.log(`✅ Scraping nativo exitoso: ${products.length} productos encontrados`);
       } else {
         console.warn('⚠️  Scraping nativo no encontró productos (puede ser selector incorrecto o página bloqueada)');
+        console.warn('⚠️  Debug: query="' + query + '", userId=' + userId + ', maxItems=' + maxItems);
       }
     } catch (nativeError: any) {
       nativeErrorForLogs = nativeError;
@@ -278,16 +279,40 @@ class OpportunityFinderService {
     }
 
     if (!products || products.length === 0) {
+      console.warn('⚠️  No se encontraron productos después de intentar scraping nativo y bridge Python');
+      console.warn('⚠️  Debug info:', {
+        query,
+        userId,
+        maxItems,
+        hasManualAuth: manualAuthPending,
+        nativeError: nativeErrorForLogs?.message || null,
+        bridgeAttempted: true,
+      });
+      
       if (manualAuthPending && manualAuthError) {
         throw manualAuthError;
       }
+      
+      // Retornar array vacío pero con información de debug en el log
       return [];
     }
 
     // 2) Analizar competencia real (placeholder hasta integrar servicios específicos)
+    console.log(`📊 Procesando ${products.length} productos scrapeados para encontrar oportunidades...`);
     const opportunities: OpportunityItem[] = [];
+    let skippedInvalid = 0;
+    let skippedLowMargin = 0;
+    let processedCount = 0;
+    
     for (const product of products) {
-      if (!product.title || !product.price || product.price <= 0) continue;
+      if (!product.title || !product.price || product.price <= 0) {
+        skippedInvalid++;
+        console.log(`⏭️  Producto descartado (inválido): title="${product.title?.substring(0, 50)}", price=${product.price}`);
+        continue;
+      }
+
+      processedCount++;
+      console.log(`🔍 [${processedCount}/${products.length}] Analizando: "${product.title.substring(0, 60)}..." (precio: ${product.price} ${product.currency})`);
 
       let analysis: Record<string, any> = {};
       try {
@@ -305,6 +330,12 @@ class OpportunityFinderService {
       // Agregar oportunidades solo si existe algún marketplace con datos reales
       const analyses = Object.values(analysis || {});
       const valid = analyses.find(a => a && a.listingsFound > 0 && a.competitivePrice > 0);
+      
+      if (valid) {
+        console.log(`✅ Análisis de competencia encontrado: ${valid.marketplace}, ${valid.listingsFound} listings, precio competitivo: ${valid.competitivePrice}`);
+      } else {
+        console.log(`⚠️  No se encontraron datos de competencia válidos, usando estimación heurística`);
+      }
 
       let best = {
         margin: -Infinity,
@@ -370,14 +401,20 @@ class OpportunityFinderService {
           }
         }
 
+        console.log(`💰 Margen calculado con datos reales: ${(best.margin * 100).toFixed(1)}% (mínimo requerido: ${(this.minMargin * 100).toFixed(1)}%)`);
         if (best.margin < this.minMargin) {
+          skippedLowMargin++;
+          console.log(`⏭️  Producto descartado (margen insuficiente): "${product.title.substring(0, 50)}" - margen ${(best.margin * 100).toFixed(1)}% < ${(this.minMargin * 100).toFixed(1)}%`);
           continue;
         }
       } else {
         // No pudimos obtener datos de competencia, crear una estimación heurística
         const fallbackPriceBase = product.price * 1.45;
         const fallbackMargin = (fallbackPriceBase - product.price) / product.price;
+        console.log(`💰 Margen estimado (sin datos de competencia): ${(fallbackMargin * 100).toFixed(1)}% (mínimo requerido: ${(this.minMargin * 100).toFixed(1)}%)`);
         if (fallbackMargin < this.minMargin) {
+          skippedLowMargin++;
+          console.log(`⏭️  Producto descartado (margen estimado insuficiente): "${product.title.substring(0, 50)}" - margen ${(fallbackMargin * 100).toFixed(1)}% < ${(this.minMargin * 100).toFixed(1)}%`);
           continue;
         }
         best = {
@@ -441,6 +478,7 @@ class OpportunityFinderService {
       };
 
       opportunities.push(opp);
+      console.log(`✅ Oportunidad agregada: "${opp.title.substring(0, 50)}" - margen ${(opp.profitMargin * 100).toFixed(1)}%, precio sugerido: ${opp.suggestedPriceUsd.toFixed(2)} ${opp.suggestedPriceCurrency}`);
 
       try {
         await opportunityPersistence.saveOpportunity(userId, {
@@ -457,6 +495,21 @@ class OpportunityFinderService {
           targetMarketplaces: opp.targetMarketplaces,
         }, analysis as any);
       } catch {}
+    }
+
+    console.log(`📊 Resumen de procesamiento:`);
+    console.log(`   - Productos scrapeados: ${products.length}`);
+    console.log(`   - Productos procesados: ${processedCount}`);
+    console.log(`   - Descartados (inválidos): ${skippedInvalid}`);
+    console.log(`   - Descartados (margen bajo): ${skippedLowMargin}`);
+    console.log(`   - Oportunidades encontradas: ${opportunities.length}`);
+    
+    if (opportunities.length === 0 && products.length > 0) {
+      console.warn(`⚠️  ⚠️  ⚠️  PROBLEMA DETECTADO: Se scrapearon ${products.length} productos pero no se generaron oportunidades.`);
+      console.warn(`   - Esto puede deberse a:`);
+      console.warn(`     1. Margen mínimo muy alto (actual: ${(this.minMargin * 100).toFixed(1)}%)`);
+      console.warn(`     2. Falta de datos de competencia (configura eBay/Amazon/MercadoLibre)`);
+      console.warn(`     3. Precios de AliExpress muy altos comparados con la competencia`);
     }
 
     return opportunities;

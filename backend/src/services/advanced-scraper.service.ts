@@ -872,7 +872,35 @@ export class AdvancedMarketplaceScraper {
       });
 
       if (productsFromDom.length === 0) {
-        await this.captureAliExpressSnapshot(page, `no-products-${Date.now()}`);
+        console.warn('⚠️  No se encontraron productos en el DOM después de todos los métodos de extracción');
+        console.warn('⚠️  Debug: query="' + query + '", userId=' + userId);
+        console.warn('⚠️  Intentando capturar snapshot para diagnóstico...');
+        await this.captureAliExpressSnapshot(page, `no-products-${Date.now()}`).catch((err) => {
+          console.warn('⚠️  No se pudo capturar snapshot:', err.message);
+        });
+        
+        // Verificar si hay algún error visible en la página
+        try {
+          const pageError = await page.evaluate(() => {
+            const errorSelectors = [
+              '.error-message',
+              '[class*="error"]',
+              '[class*="Error"]',
+              'div:contains("No results")',
+              'div:contains("no encontrado")',
+            ];
+            for (const sel of errorSelectors) {
+              const el = document.querySelector(sel);
+              if (el) return el.textContent?.trim() || 'Error desconocido';
+            }
+            return null;
+          });
+          if (pageError) {
+            console.warn('⚠️  Error detectado en la página de AliExpress:', pageError);
+          }
+        } catch (evalErr) {
+          // Ignorar errores de evaluación
+        }
       }
 
       console.log(`✅ Extraídos ${productsFromDom.length} productos REALES de AliExpress`);
