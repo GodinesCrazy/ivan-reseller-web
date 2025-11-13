@@ -1,5 +1,5 @@
 import { Queue, Worker, Job } from 'bullmq';
-import { redis } from '../config/redis';
+import { getBullMQRedisConnection, isRedisAvailable } from '../config/redis';
 import { AdvancedScrapingService } from '../services/scraping.service';
 import { MarketplaceService } from '../services/marketplace.service';
 import { ProductService } from '../services/product.service';
@@ -8,21 +8,21 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Check if Redis is available (not mock)
-const isRedisAvailable = process.env.REDIS_URL !== undefined;
+// Get BullMQ Redis connection (with maxRetriesPerRequest: null)
+const bullMQRedis = getBullMQRedisConnection();
 
 // Job queues - only create if Redis is available
-export const scrapingQueue = isRedisAvailable 
-  ? new Queue('scraping', { connection: redis as any })
+export const scrapingQueue = isRedisAvailable && bullMQRedis
+  ? new Queue('scraping', { connection: bullMQRedis as any })
   : null;
-export const publishingQueue = isRedisAvailable
-  ? new Queue('publishing', { connection: redis as any })
+export const publishingQueue = isRedisAvailable && bullMQRedis
+  ? new Queue('publishing', { connection: bullMQRedis as any })
   : null;
-export const payoutQueue = isRedisAvailable
-  ? new Queue('payout', { connection: redis as any })
+export const payoutQueue = isRedisAvailable && bullMQRedis
+  ? new Queue('payout', { connection: bullMQRedis as any })
   : null;
-export const syncQueue = isRedisAvailable
-  ? new Queue('sync', { connection: redis as any })
+export const syncQueue = isRedisAvailable && bullMQRedis
+  ? new Queue('sync', { connection: bullMQRedis as any })
   : null;
 
 // Job data interfaces
@@ -536,14 +536,14 @@ let publishingWorker: Worker | null = null;
 let payoutWorker: Worker | null = null;
 let syncWorker: Worker | null = null;
 
-if (isRedisAvailable) {
+if (isRedisAvailable && bullMQRedis) {
   scrapingWorker = new Worker(
     'scraping',
     async (job: Job<ScrapingJobData>) => {
       return await jobService.processScrapeJob(job);
     },
     {
-      connection: redis,
+      connection: bullMQRedis as any,
       concurrency: 2,
     }
   );
@@ -554,7 +554,7 @@ if (isRedisAvailable) {
       return await jobService.processPublishJob(job);
     },
     {
-      connection: redis,
+      connection: bullMQRedis as any,
       concurrency: 1, // Limit concurrency to avoid rate limits
     }
   );
@@ -565,7 +565,7 @@ if (isRedisAvailable) {
       return await jobService.processPayoutJob(job);
     },
     {
-      connection: redis,
+      connection: bullMQRedis as any,
       concurrency: 1,
     }
   );
@@ -576,7 +576,7 @@ if (isRedisAvailable) {
       return await jobService.processSyncJob(job);
     },
     {
-      connection: redis,
+      connection: bullMQRedis as any,
       concurrency: 3,
     }
   );
@@ -609,7 +609,7 @@ if (isRedisAvailable) {
 process.on('SIGINT', async () => {
   console.log('🛑 Shutting down workers...');
   
-  if (isRedisAvailable) {
+    if (isRedisAvailable && bullMQRedis) {
     const closePromises = [];
     if (scrapingWorker) closePromises.push(scrapingWorker.close());
     if (publishingWorker) closePromises.push(publishingWorker.close());
@@ -618,8 +618,9 @@ process.on('SIGINT', async () => {
     
     await Promise.all(closePromises);
     
-    if (redis && typeof (redis as any).disconnect === 'function') {
-      await (redis as any).disconnect();
+    // BullMQ maneja la desconexión de sus propias conexiones
+    if (bullMQRedis && typeof (bullMQRedis as any).disconnect === 'function') {
+      await (bullMQRedis as any).disconnect();
     }
   }
   console.log('✅ All workers stopped');

@@ -9,6 +9,7 @@ import { NotificationService } from './notifications.service';
 import { SecureCredentialManager } from './security.service';
 import logger from '../config/logger';
 import { workflowConfigService } from './workflow-config.service';
+import { getBullMQRedisConnection, isRedisAvailable } from '../config/redis';
 
 export interface AutomationConfig {
   mode: 'manual' | 'automatic';
@@ -106,14 +107,13 @@ export class AutomationService {
     this.securityManager = new SecureCredentialManager();
 
     // Configurar queues con Redis - solo si está disponible
-    const isRedisAvailable = process.env.REDIS_URL !== undefined;
+    const bullMQRedis = getBullMQRedisConnection();
     
-    if (isRedisAvailable) {
-      const redisConfig = { host: 'localhost', port: 6379 };
-      this.opportunityQueue = new Queue('opportunity-processing', { connection: redisConfig });
-      this.orderQueue = new Queue('order-processing', { connection: redisConfig });
-      this.monitoringQueue = new Queue('monitoring', { connection: redisConfig });
-      this.initializeWorkers();
+    if (isRedisAvailable && bullMQRedis) {
+      this.opportunityQueue = new Queue('opportunity-processing', { connection: bullMQRedis as any });
+      this.orderQueue = new Queue('order-processing', { connection: bullMQRedis as any });
+      this.monitoringQueue = new Queue('monitoring', { connection: bullMQRedis as any });
+      this.initializeWorkers(bullMQRedis);
     } else {
       console.log('ℹ️  Automation queues disabled (Redis not configured)');
     }
@@ -122,23 +122,21 @@ export class AutomationService {
   /**
    * Inicializar workers para procesamiento en background
    */
-  private initializeWorkers(): void {
-    const redisConfig = { host: 'localhost', port: 6379 };
-    
+  private initializeWorkers(bullMQRedis: any): void {
     // Worker para procesar oportunidades
     new Worker('opportunity-processing', async (job: Job) => {
       return await this.processOpportunityJob(job);
-    }, { connection: redisConfig });
+    }, { connection: bullMQRedis as any });
 
     // Worker para procesar órdenes automatizadas
     new Worker('order-processing', async (job: Job) => {
       return await this.processOrderJob(job);
-    }, { connection: redisConfig });
+    }, { connection: bullMQRedis as any });
 
     // Worker para monitoreo continuo
     new Worker('monitoring', async (job: Job) => {
       return await this.performMonitoringTask(job);
-    }, { connection: redisConfig });
+    }, { connection: bullMQRedis as any });
   }
 
   /**

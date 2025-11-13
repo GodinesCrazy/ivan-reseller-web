@@ -1,5 +1,5 @@
 import { Queue, Worker, QueueEvents } from 'bullmq';
-import { redis, isRedisAvailable } from '../config/redis';
+import { getBullMQRedisConnection, isRedisAvailable } from '../config/redis';
 import { logger } from '../config/logger';
 import { financialAlertsService } from './financial-alerts.service';
 import { prisma } from '../config/database';
@@ -22,8 +22,12 @@ export class ScheduledTasksService {
   private authHealthWorker: Worker | null = null;
   private fxRatesWorker: Worker | null = null;
 
+  private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
+
   constructor() {
-    if (isRedisAvailable) {
+    this.bullMQRedis = getBullMQRedisConnection();
+    
+    if (isRedisAvailable && this.bullMQRedis) {
       this.initializeQueues();
       this.initializeWorkers();
       this.scheduleTasks();
@@ -36,21 +40,23 @@ export class ScheduledTasksService {
    * Inicializar colas de trabajos
    */
   private initializeQueues(): void {
+    if (!this.bullMQRedis) return;
+
     this.financialAlertsQueue = new Queue('financial-alerts', {
-      connection: redis
+      connection: this.bullMQRedis as any
     });
 
     this.commissionProcessingQueue = new Queue('commission-processing', {
-      connection: redis
+      connection: this.bullMQRedis as any
     });
 
     this.authHealthQueue = new Queue('ali-auth-health', {
-      connection: redis
+      connection: this.bullMQRedis as any
     });
 
     if (fxService.isProviderEnabled()) {
       this.fxRatesQueue = new Queue('fx-rates-refresh', {
-        connection: redis
+        connection: this.bullMQRedis as any
       });
     }
   }
@@ -61,6 +67,8 @@ export class ScheduledTasksService {
   private initializeWorkers(): void {
     if (!isRedisAvailable) return;
 
+    if (!this.bullMQRedis) return;
+
     // Worker para alertas financieras
     this.financialAlertsWorker = new Worker(
       'financial-alerts',
@@ -69,7 +77,7 @@ export class ScheduledTasksService {
         return await financialAlertsService.runAllChecks();
       },
       {
-        connection: redis,
+        connection: this.bullMQRedis as any,
         concurrency: 1
       }
     );
@@ -82,7 +90,7 @@ export class ScheduledTasksService {
         return await this.processCommissions();
       },
       {
-        connection: redis,
+        connection: this.bullMQRedis as any,
         concurrency: 1
       }
     );
@@ -94,7 +102,7 @@ export class ScheduledTasksService {
         return await this.runAliExpressHealthCheck();
       },
       {
-        connection: redis,
+        connection: this.bullMQRedis as any,
         concurrency: 1
       }
     );
@@ -108,7 +116,7 @@ export class ScheduledTasksService {
           return fxService.getRates();
         },
         {
-          connection: redis,
+          connection: this.bullMQRedis as any,
           concurrency: 1
         }
       );
