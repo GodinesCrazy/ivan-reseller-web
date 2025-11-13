@@ -19,9 +19,8 @@ model User {
   password         String
   fullName         String?
   role             String    @default("USER") // "ADMIN" or "USER"
-  plan             String    @default("FREE") // "FREE", "BASIC", "PRO", "ENTERPRISE", "ADMIN" - Solo ADMIN puede modificar
-  commissionRate   Float     @default(0.10) // 10%
-  fixedMonthlyCost Float     @default(17.00) // $17 USD monthly
+  commissionRate   Float     @default(0.20) // Porcentaje de comisión sobre utilidad de operación exitosa (ej: 0.20 = 20%)
+  fixedMonthlyCost Float     @default(0.00) // Costo fijo mensual en USD (ej: 0.00 = sin costo fijo)
   balance          Float     @default(0)
   totalEarnings    Float     @default(0)
   totalSales       Int       @default(0)
