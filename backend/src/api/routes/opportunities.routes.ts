@@ -80,6 +80,24 @@ router.get('/', async (req, res) => {
 
     const durationMs = Date.now() - startTs;
 
+    // Debug info para cuando no se encuentran productos
+    const debugInfo: any = {};
+    if (items.length === 0) {
+      debugInfo.message = 'No se encontraron productos en AliExpress. Posibles causas:';
+      debugInfo.possibleCauses = [
+        'La sesión de AliExpress puede haber expirado (revisa API Settings)',
+        'AliExpress puede estar bloqueando el scraping (CAPTCHA o rate limiting)',
+        'El término de búsqueda puede no tener resultados disponibles',
+        'El bridge Python puede no estar disponible o configurado'
+      ];
+      debugInfo.suggestions = [
+        'Verifica que AliExpress tenga sesión activa en API Settings',
+        'Intenta con un término de búsqueda más específico',
+        'Espera unos minutos y vuelve a intentar (puede ser rate limiting)'
+      ];
+      console.warn('⚠️  No se encontraron oportunidades para query:', query, debugInfo);
+    }
+
     // Notify completion
     notificationService.sendToUser(userId, {
       type: 'JOB_COMPLETED',
@@ -87,7 +105,7 @@ router.get('/', async (req, res) => {
       message: `Resultados: ${items.length} en ${(durationMs/1000).toFixed(1)}s`,
       priority: items.length > 0 ? 'NORMAL' : 'HIGH',
       category: 'JOB',
-      data: { query, count: items.length, durationMs, marketplaces, region },
+      data: { query, count: items.length, durationMs, marketplaces, region, debugInfo: items.length === 0 ? debugInfo : undefined },
       actions: [
         { id: 'view_opportunities', label: 'Ver Oportunidades', url: '/opportunities', variant: 'primary' }
       ]
@@ -103,7 +121,8 @@ router.get('/', async (req, res) => {
       query,
       targetMarketplaces: marketplaces,
       timestamp: new Date().toISOString(),
-      data_source: 'real_analysis'
+      data_source: 'real_analysis',
+      ...(items.length === 0 && Object.keys(debugInfo).length > 0 ? { debug: debugInfo } : {})
     });
   } catch (error) {
     if (progressTimer) clearInterval(progressTimer);

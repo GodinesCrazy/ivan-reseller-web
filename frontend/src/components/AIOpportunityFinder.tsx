@@ -59,12 +59,29 @@ interface AIInsight {
   actionable: boolean;
 }
 
+interface SearchProgress {
+  stage: 'idle' | 'scraping' | 'analyzing' | 'calculating' | 'complete';
+  message: string;
+  productsFound: number;
+  productsAnalyzed: number;
+  opportunitiesFound: number;
+  elapsedTime: number;
+}
+
 export default function AIOpportunityFinder() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [opportunities, setOpportunities] = useState<MarketOpportunity[]>([]);
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [importingId, setImportingId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<SearchProgress>({
+    stage: 'idle',
+    message: 'Listo para buscar oportunidades',
+    productsFound: 0,
+    productsAnalyzed: 0,
+    opportunitiesFound: 0,
+    elapsedTime: 0
+  });
   const [selectedFilters, setSelectedFilters] = useState({
     marketplace: 'all',
     competition: 'all',
@@ -79,6 +96,49 @@ export default function AIOpportunityFinder() {
     }
 
     setIsAnalyzing(true);
+    const startTime = Date.now();
+    
+    // Inicializar progreso
+    setProgress({
+      stage: 'scraping',
+      message: '🔍 Buscando productos en AliExpress...',
+      productsFound: 0,
+      productsAnalyzed: 0,
+      opportunitiesFound: 0,
+      elapsedTime: 0
+    });
+
+    // Simular progreso mientras se busca (para feedback visual)
+    const progressInterval = setInterval(() => {
+      setProgress(prev => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        let newStage = prev.stage;
+        let newMessage = prev.message;
+        
+        // Simular progreso basado en tiempo transcurrido
+        if (elapsed < 5) {
+          newStage = 'scraping';
+          newMessage = '🔍 Escrapeando productos en AliExpress...';
+        } else if (elapsed < 15) {
+          newStage = 'analyzing';
+          newMessage = `📊 Analizando productos encontrados...`;
+        } else if (elapsed < 25) {
+          newStage = 'calculating';
+          newMessage = '💰 Calculando márgenes y oportunidades...';
+        } else {
+          // Si lleva más de 25 segundos, mantener en calculating pero mostrar mensaje de espera
+          newStage = 'calculating';
+          newMessage = '⏳ Procesando datos, por favor espera...';
+        }
+        
+        return {
+          ...prev,
+          stage: newStage,
+          message: newMessage,
+          elapsedTime: elapsed
+        };
+      });
+    }, 500);
     
     try {
       // ✅ USAR API REAL - Buscar oportunidades reales
@@ -90,8 +150,24 @@ export default function AIOpportunityFinder() {
           region: 'us'
         }
       });
+      
+      clearInterval(progressInterval);
 
       const items = response.data?.items || [];
+      const debugInfo = response.data?.debug || null;
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      
+      // Actualizar progreso con datos reales
+      setProgress(prev => ({
+        stage: 'complete',
+        message: items.length > 0 
+          ? `✅ ${items.length} ${items.length === 1 ? 'oportunidad encontrada' : 'oportunidades encontradas'} en ${elapsed}s`
+          : `⚠️ No se encontraron oportunidades en ${elapsed}s`,
+        productsFound: items.length,
+        productsAnalyzed: items.length,
+        opportunitiesFound: items.length,
+        elapsedTime: elapsed
+      }));
       
       // Convertir items de la API al formato del componente
       const formattedOpportunities: MarketOpportunity[] = items.map((item: any, index: number) => ({
@@ -146,14 +222,58 @@ export default function AIOpportunityFinder() {
           actionable: true
         });
       } else {
+        // Mostrar información de debug si está disponible
+        let description = 'Intenta con términos de búsqueda diferentes o ajusta los filtros.';
+        if (debugInfo) {
+          const causes = debugInfo.possibleCauses || [];
+          const suggestions = debugInfo.suggestions || [];
+          description = `${debugInfo.message || 'No se encontraron productos en AliExpress.'}\n\nPosibles causas:\n${causes.map((c: string, i: number) => `${i + 1}. ${c}`).join('\n')}\n\nSugerencias:\n${suggestions.map((s: string, i: number) => `• ${s}`).join('\n')}`;
+        }
+        
         realInsights.push({
           type: 'market_trend',
           title: 'No se encontraron oportunidades',
-          description: 'Intenta con términos de búsqueda diferentes o ajusta los filtros.',
+          description,
           impact: 'neutral',
           confidence: 50,
           actionable: true
         });
+        
+        // Mostrar toast con información de debug si está disponible
+        if (debugInfo) {
+          toast.error(
+            <div className="space-y-2 text-sm max-w-md">
+              <p className="font-semibold text-gray-900">{debugInfo.message || 'No se encontraron productos'}</p>
+              <div className="text-gray-700 text-xs space-y-1">
+                <p className="font-medium">Posibles causas:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  {debugInfo.possibleCauses?.map((cause: string, i: number) => (
+                    <li key={i}>{cause}</li>
+                  ))}
+                </ul>
+                <p className="font-medium mt-2">Sugerencias:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  {debugInfo.suggestions?.map((suggestion: string, i: number) => (
+                    <li key={i}>{suggestion}</li>
+                  ))}
+                </ul>
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <a
+                    href="/api-settings"
+                    className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium text-xs"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.location.href = '/api-settings';
+                    }}
+                  >
+                    Ir a API Settings para verificar AliExpress →
+                  </a>
+                </div>
+              </div>
+            </div>,
+            { duration: 15000 }
+          );
+        }
       }
       
       setInsights(realInsights);
@@ -193,8 +313,46 @@ export default function AIOpportunityFinder() {
       }
       setOpportunities([]);
       setInsights([]);
+      setProgress({
+        stage: 'idle',
+        message: 'Error en la búsqueda. Intenta nuevamente.',
+        productsFound: 0,
+        productsAnalyzed: 0,
+        opportunitiesFound: 0,
+        elapsedTime: 0
+      });
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+  
+  const getStageIcon = (stage: string) => {
+    switch (stage) {
+      case 'scraping':
+        return <Search className="h-5 w-5 animate-pulse text-blue-600" />;
+      case 'analyzing':
+        return <Brain className="h-5 w-5 animate-pulse text-purple-600" />;
+      case 'calculating':
+        return <TrendingUp className="h-5 w-5 animate-pulse text-green-600" />;
+      case 'complete':
+        return <CheckCircle className="h-5 w-5 text-green-600" />;
+      default:
+        return <Search className="h-5 w-5 text-gray-400" />;
+    }
+  };
+  
+  const getStageColor = (stage: string) => {
+    switch (stage) {
+      case 'scraping':
+        return 'bg-blue-100 border-blue-300 text-blue-800';
+      case 'analyzing':
+        return 'bg-purple-100 border-purple-300 text-purple-800';
+      case 'calculating':
+        return 'bg-green-100 border-green-300 text-green-800';
+      case 'complete':
+        return 'bg-green-50 border-green-200 text-green-700';
+      default:
+        return 'bg-gray-100 border-gray-300 text-gray-800';
     }
   };
 
@@ -372,6 +530,94 @@ export default function AIOpportunityFinder() {
           )}
         </button>
       </div>
+
+      {/* Panel de progreso animado */}
+      {isAnalyzing && (
+        <div className={`bg-white rounded-xl p-6 shadow-lg border-2 ${getStageColor(progress.stage)} transition-all duration-500`}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-3">
+              {getStageIcon(progress.stage)}
+              <div>
+                <h3 className="font-semibold text-lg">{progress.message}</h3>
+                <p className="text-sm opacity-80">
+                  {progress.stage === 'scraping' && 'Buscando productos en AliExpress...'}
+                  {progress.stage === 'analyzing' && 'Analizando productos encontrados...'}
+                  {progress.stage === 'calculating' && 'Calculando márgenes y oportunidades...'}
+                  {progress.stage === 'complete' && 'Búsqueda completada exitosamente'}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold">{progress.elapsedTime}s</div>
+              <div className="text-xs opacity-70">Tiempo transcurrido</div>
+            </div>
+          </div>
+          
+          {/* Barra de progreso animada */}
+          <div className="mb-4">
+            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all duration-500 ${
+                  progress.stage === 'scraping' ? 'bg-blue-500' :
+                  progress.stage === 'analyzing' ? 'bg-purple-500' :
+                  progress.stage === 'calculating' ? 'bg-green-500' :
+                  'bg-green-600'
+                }`}
+                style={{
+                  width: progress.stage === 'complete' ? '100%' :
+                         progress.stage === 'calculating' ? '90%' :
+                         progress.stage === 'analyzing' ? '60%' : '30%',
+                  animation: progress.stage !== 'complete' ? 'pulse 2s ease-in-out infinite' : 'none'
+                }}
+              />
+            </div>
+          </div>
+          
+          {/* Estadísticas en tiempo real */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center p-3 bg-white/50 rounded-lg">
+              <div className="text-2xl font-bold text-blue-600">{progress.productsFound}</div>
+              <div className="text-xs opacity-70">Productos encontrados</div>
+            </div>
+            <div className="text-center p-3 bg-white/50 rounded-lg">
+              <div className="text-2xl font-bold text-purple-600">{progress.productsAnalyzed}</div>
+              <div className="text-xs opacity-70">Productos analizados</div>
+            </div>
+            <div className="text-center p-3 bg-white/50 rounded-lg">
+              <div className="text-2xl font-bold text-green-600">{progress.opportunitiesFound}</div>
+              <div className="text-xs opacity-70">Oportunidades</div>
+            </div>
+          </div>
+          
+          {/* Indicadores de etapa */}
+          <div className="flex items-center justify-center space-x-2 mt-4">
+            <div className={`w-3 h-3 rounded-full ${progress.stage === 'scraping' ? 'bg-blue-600 animate-pulse' : progress.stage !== 'idle' ? 'bg-blue-400' : 'bg-gray-300'}`} />
+            <div className={`w-3 h-3 rounded-full ${progress.stage === 'analyzing' ? 'bg-purple-600 animate-pulse' : ['calculating', 'complete'].includes(progress.stage) ? 'bg-purple-400' : 'bg-gray-300'}`} />
+            <div className={`w-3 h-3 rounded-full ${progress.stage === 'calculating' ? 'bg-green-600 animate-pulse' : progress.stage === 'complete' ? 'bg-green-400' : 'bg-gray-300'}`} />
+            <div className={`w-3 h-3 rounded-full ${progress.stage === 'complete' ? 'bg-green-600' : 'bg-gray-300'}`} />
+          </div>
+        </div>
+      )}
+      
+      {/* Resultados con animación */}
+      {!isAnalyzing && progress.stage === 'complete' && opportunities.length > 0 && (
+        <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 mb-4 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              <span className="font-semibold text-green-800">
+                ✅ {opportunities.length} {opportunities.length === 1 ? 'oportunidad encontrada' : 'oportunidades encontradas'} en {progress.elapsedTime}s
+              </span>
+            </div>
+            <button
+              onClick={() => setProgress({ ...progress, stage: 'idle' })}
+              className="text-green-600 hover:text-green-700 text-sm"
+            >
+              Ocultar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Insights de IA */}
       {insights.length > 0 && (
@@ -622,7 +868,7 @@ export default function AIOpportunityFinder() {
       )}
       
       {/* Estado vacío */}
-      {opportunities.length === 0 && !isAnalyzing && (
+      {opportunities.length === 0 && !isAnalyzing && progress.stage !== 'complete' && (
         <div className="text-center py-12">
           <Brain className="h-16 w-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">Descubre oportunidades con IA</h3>

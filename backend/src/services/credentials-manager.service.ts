@@ -155,22 +155,39 @@ function encryptCredentials(credentials: Record<string, any>): string {
  * Desencriptar credenciales
  */
 function decryptCredentials(encryptedData: string): Record<string, any> {
-  const data = Buffer.from(encryptedData, 'base64');
-  const key = Buffer.from(ENCRYPTION_KEY, 'hex');
-  
-  const iv = data.slice(0, IV_LENGTH);
-  const tag = data.slice(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
-  const encrypted = data.slice(IV_LENGTH + TAG_LENGTH);
-  
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(tag);
-  
-  const decrypted = Buffer.concat([
-    decipher.update(encrypted),
-    decipher.final(),
-  ]);
-  
-  return JSON.parse(decrypted.toString('utf8'));
+  try {
+    const data = Buffer.from(encryptedData, 'base64');
+    
+    // Validar que el tamaño mínimo sea correcto
+    const minSize = IV_LENGTH + TAG_LENGTH + 1;
+    if (data.length < minSize) {
+      throw new Error(`Encrypted data too short: expected at least ${minSize} bytes, got ${data.length}`);
+    }
+    
+    const key = Buffer.from(ENCRYPTION_KEY, 'hex');
+    const iv = data.slice(0, IV_LENGTH);
+    const tag = data.slice(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
+    const encrypted = data.slice(IV_LENGTH + TAG_LENGTH);
+    
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(tag);
+    
+    const decrypted = Buffer.concat([
+      decipher.update(encrypted),
+      decipher.final(),
+    ]);
+    
+    return JSON.parse(decrypted.toString('utf8'));
+  } catch (error: any) {
+    // Mejorar el mensaje de error para diagnóstico
+    const errorType = error?.code === 'ERR_CRYPTO_INVALID_TAG' 
+      ? 'INVALID_ENCRYPTION_KEY' 
+      : error?.code === 'ERR_OSSL_BAD_DECRYPT'
+      ? 'CORRUPTED_DATA'
+      : 'UNKNOWN_ERROR';
+    
+    throw new Error(`${errorType}: ${error?.message || String(error)}`);
+  }
 }
 
 /**
@@ -263,8 +280,38 @@ export class CredentialsManager {
           sharedByUserId: personalCredential.sharedById ?? null,
           isActive: personalCredential.isActive,
         };
-      } catch (error) {
-        console.warn(`[CredentialsManager] Unable to decrypt personal credentials for ${apiName} (${finalEnvironment})`, error);
+      } catch (error: any) {
+        const errorMsg = error?.message || String(error);
+        const isCorrupted = errorMsg.includes('INVALID_ENCRYPTION_KEY') || 
+                           errorMsg.includes('CORRUPTED_DATA') ||
+                           errorMsg.includes('Unsupported state');
+        
+        // Log detallado solo la primera vez o si es un error de corrupción
+        if (isCorrupted) {
+          console.error(`🔒 [CredentialsManager] Credenciales corruptas detectadas: ${apiName} (${finalEnvironment}) para usuario ${userId}`);
+          console.error(`   Error: ${errorMsg}`);
+          console.error(`   Credential ID: ${personalCredential.id}`);
+          console.error(`   Posibles causas:`);
+          console.error(`   1. La clave de encriptación (ENCRYPTION_KEY o JWT_SECRET) cambió`);
+          console.error(`   2. Las credenciales fueron encriptadas con una clave diferente`);
+          console.error(`   3. Los datos están corruptos en la base de datos`);
+          console.error(`   Solución: Elimina y vuelve a guardar las credenciales en API Settings`);
+          
+          // Desactivar credenciales corruptas automáticamente para evitar logs repetitivos
+          try {
+            await prisma.apiCredential.update({
+              where: { id: personalCredential.id },
+              data: { isActive: false },
+            });
+            console.warn(`   ✅ Credencial desactivada automáticamente (ID: ${personalCredential.id})`);
+          } catch (updateError) {
+            console.error(`   ⚠️  No se pudo desactivar la credencial corrupta:`, updateError);
+          }
+        } else {
+          // Para otros errores, solo un warning simple
+          console.warn(`[CredentialsManager] Unable to decrypt personal credentials for ${apiName} (${finalEnvironment}): ${errorMsg}`);
+        }
+        
         return null;
       }
     }
@@ -300,8 +347,33 @@ export class CredentialsManager {
         sharedByUserId: sharedCredential.sharedById ?? sharedCredential.userId ?? null,
         isActive: sharedCredential.isActive,
       };
-    } catch (error) {
-      console.warn(`[CredentialsManager] Unable to decrypt shared credentials for ${apiName} (${finalEnvironment})`, error);
+    } catch (error: any) {
+      const errorMsg = error?.message || String(error);
+      const isCorrupted = errorMsg.includes('INVALID_ENCRYPTION_KEY') || 
+                         errorMsg.includes('CORRUPTED_DATA') ||
+                         errorMsg.includes('Unsupported state');
+      
+      // Log detallado solo si es un error de corrupción
+      if (isCorrupted) {
+        console.error(`🔒 [CredentialsManager] Credenciales globales corruptas detectadas: ${apiName} (${finalEnvironment})`);
+        console.error(`   Error: ${errorMsg}`);
+        console.error(`   Credential ID: ${sharedCredential.id}`);
+        console.error(`   Solución: Un administrador debe eliminar y volver a guardar las credenciales globales`);
+        
+        // Desactivar credenciales corruptas automáticamente
+        try {
+          await prisma.apiCredential.update({
+            where: { id: sharedCredential.id },
+            data: { isActive: false },
+          });
+          console.warn(`   ✅ Credencial global desactivada automáticamente (ID: ${sharedCredential.id})`);
+        } catch (updateError) {
+          console.error(`   ⚠️  No se pudo desactivar la credencial corrupta:`, updateError);
+        }
+      } else {
+        console.warn(`[CredentialsManager] Unable to decrypt shared credentials for ${apiName} (${finalEnvironment}): ${errorMsg}`);
+      }
+      
       return null;
     }
   }
@@ -620,6 +692,107 @@ export class CredentialsManager {
       }
       return { valid: false, errors: ['Unknown validation error'] };
     }
+  }
+
+  /**
+   * Detectar y limpiar credenciales corruptas
+   * Útil para mantenimiento y diagnóstico
+   */
+  static async detectAndCleanCorruptedCredentials(
+    options: {
+      autoDeactivate?: boolean;
+      dryRun?: boolean;
+    } = {}
+  ): Promise<{
+    total: number;
+    corrupted: number;
+    cleaned: number;
+    details: Array<{
+      id: number;
+      apiName: string;
+      environment: string;
+      scope: string;
+      userId: number;
+      error: string;
+    }>;
+  }> {
+    const { autoDeactivate = true, dryRun = false } = options;
+    const corrupted: Array<{
+      id: number;
+      apiName: string;
+      environment: string;
+      scope: string;
+      userId: number;
+      error: string;
+    }> = [];
+
+    // Obtener todas las credenciales activas
+    const allCredentials = await prisma.apiCredential.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        apiName: true,
+        environment: true,
+        scope: true,
+        userId: true,
+        credentials: true,
+      },
+    });
+
+    console.log(`🔍 Verificando ${allCredentials.length} credenciales activas...`);
+
+    for (const cred of allCredentials) {
+      try {
+        decryptCredentials(cred.credentials);
+      } catch (error: any) {
+        const errorMsg = error?.message || String(error);
+        const isCorrupted = errorMsg.includes('INVALID_ENCRYPTION_KEY') || 
+                           errorMsg.includes('CORRUPTED_DATA') ||
+                           errorMsg.includes('Unsupported state');
+        
+        if (isCorrupted) {
+          corrupted.push({
+            id: cred.id,
+            apiName: cred.apiName,
+            environment: cred.environment,
+            scope: cred.scope,
+            userId: cred.userId,
+            error: errorMsg,
+          });
+
+          if (!dryRun && autoDeactivate) {
+            try {
+              await prisma.apiCredential.update({
+                where: { id: cred.id },
+                data: { isActive: false },
+              });
+            } catch (updateError) {
+              console.error(`Error desactivando credencial ${cred.id}:`, updateError);
+            }
+          }
+        }
+      }
+    }
+
+    const result = {
+      total: allCredentials.length,
+      corrupted: corrupted.length,
+      cleaned: dryRun ? 0 : corrupted.length,
+      details: corrupted,
+    };
+
+    if (corrupted.length > 0) {
+      console.log(`⚠️  Se encontraron ${corrupted.length} credenciales corruptas de ${allCredentials.length} totales`);
+      if (dryRun) {
+        console.log(`   (Modo dry-run: no se realizaron cambios)`);
+      } else {
+        console.log(`   ✅ ${corrupted.length} credenciales desactivadas automáticamente`);
+      }
+    } else {
+      console.log(`✅ Todas las credenciales están válidas`);
+    }
+
+    return result;
   }
 
   /**

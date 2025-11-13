@@ -642,4 +642,37 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
   }
 });
 
+// POST /api/api-credentials/maintenance/clean-corrupted - Limpiar credenciales corruptas (solo ADMIN)
+router.post('/maintenance/clean-corrupted', authorize('ADMIN'), async (req: Request, res: Response, next) => {
+  try {
+    const dryRun = req.body?.dryRun === true;
+    const autoDeactivate = req.body?.autoDeactivate !== false; // Por defecto true
+    
+    logger.info('Iniciando limpieza de credenciales corruptas', {
+      dryRun,
+      autoDeactivate,
+      userId: req.user!.userId,
+    });
+    
+    const result = await CredentialsManager.detectAndCleanCorruptedCredentials({
+      autoDeactivate,
+      dryRun,
+    });
+    
+    res.json({
+      success: true,
+      message: dryRun 
+        ? `Se encontraron ${result.corrupted} credenciales corruptas (modo dry-run, no se realizaron cambios)`
+        : `${result.cleaned} credenciales corruptas desactivadas de ${result.total} totales`,
+      data: result,
+    });
+  } catch (error: any) {
+    logger.error('Error en limpieza de credenciales corruptas', {
+      error: error?.message || String(error),
+      userId: req.user!.userId,
+    });
+    next(error);
+  }
+});
+
 export default router;
