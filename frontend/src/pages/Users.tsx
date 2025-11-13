@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users as UsersIcon, 
@@ -476,43 +476,47 @@ export default function Users() {
     }
   };
 
-  // Filtrado y ordenamiento
-  const filteredUsers = users
-    .filter(user => {
-      const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           user.email.toLowerCase().includes(searchQuery.toLowerCase());
-      // Normalizar roles a mayúsculas para comparación
-      const userRoleUpper = user.role.toUpperCase();
-      const filterRoleUpper = filterRole.toUpperCase();
-      const matchesRole = filterRole === 'all' || userRoleUpper === filterRoleUpper;
-      const matchesStatus = filterStatus === 'all' || user.status === filterStatus;
-      return matchesSearch && matchesRole && matchesStatus;
-    })
-    .sort((a, b) => {
-      if (sortBy === 'name') return a.name.localeCompare(b.name);
-      if (sortBy === 'created') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      return 0; // sales: requiere stats del backend
-    });
+  // Filtrado y ordenamiento memoizado
+  const filteredUsers = useMemo(() => {
+    return users
+      .filter(user => {
+        const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                             user.email.toLowerCase().includes(searchQuery.toLowerCase());
+        // Normalizar roles a mayúsculas para comparación
+        const userRoleUpper = user.role.toUpperCase();
+        const filterRoleUpper = filterRole.toUpperCase();
+        const matchesRole = filterRole === 'all' || userRoleUpper === filterRoleUpper;
+        const matchesStatus = filterStatus === 'all' || user.status === filterStatus;
+        return matchesSearch && matchesRole && matchesStatus;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'name') return a.name.localeCompare(b.name);
+        if (sortBy === 'created') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return 0; // sales: requiere stats del backend
+      });
+  }, [users, searchQuery, filterRole, filterStatus, sortBy]);
 
-  // Paginación
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
-  const paginatedUsers = filteredUsers.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  // Paginación memoizada
+  const totalPages = useMemo(() => Math.ceil(filteredUsers.length / itemsPerPage), [filteredUsers.length, itemsPerPage]);
+  const paginatedUsers = useMemo(() => {
+    return filteredUsers.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+  }, [filteredUsers, currentPage, itemsPerPage]);
 
-  const getRoleBadgeColor = (role: string) => {
+  const getRoleBadgeColor = useCallback((role: string) => {
     const roleUpper = role.toUpperCase(); // Normalizar a mayúsculas
     switch (roleUpper) {
       case 'ADMIN': return 'bg-purple-100 text-purple-700';
       case 'USER': return 'bg-blue-100 text-blue-700';
       default: return 'bg-gray-100 text-gray-700';
     }
-  };
+  }, []);
 
-  const getStatusBadgeColor = (status: string) => {
+  const getStatusBadgeColor = useCallback((status: string) => {
     return status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
-  };
+  }, []);
 
   if (loading) {
     return (

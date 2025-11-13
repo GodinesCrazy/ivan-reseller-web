@@ -19,6 +19,7 @@ model User {
   password         String
   fullName         String?
   role             String    @default("USER") // "ADMIN" or "USER"
+  plan             String    @default("FREE") // "FREE", "BASIC", "PRO", "ENTERPRISE", "ADMIN" - Solo ADMIN puede modificar
   commissionRate   Float     @default(0.10) // 10%
   fixedMonthlyCost Float     @default(17.00) // $17 USD monthly
   balance          Float     @default(0)
@@ -48,6 +49,10 @@ model User {
   marketplaceAuthStatuses MarketplaceAuthStatus[]
   sharedCredentials    ApiCredential[] @relation("SharedCredentialOwner")
 
+  @@index([email])
+  @@index([username])
+  @@index([role, isActive])
+  @@index([createdAt])
   @@map("users")
 }
 
@@ -67,6 +72,9 @@ model ApiCredential {
   user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
   sharedBy  User? @relation("SharedCredentialOwner", fields: [sharedById], references: [id], onDelete: SetNull)
 
+  @@index([userId, apiName, environment])
+  @@index([apiName, environment, isActive])
+  @@index([scope, isActive])
   @@unique([userId, apiName, environment, scope])
   @@map("api_credentials")
 }
@@ -101,6 +109,9 @@ model Product {
   successfulOperations SuccessfulOperation[]
   marketplaceListings  MarketplaceListing[]
 
+  @@index([userId, status])
+  @@index([status, isPublished])
+  @@index([createdAt])
   @@map("products")
 }
 
@@ -130,6 +141,10 @@ model Sale {
   adminCommissions    AdminCommission[]
   successfulOperation SuccessfulOperation? // Relación one-to-one con SuccessfulOperation
 
+  @@index([userId, status])
+  @@index([marketplace, status])
+  @@index([createdAt])
+  @@index([orderId])
   @@map("sales")
 }
 
@@ -165,6 +180,8 @@ model Activity {
   // Relations
   user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
   @@map("activities")
 }
 
@@ -312,6 +329,9 @@ model Opportunity {
   user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   competitionSnapshots CompetitionSnapshot[]
 
+  @@index([userId, status])
+  @@index([status, createdAt])
+  @@index([confidenceScore])
   @@map("opportunities")
 }
 

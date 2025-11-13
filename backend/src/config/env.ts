@@ -8,7 +8,8 @@ function getDatabaseUrl(): string {
   // Intentar múltiples nombres de variables comunes en Railway
   // Railway puede usar diferentes nombres según la configuración
   const possibleNames = [
-    'DATABASE_URL',
+    'DATABASE_URL',           // Prioridad 1: Variable estándar
+    'DATABASE_PUBLIC_URL',    // Prioridad 2: Railway a veces usa este nombre
     'POSTGRES_URL',
     'POSTGRES_PRISMA_URL',
     'DATABASE_PRISMA_URL',
@@ -71,11 +72,12 @@ function getDatabaseUrl(): string {
         console.error('');
         console.error('🔧 SOLUCIÓN:');
         console.error('   1. Ve a Railway Dashboard → Postgres → Variables');
-        console.error('   2. Busca DATABASE_PUBLIC_URL');
+        console.error('   2. Busca DATABASE_URL (interna) o DATABASE_PUBLIC_URL (pública)');
         console.error('   3. Click en el ojo 👁️ para VER el valor completo');
         console.error('   4. Click en copiar 📋 para copiar TODO el valor');
         console.error('   5. Ve a ivan-reseller-web → Variables → DATABASE_URL');
         console.error('   6. Pega el valor completo (debe empezar con postgresql://)');
+        console.error('   💡 Recomendación: Usa DATABASE_URL (interna) si estás en Railway');
         console.error('');
         return '';
       }
@@ -98,6 +100,10 @@ function getDatabaseUrl(): string {
         '***';
       const maskedUrl = `${url.protocol}//${url.username}:${maskedPassword}@${url.host}${url.pathname}`;
       
+      // Detectar tipo de URL (interna vs pública)
+      const isInternalUrl = url.hostname.includes('railway.internal');
+      const isPublicUrl = url.hostname.includes('proxy.rlwy.net') || url.hostname.includes('railway.app');
+      
       console.log('🔍 DATABASE_URL encontrada:');
       console.log(`   Variable: ${foundName}`);
       console.log(`   ${maskedUrl}`);
@@ -105,17 +111,29 @@ function getDatabaseUrl(): string {
       console.log(`   Port: ${url.port || '5432'}`);
       console.log(`   Database: ${url.pathname.replace('/', '')}`);
       console.log(`   User: ${url.username}`);
+      
+      if (isInternalUrl) {
+        console.log('   ✅ Tipo: URL INTERNA (correcta para servicios dentro de Railway)');
+        console.log('   💡 Esta es la URL recomendada para servicios en Railway');
+      } else if (isPublicUrl) {
+        console.log('   ⚠️  Tipo: URL PÚBLICA (para conexiones externas)');
+        console.log('   💡 Si estás en Railway, considera usar DATABASE_URL con postgres.railway.internal');
+        console.log('   💡 La URL pública funciona pero puede ser más lenta');
+      } else {
+        console.log('   ℹ️  Tipo: URL personalizada o local');
+      }
     } catch (e) {
       console.error('⚠️  No se pudo parsear DATABASE_URL:', e);
       console.error(`   Valor recibido: ${dbUrl}`);
       console.error('');
       console.error('🔧 SOLUCIÓN:');
       console.error('   1. Ve a Railway Dashboard → Postgres → Variables');
-      console.error('   2. Busca DATABASE_PUBLIC_URL');
+      console.error('   2. Busca DATABASE_URL (interna) o DATABASE_PUBLIC_URL (pública)');
       console.error('   3. Click en el ojo 👁️ para VER el valor completo');
       console.error('   4. Click en copiar 📋 para copiar TODO el valor');
       console.error('   5. Ve a ivan-reseller-web → Variables → DATABASE_URL');
       console.error('   6. Pega el valor completo (debe empezar con postgresql://)');
+      console.error('   💡 Recomendación: Usa DATABASE_URL (interna) si estás en Railway');
       console.error('');
     }
   } else {
@@ -141,12 +159,78 @@ const databaseUrlSchema = z.string().min(1, 'DATABASE_URL no puede estar vacía'
     }
   );
 
+// Función para obtener y validar REDIS_URL
+function getRedisUrl(): string {
+  const possibleNames = [
+    'REDIS_URL',
+    'REDISCLOUD_URL',
+    'REDIS_TLS_URL',
+  ];
+
+  let redisUrl = '';
+  let foundName = '';
+
+  for (const name of possibleNames) {
+    if (process.env[name]) {
+      redisUrl = process.env[name];
+      foundName = name;
+      break;
+    }
+  }
+
+  if (redisUrl) {
+    try {
+      // Verificar formato básico
+      if (!redisUrl.startsWith('redis://') && !redisUrl.startsWith('rediss://')) {
+        console.warn('⚠️  REDIS_URL no tiene formato estándar (debe empezar con redis:// o rediss://)');
+      }
+
+      // Detectar tipo de URL (interna vs pública)
+      const isInternalUrl = redisUrl.includes('railway.internal');
+      const isPublicUrl = redisUrl.includes('proxy.rlwy.net') || redisUrl.includes('railway.app');
+
+      console.log('🔍 REDIS_URL encontrada:');
+      console.log(`   Variable: ${foundName}`);
+      console.log(`   ${redisUrl.replace(/:[^:@]+@/, ':****@')}`); // Ocultar contraseña
+      
+      if (isInternalUrl) {
+        console.log('   ✅ Tipo: URL INTERNA (correcta para servicios dentro de Railway)');
+        console.log('   💡 Esta es la URL recomendada para servicios en Railway');
+      } else if (isPublicUrl) {
+        console.log('   ⚠️  Tipo: URL PÚBLICA (para conexiones externas)');
+        console.log('   💡 Si estás en Railway, considera usar REDIS_URL con redis.railway.internal');
+      } else {
+        console.log('   ℹ️  Tipo: URL local o personalizada');
+      }
+    } catch (e) {
+      console.warn('⚠️  No se pudo parsear REDIS_URL:', e);
+    }
+  } else {
+    console.warn('⚠️  REDIS_URL no encontrada - usando valor por defecto (redis://localhost:6379)');
+    console.warn('   El sistema funcionará pero sin cache distribuido');
+  }
+
+  return redisUrl || 'redis://localhost:6379';
+}
+
+const redisUrl = getRedisUrl();
+
+// Validación de REDIS_URL
+const redisUrlSchema = z.string()
+  .refine(
+    (url) => !url || url.startsWith('redis://') || url.startsWith('rediss://'),
+    { 
+      message: 'REDIS_URL debe empezar con redis:// o rediss://',
+    }
+  )
+  .default('redis://localhost:6379');
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().default('3000'),
   API_URL: z.string().url().default('http://localhost:3000'),
   DATABASE_URL: databaseUrlSchema,
-  REDIS_URL: z.string().default('redis://localhost:6379'),
+  REDIS_URL: redisUrlSchema,
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('7d'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
@@ -171,6 +255,12 @@ const envSchema = z.object({
 if (!process.env.DATABASE_URL && databaseUrl) {
   process.env.DATABASE_URL = databaseUrl;
   console.log('✅ DATABASE_URL configurada desde variable alternativa');
+}
+
+// Asegurar que REDIS_URL esté en process.env
+if (!process.env.REDIS_URL && redisUrl && redisUrl !== 'redis://localhost:6379') {
+  process.env.REDIS_URL = redisUrl;
+  console.log('✅ REDIS_URL configurada desde variable alternativa');
 }
 
 // Validar DATABASE_URL antes de parsear todo el schema

@@ -10,6 +10,7 @@ export class UserService {
         username: true,
         email: true,
         role: true,
+        plan: true,
         commissionRate: true,
         fixedMonthlyCost: true,
         createdAt: true,
@@ -28,6 +29,7 @@ export class UserService {
         username: true,
         email: true,
         role: true,
+        plan: true,
         commissionRate: true,
         fixedMonthlyCost: true,
         createdAt: true,
@@ -83,6 +85,7 @@ export class UserService {
         username: true,
         email: true,
         role: true,
+        plan: true,
         commissionRate: true,
         fixedMonthlyCost: true,
         createdAt: true,
@@ -100,6 +103,7 @@ export class UserService {
       email?: string;
       password?: string;
       role?: string;
+      plan?: string;
       commissionRate?: number;
       fixedMonthlyCost?: number;
     }
@@ -119,6 +123,7 @@ export class UserService {
     if (data.username) updateData.username = data.username;
     if (data.email) updateData.email = data.email;
     if (data.role) updateData.role = data.role;
+    if (data.plan) updateData.plan = data.plan;
     if (data.commissionRate !== undefined) updateData.commissionRate = data.commissionRate;
     if (data.fixedMonthlyCost !== undefined) updateData.fixedMonthlyCost = data.fixedMonthlyCost;
 
@@ -136,6 +141,7 @@ export class UserService {
         username: true,
         email: true,
         role: true,
+        plan: true,
         commissionRate: true,
         fixedMonthlyCost: true,
         updatedAt: true,

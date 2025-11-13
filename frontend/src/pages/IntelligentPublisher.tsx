@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { api } from '../services/api';
 import { Check, X } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import toast from 'react-hot-toast';
 
 export default function IntelligentPublisher() {
   const [pending, setPending] = useState<any[]>([]);
@@ -30,15 +31,26 @@ export default function IntelligentPublisher() {
     })();
   }, []);
 
-  async function approve(productId: string, marketplaces: string[]) {
+  const approve = useCallback(async (productId: string, marketplaces: string[]) => {
     try {
       await api.post(`/api/publisher/approve/${productId}`, { marketplaces });
       setPending((prev) => prev.filter(p => p.id !== productId));
-      alert('Approved and published');
+      toast.success('Approved and published');
     } catch (e: any) {
-      alert(`Error approving: ${e?.message || e}`);
+      toast.error(`Error approving: ${e?.message || e}`);
     }
-  }
+  }, []);
+
+  // Memoizar productos pendientes limitados
+  const pendingLimited = useMemo(() => pending.slice(0, 20), [pending]);
+  
+  // Memoizar listings limitados
+  const listingsLimited = useMemo(() => listings.slice(0, 20), [listings]);
+  
+  // Memoizar progreso de bulk status
+  const bulkProgress = useMemo(() => {
+    return bulkStatus.total ? (bulkStatus.queued / bulkStatus.total) * 100 : 0;
+  }, [bulkStatus.total, bulkStatus.queued]);
 
   if (loading) {
     return (
@@ -62,7 +74,7 @@ export default function IntelligentPublisher() {
           <button onClick={async()=>{
             const productIds = Object.entries(selected).filter(([,v])=>v).map(([k])=>k);
             const marketplaces = (['ebay','mercadolibre','amazon'] as const).filter(m=>bulkMk[m]);
-            if (productIds.length===0 || marketplaces.length===0) { alert('Select at least one product and one marketplace'); return; }
+            if (productIds.length===0 || marketplaces.length===0) { toast.error('Select at least one product and one marketplace'); return; }
             setBulkStatus({ total: productIds.length, queued: 0, done: 0, errors: 0, running: true });
             // queue jobs sequentially to avoid hammering
             for (const pid of productIds) {
@@ -75,14 +87,14 @@ export default function IntelligentPublisher() {
               await new Promise(r=>setTimeout(r, 300));
             }
             setBulkStatus(s=>({ ...s, running: false }));
-            alert('Publishing jobs queued. Track progress in notifications.');
+            toast.success('Publishing jobs queued. Track progress in notifications.');
           }} className="px-3 py-2 bg-blue-600 text-white rounded text-sm">Queue Publishing Jobs</button>
           <button onClick={()=>{ const all: Record<string, boolean> = {}; pending.forEach((p:any)=> all[p.id]=true); setSelected(all); }} className="px-3 py-2 border rounded text-sm">Select All</button>
           <button onClick={()=> setSelected({}) } className="px-3 py-2 border rounded text-sm">Clear</button>
           <button onClick={async()=>{
             const allIds = pending.map((p:any)=> String(p.id));
             const marketplaces = (['ebay','mercadolibre','amazon'] as const).filter(m=>bulkMk[m]);
-            if (allIds.length===0 || marketplaces.length===0) { alert('No pending products or marketplaces'); return; }
+            if (allIds.length===0 || marketplaces.length===0) { toast.error('No pending products or marketplaces'); return; }
             setBulkStatus({ total: allIds.length, queued: 0, done: 0, errors: 0, running: true });
             for (const pid of allIds) {
               try {
@@ -94,11 +106,11 @@ export default function IntelligentPublisher() {
               await new Promise(r=>setTimeout(r, 300));
             }
             setBulkStatus(s=>({ ...s, running: false }));
-            alert('All pending queued for publishing');
+            toast.success('All pending queued for publishing');
           }} className="px-3 py-2 bg-green-600 text-white rounded text-sm">Publish All</button>
         </div>
         <div className="h-2 bg-gray-100 rounded overflow-hidden">
-          <div className="h-full bg-primary-500" style={{ width: `${bulkStatus.total? (bulkStatus.queued / bulkStatus.total)*100 : 0}%` }} />
+          <div className="h-full bg-primary-500" style={{ width: `${bulkProgress}%` }} />
         </div>
         <div className="text-xs text-gray-600">Queued: {bulkStatus.queued}/{bulkStatus.total} • Errors: {bulkStatus.errors}</div>
       </div>
@@ -112,9 +124,9 @@ export default function IntelligentPublisher() {
               const { data } = await api.get('/api/products', { params: { status: 'PENDING' } });
               setPending(data?.products || []);
               setUrl('');
-              alert('Product added for approval');
+              toast.success('Product added for approval');
             } catch (e:any) {
-              alert('Error adding product');
+              toast.error('Error adding product');
             }
           }} className="px-4 py-2 bg-primary-600 text-white rounded">Add</button>
         </div>
@@ -123,7 +135,7 @@ export default function IntelligentPublisher() {
         Pending approvals: <span className="font-semibold">{pending.length}</span>
       </div>
       <div className="bg-white border rounded">
-        {pending.slice(0, 20).map((p: any) => (
+        {pendingLimited.map((p: any) => (
           <div key={p.id} className="p-4 border-b flex items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <input type="checkbox" className="mt-1" checked={!!selected[p.id]} onChange={(e)=>setSelected(s=>({ ...s, [p.id]: e.target.checked }))} />
@@ -149,7 +161,7 @@ export default function IntelligentPublisher() {
       <div className="mt-6">
         <div className="text-lg font-semibold mb-2">Published Listings</div>
         <div className="bg-white border rounded">
-          {listings.slice(0, 20).map((l:any)=>(
+          {listingsLimited.map((l:any)=>(
             <div key={l.id} className="p-3 border-b flex items-center justify-between">
               <div className="text-sm">
                 <div className="font-medium">{l.marketplace.toUpperCase()} – {l.listingId}</div>

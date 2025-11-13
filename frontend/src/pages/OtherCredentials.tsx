@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Lock, Save, RefreshCw, Eye, EyeOff, AlertTriangle, Loader2 } from 'lucide-react';
 import api from '../services/api';
+import toast from 'react-hot-toast';
 
 interface OtherAPIDefinition {
   id: string;
@@ -163,10 +164,10 @@ export default function OtherCredentials() {
         },
       }));
 
-      alert(`✅ ${apiDef.name} credentials saved successfully`);
+      toast.success(`${apiDef.name} credentials saved successfully`);
     } catch (err: any) {
       const message = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Unknown error';
-      alert(`❌ Error saving ${apiDef.name} credentials: ${message}`);
+      toast.error(`Error saving ${apiDef.name} credentials: ${message}`);
     } finally {
       setSaving(null);
     }
@@ -195,14 +196,14 @@ export default function OtherCredentials() {
       const data = response.data?.data || response.data;
 
       if (data.isAvailable || data.isConfigured) {
-        alert(`✅ ${apiDef.name} credentials validated successfully`);
+        toast.success(`${apiDef.name} credentials validated successfully`);
       } else {
         const message = data.error || data.message || 'Credentials not valid';
-        alert(`❌ ${apiDef.name} test failed: ${message}`);
+        toast.error(`${apiDef.name} test failed: ${message}`);
       }
     } catch (err: any) {
       const message = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Unknown error during test';
-      alert(`❌ Error testing ${apiDef.name} credentials: ${message}`);
+      toast.error(`Error testing ${apiDef.name} credentials: ${message}`);
     } finally {
       setTesting(null);
     }

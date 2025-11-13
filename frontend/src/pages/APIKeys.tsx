@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Settings, Globe, Zap, Database, Eye, EyeOff, Save, RefreshCw, CheckCircle, AlertTriangle } from 'lucide-react';
 import { api } from '../services/api';
+import toast from 'react-hot-toast';
 
 type Marketplace = 'ebay' | 'mercadolibre' | 'amazon';
 
@@ -70,10 +71,10 @@ export default function APIKeys() {
         isActive: true
       });
       setStatus((s) => ({ ...s, [mk]: { present: true, isActive: true } }));
-      alert(`✅ ${mk} credentials saved successfully`);
+      toast.success(`${mk} credentials saved successfully`);
     } catch (e: any) {
       const errorMsg = e?.response?.data?.error || e?.response?.data?.message || e?.message || 'Unknown error';
-      alert(`❌ Error saving ${mk} credentials: ${errorMsg}`);
+      toast.error(`Error saving ${mk} credentials: ${errorMsg}`);
     } finally {
       setSaving(null);
     }
@@ -86,13 +87,13 @@ export default function APIKeys() {
       const { data } = await api.post(`/api/credentials/${mk}/test`);
       const result = data?.data || data;
       if (result?.isAvailable || result?.available) {
-        alert(`✅ ${mk} connection test: SUCCESS`);
+        toast.success(`${mk} connection test: SUCCESS`);
       } else {
-        alert(`❌ ${mk} connection test: ${result?.message || 'FAILED'}`);
+        toast.error(`${mk} connection test: ${result?.message || 'FAILED'}`);
       }
     } catch (e: any) {
       const errorMsg = e?.response?.data?.error || e?.response?.data?.message || e?.message || 'Unknown error';
-      alert(`❌ Error testing ${mk}: ${errorMsg}`);
+      toast.error(`Error testing ${mk}: ${errorMsg}`);
     } finally {
       setTesting(null);
     }
@@ -192,10 +193,10 @@ async function connectOAuth(mk: Marketplace) {
     if (url) {
       window.location.href = url; // Redirigir en la misma ventana para OAuth
     } else {
-      alert('❌ No auth URL available for OAuth');
+      toast.error('No auth URL available for OAuth');
     }
   } catch (e: any) {
     const errorMsg = e?.response?.data?.error || e?.response?.data?.message || e?.message || 'Unknown error';
-    alert(`❌ OAuth initialization failed: ${errorMsg}`);
+    toast.error(`OAuth initialization failed: ${errorMsg}`);
   }
 }

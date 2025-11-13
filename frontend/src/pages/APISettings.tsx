@@ -23,7 +23,7 @@ import {
 import api from '../services/api';
 import { useAuthStatusStore } from '@stores/authStatusStore';
 import { useAuthStore } from '@stores/authStore';
-import { toast } from 'sonner';
+import toast from 'react-hot-toast';
 
 // Tipos según backend
 interface APICredential {
@@ -1106,7 +1106,7 @@ export default function APISettings() {
       const missingFields = status.missingFields || [];
 
       if (isAvailable) {
-        alert(`✅ Conexión exitosa con ${API_DEFINITIONS[apiName]?.displayName || apiName}`);
+        toast.success(`Conexión exitosa con ${API_DEFINITIONS[apiName]?.displayName || apiName}`);
       } else {
         // Construir mensaje de error más descriptivo
         let errorMsg = errorMessage;
@@ -1117,7 +1117,7 @@ export default function APISettings() {
             ? 'API no configurada. Por favor, guarda las credenciales primero.'
             : 'No disponible. Verifica que las credenciales sean correctas.';
         }
-        alert(`❌ Error de conexión: ${errorMsg}`);
+        toast.error(`Error de conexión: ${errorMsg}`);
       }
 
       // Actualizar estado
@@ -1151,7 +1151,7 @@ export default function APISettings() {
       }
       
       setError(errorMsg);
-      alert(`❌ ${errorMsg}`);
+      toast.error(errorMsg);
     } finally {
       setTesting(null);
     }
@@ -1188,7 +1188,7 @@ export default function APISettings() {
         getCredentialForAPI(apiName, environment)?.scope ||
         'user';
       if (!isAdmin && currentScope === 'global') {
-        alert('Estas credenciales son compartidas por el administrador. Solicita que el administrador ejecute la autorización OAuth.');
+        toast.error('Estas credenciales son compartidas por el administrador. Solicita que el administrador ejecute la autorización OAuth.');
         setOauthing(null);
         return;
       }
@@ -1198,20 +1198,20 @@ export default function APISettings() {
       const storedCreds = credentialResponse.data?.data?.credentials || {};
       const ruName = storedCreds.redirectUri || storedCreds.ruName || storedCreds.RuName;
       if (!ruName) {
-        alert('⚠️ Debes completar y guardar el campo "Redirect URI (RuName)" antes de autorizar.');
+        toast.error('Debes completar y guardar el campo "Redirect URI (RuName)" antes de autorizar.');
         return;
       }
       if (apiName === 'ebay') {
         const missing = ['appId', 'devId', 'certId'].filter((field) => !String(storedCreds[field] || '').trim());
         if (missing.length) {
-          alert('⚠️ Completa y guarda App ID, Dev ID y Cert ID antes de autorizar con OAuth.');
+          toast.error('Completa y guarda App ID, Dev ID y Cert ID antes de autorizar con OAuth.');
           return;
         }
       }
       if (apiName === 'mercadolibre') {
         const missing = ['clientId', 'clientSecret'].filter((field) => !String(storedCreds[field] || '').trim());
         if (missing.length) {
-          alert('⚠️ Completa y guarda Client ID y Client Secret antes de autorizar con OAuth.');
+          toast.error('Completa y guarda Client ID y Client Secret antes de autorizar con OAuth.');
           return;
         }
       }
@@ -1238,7 +1238,7 @@ export default function APISettings() {
           fullMessage += `\n\n📋 Verifica en eBay Developer Portal que el App ID sea correcto para el ambiente ${environment === 'sandbox' ? 'Sandbox' : 'Production'}.`;
         }
         
-        alert(`❌ ${fullMessage}`);
+        toast.error(fullMessage);
         setError(errorMsg);
         setOauthing(null);
         return;
@@ -1247,7 +1247,10 @@ export default function APISettings() {
       // Mostrar advertencia si existe (pero no bloquear)
       if (data.warning) {
         console.warn('[APISettings] OAuth warning:', data.warning);
-        toast.warning(data.warning, { duration: 8000 });
+        toast(data.warning, { 
+          duration: 8000,
+          icon: '⚠️'
+        });
       }
       
       const authUrl = data?.data?.authUrl || data?.authUrl || data?.url;
@@ -1263,7 +1266,7 @@ export default function APISettings() {
       
       if (!authUrl || !authUrl.trim()) {
         console.error('[APISettings] No authUrl received from backend');
-        alert('❌ Error: No se recibió la URL de autorización del servidor. Por favor, intenta de nuevo o contacta al administrador.');
+        toast.error('Error: No se recibió la URL de autorización del servidor. Por favor, intenta de nuevo o contacta al administrador.');
         setError('No se recibió la URL de autorización');
         setOauthing(null);
         return;
@@ -1277,7 +1280,7 @@ export default function APISettings() {
           authUrl,
           error: urlError.message,
         });
-        alert(`❌ Error: La URL de autorización recibida no es válida: ${urlError.message}`);
+        toast.error(`Error: La URL de autorización recibida no es válida: ${urlError.message}`);
         setError('URL de autorización inválida');
         setOauthing(null);
         return;
@@ -1285,7 +1288,7 @@ export default function APISettings() {
       
       // Validar que el App ID no esté vacío antes de abrir OAuth
       if (apiName === 'ebay' && !storedCreds.appId?.trim()) {
-        alert('❌ Error: El App ID está vacío. Por favor, verifica que hayas guardado correctamente las credenciales de eBay.');
+        toast.error('Error: El App ID está vacío. Por favor, verifica que hayas guardado correctamente las credenciales de eBay.');
         setOauthing(null);
         return;
       }
@@ -1329,12 +1332,28 @@ export default function APISettings() {
           return; // No continuar con el monitoreo si abrimos en la misma ventana
         } else {
           // Si el usuario cancela, mostrar instrucciones
-          alert(
-            'Para autorizar con eBay:\n\n' +
-            '1. Permite ventanas emergentes para este sitio en la configuración de tu navegador\n' +
-            '2. O copia esta URL y ábrela manualmente:\n\n' +
-            authUrl.substring(0, 200) + '...'
-          );
+          toast.custom((t) => (
+            <div className="bg-white p-4 rounded-lg shadow-lg border border-gray-200 max-w-md">
+              <h3 className="font-semibold text-gray-900 mb-2">Para autorizar con eBay:</h3>
+              <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700 mb-3">
+                <li>Permite ventanas emergentes para este sitio en la configuración de tu navegador</li>
+                <li>O copia esta URL y ábrela manualmente:</li>
+              </ol>
+              <div className="bg-gray-50 p-2 rounded text-xs font-mono break-all mb-3">
+                {authUrl.substring(0, 200)}...
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(authUrl);
+                  toast.success('URL copiada al portapapeles');
+                  toast.dismiss(t.id);
+                }}
+                className="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+              >
+                Copiar URL
+              </button>
+            </div>
+          ), { duration: 10000 });
           setOauthing(null);
           return;
         }
@@ -1345,7 +1364,9 @@ export default function APISettings() {
         closed: oauthWindow.closed,
       });
       
-      toast.info('Se abrió la ventana oficial de OAuth. Completa el login y vuelve para refrescar el estado.');
+      toast('Se abrió la ventana oficial de OAuth. Completa el login y vuelve para refrescar el estado.', {
+        icon: 'ℹ️'
+      });
       
       // Monitorear si la ventana se cierra
       const checkInterval = setInterval(() => {
@@ -1368,7 +1389,7 @@ export default function APISettings() {
     } catch (err: any) {
       console.error('Error iniciando OAuth:', err);
       const message = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Error iniciando OAuth';
-      alert(`❌ ${message}`);
+      toast.error(message);
     } finally {
       setOauthing(null);
     }
@@ -1383,7 +1404,7 @@ export default function APISettings() {
         scopeSelection[scopeKey] ||
         'user';
       if (!isAdmin && scope === 'global') {
-        alert('Solo el administrador puede activar o desactivar credenciales globales.');
+        toast.error('Solo el administrador puede activar o desactivar credenciales globales.');
         return;
       }
       // Toggle activo/inactivo usando el endpoint correcto: /api/credentials/:apiName/toggle
@@ -1396,7 +1417,7 @@ export default function APISettings() {
       await loadCredentials();
       await fetchAuthStatuses();
 
-      alert(`${!currentActive ? '✅ Activada' : '❌ Desactivada'} ${API_DEFINITIONS[apiName].displayName} (${environment})`);
+      toast.success(`${!currentActive ? 'Activada' : 'Desactivada'} ${API_DEFINITIONS[apiName].displayName} (${environment})`);
     } catch (err: any) {
       console.error('Error toggling API:', err);
       setError(err.response?.data?.message || 'Error al cambiar estado');
@@ -1417,7 +1438,7 @@ export default function APISettings() {
         scopeSelection[scopeKey] ||
         'user';
       if (!isAdmin && scope === 'global') {
-        alert('Solo el administrador puede eliminar credenciales globales.');
+        toast.error('Solo el administrador puede eliminar credenciales globales.');
         setDeleting(null);
         return;
       }
@@ -1427,7 +1448,7 @@ export default function APISettings() {
       // Recargar credenciales
       await loadCredentials();
 
-      alert(`🗑️ Credenciales de ${API_DEFINITIONS[apiName].displayName} (${environment}) eliminadas`);
+      toast.success(`Credenciales de ${API_DEFINITIONS[apiName].displayName} (${environment}) eliminadas`);
     } catch (err: any) {
       console.error('Error deleting credentials:', err);
       setError(err.response?.data?.message || err.response?.data?.error || 'Error al eliminar credenciales');

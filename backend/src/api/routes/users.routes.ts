@@ -24,6 +24,7 @@ const updateUserSchema = z.object({
   email: z.string().email().optional(),
   password: z.string().min(6).optional(),
   role: z.enum(['ADMIN', 'USER']).optional(),
+  plan: z.enum(['FREE', 'BASIC', 'PRO', 'ENTERPRISE', 'ADMIN']).optional(),
   commissionRate: z.number().optional(),
   fixedMonthlyCost: z.number().optional(),
 });
@@ -99,6 +100,21 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
     // Only admins can change roles
     if (data.role && !isAdmin) {
       delete data.role;
+    }
+
+    // Only admins can change plans
+    if (data.plan && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Solo los administradores pueden modificar el plan de los usuarios'
+      });
+    }
+
+    // Si un admin está cambiando el plan, invalidar el cache del rate limiting
+    if (data.plan && isAdmin) {
+      // Invalidar cache del plan del usuario para que el nuevo plan se aplique inmediatamente
+      const { invalidateUserPlanCache } = await import('../../middleware/rate-limit.middleware');
+      invalidateUserPlanCache(userId);
     }
 
     const user = await userService.updateUser(userId, data);
