@@ -18,6 +18,7 @@ import {
   Cloud
 } from 'lucide-react';
 import { api } from '../services/api';
+import toast from 'react-hot-toast';
 
 interface APIField {
   key: string;
@@ -185,7 +186,7 @@ export default function APIConfigurationPage() {
         ));
         
         // Show success message
-        alert(`✅ ${apiName} configurada exitosamente`);
+        toast.success(`${apiName} configurada exitosamente`);
         
         // Limpiar formulario
         setFormData(prev => ({
@@ -195,7 +196,7 @@ export default function APIConfigurationPage() {
       }
     } catch (error: any) {
       console.error('Error saving API:', error);
-      alert(`❌ Error al configurar API: ${error.message || 'Error desconocido'}`);
+      toast.error(`Error al configurar API: ${error.message || 'Error desconocido'}`);
     } finally {
       setSaving(null);
     }

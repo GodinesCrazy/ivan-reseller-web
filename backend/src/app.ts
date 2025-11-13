@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import { env } from './config/env';
 import { errorHandler } from './middleware/error.middleware';
+import { setupSwagger } from './config/swagger';
 
 // Import routes
 import authRoutes from './api/routes/auth.routes';
@@ -177,6 +178,11 @@ app.use('/api/regional', regionalRoutes);
 app.use('/api/manual-auth', manualAuthRoutes);
 app.use('/api/auth-status', authStatusRoutes);
 app.use('/api/config-audit', configAuditRoutes);
+
+// Swagger API Documentation
+if (env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'true') {
+  setupSwagger(app);
+}
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
