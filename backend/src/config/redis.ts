@@ -19,7 +19,10 @@ class MockRedis {
   once() { return this; }
 }
 
-// Only create real Redis client if REDIS_URL is configured
+/**
+ * Redis client para uso general (cache, etc.)
+ * maxRetriesPerRequest: 3 - permite reintentos para operaciones no bloqueantes
+ */
 export const redis = REDIS_URL 
   ? new Redis(REDIS_URL, {
       maxRetriesPerRequest: 3,
@@ -29,6 +32,24 @@ export const redis = REDIS_URL
       },
     })
   : new MockRedis() as any;
+
+/**
+ * Redis connection para BullMQ (Workers y Queues)
+ * BullMQ requiere maxRetriesPerRequest: null para operaciones bloqueantes
+ */
+export const getBullMQRedisConnection = () => {
+  if (!REDIS_URL) {
+    return null;
+  }
+  
+  return new Redis(REDIS_URL, {
+    maxRetriesPerRequest: null, // BullMQ requiere null para operaciones bloqueantes
+    retryStrategy: (times) => {
+      const delay = Math.min(times * 50, 2000);
+      return delay;
+    },
+  });
+};
 
 export const isRedisAvailable = !!REDIS_URL;
 
