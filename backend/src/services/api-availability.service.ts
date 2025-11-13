@@ -8,6 +8,7 @@ import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { supportsEnvironments } from '../config/api-keys.config';
 import { OPTIONAL_MARKETPLACES } from '../config/marketplaces.config';
+import { redis, isRedisAvailable } from '../config/redis';
 
 interface APIStatus {
   apiName: string;
@@ -34,14 +35,88 @@ interface APICapabilities {
 }
 
 export class APIAvailabilityService {
-  private cache: Map<string, APIStatus> = new Map();
+  private cache: Map<string, APIStatus> = new Map(); // Fallback cache en memoria
   private cacheExpiry: number = 5 * 60 * 1000; // 5 minutes
+  private useRedis: boolean = isRedisAvailable;
+  private redisPrefix = 'api_availability:'; // Prefijo para keys de Redis
 
   /**
    * Generate cache key including userId for multi-tenant isolation
    */
   private getCacheKey(userId: number, apiName: string): string {
     return `user_${userId}_${apiName}`;
+  }
+
+  /**
+   * Get full Redis key
+   */
+  private getRedisKey(userId: number, apiName: string): string {
+    return `${this.redisPrefix}${this.getCacheKey(userId, apiName)}`;
+  }
+
+  /**
+   * Get from cache (Redis or memory)
+   */
+  private async getCached(key: string): Promise<APIStatus | null> {
+    if (this.useRedis) {
+      try {
+        const cached = await redis.get(this.redisPrefix + key);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          // Convertir lastChecked de string a Date
+          if (parsed.lastChecked) {
+            parsed.lastChecked = new Date(parsed.lastChecked);
+          }
+          return parsed as APIStatus;
+        }
+      } catch (error) {
+        logger.warn('Failed to get from Redis cache, falling back to memory', { error });
+        // Fallback a cache en memoria
+      }
+    }
+    
+    // Fallback a cache en memoria
+    return this.cache.get(key) || null;
+  }
+
+  /**
+   * Set cache (Redis or memory)
+   */
+  private async setCached(key: string, value: APIStatus): Promise<void> {
+    if (this.useRedis) {
+      try {
+        const serialized = JSON.stringify(value);
+        // Guardar en Redis con TTL
+        await redis.setex(
+          this.redisPrefix + key,
+          Math.floor(this.cacheExpiry / 1000), // TTL en segundos
+          serialized
+        );
+        return;
+      } catch (error) {
+        logger.warn('Failed to set Redis cache, falling back to memory', { error });
+        // Fallback a cache en memoria
+      }
+    }
+    
+    // Fallback a cache en memoria
+    this.cache.set(key, value);
+  }
+
+  /**
+   * Delete from cache (Redis or memory)
+   */
+  private async deleteCached(key: string): Promise<void> {
+    if (this.useRedis) {
+      try {
+        await redis.del(this.redisPrefix + key);
+      } catch (error) {
+        logger.warn('Failed to delete from Redis cache, falling back to memory', { error });
+      }
+    }
+    
+    // También eliminar de cache en memoria
+    this.cache.delete(key);
   }
 
   /**
@@ -102,7 +177,7 @@ export class APIAvailabilityService {
    */
   async checkEbayAPI(userId: number, environment: 'sandbox' | 'production' = 'production'): Promise<APIStatus> {
     const cacheKey = this.getCacheKey(userId, `ebay-${environment}`);
-    const cached = this.cache.get(cacheKey);
+    const cached = await this.getCached(cacheKey);
     if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
       return cached;
     }
@@ -121,7 +196,7 @@ export class APIAvailabilityService {
           lastChecked: new Date(),
           error: 'eBay API not configured for this user'
         };
-        this.cache.set(cacheKey, status);
+        await this.setCached(cacheKey, status);
         return status;
       }
 
@@ -181,7 +256,7 @@ export class APIAvailabilityService {
    */
   async checkAmazonAPI(userId: number, environment: 'sandbox' | 'production' = 'production'): Promise<APIStatus> {
     const cacheKey = this.getCacheKey(userId, `amazon-${environment}`);
-    const cached = this.cache.get(cacheKey);
+    const cached = await this.getCached(cacheKey);
     if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
       return cached;
     }
@@ -212,7 +287,7 @@ export class APIAvailabilityService {
             ? 'Opcional: agrega credenciales de Amazon para mejorar la comparación de precios.'
             : 'Amazon API not configured for this user',
         };
-        this.cache.set(cacheKey, status);
+        await this.setCached(cacheKey, status);
         return status;
       }
 
@@ -266,7 +341,7 @@ export class APIAvailabilityService {
    */
   async checkMercadoLibreAPI(userId: number, environment: 'sandbox' | 'production' = 'production'): Promise<APIStatus> {
     const cacheKey = this.getCacheKey(userId, `mercadolibre-${environment}`);
-    const cached = this.cache.get(cacheKey);
+    const cached = await this.getCached(cacheKey);
     if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
       return cached;
     }
@@ -288,7 +363,7 @@ export class APIAvailabilityService {
             ? 'Opcional: agrega credenciales de MercadoLibre para ampliar la cobertura regional.'
             : 'MercadoLibre API not configured for this user',
         };
-        this.cache.set(cacheKey, status);
+        await this.setCached(cacheKey, status);
         return status;
       }
 
@@ -340,7 +415,7 @@ export class APIAvailabilityService {
    */
   async checkGroqAPI(userId: number): Promise<APIStatus> {
     const cacheKey = this.getCacheKey(userId, 'groq');
-    const cached = this.cache.get(cacheKey);
+    const cached = await this.getCached(cacheKey);
     if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
       return cached;
     }
@@ -358,7 +433,7 @@ export class APIAvailabilityService {
           lastChecked: new Date(),
           error: 'GROQ API not configured for this user'
         };
-        this.cache.set(cacheKey, status);
+        await this.setCached(cacheKey, status);
         return status;
       }
 
@@ -402,7 +477,7 @@ export class APIAvailabilityService {
    */
   async checkScraperAPI(userId: number): Promise<APIStatus> {
     const cacheKey = this.getCacheKey(userId, 'scraperapi');
-    const cached = this.cache.get(cacheKey);
+    const cached = await this.getCached(cacheKey);
     if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
       return cached;
     }
@@ -420,7 +495,7 @@ export class APIAvailabilityService {
           lastChecked: new Date(),
           error: 'ScraperAPI not configured for this user'
         };
-        this.cache.set(cacheKey, status);
+        await this.setCached(cacheKey, status);
         return status;
       }
 
@@ -464,7 +539,7 @@ export class APIAvailabilityService {
    */
   async checkZenRowsAPI(userId: number): Promise<APIStatus> {
     const cacheKey = this.getCacheKey(userId, 'zenrows');
-    const cached = this.cache.get(cacheKey);
+    const cached = await this.getCached(cacheKey);
     if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
       return cached;
     }
@@ -482,7 +557,7 @@ export class APIAvailabilityService {
           lastChecked: new Date(),
           error: 'ZenRows not configured for this user'
         };
-        this.cache.set(cacheKey, status);
+        await this.setCached(cacheKey, status);
         return status;
       }
 
@@ -526,7 +601,7 @@ export class APIAvailabilityService {
    */
   async check2CaptchaAPI(userId: number): Promise<APIStatus> {
     const cacheKey = this.getCacheKey(userId, '2captcha');
-    const cached = this.cache.get(cacheKey);
+    const cached = await this.getCached(cacheKey);
     if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
       return cached;
     }
@@ -544,7 +619,7 @@ export class APIAvailabilityService {
           lastChecked: new Date(),
           error: '2Captcha not configured for this user'
         };
-        this.cache.set(cacheKey, status);
+        await this.setCached(cacheKey, status);
         return status;
       }
 
@@ -588,7 +663,7 @@ export class APIAvailabilityService {
    */
   async checkPayPalAPI(userId: number): Promise<APIStatus> {
     const cacheKey = this.getCacheKey(userId, 'paypal');
-    const cached = this.cache.get(cacheKey);
+    const cached = await this.getCached(cacheKey);
     if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
       return cached;
     }
@@ -606,7 +681,7 @@ export class APIAvailabilityService {
           lastChecked: new Date(),
           error: 'PayPal API not configured for this user'
         };
-        this.cache.set(cacheKey, status);
+        await this.setCached(cacheKey, status);
         return status;
       }
 
@@ -650,7 +725,7 @@ export class APIAvailabilityService {
    */
   async checkAliExpressAPI(userId: number): Promise<APIStatus> {
     const cacheKey = this.getCacheKey(userId, 'aliexpress');
-    const cached = this.cache.get(cacheKey);
+    const cached = await this.getCached(cacheKey);
     if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
       return cached;
     }
@@ -668,7 +743,7 @@ export class APIAvailabilityService {
           lastChecked: new Date(),
           error: 'AliExpress API not configured for this user'
         };
-        this.cache.set(cacheKey, status);
+        await this.setCached(cacheKey, status);
         return status;
       }
 
@@ -808,22 +883,23 @@ export class APIAvailabilityService {
   /**
    * Clear cache for specific user (force re-check on next call)
    */
-  clearUserCache(userId: number): void {
-    const keysToDelete: string[] = [];
-    for (const key of this.cache.keys()) {
-      if (key.startsWith(`user_${userId}_`)) {
-        keysToDelete.push(key);
+  async clearUserCache(userId: number): Promise<void> {
+    const prefix = `user_${userId}_`;
+    
+    if (this.useRedis) {
+      try {
+        const pattern = `${this.redisPrefix}${prefix}*`;
+        const keys = await redis.keys(pattern);
+        if (keys.length > 0) {
+          await redis.del(...keys);
+          logger.info(`Redis cache cleared for user ${userId} (${keys.length} keys)`);
+        }
+      } catch (error) {
+        logger.warn('Failed to clear Redis cache, falling back to memory', { error });
       }
     }
-    keysToDelete.forEach(key => this.cache.delete(key));
-    logger.info(`API availability cache cleared for user ${userId}`);
-  }
-
-  /**
-   * Clear specific API cache for specific user
-   */
-  clearAPICache(userId: number, apiName: string): void {
-    const prefix = `user_${userId}_${apiName.toLowerCase()}`;
+    
+    // También limpiar cache en memoria
     const keysToDelete: string[] = [];
     for (const key of this.cache.keys()) {
       if (key.startsWith(prefix)) {
@@ -831,13 +907,60 @@ export class APIAvailabilityService {
       }
     }
     keysToDelete.forEach(key => this.cache.delete(key));
-    logger.info(`Cache cleared for user ${userId}, API: ${apiName}`);
+    
+    logger.info(`API availability cache cleared for user ${userId} (${keysToDelete.length} memory keys)`);
+  }
+
+  /**
+   * Clear specific API cache for specific user
+   */
+  async clearAPICache(userId: number, apiName: string): Promise<void> {
+    const prefix = `user_${userId}_${apiName.toLowerCase()}`;
+    
+    if (this.useRedis) {
+      try {
+        // Buscar todas las keys que coincidan con el patrón
+        const pattern = `${this.redisPrefix}${prefix}*`;
+        const keys = await redis.keys(pattern);
+        if (keys.length > 0) {
+          await redis.del(...keys);
+          logger.info(`Redis cache cleared for user ${userId}, API: ${apiName} (${keys.length} keys)`);
+        }
+      } catch (error) {
+        logger.warn('Failed to clear Redis cache, falling back to memory', { error });
+      }
+    }
+    
+    // También limpiar cache en memoria
+    const keysToDelete: string[] = [];
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(prefix)) {
+        keysToDelete.push(key);
+      }
+    }
+    keysToDelete.forEach(key => this.cache.delete(key));
+    
+    logger.info(`Cache cleared for user ${userId}, API: ${apiName} (${keysToDelete.length} memory keys)`);
   }
 
   /**
    * Clear all cache (admin function)
    */
-  clearAllCache(): void {
+  async clearAllCache(): Promise<void> {
+    if (this.useRedis) {
+      try {
+        const pattern = `${this.redisPrefix}*`;
+        const keys = await redis.keys(pattern);
+        if (keys.length > 0) {
+          await redis.del(...keys);
+          logger.info(`Redis cache cleared (${keys.length} keys)`);
+        }
+      } catch (error) {
+        logger.warn('Failed to clear Redis cache, falling back to memory', { error });
+      }
+    }
+    
+    // También limpiar cache en memoria
     this.cache.clear();
     logger.info('All API availability cache cleared');
   }

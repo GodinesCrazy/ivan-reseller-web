@@ -5,6 +5,7 @@ import { AppError } from '../../middleware/error.middleware';
 import { apiAvailability } from '../../services/api-availability.service';
 import { CredentialsManager } from '../../services/credentials-manager.service';
 import { supportsEnvironments } from '../../config/api-keys.config';
+import { logger } from '../../config/logger';
 import type { ApiName, ApiEnvironment } from '../../types/api-credentials.types';
 
 const router = Router();
@@ -265,14 +266,18 @@ router.post('/', async (req: Request, res: Response, next) => {
       );
     }
 
-    // Clear cache for this API
+    // Clear cache for this API - siempre invalidar cache después de guardar
     if (scope === 'global' && actorRole === 'ADMIN') {
+      // Si es credencial global, invalidar cache para todos los usuarios
       const users = await prisma.user.findMany({ select: { id: true } });
-      for (const user of users) {
-        await apiAvailability.clearAPICache(user.id, apiName);
-      }
+      await Promise.all(
+        users.map(user => apiAvailability.clearAPICache(user.id, apiName))
+      );
+      logger.info(`Cache invalidated for all users (global ${apiName} credentials)`);
     } else {
+      // Si es credencial personal, invalidar cache solo para el usuario objetivo
       await apiAvailability.clearAPICache(targetUserId, apiName);
+      logger.info(`Cache invalidated for user ${targetUserId} (${apiName} credentials)`);
     }
 
     // Log activity
