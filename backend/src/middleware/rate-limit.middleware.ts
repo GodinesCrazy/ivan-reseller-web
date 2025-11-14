@@ -34,7 +34,7 @@ export const createRoleBasedRateLimit = () => {
         return `user:${userId}`;
       }
       // Usar ipKeyGenerator helper para soporte IPv6 correcto
-      const ip = ipKeyGenerator(req);
+      const ip = ipKeyGenerator(req as any);
       return `ip:${ip}`;
     },
     message: 'Too many requests. Please try again later.',
@@ -136,7 +136,7 @@ export const loginRateLimit = rateLimit({
   keyGenerator: (req: Request) => {
     // Usar IP para prevenir brute force desde múltiples cuentas
     // Usar ipKeyGenerator helper para soporte IPv6 correcto
-    const ip = ipKeyGenerator(req);
+    const ip = ipKeyGenerator(req as any);
     return `login:${ip}`;
   },
   skipSuccessfulRequests: false, // Contar todos los intentos, incluso los exitosos

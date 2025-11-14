@@ -22,7 +22,7 @@ class CacheService {
   async get<T>(key: string): Promise<T | null> {
     try {
       // Intentar Redis primero
-      if (isRedisAvailable()) {
+      if (isRedisAvailable) {
         const cached = await redis.get(key);
         if (cached) {
           const parsed = JSON.parse(cached);
@@ -54,7 +54,7 @@ class CacheService {
 
     try {
       // Guardar en Redis si está disponible
-      if (isRedisAvailable()) {
+      if (isRedisAvailable) {
         await redis.setex(key, ttl, JSON.stringify({ value, expiresAt, tags: options.tags }));
         return;
       }
@@ -83,7 +83,7 @@ class CacheService {
    */
   async delete(key: string): Promise<void> {
     try {
-      if (isRedisAvailable()) {
+      if (isRedisAvailable) {
         await redis.del(key);
       }
       this.memoryCache.delete(key);
@@ -97,7 +97,7 @@ class CacheService {
    */
   async invalidatePattern(pattern: string): Promise<void> {
     try {
-      if (isRedisAvailable()) {
+      if (isRedisAvailable) {
         const keys = await redis.keys(pattern);
         if (keys.length > 0) {
           await redis.del(...keys);
@@ -121,7 +121,7 @@ class CacheService {
    */
   async invalidateByTags(tags: string[]): Promise<void> {
     try {
-      if (isRedisAvailable()) {
+      if (isRedisAvailable) {
         // Buscar todas las keys con esos tags
         const allKeys = await redis.keys('*');
         for (const key of allKeys) {
@@ -163,7 +163,7 @@ class CacheService {
    */
   async clear(): Promise<void> {
     try {
-      if (isRedisAvailable()) {
+      if (isRedisAvailable) {
         await redis.flushdb();
       }
       this.memoryCache.clear();

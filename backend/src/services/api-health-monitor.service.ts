@@ -178,15 +178,13 @@ export class APIHealthMonitorService extends EventEmitter {
             case 'amazon':
               newStatus = await apiAvailability.checkAmazonAPI(
                 userId,
-                status.environment || 'production',
-                true
+                status.environment || 'production'
               );
               break;
             case 'mercadolibre':
               newStatus = await apiAvailability.checkMercadoLibreAPI(
                 userId,
-                status.environment || 'production',
-                true
+                status.environment || 'production'
               );
               break;
             default:

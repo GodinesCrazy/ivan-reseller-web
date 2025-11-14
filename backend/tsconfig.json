@@ -38,5 +38,5 @@
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests", "**/*.old.ts", "src/autopilot-init.ts", "src/routes/settings.routes.old.ts"]
+  "exclude": ["node_modules", "dist", "tests", "**/*.test.ts", "**/__tests__/**", "**/*.old.ts", "src/autopilot-init.ts", "src/routes/settings.routes.old.ts"]
 }
