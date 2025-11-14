@@ -54,8 +54,11 @@ interface APIStatus {
   apiName: string;
   environment: string;
   available: boolean;
+  status?: 'healthy' | 'degraded' | 'unhealthy' | 'unknown'; // Estado de salud
   message?: string;
   lastChecked?: string;
+  latency?: number; // Latencia en ms
+  trustScore?: number; // Score de confianza 0-100
   optional?: boolean;
 }
 
@@ -235,6 +238,7 @@ export default function APISettings() {
     present?: boolean;
   }>>({});
   const [oauthing, setOauthing] = useState<string | null>(null);
+  const [oauthBlockedModal, setOauthBlockedModal] = useState<{ open: boolean; authUrl: string; apiName: string }>({ open: false, authUrl: '', apiName: '' });
   const [manualCookieModalOpen, setManualCookieModalOpen] = useState(false);
   const [manualCookieInput, setManualCookieInput] = useState('');
   const [manualCookieError, setManualCookieError] = useState<string | null>(null);
@@ -1302,7 +1306,7 @@ export default function APISettings() {
       
       let oauthWindow: Window | null = null;
       try {
-        oauthWindow = window.open(authUrl, '_blank', 'noopener,noreferrer');
+        oauthWindow = window.open(authUrl, '_blank', 'noopener,noreferrer,width=800,height=600');
         console.log('[APISettings] window.open() result:', {
           oauthWindow: !!oauthWindow,
           oauthWindowType: typeof oauthWindow,
@@ -1314,78 +1318,69 @@ export default function APISettings() {
         });
       }
       
-      if (!oauthWindow || oauthWindow.closed) {
-        console.error('[APISettings] Failed to open OAuth window - popup blocked or closed immediately', {
-          oauthWindow: !!oauthWindow,
-          closed: oauthWindow?.closed,
-        });
+      // Verificar inmediatamente si el popup fue bloqueado
+      // Esperar un momento para que el navegador procese la apertura
+      setTimeout(() => {
+        // Verificar si la ventana fue bloqueada o cerrada inmediatamente
+        const isBlocked = !oauthWindow || oauthWindow.closed;
         
-        // Intentar abrir en la misma ventana como fallback
-        const userConfirmed = confirm(
-          '⚠️ No se pudo abrir la ventana de OAuth (puede estar bloqueada por el navegador).\n\n' +
-          '¿Deseas abrir la página de autorización de eBay en esta misma ventana?\n\n' +
-          'Nota: Después de autorizar, deberás volver manualmente a esta página.'
-        );
+        // Intentar acceder al document para verificar si realmente se abrió
+        let hasDocument = false;
+        try {
+          hasDocument = oauthWindow?.document ? true : false;
+        } catch (e) {
+          // Si hay error al acceder al document, probablemente fue bloqueado
+          hasDocument = false;
+        }
         
-        if (userConfirmed) {
-          window.location.href = authUrl;
-          return; // No continuar con el monitoreo si abrimos en la misma ventana
-        } else {
-          // Si el usuario cancela, mostrar instrucciones
-          toast.custom((t) => (
-            <div className="bg-white p-4 rounded-lg shadow-lg border border-gray-200 max-w-md">
-              <h3 className="font-semibold text-gray-900 mb-2">Para autorizar con eBay:</h3>
-              <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700 mb-3">
-                <li>Permite ventanas emergentes para este sitio en la configuración de tu navegador</li>
-                <li>O copia esta URL y ábrela manualmente:</li>
-              </ol>
-              <div className="bg-gray-50 p-2 rounded text-xs font-mono break-all mb-3">
-                {authUrl.substring(0, 200)}...
-              </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(authUrl);
-                  toast.success('URL copiada al portapapeles');
-                  toast.dismiss(t.id);
-                }}
-                className="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
-              >
-                Copiar URL
-              </button>
-            </div>
-          ), { duration: 10000 });
+        if (isBlocked || !hasDocument) {
+          console.error('[APISettings] Failed to open OAuth window - popup blocked or closed immediately', {
+            oauthWindow: !!oauthWindow,
+            closed: oauthWindow?.closed,
+            hasDocument: hasDocument,
+          });
+          
+          // Mostrar modal personalizado en lugar de confirm() (que puede ser bloqueado)
+          setOauthBlockedModal({
+            open: true,
+            authUrl: authUrl,
+            apiName: apiName,
+          });
           setOauthing(null);
           return;
         }
-      }
-      
-      console.log('[APISettings] OAuth window opened successfully', {
-        oauthWindow: !!oauthWindow,
-        closed: oauthWindow.closed,
-      });
-      
-      toast('Se abrió la ventana oficial de OAuth. Completa el login y vuelve para refrescar el estado.', {
-        icon: 'ℹ️'
-      });
-      
-      // Monitorear si la ventana se cierra
-      const checkInterval = setInterval(() => {
-        if (oauthWindow.closed) {
-          clearInterval(checkInterval);
-          // Esperar un momento y luego verificar si las credenciales se actualizaron
-          setTimeout(async () => {
-            try {
-              await fetchAuthStatuses();
-              await loadCredentials();
-            } catch (err) {
-              console.warn('Error al recargar credenciales después de OAuth:', err);
+        
+        // Si llegamos aquí, la ventana se abrió correctamente
+        if (oauthWindow) {
+          console.log('[APISettings] OAuth window opened successfully', {
+            oauthWindow: !!oauthWindow,
+            closed: oauthWindow.closed,
+          });
+          
+          toast('Se abrió la ventana oficial de OAuth. Completa el login y vuelve para refrescar el estado.', {
+            icon: 'ℹ️'
+          });
+          
+          // Monitorear si la ventana se cierra
+          const checkInterval = setInterval(() => {
+            if (!oauthWindow || oauthWindow.closed) {
+              clearInterval(checkInterval);
+              // Esperar un momento y luego verificar si las credenciales se actualizaron
+              setTimeout(async () => {
+                try {
+                  await fetchAuthStatuses();
+                  await loadCredentials();
+                } catch (err) {
+                  console.warn('Error al recargar credenciales después de OAuth:', err);
+                }
+              }, 2000);
             }
-          }, 2000);
+          }, 1000);
+          
+          // Limpiar intervalo después de 5 minutos
+          setTimeout(() => clearInterval(checkInterval), 300000);
         }
-      }, 1000);
-      
-      // Limpiar intervalo después de 5 minutos
-      setTimeout(() => clearInterval(checkInterval), 300000);
+      }, 100);
     } catch (err: any) {
       console.error('Error iniciando OAuth:', err);
       const message = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Error iniciando OAuth';
@@ -1802,6 +1797,22 @@ export default function APISettings() {
       return <AlertTriangle className="w-5 h-5 text-yellow-500" />;
     }
 
+    // Use new status field if available
+    if (status.status) {
+      switch (status.status) {
+        case 'healthy':
+          return <CheckCircle className="w-5 h-5 text-green-500" />;
+        case 'degraded':
+          return <AlertTriangle className="w-5 h-5 text-amber-500" />;
+        case 'unhealthy':
+          return <XCircle className="w-5 h-5 text-red-500" />;
+        case 'unknown':
+        default:
+          return <AlertTriangle className="w-5 h-5 text-gray-400" />;
+      }
+    }
+
+    // Fallback to old available field
     if (!status.available) {
       if (status.optional) {
         return <AlertTriangle className="w-5 h-5 text-amber-500" />;
@@ -1836,6 +1847,25 @@ export default function APISettings() {
 
     if (!status) return 'Estado desconocido';
     
+    // Use new status field if available
+    if (status.status) {
+      const latencyText = status.latency ? ` (${status.latency}ms)` : '';
+      const trustText = status.trustScore !== undefined ? ` [${Math.round(status.trustScore)}%]` : '';
+      
+      switch (status.status) {
+        case 'healthy':
+          return `Funcionando correctamente${latencyText}${trustText}`;
+        case 'degraded':
+          return `Funcionando con problemas${latencyText}${trustText}${status.message ? `: ${status.message}` : ''}`;
+        case 'unhealthy':
+          return `No disponible${status.message ? `: ${status.message}` : ''}${trustText}`;
+        case 'unknown':
+        default:
+          return 'Estado desconocido';
+      }
+    }
+    
+    // Fallback to old available field
     if (status.optional && !status.available) {
       return status.message || 'Opcional (configura para mayor precisión)';
     }
@@ -2421,6 +2451,85 @@ export default function APISettings() {
           </div>
         </div>
       </div>
+
+      {/* Modal para cuando el popup de OAuth es bloqueado */}
+      {oauthBlockedModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-lg rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-800">
+                ⚠️ Ventana de OAuth bloqueada
+              </h2>
+              <button
+                onClick={() => setOauthBlockedModal({ open: false, authUrl: '', apiName: '' })}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <p className="text-gray-700">
+                El navegador bloqueó la ventana emergente de OAuth. Tienes dos opciones:
+              </p>
+              
+              <div className="space-y-3">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-900 mb-2">Opción 1: Abrir en esta ventana</h3>
+                  <p className="text-sm text-gray-700 mb-3">
+                    Se abrirá la página de autorización en esta misma ventana. Después de autorizar, deberás volver manualmente a esta página.
+                  </p>
+                  <button
+                    onClick={() => {
+                      window.location.href = oauthBlockedModal.authUrl;
+                    }}
+                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+                  >
+                    Abrir en esta ventana
+                  </button>
+                </div>
+                
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-900 mb-2">Opción 2: Copiar URL y abrir manualmente</h3>
+                  <p className="text-sm text-gray-700 mb-3">
+                    Copia la URL y ábrela en una nueva pestaña o ventana. Después de autorizar, vuelve a esta página.
+                  </p>
+                  <div className="bg-gray-50 p-2 rounded text-xs font-mono break-all mb-3 border border-gray-200">
+                    {oauthBlockedModal.authUrl}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(oauthBlockedModal.authUrl);
+                        toast.success('URL copiada al portapapeles');
+                      } catch (error) {
+                        toast.error('No se pudo copiar la URL. Cópiala manualmente.');
+                      }
+                    }}
+                    className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition flex items-center justify-center gap-2"
+                  >
+                    <ClipboardPaste className="w-4 h-4" />
+                    Copiar URL
+                  </button>
+                </div>
+              </div>
+              
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                <p className="text-sm text-yellow-800">
+                  <strong>💡 Tip:</strong> Para evitar este problema en el futuro, permite ventanas emergentes para este sitio en la configuración de tu navegador.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
+              <button
+                onClick={() => setOauthBlockedModal({ open: false, authUrl: '', apiName: '' })}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {manualCookieModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
