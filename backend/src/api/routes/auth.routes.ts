@@ -38,21 +38,57 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
 
     // Configurar cookie httpOnly para el token (más seguro que localStorage)
     const isProduction = process.env.NODE_ENV === 'production';
-    const frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+    
+    // Obtener el dominio del frontend desde el origin de la petición (más confiable)
+    const origin = req.headers.origin || req.headers.referer;
+    let frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+    
+    // Si hay origin en la petición, usarlo (más preciso)
+    if (origin) {
+      try {
+        const originUrl = new URL(origin);
+        frontendUrl = `${originUrl.protocol}//${originUrl.host}`;
+      } catch (e) {
+        // Si falla, usar el valor por defecto
+      }
+    }
     
     // Detectar si la petición viene por HTTPS (importante para cookies secure)
     const requestProtocol = req.protocol || (req.headers['x-forwarded-proto'] as string) || 'http';
     const isHttps = requestProtocol === 'https' || frontendUrl.startsWith('https');
     
+    // Extraer el dominio del frontend (sin protocolo)
+    let cookieDomain: string | undefined = undefined;
+    try {
+      const frontendUrlObj = new URL(frontendUrl);
+      const hostname = frontendUrlObj.hostname;
+      // Remover 'www.' para que funcione con y sin www
+      cookieDomain = hostname.replace(/^www\./, '');
+      // Solo establecer domain si no es localhost
+      if (cookieDomain === 'localhost' || cookieDomain.includes('127.0.0.1')) {
+        cookieDomain = undefined;
+      } else {
+        // Agregar el punto inicial para que funcione con subdominios
+        cookieDomain = `.${cookieDomain}`;
+      }
+    } catch (e) {
+      // Si falla, no establecer domain
+      cookieDomain = undefined;
+    }
+    
     // Configurar cookies
-    const cookieOptions = {
+    const cookieOptions: any = {
       httpOnly: true, // No accesible desde JavaScript (previene XSS)
       secure: isHttps, // Enviar sobre HTTPS si la petición es HTTPS o el frontend usa HTTPS
       sameSite: 'lax' as const, // 'lax' permite cookies en navegaciones cross-site (más compatible)
       maxAge: 60 * 60 * 1000, // 1 hora (debe coincidir con JWT_EXPIRES_IN)
       path: '/', // Disponible en toda la aplicación
-      // No establecer domain explícitamente para que funcione con www y sin www
     };
+    
+    // Establecer domain solo si se pudo determinar correctamente
+    if (cookieDomain) {
+      cookieOptions.domain = cookieDomain;
+    }
 
     // Configurar cookie para refresh token (más largo)
     const refreshCookieOptions = {
@@ -64,6 +100,7 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
     console.log('🍪 Configurando cookies:', {
       secure: cookieOptions.secure,
       sameSite: cookieOptions.sameSite,
+      domain: cookieOptions.domain,
       isHttps,
       requestProtocol,
       frontendUrl,
@@ -251,22 +288,48 @@ router.post('/logout', authenticate, async (req: Request, res: Response, next: N
     }
 
     // Limpiar cookies (usar misma configuración que al crear)
-    const frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+    const origin = req.headers.origin || req.headers.referer;
+    let frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+    
+    if (origin) {
+      try {
+        const originUrl = new URL(origin);
+        frontendUrl = `${originUrl.protocol}//${originUrl.host}`;
+      } catch (e) {
+        // Si falla, usar el valor por defecto
+      }
+    }
+    
     const requestProtocol = req.protocol || (req.headers['x-forwarded-proto'] as string) || 'http';
     const isHttps = requestProtocol === 'https' || frontendUrl.startsWith('https');
     
-    res.clearCookie('token', {
+    let cookieDomain: string | undefined = undefined;
+    try {
+      const frontendUrlObj = new URL(frontendUrl);
+      const hostname = frontendUrlObj.hostname;
+      cookieDomain = hostname.replace(/^www\./, '');
+      if (cookieDomain === 'localhost' || cookieDomain.includes('127.0.0.1')) {
+        cookieDomain = undefined;
+      } else {
+        cookieDomain = `.${cookieDomain}`;
+      }
+    } catch (e) {
+      cookieDomain = undefined;
+    }
+    
+    const clearCookieOptions: any = {
       httpOnly: true,
       secure: isHttps,
       sameSite: 'lax',
       path: '/',
-    });
-    res.clearCookie('refreshToken', {
-      httpOnly: true,
-      secure: isHttps,
-      sameSite: 'lax',
-      path: '/',
-    });
+    };
+    
+    if (cookieDomain) {
+      clearCookieOptions.domain = cookieDomain;
+    }
+    
+    res.clearCookie('token', clearCookieOptions);
+    res.clearCookie('refreshToken', clearCookieOptions);
 
     res.json({
       success: true,
