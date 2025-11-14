@@ -130,6 +130,13 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
     // el header Access-Control-Allow-Credentials esté presente (CORS ya lo maneja, pero lo verificamos)
     res.header('Access-Control-Allow-Credentials', 'true');
     
+    // CRÍTICO: Para cookies cross-domain, el Access-Control-Allow-Origin debe ser específico (no *)
+    // y coincidir exactamente con el origin del request
+    const requestOrigin = req.headers.origin;
+    if (requestOrigin) {
+      res.header('Access-Control-Allow-Origin', requestOrigin);
+    }
+    
     // Establecer cookies con los tokens
     res.cookie('token', result.token, cookieOptions);
     res.cookie('refreshToken', result.refreshToken, refreshCookieOptions);
@@ -221,23 +228,66 @@ router.post('/refresh', async (req: Request, res: Response, next: NextFunction) 
 
     const result = await authService.refreshAccessToken(refreshToken);
 
-    // Configurar cookies
-    const isProduction = process.env.NODE_ENV === 'production';
-    const cookieOptions = {
+    // Usar la misma lógica de cookies que en login para mantener consistencia
+    const origin = req.headers.origin || req.headers.referer;
+    let frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+    
+    if (origin) {
+      try {
+        const originUrl = new URL(origin);
+        frontendUrl = `${originUrl.protocol}//${originUrl.host}`;
+      } catch (e) {
+        // Si falla, usar el valor por defecto
+      }
+    }
+    
+    const requestProtocol = req.protocol || (req.headers['x-forwarded-proto'] as string) || 'http';
+    const isHttps = requestProtocol === 'https' || frontendUrl.startsWith('https');
+    
+    let cookieDomain: string | undefined = undefined;
+    try {
+      const frontendUrlObj = new URL(frontendUrl);
+      const frontendHostname = frontendUrlObj.hostname;
+      const backendHostname = req.get('host') || req.hostname || '';
+      
+      const frontendBaseDomain = frontendHostname.replace(/^[^.]+\./, '');
+      const backendBaseDomain = backendHostname.replace(/^[^.]+\./, '');
+      
+      if (frontendBaseDomain === backendBaseDomain && frontendBaseDomain !== 'localhost' && !frontendBaseDomain.includes('127.0.0.1')) {
+        cookieDomain = `.${frontendBaseDomain}`;
+      } else {
+        cookieDomain = undefined;
+      }
+    } catch (e) {
+      cookieDomain = undefined;
+    }
+    
+    const cookieOptions: any = {
       httpOnly: true,
-      secure: isProduction,
-      sameSite: 'strict' as const,
+      secure: isHttps,
+      sameSite: cookieDomain ? 'lax' : 'none',
+      maxAge: 60 * 60 * 1000, // 1 hora
       path: '/',
     };
-
-    res.cookie('token', result.accessToken, {
-      ...cookieOptions,
-      maxAge: 60 * 60 * 1000, // 1 hora
-    });
-    res.cookie('refreshToken', result.refreshToken, {
+    
+    if (cookieDomain) {
+      cookieOptions.domain = cookieDomain;
+    }
+    
+    const refreshCookieOptions = {
       ...cookieOptions,
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
-    });
+    };
+
+    // CRÍTICO: Establecer Access-Control-Allow-Origin específico para cookies cross-domain
+    const requestOrigin = req.headers.origin;
+    if (requestOrigin) {
+      res.header('Access-Control-Allow-Origin', requestOrigin);
+    }
+    res.header('Access-Control-Allow-Credentials', 'true');
+
+    res.cookie('token', result.accessToken, cookieOptions);
+    res.cookie('refreshToken', result.refreshToken, refreshCookieOptions);
 
     res.json({
       success: true,
@@ -361,6 +411,13 @@ router.post('/logout', authenticate, async (req: Request, res: Response, next: N
     if (cookieDomain) {
       clearCookieOptions.domain = cookieDomain;
     }
+    
+    // CRÍTICO: Establecer Access-Control-Allow-Origin específico para cookies cross-domain
+    const requestOrigin = req.headers.origin;
+    if (requestOrigin) {
+      res.header('Access-Control-Allow-Origin', requestOrigin);
+    }
+    res.header('Access-Control-Allow-Credentials', 'true');
     
     res.clearCookie('token', clearCookieOptions);
     res.clearCookie('refreshToken', clearCookieOptions);

@@ -479,24 +479,38 @@ function APIsCredenciales() {
             <div className="flex items-start justify-between mb-3">
               <div>
                 <h4 className="text-lg font-semibold text-gray-900">GROQ AI API</h4>
-                <span className="text-sm text-purple-600 font-medium">Para CEO Agent e IA</span>
+                <span className="text-sm text-purple-600 font-medium">Crítica para CEO Agent e IA</span>
               </div>
               <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
                 Gratis
               </span>
             </div>
             <p className="text-gray-700 mb-3">
-              IA estratégica para análisis de negocio y predicciones
+              IA estratégica para análisis de negocio, generación de contenido, predicciones y toma de decisiones automáticas. Usada por el CEO Agent.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-2">
+            <div className="bg-white border rounded-lg p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campo requerido:</strong> API Key
               </div>
+              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
+                <div className="font-semibold text-gray-900">Pasos para obtener la API Key:</div>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Ve a <a href="https://console.groq.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">console.groq.com <ExternalLink className="w-3 h-3 inline" /></a></li>
+                  <li>Crea una cuenta (gratis, sin tarjeta de crédito requerida)</li>
+                  <li>Ve a <strong>"API Keys"</strong> en el menú lateral</li>
+                  <li>Haz clic en <strong>"Create API Key"</strong></li>
+                  <li>Copia tu <strong>API Key</strong> (formato: <code>gsk_...</code>)</li>
+                  <li>Pégala en el sistema en <code>Settings → Configuración de APIs → GROQ AI API</code></li>
+                </ol>
+              </div>
               <div className="text-sm text-gray-600">
-                <strong>Obtener en:</strong> 
-                <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
-                  console.groq.com/keys <ExternalLink className="w-3 h-3 inline" />
+                <strong>Documentación:</strong> 
+                <a href="https://console.groq.com/docs" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                  console.groq.com/docs <ExternalLink className="w-3 h-3 inline" />
                 </a>
+              </div>
+              <div className="bg-green-50 border border-green-200 text-green-700 rounded p-3 text-xs">
+                <strong>Ventaja:</strong> GROQ ofrece generosas cuotas gratuitas (hasta 30 requests/minuto) y es muy rápida. Perfecta para uso en producción.
               </div>
             </div>
           </div>
@@ -513,20 +527,44 @@ function APIsCredenciales() {
               </span>
             </div>
             <p className="text-gray-700 mb-3">
-              Publica y gestiona productos en MercadoLibre
+              Publica y gestiona productos en MercadoLibre usando OAuth 2.0
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-2">
+            <div className="bg-white border rounded-lg p-4 space-y-3">
               <div className="text-sm">
-                <strong>Campos requeridos:</strong> Client ID, Client Secret
+                <strong>Campos requeridos:</strong>
               </div>
+              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+                <li><strong>Client ID (App ID):</strong> ID de tu aplicación en MercadoLibre</li>
+                <li><strong>Client Secret:</strong> Secret key de tu aplicación</li>
+              </ul>
               <div className="text-sm">
-                <strong>Campos opcionales:</strong> Access Token, Refresh Token
+                <strong>Campos opcionales (se obtienen automáticamente con OAuth):</strong>
+              </div>
+              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+                <li><strong>Access Token:</strong> Token de acceso (se renueva automáticamente)</li>
+                <li><strong>Refresh Token:</strong> Token para renovar el access token</li>
+                <li><strong>User ID:</strong> ID del usuario vendedor</li>
+              </ul>
+              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
+                <div className="font-semibold text-gray-900">Pasos para obtener las credenciales:</div>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Ve a <a href="https://developers.mercadolibre.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">MercadoLibre Developers <ExternalLink className="w-3 h-3 inline" /></a> e inicia sesión</li>
+                  <li>Ve a <strong>"Mis aplicaciones"</strong> → <strong>"Crear nueva aplicación"</strong></li>
+                  <li>Completa: Nombre, Redirect URI (ej: <code>https://www.ivanreseller.com/api/marketplace/oauth/callback/mercadolibre</code>), y selecciona tipo <strong>"Marketplace"</strong> o <strong>"Dropshipping"</strong></li>
+                  <li>Guarda el <strong>App ID (Client ID)</strong> y <strong>Secret Key (Client Secret)</strong></li>
+                  <li>En el sistema, ingresa Client ID y Client Secret, luego haz clic en <strong>"Autorizar con MercadoLibre"</strong> o <strong>"OAuth"</strong></li>
+                  <li>Serás redirigido a MercadoLibre para autorizar la aplicación</li>
+                  <li>Después de autorizar, el sistema obtendrá automáticamente los Access Token y Refresh Token</li>
+                </ol>
               </div>
               <div className="text-sm text-gray-600">
-                <strong>Obtener en:</strong> 
-                <a href="https://developers.mercadolibre.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                <strong>Documentación:</strong> 
+                <a href="https://developers.mercadolibre.com.ar/es_ar/autenticacion-y-autorizacion" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
                   developers.mercadolibre.com <ExternalLink className="w-3 h-3 inline" />
                 </a>
+              </div>
+              <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 rounded p-3 text-xs">
+                <strong>Tip:</strong> Los tokens expiran periódicamente. El sistema los renueva automáticamente usando el Refresh Token.
               </div>
             </div>
           </div>
@@ -568,49 +606,120 @@ function APIsCredenciales() {
             </div>
           </div>
 
-          {/* Amazon */}
+          {/* Amazon SP-API */}
           <div className="border rounded-xl p-6 bg-gradient-to-r from-orange-50 to-red-50">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900">Amazon API</h4>
+                <h4 className="text-lg font-semibold text-gray-900">Amazon SP-API</h4>
                 <span className="text-sm text-orange-600 font-medium">Opcional (marketplace premium)</span>
               </div>
             </div>
             <p className="text-gray-700 mb-3">
-              Vende en Amazon (requiere cuenta de vendedor)
+              Vende en Amazon usando la Selling Partner API (requiere cuenta de vendedor y aprobación)
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-2">
+            <div className="bg-white border rounded-lg p-4 space-y-3">
               <div className="text-sm">
-                <strong>Campos requeridos:</strong> Access Key, Secret Key, Marketplace ID, Seller ID
+                <strong>Campos requeridos:</strong>
+              </div>
+              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+                <li><strong>Seller ID:</strong> Tu ID de vendedor en Amazon (formato: A2XXXXXXXXXX)</li>
+                <li><strong>Client ID (LWA):</strong> ID de aplicación OAuth de Amazon Developer</li>
+                <li><strong>Client Secret (LWA):</strong> Secret de aplicación OAuth</li>
+                <li><strong>Refresh Token:</strong> Token de refresco OAuth (obtenido después de autorizar)</li>
+                <li><strong>AWS Access Key ID:</strong> Credenciales AWS para firmar requests</li>
+                <li><strong>AWS Secret Access Key:</strong> Secret de AWS</li>
+                <li><strong>Region:</strong> Región de AWS (ej: us-east-1, eu-west-1)</li>
+                <li><strong>Marketplace ID:</strong> ID del marketplace (ej: ATVPDKIKX0DER para US)</li>
+              </ul>
+              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
+                <div className="font-semibold text-gray-900">Pasos para obtener las credenciales:</div>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Ve a <a href="https://developer.amazon.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Amazon Developer Central <ExternalLink className="w-3 h-3 inline" /></a> e inicia sesión</li>
+                  <li>Ve a <strong>"Apps & Services"</strong> → <strong>"Develop Apps"</strong> → <strong>"Create a new app"</strong></li>
+                  <li>Completa: App name, OAuth redirect URI, y selecciona <strong>"Selling Partner API"</strong></li>
+                  <li>Guarda el <strong>Client ID</strong> y <strong>Client Secret</strong> (LWA credentials)</li>
+                  <li>Autoriza la aplicación para obtener el <strong>Refresh Token</strong> (el sistema tiene un botón OAuth para esto)</li>
+                  <li>Ve a <a href="https://console.aws.amazon.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">AWS Console <ExternalLink className="w-3 h-3 inline" /></a> y crea un usuario IAM con acceso programático</li>
+                  <li>Asigna la política <strong>"SellingPartnerAPI"</strong> y guarda el <strong>Access Key ID</strong> y <strong>Secret Access Key</strong></li>
+                  <li>Obtén tu <strong>Seller ID</strong> desde Amazon Seller Central</li>
+                  <li>Selecciona el <strong>Marketplace ID</strong> según tu país (ver lista en documentación)</li>
+                </ol>
               </div>
               <div className="text-sm text-gray-600">
-                <strong>Obtener en:</strong> 
-                <a href="https://developer.amazonservices.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
-                  developer.amazonservices.com <ExternalLink className="w-3 h-3 inline" />
+                <strong>Documentación:</strong> 
+                <a href="https://developer-docs.amazon.com/sp-api/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                  developer-docs.amazon.com/sp-api <ExternalLink className="w-3 h-3 inline" />
+                </a>
+              </div>
+              <div className="bg-orange-50 border border-orange-200 text-orange-700 rounded p-3 text-xs">
+                <strong>Nota:</strong> Amazon SP-API requiere aprobación y puede tomar varios días. Asegúrate de tener una cuenta de vendedor activa.
+              </div>
+            </div>
+          </div>
+
+          {/* ScraperAPI */}
+          <div className="border rounded-xl p-6 bg-gradient-to-r from-green-50 to-teal-50">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900">ScraperAPI</h4>
+                <span className="text-sm text-green-600 font-medium">Crítica para Autopilot avanzado</span>
+              </div>
+            </div>
+            <p className="text-gray-700 mb-3">
+              Servicio de web scraping anti-detección para AliExpress y otros sitios. Evita bloqueos y CAPTCHAs.
+            </p>
+            <div className="bg-white border rounded-lg p-4 space-y-3">
+              <div className="text-sm">
+                <strong>Campo requerido:</strong> API Key
+              </div>
+              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
+                <div className="font-semibold text-gray-900">Pasos para obtener la API Key:</div>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Ve a <a href="https://www.scraperapi.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">scraperapi.com <ExternalLink className="w-3 h-3 inline" /></a></li>
+                  <li>Crea una cuenta (plan gratuito disponible para pruebas)</li>
+                  <li>Ve a <strong>"Dashboard"</strong> → <strong>"API Keys"</strong></li>
+                  <li>Copia tu <strong>API Key</strong></li>
+                  <li>Pégala en el sistema en <code>Settings → Configuración de APIs → ScraperAPI</code></li>
+                </ol>
+              </div>
+              <div className="text-sm text-gray-600">
+                <strong>Documentación:</strong> 
+                <a href="https://www.scraperapi.com/documentation/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                  scraperapi.com/documentation <ExternalLink className="w-3 h-3 inline" />
                 </a>
               </div>
             </div>
           </div>
 
-          {/* Scraping APIs */}
-          <div className="border rounded-xl p-6 bg-gradient-to-r from-green-50 to-teal-50">
-            <h4 className="text-lg font-semibold text-gray-900 mb-2">ScraperAPI / ZenRows</h4>
-            <span className="text-sm text-green-600 font-medium">Para Autopilot avanzado</span>
-            <p className="text-gray-700 mt-3 mb-3">
-              Scraping anti-detección de productos
+          {/* ZenRows */}
+          <div className="border rounded-xl p-6 bg-gradient-to-r from-teal-50 to-cyan-50">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900">ZenRows</h4>
+                <span className="text-sm text-teal-600 font-medium">Alternativa a ScraperAPI</span>
+              </div>
+            </div>
+            <p className="text-gray-700 mb-3">
+              Alternativa a ScraperAPI para web scraping avanzado con rotación de proxies y anti-detección.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-2">
+            <div className="bg-white border rounded-lg p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campo requerido:</strong> API Key
               </div>
-              <div className="text-sm text-gray-600">
-                ScraperAPI: <a href="https://www.scraperapi.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                  scraperapi.com <ExternalLink className="w-3 h-3 inline" />
-                </a>
+              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
+                <div className="font-semibold text-gray-900">Pasos para obtener la API Key:</div>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Ve a <a href="https://www.zenrows.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">zenrows.com <ExternalLink className="w-3 h-3 inline" /></a></li>
+                  <li>Crea una cuenta (plan gratuito disponible)</li>
+                  <li>Ve a <strong>"Dashboard"</strong> → <strong>"API Keys"</strong></li>
+                  <li>Copia tu <strong>API Key</strong></li>
+                  <li>Pégala en el sistema en <code>Settings → Configuración de APIs → ZenRows</code></li>
+                </ol>
               </div>
               <div className="text-sm text-gray-600">
-                ZenRows: <a href="https://www.zenrows.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                  zenrows.com <ExternalLink className="w-3 h-3 inline" />
+                <strong>Documentación:</strong> 
+                <a href="https://www.zenrows.com/documentation" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                  zenrows.com/documentation <ExternalLink className="w-3 h-3 inline" />
                 </a>
               </div>
             </div>
@@ -618,20 +727,80 @@ function APIsCredenciales() {
 
           {/* 2Captcha */}
           <div className="border rounded-xl p-6 bg-gradient-to-r from-indigo-50 to-purple-50">
-            <h4 className="text-lg font-semibold text-gray-900 mb-2">2Captcha</h4>
-            <span className="text-sm text-indigo-600 font-medium">Resolver captchas automáticamente</span>
-            <p className="text-gray-700 mt-3 mb-3">
-              Para Autopilot system
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900">2Captcha</h4>
+                <span className="text-sm text-indigo-600 font-medium">Resolver captchas automáticamente</span>
+              </div>
+            </div>
+            <p className="text-gray-700 mb-3">
+              Servicio para resolver CAPTCHAs automáticamente. Útil para Autopilot cuando AliExpress muestra CAPTCHAs.
             </p>
-            <div className="bg-white border rounded-lg p-4 space-y-2">
+            <div className="bg-white border rounded-lg p-4 space-y-3">
               <div className="text-sm">
                 <strong>Campo requerido:</strong> API Key
               </div>
+              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
+                <div className="font-semibold text-gray-900">Pasos para obtener la API Key:</div>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Ve a <a href="https://2captcha.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">2captcha.com <ExternalLink className="w-3 h-3 inline" /></a></li>
+                  <li>Crea una cuenta y recarga saldo (mínimo $3 USD)</li>
+                  <li>Ve a <strong>"Settings"</strong> → <strong>"API Key"</strong></li>
+                  <li>Copia tu <strong>API Key</strong></li>
+                  <li>Pégala en el sistema en <code>Settings → Configuración de APIs → 2Captcha</code></li>
+                </ol>
+              </div>
               <div className="text-sm text-gray-600">
-                <strong>Obtener en:</strong> 
-                <a href="https://2captcha.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
-                  2captcha.com <ExternalLink className="w-3 h-3 inline" />
+                <strong>Documentación:</strong> 
+                <a href="https://2captcha.com/2captcha-api" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                  2captcha.com/2captcha-api <ExternalLink className="w-3 h-3 inline" />
                 </a>
+              </div>
+              <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 rounded p-3 text-xs">
+                <strong>Nota:</strong> 2Captcha es un servicio de pago. Cada CAPTCHA resuelto tiene un costo (aproximadamente $2.99 por 1000 CAPTCHAs).
+              </div>
+            </div>
+          </div>
+
+          {/* PayPal */}
+          <div className="border rounded-xl p-6 bg-gradient-to-r from-blue-50 to-indigo-50">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900">PayPal Payouts API</h4>
+                <span className="text-sm text-blue-600 font-medium">Para pagos automáticos de comisiones</span>
+              </div>
+            </div>
+            <p className="text-gray-700 mb-3">
+              Permite pagar comisiones automáticamente a vendedores usando PayPal Payouts.
+            </p>
+            <div className="bg-white border rounded-lg p-4 space-y-3">
+              <div className="text-sm">
+                <strong>Campos requeridos:</strong>
+              </div>
+              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+                <li><strong>Client ID:</strong> ID de aplicación de PayPal</li>
+                <li><strong>Client Secret:</strong> Secret de aplicación de PayPal</li>
+                <li><strong>Mode:</strong> <code>sandbox</code> para pruebas o <code>live</code> para producción</li>
+              </ul>
+              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
+                <div className="font-semibold text-gray-900">Pasos para obtener las credenciales:</div>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Ve a <a href="https://developer.paypal.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">PayPal Developer <ExternalLink className="w-3 h-3 inline" /></a> e inicia sesión</li>
+                  <li>Ve a <strong>"Dashboard"</strong> → <strong>"My Apps & Credentials"</strong></li>
+                  <li>Crea una nueva aplicación o usa una existente</li>
+                  <li>Selecciona el ambiente (<strong>Sandbox</strong> para pruebas o <strong>Live</strong> para producción)</li>
+                  <li>Copia el <strong>Client ID</strong> y <strong>Secret</strong></li>
+                  <li>Pégalos en el sistema en <code>Settings → Configuración de APIs → PayPal Payouts</code></li>
+                </ol>
+              </div>
+              <div className="text-sm text-gray-600">
+                <strong>Documentación:</strong> 
+                <a href="https://developer.paypal.com/docs/payouts/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                  developer.paypal.com/docs/payouts <ExternalLink className="w-3 h-3 inline" />
+                </a>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded p-3 text-xs">
+                <strong>Importante:</strong> Para usar PayPal Payouts en producción, necesitas aprobación de PayPal y una cuenta de negocio verificada.
               </div>
             </div>
           </div>
