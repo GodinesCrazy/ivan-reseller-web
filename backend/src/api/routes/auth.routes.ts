@@ -126,9 +126,23 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
       protocol: req.protocol,
     });
 
+    // IMPORTANTE: Para cookies cross-domain con sameSite: 'none', necesitamos asegurar que
+    // el header Access-Control-Allow-Credentials esté presente (CORS ya lo maneja, pero lo verificamos)
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
     // Establecer cookies con los tokens
     res.cookie('token', result.token, cookieOptions);
     res.cookie('refreshToken', result.refreshToken, refreshCookieOptions);
+
+    // Logging adicional para verificar que las cookies se establecieron
+    console.log('✅ Cookies establecidas:', {
+      tokenLength: result.token.length,
+      refreshTokenLength: result.refreshToken.length,
+      cookieOptions,
+      responseHeaders: {
+        'set-cookie': res.getHeader('Set-Cookie'),
+      },
+    });
 
     // Retornar datos del usuario (sin los tokens en el body por seguridad)
     res.json({
