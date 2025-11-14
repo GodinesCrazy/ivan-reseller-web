@@ -38,12 +38,20 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
 
     // Configurar cookie httpOnly para el token (más seguro que localStorage)
     const isProduction = process.env.NODE_ENV === 'production';
+    const frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+    
+    // Detectar si la petición viene por HTTPS (importante para cookies secure)
+    const requestProtocol = req.protocol || (req.headers['x-forwarded-proto'] as string) || 'http';
+    const isHttps = requestProtocol === 'https' || frontendUrl.startsWith('https');
+    
+    // Configurar cookies
     const cookieOptions = {
       httpOnly: true, // No accesible desde JavaScript (previene XSS)
-      secure: isProduction, // Solo enviar sobre HTTPS en producción
-      sameSite: 'strict' as const, // Prevenir CSRF
+      secure: isHttps, // Enviar sobre HTTPS si la petición es HTTPS o el frontend usa HTTPS
+      sameSite: 'lax' as const, // 'lax' permite cookies en navegaciones cross-site (más compatible)
       maxAge: 60 * 60 * 1000, // 1 hora (debe coincidir con JWT_EXPIRES_IN)
       path: '/', // Disponible en toda la aplicación
+      // No establecer domain explícitamente para que funcione con www y sin www
     };
 
     // Configurar cookie para refresh token (más largo)
@@ -51,6 +59,18 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
       ...cookieOptions,
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
     };
+
+    // Logging para debug (solo en desarrollo o si hay problemas)
+    if (!isProduction || process.env.DEBUG_COOKIES === 'true') {
+      console.log('🍪 Configurando cookies:', {
+        secure: cookieOptions.secure,
+        sameSite: cookieOptions.sameSite,
+        isHttps,
+        requestProtocol,
+        frontendUrl,
+        hasToken: !!result.token,
+      });
+    }
 
     // Establecer cookies con los tokens
     res.cookie('token', result.token, cookieOptions);
@@ -228,17 +248,21 @@ router.post('/logout', authenticate, async (req: Request, res: Response, next: N
       await authService.blacklistToken(accessToken, expiresIn);
     }
 
-    // Limpiar cookies
+    // Limpiar cookies (usar misma configuración que al crear)
+    const frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+    const requestProtocol = req.protocol || (req.headers['x-forwarded-proto'] as string) || 'http';
+    const isHttps = requestProtocol === 'https' || frontendUrl.startsWith('https');
+    
     res.clearCookie('token', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: isHttps,
+      sameSite: 'lax',
       path: '/',
     });
     res.clearCookie('refreshToken', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: isHttps,
+      sameSite: 'lax',
       path: '/',
     });
 
