@@ -318,15 +318,20 @@ router.post('/logout', authenticate, async (req: Request, res: Response, next: N
     const requestProtocol = req.protocol || (req.headers['x-forwarded-proto'] as string) || 'http';
     const isHttps = requestProtocol === 'https' || frontendUrl.startsWith('https');
     
+    // Misma lógica que en login - solo establecer domain si backend y frontend están en mismo dominio base
     let cookieDomain: string | undefined = undefined;
     try {
       const frontendUrlObj = new URL(frontendUrl);
-      const hostname = frontendUrlObj.hostname;
-      cookieDomain = hostname.replace(/^www\./, '');
-      if (cookieDomain === 'localhost' || cookieDomain.includes('127.0.0.1')) {
-        cookieDomain = undefined;
+      const frontendHostname = frontendUrlObj.hostname;
+      const backendHostname = req.get('host') || req.hostname || '';
+      
+      const frontendBaseDomain = frontendHostname.replace(/^[^.]+\./, '');
+      const backendBaseDomain = backendHostname.replace(/^[^.]+\./, '');
+      
+      if (frontendBaseDomain === backendBaseDomain && frontendBaseDomain !== 'localhost' && !frontendBaseDomain.includes('127.0.0.1')) {
+        cookieDomain = `.${frontendBaseDomain}`;
       } else {
-        cookieDomain = `.${cookieDomain}`;
+        cookieDomain = undefined;
       }
     } catch (e) {
       cookieDomain = undefined;
@@ -335,7 +340,7 @@ router.post('/logout', authenticate, async (req: Request, res: Response, next: N
     const clearCookieOptions: any = {
       httpOnly: true,
       secure: isHttps,
-      sameSite: 'lax',
+      sameSite: cookieDomain ? 'lax' : 'none', // 'none' para cross-domain, 'lax' para mismo dominio
       path: '/',
     };
     
