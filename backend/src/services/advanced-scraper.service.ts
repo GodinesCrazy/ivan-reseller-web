@@ -286,27 +286,52 @@ export class AdvancedMarketplaceScraper {
       console.log(`🔧 Lanzando Chromium en: ${executablePath}`);
 
       // ✅ Intentar lanzar con timeout para evitar cuelgues
-      this.browser = await Promise.race([
-        puppeteer.launch(launchOptions),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Browser launch timeout after 30s')), 30000)
-        )
-      ]) as Browser;
-      
-      // ✅ Verificar que el navegador esté realmente conectado
-      if (!this.browser || !this.browser.isConnected()) {
-        throw new Error('Browser launched but not connected');
+      try {
+        this.browser = await Promise.race([
+          puppeteer.launch(launchOptions),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Browser launch timeout after 30s')), 30000)
+          )
+        ]) as Browser;
+        
+        // ✅ Verificar que el navegador esté realmente conectado
+        if (!this.browser || !this.browser.isConnected()) {
+          throw new Error('Browser launched but not connected');
+        }
+        
+        console.log('✅ Navegador iniciado exitosamente');
+      } catch (launchError: any) {
+        // ✅ Si hay error de "Target closed", intentar cerrar y relanzar
+        if (launchError.message?.includes('Target closed') || launchError.message?.includes('Protocol error')) {
+          console.warn('⚠️  Error de protocolo detectado, intentando con configuración más simple...');
+          // Cerrar navegador si existe pero está en mal estado
+          if (this.browser) {
+            try {
+              await this.browser.close().catch(() => {});
+            } catch {}
+            this.browser = null;
+          }
+          // Lanzar con configuración más simple
+          throw new Error('Protocol error - will retry with minimal config');
+        }
+        throw launchError;
       }
-      
-      console.log('✅ Navegador iniciado exitosamente');
     } catch (error: any) {
-      console.error('❌ Error al iniciar navegador:', error.message);
-      console.error('   Stack:', error.stack?.substring(0, 200));
+      const errorMsg = error.message || String(error);
+      console.error('❌ Error al iniciar navegador:', errorMsg);
+      
       // Fallback con configuración mínima
       try {
+        console.log('🔄 Intentando con configuración mínima...');
         const minimalOptions: any = {
           headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--single-process', // ✅ Útil para contenedores con recursos limitados
+          ],
         };
 
         if (executablePath) {
@@ -321,6 +346,9 @@ export class AdvancedMarketplaceScraper {
           )
         ]) as Browser;
         
+        // ✅ Esperar un momento para que el navegador se estabilice
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         // ✅ Verificar conexión
         if (!this.browser || !this.browser.isConnected()) {
           throw new Error('Browser launched but not connected (fallback)');
@@ -328,8 +356,8 @@ export class AdvancedMarketplaceScraper {
         
         console.log('✅ Navegador iniciado con configuración mínima');
       } catch (fallbackError: any) {
-        console.error('❌ Error crítico al iniciar navegador:', fallbackError.message);
-        console.error('   Stack:', fallbackError.stack?.substring(0, 200));
+        const fallbackMsg = fallbackError.message || String(fallbackError);
+        console.error('❌ Error crítico al iniciar navegador:', fallbackMsg);
         // ✅ NO lanzar error - permitir que el sistema continúe sin navegador
         // El bridge Python puede funcionar como alternativa
         console.warn('⚠️  Continuando sin navegador - se usará bridge Python como alternativa');
