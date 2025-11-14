@@ -572,7 +572,7 @@ export class APIAvailabilityService {
       // Calculate health status
       const healthStatus = this.calculateHealthStatus(
         isAvailable,
-        healthCheckResult?.latency,
+        (healthCheckResult as any)?.latency,
         healthCheckResult?.error
       );
 
@@ -588,7 +588,7 @@ export class APIAvailabilityService {
         environment,
         lastChecked: new Date(),
         missingFields: validation.missing,
-        latency: healthCheckResult?.latency,
+        latency: (healthCheckResult as any)?.latency,
         trustScore,
       };
 
