@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { Request } from 'express';
 
 /**
@@ -30,7 +30,12 @@ export const createRoleBasedRateLimit = () => {
     },
     keyGenerator: (req: Request) => {
       const userId = (req as any).user?.userId;
-      return userId ? `user:${userId}` : `ip:${req.ip || 'unknown'}`;
+      if (userId) {
+        return `user:${userId}`;
+      }
+      // Usar ipKeyGenerator helper para soporte IPv6 correcto
+      const ip = ipKeyGenerator(req);
+      return `ip:${ip}`;
     },
     message: 'Too many requests. Please try again later.',
     standardHeaders: true,
@@ -130,7 +135,9 @@ export const loginRateLimit = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
     // Usar IP para prevenir brute force desde múltiples cuentas
-    return `login:${req.ip || 'unknown'}`;
+    // Usar ipKeyGenerator helper para soporte IPv6 correcto
+    const ip = ipKeyGenerator(req);
+    return `login:${ip}`;
   },
   skipSuccessfulRequests: false, // Contar todos los intentos, incluso los exitosos
   skipFailedRequests: false, // Contar todos los intentos fallidos
