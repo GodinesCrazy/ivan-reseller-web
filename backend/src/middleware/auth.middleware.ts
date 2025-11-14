@@ -35,16 +35,18 @@ export const authenticate = async (
       }
     }
 
-    // Logging para debug cuando no hay token (solo en desarrollo o si está habilitado)
-    if (!token && (process.env.NODE_ENV !== 'production' || process.env.DEBUG_AUTH === 'true')) {
-      console.log('🔍 Auth debug:', {
+    // Logging para debug cuando no hay token (siempre activo para diagnosticar)
+    if (!token) {
+      console.log('🔍 Auth debug - No token encontrado:', {
         hasCookies: !!req.cookies,
         cookieNames: req.cookies ? Object.keys(req.cookies) : [],
+        cookies: req.cookies, // Mostrar todas las cookies recibidas
         hasAuthHeader: !!req.headers.authorization,
         path: req.path,
         method: req.method,
         origin: req.headers.origin,
         referer: req.headers.referer,
+        'cookie-header': req.headers.cookie, // Header raw de cookies
       });
     }
 

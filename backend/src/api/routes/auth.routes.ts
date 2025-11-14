@@ -60,17 +60,19 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
     };
 
-    // Logging para debug (solo en desarrollo o si hay problemas)
-    if (!isProduction || process.env.DEBUG_COOKIES === 'true') {
-      console.log('🍪 Configurando cookies:', {
-        secure: cookieOptions.secure,
-        sameSite: cookieOptions.sameSite,
-        isHttps,
-        requestProtocol,
-        frontendUrl,
-        hasToken: !!result.token,
-      });
-    }
+    // Logging para debug (siempre activo para diagnosticar)
+    console.log('🍪 Configurando cookies:', {
+      secure: cookieOptions.secure,
+      sameSite: cookieOptions.sameSite,
+      isHttps,
+      requestProtocol,
+      frontendUrl,
+      hasToken: !!result.token,
+      origin: req.headers.origin,
+      referer: req.headers.referer,
+      'x-forwarded-proto': req.headers['x-forwarded-proto'],
+      protocol: req.protocol,
+    });
 
     // Establecer cookies con los tokens
     res.cookie('token', result.token, cookieOptions);
