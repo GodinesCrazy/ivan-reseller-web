@@ -77,31 +77,64 @@ const dynamicOriginMatchers = [
   /\.aliexpress\.[a-z]+$/i,
 ];
 
+// Función para normalizar dominios (www y sin www)
+const normalizeDomain = (url: string): string => {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.hostname.replace(/^www\./, ''); // Remover www para comparación
+  } catch {
+    return url;
+  }
+};
+
 const corsOptions: CorsOptions = {
   credentials: true,
   origin: (origin, callback) => {
+    // Logging para debug
+    if (origin) {
+      logger.info('CORS: Checking origin', { origin, allowedOrigins });
+    }
+    
     if (!origin) {
       return callback(null, true);
     }
 
+    // Permitir si está en la lista exacta
     if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      logger.info('CORS: Origin allowed (exact match)', { origin });
       return callback(null, true);
     }
 
+    // Normalizar y comparar dominios (www y sin www)
     try {
+      const originDomain = normalizeDomain(origin);
+      const isAllowed = allowedOrigins.some(allowedOrigin => {
+        const normalizedAllowed = normalizeDomain(allowedOrigin);
+        return originDomain === normalizedAllowed;
+      });
+
+      if (isAllowed) {
+        logger.info('CORS: Origin allowed (normalized match)', { origin, originDomain });
+        return callback(null, true);
+      }
+
+      // Verificar patrones dinámicos (AliExpress, etc.)
       const hostname = new URL(origin).hostname;
       if (dynamicOriginMatchers.some((pattern) => pattern.test(hostname))) {
+        logger.info('CORS: Origin allowed (pattern match)', { origin, hostname });
         return callback(null, true);
       }
     } catch (error) {
       logger.warn('CORS: invalid origin received', { origin, error });
     }
 
-    logger.warn('CORS: origin not allowed', { origin });
+    logger.warn('CORS: origin not allowed', { origin, allowedOrigins });
     return callback(new Error('Not allowed by CORS policy'), false);
   },
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
 };
 
 app.use(cors(corsOptions));

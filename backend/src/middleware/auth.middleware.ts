@@ -47,6 +47,10 @@ export const authenticate = async (
         origin: req.headers.origin,
         referer: req.headers.referer,
         'cookie-header': req.headers.cookie, // Header raw de cookies
+        'user-agent': req.headers['user-agent'],
+        'accept': req.headers.accept,
+        'accept-language': req.headers['accept-language'],
+        allHeaders: Object.keys(req.headers),
       });
     }
 

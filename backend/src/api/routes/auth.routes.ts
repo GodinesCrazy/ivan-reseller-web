@@ -142,13 +142,18 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
     res.cookie('refreshToken', result.refreshToken, refreshCookieOptions);
 
     // Logging adicional para verificar que las cookies se establecieron
+    const setCookieHeaders = res.getHeader('Set-Cookie');
     console.log('✅ Cookies establecidas:', {
       tokenLength: result.token.length,
       refreshTokenLength: result.refreshToken.length,
       cookieOptions,
       responseHeaders: {
-        'set-cookie': res.getHeader('Set-Cookie'),
+        'set-cookie': setCookieHeaders,
+        'access-control-allow-origin': res.getHeader('Access-Control-Allow-Origin'),
+        'access-control-allow-credentials': res.getHeader('Access-Control-Allow-Credentials'),
       },
+      requestOrigin: requestOrigin,
+      allResponseHeaders: res.getHeaders(),
     });
 
     // Retornar datos del usuario (sin los tokens en el body por seguridad)
@@ -425,6 +430,31 @@ router.post('/logout', authenticate, async (req: Request, res: Response, next: N
     res.json({
       success: true,
       message: 'Logout successful',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/auth/test-cookies - Endpoint de prueba para verificar cookies
+router.get('/test-cookies', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // CRÍTICO: Establecer Access-Control-Allow-Origin específico
+    const requestOrigin = req.headers.origin;
+    if (requestOrigin) {
+      res.header('Access-Control-Allow-Origin', requestOrigin);
+    }
+    res.header('Access-Control-Allow-Credentials', 'true');
+    
+    res.json({
+      success: true,
+      message: 'Cookies test endpoint',
+      cookies: req.cookies,
+      cookieHeader: req.headers.cookie,
+      hasToken: !!req.cookies?.token,
+      hasRefreshToken: !!req.cookies?.refreshToken,
+      origin: req.headers.origin,
+      userAgent: req.headers['user-agent'],
     });
   } catch (error) {
     next(error);
