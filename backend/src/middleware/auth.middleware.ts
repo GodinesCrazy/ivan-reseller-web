@@ -35,6 +35,19 @@ export const authenticate = async (
       }
     }
 
+    // Logging para debug cuando no hay token (solo en desarrollo o si está habilitado)
+    if (!token && (process.env.NODE_ENV !== 'production' || process.env.DEBUG_AUTH === 'true')) {
+      console.log('🔍 Auth debug:', {
+        hasCookies: !!req.cookies,
+        cookieNames: req.cookies ? Object.keys(req.cookies) : [],
+        hasAuthHeader: !!req.headers.authorization,
+        path: req.path,
+        method: req.method,
+        origin: req.headers.origin,
+        referer: req.headers.referer,
+      });
+    }
+
     if (!token) {
       throw new AppError('Authentication required', 401);
     }
