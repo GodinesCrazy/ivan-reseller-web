@@ -12,11 +12,11 @@ interface User {
 
 interface AuthState {
   user: User | null;
-  token: string | null;
+  token: string | null; // Mantenemos para compatibilidad, pero el token real está en cookie
   isAuthenticated: boolean;
   isCheckingAuth: boolean;
-  login: (user: User, token: string) => void;
-  logout: () => void;
+  login: (user: User, token?: string) => void; // token es opcional ahora
+  logout: () => Promise<void>;
   checkAuth: () => Promise<boolean>;
 }
 
@@ -24,20 +24,31 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      token: null,
+      token: null, // Mantenemos para compatibilidad, pero el token real está en cookie httpOnly
       isAuthenticated: false,
       isCheckingAuth: false,
-      login: (user, token) => set({ user, token, isAuthenticated: true }),
-      logout: () => set({ user: null, token: null, isAuthenticated: false }),
-      checkAuth: async () => {
-        const { token } = get();
-        
-        // Si no hay token, no está autenticado
-        if (!token) {
-          set({ isAuthenticated: false, user: null });
-          return false;
+      login: (user, token) => {
+        // El token puede estar en la cookie httpOnly O en localStorage (Safari iOS)
+        // Si recibimos un token, lo guardamos en localStorage como fallback
+        if (token && token !== 'cookie') {
+          localStorage.setItem('auth_token', token);
         }
-
+        set({ user, token: token || 'cookie', isAuthenticated: true });
+      },
+      logout: async () => {
+        try {
+          // Llamar al endpoint de logout para limpiar la cookie
+          await authApi.logout();
+        } catch (error) {
+          // Si falla, continuar con la limpieza local
+          console.warn('Error al hacer logout en el servidor:', error);
+        }
+        // Limpiar estado local y localStorage
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_refresh_token');
+        set({ user: null, token: null, isAuthenticated: false });
+      },
+      checkAuth: async () => {
         // Si ya está verificando, no hacer nada
         if (get().isCheckingAuth) {
           return get().isAuthenticated;
@@ -46,7 +57,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isCheckingAuth: true });
 
         try {
-          // Validar token con el backend
+          // Validar token con el backend (el token está en la cookie httpOnly)
           const userData = await authApi.me();
           
           // Token válido - actualizar usuario
@@ -71,6 +82,8 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
+      // Solo persistir el usuario, no el token (está en cookie httpOnly)
+      partialize: (state) => ({ user: state.user }),
     }
   )
 );
