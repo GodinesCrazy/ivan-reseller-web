@@ -457,6 +457,15 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         });
       }
       
+      // Validar formato del Redirect URI
+      if (ruName.length < 3 || ruName.length > 255) {
+        return res.status(400).json({
+          success: false,
+          message: `El Redirect URI (RuName) debe tener entre 3 y 255 caracteres. Longitud actual: ${ruName.length}`,
+          code: 'INVALID_REDIRECT_URI_LENGTH'
+        });
+      }
+      
       // Advertencia si el Redirect URI contiene espacios (puede causar problemas)
       if (ruName.includes(' ')) {
         console.warn('[eBay OAuth] Redirect URI contains spaces - this may cause issues:', {
@@ -465,6 +474,17 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         });
         formatWarning = (formatWarning ? formatWarning + '\n\n' : '') + 
           `⚠️ Advertencia: El Redirect URI (RuName) contiene espacios. eBay requiere que el RuName coincida EXACTAMENTE con el registrado en eBay Developer Portal. Verifica que no haya espacios adicionales.`;
+      }
+      
+      // Advertencia si contiene caracteres problemáticos
+      const problematicChars = /[<>"{}|\\^`\[\]]/;
+      if (problematicChars.test(ruName)) {
+        console.warn('[eBay OAuth] Redirect URI contains problematic characters:', {
+          ruName: ruName.substring(0, 50) + '...',
+          problematicChars: ruName.match(problematicChars),
+        });
+        formatWarning = (formatWarning ? formatWarning + '\n\n' : '') +
+          `⚠️ Advertencia: El Redirect URI contiene caracteres que pueden causar problemas. Verifica que coincida exactamente con el registrado en eBay Developer Portal.`;
       }
       
       // Validar formato del App ID según el ambiente (solo como advertencia, no bloqueante)
@@ -513,10 +533,34 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       // Usar el App ID limpiado
       try {
         const ebay = new EbayService({ appId: finalAppId, devId: devId.trim(), certId: certId.trim(), sandbox });
-        const baseAuthUrl = ebay.getAuthUrl(String(ruName.trim()));
+        // ruName ya está limpiado en línea 412, no hacer trim() de nuevo
+        const baseAuthUrl = ebay.getAuthUrl(ruName);
+        
+        // Construir URL final reemplazando solo el parámetro 'state'
+        // NO usar url.searchParams.set() porque puede decodificar/recodificar redirect_uri
         const url = new URL(baseAuthUrl);
-        url.searchParams.set('state', state);
-        authUrl = url.toString();
+        const existingParams = new URLSearchParams(url.search);
+        existingParams.set('state', state);
+        
+        // Construir URL final preservando la codificación original del redirect_uri
+        // Extraer el redirect_uri original de la URL base para preservar su codificación
+        const baseUrlParams = new URLSearchParams(baseAuthUrl.split('?')[1] || '');
+        const originalRedirectUri = baseUrlParams.get('redirect_uri');
+        
+        // Construir URL manualmente para preservar codificación exacta
+        const authBase = sandbox 
+          ? 'https://auth.sandbox.ebay.com/oauth2/authorize'
+          : 'https://auth.ebay.com/oauth2/authorize';
+        
+        const finalParams = [
+          `client_id=${encodeURIComponent(finalAppId)}`,
+          `redirect_uri=${originalRedirectUri || encodeURIComponent(ruName)}`, // Usar el original si existe
+          `response_type=code`,
+          `scope=${encodeURIComponent('sell.inventory.readonly sell.inventory sell.marketing.readonly sell.marketing')}`,
+          `state=${encodeURIComponent(state)}`,
+        ].join('&');
+        
+        authUrl = `${authBase}?${finalParams}`;
         
         // Logging detallado para debugging
         const urlObj = new URL(authUrl);

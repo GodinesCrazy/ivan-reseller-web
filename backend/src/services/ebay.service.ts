@@ -229,19 +229,23 @@ export class EbayService {
       scopes: scopes.join(' '),
     });
     
-    const params = new URLSearchParams({
-      client_id: this.credentials.appId,
-      redirect_uri: cleanRedirectUri,
-      response_type: 'code',
-      scope: scopes.join(' '),
-      state: 'state_' + Date.now(),
-    });
-    
+    // Construir URL manualmente para tener control total sobre la codificación
+    // eBay requiere que redirect_uri coincida EXACTAMENTE con el registrado
     const authBase = this.credentials.sandbox 
       ? 'https://auth.sandbox.ebay.com/oauth2/authorize' 
       : 'https://auth.ebay.com/oauth2/authorize';
     
-    const finalUrl = `${authBase}?${params.toString()}`;
+    // Usar encodeURIComponent para cada parámetro individualmente
+    // Esto asegura que caracteres especiales se codifiquen correctamente
+    const params = [
+      `client_id=${encodeURIComponent(this.credentials.appId)}`,
+      `redirect_uri=${encodeURIComponent(cleanRedirectUri)}`, // Codificar pero de manera consistente
+      `response_type=${encodeURIComponent('code')}`,
+      `scope=${encodeURIComponent(scopes.join(' '))}`,
+      `state=${encodeURIComponent('state_' + Date.now())}`,
+    ].join('&');
+    
+    const finalUrl = `${authBase}?${params}`;
     
     // Logging de la URL final (solo primeros caracteres por seguridad)
     logger.debug('[EbayService] Generated OAuth URL', {
