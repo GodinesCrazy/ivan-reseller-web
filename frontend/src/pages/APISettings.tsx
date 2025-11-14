@@ -238,7 +238,7 @@ export default function APISettings() {
     present?: boolean;
   }>>({});
   const [oauthing, setOauthing] = useState<string | null>(null);
-  const [oauthBlockedModal, setOauthBlockedModal] = useState<{ open: boolean; authUrl: string; apiName: string }>({ open: false, authUrl: '', apiName: '' });
+  const [oauthBlockedModal, setOauthBlockedModal] = useState<{ open: boolean; authUrl: string; apiName: string; warning?: string }>({ open: false, authUrl: '', apiName: '', warning: undefined });
   const [manualCookieModalOpen, setManualCookieModalOpen] = useState(false);
   const [manualCookieInput, setManualCookieInput] = useState('');
   const [manualCookieError, setManualCookieError] = useState<string | null>(null);
@@ -1248,16 +1248,19 @@ export default function APISettings() {
         return;
       }
       
+      const authUrl = data?.data?.authUrl || data?.authUrl || data?.url;
+      
+      // Guardar advertencia para mostrarla en el modal si el popup es bloqueado
+      const oauthWarning = data.warning;
+      
       // Mostrar advertencia si existe (pero no bloquear)
-      if (data.warning) {
-        console.warn('[APISettings] OAuth warning:', data.warning);
-        toast(data.warning, { 
+      if (oauthWarning) {
+        console.warn('[APISettings] OAuth warning:', oauthWarning);
+        toast(oauthWarning, { 
           duration: 8000,
           icon: '⚠️'
         });
       }
-      
-      const authUrl = data?.data?.authUrl || data?.authUrl || data?.url;
       
       // Logging para debugging
       console.log('[APISettings] OAuth response:', {
@@ -1345,6 +1348,7 @@ export default function APISettings() {
             open: true,
             authUrl: authUrl,
             apiName: apiName,
+            warning: oauthWarning,
           });
           setOauthing(null);
           return;
@@ -2461,7 +2465,7 @@ export default function APISettings() {
                 ⚠️ Ventana de OAuth bloqueada
               </h2>
               <button
-                onClick={() => setOauthBlockedModal({ open: false, authUrl: '', apiName: '' })}
+                onClick={() => setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined })}
                 className="text-gray-500 hover:text-gray-700"
               >
                 ✕
@@ -2471,6 +2475,37 @@ export default function APISettings() {
               <p className="text-gray-700">
                 El navegador bloqueó la ventana emergente de OAuth. Tienes dos opciones:
               </p>
+              
+              {/* Mostrar advertencia del backend si existe */}
+              {oauthBlockedModal.warning && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-start gap-2">
+                    <span className="text-yellow-600 text-lg">⚠️</span>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-yellow-900 mb-1">Advertencia sobre las credenciales</h4>
+                      <p className="text-sm text-yellow-800 whitespace-pre-line">{oauthBlockedModal.warning}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Información adicional para eBay */}
+              {oauthBlockedModal.apiName === 'ebay' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-600 text-lg">ℹ️</span>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-blue-900 mb-2">Antes de continuar, verifica:</h4>
+                      <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                        <li>El <strong>App ID</strong> existe en eBay Developer Portal</li>
+                        <li>El <strong>App ID</strong> corresponde al ambiente correcto (Sandbox o Production)</li>
+                        <li>El <strong>Redirect URI (RuName)</strong> coincide exactamente con el registrado</li>
+                        <li>Si ves el error "unauthorized_client", el App ID no es válido para este ambiente</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div className="space-y-3">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -2521,7 +2556,7 @@ export default function APISettings() {
             </div>
             <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
               <button
-                onClick={() => setOauthBlockedModal({ open: false, authUrl: '', apiName: '' })}
+                onClick={() => setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined })}
                 className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md transition"
               >
                 Cancelar
