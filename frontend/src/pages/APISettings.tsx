@@ -1200,10 +1200,40 @@ export default function APISettings() {
         params: { environment, scope: currentScope },
       });
       const storedCreds = credentialResponse.data?.data?.credentials || {};
-      const ruName = storedCreds.redirectUri || storedCreds.ruName || storedCreds.RuName;
+      let ruName = storedCreds.redirectUri || storedCreds.ruName || storedCreds.RuName;
+      
+      // Logging detallado para debugging
+      console.log('[APISettings] eBay credentials before OAuth:', {
+        hasAppId: !!storedCreds.appId,
+        appIdLength: storedCreds.appId?.length || 0,
+        appIdPreview: storedCreds.appId ? storedCreds.appId.substring(0, 20) + '...' : 'N/A',
+        hasDevId: !!storedCreds.devId,
+        hasCertId: !!storedCreds.certId,
+        hasRedirectUri: !!ruName,
+        redirectUri: ruName,
+        redirectUriLength: ruName?.length || 0,
+        redirectUriHasSpaces: ruName?.includes(' ') || false,
+        environment,
+      });
+      
       if (!ruName) {
         toast.error('Debes completar y guardar el campo "Redirect URI (RuName)" antes de autorizar.');
+        setOauthing(null);
         return;
+      }
+      
+      // Limpiar el Redirect URI (remover espacios al inicio y final)
+      ruName = String(ruName).trim();
+      
+      // Advertencia si contiene espacios (eBay requiere coincidencia exacta)
+      if (ruName.includes(' ')) {
+        console.warn('[APISettings] Redirect URI contains spaces:', {
+          ruName,
+          spacesCount: (ruName.match(/ /g) || []).length,
+        });
+        toast.warning('⚠️ El Redirect URI contiene espacios. eBay requiere que coincida EXACTAMENTE con el registrado. Verifica que no haya espacios adicionales.', {
+          duration: 6000,
+        });
       }
       if (apiName === 'ebay') {
         const missing = ['appId', 'devId', 'certId'].filter((field) => !String(storedCreds[field] || '').trim());

@@ -215,15 +215,44 @@ export class EbayService {
     if (!this.credentials) {
       throw new Error('eBay credentials not configured');
     }
+    
+    // Limpiar el redirectUri - remover espacios al inicio y final
+    // NO modificar el contenido interno porque eBay requiere coincidencia exacta
+    const cleanRedirectUri = redirectUri.trim();
+    
+    // Logging para debugging
+    logger.info('[EbayService] Generating OAuth URL', {
+      sandbox: this.credentials.sandbox,
+      appId: this.credentials.appId.substring(0, 20) + '...',
+      redirectUri: cleanRedirectUri,
+      redirectUriLength: cleanRedirectUri.length,
+      scopes: scopes.join(' '),
+    });
+    
     const params = new URLSearchParams({
       client_id: this.credentials.appId,
-      redirect_uri: redirectUri,
+      redirect_uri: cleanRedirectUri,
       response_type: 'code',
       scope: scopes.join(' '),
       state: 'state_' + Date.now(),
     });
-    const authBase = this.credentials.sandbox ? 'https://auth.sandbox.ebay.com/oauth2/authorize' : 'https://auth.ebay.com/oauth2/authorize';
-    return `${authBase}?${params.toString()}`;
+    
+    const authBase = this.credentials.sandbox 
+      ? 'https://auth.sandbox.ebay.com/oauth2/authorize' 
+      : 'https://auth.ebay.com/oauth2/authorize';
+    
+    const finalUrl = `${authBase}?${params.toString()}`;
+    
+    // Logging de la URL final (solo primeros caracteres por seguridad)
+    logger.debug('[EbayService] Generated OAuth URL', {
+      urlPreview: finalUrl.substring(0, 150) + '...',
+      urlLength: finalUrl.length,
+      hasClientId: params.has('client_id'),
+      hasRedirectUri: params.has('redirect_uri'),
+      redirectUriValue: params.get('redirect_uri'),
+    });
+    
+    return finalUrl;
   }
 
   /**

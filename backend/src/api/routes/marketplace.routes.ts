@@ -402,9 +402,27 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const certId = cred?.credentials?.certId || process.env.EBAY_CERT_ID || '';
       const resolvedEnv: 'sandbox' | 'production' = environment || (cred?.environment as any) || 'production';
       const sandbox = resolvedEnv === 'sandbox';
-      const ruName = typeof redirect_uri === 'string' && redirect_uri.length > 0
+      let ruName = typeof redirect_uri === 'string' && redirect_uri.length > 0
         ? redirect_uri
         : cred?.credentials?.redirectUri || process.env.EBAY_REDIRECT_URI || '';
+      
+      // Limpiar el Redirect URI (RuName) - eBay es muy estricto con esto
+      // Remover espacios al inicio y final, pero NO modificar el contenido interno
+      // porque eBay requiere que coincida EXACTAMENTE con el registrado
+      ruName = ruName.trim();
+      
+      // Logging detallado para debugging
+      console.log('[eBay OAuth] Redirect URI (RuName) validation:', {
+        original: typeof redirect_uri === 'string' ? redirect_uri : 'N/A',
+        fromCreds: cred?.credentials?.redirectUri || 'N/A',
+        fromEnv: process.env.EBAY_REDIRECT_URI || 'N/A',
+        final: ruName,
+        length: ruName.length,
+        isEmpty: !ruName || ruName.length === 0,
+        hasSpaces: ruName.includes(' '),
+        firstChars: ruName.substring(0, 20),
+        lastChars: ruName.substring(Math.max(0, ruName.length - 20)),
+      });
       
       // Validaciones antes de generar URL de OAuth
       if (!appId || !appId.trim()) {
@@ -437,6 +455,16 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
           message: 'El Redirect URI (RuName) de eBay es requerido. Por favor, guarda las credenciales primero.',
           code: 'MISSING_REDIRECT_URI'
         });
+      }
+      
+      // Advertencia si el Redirect URI contiene espacios (puede causar problemas)
+      if (ruName.includes(' ')) {
+        console.warn('[eBay OAuth] Redirect URI contains spaces - this may cause issues:', {
+          ruName: ruName.substring(0, 50) + '...',
+          spacesCount: (ruName.match(/ /g) || []).length,
+        });
+        formatWarning = (formatWarning ? formatWarning + '\n\n' : '') + 
+          `⚠️ Advertencia: El Redirect URI (RuName) contiene espacios. eBay requiere que el RuName coincida EXACTAMENTE con el registrado en eBay Developer Portal. Verifica que no haya espacios adicionales.`;
       }
       
       // Validar formato del App ID según el ambiente (solo como advertencia, no bloqueante)
@@ -490,14 +518,33 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         url.searchParams.set('state', state);
         authUrl = url.toString();
         
-        // Logging para debugging
+        // Logging detallado para debugging
+        const urlObj = new URL(authUrl);
+        const clientIdParam = urlObj.searchParams.get('client_id');
+        const redirectUriParam = urlObj.searchParams.get('redirect_uri');
+        
         console.log('[eBay OAuth] Generated auth URL:', {
           sandbox,
+          environment: resolvedEnv,
           appId: finalAppId.substring(0, 20) + '...',
-          redirectUri: ruName.substring(0, 30) + '...',
+          appIdLength: finalAppId.length,
+          redirectUri: ruName,
+          redirectUriLength: ruName.length,
+          redirectUriInUrl: redirectUriParam,
+          clientIdInUrl: clientIdParam?.substring(0, 20) + '...',
           authUrlLength: authUrl.length,
-          authUrlPreview: authUrl.substring(0, 100) + '...',
+          authUrlPreview: authUrl.substring(0, 150) + '...',
+          fullAuthUrl: authUrl, // Log completo para debugging (solo en desarrollo)
         });
+        
+        // Validar que los parámetros se codificaron correctamente
+        if (redirectUriParam !== ruName) {
+          console.warn('[eBay OAuth] Redirect URI mismatch after encoding:', {
+            original: ruName,
+            encoded: redirectUriParam,
+            difference: 'URL encoding may have changed the value',
+          });
+        }
       } catch (urlError: any) {
         console.error('[eBay OAuth] Error generating auth URL:', {
           error: urlError.message,
