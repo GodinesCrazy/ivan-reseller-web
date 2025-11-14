@@ -529,7 +529,23 @@ export class AdvancedMarketplaceScraper {
       const searchUrl = `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(query)}.html`;
       console.log(`📡 Navegando a: ${searchUrl}`);
 
-      await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      // ✅ Navegar con manejo robusto de errores
+      try {
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      } catch (navError: any) {
+        // Si hay error de navegación, intentar con timeout más corto
+        if (navError.message?.includes('timeout') || navError.message?.includes('Navigation')) {
+          console.warn('⚠️  Timeout en navegación inicial, intentando con timeout reducido...');
+          try {
+            await page.goto(searchUrl, { waitUntil: 'networkidle0', timeout: 15000 });
+          } catch (retryError: any) {
+            console.error('❌ Error al navegar a AliExpress:', retryError.message);
+            throw new Error(`Failed to navigate to AliExpress: ${retryError.message}`);
+          }
+        } else {
+          throw navError;
+        }
+      }
 
       // Extraer runParams con los productos renderizados por la propia página
       let products: any[] = [];
