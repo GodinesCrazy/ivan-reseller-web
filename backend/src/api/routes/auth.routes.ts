@@ -156,13 +156,21 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
       allResponseHeaders: res.getHeaders(),
     });
 
-    // Retornar datos del usuario (sin los tokens en el body por seguridad)
+    // SOLUCIÓN HÍBRIDA: Devolver token en el body para navegadores que bloquean cookies de terceros (Safari iOS)
+    // El frontend usará cookies si están disponibles, o el token del body como fallback
+    const userAgent = req.headers['user-agent'] || '';
+    const isSafariIOS = /iPhone|iPad|iPod/i.test(userAgent) || 
+                       (userAgent.includes('Safari') && !userAgent.includes('Chrome') && !userAgent.includes('Firefox'));
+    
+    // Retornar datos del usuario
+    // Para Safari iOS, también devolvemos el token en el body como fallback
     res.json({
       success: true,
       message: 'Login successful',
       data: {
         user: result.user,
-        // Tokens están en cookies httpOnly
+        // Token en el body solo para Safari iOS (fallback cuando cookies no funcionan)
+        ...(isSafariIOS ? { token: result.token, refreshToken: result.refreshToken } : {}),
       },
     });
   } catch (error) {

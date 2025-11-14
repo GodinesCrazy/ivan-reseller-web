@@ -9,13 +9,23 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Enviar cookies automáticamente (necesario para httpOnly cookies)
 });
 
-// Request interceptor - add auth token
+// Request interceptor - cookies se envían automáticamente con withCredentials
+// Si las cookies no funcionan (Safari iOS), usamos el token de localStorage
 api.interceptors.request.use(
   (config) => {
-    const token = useAuthStore.getState().token;
-    if (token) {
+    // Intentar obtener token de localStorage primero (fallback para Safari iOS)
+    let token = localStorage.getItem('auth_token');
+    
+    // Si no hay token en localStorage, intentar del store (compatibilidad)
+    if (!token) {
+      token = useAuthStore.getState().token;
+    }
+    
+    // Si hay token, agregarlo al header Authorization (fallback cuando cookies no funcionan)
+    if (token && token !== 'cookie') {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
@@ -39,9 +49,10 @@ api.interceptors.request.use(
 // Response interceptor - handle errors
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401) {
-      useAuthStore.getState().logout();
+      // Logout asíncrono para limpiar la cookie
+      await useAuthStore.getState().logout();
       window.location.href = '/login';
     }
     return Promise.reject(error);

@@ -31,11 +31,13 @@ export default function Login() {
     setIsLoading(true);
     try {
       const result = await authApi.login(data);
+      // El token puede estar en la cookie httpOnly O en el body (Safari iOS)
+      // Si está en el body, authApi.login ya lo guardó en localStorage
       login(result.user, result.token);
       toast.success('Login successful!');
       navigate('/dashboard');
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Login failed');
+      toast.error(error.response?.data?.message || error.response?.data?.error || 'Login failed');
     } finally {
       setIsLoading(false);
     }
