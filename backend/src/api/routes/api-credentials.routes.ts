@@ -243,6 +243,43 @@ router.post('/', async (req: Request, res: Response, next) => {
       });
     }
 
+    // Validar credenciales antes de guardar (health check inmediato)
+    let validationResult: { success: boolean; message?: string } | null = null;
+    const shouldValidate = ['ebay', 'amazon', 'mercadolibre'].includes(apiName.toLowerCase());
+    
+    if (shouldValidate && validation.valid) {
+      try {
+        const { MarketplaceService } = await import('../../services/marketplace.service');
+        const marketplaceService = new MarketplaceService();
+        
+        // Test connection before saving
+        const testResult = await marketplaceService.testConnection(
+          ownerUserId,
+          apiName.toLowerCase() as 'ebay' | 'amazon' | 'mercadolibre',
+          env
+        );
+        
+        validationResult = {
+          success: testResult.success,
+          message: testResult.message,
+        };
+        
+        if (!testResult.success) {
+          // Credentials are invalid, but still save them (user might fix later)
+          logger.warn(`Credentials validation failed for ${apiName}`, {
+            userId: ownerUserId,
+            error: testResult.message,
+          });
+        }
+      } catch (error: any) {
+        logger.warn(`Error validating credentials for ${apiName}`, {
+          userId: ownerUserId,
+          error: error.message,
+        });
+        // Continue saving even if validation fails (might be temporary issue)
+      }
+    }
+
     // Guardar credenciales usando CredentialsManager
     await CredentialsManager.saveCredentials(
       ownerUserId,
@@ -280,6 +317,17 @@ router.post('/', async (req: Request, res: Response, next) => {
       logger.info(`Cache invalidated for user ${targetUserId} (${apiName} credentials)`);
     }
 
+    // Force immediate health check after saving
+    try {
+      if (shouldValidate) {
+        // Trigger health check to update status immediately
+        await apiAvailability.checkEbayAPI(targetUserId, env, true).catch(() => {});
+      }
+    } catch (error) {
+      // Don't fail the request if health check fails
+      logger.warn('Error performing immediate health check after saving credentials', { error });
+    }
+
     // Log activity
     await prisma.activity.create({
       data: {
@@ -296,15 +344,28 @@ router.post('/', async (req: Request, res: Response, next) => {
       },
     });
 
+    // Build response message
+    let message = `${apiName} credentials saved successfully for ${env} environment`;
+    if (validationResult !== null) {
+      if (validationResult.success) {
+        message += ' and validated successfully';
+      } else {
+        message += ` but validation failed: ${validationResult.message}`;
+      }
+    }
+
     res.json({ 
       success: true,
-      message: `${apiName} credentials saved successfully for ${env} environment`,
+      message,
       data: {
         apiName,
         environment: env,
         isActive,
         supportsEnvironments: supportsEnvironments(apiName),
         scope,
+        validated: validationResult !== null,
+        validationSuccess: validationResult?.success ?? null,
+        validationMessage: validationResult?.message,
       }
     });
   } catch (error: any) {

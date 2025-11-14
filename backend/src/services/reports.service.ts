@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { notificationService } from './notification.service';
 
 const prisma = new PrismaClient();
@@ -161,7 +161,8 @@ class ReportsService {
         username: sale.user?.username || 'Unknown User'
       }));
     } catch (error) {
-      console.error('Error generating sales report:', error);
+      const { logger } = await import('../config/logger');
+      logger.error('Error generating sales report', { error });
       throw new Error('Failed to generate sales report');
     }
   }
@@ -216,7 +217,8 @@ class ReportsService {
         };
       });
     } catch (error) {
-      console.error('Error generating product report:', error);
+      const { logger } = await import('../config/logger');
+      logger.error('Error generating product report', { error });
       throw new Error('Failed to generate product report');
     }
   }
@@ -280,7 +282,8 @@ class ReportsService {
         };
       });
     } catch (error) {
-      console.error('Error generating user performance report:', error);
+      const { logger } = await import('../config/logger');
+      logger.error('Error generating user performance report', { error });
       throw new Error('Failed to generate user performance report');
     }
   }
@@ -336,7 +339,8 @@ class ReportsService {
 
       return analytics;
     } catch (error) {
-      console.error('Error generating marketplace analytics:', error);
+      const { logger } = await import('../config/logger');
+      logger.error('Error generating marketplace analytics', { error });
       throw new Error('Failed to generate marketplace analytics');
     }
   }
@@ -496,7 +500,8 @@ class ReportsService {
         alerts
       };
     } catch (error) {
-      console.error('Error generating executive report:', error);
+      const { logger } = await import('../config/logger');
+      logger.error('Error generating executive report', { error });
       throw new Error('Failed to generate executive report');
     }
   }
@@ -506,28 +511,41 @@ class ReportsService {
    */
   async exportToExcel(data: any[], sheetName: string = 'Report'): Promise<Buffer> {
     try {
-      const workbook = XLSX.utils.book_new();
-      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet(sheetName);
       
-      // Auto-size columns
-      const columnWidths = [];
+      // Add headers
       if (data.length > 0) {
         const keys = Object.keys(data[0]);
-        keys.forEach((key, index) => {
-          const maxLength = Math.max(
-            key.length,
-            ...data.map(row => String(row[key] || '').length)
-          );
-          columnWidths.push({ wch: Math.min(maxLength + 2, 50) });
-        });
-        worksheet['!cols'] = columnWidths;
-      }
+        worksheet.columns = keys.map(key => ({
+          header: key,
+          key: key,
+          width: Math.min(
+            Math.max(key.length, ...data.map(row => String(row[key] || '').length)) + 2,
+            50
+          )
+        }));
 
-      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+        // Add rows
+        data.forEach(row => {
+          worksheet.addRow(row);
+        });
+
+        // Style header row
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.getRow(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' }
+        };
+      }
       
-      return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      // Generate buffer
+      const buffer = await workbook.xlsx.writeBuffer();
+      return Buffer.from(buffer);
     } catch (error) {
-      console.error('Error exporting to Excel:', error);
+      const { logger } = await import('../config/logger');
+      logger.error('Error exporting to Excel', { error });
       throw new Error('Failed to export to Excel');
     }
   }
@@ -546,7 +564,8 @@ class ReportsService {
       
       return htmlToPdfBuffer;
     } catch (error) {
-      console.error('Error generating PDF:', error);
+      const { logger } = await import('../config/logger');
+      logger.error('Error generating PDF', { error });
       throw new Error('Failed to generate PDF');
     }
   }

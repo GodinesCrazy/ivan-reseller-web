@@ -2,6 +2,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { userService } from '../../services/user.service';
+import { registerPasswordSchema } from '../../utils/password-validation';
 import { z } from 'zod';
 
 const router = Router();
@@ -13,7 +14,7 @@ router.use(authenticate);
 const createUserSchema = z.object({
   username: z.string().min(3),
   email: z.string().email(),
-  password: z.string().min(6),
+  password: registerPasswordSchema, // Validación de contraseña fuerte
   fullName: z.string().optional(),
   role: z.enum(['ADMIN', 'USER']).optional(),
   commissionRate: z.number().optional(),
@@ -24,7 +25,7 @@ const createUserSchema = z.object({
 const updateUserSchema = z.object({
   username: z.string().min(3).optional(),
   email: z.string().email().optional(),
-  password: z.string().min(6).optional(),
+  password: registerPasswordSchema.optional(), // Validación de contraseña fuerte si se proporciona
   role: z.enum(['ADMIN', 'USER']).optional(),
   commissionRate: z.number().min(0).max(1).optional(), // 0.0 a 1.0 (0% a 100%)
   fixedMonthlyCost: z.number().min(0).optional(), // Costo fijo mensual en USD

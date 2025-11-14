@@ -7,6 +7,7 @@ import costCalculator from './cost-calculator.service';
 import opportunityPersistence from './opportunity.service';
 import MarketplaceService from './marketplace.service';
 import fxService from './fx.service';
+import { workflowConfigService } from './workflow-config.service';
 import {
   DEFAULT_COMPARATOR_MARKETPLACES,
   OPTIONAL_MARKETPLACES,
@@ -17,6 +18,7 @@ export interface OpportunityFilters {
   maxItems?: number;
   marketplaces?: Array<'ebay' | 'amazon' | 'mercadolibre'>;
   region?: string; // e.g., 'us', 'uk', 'mx'
+  environment?: 'sandbox' | 'production'; // Environment para credenciales
 }
 
 export interface OpportunityItem {
@@ -56,6 +58,19 @@ class OpportunityFinderService {
       ? filters.marketplaces
       : DEFAULT_COMPARATOR_MARKETPLACES;
     const region = filters.region || 'us';
+    
+    // ✅ Obtener environment del usuario si no se especificó
+    let environment: 'sandbox' | 'production' = filters.environment || 'production';
+    if (!filters.environment) {
+      try {
+        environment = await workflowConfigService.getUserEnvironment(userId);
+      } catch (error) {
+        console.warn('⚠️  No se pudo obtener environment del usuario, usando production por defecto');
+        environment = 'production';
+      }
+    }
+    
+    console.log(`🌍 Búsqueda de oportunidades en modo: ${environment}`);
 
     const credentialDiagnostics: Record<string, { issues: string[]; warnings: string[] }> = {};
     const marketplaceService = new MarketplaceService();
@@ -122,6 +137,7 @@ class OpportunityFinderService {
     const baseCurrency = fxService.getBase();
 
     try {
+      console.log(`🔍 [OPPORTUNITY-FINDER] Iniciando búsqueda para: "${query}" (userId: ${userId}, environment: ${environment})`);
       console.log('🔍 Usando scraping nativo local (Puppeteer) para:', query);
       
       // ✅ Inicializar scraper explícitamente antes de usar
@@ -131,7 +147,10 @@ class OpportunityFinderService {
         scraperInitialized = true;
       }
       
-      const items = await scraper.scrapeAliExpress(userId, query);
+      console.log(`📡 [OPPORTUNITY-FINDER] Llamando a scrapeAliExpress...`);
+      const items = await scraper.scrapeAliExpress(userId, query, environment);
+      console.log(`📦 [OPPORTUNITY-FINDER] scrapeAliExpress retornó ${items?.length || 0} items`);
+      
       products = (items || [])
         .slice(0, maxItems)
         .map((p: any) => {
@@ -182,102 +201,111 @@ class OpportunityFinderService {
             productId: p.productId || p.productUrl?.split('/').pop()?.split('.html')[0],
           };
         })
-        .filter(p => p.price > 0 && p.sourcePrice > 0);
+        .filter(p => {
+          const isValid = p.price > 0 && p.sourcePrice > 0;
+          if (!isValid && p.title) {
+            console.warn(`⚠️  [OPPORTUNITY-FINDER] Producto filtrado: "${p.title.substring(0, 50)}" - price: ${p.price}, sourcePrice: ${p.sourcePrice}`);
+          }
+          return isValid;
+        });
       
       if (products.length > 0) {
-        console.log(`✅ Scraping nativo exitoso: ${products.length} productos encontrados`);
+        console.log(`✅ [OPPORTUNITY-FINDER] Scraping nativo exitoso: ${products.length} productos encontrados`);
+        console.log(`   Primeros productos:`, products.slice(0, 3).map(p => ({ title: p.title?.substring(0, 50), price: p.price })));
       } else {
-        console.warn('⚠️  Scraping nativo no encontró productos (puede ser selector incorrecto o página bloqueada)');
-        console.warn('⚠️  Debug: query="' + query + '", userId=' + userId + ', maxItems=' + maxItems);
+        console.warn('⚠️  [OPPORTUNITY-FINDER] Scraping nativo no encontró productos');
+        console.warn('⚠️  Debug: query="' + query + '", userId=' + userId + ', maxItems=' + maxItems + ', environment=' + environment);
+        console.warn('⚠️  Items raw de scrapeAliExpress:', items?.length || 0, 'items');
+        if (items && items.length > 0) {
+          console.warn('⚠️  Items encontrados pero filtrados:', items.slice(0, 3).map((i: any) => ({ title: i.title?.substring(0, 50), price: i.price, sourcePrice: i.sourcePrice })));
+        }
       }
     } catch (nativeError: any) {
       nativeErrorForLogs = nativeError;
+      const errorMsg = nativeError?.message || String(nativeError);
+      
+      // ✅ NO bloquear si es error de autenticación manual - continuar con bridge Python
       if (nativeError instanceof ManualAuthRequiredError) {
         manualAuthPending = true;
         manualAuthError = nativeError;
-        console.warn('⚠️  AliExpress requiere autenticación manual. Usaremos datos públicos temporales.');
+        console.warn('⚠️  AliExpress requiere autenticación manual. Intentando bridge Python como alternativa...');
       } else {
-        const errorMsg = nativeError?.message || String(nativeError);
         console.error('❌ Error en scraping nativo:', errorMsg);
         console.warn('⚠️  Scraping nativo falló, intentando bridge Python:', errorMsg);
-
-        const nativeMsg = String(nativeError?.message || '').toLowerCase();
-        const isCaptchaError = nativeError?.code === 'CAPTCHA_REQUIRED' ||
-          nativeMsg.includes('captcha') ||
-          nativeMsg.includes('no se pudo evadir');
-
-        if (isCaptchaError) {
-          await notificationService.sendToUser(userId, {
-            type: 'USER_ACTION',
-            title: 'CAPTCHA detectado en AliExpress',
-            message: 'El scraping nativo detectó un CAPTCHA que requiere resolución manual. El sistema intentará usar el bridge Python como alternativa.',
-            priority: 'HIGH',
-            category: 'SYSTEM',
-            data: { source: 'aliexpress', step: 'scrape', method: 'native' },
-            actions: [
-              { id: 'open_captcha', label: 'Abrir CAPTCHA', url: '/api/captcha/stats', variant: 'primary' },
-              { id: 'continuar_luego', label: 'Continuar luego', action: 'dismiss', variant: 'secondary' }
-            ]
-          });
-        }
       }
+
+      // ✅ NO intentar resolver CAPTCHA aquí - mejor continuar directamente con bridge Python
+      // El sistema de CAPTCHA manual se activará solo si el bridge Python también falla
     } finally {
-      await scraper.close().catch(() => {});
+      if (scraperInitialized) {
+        await scraper.close().catch(() => {});
+      }
     }
 
+    // ✅ FALLBACK: Intentar bridge Python si scraping nativo falló
     if (!products || products.length === 0) {
       try {
+        console.log(`🔄 [OPPORTUNITY-FINDER] Intentando bridge Python como alternativa (query: "${query}")...`);
         const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
+        console.log(`📦 [OPPORTUNITY-FINDER] Bridge Python retornó ${items?.length || 0} items`);
         products = (items || [])
           .map((p: any) => {
-          const sourceCurrency = String(p.currency || baseCurrency || 'USD').toUpperCase();
-          const sourcePrice = Number(p.price) || 0;
-          const priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
-          return {
-            title: p.title,
-            price: priceInBase,
-            priceMin: priceInBase,
-            priceMax: priceInBase,
-            priceMinSource: sourcePrice,
-            priceMaxSource: sourcePrice,
-            priceRangeSourceCurrency: sourceCurrency,
-            currency: baseCurrency,
-            sourcePrice,
-            sourceCurrency,
-            productUrl: p.url || p.productUrl,
-            imageUrl: p.images?.[0] || p.image || p.imageUrl,
-            productId: p.productId,
-          };
+            const sourceCurrency = String(p.currency || baseCurrency || 'USD').toUpperCase();
+            const sourcePrice = Number(p.price) || 0;
+            const priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
+            return {
+              title: p.title,
+              price: priceInBase,
+              priceMin: priceInBase,
+              priceMax: priceInBase,
+              priceMinSource: sourcePrice,
+              priceMaxSource: sourcePrice,
+              priceRangeSourceCurrency: sourceCurrency,
+              currency: baseCurrency,
+              sourcePrice,
+              sourceCurrency,
+              productUrl: p.url || p.productUrl,
+              imageUrl: p.images?.[0] || p.image || p.imageUrl,
+              productId: p.productId,
+            };
           })
           .filter(p => p.price > 0 && p.sourcePrice > 0);
-        console.log(`✅ Bridge Python exitoso: ${products.length} productos encontrados`);
+        
+        if (products.length > 0) {
+          console.log(`✅ Bridge Python exitoso: ${products.length} productos encontrados`);
+        } else {
+          console.warn('⚠️  Bridge Python no encontró productos');
+        }
       } catch (bridgeError: any) {
         const msg = String(bridgeError?.message || '').toLowerCase();
-        if (bridgeError?.code === 'CAPTCHA_REQUIRED' || msg.includes('captcha')) {
-          await notificationService.sendToUser(userId, {
-            type: 'USER_ACTION',
-            title: 'CAPTCHA detectado en AliExpress',
-            message: 'Se requiere resolver CAPTCHA manualmente para continuar con el scraping.',
-            priority: 'HIGH',
-            category: 'SYSTEM',
-            data: { source: 'aliexpress', step: 'scrape' },
-            actions: [
-              { id: 'open_captcha', label: 'Abrir CAPTCHA', url: '/api/captcha/stats', variant: 'primary' },
-              { id: 'continuar_luego', label: 'Continuar luego', action: 'dismiss', variant: 'secondary' }
-            ]
-          });
+        const isCaptchaError = bridgeError?.code === 'CAPTCHA_REQUIRED' || msg.includes('captcha');
+        
+        console.error('❌ Bridge Python falló:', bridgeError.message);
+        
+        // Solo intentar resolver CAPTCHA si ambos métodos fallaron Y es un error de CAPTCHA
+        if (isCaptchaError && !manualAuthPending) {
+          try {
+            const ManualCaptchaService = (await import('./manual-captcha.service')).default;
+            const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`;
+            
+            console.log('🛡️  CAPTCHA detectado, iniciando sesión de resolución manual...');
+            await ManualCaptchaService.startSession(userId, searchUrl, searchUrl);
+            console.log('📨 Notificación enviada al usuario para resolver CAPTCHA');
+          } catch (captchaError: any) {
+            console.error('Error al iniciar resolución manual de CAPTCHA:', captchaError.message);
+          }
         }
-        console.error('❌ Ambos métodos de scraping fallaron:', {
-          native: nativeErrorForLogs?.message,
-          bridge: bridgeError.message
-        });
+        
+        // ✅ NO lanzar error - retornar array vacío para que el frontend muestre el mensaje apropiado
+        console.warn('⚠️  Ambos métodos de scraping fallaron. Retornando resultados vacíos.');
         if (manualAuthPending && manualAuthError) {
-          throw manualAuthError;
+          console.warn('⚠️  Autenticación manual requerida, pero continuando sin bloquear:', manualAuthError.message);
         }
         return [];
       }
     }
 
+    // ✅ Si después de todos los intentos no hay productos, retornar vacío
     if (!products || products.length === 0) {
       console.warn('⚠️  No se encontraron productos después de intentar scraping nativo y bridge Python');
       console.warn('⚠️  Debug info:', {
@@ -288,12 +316,6 @@ class OpportunityFinderService {
         nativeError: nativeErrorForLogs?.message || null,
         bridgeAttempted: true,
       });
-      
-      if (manualAuthPending && manualAuthError) {
-        throw manualAuthError;
-      }
-      
-      // Retornar array vacío pero con información de debug en el log
       return [];
     }
 

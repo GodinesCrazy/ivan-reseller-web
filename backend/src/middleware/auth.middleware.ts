@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { AppError } from './error.middleware';
+import { authService } from '../services/auth.service';
 
 export interface JwtPayload {
   userId: number;
@@ -23,13 +24,26 @@ export const authenticate = async (
   next: NextFunction
 ) => {
   try {
-    const authHeader = req.headers.authorization;
+    // Prioridad 1: Token desde cookie (httpOnly, más seguro)
+    // Prioridad 2: Token desde header Authorization (para compatibilidad)
+    let token: string | undefined = req.cookies?.token;
+    
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       throw new AppError('Authentication required', 401);
     }
 
-    const token = authHeader.substring(7);
+    // Check if token is blacklisted
+    const isBlacklisted = await authService.isTokenBlacklisted(token);
+    if (isBlacklisted) {
+      throw new AppError('Token has been revoked', 401);
+    }
 
     try {
       const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;

@@ -31,22 +31,26 @@ model User {
   createdBy        Int? // ID del admin que creó este usuario (null si es admin o auto-creado)
 
   // Relations
-  products             Product[]
-  sales                Sale[]
-  commissions          Commission[]
-  apiCredentials       ApiCredential[]
-  activities           Activity[]
-  workflowConfig       UserWorkflowConfig?
-  createdUsers         User[]                @relation("UserCreator") // Usuarios creados por este admin
-  creator              User?                 @relation("UserCreator", fields: [createdBy], references: [id])
-  adminCommissions     AdminCommission[] // Comisiones que recibe como admin de usuarios creados
-  successfulOperations SuccessfulOperation[] // Operaciones exitosas del usuario
-  marketplaceListings  MarketplaceListing[]
-  opportunities        Opportunity[]
-  aiSuggestions        AISuggestion[]
-  manualAuthSessions   ManualAuthSession[]
+  products                Product[]
+  sales                   Sale[]
+  commissions             Commission[]
+  apiCredentials          ApiCredential[]
+  activities              Activity[]
+  workflowConfig          UserWorkflowConfig?
+  createdUsers            User[]                  @relation("UserCreator") // Usuarios creados por este admin
+  creator                 User?                   @relation("UserCreator", fields: [createdBy], references: [id])
+  adminCommissions        AdminCommission[] // Comisiones que recibe como admin de usuarios creados
+  successfulOperations    SuccessfulOperation[] // Operaciones exitosas del usuario
+  marketplaceListings     MarketplaceListing[]
+  opportunities           Opportunity[]
+  aiSuggestions           AISuggestion[]
+  manualAuthSessions      ManualAuthSession[]
   marketplaceAuthStatuses MarketplaceAuthStatus[]
-  sharedCredentials    ApiCredential[] @relation("SharedCredentialOwner")
+  sharedCredentials       ApiCredential[]         @relation("SharedCredentialOwner")
+  refreshTokens           RefreshToken[]
+  passwordResetTokens     PasswordResetToken[]
+  apiStatusHistory        APIStatusHistory[]
+  apiStatusSnapshots      APIStatusSnapshot[]
 
   @@index([email])
   @@index([username])
@@ -56,25 +60,25 @@ model User {
 }
 
 model ApiCredential {
-  id          Int      @id @default(autoincrement())
+  id          Int             @id @default(autoincrement())
   userId      Int
   apiName     String // ebay, mercadolibre, amazon, paypal, groq, email, twilio, slack, stripe, etc.
-  environment String   @default("production") // sandbox, production
+  environment String          @default("production") // sandbox, production
   credentials String // JSON string with encrypted API keys
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
   scope       CredentialScope @default(user)
   sharedById  Int?
 
   // Relations
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sharedBy  User? @relation("SharedCredentialOwner", fields: [sharedById], references: [id], onDelete: SetNull)
+  user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sharedBy User? @relation("SharedCredentialOwner", fields: [sharedById], references: [id], onDelete: SetNull)
 
+  @@unique([userId, apiName, environment, scope])
   @@index([userId, apiName, environment])
   @@index([apiName, environment, isActive])
   @@index([scope, isActive])
-  @@unique([userId, apiName, environment, scope])
   @@map("api_credentials")
 }
 
@@ -358,26 +362,26 @@ model CompetitionSnapshot {
 
 // ✅ SUGERENCIAS IA
 model AISuggestion {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   userId          Int
   type            String // pricing, inventory, marketing, listing, optimization, automation
   priority        String // high, medium, low
   title           String
   description     String
-  impactRevenue   Float    @default(0)
-  impactTime      Float    @default(0) // horas ahorradas
+  impactRevenue   Float     @default(0)
+  impactTime      Float     @default(0) // horas ahorradas
   difficulty      String // easy, medium, hard
   confidence      Float // 0-100
-  actionable      Boolean  @default(true)
-  implemented     Boolean  @default(false)
+  actionable      Boolean   @default(true)
+  implemented     Boolean   @default(false)
   implementedAt   DateTime?
   estimatedTime   String
   requirements    String? // JSON array
   steps           String? // JSON array
   relatedProducts String? // JSON array
   metrics         String? // JSON object { currentValue, targetValue, unit }
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -387,14 +391,15 @@ model AISuggestion {
 }
 
 model ManualAuthSession {
-  id          Int      @id @default(autoincrement())
-  token       String   @unique
+  id          Int       @id @default(autoincrement())
+  token       String    @unique
   provider    String
   userId      Int
-  status      String   @default("pending")
+  status      String    @default("pending")
   cookies     Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  metadata    String? // JSON string with additional data (captchaUrl, pageUrl, etc.)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   expiresAt   DateTime?
   completedAt DateTime?
 
@@ -405,20 +410,102 @@ model ManualAuthSession {
 }
 
 model MarketplaceAuthStatus {
-  id                    Int      @id @default(autoincrement())
-  userId                Int      @map("user_id")
-  marketplace           String
-  status                String   @default("unknown")
-  message               String?
-  requiresManual        Boolean  @default(false) @map("requires_manual")
-  lastAutomaticAttempt  DateTime? @map("last_automatic_attempt")
-  lastAutomaticSuccess  DateTime? @map("last_automatic_success")
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  id                   Int       @id @default(autoincrement())
+  userId               Int       @map("user_id")
+  marketplace          String
+  status               String    @default("unknown")
+  message              String?
+  requiresManual       Boolean   @default(false) @map("requires_manual")
+  lastAutomaticAttempt DateTime? @map("last_automatic_attempt")
+  lastAutomaticSuccess DateTime? @map("last_automatic_success")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, marketplace])
   @@index([marketplace, status])
   @@map("marketplace_auth_status")
+}
+
+model RefreshToken {
+  id        Int       @id @default(autoincrement())
+  token     String    @unique
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  token     String    @unique
+  userId    Int
+  email     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([email])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+model APIStatusHistory {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  apiName        String
+  environment    String   @default("production")
+  status         String // "healthy", "degraded", "unhealthy", "unknown"
+  previousStatus String? // Estado anterior
+  isAvailable    Boolean
+  isConfigured   Boolean
+  error          String?
+  message        String?
+  latency        Int? // Latencia en ms
+  trustScore     Float?   @default(100.0) // Score de confianza 0-100
+  changedAt      DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, apiName, environment])
+  @@index([apiName, environment, status])
+  @@index([changedAt])
+  @@index([userId, changedAt])
+  @@map("api_status_history")
+}
+
+model APIStatusSnapshot {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  apiName      String
+  environment  String   @default("production")
+  status       String // "healthy", "degraded", "unhealthy", "unknown"
+  isAvailable  Boolean
+  isConfigured Boolean
+  error        String?
+  message      String?
+  latency      Int?
+  trustScore   Float    @default(100.0)
+  lastChecked  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, apiName, environment])
+  @@index([userId, apiName, environment])
+  @@index([status, isAvailable])
+  @@map("api_status_snapshots")
 }
