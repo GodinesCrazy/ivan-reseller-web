@@ -249,7 +249,7 @@ app.use('/api/config-audit', configAuditRoutes);
 
 // Swagger API Documentation
 if (env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'true') {
-  setupSwagger(app);
+  setupSwagger(app as any);
 }
 
 // 404 handler
