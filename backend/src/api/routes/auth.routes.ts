@@ -57,19 +57,31 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
     const requestProtocol = req.protocol || (req.headers['x-forwarded-proto'] as string) || 'http';
     const isHttps = requestProtocol === 'https' || frontendUrl.startsWith('https');
     
-    // Extraer el dominio del frontend (sin protocolo)
+    // IMPORTANTE: Cuando el backend y frontend están en dominios diferentes (ej: Railway vs ivanreseller.com),
+    // NO debemos establecer el dominio de la cookie. El navegador solo enviará cookies al dominio que las estableció.
+    // Si establecemos domain: '.ivanreseller.com' pero el backend está en Railway, el navegador NO enviará las cookies.
+    
+    // Solo establecer domain si el backend está en el mismo dominio base que el frontend
     let cookieDomain: string | undefined = undefined;
     try {
       const frontendUrlObj = new URL(frontendUrl);
-      const hostname = frontendUrlObj.hostname;
-      // Remover 'www.' para que funcione con y sin www
-      cookieDomain = hostname.replace(/^www\./, '');
-      // Solo establecer domain si no es localhost
-      if (cookieDomain === 'localhost' || cookieDomain.includes('127.0.0.1')) {
-        cookieDomain = undefined;
+      const frontendHostname = frontendUrlObj.hostname;
+      
+      // Obtener el hostname del backend (desde el request)
+      const backendHostname = req.get('host') || req.hostname || '';
+      
+      // Solo establecer domain si el backend y frontend están en el mismo dominio base
+      // Por ejemplo: api.ivanreseller.com y www.ivanreseller.com comparten el dominio base
+      const frontendBaseDomain = frontendHostname.replace(/^[^.]+\./, ''); // Remover subdominio
+      const backendBaseDomain = backendHostname.replace(/^[^.]+\./, '');
+      
+      if (frontendBaseDomain === backendBaseDomain && frontendBaseDomain !== 'localhost' && !frontendBaseDomain.includes('127.0.0.1')) {
+        // Mismo dominio base - podemos establecer domain para que funcione con subdominios
+        cookieDomain = `.${frontendBaseDomain}`;
       } else {
-        // Agregar el punto inicial para que funcione con subdominios
-        cookieDomain = `.${cookieDomain}`;
+        // Dominios diferentes (ej: Railway vs ivanreseller.com) - NO establecer domain
+        // El navegador enviará las cookies al dominio que las estableció (Railway)
+        cookieDomain = undefined;
       }
     } catch (e) {
       // Si falla, no establecer domain
@@ -80,15 +92,18 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
     const cookieOptions: any = {
       httpOnly: true, // No accesible desde JavaScript (previene XSS)
       secure: isHttps, // Enviar sobre HTTPS si la petición es HTTPS o el frontend usa HTTPS
-      sameSite: 'lax' as const, // 'lax' permite cookies en navegaciones cross-site (más compatible)
+      sameSite: 'none' as const, // 'none' es necesario para cookies cross-domain (backend en Railway, frontend en otro dominio)
       maxAge: 60 * 60 * 1000, // 1 hora (debe coincidir con JWT_EXPIRES_IN)
       path: '/', // Disponible en toda la aplicación
     };
     
-    // Establecer domain solo si se pudo determinar correctamente
+    // Establecer domain solo si backend y frontend están en el mismo dominio base
     if (cookieDomain) {
       cookieOptions.domain = cookieDomain;
+      // Si están en el mismo dominio, podemos usar 'lax'
+      cookieOptions.sameSite = 'lax' as const;
     }
+    // Si NO establecemos domain (dominios diferentes), sameSite debe ser 'none' y secure debe ser true
 
     // Configurar cookie para refresh token (más largo)
     const refreshCookieOptions = {
