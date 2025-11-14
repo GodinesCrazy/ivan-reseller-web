@@ -321,12 +321,12 @@ export class AdvancedMarketplaceScraper {
   /**
    * Scraping REAL de AliExpress con evasión completa
    */
-  async scrapeAliExpress(userId: number, query: string): Promise<ScrapedProduct[]> {
+  async scrapeAliExpress(userId: number, query: string, environment: 'sandbox' | 'production' = 'production'): Promise<ScrapedProduct[]> {
     if (!this.browser) await this.init();
 
-    console.log(`🔍 Scraping REAL AliExpress: "${query}"`);
+    console.log(`🔍 Scraping REAL AliExpress: "${query}" (environment: ${environment})`);
 
-    const cookies = await this.fetchAliExpressCookies(userId);
+    const cookies = await this.fetchAliExpressCookies(userId, environment);
 
     const hasManualCookies = cookies.length > 0;
 
@@ -359,8 +359,30 @@ export class AdvancedMarketplaceScraper {
         await tempPage.close().catch(() => {});
       }
     }
+    // ✅ Intentar login solo si hay credenciales, pero NO bloquear si falla
     if (!hasManualCookies) {
-      await this.ensureAliExpressLogin(userId);
+      try {
+        const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', environment);
+        if (credentials && (credentials as any).email && (credentials as any).password) {
+          console.log('🔐 Intentando login automático de AliExpress...');
+          await Promise.race([
+            this.ensureAliExpressLogin(userId),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Login timeout')), 30000)) // Timeout de 30s
+          ]).catch((error: any) => {
+            // NO lanzar error, solo loguear y continuar en modo público
+            if (error instanceof ManualAuthRequiredError) {
+              console.warn('⚠️  AliExpress requiere autenticación manual. Continuando en modo público...');
+            } else {
+              console.warn('⚠️  Login automático falló o expiró. Continuando en modo público:', error?.message || error);
+            }
+          });
+        } else {
+          console.log('ℹ️  No hay credenciales de AliExpress configuradas. Continuando en modo público...');
+        }
+      } catch (loginError: any) {
+        // NO bloquear el proceso si el login falla
+        console.warn('⚠️  Error al intentar login de AliExpress. Continuando en modo público:', loginError?.message || loginError);
+      }
     } else {
       console.log('✅ Using manual AliExpress session without automated login attempt');
     }
@@ -494,8 +516,11 @@ export class AdvancedMarketplaceScraper {
       }
 
       if (products.length > 0) {
+        console.log(`✅ [SCRAPER] Productos encontrados desde runParams/API: ${products.length}`);
         return products;
       }
+      
+      console.log(`⚠️  [SCRAPER] No se encontraron productos desde runParams/API, intentando DOM scraping...`);
 
       if (apiCapturedItems.length > 0) {
         const normalizedApi = apiCapturedItems
@@ -872,9 +897,17 @@ export class AdvancedMarketplaceScraper {
       });
 
       if (productsFromDom.length === 0) {
-        console.warn('⚠️  No se encontraron productos en el DOM después de todos los métodos de extracción');
-        console.warn('⚠️  Debug: query="' + query + '", userId=' + userId);
-        console.warn('⚠️  Intentando capturar snapshot para diagnóstico...');
+        console.warn('⚠️  [SCRAPER] No se encontraron productos en el DOM después de todos los métodos de extracción');
+        console.warn('⚠️  [SCRAPER] Debug: query="' + query + '", userId=' + userId);
+        console.warn('⚠️  [SCRAPER] Resumen de intentos:');
+        console.warn('   - runParams desde script: falló');
+        console.warn('   - runParams desde window: falló');
+        console.warn('   - API responses capturadas: ' + (apiCapturedItems.length > 0 ? apiCapturedItems.length + ' items' : 'ninguna'));
+        console.warn('   - __NI_DATA__: falló');
+        console.warn('   - Scripts embebidos: falló');
+        console.warn('   - DOM scraping: falló');
+        console.warn('⚠️  [SCRAPER] URL final:', page.url());
+        console.warn('⚠️  [SCRAPER] Intentando capturar snapshot para diagnóstico...');
         await this.captureAliExpressSnapshot(page, `no-products-${Date.now()}`).catch((err) => {
           console.warn('⚠️  No se pudo capturar snapshot:', err.message);
         });
@@ -896,14 +929,32 @@ export class AdvancedMarketplaceScraper {
             return null;
           });
           if (pageError) {
-            console.warn('⚠️  Error detectado en la página de AliExpress:', pageError);
+            console.warn('⚠️  [SCRAPER] Error detectado en la página de AliExpress:', pageError);
           }
         } catch (evalErr) {
           // Ignorar errores de evaluación
         }
+        
+        // Intentar capturar screenshot para debug (solo en desarrollo)
+        if (process.env.NODE_ENV !== 'production') {
+          try {
+            const screenshot = await page.screenshot({ encoding: 'base64' });
+            console.log('📸 [SCRAPER] Screenshot capturado (base64, length:', screenshot.length, ')');
+          } catch (e) {
+            console.warn('⚠️  No se pudo capturar screenshot:', (e as Error).message);
+          }
+        }
+        
+        return [];
       }
 
-      console.log(`✅ Extraídos ${productsFromDom.length} productos REALES de AliExpress`);
+      console.log(`✅ [SCRAPER] Extraídos ${productsFromDom.length} productos REALES de AliExpress desde DOM`);
+      console.log(`   Primeros productos DOM:`, productsFromDom.slice(0, 3).map((p: any) => ({ 
+        title: p.title?.substring(0, 50), 
+        price: p.price, 
+        currency: p.currency,
+        sourcePrice: p.sourcePrice 
+      })));
       return productsFromDom;
 
     } catch (error) {
@@ -2367,9 +2418,9 @@ export class AdvancedMarketplaceScraper {
     }
   }
 
-  private async fetchAliExpressCookies(userId: number): Promise<Protocol.Network.Cookie[]> {
+  private async fetchAliExpressCookies(userId: number, environment: 'sandbox' | 'production' = 'production'): Promise<Protocol.Network.Cookie[]> {
     try {
-      const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', 'production');
+      const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', environment);
       if (!credentials) return [];
       const cookiesRaw = (credentials as any).cookies;
       if (!cookiesRaw) return [];

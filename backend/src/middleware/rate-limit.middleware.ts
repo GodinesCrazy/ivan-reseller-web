@@ -114,3 +114,25 @@ export const createUserRateLimit = (maxRequests: number = 50, windowMs: number =
   });
 };
 
+/**
+ * Rate limit específico para login - Previene brute force attacks
+ * 5 intentos por 15 minutos por IP
+ */
+export const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 5, // 5 intentos de login por 15 minutos
+  message: {
+    success: false,
+    error: 'Too many login attempts. Please try again after 15 minutes.',
+    errorCode: 'RATE_LIMIT_EXCEEDED',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => {
+    // Usar IP para prevenir brute force desde múltiples cuentas
+    return `login:${req.ip || 'unknown'}`;
+  },
+  skipSuccessfulRequests: false, // Contar todos los intentos, incluso los exitosos
+  skipFailedRequests: false, // Contar todos los intentos fallidos
+});
+

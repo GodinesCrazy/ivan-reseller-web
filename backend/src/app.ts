@@ -2,9 +2,11 @@ import express, { Application, Request, Response, NextFunction } from 'express';
 import cors, { type CorsOptions } from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import { env } from './config/env';
 import { errorHandler } from './middleware/error.middleware';
 import { setupSwagger } from './config/swagger';
+import { logger } from './config/logger';
 
 // Import routes
 import authRoutes from './api/routes/auth.routes';
@@ -53,6 +55,7 @@ import aiSuggestionsRoutes from './api/routes/ai-suggestions.routes';
 import manualAuthRoutes from './api/routes/manual-auth.routes';
 import authStatusRoutes from './api/routes/auth-status.routes';
 import configAuditRoutes from './api/routes/config-audit.routes';
+import manualCaptchaRoutes from './api/routes/manual-captcha.routes';
 // import adminRoutes from './api/routes/admin.routes'; // Temporarily disabled
 
 const app: Application = express();
@@ -91,10 +94,10 @@ const corsOptions: CorsOptions = {
         return callback(null, true);
       }
     } catch (error) {
-      console.warn('CORS: invalid origin received', { origin, error });
+      logger.warn('CORS: invalid origin received', { origin, error });
     }
 
-    console.warn(`CORS: origin not allowed -> ${origin}`);
+    logger.warn('CORS: origin not allowed', { origin });
     return callback(new Error('Not allowed by CORS policy'), false);
   },
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -102,6 +105,9 @@ const corsOptions: CorsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Cookie parser (debe ir antes de las rutas)
+app.use(cookieParser());
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
@@ -113,7 +119,7 @@ app.use(compression());
 // Request logging (development)
 if (env.NODE_ENV === 'development') {
   app.use((req: Request, _res: Response, next: NextFunction) => {
-    console.log(`${req.method} ${req.path}`);
+    logger.debug('HTTP Request', { method: req.method, path: req.path });
     next();
   });
 }
@@ -122,13 +128,41 @@ if (env.NODE_ENV === 'development') {
 // ROUTES
 // ====================================
 
-// Health check
-app.get('/health', (_req: Request, res: Response) => {
-  res.json({
+// Health check básico
+app.get('/health', async (_req: Request, res: Response) => {
+  const checks: Record<string, any> = {
     status: 'ok',
     timestamp: new Date().toISOString(),
     environment: env.NODE_ENV,
-  });
+  };
+
+  // Verificar conexión a base de datos
+  try {
+    const { prisma } = await import('./config/database');
+    await prisma.$queryRaw`SELECT 1`;
+    checks.database = { status: 'healthy', connected: true };
+  } catch (error: any) {
+    checks.database = { status: 'unhealthy', connected: false, error: error.message };
+  }
+
+  // Verificar conexión a Redis (si está configurado)
+  try {
+    const redisModule = await import('./config/redis');
+    if (redisModule.isRedisAvailable) {
+      await redisModule.redis.ping();
+      checks.redis = { status: 'healthy', connected: true };
+    } else {
+      checks.redis = { status: 'not_configured', connected: false };
+    }
+  } catch (error: any) {
+    checks.redis = { status: 'unhealthy', connected: false, error: error.message };
+  }
+
+  // Determinar estado general
+  const isHealthy = checks.database?.status === 'healthy' && 
+                    (checks.redis?.status === 'healthy' || checks.redis?.status === 'not_configured');
+  
+  res.status(isHealthy ? 200 : 503).json(checks);
 });
 
 // API routes
@@ -158,6 +192,7 @@ app.use('/api/proxies', proxiesRoutes);
 app.use('/api/publisher', publisherRoutes);
 app.use('/api/currency', currencyRoutes);
 app.use('/api/captcha', captchaRoutes);
+app.use('/api/manual-captcha', manualCaptchaRoutes);
 app.use('/api/credentials', apiCredentialsRoutes);
 app.use('/api/workflow', workflowConfigRoutes);
 app.use('/api/admin', adminRoutes);

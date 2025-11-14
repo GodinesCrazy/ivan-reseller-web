@@ -26,6 +26,7 @@ router.get('/', async (req, res) => {
     const region = String(req.query.region || 'us');
     const marketplacesParam = String(req.query.marketplaces || 'ebay,amazon,mercadolibre');
     const marketplaces = marketplacesParam.split(',').map(s => s.trim()).filter(Boolean) as Array<'ebay'|'amazon'|'mercadolibre'>;
+    const environment = (req.query.environment as 'sandbox' | 'production' | undefined) || undefined; // Opcional, se obtiene del usuario si no se especifica
 
     if (!query) {
       return res.json({ success: true, items: [], count: 0, query, targetMarketplaces: marketplaces, data_source: 'real_analysis' });
@@ -76,7 +77,7 @@ router.get('/', async (req, res) => {
       } catch {}
     }, Math.max(60000, warnMs));
     // Find real opportunities (may return empty until marketplace analyzers are fully wired)
-    const items = await opportunityFinder.findOpportunities(userId, { query, maxItems, marketplaces, region });
+    const items = await opportunityFinder.findOpportunities(userId, { query, maxItems, marketplaces, region, environment });
 
     const durationMs = Date.now() - startTs;
 

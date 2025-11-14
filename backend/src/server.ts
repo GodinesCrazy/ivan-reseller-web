@@ -6,6 +6,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { scheduledTasksService } from './services/scheduled-tasks.service';
 import { aliExpressAuthMonitor } from './services/ali-auth-monitor.service';
+import { apiHealthMonitor } from './services/api-health-monitor.service';
 import bcrypt from 'bcryptjs';
 import { resolveChromiumExecutable } from './utils/chromium';
 
@@ -262,7 +263,7 @@ async function startServer() {
 
     // Start server
     console.log('🌐 Iniciando servidor HTTP...');
-    app.listen(PORT, '0.0.0.0', () => {
+    app.listen(PORT, '0.0.0.0', async () => {
       console.log('');
       console.log('🚀 Ivan Reseller API Server');
       console.log('================================');
@@ -275,6 +276,21 @@ async function startServer() {
       console.log('  - Financial alerts: Daily at 6:00 AM');
       console.log('  - Commission processing: Daily at 2:00 AM');
       console.log('');
+      
+      // Recover persisted API statuses
+      try {
+        await apiAvailability.recoverPersistedStatuses();
+        console.log('✅ Recovered persisted API statuses from database');
+      } catch (error: any) {
+        console.warn('⚠️  Warning: Could not recover persisted API statuses:', error.message);
+      }
+      
+      // Start API Health Monitor
+      await apiHealthMonitor.start();
+      console.log('✅ API Health Monitor started');
+      console.log('  - Monitoring API health every 15 minutes');
+      console.log('');
+      
       aliExpressAuthMonitor.start();
     });
   } catch (error) {
@@ -286,6 +302,7 @@ async function startServer() {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
+  apiHealthMonitor.stop();
   aliExpressAuthMonitor.stop();
   await scheduledTasksService.shutdown();
   await prisma.$disconnect();
@@ -297,6 +314,7 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down gracefully...');
+  apiHealthMonitor.stop();
   aliExpressAuthMonitor.stop();
   await scheduledTasksService.shutdown();
   await prisma.$disconnect();

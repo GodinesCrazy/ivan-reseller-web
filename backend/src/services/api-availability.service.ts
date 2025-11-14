@@ -9,18 +9,25 @@ import { logger } from '../config/logger';
 import { supportsEnvironments } from '../config/api-keys.config';
 import { OPTIONAL_MARKETPLACES } from '../config/marketplaces.config';
 import { redis, isRedisAvailable } from '../config/redis';
+import { circuitBreakerManager } from './circuit-breaker.service';
+import { retryWithBackoff, isRetryableError } from '../utils/retry';
+
+export type APIHealthStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
 
 interface APIStatus {
   apiName: string;
   name: string;
   isConfigured: boolean;
   isAvailable: boolean;
+  status?: APIHealthStatus; // Estado de salud: healthy, degraded, unhealthy, unknown
   lastChecked: Date;
   error?: string;
   message?: string;
   missingFields?: string[];
   environment?: 'sandbox' | 'production';
   isOptional?: boolean;
+  latency?: number; // Latencia en ms
+  trustScore?: number; // Score de confianza 0-100
 }
 
 interface APICapabilities {
@@ -36,9 +43,11 @@ interface APICapabilities {
 
 export class APIAvailabilityService {
   private cache: Map<string, APIStatus> = new Map(); // Fallback cache en memoria
-  private cacheExpiry: number = 5 * 60 * 1000; // 5 minutes
+  private cacheExpiry: number = 5 * 60 * 1000; // 5 minutes (para validación rápida)
+  private healthCheckExpiry: number = 30 * 60 * 1000; // 30 minutes (para health checks reales)
   private useRedis: boolean = isRedisAvailable;
   private redisPrefix = 'api_availability:'; // Prefijo para keys de Redis
+  private healthCheckPrefix = 'api_health:'; // Prefijo para health checks en Redis
 
   /**
    * Generate cache key including userId for multi-tenant isolation
@@ -171,19 +180,316 @@ export class APIAvailabilityService {
   }
 
   /**
+   * Check if OAuth token is expired
+   */
+  private isTokenExpired(token: string): boolean {
+    try {
+      // Try to decode JWT token
+      const jwt = require('jsonwebtoken');
+      const decoded = jwt.decode(token, { complete: true });
+      
+      if (decoded && decoded.payload && decoded.payload.exp) {
+        const expirationTime = decoded.payload.exp * 1000; // Convert to milliseconds
+        const now = Date.now();
+        const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
+        return expirationTime <= (now + bufferTime);
+      }
+      
+      // If not JWT, assume it might be expired (conservative approach)
+      return false;
+    } catch (error) {
+      // If can't decode, assume not expired (let health check determine)
+      return false;
+    }
+  }
+
+  /**
+   * Calculate health status based on metrics
+   */
+  private calculateHealthStatus(
+    isAvailable: boolean,
+    latency?: number,
+    error?: string
+  ): APIHealthStatus {
+    if (!isAvailable) {
+      return 'unhealthy';
+    }
+
+    if (error) {
+      return 'degraded';
+    }
+
+    // Latency thresholds (ms)
+    if (latency !== undefined) {
+      if (latency > 5000) {
+        return 'degraded'; // Very slow
+      }
+      if (latency > 10000) {
+        return 'unhealthy'; // Extremely slow
+      }
+    }
+
+    return 'healthy';
+  }
+
+  /**
+   * Calculate trust score based on history
+   */
+  private async calculateTrustScore(
+    userId: number,
+    apiName: string,
+    environment: string,
+    currentStatus: APIHealthStatus
+  ): Promise<number> {
+    try {
+      // Get last 10 status changes from history
+      const history = await prisma.aPIStatusHistory.findMany({
+        where: {
+          userId,
+          apiName,
+          environment,
+        },
+        orderBy: { changedAt: 'desc' },
+        take: 10,
+      });
+
+      if (history.length === 0) {
+        return currentStatus === 'healthy' ? 100 : 50;
+      }
+
+      // Calculate score based on recent history
+      let score = 100;
+      const healthyCount = history.filter(h => h.status === 'healthy').length;
+      const degradedCount = history.filter(h => h.status === 'degraded').length;
+      const unhealthyCount = history.filter(h => h.status === 'unhealthy').length;
+
+      // Weight recent status more
+      if (history.length > 0) {
+        const recentStatus = history[0].status;
+        if (recentStatus === 'unhealthy') score -= 30;
+        else if (recentStatus === 'degraded') score -= 15;
+      }
+
+      // Adjust based on overall history
+      const total = history.length;
+      score -= (unhealthyCount / total) * 40;
+      score -= (degradedCount / total) * 20;
+
+      return Math.max(0, Math.min(100, score));
+    } catch (error) {
+      logger.warn('Error calculating trust score', { userId, apiName, error });
+      return 50; // Default score
+    }
+  }
+
+  /**
+   * Persist API status to database
+   */
+  private async persistStatus(
+    userId: number,
+    status: APIStatus,
+    previousStatus?: APIStatus
+  ): Promise<void> {
+    try {
+      const apiName = status.apiName;
+      const environment = status.environment || 'production';
+      const healthStatus = status.status || (status.isAvailable ? 'healthy' : 'unhealthy');
+
+      // Save snapshot (current state)
+      await prisma.aPIStatusSnapshot.upsert({
+        where: {
+          userId_apiName_environment: {
+            userId,
+            apiName,
+            environment,
+          },
+        },
+        create: {
+          userId,
+          apiName,
+          environment,
+          status: healthStatus,
+          isAvailable: status.isAvailable,
+          isConfigured: status.isConfigured,
+          error: status.error || null,
+          message: status.message || null,
+          latency: status.latency || null,
+          trustScore: status.trustScore || 100,
+          lastChecked: status.lastChecked,
+        },
+        update: {
+          status: healthStatus,
+          isAvailable: status.isAvailable,
+          isConfigured: status.isConfigured,
+          error: status.error || null,
+          message: status.message || null,
+          latency: status.latency || null,
+          trustScore: status.trustScore || 100,
+          lastChecked: status.lastChecked,
+        },
+      });
+
+      // Save to history if status changed
+      if (!previousStatus || 
+          previousStatus.status !== status.status ||
+          previousStatus.isAvailable !== status.isAvailable) {
+        await prisma.aPIStatusHistory.create({
+          data: {
+            userId,
+            apiName,
+            environment,
+            status: healthStatus,
+            previousStatus: previousStatus?.status || null,
+            isAvailable: status.isAvailable,
+            isConfigured: status.isConfigured,
+            error: status.error || null,
+            message: status.message || null,
+            latency: status.latency || null,
+            trustScore: status.trustScore || 100,
+            changedAt: status.lastChecked,
+          },
+        });
+      }
+    } catch (error) {
+      logger.warn('Error persisting API status', { userId, apiName: status.apiName, error });
+      // Don't throw - persistence is not critical
+    }
+  }
+
+  /**
+   * Load persisted status from database
+   */
+  private async loadPersistedStatus(
+    userId: number,
+    apiName: string,
+    environment: string
+  ): Promise<APIStatus | null> {
+    try {
+      const snapshot = await prisma.aPIStatusSnapshot.findUnique({
+        where: {
+          userId_apiName_environment: {
+            userId,
+            apiName,
+            environment,
+          },
+        },
+      });
+
+      if (!snapshot) {
+        return null;
+      }
+
+      // Check if snapshot is recent (less than 1 hour old)
+      const age = Date.now() - snapshot.lastChecked.getTime();
+      if (age > 60 * 60 * 1000) {
+        return null; // Too old, don't use
+      }
+
+      return {
+        apiName: snapshot.apiName,
+        name: snapshot.apiName, // Will be set by caller
+        isConfigured: snapshot.isConfigured,
+        isAvailable: snapshot.isAvailable,
+        status: snapshot.status as APIHealthStatus,
+        lastChecked: snapshot.lastChecked,
+        error: snapshot.error || undefined,
+        message: snapshot.message || undefined,
+        environment: snapshot.environment as 'sandbox' | 'production',
+        latency: snapshot.latency || undefined,
+        trustScore: snapshot.trustScore,
+      };
+    } catch (error) {
+      logger.warn('Error loading persisted status', { userId, apiName, error });
+      return null;
+    }
+  }
+
+  /**
+   * Perform real health check for eBay API
+   */
+  private async performEbayHealthCheck(
+    userId: number,
+    environment: 'sandbox' | 'production',
+    credentials: Record<string, string>
+  ): Promise<{ success: boolean; error?: string; latency?: number }> {
+    const breaker = circuitBreakerManager.getBreaker(`ebay-${environment}`, {
+      failureThreshold: 3,
+      timeout: 60000,
+    });
+
+    try {
+      return await breaker.execute(async () => {
+        const { MarketplaceService } = await import('./marketplace.service');
+        const marketplaceService = new MarketplaceService();
+        
+        const startTime = Date.now();
+        const result = await retryWithBackoff(
+          async () => {
+            return await marketplaceService.testConnection(userId, 'ebay', environment);
+          },
+          {
+            maxAttempts: 2,
+            initialDelay: 1000,
+            retryable: isRetryableError,
+          }
+        );
+        const latency = Date.now() - startTime;
+
+        return {
+          success: result.success,
+          error: result.success ? undefined : result.message,
+          latency,
+        };
+      });
+    } catch (error: any) {
+      if (error.message?.includes('Circuit breaker')) {
+        // Circuit is open, return cached degraded status
+        return { success: false, error: 'Service temporarily unavailable (circuit open)' };
+      }
+      return {
+        success: false,
+        error: error.message || 'Health check failed',
+      };
+    }
+  }
+
+  /**
    * Check eBay API availability for specific user
    * @param userId - User ID
    * @param environment - Environment (sandbox/production). Defaults to 'production'
+   * @param forceHealthCheck - Force a real health check (bypass cache)
    */
-  async checkEbayAPI(userId: number, environment: 'sandbox' | 'production' = 'production'): Promise<APIStatus> {
+  async checkEbayAPI(
+    userId: number,
+    environment: 'sandbox' | 'production' = 'production',
+    forceHealthCheck: boolean = false
+  ): Promise<APIStatus> {
     const cacheKey = this.getCacheKey(userId, `ebay-${environment}`);
-    const cached = await this.getCached(cacheKey);
-    if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
-      return cached;
+    const healthCheckKey = `${this.healthCheckPrefix}${cacheKey}`;
+    
+    // Try to load from persisted status first (if recent)
+    if (!forceHealthCheck) {
+      const persistedStatus = await this.loadPersistedStatus(userId, 'ebay', environment);
+      if (persistedStatus) {
+        // Use persisted status if recent (less than 5 minutes)
+        const age = Date.now() - persistedStatus.lastChecked.getTime();
+        if (age < 5 * 60 * 1000) {
+          persistedStatus.name = 'eBay Trading API';
+          return persistedStatus;
+        }
+      }
+    }
+    
+    // Level 1: Fast validation (check cache first)
+    if (!forceHealthCheck) {
+      const cached = await this.getCached(cacheKey);
+      if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
+        return cached;
+      }
     }
 
     try {
-      const requiredFields = ['EBAY_APP_ID', 'EBAY_DEV_ID', 'EBAY_CERT_ID'];
+      const requiredFields = ['appId', 'devId', 'certId'];
       const credentials = await this.getUserCredentials(userId, 'ebay', environment);
       
       if (!credentials) {
@@ -200,39 +506,125 @@ export class APIAvailabilityService {
         return status;
       }
 
-      const validation = this.hasRequiredFields(credentials, requiredFields);
+      // Normalize field names (credentials manager uses different names)
+      const normalizedCreds: Record<string, string> = {
+        appId: credentials['appId'] || credentials['EBAY_APP_ID'] || '',
+        devId: credentials['devId'] || credentials['EBAY_DEV_ID'] || '',
+        certId: credentials['certId'] || credentials['EBAY_CERT_ID'] || '',
+        token: credentials['token'] || credentials['authToken'] || credentials['accessToken'] || '',
+        refreshToken: credentials['refreshToken'] || '',
+      };
+
+      const validation = this.hasRequiredFields(normalizedCreds, requiredFields);
+
+      // Level 2: Real health check (only if fields are valid and not recently checked)
+      let healthCheckResult: { success: boolean; error?: string } | null = null;
+      const lastHealthCheck = await this.getCached(healthCheckKey);
+      const shouldPerformHealthCheck = 
+        forceHealthCheck || 
+        !lastHealthCheck || 
+        Date.now() - lastHealthCheck.lastChecked.getTime() >= this.healthCheckExpiry;
+
+      if (validation.valid && shouldPerformHealthCheck) {
+        try {
+          healthCheckResult = await this.performEbayHealthCheck(userId, environment, normalizedCreds);
+          // Cache health check result
+          await this.setCached(healthCheckKey, {
+            apiName: 'ebay',
+            name: 'eBay Trading API',
+            isConfigured: true,
+            isAvailable: healthCheckResult.success,
+            environment,
+            lastChecked: new Date(),
+            error: healthCheckResult.error,
+            message: healthCheckResult.success ? 'API funcionando correctamente' : healthCheckResult.error,
+          } as APIStatus);
+        } catch (error: any) {
+          logger.warn(`Health check failed for eBay ${environment}`, { userId, error: error.message });
+          // Don't fail completely, use field validation result
+        }
+      } else if (lastHealthCheck && validation.valid) {
+        // Use cached health check result
+        healthCheckResult = {
+          success: lastHealthCheck.isAvailable,
+          error: lastHealthCheck.error,
+        };
+      }
+
+      const tokenLike = normalizedCreds.token;
+      const refreshToken = normalizedCreds.refreshToken;
+
+      // Check if token is expired
+      let tokenExpired = false;
+      if (tokenLike && !refreshToken) {
+        tokenExpired = this.isTokenExpired(tokenLike);
+      }
+
+      // Load previous status for comparison
+      const previousStatus = await this.loadPersistedStatus(userId, 'ebay', environment);
+
+      // Determine availability and health status
+      let isAvailable = validation.valid && (!!tokenLike || !!refreshToken) && !tokenExpired;
+      if (healthCheckResult) {
+        isAvailable = isAvailable && healthCheckResult.success;
+      }
+
+      // Calculate health status
+      const healthStatus = this.calculateHealthStatus(
+        isAvailable,
+        healthCheckResult?.latency,
+        healthCheckResult?.error
+      );
+
+      // Calculate trust score
+      const trustScore = await this.calculateTrustScore(userId, 'ebay', environment, healthStatus);
 
       const status: APIStatus = {
         apiName: 'ebay',
         name: 'eBay Trading API',
         isConfigured: validation.valid,
-        isAvailable: validation.valid,
+        isAvailable,
+        status: healthStatus,
         environment,
         lastChecked: new Date(),
-        missingFields: validation.missing
+        missingFields: validation.missing,
+        latency: healthCheckResult?.latency,
+        trustScore,
       };
 
-      const tokenLike =
-        credentials['token'] ||
-        credentials['authToken'] ||
-        credentials['accessToken'];
-      const refreshToken = credentials['refreshToken'];
-
-      if (!tokenLike && !refreshToken) {
+      if (tokenExpired) {
         status.isAvailable = false;
+        status.status = 'unhealthy';
+        status.error = 'Token OAuth expirado';
+        status.message = 'El token OAuth ha expirado. Reautoriza en Settings → API Settings → eBay.';
+      } else if (!tokenLike && !refreshToken) {
+        status.isAvailable = false;
+        status.status = 'unhealthy';
         status.error = 'Falta token OAuth de eBay';
         status.message = 'Completa la autorización OAuth para este entorno.';
-      }
-
-      if (!validation.valid) {
+      } else if (!validation.valid) {
+        status.isAvailable = false;
+        status.status = 'unhealthy';
         const missingList = validation.missing.join(', ');
         status.error = `Missing credentials: ${missingList}`;
         status.message = `Faltan credenciales requeridas: ${missingList}`;
-      } else if (!status.error) {
+      } else if (healthCheckResult && !healthCheckResult.success) {
+        status.isAvailable = false;
+        status.status = healthStatus;
+        status.error = healthCheckResult.error || 'Health check failed';
+        status.message = healthCheckResult.error || 'La API no responde correctamente';
+      } else if (healthCheckResult?.success) {
+        status.message = healthStatus === 'healthy' 
+          ? 'API funcionando correctamente' 
+          : 'API funcionando con problemas menores';
+      } else {
         status.message = 'API configurada correctamente';
       }
 
-      this.cache.set(cacheKey, status);
+      // Persist to database
+      await this.persistStatus(userId, status, previousStatus || undefined);
+
+      await this.setCached(cacheKey, status);
       return status;
     } catch (error) {
       const status: APIStatus = {
@@ -244,7 +636,7 @@ export class APIAvailabilityService {
         lastChecked: new Date(),
         error: error instanceof Error ? error.message : 'Unknown error'
       };
-      this.cache.set(cacheKey, status);
+      await this.setCached(cacheKey, status);
       return status;
     }
   }
@@ -963,6 +1355,47 @@ export class APIAvailabilityService {
     // También limpiar cache en memoria
     this.cache.clear();
     logger.info('All API availability cache cleared');
+  }
+
+  /**
+   * Recover persisted statuses on server startup
+   */
+  async recoverPersistedStatuses(): Promise<void> {
+    try {
+      const snapshots = await prisma.aPIStatusSnapshot.findMany({
+        where: {
+          lastChecked: {
+            gte: new Date(Date.now() - 60 * 60 * 1000), // Last hour
+          },
+        },
+        take: 1000, // Limit to prevent memory issues
+      });
+
+      logger.info(`Recovering ${snapshots.length} persisted API statuses`);
+
+      for (const snapshot of snapshots) {
+        const cacheKey = this.getCacheKey(snapshot.userId, `${snapshot.apiName}-${snapshot.environment}`);
+        const status: APIStatus = {
+          apiName: snapshot.apiName,
+          name: snapshot.apiName,
+          isConfigured: snapshot.isConfigured,
+          isAvailable: snapshot.isAvailable,
+          status: snapshot.status as APIHealthStatus,
+          lastChecked: snapshot.lastChecked,
+          error: snapshot.error || undefined,
+          message: snapshot.message || undefined,
+          environment: snapshot.environment as 'sandbox' | 'production',
+          latency: snapshot.latency || undefined,
+          trustScore: snapshot.trustScore,
+        };
+
+        await this.setCached(cacheKey, status);
+      }
+
+      logger.info(`Recovered ${snapshots.length} API statuses from database`);
+    } catch (error) {
+      logger.error('Error recovering persisted statuses', { error });
+    }
   }
 }
 
