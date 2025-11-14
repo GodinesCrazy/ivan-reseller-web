@@ -7,6 +7,7 @@ import { promisify } from 'util';
 import { scheduledTasksService } from './services/scheduled-tasks.service';
 import { aliExpressAuthMonitor } from './services/ali-auth-monitor.service';
 import { apiHealthMonitor } from './services/api-health-monitor.service';
+import { apiAvailability } from './services/api-availability.service';
 import bcrypt from 'bcryptjs';
 import { resolveChromiumExecutable } from './utils/chromium';
 

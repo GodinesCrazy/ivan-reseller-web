@@ -285,10 +285,23 @@ export class AdvancedMarketplaceScraper {
 
       console.log(`🔧 Lanzando Chromium en: ${executablePath}`);
 
-      this.browser = await puppeteer.launch(launchOptions);
+      // ✅ Intentar lanzar con timeout para evitar cuelgues
+      this.browser = await Promise.race([
+        puppeteer.launch(launchOptions),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Browser launch timeout after 30s')), 30000)
+        )
+      ]) as Browser;
+      
+      // ✅ Verificar que el navegador esté realmente conectado
+      if (!this.browser || !this.browser.isConnected()) {
+        throw new Error('Browser launched but not connected');
+      }
+      
       console.log('✅ Navegador iniciado exitosamente');
     } catch (error: any) {
       console.error('❌ Error al iniciar navegador:', error.message);
+      console.error('   Stack:', error.stack?.substring(0, 200));
       // Fallback con configuración mínima
       try {
         const minimalOptions: any = {
@@ -300,11 +313,27 @@ export class AdvancedMarketplaceScraper {
           minimalOptions.executablePath = executablePath;
         }
 
-        this.browser = await puppeteer.launch(minimalOptions);
+        // ✅ Intentar lanzar con timeout también en fallback
+        this.browser = await Promise.race([
+          puppeteer.launch(minimalOptions),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Browser launch timeout after 30s')), 30000)
+          )
+        ]) as Browser;
+        
+        // ✅ Verificar conexión
+        if (!this.browser || !this.browser.isConnected()) {
+          throw new Error('Browser launched but not connected (fallback)');
+        }
+        
         console.log('✅ Navegador iniciado con configuración mínima');
       } catch (fallbackError: any) {
         console.error('❌ Error crítico al iniciar navegador:', fallbackError.message);
-        throw new Error(`No se pudo iniciar el navegador: ${fallbackError.message}`);
+        console.error('   Stack:', fallbackError.stack?.substring(0, 200));
+        // ✅ NO lanzar error - permitir que el sistema continúe sin navegador
+        // El bridge Python puede funcionar como alternativa
+        console.warn('⚠️  Continuando sin navegador - se usará bridge Python como alternativa');
+        this.browser = null;
       }
     }
   }
@@ -322,7 +351,36 @@ export class AdvancedMarketplaceScraper {
    * Scraping REAL de AliExpress con evasión completa
    */
   async scrapeAliExpress(userId: number, query: string, environment: 'sandbox' | 'production' = 'production'): Promise<ScrapedProduct[]> {
-    if (!this.browser) await this.init();
+    // ✅ Intentar inicializar navegador, pero si falla, retornar array vacío (no lanzar error)
+    if (!this.browser) {
+      try {
+        await this.init();
+        // Verificar que el navegador se inicializó correctamente
+        if (!this.browser || !this.browser.isConnected()) {
+          console.warn('⚠️  [SCRAPER] Navegador no disponible después de init, continuando sin scraping nativo');
+          return [];
+        }
+      } catch (initError: any) {
+        console.warn('⚠️  [SCRAPER] No se pudo inicializar navegador:', initError.message);
+        console.warn('⚠️  [SCRAPER] Continuando sin scraping nativo - se usará bridge Python como alternativa');
+        return [];
+      }
+    }
+    
+    // ✅ Verificar que el navegador sigue conectado antes de usar
+    if (this.browser && !this.browser.isConnected()) {
+      console.warn('⚠️  [SCRAPER] Navegador desconectado, intentando reinicializar...');
+      try {
+        await this.init();
+        if (!this.browser || !this.browser.isConnected()) {
+          console.warn('⚠️  [SCRAPER] No se pudo reinicializar navegador, retornando vacío');
+          return [];
+        }
+      } catch (reinitError: any) {
+        console.warn('⚠️  [SCRAPER] Error al reinicializar navegador:', reinitError.message);
+        return [];
+      }
+    }
 
     console.log(`🔍 Scraping REAL AliExpress: "${query}" (environment: ${environment})`);
 
