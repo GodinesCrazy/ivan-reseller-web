@@ -248,12 +248,16 @@ export class EbayService {
     const finalUrl = `${authBase}?${params}`;
     
     // Logging de la URL final (solo primeros caracteres por seguridad)
+    // Extraer parámetros de la URL para logging
+    const urlForLogging = new URL(finalUrl);
+    const paramsForLogging = urlForLogging.searchParams;
+    
     logger.debug('[EbayService] Generated OAuth URL', {
       urlPreview: finalUrl.substring(0, 150) + '...',
       urlLength: finalUrl.length,
-      hasClientId: params.has('client_id'),
-      hasRedirectUri: params.has('redirect_uri'),
-      redirectUriValue: params.get('redirect_uri'),
+      hasClientId: paramsForLogging.has('client_id'),
+      hasRedirectUri: paramsForLogging.has('redirect_uri'),
+      redirectUriValue: paramsForLogging.get('redirect_uri')?.substring(0, 50) + '...',
     });
     
     return finalUrl;
