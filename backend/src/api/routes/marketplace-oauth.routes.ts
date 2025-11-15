@@ -3,6 +3,7 @@ import { MarketplaceService } from '../../services/marketplace.service';
 import { EbayService } from '../../services/ebay.service';
 import { MercadoLibreService } from '../../services/mercadolibre.service';
 import crypto from 'crypto';
+import logger from '../../config/logger';
 
 const router = Router();
 const marketplaceService = new MarketplaceService();
@@ -64,10 +65,64 @@ function parseState(state: string) {
 
 // Public callback (no auth) to complete OAuth
 router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) => {
+  const startTime = Date.now();
   try {
     const { marketplace } = req.params;
     const code = String(req.query.code || '');
     const state = String(req.query.state || '');
+    const errorParam = String(req.query.error || '');
+    
+    // 🔍 LOGGING: Registrar inicio del callback
+    logger.info('[OAuth Callback] Received callback request', {
+      service: 'marketplace-oauth',
+      marketplace,
+      hasCode: !!code,
+      codeLength: code.length,
+      hasState: !!state,
+      stateLength: state.length,
+      hasError: !!errorParam,
+      error: errorParam || undefined,
+      queryParams: Object.keys(req.query)
+    });
+    
+    // Validar que no haya error en los parámetros de query
+    if (errorParam) {
+      logger.error('[OAuth Callback] OAuth error from provider', {
+        service: 'marketplace-oauth',
+        marketplace,
+        error: errorParam,
+        errorDescription: req.query.error_description || 'No description'
+      });
+      return res.status(400).send(`
+        <html>
+          <body>
+            <h2>Authorization Error</h2>
+            <p>eBay returned an error: ${errorParam}</p>
+            <p>${req.query.error_description || 'Please try again.'}</p>
+            <p>Please return to the application and try again.</p>
+          </body>
+        </html>
+      `);
+    }
+    
+    // Validar que el código no esté vacío
+    if (!code || code.trim().length === 0) {
+      logger.error('[OAuth Callback] Missing authorization code', {
+        service: 'marketplace-oauth',
+        marketplace,
+        hasState: !!state
+      });
+      return res.status(400).send(`
+        <html>
+          <body>
+            <h2>Authorization Error</h2>
+            <p>No authorization code received from eBay.</p>
+            <p>Please return to the application and try again.</p>
+          </body>
+        </html>
+      `);
+    }
+    
     const parsed = parseState(state);
     if (!parsed.ok) {
       // 🔒 SEGURIDAD: Mensajes de error más específicos pero sin exponer detalles
@@ -77,6 +132,13 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       } else if (parsed.reason === 'invalid_signature') {
         errorMessage = 'Invalid authorization state signature';
       }
+      
+      logger.error('[OAuth Callback] Invalid state', {
+        service: 'marketplace-oauth',
+        marketplace,
+        reason: parsed.reason,
+        stateLength: state.length
+      });
       
       return res.status(400).send(`
         <html>
@@ -89,22 +151,96 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       `);
     }
     const { userId, redirectUri, environment } = parsed as any;
+    
+    logger.info('[OAuth Callback] State parsed successfully', {
+      service: 'marketplace-oauth',
+      marketplace,
+      userId,
+      environment,
+      redirectUriLength: redirectUri?.length || 0,
+      redirectUriPreview: redirectUri ? redirectUri.substring(0, 50) + '...' : 'N/A'
+    });
 
     if (marketplace === 'ebay') {
+      logger.info('[OAuth Callback] Processing eBay OAuth', {
+        service: 'marketplace-oauth',
+        userId,
+        environment,
+        codeLength: code.length
+      });
+      
       const cred = await marketplaceService.getCredentials(userId, 'ebay', environment);
       const appId = cred?.credentials?.appId || process.env.EBAY_APP_ID || '';
       const devId = cred?.credentials?.devId || process.env.EBAY_DEV_ID || '';
       const certId = cred?.credentials?.certId || process.env.EBAY_CERT_ID || '';
       const sandbox = !!(cred?.credentials?.sandbox || (process.env.EBAY_SANDBOX === 'true'));
+      
+      logger.info('[OAuth Callback] eBay credentials loaded', {
+        service: 'marketplace-oauth',
+        userId,
+        environment,
+        hasAppId: !!appId,
+        appIdLength: appId.length,
+        hasDevId: !!devId,
+        hasCertId: !!certId,
+        sandbox
+      });
+      
       if (!appId || !devId || !certId) {
+        logger.error('[OAuth Callback] Missing eBay base credentials', {
+          service: 'marketplace-oauth',
+          userId,
+          environment,
+          hasAppId: !!appId,
+          hasDevId: !!devId,
+          hasCertId: !!certId
+        });
         return res
           .status(400)
           .send('<html><body>Base credentials missing. Please save App ID, Dev ID and Cert ID before authorizing.</body></html>');
       }
+      
       const ebay = new EbayService({ appId, devId, certId, sandbox });
+      
+      logger.info('[OAuth Callback] Exchanging code for token', {
+        service: 'marketplace-oauth',
+        userId,
+        environment,
+        codeLength: code.length,
+        redirectUriLength: redirectUri?.length || 0,
+        redirectUriPreview: redirectUri ? redirectUri.substring(0, 50) + '...' : 'N/A'
+      });
+      
       const tokens = await ebay.exchangeCodeForToken(code, redirectUri);
+      
+      logger.info('[OAuth Callback] Token exchange successful', {
+        service: 'marketplace-oauth',
+        userId,
+        environment,
+        hasToken: !!tokens.token,
+        tokenLength: tokens.token?.length || 0,
+        hasRefreshToken: !!tokens.refreshToken,
+        refreshTokenLength: tokens.refreshToken?.length || 0,
+        expiresIn: tokens.expiresIn
+      });
+      
       const newCreds = { ...(cred?.credentials || {}), token: tokens.token, refreshToken: tokens.refreshToken };
+      
+      logger.info('[OAuth Callback] Saving credentials', {
+        service: 'marketplace-oauth',
+        userId,
+        environment,
+        credentialKeys: Object.keys(newCreds)
+      });
+      
       await marketplaceService.saveCredentials(userId, 'ebay', newCreds, environment);
+      
+      logger.info('[OAuth Callback] Credentials saved successfully', {
+        service: 'marketplace-oauth',
+        userId,
+        environment,
+        duration: Date.now() - startTime
+      });
     } else if (marketplace === 'mercadolibre') {
       const cred = await marketplaceService.getCredentials(userId, 'mercadolibre', environment);
       const clientId = cred?.credentials?.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '';
@@ -149,8 +285,23 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
     `);
   } catch (e: any) {
     const errorMessage = e?.message || 'Unknown error';
+    const errorResponse = e?.response?.data || {};
+    const errorStatus = e?.response?.status || 500;
+    
+    // 🔍 LOGGING: Registrar error completo
+    logger.error('[OAuth Callback] Error processing OAuth callback', {
+      service: 'marketplace-oauth',
+      marketplace: req.params.marketplace,
+      error: errorMessage,
+      errorStatus,
+      errorResponse,
+      stack: e?.stack,
+      duration: Date.now() - startTime
+    });
+    
     const isUnauthorizedClient = errorMessage.toLowerCase().includes('unauthorized_client') || 
-                                 errorMessage.toLowerCase().includes('oauth client was not found');
+                                 errorMessage.toLowerCase().includes('oauth client was not found') ||
+                                 errorResponse?.error === 'unauthorized_client';
     
     let userFriendlyMessage = 'Error al completar la autorización OAuth.';
     let troubleshooting = '';

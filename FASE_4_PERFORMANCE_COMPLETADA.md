@@ -51,9 +51,13 @@ try {
   }
   
   // Invalidar también el caché de credenciales desencriptadas
-  await clearCredentialsCache(targetUserId, apiName, env).catch(err => {
-    logger.warn(`Failed to clear credentials cache`, { error: err });
-  });
+  // Nota: clearCredentialsCache es síncrona (void), no una Promise
+  try {
+    const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
+    clearCredentialsCache(targetUserId, apiName, env);
+  } catch (err: any) {
+    logger.warn(`Failed to clear credentials cache`, { error: err?.message || err, userId: targetUserId, apiName, environment: env });
+  }
 } catch (error: any) {
   // Log pero no fallar la request si la invalidación de caché falla
   logger.error('Error invalidating cache after saving credentials', { error: error.message });

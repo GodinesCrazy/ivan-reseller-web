@@ -17,6 +17,7 @@ import type {
   ApiCredentialsMap 
 } from '../types/api-credentials.types';
 import { API_KEY_NAMES, supportsEnvironments } from '../config/api-keys.config';
+import logger from '../config/logger';
 
 const prisma = new PrismaClient();
 
@@ -338,6 +339,69 @@ export class CredentialsManager {
       // Trim redirectUri (eBay is strict about exact matching)
       if (creds.redirectUri && typeof creds.redirectUri === 'string') {
         creds.redirectUri = creds.redirectUri.trim();
+        
+        // 🔒 VALIDACIÓN: Limpiar prefijos comunes que pueden copiarse por error
+        // Caso 1: Si tiene prefijo "redirect_uri=" (copiado de una URL)
+        if (creds.redirectUri.startsWith('redirect_uri=')) {
+          const cleaned = creds.redirectUri.replace(/^redirect_uri=/, '').trim();
+          logger.warn('[CredentialsManager] Detected redirect_uri= prefix, removing it', {
+            original: creds.redirectUri.substring(0, 50) + '...',
+            cleaned: cleaned.substring(0, 50) + '...'
+          });
+          creds.redirectUri = cleaned;
+        }
+        
+        // 🔒 VALIDACIÓN: Prevenir que se guarde una URL completa de OAuth en lugar del RuName
+        // Detectar URLs de eBay (auth.sandbox.ebay.com, auth.ebay.com, signin.sandbox.ebay.com, signin.ebay.com)
+        const isEbayUrl = creds.redirectUri.length > 255 || 
+          creds.redirectUri.includes('auth.sandbox.ebay.com') || 
+          creds.redirectUri.includes('auth.ebay.com') ||
+          creds.redirectUri.includes('signin.sandbox.ebay.com') ||
+          creds.redirectUri.includes('signin.ebay.com');
+        
+        if (isEbayUrl) {
+          try {
+            const originalRedirectUri = creds.redirectUri;
+            // Intentar parsear como URL
+            const url = new URL(creds.redirectUri);
+            
+            // Intentar extraer el RuName de diferentes parámetros posibles
+            let extractedRuName: string | null = null;
+            
+            // Caso 1: Parámetro redirect_uri (OAuth estándar)
+            extractedRuName = url.searchParams.get('redirect_uri');
+            
+            // Caso 2: Parámetro runame (eBay SignIn legacy)
+            if (!extractedRuName) {
+              extractedRuName = url.searchParams.get('runame');
+            }
+            
+            if (extractedRuName) {
+              // El parámetro puede estar codificado, decodificarlo
+              const decoded = decodeURIComponent(extractedRuName).trim();
+              creds.redirectUri = decoded;
+              logger.warn('[CredentialsManager] Detected eBay URL instead of RuName, extracted parameter', {
+                originalLength: originalRedirectUri.length,
+                extractedLength: decoded.length,
+                preview: decoded.substring(0, 50) + '...',
+                source: url.searchParams.has('redirect_uri') ? 'redirect_uri' : 'runame'
+              });
+            } else {
+              // Si no tiene parámetros conocidos, es probable que sea una URL incorrecta
+              logger.error('[CredentialsManager] redirectUri appears to be an eBay URL but missing redirect_uri or runame parameter', {
+                urlPreview: originalRedirectUri.substring(0, 100) + '...',
+                hasParams: url.searchParams.toString().length > 0
+              });
+              // No modificar, dejar que la validación de Zod lo rechace
+            }
+          } catch (urlError) {
+            // No es una URL válida, continuar con el valor original
+            // La validación de Zod lo rechazará si excede 255 caracteres
+            logger.debug('[CredentialsManager] redirectUri is not a valid URL, keeping original value', {
+              preview: creds.redirectUri.substring(0, 50) + '...'
+            });
+          }
+        }
       }
     }
 

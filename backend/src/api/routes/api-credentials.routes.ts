@@ -423,10 +423,13 @@ router.post('/', async (req: Request, res: Response, next) => {
       }
       
       // 🚀 PERFORMANCE: Invalidar también el caché de credenciales desencriptadas
-      const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
-      await clearCredentialsCache(targetUserId, apiName, env).catch(err => {
-        logger.warn(`Failed to clear credentials cache`, { error: err, userId: targetUserId, apiName, environment: env });
-      });
+      // Nota: clearCredentialsCache es síncrona (void), no una Promise
+      try {
+        const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
+        clearCredentialsCache(targetUserId, apiName, env);
+      } catch (err: any) {
+        logger.warn(`Failed to clear credentials cache`, { error: err?.message || err, userId: targetUserId, apiName, environment: env });
+      }
     } catch (error: any) {
       // Log pero no fallar la request si la invalidación de caché falla
       logger.error('Error invalidating cache after saving credentials', {

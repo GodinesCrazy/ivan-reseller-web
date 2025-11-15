@@ -24,6 +24,7 @@ router.get('/config', async (req: Request, res: Response, next) => {
 });
 
 // ✅ PUT /api/workflow/config - Actualizar configuración de workflow del usuario
+// ✅ MEJORADO: Logging cuando se cambia de ambiente
 router.put('/config', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user?.userId;
@@ -47,6 +48,46 @@ router.put('/config', async (req: Request, res: Response, next) => {
     });
 
     const validatedData = updateSchema.parse(req.body);
+    
+    // ✅ Logging: Detectar cambio de ambiente
+    if (validatedData.environment) {
+      const currentConfig = await workflowConfigService.getUserConfig(userId);
+      const oldEnvironment = currentConfig.environment;
+      const newEnvironment = validatedData.environment;
+      
+      if (oldEnvironment !== newEnvironment) {
+        const logger = (await import('../../config/logger')).default;
+        logger.info('[WorkflowConfig] Environment changed', {
+          userId,
+          oldEnvironment,
+          newEnvironment,
+          changedBy: req.user?.username || 'unknown',
+          timestamp: new Date().toISOString()
+        });
+        
+        // ✅ MEJORA: Enviar notificación al usuario sobre cambio de ambiente
+        try {
+          const { notificationService } = await import('../../services/notification.service');
+          notificationService.sendToUser(userId, {
+            type: 'SYSTEM_ALERT',
+            title: 'Ambiente cambiado',
+            message: `El ambiente ha sido cambiado de ${oldEnvironment} a ${newEnvironment}. Las próximas publicaciones usarán el nuevo ambiente.`,
+            priority: 'MEDIUM',
+            data: {
+              oldEnvironment,
+              newEnvironment,
+              changedBy: req.user?.username || 'unknown'
+            }
+          });
+        } catch (notifError: any) {
+          logger.warn('[WorkflowConfig] Failed to send notification', {
+            error: notifError?.message || String(notifError),
+            userId
+          });
+        }
+      }
+    }
+    
     const config = await workflowConfigService.updateUserConfig(userId, validatedData);
     
     res.json({ success: true, config });
@@ -154,24 +195,77 @@ router.post('/continue-stage', async (req: Request, res: Response, next) => {
       });
     }
 
-    // ✅ Ejecutar acción según el tipo
+    // ✅ MEJORADO: Ejecutar acción según el tipo con integración real
+    const logger = (await import('../../config/logger')).default;
+    
     if (action === 'continue') {
-      // Continuar con la etapa automáticamente
-      // TODO: Implementar lógica específica para cada etapa
-      // Por ahora, solo confirmamos que se puede continuar
-      
-      // Emitir evento para que los servicios reaccionen
-      const { EventEmitter } = await import('events');
-      // Nota: En producción, esto debería usar un sistema de eventos real
-      
-      res.json({ 
-        success: true, 
-        message: `Stage ${stage} continued successfully`,
+      logger.info('[Workflow] Continuing stage in guided mode', {
+        userId,
         stage,
-        action: 'continued'
+        action: 'continue',
+        data: data || null
       });
+      
+      // ✅ Integrar con servicios según la etapa
+      try {
+        if (stage === 'scrape' || stage === 'analyze' || stage === 'publish') {
+          // Notificar a AutomatedBusinessService para continuar
+          const { automatedBusinessSystem } = await import('../../services/automated-business.service');
+          if (automatedBusinessSystem && typeof automatedBusinessSystem.resumeStage === 'function') {
+            automatedBusinessSystem.resumeStage(stage as any);
+            await automatedBusinessSystem.runOneCycle();
+          }
+        }
+        
+        // ✅ MEJORA: Enviar notificación de confirmación
+        try {
+          const { notificationService } = await import('../../services/notification.service');
+          notificationService.sendToUser(userId, {
+            type: 'JOB_COMPLETED',
+            title: `Etapa ${stage} continuada`,
+            message: `Has continuado la etapa ${stage} en modo guided. El proceso continuará automáticamente.`,
+            priority: 'LOW',
+            data: {
+              stage,
+              action: 'continued',
+              userId
+            }
+          });
+        } catch (notifError: any) {
+          logger.warn('[Workflow] Failed to send notification', {
+            error: notifError?.message || String(notifError),
+            userId,
+            stage
+          });
+        }
+        
+        res.json({ 
+          success: true, 
+          message: `Stage ${stage} continued successfully`,
+          stage,
+          action: 'continued'
+        });
+      } catch (serviceError: any) {
+        logger.error('[Workflow] Error continuing stage', {
+          userId,
+          stage,
+          error: serviceError?.message || String(serviceError)
+        });
+        res.json({ 
+          success: true, 
+          message: `Stage ${stage} continued (service notification may have failed)`,
+          stage,
+          action: 'continued',
+          warning: serviceError?.message
+        });
+      }
     } else if (action === 'skip') {
-      // Saltar esta etapa
+      logger.info('[Workflow] Skipping stage in guided mode', {
+        userId,
+        stage,
+        action: 'skip'
+      });
+      
       res.json({ 
         success: true, 
         message: `Stage ${stage} skipped`,
@@ -179,7 +273,12 @@ router.post('/continue-stage', async (req: Request, res: Response, next) => {
         action: 'skipped'
       });
     } else if (action === 'cancel') {
-      // Cancelar la operación
+      logger.info('[Workflow] Cancelling stage in guided mode', {
+        userId,
+        stage,
+        action: 'cancel'
+      });
+      
       res.json({ 
         success: true, 
         message: `Stage ${stage} cancelled`,

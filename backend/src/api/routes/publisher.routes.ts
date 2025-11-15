@@ -28,10 +28,42 @@ router.post('/add_for_approval', async (req: Request, res: Response) => {
 });
 
 // GET /api/publisher/pending
+// ✅ MEJORADO: Incluye información de productos pendientes de aprobación
 router.get('/pending', async (req: Request, res: Response) => {
   try {
-    const items = await productService.getProducts(req.user!.userId, 'PENDING');
-    return res.json({ success: true, items, count: items.length });
+    const userId = req.user!.userId;
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    
+    // Admin puede ver todos los productos pendientes, usuarios solo los suyos
+    const items = await productService.getProducts(isAdmin ? undefined : userId, 'PENDING');
+    
+    // ✅ Enriquecer con información adicional
+    const enrichedItems = await Promise.all(
+      items.map(async (item: any) => {
+        try {
+          const productData = item.productData ? JSON.parse(item.productData) : {};
+          return {
+            ...item,
+            source: productData.source || 'manual',
+            queuedAt: productData.queuedAt || item.createdAt,
+            queuedBy: productData.queuedBy || 'user',
+            estimatedCost: productData.estimatedCost || item.aliexpressPrice,
+            estimatedProfit: productData.estimatedProfit || (item.suggestedPrice - item.aliexpressPrice),
+            estimatedROI: productData.estimatedROI || 
+              ((item.suggestedPrice - item.aliexpressPrice) / item.aliexpressPrice * 100)
+          };
+        } catch {
+          return item;
+        }
+      })
+    );
+    
+    return res.json({ 
+      success: true, 
+      items: enrichedItems, 
+      count: enrichedItems.length 
+    });
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e?.message || 'Failed to list pending' });
   }
@@ -51,26 +83,56 @@ router.get('/listings', async (req: Request, res: Response) => {
 });
 
 // POST /api/publisher/approve/:id
+// ✅ MEJORADO: Usa ambiente del usuario y mejor logging
 router.post('/approve/:id', authorize('ADMIN'), async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { marketplaces = [], customData } = req.body || {};
+    const { marketplaces = [], customData, environment } = req.body || {};
 
     const product = await productService.getProductById(id);
+    
+    // ✅ Obtener ambiente del usuario si no se proporciona
+    const { workflowConfigService } = await import('../../services/workflow-config.service');
+    const userEnvironment = environment || await workflowConfigService.getUserEnvironment(product.userId);
+    
     await productService.updateProductStatus(id, 'APPROVED', req.user!.userId);
 
     let publishResults: any[] = [];
     if (Array.isArray(marketplaces) && marketplaces.length > 0) {
       const service = new MarketplaceService();
-      publishResults = await service.publishToMultipleMarketplaces(product.userId, (product as any).id, marketplaces);
+      // ✅ Usar ambiente del usuario al publicar
+      publishResults = await service.publishToMultipleMarketplaces(
+        product.userId, 
+        (product as any).id, 
+        marketplaces,
+        userEnvironment
+      );
 
       const anySuccess = publishResults.some(r => r.success);
       if (anySuccess) {
-        await prisma.product.update({ where: { id }, data: { isPublished: true, publishedAt: new Date(), status: 'PUBLISHED' } });
+        await prisma.product.update({ 
+          where: { id }, 
+          data: { 
+            isPublished: true, 
+            publishedAt: new Date(), 
+            status: 'PUBLISHED',
+            productData: JSON.stringify({
+              ...(product.productData ? JSON.parse(product.productData) : {}),
+              approvedAt: new Date().toISOString(),
+              approvedBy: req.user!.userId,
+              publishedEnvironment: userEnvironment
+            })
+          } 
+        });
       }
     }
 
-    return res.json({ success: true, message: 'Product approved', publishResults });
+    return res.json({ 
+      success: true, 
+      message: 'Product approved', 
+      publishResults,
+      environment: userEnvironment
+    });
   } catch (e: any) {
     return res.status(500).json({ success: false, error: e?.message || 'Failed to approve' });
   }
