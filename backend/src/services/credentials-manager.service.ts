@@ -20,6 +20,45 @@ import { API_KEY_NAMES, supportsEnvironments } from '../config/api-keys.config';
 
 const prisma = new PrismaClient();
 
+// 🚀 PERFORMANCE: Caché de credenciales desencriptadas (TTL: 5 minutos)
+// Evita desencriptar repetidamente las mismas credenciales
+interface CachedCredential {
+  credentials: any;
+  timestamp: number;
+  environment: ApiEnvironment;
+}
+
+const credentialsCache = new Map<string, CachedCredential>();
+const CREDENTIALS_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+/**
+ * Get cache key for credentials
+ */
+function getCredentialsCacheKey(userId: number, apiName: string, environment: ApiEnvironment): string {
+  return `creds_${userId}_${apiName}_${environment}`;
+}
+
+/**
+ * Clear credentials cache for a specific user/API/environment
+ */
+export function clearCredentialsCache(userId: number, apiName: string, environment: ApiEnvironment): void {
+  const key = getCredentialsCacheKey(userId, apiName, environment);
+  credentialsCache.delete(key);
+}
+
+/**
+ * Clear all credentials cache for a user
+ */
+export function clearAllCredentialsCacheForUser(userId: number): void {
+  const keysToDelete: string[] = [];
+  for (const key of credentialsCache.keys()) {
+    if (key.startsWith(`creds_${userId}_`)) {
+      keysToDelete.push(key);
+    }
+  }
+  keysToDelete.forEach(key => credentialsCache.delete(key));
+}
+
 // Configuración de encriptación
 const ALGORITHM = 'aes-256-gcm';
 
@@ -342,96 +381,76 @@ export class CredentialsManager {
   } | null> {
     const finalEnvironment = supportsEnvironments(apiName) ? environment : 'production';
 
-    // Buscar credenciales específicas del usuario (scope user)
-    const personalCredential = await prisma.apiCredential.findFirst({
-      where: {
-        userId,
-        apiName,
-        environment: finalEnvironment,
-        scope: 'user',
-        isActive: true,
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
-
-    if (personalCredential) {
-      try {
-        const decrypted = decryptCredentials(personalCredential.credentials);
-        const normalized = this.normalizeCredential(apiName, decrypted, finalEnvironment);
-        return {
-          id: personalCredential.id,
-          credentials: normalized as ApiCredentialsMap[T],
-          scope: 'user',
-          ownerUserId: personalCredential.userId,
-          sharedByUserId: personalCredential.sharedById ?? null,
-          isActive: personalCredential.isActive,
-        };
-      } catch (error: any) {
-        const errorMsg = error?.message || String(error);
-        const isCorrupted = errorMsg.includes('INVALID_ENCRYPTION_KEY') || 
-                           errorMsg.includes('CORRUPTED_DATA') ||
-                           errorMsg.includes('Unsupported state');
-        
-        // Log detallado solo la primera vez o si es un error de corrupción
-        if (isCorrupted) {
-          console.error(`🔒 [CredentialsManager] Credenciales corruptas detectadas: ${apiName} (${finalEnvironment}) para usuario ${userId}`);
-          console.error(`   Error: ${errorMsg}`);
-          console.error(`   Credential ID: ${personalCredential.id}`);
-          console.error(`   Posibles causas:`);
-          console.error(`   1. La clave de encriptación (ENCRYPTION_KEY o JWT_SECRET) cambió`);
-          console.error(`   2. Las credenciales fueron encriptadas con una clave diferente`);
-          console.error(`   3. Los datos están corruptos en la base de datos`);
-          console.error(`   Solución: Elimina y vuelve a guardar las credenciales en API Settings`);
-          
-          // Desactivar credenciales corruptas automáticamente para evitar logs repetitivos
-          try {
-            await prisma.apiCredential.update({
-              where: { id: personalCredential.id },
-              data: { isActive: false },
-            });
-            console.warn(`   ✅ Credencial desactivada automáticamente (ID: ${personalCredential.id})`);
-          } catch (updateError) {
-            console.error(`   ⚠️  No se pudo desactivar la credencial corrupta:`, updateError);
-          }
-        } else {
-          // Para otros errores, solo un warning simple
-          console.warn(`[CredentialsManager] Unable to decrypt personal credentials for ${apiName} (${finalEnvironment}): ${errorMsg}`);
-        }
-        
-        return null;
-      }
-    }
+    // 🚀 PERFORMANCE: Optimizar consultas - usar una sola query con OR en lugar de 2 queries
+    const whereClause: any = {
+      apiName,
+      environment: finalEnvironment,
+      isActive: true,
+    };
 
     if (options.includeGlobal === false) {
-      return null;
+      // Solo buscar credenciales personales
+      whereClause.userId = userId;
+      whereClause.scope = 'user';
+    } else {
+      // Buscar credenciales personales O globales en una sola query
+      whereClause.OR = [
+        { userId, scope: 'user' },
+        { scope: 'global' }
+      ];
     }
 
-    // Buscar credenciales globales
-    const sharedCredential = await prisma.apiCredential.findFirst({
-      where: {
-        scope: 'global',
-        apiName,
-        environment: finalEnvironment,
-        isActive: true,
-      },
-      orderBy: { updatedAt: 'desc' },
+    // 🚀 PERFORMANCE: Una sola query en lugar de N+1
+    const credentials = await prisma.apiCredential.findMany({
+      where: whereClause,
+      orderBy: [
+        { scope: 'asc' }, // Priorizar 'user' sobre 'global'
+        { updatedAt: 'desc' }
+      ],
+      take: 1, // Solo necesitamos la primera (prioridad: user > global)
     });
 
-    if (!sharedCredential) {
+    const credential = credentials[0];
+    if (!credential) {
       return null;
     }
 
+    // 🚀 PERFORMANCE: Verificar caché de credenciales desencriptadas
+    const cacheKey = getCredentialsCacheKey(credential.userId, apiName, finalEnvironment);
+    const cached = credentialsCache.get(cacheKey);
+    const now = Date.now();
+
+    if (cached && (now - cached.timestamp) < CREDENTIALS_CACHE_TTL && cached.environment === finalEnvironment) {
+      // Usar credenciales del caché
+      return {
+        id: credential.id,
+        credentials: cached.credentials as ApiCredentialsMap[T],
+        scope: credential.scope,
+        ownerUserId: credential.userId,
+        sharedByUserId: credential.sharedById ?? null,
+        isActive: credential.isActive,
+      };
+    }
+
+    // Desencriptar y normalizar
     try {
-      const decrypted = decryptCredentials(sharedCredential.credentials);
+      const decrypted = decryptCredentials(credential.credentials);
       const normalized = this.normalizeCredential(apiName, decrypted, finalEnvironment);
+      
+      // 🚀 PERFORMANCE: Guardar en caché
+      credentialsCache.set(cacheKey, {
+        credentials: normalized,
+        timestamp: now,
+        environment: finalEnvironment,
+      });
 
       return {
-        id: sharedCredential.id,
+        id: credential.id,
         credentials: normalized as ApiCredentialsMap[T],
-        scope: 'global',
-        ownerUserId: sharedCredential.userId,
-        sharedByUserId: sharedCredential.sharedById ?? sharedCredential.userId ?? null,
-        isActive: sharedCredential.isActive,
+        scope: credential.scope,
+        ownerUserId: credential.userId,
+        sharedByUserId: credential.sharedById ?? null,
+        isActive: credential.isActive,
       };
     } catch (error: any) {
       const errorMsg = error?.message || String(error);
@@ -439,25 +458,30 @@ export class CredentialsManager {
                          errorMsg.includes('CORRUPTED_DATA') ||
                          errorMsg.includes('Unsupported state');
       
-      // Log detallado solo si es un error de corrupción
+      // Log detallado solo la primera vez o si es un error de corrupción
       if (isCorrupted) {
-        console.error(`🔒 [CredentialsManager] Credenciales globales corruptas detectadas: ${apiName} (${finalEnvironment})`);
+        console.error(`🔒 [CredentialsManager] Credenciales corruptas detectadas: ${apiName} (${finalEnvironment}) para usuario ${userId}`);
         console.error(`   Error: ${errorMsg}`);
-        console.error(`   Credential ID: ${sharedCredential.id}`);
-        console.error(`   Solución: Un administrador debe eliminar y volver a guardar las credenciales globales`);
+        console.error(`   Credential ID: ${credential.id}`);
+        console.error(`   Posibles causas:`);
+        console.error(`   1. La clave de encriptación (ENCRYPTION_KEY o JWT_SECRET) cambió`);
+        console.error(`   2. Las credenciales fueron encriptadas con una clave diferente`);
+        console.error(`   3. Los datos están corruptos en la base de datos`);
+        console.error(`   Solución: Elimina y vuelve a guardar las credenciales en API Settings`);
         
-        // Desactivar credenciales corruptas automáticamente
+        // Desactivar credenciales corruptas automáticamente para evitar logs repetitivos
         try {
           await prisma.apiCredential.update({
-            where: { id: sharedCredential.id },
+            where: { id: credential.id },
             data: { isActive: false },
           });
-          console.warn(`   ✅ Credencial global desactivada automáticamente (ID: ${sharedCredential.id})`);
+          console.warn(`   ✅ Credencial desactivada automáticamente (ID: ${credential.id})`);
         } catch (updateError) {
           console.error(`   ⚠️  No se pudo desactivar la credencial corrupta:`, updateError);
         }
       } else {
-        console.warn(`[CredentialsManager] Unable to decrypt shared credentials for ${apiName} (${finalEnvironment}): ${errorMsg}`);
+        // Para otros errores, solo un warning simple
+        console.warn(`[CredentialsManager] Unable to decrypt credentials for ${apiName} (${finalEnvironment}): ${errorMsg}`);
       }
       
       return null;

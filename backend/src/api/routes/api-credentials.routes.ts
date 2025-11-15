@@ -350,18 +350,41 @@ router.post('/', async (req: Request, res: Response, next) => {
       );
     }
 
-    // Clear cache for this API - siempre invalidar cache después de guardar
-    if (scope === 'global' && actorRole === 'ADMIN') {
-      // Si es credencial global, invalidar cache para todos los usuarios
-      const users = await prisma.user.findMany({ select: { id: true } });
-      await Promise.all(
-        users.map(user => apiAvailability.clearAPICache(user.id, apiName))
-      );
-      logger.info(`Cache invalidated for all users (global ${apiName} credentials)`);
-    } else {
-      // Si es credencial personal, invalidar cache solo para el usuario objetivo
-      await apiAvailability.clearAPICache(targetUserId, apiName);
-      logger.info(`Cache invalidated for user ${targetUserId} (${apiName} credentials)`);
+    // 🚀 PERFORMANCE: Asegurar invalidación de caché incluso si hay errores
+    try {
+      if (scope === 'global' && actorRole === 'ADMIN') {
+        // Si es credencial global, invalidar cache para todos los usuarios
+        const users = await prisma.user.findMany({ select: { id: true } });
+        const invalidationPromises = users.map(user => 
+          apiAvailability.clearAPICache(user.id, apiName).catch(err => {
+            logger.warn(`Failed to clear cache for user ${user.id}`, { error: err, apiName });
+            return null; // Continuar con otros usuarios aunque falle uno
+          })
+        );
+        await Promise.all(invalidationPromises);
+        logger.info(`Cache invalidated for all users (global ${apiName} credentials)`);
+      } else {
+        // Si es credencial personal, invalidar cache solo para el usuario objetivo
+        await apiAvailability.clearAPICache(targetUserId, apiName).catch(err => {
+          logger.warn(`Failed to clear cache for user ${targetUserId}`, { error: err, apiName });
+          // No fallar la request si la invalidación falla
+        });
+        logger.info(`Cache invalidated for user ${targetUserId} (${apiName} credentials)`);
+      }
+      
+      // 🚀 PERFORMANCE: Invalidar también el caché de credenciales desencriptadas
+      const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
+      await clearCredentialsCache(targetUserId, apiName, env).catch(err => {
+        logger.warn(`Failed to clear credentials cache`, { error: err, userId: targetUserId, apiName, environment: env });
+      });
+    } catch (error: any) {
+      // Log pero no fallar la request si la invalidación de caché falla
+      logger.error('Error invalidating cache after saving credentials', {
+        error: error.message,
+        userId: targetUserId,
+        apiName,
+        scope
+      });
     }
 
     // Force immediate health check after saving
