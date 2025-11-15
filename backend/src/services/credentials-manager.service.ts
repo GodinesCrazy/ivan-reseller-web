@@ -345,7 +345,22 @@ export class CredentialsManager {
   }
 
   /**
-   * Obtener credenciales de una API para un usuario
+   * 📝 MANTENIBILIDAD: Obtener credenciales de una API para un usuario
+   * 
+   * @template T - Tipo de API (eBay, Amazon, etc.)
+   * @param userId - ID del usuario
+   * @param apiName - Nombre de la API
+   * @param environment - Ambiente (sandbox/production)
+   * @param options - Opciones adicionales (includeGlobal)
+   * @returns Credenciales desencriptadas y normalizadas, o null si no existen
+   * 
+   * @example
+   * ```typescript
+   * const creds = await CredentialsManager.getCredentials(1, 'ebay', 'sandbox');
+   * if (creds) {
+   *   console.log(creds.appId);
+   * }
+   * ```
    */
   static async getCredentials<T extends ApiName>(
     userId: number,
@@ -358,12 +373,40 @@ export class CredentialsManager {
     try {
       const entry = await this.getCredentialEntry(userId, apiName, environment, options);
       return entry?.credentials ?? null;
-    } catch (error) {
-      console.error(`Error getting credentials for ${apiName}:`, error);
+    } catch (error: any) {
+      logger.error('Error getting credentials', {
+        service: 'credentials-manager',
+        apiName,
+        userId,
+        error: error?.message || String(error)
+      });
       return null;
     }
   }
 
+  /**
+   * 📝 MANTENIBILIDAD: Obtener entrada completa de credenciales (incluye metadata)
+   * 
+   * @template T - Tipo de API
+   * @param userId - ID del usuario
+   * @param apiName - Nombre de la API
+   * @param environment - Ambiente (sandbox/production)
+   * @param options - Opciones (includeGlobal para incluir credenciales globales)
+   * @returns Objeto con credenciales, scope, ownerUserId, etc., o null si no existen
+   * 
+   * @remarks
+   * - Prioriza credenciales personales sobre globales
+   * - Usa caché de credenciales desencriptadas (TTL: 5 min)
+   * - Optimiza consultas (1 query en lugar de 2)
+   * 
+   * @example
+   * ```typescript
+   * const entry = await CredentialsManager.getCredentialEntry(1, 'ebay', 'production');
+   * if (entry) {
+   *   console.log(`Scope: ${entry.scope}, Active: ${entry.isActive}`);
+   * }
+   * ```
+   */
   static async getCredentialEntry<T extends ApiName>(
     userId: number,
     apiName: T,
@@ -458,16 +501,22 @@ export class CredentialsManager {
                          errorMsg.includes('CORRUPTED_DATA') ||
                          errorMsg.includes('Unsupported state');
       
-      // Log detallado solo la primera vez o si es un error de corrupción
+      // 📝 MANTENIBILIDAD: Logging estructurado con contexto consistente
       if (isCorrupted) {
-        console.error(`🔒 [CredentialsManager] Credenciales corruptas detectadas: ${apiName} (${finalEnvironment}) para usuario ${userId}`);
-        console.error(`   Error: ${errorMsg}`);
-        console.error(`   Credential ID: ${credential.id}`);
-        console.error(`   Posibles causas:`);
-        console.error(`   1. La clave de encriptación (ENCRYPTION_KEY o JWT_SECRET) cambió`);
-        console.error(`   2. Las credenciales fueron encriptadas con una clave diferente`);
-        console.error(`   3. Los datos están corruptos en la base de datos`);
-        console.error(`   Solución: Elimina y vuelve a guardar las credenciales en API Settings`);
+        logger.error('Credenciales corruptas detectadas', {
+          service: 'credentials-manager',
+          apiName,
+          environment: finalEnvironment,
+          userId,
+          credentialId: credential.id,
+          error: errorMsg,
+          possibleCauses: [
+            'La clave de encriptación (ENCRYPTION_KEY o JWT_SECRET) cambió',
+            'Las credenciales fueron encriptadas con una clave diferente',
+            'Los datos están corruptos en la base de datos'
+          ],
+          solution: 'Elimina y vuelve a guardar las credenciales en API Settings'
+        });
         
         // Desactivar credenciales corruptas automáticamente para evitar logs repetitivos
         try {
@@ -475,13 +524,28 @@ export class CredentialsManager {
             where: { id: credential.id },
             data: { isActive: false },
           });
-          console.warn(`   ✅ Credencial desactivada automáticamente (ID: ${credential.id})`);
-        } catch (updateError) {
-          console.error(`   ⚠️  No se pudo desactivar la credencial corrupta:`, updateError);
+          logger.info('Credencial corrupta desactivada automáticamente', {
+            service: 'credentials-manager',
+            credentialId: credential.id,
+            apiName,
+            userId
+          });
+        } catch (updateError: any) {
+          logger.error('No se pudo desactivar la credencial corrupta', {
+            service: 'credentials-manager',
+            credentialId: credential.id,
+            error: updateError?.message || String(updateError)
+          });
         }
       } else {
         // Para otros errores, solo un warning simple
-        console.warn(`[CredentialsManager] Unable to decrypt credentials for ${apiName} (${finalEnvironment}): ${errorMsg}`);
+        logger.warn('Unable to decrypt credentials', {
+          service: 'credentials-manager',
+          apiName,
+          environment: finalEnvironment,
+          userId,
+          error: errorMsg
+        });
       }
       
       return null;
