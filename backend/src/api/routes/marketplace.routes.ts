@@ -7,6 +7,7 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { z } from 'zod';
 import { marketplaceRateLimit, ebayRateLimit, mercadolibreRateLimit, amazonRateLimit } from '../../middleware/rate-limit.middleware';
 import { logger } from '../../config/logger';
+import { AppError, ErrorCode } from '../../middleware/error.middleware';
 
 const router = Router();
 const marketplaceService = new MarketplaceService();
@@ -445,49 +446,75 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         lastChars: redirectUri.substring(Math.max(0, redirectUri.length - 20)),
       });
       
-      // Validaciones antes de generar URL de OAuth
+      // ✅ VALIDACIÓN: Validar campos requeridos con códigos de error consistentes
       if (!appId || !appId.trim()) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'El App ID de eBay es requerido. Por favor, guarda las credenciales primero.',
-          code: 'MISSING_APP_ID'
-        });
+        throw new AppError(
+          'El App ID de eBay es requerido. Por favor, guarda las credenciales primero.',
+          400,
+          ErrorCode.MISSING_REQUIRED_FIELD,
+          { field: 'appId', apiName: 'ebay' }
+        );
       }
       
       if (!devId || !devId.trim()) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'El Dev ID de eBay es requerido. Por favor, guarda las credenciales primero.',
-          code: 'MISSING_DEV_ID'
-        });
+        throw new AppError(
+          'El Dev ID de eBay es requerido. Por favor, guarda las credenciales primero.',
+          400,
+          ErrorCode.MISSING_REQUIRED_FIELD,
+          { field: 'devId', apiName: 'ebay' }
+        );
       }
       
       if (!certId || !certId.trim()) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'El Cert ID de eBay es requerido. Por favor, guarda las credenciales primero.',
-          code: 'MISSING_CERT_ID'
-        });
+        throw new AppError(
+          'El Cert ID de eBay es requerido. Por favor, guarda las credenciales primero.',
+          400,
+          ErrorCode.MISSING_REQUIRED_FIELD,
+          { field: 'certId', apiName: 'ebay' }
+        );
       }
       
+      // ✅ VALIDACIÓN: Validar Redirect URI con códigos de error consistentes
       if (!redirectUri || !redirectUri.trim()) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'El Redirect URI de eBay es requerido. Por favor, guarda las credenciales primero.',
-          code: 'MISSING_REDIRECT_URI'
-        });
+        throw new AppError(
+          'El Redirect URI de eBay es requerido. Por favor, guarda las credenciales primero.',
+          400,
+          ErrorCode.MISSING_REQUIRED_FIELD,
+          { field: 'redirectUri', apiName: 'ebay' }
+        );
       }
       
       // Validar formato del Redirect URI
       if (redirectUri.length < 3 || redirectUri.length > 255) {
-        return res.status(400).json({
-          success: false,
-          message: `El Redirect URI debe tener entre 3 y 255 caracteres. Longitud actual: ${redirectUri.length}`,
-          code: 'INVALID_REDIRECT_URI_LENGTH'
-        });
+        throw new AppError(
+          `El Redirect URI debe tener entre 3 y 255 caracteres. Longitud actual: ${redirectUri.length}`,
+          400,
+          ErrorCode.VALIDATION_ERROR,
+          { 
+            field: 'redirectUri',
+            length: redirectUri.length,
+            minLength: 3,
+            maxLength: 255
+          }
+        );
+      }
+      
+      // Validar caracteres problemáticos
+      const problematicChars = /[<>"{}|\\^`\[\]]/;
+      if (problematicChars.test(redirectUri)) {
+        throw new AppError(
+          'El Redirect URI contiene caracteres inválidos. eBay requiere que coincida exactamente con el registrado.',
+          400,
+          ErrorCode.VALIDATION_ERROR,
+          { 
+            field: 'redirectUri',
+            invalidChars: redirectUri.match(problematicChars)?.map(c => c)
+          }
+        );
       }
       
       // Advertencia si el Redirect URI contiene espacios (puede causar problemas)
+      // No bloqueamos, solo advertimos, porque algunos RuNames válidos pueden tener espacios
       if (redirectUri.includes(' ')) {
         logger.warn('[eBay OAuth] Redirect URI contains spaces - this may cause issues', {
           redirectUriPreview: redirectUri.substring(0, 30) + '...',
@@ -496,18 +523,6 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         });
         formatWarning = (formatWarning ? formatWarning + '\n\n' : '') + 
           `⚠️ Advertencia: El Redirect URI contiene espacios. eBay requiere que el Redirect URI coincida EXACTAMENTE con el registrado en eBay Developer Portal. Verifica que no haya espacios adicionales.`;
-      }
-      
-      // Advertencia si contiene caracteres problemáticos
-      const problematicChars = /[<>"{}|\\^`\[\]]/;
-      if (problematicChars.test(redirectUri)) {
-        logger.warn('[eBay OAuth] Redirect URI contains problematic characters', {
-          redirectUriPreview: redirectUri.substring(0, 30) + '...',
-          redirectUriLength: redirectUri.length,
-          problematicChars: redirectUri.match(problematicChars)?.map(c => c),
-        });
-        formatWarning = (formatWarning ? formatWarning + '\n\n' : '') +
-          `⚠️ Advertencia: El Redirect URI contiene caracteres que pueden causar problemas. Verifica que coincida exactamente con el registrado en eBay Developer Portal.`;
       }
       
       // Validar formato del App ID según el ambiente (solo como advertencia, no bloqueante)

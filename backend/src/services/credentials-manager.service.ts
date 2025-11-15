@@ -47,59 +47,110 @@ const TAG_LENGTH = 16;
  */
 const apiSchemas = {
   ebay: z.object({
-    appId: z.string().min(1, 'App ID is required'),
-    devId: z.string().min(1, 'Dev ID is required'),
-    certId: z.string().min(1, 'Cert ID is required'),
-    token: z.string().optional(),
-    authToken: z.string().optional(),
-    refreshToken: z.string().optional(),
+    appId: z.string()
+      .min(1, 'App ID is required')
+      .max(255, 'App ID must not exceed 255 characters'),
+    devId: z.string()
+      .min(1, 'Dev ID is required')
+      .max(255, 'Dev ID must not exceed 255 characters'),
+    certId: z.string()
+      .min(1, 'Cert ID is required')
+      .max(255, 'Cert ID must not exceed 255 characters'),
+    token: z.string().max(1000, 'Token must not exceed 1000 characters').optional(),
+    authToken: z.string().max(1000, 'Auth Token must not exceed 1000 characters').optional(),
+    refreshToken: z.string().max(1000, 'Refresh Token must not exceed 1000 characters').optional(),
+    redirectUri: z.string()
+      .min(3, 'Redirect URI must be at least 3 characters')
+      .max(255, 'Redirect URI must not exceed 255 characters')
+      .refine(
+        (uri) => !/[<>"{}|\\^`\[\]]/.test(uri),
+        { message: 'Redirect URI contains invalid characters' }
+      )
+      .optional(),
     sandbox: z.boolean(),
   }),
   amazon: z.object({
-    sellerId: z.string().min(1, 'Seller ID is required'),
-    clientId: z.string().min(1, 'Client ID is required'),
-    clientSecret: z.string().min(1, 'Client Secret is required'),
-    refreshToken: z.string().min(1, 'Refresh Token is required'),
-    accessToken: z.string().optional(),
-    awsAccessKeyId: z.string().min(1, 'AWS Access Key ID is required'),
-    awsSecretAccessKey: z.string().min(1, 'AWS Secret Access Key is required'),
-    awsSessionToken: z.string().optional(),
-    region: z.string().default('us-east-1'),
-    marketplaceId: z.string().min(1, 'Marketplace ID is required'),
+    sellerId: z.string()
+      .min(1, 'Seller ID is required')
+      .max(255, 'Seller ID must not exceed 255 characters'),
+    clientId: z.string()
+      .min(1, 'Client ID is required')
+      .max(255, 'Client ID must not exceed 255 characters'),
+    clientSecret: z.string()
+      .min(1, 'Client Secret is required')
+      .max(500, 'Client Secret must not exceed 500 characters'),
+    refreshToken: z.string()
+      .min(1, 'Refresh Token is required')
+      .max(1000, 'Refresh Token must not exceed 1000 characters'),
+    accessToken: z.string().max(1000, 'Access Token must not exceed 1000 characters').optional(),
+    awsAccessKeyId: z.string()
+      .min(1, 'AWS Access Key ID is required')
+      .max(255, 'AWS Access Key ID must not exceed 255 characters'),
+    awsSecretAccessKey: z.string()
+      .min(1, 'AWS Secret Access Key is required')
+      .max(500, 'AWS Secret Access Key must not exceed 500 characters'),
+    awsSessionToken: z.string().max(2000, 'AWS Session Token must not exceed 2000 characters').optional(),
+    region: z.string().max(50, 'Region must not exceed 50 characters').default('us-east-1'),
+    marketplaceId: z.string()
+      .min(1, 'Marketplace ID is required')
+      .max(255, 'Marketplace ID must not exceed 255 characters'),
     sandbox: z.boolean(),
   }),
   mercadolibre: z.object({
-    clientId: z.string().min(1, 'Client ID is required'),
-    clientSecret: z.string().min(1, 'Client Secret is required'),
-    accessToken: z.string().min(1, 'Access Token is required'),
-    refreshToken: z.string().min(1, 'Refresh Token is required'),
-    userId: z.string().optional(),
+    clientId: z.string()
+      .min(1, 'Client ID is required')
+      .max(255, 'Client ID must not exceed 255 characters'),
+    clientSecret: z.string()
+      .min(1, 'Client Secret is required')
+      .max(500, 'Client Secret must not exceed 500 characters'),
+    accessToken: z.string()
+      .min(1, 'Access Token is required')
+      .max(1000, 'Access Token must not exceed 1000 characters'),
+    refreshToken: z.string()
+      .min(1, 'Refresh Token is required')
+      .max(1000, 'Refresh Token must not exceed 1000 characters'),
+    userId: z.string().max(255, 'User ID must not exceed 255 characters').optional(),
+    siteId: z.string().max(10, 'Site ID must not exceed 10 characters').optional(),
     sandbox: z.boolean(),
   }),
   groq: z.object({
-    apiKey: z.string().min(1, 'API Key is required'),
-    model: z.string().optional(),
-    maxTokens: z.number().optional(),
+    apiKey: z.string()
+      .min(1, 'API Key is required')
+      .max(500, 'API Key must not exceed 500 characters'),
+    model: z.string().max(100, 'Model name must not exceed 100 characters').optional(),
+    maxTokens: z.number().int().min(1).max(100000).optional(),
   }),
   openai: z.object({
-    apiKey: z.string().min(1, 'API Key is required'),
-    organization: z.string().optional(),
-    model: z.string().optional(),
+    apiKey: z.string()
+      .min(1, 'API Key is required')
+      .max(500, 'API Key must not exceed 500 characters'),
+    organization: z.string().max(255, 'Organization must not exceed 255 characters').optional(),
+    model: z.string().max(100, 'Model name must not exceed 100 characters').optional(),
   }),
   scraperapi: z.object({
-    apiKey: z.string().min(1, 'API Key is required'),
+    apiKey: z.string()
+      .min(1, 'API Key is required')
+      .max(500, 'API Key must not exceed 500 characters'),
     premium: z.boolean().optional(),
   }),
   zenrows: z.object({
-    apiKey: z.string().min(1, 'API Key is required'),
+    apiKey: z.string()
+      .min(1, 'API Key is required')
+      .max(500, 'API Key must not exceed 500 characters'),
     premium: z.boolean().optional(),
   }),
   '2captcha': z.object({
-    apiKey: z.string().min(1, 'API Key is required'),
+    apiKey: z.string()
+      .min(1, 'API Key is required')
+      .max(500, 'API Key must not exceed 500 characters'),
   }),
   paypal: z.object({
-    clientId: z.string().min(1, 'Client ID is required'),
-    clientSecret: z.string().min(1, 'Client Secret is required'),
+    clientId: z.string()
+      .min(1, 'Client ID is required')
+      .max(255, 'Client ID must not exceed 255 characters'),
+    clientSecret: z.string()
+      .min(1, 'Client Secret is required')
+      .max(500, 'Client Secret must not exceed 500 characters'),
     environment: z.enum(['sandbox', 'live']),
   }),
   aliexpress: z.object({
