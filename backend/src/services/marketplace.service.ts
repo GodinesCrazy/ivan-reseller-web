@@ -53,12 +53,21 @@ export class MarketplaceService {
     environment?: 'sandbox' | 'production'
   ): Promise<MarketplaceCredentials | null> {
     try {
-      const { workflowConfigService } = await import('./workflow-config.service');
       const { CredentialsManager } = await import('./credentials-manager.service');
+      const { resolveEnvironment } = await import('../utils/environment-resolver');
 
-      const preferredEnvironment: 'sandbox' | 'production' = environment
-        ? environment
-        : await workflowConfigService.getUserEnvironment(userId);
+      // 🔄 CONSISTENCIA: Usar resolver de ambiente centralizado
+      // Obtener ambiente de credenciales existentes para usarlo como fallback
+      const tempEntryProd = await CredentialsManager.getCredentialEntry(userId, marketplace as any, 'production');
+      const tempEntrySandbox = await CredentialsManager.getCredentialEntry(userId, marketplace as any, 'sandbox');
+      const fromCredentials = tempEntryProd ? 'production' : (tempEntrySandbox ? 'sandbox' : undefined);
+      
+      const preferredEnvironment = await resolveEnvironment({
+        explicit: environment,
+        fromCredentials: fromCredentials as 'sandbox' | 'production' | undefined,
+        userId,
+        default: 'production'
+      });
 
       const environmentsToTry: Array<'sandbox' | 'production'> = [preferredEnvironment];
       if (!environment) {
@@ -105,19 +114,21 @@ export class MarketplaceService {
         return null;
       }
 
-      // Normalizar campos por marketplace
+      // Normalizar campos por marketplace usando CredentialsManager (centralizado)
       if (marketplace === 'ebay') {
-        const ebayCreds = resolvedCredentials as any;
-        if (ebayCreds && typeof ebayCreds === 'object') {
-          if (!ebayCreds.token && ebayCreds.authToken) {
-            ebayCreds.token = ebayCreds.authToken;
-          }
-          if (resolvedEnv) {
-            ebayCreds.sandbox = resolvedEnv === 'sandbox';
-          }
-          if (!ebayCreds.token && !ebayCreds.refreshToken) {
-            issues.push('Falta token OAuth de eBay. Completa la autorización en Settings → API Settings.');
-          }
+        const { CredentialsManager } = await import('./credentials-manager.service');
+        const normalizedCreds = CredentialsManager.normalizeCredential(
+          'ebay',
+          resolvedCredentials as any,
+          resolvedEnv || 'production'
+        );
+        
+        // Update resolved credentials with normalized version
+        Object.assign(resolvedCredentials, normalizedCreds);
+        
+        // Check for missing OAuth tokens
+        if (!normalizedCreds.token && !normalizedCreds.refreshToken) {
+          issues.push('Falta token OAuth de eBay. Completa la autorización en Settings → API Settings.');
         }
       }
 

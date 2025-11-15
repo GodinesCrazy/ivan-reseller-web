@@ -202,29 +202,56 @@ function decryptCredentials(encryptedData: string): Record<string, any> {
  * Servicio de gestión de credenciales
  */
 export class CredentialsManager {
-  private static normalizeCredential(
+  /**
+   * Normalize credentials for a specific API
+   * This is the CENTRALIZED place for credential normalization
+   * All other services should use this method instead of duplicating logic
+   */
+  static normalizeCredential(
     apiName: ApiName,
     credential: Record<string, any>,
     environment: ApiEnvironment
-  ): void {
+  ): Record<string, any> {
     if (!credential || typeof credential !== 'object') {
-      return;
+      return credential || {};
     }
 
-    const creds = credential as any;
+    // Create a copy to avoid mutating the original
+    const creds = { ...credential };
 
+    // General normalization: trim string fields
     if (creds.apiKey && typeof creds.apiKey === 'string') {
       creds.apiKey = creds.apiKey.trim();
     }
 
+    // API-specific normalization
     if (apiName === 'ebay') {
+      // Normalize token field: use 'token' as primary, 'authToken' as alias
       if (creds.authToken && !creds.token) {
         creds.token = creds.authToken;
       }
+      
+      // Normalize sandbox flag based on environment
       if (typeof creds.sandbox === 'undefined') {
         creds.sandbox = environment === 'sandbox';
       }
+      
+      // Normalize redirectUri: eBay uses 'redirectUri' (not 'ruName' or 'redirect_uri')
+      // Support legacy field names for backward compatibility
+      if (creds.ruName && !creds.redirectUri) {
+        creds.redirectUri = creds.ruName;
+      }
+      if (creds.redirect_uri && !creds.redirectUri) {
+        creds.redirectUri = creds.redirect_uri;
+      }
+      
+      // Trim redirectUri (eBay is strict about exact matching)
+      if (creds.redirectUri && typeof creds.redirectUri === 'string') {
+        creds.redirectUri = creds.redirectUri.trim();
+      }
     }
+
+    return creds;
   }
 
   /**
@@ -279,10 +306,10 @@ export class CredentialsManager {
     if (personalCredential) {
       try {
         const decrypted = decryptCredentials(personalCredential.credentials);
-        this.normalizeCredential(apiName, decrypted, finalEnvironment);
+        const normalized = this.normalizeCredential(apiName, decrypted, finalEnvironment);
         return {
           id: personalCredential.id,
-          credentials: decrypted as ApiCredentialsMap[T],
+          credentials: normalized as ApiCredentialsMap[T],
           scope: 'user',
           ownerUserId: personalCredential.userId,
           sharedByUserId: personalCredential.sharedById ?? null,
@@ -345,11 +372,11 @@ export class CredentialsManager {
 
     try {
       const decrypted = decryptCredentials(sharedCredential.credentials);
-      this.normalizeCredential(apiName, decrypted, finalEnvironment);
+      const normalized = this.normalizeCredential(apiName, decrypted, finalEnvironment);
 
       return {
         id: sharedCredential.id,
-        credentials: decrypted as ApiCredentialsMap[T],
+        credentials: normalized as ApiCredentialsMap[T],
         scope: 'global',
         ownerUserId: sharedCredential.userId,
         sharedByUserId: sharedCredential.sharedById ?? sharedCredential.userId ?? null,
