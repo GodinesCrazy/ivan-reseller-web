@@ -20,7 +20,7 @@ declare global {
 
 export const authenticate = async (
   req: Request,
-  _res: Response,
+  res: Response,
   next: NextFunction
 ) => {
   try {
@@ -35,23 +35,108 @@ export const authenticate = async (
       }
     }
 
-    // Logging para debug cuando no hay token (siempre activo para diagnosticar)
+    // ✅ MEJORA: Si no hay token pero hay refreshToken, intentar refrescar automáticamente
     if (!token) {
-      console.log('🔍 Auth debug - No token encontrado:', {
-        hasCookies: !!req.cookies,
-        cookieNames: req.cookies ? Object.keys(req.cookies) : [],
-        cookies: req.cookies, // Mostrar todas las cookies recibidas
-        hasAuthHeader: !!req.headers.authorization,
-        path: req.path,
-        method: req.method,
-        origin: req.headers.origin,
-        referer: req.headers.referer,
-        'cookie-header': req.headers.cookie, // Header raw de cookies
-        'user-agent': req.headers['user-agent'],
-        'accept': req.headers.accept,
-        'accept-language': req.headers['accept-language'],
-        allHeaders: Object.keys(req.headers),
-      });
+      const refreshToken = req.cookies?.refreshToken;
+      
+      // Si hay refreshToken, intentar refrescar el token automáticamente
+      if (refreshToken && req.path !== '/api/auth/refresh' && req.path !== '/api/auth/logout') {
+        try {
+          const result = await authService.refreshAccessToken(refreshToken);
+          
+          // Usar el nuevo token para autenticar
+          token = result.accessToken;
+          
+          // ✅ Establecer el nuevo token en la cookie para futuras peticiones
+          const origin = req.headers.origin || req.headers.referer;
+          let frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
+          
+          if (origin) {
+            try {
+              const originUrl = new URL(origin);
+              frontendUrl = `${originUrl.protocol}//${originUrl.host}`;
+            } catch (e) {
+              // Si falla, usar el valor por defecto
+            }
+          }
+          
+          const requestProtocol = req.protocol || (req.headers['x-forwarded-proto'] as string) || 'http';
+          const isHttps = requestProtocol === 'https' || frontendUrl.startsWith('https');
+          
+          let cookieDomain: string | undefined = undefined;
+          try {
+            const frontendUrlObj = new URL(frontendUrl);
+            const frontendHostname = frontendUrlObj.hostname;
+            const backendHostname = req.get('host') || req.hostname || '';
+            
+            const frontendBaseDomain = frontendHostname.replace(/^[^.]+\./, '');
+            const backendBaseDomain = backendHostname.replace(/^[^.]+\./, '');
+            
+            if (frontendBaseDomain === backendBaseDomain && frontendBaseDomain !== 'localhost' && !frontendBaseDomain.includes('127.0.0.1')) {
+              cookieDomain = `.${frontendBaseDomain}`;
+            }
+          } catch (e) {
+            cookieDomain = undefined;
+          }
+          
+          const cookieOptions: any = {
+            httpOnly: true,
+            secure: isHttps,
+            sameSite: cookieDomain ? 'lax' : 'none',
+            maxAge: 60 * 60 * 1000, // 1 hora
+          };
+          
+          if (cookieDomain) {
+            cookieOptions.domain = cookieDomain;
+          }
+          
+          // Establecer el nuevo token en la cookie
+          res.cookie('token', result.accessToken, cookieOptions);
+          
+          // Establecer headers CORS si es necesario
+          const requestOrigin = req.headers.origin;
+          if (requestOrigin) {
+            res.header('Access-Control-Allow-Origin', requestOrigin);
+          }
+          res.header('Access-Control-Allow-Credentials', 'true');
+          
+          // Logging para debug
+          const logger = (await import('../config/logger')).default;
+          logger.debug('[Auth] Token auto-refreshed and cookie set', {
+            path: req.path,
+            method: req.method,
+            hasRefreshToken: true
+          });
+        } catch (refreshError: any) {
+          // Si falla el refresh, continuar con el flujo normal de error
+          const logger = (await import('../config/logger')).default;
+          logger.debug('[Auth] Auto-refresh failed', {
+            path: req.path,
+            method: req.method,
+            error: refreshError?.message || String(refreshError)
+          });
+        }
+      }
+      
+      // Logging para debug cuando no hay token (siempre activo para diagnosticar)
+      if (!token) {
+        console.log('🔍 Auth debug - No token encontrado:', {
+          hasCookies: !!req.cookies,
+          cookieNames: req.cookies ? Object.keys(req.cookies) : [],
+          cookies: req.cookies, // Mostrar todas las cookies recibidas
+          hasAuthHeader: !!req.headers.authorization,
+          hasRefreshToken: !!refreshToken,
+          path: req.path,
+          method: req.method,
+          origin: req.headers.origin,
+          referer: req.headers.referer,
+          'cookie-header': req.headers.cookie, // Header raw de cookies
+          'user-agent': req.headers['user-agent'],
+          'accept': req.headers.accept,
+          'accept-language': req.headers['accept-language'],
+          allHeaders: Object.keys(req.headers),
+        });
+      }
     }
 
     if (!token) {
