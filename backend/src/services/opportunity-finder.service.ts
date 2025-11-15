@@ -217,34 +217,54 @@ class OpportunityFinderService {
         .filter(p => {
           const isValid = p.price > 0 && p.sourcePrice > 0;
           if (!isValid && p.title) {
-            console.warn(`⚠️  [OPPORTUNITY-FINDER] Producto filtrado: "${p.title.substring(0, 50)}" - price: ${p.price}, sourcePrice: ${p.sourcePrice}`);
+            logger.debug('Producto filtrado (precio inválido)', {
+              service: 'opportunity-finder',
+              title: p.title.substring(0, 50),
+              price: p.price,
+              sourcePrice: p.sourcePrice
+            });
           }
           return isValid;
         });
       
       if (products.length > 0) {
-        console.log(`✅ [OPPORTUNITY-FINDER] Scraping nativo exitoso: ${products.length} productos encontrados`);
-        console.log(`   Primeros productos:`, products.slice(0, 3).map(p => ({ title: p.title?.substring(0, 50), price: p.price })));
+        logger.info('Scraping nativo exitoso', {
+          service: 'opportunity-finder',
+          productsFound: products.length,
+          firstProducts: products.slice(0, 3).map(p => ({ title: p.title?.substring(0, 50), price: p.price }))
+        });
       } else {
-        console.warn('⚠️  [OPPORTUNITY-FINDER] Scraping nativo no encontró productos');
-        console.warn('⚠️  Debug: query="' + query + '", userId=' + userId + ', maxItems=' + maxItems + ', environment=' + environment);
-        console.warn('⚠️  Items raw de scrapeAliExpress:', items?.length || 0, 'items');
-        if (items && items.length > 0) {
-          console.warn('⚠️  Items encontrados pero filtrados:', items.slice(0, 3).map((i: any) => ({ title: i.title?.substring(0, 50), price: i.price, sourcePrice: i.sourcePrice })));
-        }
+        logger.warn('Scraping nativo no encontró productos', {
+          service: 'opportunity-finder',
+          query,
+          userId,
+          maxItems,
+          environment,
+          itemsRaw: items?.length || 0,
+          filteredItems: items && items.length > 0 ? items.slice(0, 3).map((i: any) => ({ title: i.title?.substring(0, 50), price: i.price, sourcePrice: i.sourcePrice })) : []
+        });
       }
     } catch (nativeError: any) {
       nativeErrorForLogs = nativeError;
       const errorMsg = nativeError?.message || String(nativeError);
       
-      // ✅ NO bloquear si es error de autenticación manual - continuar con bridge Python
+      // ✅ MEDIA PRIORIDAD: NO bloquear si es error de autenticación manual - continuar con bridge Python (con logger estructurado)
       if (nativeError instanceof ManualAuthRequiredError) {
         manualAuthPending = true;
         manualAuthError = nativeError;
-        console.warn('⚠️  AliExpress requiere autenticación manual. Intentando bridge Python como alternativa...');
+        logger.warn('AliExpress requiere autenticación manual, intentando bridge Python', {
+          service: 'opportunity-finder',
+          userId,
+          query,
+          error: errorMsg
+        });
       } else {
-        console.error('❌ Error en scraping nativo:', errorMsg);
-        console.warn('⚠️  Scraping nativo falló, intentando bridge Python:', errorMsg);
+        logger.error('Error en scraping nativo, intentando bridge Python', {
+          service: 'opportunity-finder',
+          userId,
+          query,
+          error: errorMsg
+        });
       }
 
       // ✅ NO intentar resolver CAPTCHA aquí - mejor continuar directamente con bridge Python
@@ -258,9 +278,16 @@ class OpportunityFinderService {
     // ✅ FALLBACK: Intentar bridge Python si scraping nativo falló
     if (!products || products.length === 0) {
       try {
-        console.log(`🔄 [OPPORTUNITY-FINDER] Intentando bridge Python como alternativa (query: "${query}")...`);
+        logger.info('Intentando bridge Python como alternativa', {
+          service: 'opportunity-finder',
+          userId,
+          query
+        });
         const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
-        console.log(`📦 [OPPORTUNITY-FINDER] Bridge Python retornó ${items?.length || 0} items`);
+        logger.debug('Bridge Python completado', {
+          service: 'opportunity-finder',
+          itemsCount: items?.length || 0
+        });
         products = (items || [])
           .map((p: any) => {
             const sourceCurrency = String(p.currency || baseCurrency || 'USD').toUpperCase();
@@ -285,15 +312,28 @@ class OpportunityFinderService {
           .filter(p => p.price > 0 && p.sourcePrice > 0);
         
         if (products.length > 0) {
-          console.log(`✅ Bridge Python exitoso: ${products.length} productos encontrados`);
+          logger.info('Bridge Python exitoso', {
+            service: 'opportunity-finder',
+            productsFound: products.length
+          });
         } else {
-          console.warn('⚠️  Bridge Python no encontró productos');
+          logger.warn('Bridge Python no encontró productos', {
+            service: 'opportunity-finder',
+            userId,
+            query
+          });
         }
       } catch (bridgeError: any) {
         const msg = String(bridgeError?.message || '').toLowerCase();
         const isCaptchaError = bridgeError?.code === 'CAPTCHA_REQUIRED' || msg.includes('captcha');
         
-        console.error('❌ Bridge Python falló:', bridgeError.message);
+        logger.error('Bridge Python falló', {
+          service: 'opportunity-finder',
+          userId,
+          query,
+          error: bridgeError.message,
+          isCaptchaError
+        });
         
         // Solo intentar resolver CAPTCHA si ambos métodos fallaron Y es un error de CAPTCHA
         if (isCaptchaError && !manualAuthPending) {
@@ -301,27 +341,41 @@ class OpportunityFinderService {
             const ManualCaptchaService = (await import('./manual-captcha.service')).default;
             const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`;
             
-            console.log('🛡️  CAPTCHA detectado, iniciando sesión de resolución manual...');
+            logger.info('CAPTCHA detectado, iniciando sesión de resolución manual', {
+              service: 'opportunity-finder',
+              userId,
+              searchUrl
+            });
             await ManualCaptchaService.startSession(userId, searchUrl, searchUrl);
-            console.log('📨 Notificación enviada al usuario para resolver CAPTCHA');
+            logger.info('Notificación enviada al usuario para resolver CAPTCHA', {
+              service: 'opportunity-finder',
+              userId
+            });
           } catch (captchaError: any) {
-            console.error('Error al iniciar resolución manual de CAPTCHA:', captchaError.message);
+            logger.error('Error al iniciar resolución manual de CAPTCHA', {
+              service: 'opportunity-finder',
+              userId,
+              error: captchaError.message
+            });
           }
         }
         
         // ✅ NO lanzar error - retornar array vacío para que el frontend muestre el mensaje apropiado
-        console.warn('⚠️  Ambos métodos de scraping fallaron. Retornando resultados vacíos.');
-        if (manualAuthPending && manualAuthError) {
-          console.warn('⚠️  Autenticación manual requerida, pero continuando sin bloquear:', manualAuthError.message);
-        }
+        logger.warn('Ambos métodos de scraping fallaron, retornando resultados vacíos', {
+          service: 'opportunity-finder',
+          userId,
+          query,
+          manualAuthPending,
+          manualAuthError: manualAuthError?.message
+        });
         return [];
       }
     }
 
     // ✅ Si después de todos los intentos no hay productos, retornar vacío
     if (!products || products.length === 0) {
-      console.warn('⚠️  No se encontraron productos después de intentar scraping nativo y bridge Python');
-      console.warn('⚠️  Debug info:', {
+      logger.warn('No se encontraron productos después de intentar scraping nativo y bridge Python', {
+        service: 'opportunity-finder',
         query,
         userId,
         maxItems,
@@ -358,7 +412,11 @@ class OpportunityFinderService {
           region
         );
       } catch (err: any) {
-        console.warn('⚠️  Competition analysis failed, using heuristic fallback:', err?.message || err);
+        logger.warn('Competition analysis failed, using heuristic fallback', {
+          service: 'opportunity-finder',
+          userId,
+          error: err?.message || String(err)
+        });
         analysis = {};
       }
 
@@ -367,9 +425,16 @@ class OpportunityFinderService {
       const valid = analyses.find(a => a && a.listingsFound > 0 && a.competitivePrice > 0);
       
       if (valid) {
-        console.log(`✅ Análisis de competencia encontrado: ${valid.marketplace}, ${valid.listingsFound} listings, precio competitivo: ${valid.competitivePrice}`);
+        logger.debug('Análisis de competencia encontrado', {
+          service: 'opportunity-finder',
+          marketplace: valid.marketplace,
+          listingsFound: valid.listingsFound,
+          competitivePrice: valid.competitivePrice
+        });
       } else {
-        console.log(`⚠️  No se encontraron datos de competencia válidos, usando estimación heurística`);
+        logger.debug('No se encontraron datos de competencia válidos, usando estimación heurística', {
+          service: 'opportunity-finder'
+        });
       }
 
       let best = {
@@ -436,20 +501,38 @@ class OpportunityFinderService {
           }
         }
 
-        console.log(`💰 Margen calculado con datos reales: ${(best.margin * 100).toFixed(1)}% (mínimo requerido: ${(this.minMargin * 100).toFixed(1)}%)`);
+        logger.debug('Margen calculado con datos reales', {
+          service: 'opportunity-finder',
+          margin: (best.margin * 100).toFixed(1),
+          minRequired: (this.minMargin * 100).toFixed(1)
+        });
         if (best.margin < this.minMargin) {
           skippedLowMargin++;
-          console.log(`⏭️  Producto descartado (margen insuficiente): "${product.title.substring(0, 50)}" - margen ${(best.margin * 100).toFixed(1)}% < ${(this.minMargin * 100).toFixed(1)}%`);
+          logger.debug('Producto descartado (margen insuficiente)', {
+            service: 'opportunity-finder',
+            title: product.title.substring(0, 50),
+            margin: (best.margin * 100).toFixed(1),
+            minRequired: (this.minMargin * 100).toFixed(1)
+          });
           continue;
         }
       } else {
         // No pudimos obtener datos de competencia, crear una estimación heurística
         const fallbackPriceBase = product.price * 1.45;
         const fallbackMargin = (fallbackPriceBase - product.price) / product.price;
-        console.log(`💰 Margen estimado (sin datos de competencia): ${(fallbackMargin * 100).toFixed(1)}% (mínimo requerido: ${(this.minMargin * 100).toFixed(1)}%)`);
+        logger.debug('Margen estimado (sin datos de competencia)', {
+          service: 'opportunity-finder',
+          margin: (fallbackMargin * 100).toFixed(1),
+          minRequired: (this.minMargin * 100).toFixed(1)
+        });
         if (fallbackMargin < this.minMargin) {
           skippedLowMargin++;
-          console.log(`⏭️  Producto descartado (margen estimado insuficiente): "${product.title.substring(0, 50)}" - margen ${(fallbackMargin * 100).toFixed(1)}% < ${(this.minMargin * 100).toFixed(1)}%`);
+          logger.debug('Producto descartado (margen estimado insuficiente)', {
+            service: 'opportunity-finder',
+            title: product.title.substring(0, 50),
+            margin: (fallbackMargin * 100).toFixed(1),
+            minRequired: (this.minMargin * 100).toFixed(1)
+          });
           continue;
         }
         best = {
@@ -513,7 +596,12 @@ class OpportunityFinderService {
       };
 
       opportunities.push(opp);
-      console.log(`✅ Oportunidad agregada: "${opp.title.substring(0, 50)}" - margen ${(opp.profitMargin * 100).toFixed(1)}%, precio sugerido: ${opp.suggestedPriceUsd.toFixed(2)} ${opp.suggestedPriceCurrency}`);
+      logger.debug('Oportunidad agregada', {
+        service: 'opportunity-finder',
+        title: opp.title.substring(0, 50),
+        margin: (opp.profitMargin * 100).toFixed(1),
+        suggestedPrice: `${opp.suggestedPriceUsd.toFixed(2)} ${opp.suggestedPriceCurrency}`
+      });
 
       try {
         await opportunityPersistence.saveOpportunity(userId, {
@@ -532,19 +620,27 @@ class OpportunityFinderService {
       } catch {}
     }
 
-    console.log(`📊 Resumen de procesamiento:`);
-    console.log(`   - Productos scrapeados: ${products.length}`);
-    console.log(`   - Productos procesados: ${processedCount}`);
-    console.log(`   - Descartados (inválidos): ${skippedInvalid}`);
-    console.log(`   - Descartados (margen bajo): ${skippedLowMargin}`);
-    console.log(`   - Oportunidades encontradas: ${opportunities.length}`);
+    logger.info('Resumen de procesamiento', {
+      service: 'opportunity-finder',
+      userId,
+      productsScraped: products.length,
+      productsProcessed: processedCount,
+      skippedInvalid,
+      skippedLowMargin,
+      opportunitiesFound: opportunities.length
+    });
     
     if (opportunities.length === 0 && products.length > 0) {
-      console.warn(`⚠️  ⚠️  ⚠️  PROBLEMA DETECTADO: Se scrapearon ${products.length} productos pero no se generaron oportunidades.`);
-      console.warn(`   - Esto puede deberse a:`);
-      console.warn(`     1. Margen mínimo muy alto (actual: ${(this.minMargin * 100).toFixed(1)}%)`);
-      console.warn(`     2. Falta de datos de competencia (configura eBay/Amazon/MercadoLibre)`);
-      console.warn(`     3. Precios de AliExpress muy altos comparados con la competencia`);
+      logger.warn('PROBLEMA DETECTADO: Se scrapearon productos pero no se generaron oportunidades', {
+        service: 'opportunity-finder',
+        userId,
+        productsScraped: products.length,
+        possibleCauses: [
+          `Margen mínimo muy alto (actual: ${(this.minMargin * 100).toFixed(1)}%)`,
+          'Falta de datos de competencia (configura eBay/Amazon/MercadoLibre)',
+          'Precios de AliExpress muy altos comparados con la competencia'
+        ]
+      });
     }
 
     return opportunities;

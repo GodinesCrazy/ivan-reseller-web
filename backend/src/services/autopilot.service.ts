@@ -126,6 +126,9 @@ export class AutopilotSystem extends EventEmitter {
   constructor() {
     super();
     
+    // ✅ ALTA PRIORIDAD: Inicializar MarketplaceService
+    this.marketplaceService = new MarketplaceService();
+    
     // Default configuration
     this.config = {
       enabled: false,
