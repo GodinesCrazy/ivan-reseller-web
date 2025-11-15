@@ -267,9 +267,20 @@ export class EbayService {
    * Exchange authorization code for access token
    */
   async exchangeCodeForToken(code: string, redirectUri: string): Promise<{ token: string; refreshToken: string; expiresIn: number }> {
+    const tokenUrl = `${this.baseUrl}/identity/v1/oauth2/token`;
+    
+    logger.info('[EbayService] Exchanging authorization code for token', {
+      service: 'ebay',
+      sandbox: this.credentials?.sandbox,
+      codeLength: code.length,
+      redirectUriLength: redirectUri.length,
+      redirectUriPreview: redirectUri.substring(0, 50) + '...',
+      tokenUrl
+    });
+    
     try {
       const response = await axios.post(
-        `${this.baseUrl}/identity/v1/oauth2/token`,
+        tokenUrl,
         new URLSearchParams({
           grant_type: 'authorization_code',
           code,
@@ -283,13 +294,39 @@ export class EbayService {
         }
       );
 
+      logger.info('[EbayService] Token exchange successful', {
+        service: 'ebay',
+        sandbox: this.credentials?.sandbox,
+        hasAccessToken: !!response.data.access_token,
+        accessTokenLength: response.data.access_token?.length || 0,
+        hasRefreshToken: !!response.data.refresh_token,
+        refreshTokenLength: response.data.refresh_token?.length || 0,
+        expiresIn: response.data.expires_in
+      });
+
       return {
         token: response.data.access_token,
         refreshToken: response.data.refresh_token,
         expiresIn: response.data.expires_in,
       };
     } catch (error: any) {
-      throw new AppError(`eBay OAuth error: ${error.response?.data?.error_description || error.message}`, 400);
+      const errorData = error.response?.data || {};
+      const errorDescription = errorData.error_description || errorData.error || error.message;
+      const errorCode = errorData.error || 'unknown_error';
+      const statusCode = error.response?.status || 400;
+      
+      logger.error('[EbayService] Token exchange failed', {
+        service: 'ebay',
+        sandbox: this.credentials?.sandbox,
+        error: errorDescription,
+        errorCode,
+        statusCode,
+        errorResponse: errorData,
+        redirectUriLength: redirectUri.length,
+        redirectUriPreview: redirectUri.substring(0, 50) + '...'
+      });
+      
+      throw new AppError(`eBay OAuth error: ${errorDescription}`, statusCode);
     }
   }
 

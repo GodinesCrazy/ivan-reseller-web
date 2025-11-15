@@ -1057,7 +1057,8 @@ export class AutopilotSystem extends EventEmitter {
     try {
       const currentUserId = userId || 1;
       
-      await prisma.product.create({
+      // ✅ CORRECCIÓN: Status debe ser 'PENDING' para que aparezca en cola de aprobación
+      const product = await prisma.product.create({
         data: {
           userId: currentUserId, // ✅ Usar userId del usuario
           title: opportunity.title,
@@ -1067,16 +1068,68 @@ export class AutopilotSystem extends EventEmitter {
           suggestedPrice: opportunity.estimatedCost * 2,
           category: opportunity.category,
           images: JSON.stringify(opportunity.images || []),
-          productData: JSON.stringify(opportunity),
-          status: 'APPROVED',
+          productData: JSON.stringify({
+            ...opportunity,
+            source: 'autopilot',
+            queuedAt: new Date().toISOString(),
+            queuedBy: 'autopilot-system'
+          }),
+          status: 'PENDING', // ✅ Cambiado de 'APPROVED' a 'PENDING'
           isPublished: false
         }
       });
 
-      this.emit('product:queued', { opportunity });
+      logger.info('Autopilot: Product sent to approval queue', {
+        productId: product.id,
+        title: opportunity.title,
+        userId: currentUserId,
+        estimatedCost: opportunity.estimatedCost,
+        estimatedProfit: opportunity.estimatedProfit
+      });
+
+      // ✅ MEJORA: Enviar notificación al usuario
+      try {
+        const { notificationService } = await import('./notification.service');
+        notificationService.sendToUser(currentUserId, {
+          type: 'USER_ACTION',
+          title: 'Producto pendiente de aprobación',
+          message: `El producto "${opportunity.title}" ha sido enviado a la cola de aprobación. Profit estimado: $${opportunity.estimatedProfit.toFixed(2)}`,
+          priority: 'MEDIUM',
+          data: {
+            productId: product.id,
+            userId: currentUserId,
+            estimatedProfit: opportunity.estimatedProfit,
+            estimatedROI: opportunity.roi
+          },
+          actions: [
+            {
+              id: 'view_product',
+              label: 'Ver producto',
+              action: `view_product:${product.id}`,
+              variant: 'primary',
+              url: `/publisher`
+            }
+          ]
+        });
+      } catch (notifError: any) {
+        logger.warn('Autopilot: Failed to send notification', {
+          error: notifError?.message || String(notifError),
+          productId: product.id
+        });
+      }
+
+      this.emit('product:queued', { 
+        productId: product.id,
+        opportunity,
+        userId: currentUserId
+      });
 
     } catch (error) {
-      logger.error('Autopilot: Error sending to approval queue', { error });
+      logger.error('Autopilot: Error sending to approval queue', { 
+        error,
+        userId,
+        opportunityTitle: opportunity.title
+      });
       throw error;
     }
   }

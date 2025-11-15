@@ -13,18 +13,20 @@ export default function IntelligentPublisher() {
   const [bulkStatus, setBulkStatus] = useState<{ total: number; queued: number; done: number; errors: number; running: boolean }>({ total: 0, queued: 0, done: 0, errors: 0, running: false });
   const [loading, setLoading] = useState(true);
 
+  // ✅ MEJORADO: Usar nuevo endpoint /api/publisher/pending con información enriquecida
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
-        const [productsRes, listingsRes] = await Promise.all([
-          api.get('/api/products', { params: { status: 'PENDING' } }),
+        const [pendingRes, listingsRes] = await Promise.all([
+          api.get('/api/publisher/pending'), // ✅ Nuevo endpoint con información enriquecida
           api.get('/api/publisher/listings')
         ]);
-        setPending(productsRes.data?.products || []);
+        setPending(pendingRes.data?.items || []);
         setListings(listingsRes.data?.items || []);
       } catch (error) {
         console.error('Error loading publisher data:', error);
+        toast.error('Error al cargar productos pendientes');
       } finally {
         setLoading(false);
       }
@@ -121,8 +123,8 @@ export default function IntelligentPublisher() {
           <button onClick={async()=>{
             try {
               await api.post('/api/publisher/add_for_approval', { aliexpressUrl: url, scrape: true });
-              const { data } = await api.get('/api/products', { params: { status: 'PENDING' } });
-              setPending(data?.products || []);
+              const { data } = await api.get('/api/publisher/pending'); // ✅ Usar nuevo endpoint
+              setPending(data?.items || []);
               setUrl('');
               toast.success('Product added for approval');
             } catch (e:any) {
@@ -131,16 +133,68 @@ export default function IntelligentPublisher() {
           }} className="px-4 py-2 bg-primary-600 text-white rounded">Add</button>
         </div>
       </div>
-      <div className="p-4 border rounded bg-white text-gray-700 mb-3">
-        Pending approvals: <span className="font-semibold">{pending.length}</span>
+      <div className="p-4 border rounded bg-white text-gray-700 mb-3 flex items-center justify-between">
+        <div>
+          Pending approvals: <span className="font-semibold">{pending.length}</span>
+          {pending.length > 0 && (
+            <span className="ml-2 text-xs text-gray-500">
+              ({pending.filter((p: any) => p.source === 'autopilot').length} from Autopilot)
+            </span>
+          )}
+        </div>
+        <button 
+          onClick={async () => {
+            try {
+              setLoading(true);
+              const { data } = await api.get('/api/publisher/pending');
+              setPending(data?.items || []);
+              toast.success('Lista actualizada');
+            } catch (e: any) {
+              toast.error('Error al actualizar');
+            } finally {
+              setLoading(false);
+            }
+          }}
+          className="text-sm text-primary-600 hover:text-primary-700"
+        >
+          Actualizar
+        </button>
       </div>
       <div className="bg-white border rounded">
         {pendingLimited.map((p: any) => (
           <div key={p.id} className="p-4 border-b flex items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3 flex-1">
               <input type="checkbox" className="mt-1" checked={!!selected[p.id]} onChange={(e)=>setSelected(s=>({ ...s, [p.id]: e.target.checked }))} />
-              <div className="font-medium">{p.title}</div>
-              <div className="text-xs text-gray-500">Cost: ${p.aliexpressPrice} → Suggested: ${p.suggestedPrice}</div>
+              <div className="flex-1">
+                <div className="font-medium">{p.title}</div>
+                <div className="text-xs text-gray-500 mt-1 space-y-1">
+                  <div>Cost: ${p.estimatedCost || p.aliexpressPrice} → Suggested: ${p.suggestedPrice}</div>
+                  {p.estimatedProfit !== undefined && (
+                    <div className="flex items-center gap-2">
+                      <span>Profit: <span className="font-semibold text-green-600">${p.estimatedProfit.toFixed(2)}</span></span>
+                      {p.estimatedROI !== undefined && (
+                        <span>ROI: <span className="font-semibold text-blue-600">{p.estimatedROI.toFixed(1)}%</span></span>
+                      )}
+                    </div>
+                  )}
+                  {p.source && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`px-2 py-0.5 rounded text-xs ${
+                        p.source === 'autopilot' 
+                          ? 'bg-blue-100 text-blue-700' 
+                          : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {p.source === 'autopilot' ? '🤖 Autopilot' : '👤 Manual'}
+                      </span>
+                      {p.queuedAt && (
+                        <span className="text-gray-400">
+                          Queued: {new Date(p.queuedAt).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <label className="text-sm"><input type="checkbox" value="ebay" defaultChecked className="mr-1" /> eBay</label>
