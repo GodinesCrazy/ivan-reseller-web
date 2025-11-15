@@ -532,32 +532,21 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       
       // Usar el App ID limpiado
       try {
-        const ebay = new EbayService({ appId: finalAppId, devId: devId.trim(), certId: certId.trim(), sandbox });
-        // ruName ya está limpiado en línea 412, no hacer trim() de nuevo
-        const baseAuthUrl = ebay.getAuthUrl(ruName);
-        
-        // Construir URL final reemplazando solo el parámetro 'state'
-        // NO usar url.searchParams.set() porque puede decodificar/recodificar redirect_uri
-        const url = new URL(baseAuthUrl);
-        const existingParams = new URLSearchParams(url.search);
-        existingParams.set('state', state);
-        
-        // Construir URL final preservando la codificación original del redirect_uri
-        // Extraer el redirect_uri original de la URL base para preservar su codificación
-        const baseUrlParams = new URLSearchParams(baseAuthUrl.split('?')[1] || '');
-        const originalRedirectUri = baseUrlParams.get('redirect_uri');
-        
-        // Construir URL manualmente para preservar codificación exacta
+        // Construir URL de OAuth directamente para tener control total sobre la codificación
+        // NO usar ebay.getAuthUrl() porque genera su propio state, y necesitamos usar nuestro state personalizado
         const authBase = sandbox 
           ? 'https://auth.sandbox.ebay.com/oauth2/authorize'
           : 'https://auth.ebay.com/oauth2/authorize';
         
+        // Construir parámetros manualmente con codificación explícita
+        // eBay requiere que redirect_uri coincida EXACTAMENTE con el registrado
+        const scopes = ['sell.inventory.readonly', 'sell.inventory', 'sell.marketing.readonly', 'sell.marketing'];
         const finalParams = [
           `client_id=${encodeURIComponent(finalAppId)}`,
-          `redirect_uri=${originalRedirectUri || encodeURIComponent(ruName)}`, // Usar el original si existe
-          `response_type=code`,
-          `scope=${encodeURIComponent('sell.inventory.readonly sell.inventory sell.marketing.readonly sell.marketing')}`,
-          `state=${encodeURIComponent(state)}`,
+          `redirect_uri=${encodeURIComponent(ruName)}`, // Codificar de manera consistente
+          `response_type=${encodeURIComponent('code')}`,
+          `scope=${encodeURIComponent(scopes.join(' '))}`,
+          `state=${encodeURIComponent(state)}`, // Usar nuestro state personalizado
         ].join('&');
         
         authUrl = `${authBase}?${finalParams}`;
