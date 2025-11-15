@@ -11,20 +11,54 @@ function parseState(state: string) {
   try {
     const decoded = Buffer.from(state, 'base64url').toString('utf8');
     const parts = decoded.split('|');
-    if (parts.length < 6) return { ok: false };
-    const [userIdStr, mk, ts, nonce, redirB64, env = 'production', sig] = parts.length === 7
+    
+    // 🔒 SEGURIDAD: Validar que el state tenga el formato correcto con expiración
+    // Formato esperado: userId|marketplace|timestamp|nonce|redirectUri|environment|expirationTime|signature
+    // O formato legacy: userId|marketplace|timestamp|nonce|redirectUri|environment|signature (sin expiración)
+    if (parts.length < 6) return { ok: false, reason: 'invalid_format' };
+    
+    // Determinar si tiene expiración (8 partes) o es legacy (7 partes)
+    const hasExpiration = parts.length === 8;
+    const [userIdStr, mk, ts, nonce, redirB64, env = 'production', expirationTimeOrSig, sig] = hasExpiration
       ? parts
-      : [...parts, 'production'];
-    const payload = [userIdStr, mk, ts, nonce, redirB64, env].join('|');
-    const secret = process.env.ENCRYPTION_KEY || 'default-key';
+      : [...parts, null, 'production'];
+    
+    // Si tiene expiración, validarla
+    if (hasExpiration && expirationTimeOrSig) {
+      const expirationTime = parseInt(expirationTimeOrSig, 10);
+      if (isNaN(expirationTime) || expirationTime < Date.now()) {
+        return { ok: false, reason: 'expired', expiredAt: expirationTime, now: Date.now() };
+      }
+    }
+    
+    // Validar firma
+    const payload = hasExpiration 
+      ? [userIdStr, mk, ts, nonce, redirB64, env, expirationTimeOrSig].join('|')
+      : [userIdStr, mk, ts, nonce, redirB64, env].join('|');
+    
+    const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-key';
+    if (!secret || secret === 'default-key') {
+      return { ok: false, reason: 'missing_secret' };
+    }
+    
     const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
-    if (expectedSig !== sig) return { ok: false };
+    if (expectedSig !== sig) return { ok: false, reason: 'invalid_signature' };
+    
     const redirectUri = Buffer.from(redirB64, 'base64url').toString('utf8');
     const userId = parseInt(userIdStr, 10);
-    if (!userId || !mk) return { ok: false };
-    return { ok: true, userId, marketplace: mk, redirectUri, environment: env as 'sandbox' | 'production' };
-  } catch {
-    return { ok: false };
+    if (!userId || !mk) return { ok: false, reason: 'invalid_user_or_marketplace' };
+    
+    return { 
+      ok: true, 
+      userId, 
+      marketplace: mk, 
+      redirectUri, 
+      environment: env as 'sandbox' | 'production',
+      hasExpiration,
+      expirationTime: hasExpiration ? parseInt(expirationTimeOrSig, 10) : null
+    };
+  } catch (error: any) {
+    return { ok: false, reason: 'parse_error', error: error.message };
   }
 }
 
@@ -36,7 +70,23 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
     const state = String(req.query.state || '');
     const parsed = parseState(state);
     if (!parsed.ok) {
-      return res.status(400).send('<html><body>Invalid state</body></html>');
+      // 🔒 SEGURIDAD: Mensajes de error más específicos pero sin exponer detalles
+      let errorMessage = 'Invalid or expired authorization state';
+      if (parsed.reason === 'expired') {
+        errorMessage = 'Authorization state has expired. Please try again.';
+      } else if (parsed.reason === 'invalid_signature') {
+        errorMessage = 'Invalid authorization state signature';
+      }
+      
+      return res.status(400).send(`
+        <html>
+          <body>
+            <h2>Authorization Error</h2>
+            <p>${errorMessage}</p>
+            <p>Please return to the application and try again.</p>
+          </body>
+        </html>
+      `);
     }
     const { userId, redirectUri, environment } = parsed as any;
 
