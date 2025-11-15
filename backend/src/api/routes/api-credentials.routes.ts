@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { PrismaClient, CredentialScope } from '@prisma/client';
-import { AppError } from '../../middleware/error.middleware';
+import { AppError, ErrorCode } from '../../middleware/error.middleware';
 import { apiAvailability } from '../../services/api-availability.service';
 import { CredentialsManager } from '../../services/credentials-manager.service';
 import { supportsEnvironments } from '../../config/api-keys.config';
@@ -124,12 +124,26 @@ router.get('/:apiName', async (req: Request, res: Response, next) => {
     const environment = (req.query.environment as ApiEnvironment) || 'production';
     const includeGlobal = req.query.includeGlobal !== 'false';
 
-    // Validar environment
-    if (environment !== 'sandbox' && environment !== 'production') {
-      throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
+    // ✅ VALIDACIÓN: Validar que API soporte ambientes antes de aceptar parámetro
+    const supportsEnv = supportsEnvironments(apiName);
+    if (!supportsEnv && environment !== 'production') {
+      throw new AppError(
+        `API "${apiName}" does not support environments. Only "production" is allowed.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+        { apiName, environment, supportsEnvironments: false }
+      );
     }
 
-    const supportsEnv = supportsEnvironments(apiName);
+    // Validar environment
+    if (environment !== 'sandbox' && environment !== 'production') {
+      throw new AppError(
+        'Invalid environment. Must be "sandbox" or "production"',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+        { environment, allowedValues: ['sandbox', 'production'] }
+      );
+    }
 
     const entry = await CredentialsManager.getCredentialEntry(
       targetUserId,
@@ -199,18 +213,44 @@ router.post('/', async (req: Request, res: Response, next) => {
 
     // Validar apiName
     if (!apiName || typeof apiName !== 'string') {
-      throw new AppError('API name is required', 400);
+      throw new AppError(
+        'API name is required',
+        400,
+        ErrorCode.MISSING_REQUIRED_FIELD,
+        { field: 'apiName' }
+      );
+    }
+
+    // ✅ VALIDACIÓN: Validar que API soporte ambientes antes de aceptar parámetro
+    const supportsEnv = supportsEnvironments(apiName);
+    if (!supportsEnv && environment !== 'production') {
+      throw new AppError(
+        `API "${apiName}" does not support environments. Only "production" is allowed.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+        { apiName, environment, supportsEnvironments: false }
+      );
     }
 
     // Validar environment
     const env = environment as ApiEnvironment;
     if (env !== 'sandbox' && env !== 'production') {
-      throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
+      throw new AppError(
+        'Invalid environment. Must be "sandbox" or "production"',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+        { environment, allowedValues: ['sandbox', 'production'] }
+      );
     }
 
     // Validar credentials
     if (!credentials || typeof credentials !== 'object') {
-      throw new AppError('Credentials object is required', 400);
+      throw new AppError(
+        'Credentials object is required',
+        400,
+        ErrorCode.MISSING_REQUIRED_FIELD,
+        { field: 'credentials' }
+      );
     }
 
     // 🔒 SEGURIDAD: Log para debugging (redactado - sin datos sensibles)
@@ -240,6 +280,7 @@ router.post('/', async (req: Request, res: Response, next) => {
       return res.status(400).json({
         success: false,
         error: 'Invalid credentials format',
+        errorCode: ErrorCode.VALIDATION_ERROR,
         details: validation.errors,
         received: {
           keys: Object.keys(credentials || {}),
@@ -400,10 +441,26 @@ router.put('/:apiName/toggle', async (req: Request, res: Response, next) => {
     const targetUserId = resolveTargetUserId(req, targetUserIdRaw);
     const requestedScope = scopeRaw ? normalizeScope(scopeRaw, actorRole, apiName) : undefined;
 
+    // ✅ VALIDACIÓN: Validar que API soporte ambientes antes de aceptar parámetro
+    const supportsEnv = supportsEnvironments(apiName);
+    if (!supportsEnv && environment !== 'production') {
+      throw new AppError(
+        `API "${apiName}" does not support environments. Only "production" is allowed.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+        { apiName, environment, supportsEnvironments: false }
+      );
+    }
+
     // Validar environment
     const env = environment as ApiEnvironment;
     if (env !== 'sandbox' && env !== 'production') {
-      throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
+      throw new AppError(
+        'Invalid environment. Must be "sandbox" or "production"',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+        { environment, allowedValues: ['sandbox', 'production'] }
+      );
     }
 
     const entry = await CredentialsManager.getCredentialEntry(
@@ -491,9 +548,25 @@ router.delete('/:apiName', async (req: Request, res: Response, next) => {
     const requestedScope =
       scopeParam !== undefined ? normalizeScope(scopeParam, actorRole, apiName) : undefined;
 
+    // ✅ VALIDACIÓN: Validar que API soporte ambientes antes de aceptar parámetro
+    const supportsEnv = supportsEnvironments(apiName);
+    if (!supportsEnv && environment !== 'production') {
+      throw new AppError(
+        `API "${apiName}" does not support environments. Only "production" is allowed.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+        { apiName, environment, supportsEnvironments: false }
+      );
+    }
+
     // Validar environment
     if (environment !== 'sandbox' && environment !== 'production') {
-      throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
+      throw new AppError(
+        'Invalid environment. Must be "sandbox" or "production"',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+        { environment, allowedValues: ['sandbox', 'production'] }
+      );
     }
 
     const entry = await CredentialsManager.getCredentialEntry(
@@ -568,9 +641,25 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
     const { apiName } = req.params;
     const { environment = 'production', credentials: tempCredentials } = req.body;
 
+    // ✅ VALIDACIÓN: Validar que API soporte ambientes antes de aceptar parámetro
+    const supportsEnv = supportsEnvironments(apiName);
+    if (!supportsEnv && environment !== 'production') {
+      throw new AppError(
+        `API "${apiName}" does not support environments. Only "production" is allowed.`,
+        400,
+        ErrorCode.VALIDATION_ERROR,
+        { apiName, environment, supportsEnvironments: false }
+      );
+    }
+
     // Validar environment
     if (environment !== 'sandbox' && environment !== 'production') {
-      throw new AppError('Invalid environment. Must be "sandbox" or "production"', 400);
+      throw new AppError(
+        'Invalid environment. Must be "sandbox" or "production"',
+        400,
+        ErrorCode.VALIDATION_ERROR,
+        { environment, allowedValues: ['sandbox', 'production'] }
+      );
     }
 
     // ✅ Si se proporcionan credenciales temporales del formulario, validarlas primero
