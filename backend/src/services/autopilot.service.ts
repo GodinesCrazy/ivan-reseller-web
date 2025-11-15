@@ -951,8 +951,91 @@ export class AutopilotSystem extends EventEmitter {
         optimization.durationDays
       );
 
-      // Trigger marketplace publishing
-      // TODO: Integrate with marketplace API
+      // ✅ ALTA PRIORIDAD: Integrar MarketplaceService para publicar automáticamente
+      try {
+        const marketplace = this.config.targetMarketplace as 'ebay' | 'mercadolibre' | 'amazon';
+        const publishResult = await this.marketplaceService.publishProduct(currentUserId, {
+          productId: product.id,
+          marketplace,
+          customData: {
+            categoryId: opportunity.category,
+            price: opportunity.estimatedCost * 2,
+            quantity: 1,
+            title: opportunity.title,
+            description: opportunity.description
+          }
+        }, currentEnvironment);
+
+        if (publishResult.success) {
+          // Actualizar producto como publicado
+          await prisma.product.update({
+            where: { id: product.id },
+            data: { 
+              isPublished: true, 
+              status: 'PUBLISHED',
+              productData: JSON.stringify({
+                ...JSON.parse(product.productData || '{}'),
+                marketplaceListingId: publishResult.listingId,
+                marketplaceListingUrl: publishResult.listingUrl,
+                publishedAt: new Date().toISOString()
+              })
+            }
+          });
+
+          logger.info('Autopilot: Product published to marketplace successfully', {
+            service: 'autopilot',
+            userId: currentUserId,
+            productId: product.id,
+            marketplace,
+            listingId: publishResult.listingId,
+            environment: currentEnvironment
+          });
+        } else {
+          logger.warn('Autopilot: Failed to publish product to marketplace', {
+            service: 'autopilot',
+            userId: currentUserId,
+            productId: product.id,
+            marketplace,
+            error: publishResult.error,
+            environment: currentEnvironment
+          });
+          
+          // Mantener producto en PENDING si falla la publicación
+          await prisma.product.update({
+            where: { id: product.id },
+            data: { 
+              status: 'PENDING',
+              productData: JSON.stringify({
+                ...JSON.parse(product.productData || '{}'),
+                publishError: publishResult.error,
+                publishAttemptedAt: new Date().toISOString()
+              })
+            }
+          });
+        }
+      } catch (publishError: any) {
+        logger.error('Autopilot: Error publishing product to marketplace', {
+          service: 'autopilot',
+          userId: currentUserId,
+          productId: product.id,
+          marketplace: this.config.targetMarketplace,
+          error: publishError?.message || String(publishError),
+          environment: currentEnvironment
+        });
+
+        // Mantener producto en PENDING si hay error
+        await prisma.product.update({
+          where: { id: product.id },
+          data: { 
+            status: 'PENDING',
+            productData: JSON.stringify({
+              ...JSON.parse(product.productData || '{}'),
+              publishError: publishError?.message || String(publishError),
+              publishAttemptedAt: new Date().toISOString()
+            })
+          }
+        });
+      }
 
       this.emit('product:published', { 
         productId: product.id, 
