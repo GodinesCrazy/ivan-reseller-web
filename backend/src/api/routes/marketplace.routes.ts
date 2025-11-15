@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { authenticate } from '../../middleware/auth.middleware';
 import { z } from 'zod';
 import { marketplaceRateLimit, ebayRateLimit, mercadolibreRateLimit, amazonRateLimit } from '../../middleware/rate-limit.middleware';
+import { logger } from '../../config/logger';
 
 const router = Router();
 const marketplaceService = new MarketplaceService();
@@ -411,13 +412,13 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       // porque eBay requiere que coincida EXACTAMENTE con el registrado
       ruName = ruName.trim();
       
-      // Logging detallado para debugging
-      console.log('[eBay OAuth] Redirect URI (RuName) validation:', {
-        original: typeof redirect_uri === 'string' ? redirect_uri : 'N/A',
-        fromCreds: cred?.credentials?.redirectUri || 'N/A',
-        fromEnv: process.env.EBAY_REDIRECT_URI || 'N/A',
-        final: ruName,
-        length: ruName.length,
+      // Logging detallado para debugging (redactado)
+      logger.debug('[eBay OAuth] Redirect URI (RuName) validation', {
+        originalLength: typeof redirect_uri === 'string' ? redirect_uri.length : 0,
+        fromCredsLength: cred?.credentials?.redirectUri?.length || 0,
+        fromEnvLength: process.env.EBAY_REDIRECT_URI?.length || 0,
+        finalLength: ruName.length,
+        finalPreview: ruName.substring(0, 30) + (ruName.length > 30 ? '...' : ''),
         isEmpty: !ruName || ruName.length === 0,
         hasSpaces: ruName.includes(' '),
         firstChars: ruName.substring(0, 20),
@@ -468,8 +469,9 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       
       // Advertencia si el Redirect URI contiene espacios (puede causar problemas)
       if (ruName.includes(' ')) {
-        console.warn('[eBay OAuth] Redirect URI contains spaces - this may cause issues:', {
-          ruName: ruName.substring(0, 50) + '...',
+        logger.warn('[eBay OAuth] Redirect URI contains spaces - this may cause issues', {
+          ruNamePreview: ruName.substring(0, 30) + '...',
+          ruNameLength: ruName.length,
           spacesCount: (ruName.match(/ /g) || []).length,
         });
         formatWarning = (formatWarning ? formatWarning + '\n\n' : '') + 
@@ -479,9 +481,10 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       // Advertencia si contiene caracteres problemáticos
       const problematicChars = /[<>"{}|\\^`\[\]]/;
       if (problematicChars.test(ruName)) {
-        console.warn('[eBay OAuth] Redirect URI contains problematic characters:', {
-          ruName: ruName.substring(0, 50) + '...',
-          problematicChars: ruName.match(problematicChars),
+        logger.warn('[eBay OAuth] Redirect URI contains problematic characters', {
+          ruNamePreview: ruName.substring(0, 30) + '...',
+          ruNameLength: ruName.length,
+          problematicChars: ruName.match(problematicChars)?.map(c => c),
         });
         formatWarning = (formatWarning ? formatWarning + '\n\n' : '') +
           `⚠️ Advertencia: El Redirect URI contiene caracteres que pueden causar problemas. Verifica que coincida exactamente con el registrado en eBay Developer Portal.`;
@@ -492,24 +495,24 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const cleanedAppId = appId.trim().replace(/[\s\u200B-\u200D\uFEFF]/g, ''); // Remover espacios y caracteres invisibles
       const appIdUpper = cleanedAppId.toUpperCase();
       
-      // Logging para debugging
-      console.log('[eBay OAuth] Validating App ID:', {
-        original: appId,
-        cleaned: cleanedAppId,
-        upper: appIdUpper,
+      // Logging para debugging (redactado)
+      logger.debug('[eBay OAuth] Validating App ID', {
+        originalLength: appId.length,
+        cleanedLength: cleanedAppId.length,
+        upperPreview: appIdUpper.substring(0, 8) + '...',
         sandbox,
         environment: resolvedEnv,
         startsWithSBX: appIdUpper.startsWith('SBX-'),
         appIdLength: cleanedAppId.length,
-        firstChars: cleanedAppId.substring(0, 10),
+        firstChars: cleanedAppId.substring(0, 8) + '...',
       });
       
       // Solo mostrar advertencia, no bloquear
       // Algunos App IDs de eBay pueden tener formatos diferentes o pueden ser válidos aunque no empiecen con SBX-
       if (sandbox && !appIdUpper.startsWith('SBX-')) {
         formatWarning = `⚠️ Advertencia: El App ID no parece ser de Sandbox (típicamente empiezan con "SBX-"). Si el error persiste, verifica en eBay Developer Portal que el App ID sea correcto para Sandbox.`;
-        console.warn('[eBay OAuth] App ID format warning for Sandbox:', {
-          appId: cleanedAppId.substring(0, 20) + '...',
+        logger.warn('[eBay OAuth] App ID format warning for Sandbox', {
+          appIdPreview: cleanedAppId.substring(0, 8) + '...' + cleanedAppId.substring(cleanedAppId.length - 4),
           expectedPrefix: 'SBX-',
           actualPrefix: cleanedAppId.substring(0, 4),
         });
@@ -517,8 +520,8 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       
       if (!sandbox && appIdUpper.startsWith('SBX-')) {
         formatWarning = `⚠️ Advertencia: El App ID parece ser de Sandbox (empieza con "SBX-"), pero estás usando Production. Si el error persiste, verifica que estés usando las credenciales correctas.`;
-        console.warn('[eBay OAuth] App ID format warning for Production:', {
-          appId: cleanedAppId.substring(0, 20) + '...',
+        logger.warn('[eBay OAuth] App ID format warning for Production', {
+          appIdPreview: cleanedAppId.substring(0, 8) + '...' + cleanedAppId.substring(cleanedAppId.length - 4),
           detectedPrefix: 'SBX-',
         });
       }
@@ -526,7 +529,10 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       // Usar el App ID limpiado para continuar
       const finalAppId = cleanedAppId;
       const redirB64 = Buffer.from(String(ruName)).toString('base64url');
-      const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv].join('|');
+      
+      // 🔒 SEGURIDAD: Agregar expiración al state parameter (10 minutos)
+      const expirationTime = Date.now() + (10 * 60 * 1000); // 10 minutos desde ahora
+      const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv, expirationTime.toString()].join('|');
       const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
       const state = Buffer.from([payload, sig].join('|')).toString('base64url');
       
@@ -556,33 +562,36 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         const clientIdParam = urlObj.searchParams.get('client_id');
         const redirectUriParam = urlObj.searchParams.get('redirect_uri');
         
-        console.log('[eBay OAuth] Generated auth URL:', {
+        // 🔒 SEGURIDAD: Redactar URL completa en logs para evitar exposición de tokens
+        const { redactUrlForLogging } = await import('../../utils/redact');
+        logger.info('[eBay OAuth] Generated auth URL', {
           sandbox,
           environment: resolvedEnv,
-          appId: finalAppId.substring(0, 20) + '...',
+          appId: finalAppId.substring(0, 8) + '...' + finalAppId.substring(finalAppId.length - 4),
           appIdLength: finalAppId.length,
-          redirectUri: ruName,
+          redirectUri: ruName.substring(0, 30) + '...',
           redirectUriLength: ruName.length,
-          redirectUriInUrl: redirectUriParam,
-          clientIdInUrl: clientIdParam?.substring(0, 20) + '...',
+          redirectUriInUrl: redirectUriParam ? redirectUriParam.substring(0, 30) + '...' : null,
+          clientIdInUrl: clientIdParam ? clientIdParam.substring(0, 8) + '...' + clientIdParam.substring(clientIdParam.length - 4) : null,
           authUrlLength: authUrl.length,
-          authUrlPreview: authUrl.substring(0, 150) + '...',
-          fullAuthUrl: authUrl, // Log completo para debugging (solo en desarrollo)
+          authUrlPreview: redactUrlForLogging(authUrl), // Redactar URL completa
         });
         
         // Validar que los parámetros se codificaron correctamente
         if (redirectUriParam !== ruName) {
-          console.warn('[eBay OAuth] Redirect URI mismatch after encoding:', {
-            original: ruName,
-            encoded: redirectUriParam,
+          logger.warn('[eBay OAuth] Redirect URI mismatch after encoding', {
+            originalLength: ruName.length,
+            encodedLength: redirectUriParam?.length,
+            originalPreview: ruName.substring(0, 30) + '...',
+            encodedPreview: redirectUriParam?.substring(0, 30) + '...',
             difference: 'URL encoding may have changed the value',
           });
         }
       } catch (urlError: any) {
-        console.error('[eBay OAuth] Error generating auth URL:', {
+        logger.error('[eBay OAuth] Error generating auth URL', {
           error: urlError.message,
           stack: urlError.stack,
-          appId: finalAppId.substring(0, 20) + '...',
+          appId: finalAppId.substring(0, 8) + '...' + finalAppId.substring(finalAppId.length - 4),
           redirectUri: ruName.substring(0, 30) + '...',
         });
         throw new Error(`Error al generar URL de autorización: ${urlError.message}`);
@@ -590,7 +599,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       
       // Si hay advertencia de formato, incluirla en la respuesta pero no bloquear
       if (formatWarning) {
-        console.log('[eBay OAuth] Format warning (non-blocking):', formatWarning);
+        logger.info('[eBay OAuth] Format warning (non-blocking)', { warning: formatWarning });
       }
     } else if (marketplace === 'mercadolibre') {
       const cred = await marketplaceService.getCredentials(userId, 'mercadolibre', environment as any);
@@ -616,7 +625,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
 
     // Validar que authUrl se haya generado correctamente
     if (!authUrl || !authUrl.trim()) {
-      console.error('[eBay OAuth] authUrl is empty after generation');
+      logger.error('[eBay OAuth] authUrl is empty after generation');
       return res.status(500).json({
         success: false,
         message: 'Error: No se pudo generar la URL de autorización. Verifica los logs del servidor.',
@@ -627,8 +636,9 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
     try {
       new URL(authUrl);
     } catch (urlError: any) {
-      console.error('[eBay OAuth] Invalid authUrl generated:', {
-        authUrl,
+      const { redactUrlForLogging } = await import('../../utils/redact');
+      logger.error('[eBay OAuth] Invalid authUrl generated', {
+        authUrlPreview: redactUrlForLogging(authUrl),
         error: urlError.message,
       });
       return res.status(500).json({
@@ -650,7 +660,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       responseData.message = 'URL de autorización generada. Revisa la advertencia sobre el formato del App ID si el OAuth falla.';
     }
     
-    console.log('[eBay OAuth] Returning auth URL response:', {
+    logger.info('[eBay OAuth] Returning auth URL response', {
       success: responseData.success,
       hasAuthUrl: !!responseData.data.authUrl,
       authUrlLength: responseData.data.authUrl?.length,

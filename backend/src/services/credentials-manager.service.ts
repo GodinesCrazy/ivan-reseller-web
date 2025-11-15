@@ -22,12 +22,20 @@ const prisma = new PrismaClient();
 
 // Configuración de encriptación
 const ALGORITHM = 'aes-256-gcm';
-const RAW_ENCRYPTION_SECRET = (process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY.trim())
-  || (process.env.JWT_SECRET && process.env.JWT_SECRET.trim())
-  || 'ivan-reseller-default-secret';
 
-if (!process.env.ENCRYPTION_KEY && !process.env.JWT_SECRET) {
-  console.warn('⚠️  Using fallback encryption secret. Set ENCRYPTION_KEY for stronger security.');
+// 🔒 SEGURIDAD CRÍTICA: FALLAR si no hay clave de encriptación configurada
+// No usar claves por defecto o fallback - esto es un riesgo de seguridad crítico
+const RAW_ENCRYPTION_SECRET = (process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY.trim())
+  || (process.env.JWT_SECRET && process.env.JWT_SECRET.trim());
+
+if (!RAW_ENCRYPTION_SECRET || RAW_ENCRYPTION_SECRET.length < 32) {
+  const error = new Error(
+    'CRITICAL SECURITY ERROR: ENCRYPTION_KEY or JWT_SECRET environment variable must be set and be at least 32 characters long. ' +
+    'Without a proper encryption key, credentials cannot be securely stored. ' +
+    'Please set ENCRYPTION_KEY in your environment variables before starting the application.'
+  );
+  console.error('❌', error.message);
+  throw error;
 }
 
 const ENCRYPTION_KEY = crypto.createHash('sha256').update(RAW_ENCRYPTION_SECRET).digest('hex');

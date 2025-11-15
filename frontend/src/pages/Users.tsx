@@ -38,6 +38,37 @@ interface User {
   createdAt: string;
   lastLogin?: string; // Mapeado desde lastLoginAt
   avatar?: string;
+  commissionRate?: number;
+  fixedMonthlyCost?: number;
+  balance?: number;
+  totalEarnings?: number;
+  totalSales?: number;
+}
+
+interface UserProfile {
+  id: number;
+  username: string;
+  email: string;
+  fullName?: string;
+  role: string;
+  commissionRate: number;
+  fixedMonthlyCost: number;
+  balance: number;
+  totalEarnings: number;
+  totalSales: number;
+  isActive: boolean;
+  lastLoginAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  workflowConfig?: any;
+  apiCredentials: any[];
+  stats: {
+    products: number;
+    sales: number;
+    opportunities: number;
+    activities: number;
+    commissions: number;
+  };
 }
 
 interface UserStats {
@@ -64,6 +95,7 @@ export default function Users() {
   const [showNewUserModal, setShowNewUserModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userStats, setUserStats] = useState<UserStats | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   // New/Edit User Form
   const [formData, setFormData] = useState({
@@ -72,8 +104,8 @@ export default function Users() {
     fullName: '', // Backend espera fullName opcional
     password: '',
     role: 'USER' as 'ADMIN' | 'USER', // Estandarizado a mayúsculas
-    commissionRate: 0.15, // Backend requiere commissionRate
-    fixedMonthlyCost: 17.0, // Backend requiere fixedMonthlyCost
+    commissionRate: 0.20, // Porcentaje de comisión sobre utilidad (ej: 0.20 = 20%)
+    fixedMonthlyCost: 0.0, // Costo fijo mensual en USD
     isActive: true // Backend espera isActive, no status
   });
 
@@ -237,7 +269,12 @@ export default function Users() {
         status: user.isActive ? 'active' : 'inactive', // Mapear isActive a status
         createdAt: user.createdAt,
         lastLogin: user.lastLoginAt || undefined, // Mapear lastLoginAt a lastLogin
-        avatar: undefined
+        avatar: undefined,
+        commissionRate: user.commissionRate,
+        fixedMonthlyCost: user.fixedMonthlyCost,
+        balance: user.balance,
+        totalEarnings: user.totalEarnings,
+        totalSales: user.totalSales
       }));
       setUsers(mappedUsers);
     } catch (error: any) {
@@ -249,31 +286,50 @@ export default function Users() {
 
   const loadUserDetails = async (userId: number) => {
     try {
-      const [detailsRes, statsRes] = await Promise.all([
-        api.get(`/api/users/${userId}`),
-        api.get(`/api/users/${userId}/stats`)
-      ]);
+      // Cargar perfil completo usando el nuevo endpoint
+      const profileRes = await api.get(`/api/users/${userId}/profile`);
+      const profile = profileRes.data?.data;
       
-      // Mapear datos del backend al formato esperado por el frontend
-      // El backend devuelve { success: true, data: user }
-      const backendUser = detailsRes.data?.data || detailsRes.data?.user;
+      if (!profile) {
+        toast.error('Error loading user profile');
+        return;
+      }
+
+      setUserProfile(profile);
+      
+      // Mapear para el modal de detalles
       const mappedUser: User = {
-        id: backendUser.id,
-        name: backendUser.fullName || backendUser.username,
-        email: backendUser.email,
-        phone: '', // No existe en backend
-        role: backendUser.role || 'USER',
-        status: backendUser.isActive ? 'active' : 'inactive',
-        createdAt: backendUser.createdAt,
-        lastLogin: backendUser.lastLoginAt || undefined,
-        avatar: undefined
+        id: profile.id,
+        name: profile.fullName || profile.username,
+        email: profile.email,
+        phone: '',
+        role: profile.role as 'ADMIN' | 'USER',
+        status: profile.isActive ? 'active' : 'inactive',
+        createdAt: profile.createdAt,
+        lastLogin: profile.lastLoginAt || undefined,
+        avatar: undefined,
+        commissionRate: profile.commissionRate,
+        fixedMonthlyCost: profile.fixedMonthlyCost,
+        balance: profile.balance,
+        totalEarnings: profile.totalEarnings,
+        totalSales: profile.totalSales
       };
       
       setSelectedUser(mappedUser);
-      setUserStats(statsRes.data?.stats);
+      
+      // Mapear stats desde el perfil
+      setUserStats({
+        totalProducts: profile.stats.products,
+        totalSales: profile.stats.sales,
+        totalRevenue: profile.totalEarnings,
+        commissions: 0, // Se puede calcular desde profile.stats.commissions
+        conversionRate: 0
+      });
+      
       setShowDetailsModal(true);
     } catch (error: any) {
-      toast.error('Error loading user details');
+      console.error('Error loading user profile:', error);
+      toast.error('Error loading user details: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -294,8 +350,8 @@ export default function Users() {
         fullName: backendUser.fullName || '',
         password: '',
         role: (backendUser.role || user.role) as 'ADMIN' | 'USER',
-        commissionRate: backendUser.commissionRate || 0.15,
-        fixedMonthlyCost: backendUser.fixedMonthlyCost || 17.0,
+        commissionRate: backendUser.commissionRate ?? 0.20,
+        fixedMonthlyCost: backendUser.fixedMonthlyCost ?? 0.0,
         isActive: backendUser.isActive !== undefined ? backendUser.isActive : (user.status === 'active')
       });
     } catch (error: any) {
@@ -306,8 +362,8 @@ export default function Users() {
         fullName: user.name,
         password: '',
         role: user.role as 'ADMIN' | 'USER',
-        commissionRate: 0.15,
-        fixedMonthlyCost: 17.0,
+        commissionRate: user.commissionRate ?? 0.20,
+        fixedMonthlyCost: user.fixedMonthlyCost ?? 0.0,
         isActive: user.status === 'active'
       });
     }
@@ -321,8 +377,8 @@ export default function Users() {
       fullName: '',
       password: '',
       role: 'USER' as 'ADMIN' | 'USER',
-      commissionRate: 0.15,
-      fixedMonthlyCost: 17.0,
+      commissionRate: 0.20,
+      fixedMonthlyCost: 0.0,
       isActive: true
     });
     setShowNewUserModal(true);
@@ -362,8 +418,8 @@ export default function Users() {
         fullName: formData.fullName?.trim() || undefined,
         password: formData.password,
         role: formData.role,
-        commissionRate: formData.commissionRate || 0.15,
-        fixedMonthlyCost: formData.fixedMonthlyCost || 17.0,
+        commissionRate: formData.commissionRate ?? 0.20,
+        fixedMonthlyCost: formData.fixedMonthlyCost ?? 0.0,
         isActive: formData.isActive !== undefined ? formData.isActive : true
       };
 
@@ -383,8 +439,8 @@ export default function Users() {
         fullName: '',
         password: '',
         role: 'USER' as 'ADMIN' | 'USER',
-        commissionRate: 0.15,
-        fixedMonthlyCost: 17.0,
+        commissionRate: 0.20,
+        fixedMonthlyCost: 0.0,
         isActive: true
       });
       
@@ -649,9 +705,11 @@ export default function Users() {
                   {user.phone && <div className="text-sm text-gray-500">{user.phone}</div>}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleBadgeColor(user.role)}`}>
-                    {user.role.toUpperCase()}
-                  </span>
+                  <div className="flex flex-col gap-1">
+                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleBadgeColor(user.role)}`}>
+                      {user.role.toUpperCase()}
+                    </span>
+                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeColor(user.status)}`}>
@@ -782,20 +840,33 @@ export default function Users() {
                     <div className="font-medium">{selectedUser.email}</div>
                   </div>
                   <div>
-                    <div className="text-sm text-gray-500">Phone</div>
-                    <div className="font-medium">{selectedUser.phone || '—'}</div>
-                  </div>
-                  <div>
                     <div className="text-sm text-gray-500">Role</div>
                     <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleBadgeColor(selectedUser.role)}`}>
                       {selectedUser.role.toUpperCase()}
                     </span>
                   </div>
+                  {userProfile && (
+                    <>
+                      <div>
+                        <div className="text-sm text-gray-500">Commission Rate</div>
+                        <div className="font-medium">{(userProfile.commissionRate * 100).toFixed(1)}%</div>
+                        <div className="text-xs text-gray-400">Sobre utilidad de operación exitosa</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500">Fixed Monthly Cost</div>
+                        <div className="font-medium">${userProfile.fixedMonthlyCost.toFixed(2)} USD</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-500">Balance</div>
+                        <div className="font-medium">${userProfile.balance.toFixed(2)} USD</div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
               {/* Statistics */}
-              {userStats && (
+              {userProfile && (
                 <div>
                   <h4 className="font-semibold text-gray-900 mb-3">Statistics</h4>
                   <div className="grid grid-cols-2 gap-4">
@@ -804,29 +875,49 @@ export default function Users() {
                         <Package className="w-5 h-5 text-blue-600" />
                         <div className="text-sm text-blue-600">Total Products</div>
                       </div>
-                      <div className="text-2xl font-bold text-blue-900">{userStats.totalProducts}</div>
+                      <div className="text-2xl font-bold text-blue-900">{userProfile.stats.products}</div>
                     </div>
                     <div className="p-4 bg-green-50 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
                         <DollarSign className="w-5 h-5 text-green-600" />
                         <div className="text-sm text-green-600">Total Sales</div>
                       </div>
-                      <div className="text-2xl font-bold text-green-900">{userStats.totalSales}</div>
+                      <div className="text-2xl font-bold text-green-900">{userProfile.stats.sales}</div>
                     </div>
                     <div className="p-4 bg-purple-50 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
                         <TrendingUp className="w-5 h-5 text-purple-600" />
-                        <div className="text-sm text-purple-600">Revenue</div>
+                        <div className="text-sm text-purple-600">Total Earnings</div>
                       </div>
-                      <div className="text-2xl font-bold text-purple-900">${userStats.totalRevenue.toFixed(2)}</div>
+                      <div className="text-2xl font-bold text-purple-900">${userProfile.totalEarnings.toFixed(2)}</div>
                     </div>
                     <div className="p-4 bg-yellow-50 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
                         <DollarSign className="w-5 h-5 text-yellow-600" />
-                        <div className="text-sm text-yellow-600">Commissions</div>
+                        <div className="text-sm text-yellow-600">Opportunities</div>
                       </div>
-                      <div className="text-2xl font-bold text-yellow-900">${userStats.commissions.toFixed(2)}</div>
+                      <div className="text-2xl font-bold text-yellow-900">{userProfile.stats.opportunities}</div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* API Credentials */}
+              {userProfile && userProfile.apiCredentials && userProfile.apiCredentials.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-3">API Credentials</h4>
+                  <div className="space-y-2">
+                    {userProfile.apiCredentials.map((cred: any) => (
+                      <div key={cred.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div>
+                          <span className="font-medium">{cred.apiName}</span>
+                          <span className="text-sm text-gray-500 ml-2">({cred.environment})</span>
+                        </div>
+                        <span className={`px-2 py-1 text-xs rounded ${cred.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {cred.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
