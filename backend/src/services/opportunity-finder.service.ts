@@ -8,6 +8,7 @@ import opportunityPersistence from './opportunity.service';
 import MarketplaceService from './marketplace.service';
 import fxService from './fx.service';
 import { workflowConfigService } from './workflow-config.service';
+import { logger } from '../config/logger';
 import {
   DEFAULT_COMPARATOR_MARKETPLACES,
   OPTIONAL_MARKETPLACES,
@@ -59,18 +60,30 @@ class OpportunityFinderService {
       : DEFAULT_COMPARATOR_MARKETPLACES;
     const region = filters.region || 'us';
     
-    // ✅ Obtener environment del usuario si no se especificó
+    // ✅ MEDIA PRIORIDAD: Obtener environment del usuario si no se especificó (con logger estructurado)
     let environment: 'sandbox' | 'production' = filters.environment || 'production';
     if (!filters.environment) {
       try {
         environment = await workflowConfigService.getUserEnvironment(userId);
-      } catch (error) {
-        console.warn('⚠️  No se pudo obtener environment del usuario, usando production por defecto');
+      } catch (error: any) {
+        logger.warn('No se pudo obtener environment del usuario, usando production por defecto', {
+          service: 'opportunity-finder',
+          userId,
+          error: error?.message || String(error),
+          fallback: 'production'
+        });
         environment = 'production';
       }
     }
     
-    console.log(`🌍 Búsqueda de oportunidades en modo: ${environment}`);
+    logger.info('Búsqueda de oportunidades iniciada', {
+      service: 'opportunity-finder',
+      userId,
+      query,
+      environment,
+      maxItems,
+      marketplaces: requestedMarketplaces
+    });
 
     const credentialDiagnostics: Record<string, { issues: string[]; warnings: string[] }> = {};
     const marketplaceService = new MarketplaceService();
