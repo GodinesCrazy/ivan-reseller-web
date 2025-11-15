@@ -44,10 +44,25 @@ interface APICapabilities {
 export class APIAvailabilityService {
   private cache: Map<string, APIStatus> = new Map(); // Fallback cache en memoria
   private cacheExpiry: number = 5 * 60 * 1000; // 5 minutes (para validación rápida)
-  private healthCheckExpiry: number = 30 * 60 * 1000; // 30 minutes (para health checks reales)
+  // 🚀 PERFORMANCE: TTL más corto para APIs críticas (5 min) vs no críticas (15 min)
+  private healthCheckExpiry: number = 5 * 60 * 1000; // 5 minutes (para APIs críticas)
+  private healthCheckExpiryNonCritical: number = 15 * 60 * 1000; // 15 minutes (para APIs no críticas)
   private useRedis: boolean = isRedisAvailable;
   private redisPrefix = 'api_availability:'; // Prefijo para keys de Redis
   private healthCheckPrefix = 'api_health:'; // Prefijo para health checks en Redis
+
+  /**
+   * 🚀 PERFORMANCE: Determinar TTL según criticidad de la API
+   */
+  private getHealthCheckTTL(apiName: string): number {
+    // APIs críticas: eBay, Amazon, MercadoLibre (marketplaces principales)
+    const criticalAPIs = ['ebay', 'amazon', 'mercadolibre'];
+    if (criticalAPIs.includes(apiName.toLowerCase())) {
+      return this.healthCheckExpiry; // 5 minutos
+    }
+    // APIs no críticas: GROQ, ScraperAPI, etc.
+    return this.healthCheckExpiryNonCritical; // 15 minutos
+  }
 
   /**
    * Generate cache key including userId for multi-tenant isolation
@@ -520,10 +535,12 @@ export class APIAvailabilityService {
       // Level 2: Real health check (only if fields are valid and not recently checked)
       let healthCheckResult: { success: boolean; error?: string } | null = null;
       const lastHealthCheck = await this.getCached(healthCheckKey);
+      // 🚀 PERFORMANCE: Usar TTL dinámico según criticidad
+      const healthCheckTTL = this.getHealthCheckTTL('ebay');
       const shouldPerformHealthCheck = 
         forceHealthCheck || 
         !lastHealthCheck || 
-        Date.now() - lastHealthCheck.lastChecked.getTime() >= this.healthCheckExpiry;
+        Date.now() - lastHealthCheck.lastChecked.getTime() >= healthCheckTTL;
 
       if (validation.valid && shouldPerformHealthCheck) {
         try {
