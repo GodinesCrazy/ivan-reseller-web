@@ -235,17 +235,31 @@ export class EbayService {
       ? 'https://auth.sandbox.ebay.com/oauth2/authorize' 
       : 'https://auth.ebay.com/oauth2/authorize';
     
+    // ✅ CORRECCIÓN: Verificar si el redirectUri necesita codificación
+    // eBay RuName típicamente solo contiene: letras, números, guiones (-), guiones bajos (_)
+    // Si tiene estos caracteres, NO codificar (eBay lo espera sin codificar)
+    // Solo codificar si tiene caracteres que realmente requieren codificación URL
+    const needsEncoding = /[^a-zA-Z0-9\-_.]/.test(cleanRedirectUri);
+    const encodedRedirectUri = needsEncoding ? encodeURIComponent(cleanRedirectUri) : cleanRedirectUri;
+    
     // Usar encodeURIComponent para cada parámetro individualmente
     // Esto asegura que caracteres especiales se codifiquen correctamente
     const params = [
       `client_id=${encodeURIComponent(this.credentials.appId)}`,
-      `redirect_uri=${encodeURIComponent(cleanRedirectUri)}`, // Codificar pero de manera consistente
+      `redirect_uri=${encodedRedirectUri}`, // Codificar solo si es necesario
       `response_type=${encodeURIComponent('code')}`,
       `scope=${encodeURIComponent(scopes.join(' '))}`,
       `state=${encodeURIComponent('state_' + Date.now())}`,
     ].join('&');
     
     const finalUrl = `${authBase}?${params}`;
+    
+    // Logging para debugging
+    logger.debug('[EbayService] Redirect URI encoding decision', {
+      redirectUri: cleanRedirectUri.substring(0, 30) + '...',
+      needsEncoding,
+      encoded: encodedRedirectUri.substring(0, 30) + '...',
+    });
     
     // Logging de la URL final (solo primeros caracteres por seguridad)
     // Extraer parámetros de la URL para logging

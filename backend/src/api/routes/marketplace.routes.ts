@@ -581,10 +581,20 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         
         // Construir parámetros manualmente con codificación explícita
         // eBay requiere que redirect_uri coincida EXACTAMENTE con el registrado
+        // IMPORTANTE: El RuName NO debe codificarse si solo contiene caracteres alfanuméricos, guiones y guiones bajos
+        // Solo codificar si tiene caracteres especiales que realmente necesiten codificación
         const scopes = ['sell.inventory.readonly', 'sell.inventory', 'sell.marketing.readonly', 'sell.marketing'];
+        
+        // ✅ CORRECCIÓN: Verificar si el redirectUri necesita codificación
+        // eBay RuName típicamente solo contiene: letras, números, guiones (-), guiones bajos (_)
+        // Si tiene estos caracteres, NO codificar (eBay lo espera sin codificar)
+        // Solo codificar si tiene caracteres que realmente requieren codificación URL
+        const needsEncoding = /[^a-zA-Z0-9\-_.]/.test(redirectUri);
+        const encodedRedirectUri = needsEncoding ? encodeURIComponent(redirectUri) : redirectUri;
+        
         const finalParams = [
           `client_id=${encodeURIComponent(finalAppId)}`,
-          `redirect_uri=${encodeURIComponent(redirectUri)}`, // Codificar de manera consistente
+          `redirect_uri=${encodedRedirectUri}`, // Codificar solo si es necesario
           `response_type=${encodeURIComponent('code')}`,
           `scope=${encodeURIComponent(scopes.join(' '))}`,
           `state=${encodeURIComponent(state)}`, // Usar nuestro state personalizado
@@ -610,16 +620,44 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
           clientIdInUrl: clientIdParam ? clientIdParam.substring(0, 8) + '...' + clientIdParam.substring(clientIdParam.length - 4) : null,
           authUrlLength: authUrl.length,
           authUrlPreview: redactUrlForLogging(authUrl), // Redactar URL completa
+          needsEncoding,
+          encodedRedirectUri: encodedRedirectUri.substring(0, 30) + '...',
         });
         
-        // Validar que los parámetros se codificaron correctamente
+        // ✅ VALIDACIÓN: Verificar que el redirectUri se mantuvo igual después de decodificar
+        // URLSearchParams.get() decodifica automáticamente, así que debe coincidir con el original
         if (redirectUriParam !== redirectUri) {
-          logger.warn('[eBay OAuth] Redirect URI mismatch after encoding', {
+          logger.error('[eBay OAuth] CRITICAL: Redirect URI mismatch after URL parsing', {
+            original: redirectUri,
             originalLength: redirectUri.length,
-            encodedLength: redirectUriParam?.length,
-            originalPreview: redirectUri.substring(0, 30) + '...',
-            encodedPreview: redirectUriParam?.substring(0, 30) + '...',
-            difference: 'URL encoding may have changed the value',
+            parsed: redirectUriParam,
+            parsedLength: redirectUriParam?.length,
+            needsEncoding,
+            encoded: encodedRedirectUri,
+            warning: 'This mismatch will cause unauthorized_client error. The RuName must match EXACTLY.',
+          });
+          
+          // Intentar usar el valor sin codificar si la codificación causó el problema
+          if (!needsEncoding && redirectUriParam !== redirectUri) {
+            logger.warn('[eBay OAuth] Retrying without encoding redirect_uri', {
+              original: redirectUri,
+            });
+            // Reconstruir URL sin codificar redirect_uri
+            const retryParams = [
+              `client_id=${encodeURIComponent(finalAppId)}`,
+              `redirect_uri=${redirectUri}`, // Sin codificar
+              `response_type=${encodeURIComponent('code')}`,
+              `scope=${encodeURIComponent(scopes.join(' '))}`,
+              `state=${encodeURIComponent(state)}`,
+            ].join('&');
+            authUrl = `${authBase}?${retryParams}`;
+            logger.info('[eBay OAuth] Retry URL generated without encoding redirect_uri', {
+              authUrlPreview: redactUrlForLogging(authUrl),
+            });
+          }
+        } else {
+          logger.debug('[eBay OAuth] Redirect URI matches correctly after encoding', {
+            redirectUri: redirectUri.substring(0, 30) + '...',
           });
         }
       } catch (urlError: any) {
