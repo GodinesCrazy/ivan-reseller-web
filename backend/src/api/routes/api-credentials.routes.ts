@@ -114,8 +114,58 @@ router.get('/status', async (req: Request, res: Response, next) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/api-credentials/{apiName}:
+ *   get:
+ *     summary: Obtener credenciales de una API
+ *     description: Obtiene las credenciales de una API específica para el usuario autenticado. Soporta ambientes sandbox/production.
+ *     tags: [API Credentials]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: apiName
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [ebay, amazon, mercadolibre, groq, openai, scraperapi, zenrows, 2captcha, paypal, aliexpress, email, twilio, slack, stripe]
+ *         description: Nombre de la API
+ *       - in: query
+ *         name: environment
+ *         schema:
+ *           type: string
+ *           enum: [sandbox, production]
+ *           default: production
+ *         description: Ambiente (solo para APIs que lo soportan)
+ *       - in: query
+ *         name: includeGlobal
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Incluir credenciales globales si no hay personales
+ *     responses:
+ *       200:
+ *         description: Credenciales obtenidas exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/ApiCredential'
+ *       400:
+ *         description: Error de validación
+ *       401:
+ *         description: No autenticado
+ *       404:
+ *         description: Credenciales no encontradas
+ */
 // GET /api/api-credentials/:apiName - Obtener credenciales de una API específica
-router.get('/:apiName', async (req: Request, res: Response, next) => {
+router.get('/:apiName', authenticate, async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const role = req.user!.role?.toUpperCase() || 'USER';
