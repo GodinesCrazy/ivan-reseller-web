@@ -25,7 +25,7 @@ export interface MarketplaceCredentials {
 
 export interface PublishProductRequest {
   productId: number;
-  marketplace: 'ebay' | 'mercadolibre' | 'amazon';
+  marketplace: MarketplaceName; // ✅ Estandarizado a tipo union estricto
   customData?: {
     categoryId?: string;
     price?: number;
@@ -180,7 +180,7 @@ export class MarketplaceService {
   /**
    * Save or update marketplace credentials
    */
-  async saveCredentials(userId: number, marketplace: string, credentials: any, environment?: 'sandbox' | 'production'): Promise<void> {
+  async saveCredentials(userId: number, marketplace: MarketplaceName, credentials: any, environment?: 'sandbox' | 'production'): Promise<void> {
     try {
       // ✅ Obtener environment del usuario si no se proporciona
       const { workflowConfigService } = await import('./workflow-config.service');
@@ -207,7 +207,7 @@ export class MarketplaceService {
    */
   async testConnection(
     userId: number, 
-    marketplace: string,
+    marketplace: MarketplaceName,
     environment?: 'sandbox' | 'production'
   ): Promise<{ success: boolean; message: string }> {
     try {
@@ -679,7 +679,7 @@ export class MarketplaceService {
       
       for (const marketplace of marketplaces) {
         try {
-          const credentials = await this.getCredentials(userId, marketplace, userEnvironment);
+          const credentials = await this.getCredentials(userId, marketplace as MarketplaceName, userEnvironment);
           if (!credentials || credentials.issues?.length) continue;
 
           switch (marketplace) {
