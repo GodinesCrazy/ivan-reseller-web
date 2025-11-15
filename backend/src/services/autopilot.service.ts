@@ -8,6 +8,7 @@ import { apiAvailability } from './api-availability.service';
 import { prisma } from '../config/database';
 import { workflowConfigService } from './workflow-config.service';
 import { publicationOptimizerService } from './publication-optimizer.service';
+import MarketplaceService from './marketplace.service';
 
 /**
  * Configuration for autopilot system
@@ -875,10 +876,28 @@ export class AutopilotSystem extends EventEmitter {
         reasoning: optimization.reasoning
       });
 
-      // ✅ Validar datos de oportunidad antes de crear producto
-      if (!opportunity.title || !opportunity.url || !opportunity.estimatedCost || opportunity.estimatedCost <= 0) {
-        logger.error('Autopilot: Invalid opportunity data', { opportunity });
-        throw new Error('Invalid opportunity data: missing required fields');
+      // ✅ BAJA PRIORIDAD: Validar datos de oportunidad con Zod schema
+      try {
+        OpportunitySchema.parse(opportunity);
+      } catch (validationError: any) {
+        if (validationError instanceof z.ZodError) {
+          logger.error('Autopilot: Invalid opportunity data (Zod validation)', { 
+            service: 'autopilot',
+            userId: currentUserId,
+            errors: validationError.errors,
+            opportunity
+          });
+          throw new AppError(
+            'Invalid opportunity data: validation failed',
+            400,
+            ErrorCode.VALIDATION_ERROR,
+            {
+              validationErrors: validationError.errors,
+              received: opportunity
+            }
+          );
+        }
+        throw validationError;
       }
 
       // ✅ Usar transacción para crear producto y listing de forma atómica

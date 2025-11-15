@@ -8,10 +8,13 @@ import logger from '../config/logger';
 import crypto from 'crypto';
 import type { CredentialScope } from '@prisma/client';
 
+// ✅ BAJA PRIORIDAD: Tipo union estricto para marketplace
+export type MarketplaceName = 'ebay' | 'mercadolibre' | 'amazon';
+
 export interface MarketplaceCredentials {
   id?: number;
   userId: number;
-  marketplace: 'ebay' | 'mercadolibre' | 'amazon';
+  marketplace: MarketplaceName; // ✅ Estandarizado a tipo union estricto
   credentials: any;
   isActive: boolean;
   environment: 'sandbox' | 'production';
@@ -49,7 +52,7 @@ export class MarketplaceService {
    */
   async getCredentials(
     userId: number,
-    marketplace: string,
+    marketplace: MarketplaceName, // ✅ Estandarizado a tipo union estricto
     environment?: 'sandbox' | 'production'
   ): Promise<MarketplaceCredentials | null> {
     try {
