@@ -1256,80 +1256,24 @@ export class AdvancedMarketplaceScraper {
               linkElementHref: linkElement?.getAttribute('href')?.substring(0, 50) || 'none'
             };
 
-            const priceCandidates: unknown[] = [
-              item.actSkuCalPrice,
-              item.skuCalPrice,
-              item.salePrice,
-              item.displayPrice,
-              item.priceValue,
-              item.price,
-              item.tradePrice,
-              item.discountPrice,
-              item.minPrice,
-              item.maxPrice,
-              item.appSalePrice,
-              item.appSalePriceMin,
-              item.appSalePriceMax,
-              item.priceText,
-              item.salePriceText,
-              item.displayPriceText,
-            ];
-
-            const currencyHints: unknown[] = [
-              item.currency,
-              item.currencyCode,
-              item.tradeCurrency,
-              item.displayCurrency,
-              item.targetCurrency,
-              item.originalCurrency,
-              item.appSaleCurrency,
-              item.localCurrency,
-              item.currencySymbol,
-              item.prices?.currency,
-              item.prices?.currencyCode,
-              item.priceModule?.currency,
-              item.priceModule?.currencyCode,
-            ];
-
-            const textHints: Array<string | undefined | null> = [
-              item.priceText,
-              item.salePriceText,
-              item.displayPriceText,
-              item.displayPrice,
-              item.discountPriceText,
-              item.priceDescription,
-              item.currencySymbol ? String(item.currencySymbol) : null,
-              item.priceModule?.formattedPrice,
-              item.priceModule?.formatedPrice,
-              item.priceModule?.priceRangeText,
-              item.multiPriceDisplay,
-            ];
-
-            const rangeCandidates: unknown[] = [
-              [item.minPrice, item.maxPrice],
-              [item.appSalePriceMin, item.appSalePriceMax],
-              item.priceRange,
-              item.activityPriceRange,
-              item.priceModule?.priceRange,
-              item.priceModule?.activityPriceRange,
-              item.priceModule?.minActivityPrice,
-              item.priceModule?.maxActivityPrice,
-              item.priceModule?.minPrice,
-              item.priceModule?.maxPrice,
-              item.priceModule?.minAmount,
-              item.priceModule?.maxAmount,
-              item.skuPriceRange,
-              item.skuActivityAmount,
-            ];
+            // ✅ Extraer precio del texto visible del elemento DOM (no de propiedades inexistentes)
+            const priceElementText = priceElement?.textContent?.trim() || '';
+            const priceFromAttribute = attrPriceRaw || '';
+            
+            // Intentar extraer precio del atributo data-price si existe
+            const dataPrice = item.getAttribute('data-price') || 
+                             item.getAttribute('data-skuprice') || 
+                             item.getAttribute('data-actprice') ||
+                             item.getAttribute('data-price-range') ||
+                             '';
 
             // ✅ Extraer datos brutos del precio (sin resolver) para procesarlos fuera de page.evaluate()
+            // Solo usar el texto visible y atributos del DOM, no propiedades de objetos JavaScript
             const rawPriceData = {
-              priceCandidates,
-              currencyHints,
-              textHints,
-              rangeCandidates,
-              priceElementText: priceElement?.textContent?.trim() || '',
-              attrPriceRaw
+              priceElementText,
+              priceFromAttribute,
+              dataPrice,
+              fullText: fullText.substring(0, 500), // Limitar tamaño para evitar payloads grandes
             };
 
             const image =
@@ -1438,16 +1382,10 @@ export class AdvancedMarketplaceScraper {
           return null;
         }
 
-        const { priceCandidates, currencyHints, textHints, rangeCandidates } = product.rawPriceData;
+        const { priceElementText, priceFromAttribute, dataPrice, fullText } = product.rawPriceData;
 
         try {
-          // Intentar resolver rango de precios primero
-          const priceRangeInfo = resolvePriceRange({
-            rawRange: rangeCandidates,
-            itemCurrencyHints: currencyHints,
-            textHints,
-          });
-
+          // ✅ Prioridad 1: Intentar resolver desde atributo data-price
           let resolvedPrice:
             | {
                 amount: number;
@@ -1457,30 +1395,52 @@ export class AdvancedMarketplaceScraper {
               }
             | null = null;
 
-          if (priceRangeInfo && priceRangeInfo.maxAmountInBase > 0) {
-            resolvedPrice = {
-              amount: priceRangeInfo.maxAmount,
-              sourceCurrency: priceRangeInfo.currency,
-              amountInBase: priceRangeInfo.maxAmountInBase,
-              baseCurrency: priceRangeInfo.baseCurrency,
-            };
+          if (dataPrice) {
+            const resolution = resolvePrice({
+              raw: dataPrice,
+              itemCurrencyHints: [],
+              textHints: [dataPrice],
+            });
+            if (resolution.amount > 0 && resolution.amountInBase > 0) {
+              resolvedPrice = resolution;
+            }
           }
 
-          // Si no se resolvió el rango, intentar con candidatos individuales
-          if (!resolvedPrice) {
-            for (const candidate of priceCandidates) {
-              if (candidate === undefined || candidate === null || candidate === '') {
-                continue;
-              }
-              const hints = [...textHints, typeof candidate === 'string' ? candidate : null];
-              const resolution = resolvePrice({
-                raw: candidate,
-                itemCurrencyHints: currencyHints,
-                textHints: hints,
-              });
-              if (resolution.amount > 0 && resolution.amountInBase > 0) {
-                resolvedPrice = resolution;
-                break;
+          // ✅ Prioridad 2: Intentar resolver desde texto visible del elemento de precio
+          if (!resolvedPrice && priceElementText) {
+            const resolution = resolvePrice({
+              raw: priceElementText,
+              itemCurrencyHints: [],
+              textHints: [priceElementText],
+            });
+            if (resolution.amount > 0 && resolution.amountInBase > 0) {
+              resolvedPrice = resolution;
+            }
+          }
+
+          // ✅ Prioridad 3: Intentar extraer precio del texto completo del producto
+          if (!resolvedPrice && fullText) {
+            // Buscar patrones de precio en el texto (ej: "$5.330", "$1.371", "US $8.025", etc.)
+            const pricePatterns = [
+              /US\s*\$?\s*([\d,]+\.?\d*)/i,
+              /\$?\s*([\d,]+\.?\d*)/,
+              /([\d,]+\.?\d*)\s*USD/i,
+              /([\d,]+\.?\d*)\s*\$/
+            ];
+
+            for (const pattern of pricePatterns) {
+              const match = fullText.match(pattern);
+              if (match && match[1]) {
+                const priceStr = match[1].replace(/,/g, '');
+                const resolution = resolvePrice({
+                  raw: priceStr,
+                  itemCurrencyHints: [],
+                  textHints: [fullText],
+                });
+                if (resolution.amount > 0 && resolution.amountInBase > 0) {
+                  resolvedPrice = resolution;
+                  break;
+                }
               }
             }
           }
@@ -1488,7 +1448,9 @@ export class AdvancedMarketplaceScraper {
           if (!resolvedPrice || resolvedPrice.amountInBase <= 0) {
             logger.warn('[DOM] Producto descartado (precio inválido después de resolver)', {
               title: product.title?.substring(0, 50),
-              priceCandidatesCount: priceCandidates.filter((c: any) => c !== null && c !== undefined && c !== '').length,
+              priceElementText: priceElementText?.substring(0, 50),
+              dataPrice,
+              hasFullText: !!fullText,
               query,
               userId
             });
@@ -1500,12 +1462,13 @@ export class AdvancedMarketplaceScraper {
           const sourcePrice = resolvedPrice.amount;
           const sourceCurrency = resolvedPrice.sourceCurrency;
 
-          const priceMinBase = priceRangeInfo ? priceRangeInfo.minAmountInBase : price;
-          const priceMaxBase = priceRangeInfo ? priceRangeInfo.maxAmountInBase : price;
-          const priceMinSource = priceRangeInfo ? priceRangeInfo.minAmount : sourcePrice;
-          const priceMaxSource = priceRangeInfo ? priceRangeInfo.maxAmount : sourcePrice;
-          const priceRangeSourceCurrency = priceRangeInfo ? priceRangeInfo.currency : sourceCurrency;
-          const priceSource = priceRangeInfo ? 'range:max' : 'single';
+          // Para DOM scraping, usamos el precio único (no rangos)
+          const priceMinBase = price;
+          const priceMaxBase = price;
+          const priceMinSource = sourcePrice;
+          const priceMaxSource = sourcePrice;
+          const priceRangeSourceCurrency = sourceCurrency;
+          const priceSource = 'single';
 
           // Validación final con precio resuelto
           if (price <= 0 || !product.title || !product.productUrl) {
