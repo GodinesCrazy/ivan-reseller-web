@@ -309,12 +309,40 @@ export class AdvancedMarketplaceScraper {
         
         console.log('✅ Navegador iniciado exitosamente');
       } catch (launchError: any) {
-        // ✅ SI HAY ENOENT: El archivo no existe realmente, intentar SIN executablePath inmediatamente
+        // ✅ SI HAY ENOENT: El archivo no existe realmente, intentar buscar chromium del sistema primero
         if (launchError.message?.includes('ENOENT') && executablePath) {
           console.warn(`⚠️  Error ENOENT con executablePath ${executablePath} - el archivo no existe realmente`);
-          console.warn(`⚠️  Intentando sin executablePath (Puppeteer usará su propio Chromium)...`);
           
-          // Eliminar executablePath e intentar inmediatamente sin él
+          // ✅ Intentar buscar chromium del sistema (Railway/Nixpacks lo instala)
+          const { resolveChromiumExecutable } = await import('../utils/chromium');
+          const systemChromium = await resolveChromiumExecutable();
+          
+          if (systemChromium && systemChromium !== executablePath) {
+            console.log(`🔄 Intentando con chromium del sistema: ${systemChromium}`);
+            launchOptions.executablePath = systemChromium;
+            
+            try {
+              this.browser = await Promise.race([
+                puppeteer.launch(launchOptions),
+                new Promise((_, reject) => 
+                  setTimeout(() => reject(new Error('Browser launch timeout after 30s')), 30000)
+                )
+              ]) as Browser;
+              
+              if (!this.browser || !this.browser.isConnected()) {
+                throw new Error('Browser launched but not connected (with system chromium)');
+              }
+              
+              console.log('✅ Navegador iniciado exitosamente con chromium del sistema');
+              return; // ✅ Éxito, retornar inmediatamente
+            } catch (systemChromiumError: any) {
+              console.warn('⚠️  También falló con chromium del sistema, intentando sin executablePath...');
+              // Continuar con intento sin executablePath
+            }
+          }
+          
+          // ✅ Si no se encuentra chromium del sistema o falló, intentar SIN executablePath
+          console.warn(`⚠️  Intentando sin executablePath (Puppeteer usará su propio Chromium)...`);
           delete launchOptions.executablePath;
           
           try {

@@ -151,14 +151,26 @@ export async function resolveChromiumExecutable(): Promise<string | undefined> {
     
     // ✅ En entornos serverless, priorizar Sparticuz (optimizado para contenedores)
     const sparticuzPath = await ensureChromiumFromSparticuz();
-    if (sparticuzPath) {
+    if (sparticuzPath && isExecutable(sparticuzPath)) {
       process.env.PUPPETEER_EXECUTABLE_PATH = sparticuzPath;
       process.env.CHROMIUM_PATH = sparticuzPath;
       console.log(`✅ Chromium obtenido de Sparticuz (serverless): ${sparticuzPath}`);
       return sparticuzPath;
     }
     
-    // ✅ Si Sparticuz falla, intentar descargar Chromium de Puppeteer
+    // ✅ Si Sparticuz falla o no es ejecutable, intentar chromium del sistema (Railway/Nixpacks)
+    // Railway/Nixpacks instala chromium y lo enlaza a /app/.chromium/chromium
+    for (const getter of candidatePaths) {
+      const candidate = getter();
+      if (candidate && isExecutable(candidate)) {
+        process.env.PUPPETEER_EXECUTABLE_PATH = candidate;
+        process.env.CHROMIUM_PATH = candidate;
+        console.log(`✅ Chromium encontrado del sistema (serverless): ${candidate}`);
+        return candidate;
+      }
+    }
+    
+    // ✅ Si no se encuentra chromium del sistema, intentar descargar Chromium de Puppeteer
     const puppeteerPath = await ensureChromiumFromPuppeteer();
     if (puppeteerPath) {
       process.env.PUPPETEER_EXECUTABLE_PATH = puppeteerPath;
