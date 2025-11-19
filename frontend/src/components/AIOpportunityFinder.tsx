@@ -181,7 +181,7 @@ export default function AIOpportunityFinder() {
         targetMarketplaces: Array.isArray(item.targetMarketplaces) && item.targetMarketplaces.length > 0
           ? item.targetMarketplaces
           : ['ebay', 'amazon', 'mercadolibre'],
-        aliexpressUrl: item.aliexpressUrl,
+        aliexpressUrl: item.aliexpressUrl || item.productUrl || '',
         image: item.image,
         currentPrice: item.costUsd || 0,
         suggestedPrice: item.suggestedPriceUsd || 0,
@@ -375,10 +375,31 @@ export default function AIOpportunityFinder() {
   };
 
   const handleViewDetails = (opp: MarketOpportunity) => {
-    if (opp.aliexpressUrl) {
-      window.open(opp.aliexpressUrl, '_blank', 'noopener,noreferrer');
-    } else {
-      toast('No se encontró el enlace original del producto.', { icon: 'ℹ️' });
+    // ✅ Asegurar que la URL esté presente y sea válida
+    let url = opp.aliexpressUrl;
+    
+    // Si no hay URL directa, intentar construirla desde el ID del producto
+    if (!url || !url.startsWith('http')) {
+      // Intentar construir URL desde el productId si está disponible
+      if (opp.id && opp.id.length > 5) {
+        // Si el ID parece ser un ID de producto de AliExpress
+        url = `https://www.aliexpress.com/item/${opp.id}.html`;
+      } else {
+        toast.error('No se encontró el enlace original del producto. Intenta importar el producto directamente.', {
+          duration: 5000
+        });
+        return;
+      }
+    }
+    
+    // Validar que la URL sea válida antes de abrir
+    try {
+      new URL(url);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      toast.error('El enlace del producto no es válido. Intenta importar el producto directamente.', {
+        duration: 5000
+      });
     }
   };
 
@@ -746,10 +767,22 @@ export default function AIOpportunityFinder() {
                   </div>
                   <p className="text-sm text-gray-600 mb-3">{opp.category}</p>
                   {opp.estimationNotes.length > 0 && (
-                    <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-3 py-2 rounded mb-3">
-                      {opp.estimationNotes.map((note, idx) => (
-                        <div key={idx}>* {note}</div>
-                      ))}
+                    <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 px-3 py-2 rounded mb-3">
+                      <div className="font-semibold mb-1 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Nota informativa:
+                      </div>
+                      <ul className="space-y-1 list-none">
+                        {opp.estimationNotes.map((note, idx) => (
+                          <li key={idx} className="flex items-start">
+                            <span className="text-blue-500 mr-1">•</span>
+                            <span>{note}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="mt-2 text-blue-600 font-medium">
+                        💡 Puedes importar el producto independientemente. Los precios exactos se actualizarán cuando configures las credenciales.
+                      </div>
                     </div>
                   )}
 
