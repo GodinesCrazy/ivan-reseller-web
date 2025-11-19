@@ -1220,25 +1220,44 @@ export class AdvancedMarketplaceScraper {
               item.querySelector('[data-pl="shipping"]') ||
               item.querySelector('[class*="shipping"]');
 
-            // ✅ Buscar enlace del producto con múltiples selectores
+            // ✅ Buscar enlace del producto con múltiples selectores (priorizando enlaces de productos individuales)
             let linkElement: any = null;
             const linkSelectors = [
-              'a[href][data-pl="product-title"]',
-              'a[href*="/item/"]',
-              'a[href*="/product/"]',
+              'a[href*="/item/"][href*=".html"]',  // Prioridad: URLs de productos individuales con .html
+              'a[href*="/item/"]',  // URLs de productos individuales
+              'a[href*="/product/"][href*=".html"]',  // URLs de productos con .html
+              'a[href*="/product/"]',  // URLs de productos
+              'a[href*="aliexpress.com/item"][href*=".html"]',
               'a[href*="aliexpress.com/item"]',
+              'a[href*="aliexpress.com/product"][href*=".html"]',
               'a[href*="aliexpress.com/product"]',
+              'a[href][data-pl="product-title"]',
+              '[data-pl="product-title"] a[href*="/item/"]',
+              '[data-pl="product-title"] a[href*="/product/"]',
               '[data-pl="product-title"] a[href]',
+              '[class*="product-title"] a[href*="/item/"]',
+              '[class*="product-title"] a[href*="/product/"]',
               '[class*="product-title"] a[href]',
+              '[class*="title"] a[href*="/item/"]',
+              '[class*="title"] a[href*="/product/"]',
               '[class*="title"] a[href]',
+              'a[href*="/item/"]:first-of-type',
+              'a[href*="/product/"]:first-of-type',
               'a[href]:first-of-type',
               'a[href]'
             ];
             
             for (const selector of linkSelectors) {
-              linkElement = item.querySelector(selector);
-              if (linkElement && linkElement.getAttribute('href')) {
-                break;
+              const found = item.querySelector(selector);
+              if (found) {
+                const href = found.getAttribute('href') || '';
+                // ✅ Filtrar URLs genéricas que no son de productos individuales
+                if (href && !href.includes('/ssr/') && !href.includes('/wholesale') && 
+                    !href.includes('/w/') && !href.includes('/category/') &&
+                    (href.includes('/item/') || href.includes('/product/'))) {
+                  linkElement = found;
+                  break;
+                }
               }
             }
 
@@ -1310,10 +1329,35 @@ export class AdvancedMarketplaceScraper {
               url = linkElement.getAttribute('href') || '';
             }
             
-            // Si no hay linkElement, intentar encontrar un enlace dentro del item
-            if (!url) {
-              const firstLink = item.querySelector('a[href]');
-              url = firstLink ? (firstLink.getAttribute('href') || '') : '';
+            // Si no hay linkElement, intentar encontrar un enlace dentro del item (evitando URLs genéricas)
+            if (!url || url.includes('/ssr/') || url.includes('/wholesale') || url.includes('/w/')) {
+              const allLinks = item.querySelectorAll('a[href]');
+              for (const link of Array.from(allLinks)) {
+                const linkEl = link as HTMLAnchorElement;
+                if (!linkEl || typeof linkEl.getAttribute !== 'function') continue;
+                const href = linkEl.getAttribute('href') || '';
+                // ✅ Solo aceptar URLs de productos individuales
+                if (href && (href.includes('/item/') || href.includes('/product/')) &&
+                    !href.includes('/ssr/') && !href.includes('/wholesale') && 
+                    !href.includes('/w/') && !href.includes('/category/')) {
+                  url = href;
+                  linkElement = linkEl;
+                  break;
+                }
+              }
+            }
+
+            // ✅ Validar que la URL sea de un producto individual antes de continuar
+            if (!url || url.includes('/ssr/') || url.includes('/wholesale') || 
+                url.includes('/w/') || url.includes('/category/') ||
+                (!url.includes('/item/') && !url.includes('/product/'))) {
+              debugInfo.discardReason = 'url_invalida';
+              debugInfo.hasUrl = !!url;
+              debugInfo.urlLength = url?.length || 0;
+              debugInfo.url = url?.substring(0, 80) || 'none';
+              extractionLogs.push(`Producto ${index} descartado (URL inválida - no es de producto individual): ${JSON.stringify(debugInfo)}`);
+              discardedCount++;
+              return null as any;
             }
 
             if (!title || !url) {
