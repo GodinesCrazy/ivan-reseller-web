@@ -48,7 +48,7 @@ function isExecutable(filePath: string | undefined): filePath is string {
   }
 }
 
-async function ensureChromiumFromPuppeteer(): Promise<string | null> {
+async function ensureChromiumFromPuppeteer(): Promise<string | undefined> {
   try {
     // Intentar usar Puppeteer directamente para obtener la ruta de Chromium
     const puppeteer = require('puppeteer');
@@ -101,187 +101,75 @@ async function ensureChromiumFromPuppeteer(): Promise<string | null> {
   } catch (error: any) {
     console.warn('⚠️  Puppeteer Chromium resolution failed:', error?.message || error);
   }
-  return null;
+  return undefined;
 }
 
-async function ensureChromiumFromSparticuz(): Promise<string | null> {
-  if (!chromium) return null;
+async function ensureChromiumFromSparticuz(): Promise<string | undefined> {
+  if (!chromium) return undefined;
   
   try {
-    // ✅ MODIFICADO: Forzar descarga si no está disponible
+    // ✅ RESTAURADO: Lógica simple que funcionaba antes
     // @sparticuz/chromium descarga automáticamente si no está presente
-    let executablePath: string | null = null;
-    
-    try {
-      // Intentar obtener el ejecutable (esto debería descargarlo automáticamente si no existe)
-      executablePath = await chromium.executablePath();
-      
-      // ✅ Verificar que el archivo realmente existe
-      if (executablePath && fs.existsSync(executablePath)) {
-        // Garantizar permisos de ejecución (por si se extrae en /tmp) - solo en Unix
-        if (!isWindows) {
-          try {
-            fs.chmodSync(executablePath, 0o755);
-          } catch {
-            // Ignorar si no se puede cambiar permisos
-          }
-        }
+    const executablePath = await chromium.executablePath();
+    if (!executablePath) {
+      return undefined;
+    }
 
-        // ✅ Verificación adicional: intentar acceder al archivo directamente
-        // IMPORTANTE: Verificar que el archivo existe Y es accesible JUSTO ANTES de retornarlo
-        try {
-          // Verificar que el archivo existe realmente (no solo que el path existe)
-          if (!fs.existsSync(executablePath)) {
-            console.warn(`⚠️  Sparticuz Chromium path retornado pero archivo no existe realmente: ${executablePath}`);
-            console.warn(`⚠️  Esto puede ocurrir en Railway si @sparticuz/chromium no descargó el ejecutable correctamente`);
-            return null;
-          }
-          
-          // Verificar permisos de acceso
-          fs.accessSync(executablePath, fs.constants.F_OK | (isWindows ? 0 : fs.constants.X_OK));
-          
-          // Verificar que es un archivo (no directorio)
-          const stats = fs.statSync(executablePath);
-          if (!stats.isFile()) {
-            console.warn(`⚠️  Sparticuz Chromium path no es un archivo: ${executablePath}`);
-            return null;
-          }
-          
-          // Verificar que es ejecutable
-          if (isExecutable(executablePath)) {
-            console.log(`✅ Chromium de Sparticuz verificado y ejecutable: ${executablePath}`);
-            return executablePath;
-          } else {
-            // Intentar dar permisos de ejecución
-            try {
-              if (!isWindows) {
-                fs.chmodSync(executablePath, 0o755);
-                if (isExecutable(executablePath)) {
-                  console.log(`✅ Chromium de Sparticuz verificado (permisos otorgados): ${executablePath}`);
-                  return executablePath;
-                }
-              }
-            } catch (chmodError) {
-              // Ignorar si no se pueden otorgar permisos
-            }
-            console.warn(`⚠️  Sparticuz Chromium existe pero no es ejecutable: ${executablePath}`);
-            return null;
-          }
-        } catch (accessError) {
-          // El archivo no es accesible o no existe realmente
-          console.warn(`⚠️  Sparticuz Chromium path no es accesible: ${executablePath}`, (accessError as Error).message);
-          console.warn(`⚠️  Esto puede ocurrir si el archivo fue eliminado o nunca se descargó correctamente`);
-          return null;
-        }
-      } else if (executablePath) {
-        // El path existe pero el archivo no está descargado aún
-        console.warn(`⚠️  Sparticuz Chromium path retornado pero archivo no existe: ${executablePath}`);
-        console.warn(`⚠️  Intentando descargar Chromium de Sparticuz...`);
-        
-        // Intentar forzar descarga (esto puede tardar varios minutos)
-        // Pero no esperamos aquí, mejor usar Puppeteer directamente
-        return null;
+    // Garantizar permisos de ejecución (por si se extrae en /tmp) - solo en Unix
+    if (!isWindows) {
+      try {
+        fs.chmodSync(executablePath, 0o755);
+      } catch {
+        // Ignorar si no se puede cambiar permisos
       }
-    } catch (execPathError: any) {
-      console.warn('⚠️  Error obteniendo executablePath de Sparticuz:', execPathError?.message);
-      // Continuar con Puppeteer como fallback
-      return null;
+    }
+
+    if (isExecutable(executablePath)) {
+      return executablePath;
     }
 
     // Algunas distros extraen el binario dentro de un directorio llamado "chromium" sin extensión
-    if (executablePath) {
-      const altPath = path.join(path.dirname(executablePath), 'chromium');
-      if (fs.existsSync(altPath) && isExecutable(altPath)) {
-        return altPath;
-      }
+    const altPath = path.join(path.dirname(executablePath), 'chromium');
+    if (isExecutable(altPath)) {
+      return altPath;
     }
   } catch (error) {
     console.warn('⚠️  Sparticuz chromium download failed:', (error as Error).message);
   }
-  return null;
+  return undefined;
 }
 
-export async function resolveChromiumExecutable(): Promise<string | null> {
-  // ✅ MODIFICADO: Retornar null en lugar de lanzar error para permitir que Puppeteer use su propio Chromium
-  // ✅ Detectar si estamos en Railway o entorno serverless similar
+export async function resolveChromiumExecutable(): Promise<string | undefined> {
+  // ✅ RESTAURADO: Lógica simple que funcionaba antes
+  // Detectar si estamos en Railway o entorno serverless similar
   const isRailway = process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID;
   const isHeroku = process.env.HEROKU_APP_ID;
   const isServerless = isRailway || isHeroku || process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
   
-  // ✅ MODIFICADO: En Railway, Sparticuz Chromium puede fallar con ENOENT aunque pase la verificación
-  // Si está deshabilitado explícitamente o si sabemos que falla, usar Puppeteer directamente
-  const disableSparticuz = process.env.DISABLE_SPARTICUZ_CHROMIUM === 'true' || process.env.SKIP_SPARTICUZ === 'true';
-  
-  if (isServerless && !disableSparticuz) {
-    console.log('🌐 Entorno serverless detectado, intentando Sparticuz Chromium...');
+  if (isServerless) {
+    console.log('🌐 Entorno serverless detectado, priorizando Sparticuz Chromium...');
     
-    // ✅ En entornos serverless, intentar Sparticuz (pero NO confiar completamente en él en Railway)
+    // ✅ En entornos serverless, priorizar Sparticuz (optimizado para contenedores)
     const sparticuzPath = await ensureChromiumFromSparticuz();
-    
-    // ✅ VERIFICACIÓN RIGUROSA: En Railway, verificar que el archivo existe REALMENTE justo antes de retornar
     if (sparticuzPath) {
-      // Verificar múltiples veces que el archivo existe y es accesible
-      let fileExists = false;
-      let isAccessible = false;
-      
-      try {
-        // Verificar que existe
-        fileExists = fs.existsSync(sparticuzPath);
-        if (fileExists) {
-          // Verificar que es accesible y ejecutable
-          try {
-            fs.accessSync(sparticuzPath, fs.constants.F_OK | (isWindows ? 0 : fs.constants.X_OK));
-            const stats = fs.statSync(sparticuzPath);
-            isAccessible = stats.isFile() && (isWindows || isExecutable(sparticuzPath));
-          } catch (accessError) {
-            console.warn(`⚠️  Sparticuz Chromium no es accesible: ${sparticuzPath}`, (accessError as Error).message);
-            isAccessible = false;
-          }
-        }
-      } catch (checkError) {
-        console.warn(`⚠️  Error verificando Sparticuz Chromium: ${sparticuzPath}`, (checkError as Error).message);
-        fileExists = false;
-        isAccessible = false;
-      }
-      
-      // ✅ En Railway, si el archivo no existe o no es accesible, NO usarlo
-      // Esto previene el error ENOENT cuando Puppeteer intenta usarlo
-      if (isRailway && (!fileExists || !isAccessible)) {
-        console.warn(`⚠️  Sparticuz Chromium no está disponible en Railway (archivo no existe o no es accesible)`);
-        console.warn(`⚠️  Usando Puppeteer directamente sin executablePath (Railway puede tener limitaciones)`);
-        return null; // Retornar null para usar Puppeteer directamente
-      }
-      
-      // ✅ Si pasó todas las verificaciones, usarlo
-      if (fileExists && isAccessible) {
-        process.env.PUPPETEER_EXECUTABLE_PATH = sparticuzPath;
-        process.env.CHROMIUM_PATH = sparticuzPath;
-        console.log(`✅ Chromium obtenido de Sparticuz (serverless): ${sparticuzPath}`);
-        return sparticuzPath;
-      }
+      process.env.PUPPETEER_EXECUTABLE_PATH = sparticuzPath;
+      process.env.CHROMIUM_PATH = sparticuzPath;
+      console.log(`✅ Chromium obtenido de Sparticuz (serverless): ${sparticuzPath}`);
+      return sparticuzPath;
     }
-    
-    console.warn('⚠️  Sparticuz Chromium no disponible, intentando Puppeteer...');
     
     // ✅ Si Sparticuz falla, intentar descargar Chromium de Puppeteer
     const puppeteerPath = await ensureChromiumFromPuppeteer();
-    if (puppeteerPath && fs.existsSync(puppeteerPath)) {
+    if (puppeteerPath) {
       process.env.PUPPETEER_EXECUTABLE_PATH = puppeteerPath;
       process.env.CHROMIUM_PATH = puppeteerPath;
       console.log(`✅ Chromium obtenido de Puppeteer (serverless): ${puppeteerPath}`);
       return puppeteerPath;
     }
     
-    // ✅ Si ambos fallan, retornar null para que Puppeteer use su propio Chromium (descargará automáticamente)
-    console.warn('⚠️  No se encontró Chromium preinstalado, Puppeteer usará su propio Chromium (puede tardar en descargar)');
-    if (isRailway) {
-      console.warn('⚠️  NOTA: Railway puede tener limitaciones para ejecutar navegadores. Si falla, considerar usar un servicio de scraping externo.');
-    }
-    return null;
-  } else if (isServerless && disableSparticuz) {
-    // ✅ Si Sparticuz está deshabilitado explícitamente, usar Puppeteer directamente
-    console.log('ℹ️  Sparticuz Chromium deshabilitado, usando Puppeteer directamente...');
-    return null;
+    // ✅ Si ambos fallan, retornar undefined para que Puppeteer use su propio Chromium
+    console.warn('⚠️  No se encontró Chromium preinstalado, Puppeteer usará su propio Chromium');
+    return undefined;
   } else {
     // ✅ En entornos normales, primero intentar rutas del sistema
     for (const getter of candidatePaths) {
@@ -295,7 +183,7 @@ export async function resolveChromiumExecutable(): Promise<string | null> {
 
   // ✅ Intentar con Puppeteer (puede descargar Chromium automáticamente)
   const puppeteerPath = await ensureChromiumFromPuppeteer();
-  if (puppeteerPath && fs.existsSync(puppeteerPath)) {
+  if (puppeteerPath) {
     process.env.PUPPETEER_EXECUTABLE_PATH = puppeteerPath;
     process.env.CHROMIUM_PATH = puppeteerPath;
     console.log(`✅ Chromium obtenido de Puppeteer: ${puppeteerPath}`);
@@ -304,29 +192,28 @@ export async function resolveChromiumExecutable(): Promise<string | null> {
 
   // ✅ Fallback: Sparticuz (útil en AWS Lambda y Railway)
   const sparticuzPath = await ensureChromiumFromSparticuz();
-  if (sparticuzPath && fs.existsSync(sparticuzPath)) {
+  if (sparticuzPath) {
     process.env.PUPPETEER_EXECUTABLE_PATH = sparticuzPath;
     process.env.CHROMIUM_PATH = sparticuzPath;
     console.log(`✅ Chromium obtenido de Sparticuz: ${sparticuzPath}`);
     return sparticuzPath;
   }
 
-  // ✅ Si nada funciona, retornar null para que Puppeteer use su propio Chromium
+  // ✅ Si nada funciona, retornar undefined para que Puppeteer use su propio Chromium
   console.warn('⚠️  No se encontró Chromium en rutas del sistema, Puppeteer usará su propio Chromium');
-  return null;
+  return undefined;
 }
 
 export async function getChromiumLaunchConfig(extraArgs: string[] = []) {
   const executablePath = await resolveChromiumExecutable();
-  
-  // ✅ Si no hay executablePath, Puppeteer usará su propio Chromium
-  // En ese caso, NO incluir chromium.args ya que pueden no ser compatibles
+  // ✅ RESTAURADO: Lógica simple que funcionaba antes
+  // Si executablePath es undefined, Puppeteer usará su propio Chromium automáticamente
   const args = executablePath && chromium?.args
     ? Array.from(new Set([...(chromium.args || []), ...extraArgs, '--no-sandbox']))
     : Array.from(new Set([...extraArgs, '--no-sandbox']));
 
   return {
-    executablePath: executablePath || undefined, // undefined = usar Chromium de Puppeteer
+    executablePath: executablePath, // undefined = usar Chromium de Puppeteer automáticamente
     args,
     headless: true,
     defaultViewport: executablePath && chromium?.defaultViewport ? chromium.defaultViewport : { width: 1920, height: 1080 },
