@@ -1276,22 +1276,28 @@ export class AdvancedMarketplaceScraper {
               fullText: fullText.substring(0, 500), // Limitar tamaño para evitar payloads grandes
             };
 
-            const image =
-              item.imageUrl ||
-              item.productImage ||
-              item.image ||
-              item.pic ||
-              (Array.isArray(item.imageUrlList) ? item.imageUrlList[0] : null) ||
-              (Array.isArray(item.images) ? item.images[0] : null) ||
-              '';
+            // ✅ Extraer imagen del atributo src o data-src del elemento DOM
+            let image = '';
+            if (imageElement) {
+              image = imageElement.getAttribute('src') ||
+                      imageElement.getAttribute('data-src') ||
+                      imageElement.getAttribute('data-lazy-src') ||
+                      imageElement.getAttribute('data-ks-lazyload') ||
+                      (imageElement as any).src ||
+                      '';
+            }
 
-            const url =
-              item.productUrl ||
-              item.detailUrl ||
-              item.itemDetailUrl ||
-              item.targetUrl ||
-              item.url ||
-              (linkElement?.getAttribute('href') || '');
+            // ✅ Extraer URL del atributo href del elemento link del DOM
+            let url = '';
+            if (linkElement) {
+              url = linkElement.getAttribute('href') || '';
+            }
+            
+            // Si no hay linkElement, intentar encontrar un enlace dentro del item
+            if (!url) {
+              const firstLink = item.querySelector('a[href]');
+              url = firstLink ? (firstLink.getAttribute('href') || '') : '';
+            }
 
             if (!title || !url) {
               debugInfo.discardReason = 'validacion_final';
@@ -1318,23 +1324,44 @@ export class AdvancedMarketplaceScraper {
               item.numberOfOrders ||
               0;
 
+            // ✅ Construir URLs absolutas
+            let imageUrl = '';
+            if (image) {
+              if (image.startsWith('//')) {
+                imageUrl = `https:${image}`;
+              } else if (image.startsWith('http')) {
+                imageUrl = image;
+              } else if (image.startsWith('/')) {
+                imageUrl = `https://www.aliexpress.com${image}`;
+              } else {
+                imageUrl = `https://${image}`;
+              }
+            }
+
+            let productUrl = '';
+            if (url) {
+              if (url.startsWith('http')) {
+                productUrl = url;
+              } else if (url.startsWith('/')) {
+                productUrl = `https://www.aliexpress.com${url}`;
+              } else if (url.startsWith('//')) {
+                productUrl = `https:${url}`;
+              } else {
+                productUrl = `https://www.aliexpress.com/${url}`;
+              }
+            }
+
             extractedCount++;
             return {
               title: String(title).trim().substring(0, 150),
               rawPriceData, // ✅ Incluir datos brutos para resolver fuera
-              imageUrl: image
-                ? image.startsWith('//')
-                  ? `https:${image}`
-                  : image.startsWith('http')
-                  ? image
-                  : `https:${image}`
-                : '',
-              productUrl: url.startsWith('http') ? url : `https:${url}`,
+              imageUrl,
+              productUrl,
               rating: Number(rating) || 0,
               reviewCount: Number(reviewCount) || 0,
-              seller: item.storeName || item.sellerName || 'AliExpress Vendor',
-              shipping: item.logisticsDesc || item.shipping || 'Varies',
-              availability: item.availability || 'In stock',
+              seller: 'AliExpress Vendor', // No tenemos esta info del DOM
+              shipping: 'Varies',
+              availability: 'In stock',
             };
           } catch (error) {
             discardedCount++;
