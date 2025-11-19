@@ -309,40 +309,69 @@ export class AdvancedMarketplaceScraper {
         
         console.log('✅ Navegador iniciado exitosamente');
       } catch (launchError: any) {
-        // ✅ SI HAY ENOENT: El archivo no existe realmente, intentar buscar chromium del sistema primero
+        // ✅ SI HAY ENOENT: El archivo no existe realmente, buscar chromium del sistema directamente
         if (launchError.message?.includes('ENOENT') && executablePath) {
           console.warn(`⚠️  Error ENOENT con executablePath ${executablePath} - el archivo no existe realmente`);
           
-          // ✅ Intentar buscar chromium del sistema (Railway/Nixpacks lo instala)
-          const { resolveChromiumExecutable } = await import('../utils/chromium');
-          const systemChromium = await resolveChromiumExecutable();
+          // ✅ En ENOENT, buscar chromium del sistema directamente (Railway/Nixpacks lo instala en /app/.chromium/chromium)
+          // No usar resolveChromiumExecutable() porque ya probamos Sparticuz - buscar directamente en rutas del sistema
+          const fs = await import('fs');
+          const systemPaths = [
+            '/app/.chromium/chromium', // Railway/Nixpacks
+            '/usr/bin/chromium',
+            '/usr/bin/chromium-browser',
+            '/usr/local/bin/chromium',
+            '/usr/local/bin/chromium-browser'
+          ];
           
-          if (systemChromium && systemChromium !== executablePath) {
-            console.log(`🔄 Intentando con chromium del sistema: ${systemChromium}`);
-            launchOptions.executablePath = systemChromium;
-            
+          for (const systemPath of systemPaths) {
             try {
-              this.browser = await Promise.race([
-                puppeteer.launch(launchOptions),
-                new Promise((_, reject) => 
-                  setTimeout(() => reject(new Error('Browser launch timeout after 30s')), 30000)
-                )
-              ]) as Browser;
-              
-              if (!this.browser || !this.browser.isConnected()) {
-                throw new Error('Browser launched but not connected (with system chromium)');
+              if (fs.existsSync(systemPath)) {
+                const stats = fs.statSync(systemPath);
+                if (stats.isFile()) {
+                  // Intentar hacer ejecutable si no lo es
+                  try {
+                    if (!isWindows) {
+                      fs.chmodSync(systemPath, 0o755);
+                    }
+                  } catch {}
+                  
+                  console.log(`🔄 Intentando con chromium del sistema encontrado: ${systemPath}`);
+                  launchOptions.executablePath = systemPath;
+                  
+                  try {
+                    this.browser = await Promise.race([
+                      puppeteer.launch(launchOptions),
+                      new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Browser launch timeout after 30s')), 30000)
+                      )
+                    ]) as Browser;
+                    
+                    if (!this.browser || !this.browser.isConnected()) {
+                      throw new Error('Browser launched but not connected (with system chromium)');
+                    }
+                    
+                    // Verificar que puede crear páginas
+                    const testPage = await this.browser.newPage();
+                    await testPage.close();
+                    
+                    console.log('✅ Navegador iniciado exitosamente con chromium del sistema');
+                    return; // ✅ Éxito, retornar inmediatamente
+                  } catch (systemChromiumError: any) {
+                    console.warn(`⚠️  Falló con ${systemPath}: ${systemChromiumError.message}`);
+                    // Continuar con siguiente path
+                    continue;
+                  }
+                }
               }
-              
-              console.log('✅ Navegador iniciado exitosamente con chromium del sistema');
-              return; // ✅ Éxito, retornar inmediatamente
-            } catch (systemChromiumError: any) {
-              console.warn('⚠️  También falló con chromium del sistema, intentando sin executablePath...');
-              // Continuar con intento sin executablePath
+            } catch (pathError) {
+              // Continuar con siguiente path
+              continue;
             }
           }
           
-          // ✅ Si no se encuentra chromium del sistema o falló, intentar SIN executablePath
-          console.warn(`⚠️  Intentando sin executablePath (Puppeteer usará su propio Chromium)...`);
+          // ✅ Si no se encuentra chromium del sistema, intentar SIN executablePath
+          console.warn(`⚠️  No se encontró chromium del sistema, intentando sin executablePath...`);
           delete launchOptions.executablePath;
           
           try {
@@ -356,6 +385,10 @@ export class AdvancedMarketplaceScraper {
             if (!this.browser || !this.browser.isConnected()) {
               throw new Error('Browser launched but not connected (without executablePath)');
             }
+            
+            // Verificar que puede crear páginas
+            const testPage = await this.browser.newPage();
+            await testPage.close();
             
             console.log('✅ Navegador iniciado exitosamente sin executablePath');
             return; // ✅ Éxito, retornar inmediatamente

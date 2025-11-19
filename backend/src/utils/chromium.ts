@@ -147,9 +147,23 @@ export async function resolveChromiumExecutable(): Promise<string | undefined> {
   const isServerless = isRailway || isHeroku || process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
   
   if (isServerless) {
-    console.log('🌐 Entorno serverless detectado, priorizando Sparticuz Chromium...');
+    console.log('🌐 Entorno serverless detectado, buscando Chromium...');
     
-    // ✅ En entornos serverless, priorizar Sparticuz (optimizado para contenedores)
+    // ✅ PRIORIDAD 1: Chromium del sistema instalado por Nixpacks (Railway)
+    // Railway/Nixpacks instala chromium y lo enlaza a /app/.chromium/chromium durante el build
+    console.log('🔍 Buscando Chromium del sistema (Nixpacks)...');
+    for (const getter of candidatePaths) {
+      const candidate = getter();
+      if (candidate && isExecutable(candidate)) {
+        process.env.PUPPETEER_EXECUTABLE_PATH = candidate;
+        process.env.CHROMIUM_PATH = candidate;
+        console.log(`✅ Chromium encontrado del sistema (Nixpacks): ${candidate}`);
+        return candidate;
+      }
+    }
+    
+    // ✅ PRIORIDAD 2: Sparticuz Chromium (optimizado para contenedores)
+    console.log('🔍 Buscando Sparticuz Chromium...');
     const sparticuzPath = await ensureChromiumFromSparticuz();
     if (sparticuzPath && isExecutable(sparticuzPath)) {
       process.env.PUPPETEER_EXECUTABLE_PATH = sparticuzPath;
@@ -158,19 +172,8 @@ export async function resolveChromiumExecutable(): Promise<string | undefined> {
       return sparticuzPath;
     }
     
-    // ✅ Si Sparticuz falla o no es ejecutable, intentar chromium del sistema (Railway/Nixpacks)
-    // Railway/Nixpacks instala chromium y lo enlaza a /app/.chromium/chromium
-    for (const getter of candidatePaths) {
-      const candidate = getter();
-      if (candidate && isExecutable(candidate)) {
-        process.env.PUPPETEER_EXECUTABLE_PATH = candidate;
-        process.env.CHROMIUM_PATH = candidate;
-        console.log(`✅ Chromium encontrado del sistema (serverless): ${candidate}`);
-        return candidate;
-      }
-    }
-    
-    // ✅ Si no se encuentra chromium del sistema, intentar descargar Chromium de Puppeteer
+    // ✅ PRIORIDAD 3: Chromium descargado por Puppeteer
+    console.log('🔍 Buscando Chromium de Puppeteer...');
     const puppeteerPath = await ensureChromiumFromPuppeteer();
     if (puppeteerPath) {
       process.env.PUPPETEER_EXECUTABLE_PATH = puppeteerPath;
@@ -179,8 +182,8 @@ export async function resolveChromiumExecutable(): Promise<string | undefined> {
       return puppeteerPath;
     }
     
-    // ✅ Si ambos fallan, retornar undefined para que Puppeteer use su propio Chromium
-    console.warn('⚠️  No se encontró Chromium preinstalado, Puppeteer usará su propio Chromium');
+    // ✅ PRIORIDAD 4: Dejar que Puppeteer descargue/use su propio Chromium
+    console.warn('⚠️  No se encontró Chromium preinstalado, Puppeteer intentará usar su propio Chromium');
     return undefined;
   } else {
     // ✅ En entornos normales, primero intentar rutas del sistema
