@@ -127,9 +127,26 @@ async function ensureChromiumFromSparticuz(): Promise<string | null> {
           }
         }
 
-        if (isExecutable(executablePath)) {
-          console.log(`✅ Chromium de Sparticuz verificado: ${executablePath}`);
-          return executablePath;
+        // ✅ Verificación adicional: intentar acceder al archivo directamente
+        try {
+          fs.accessSync(executablePath, fs.constants.F_OK | (isWindows ? 0 : fs.constants.X_OK));
+          const stats = fs.statSync(executablePath);
+          if (!stats.isFile()) {
+            console.warn(`⚠️  Sparticuz Chromium path no es un archivo: ${executablePath}`);
+            return null;
+          }
+          
+          if (isExecutable(executablePath)) {
+            console.log(`✅ Chromium de Sparticuz verificado y ejecutable: ${executablePath}`);
+            return executablePath;
+          } else {
+            console.warn(`⚠️  Sparticuz Chromium existe pero no es ejecutable: ${executablePath}`);
+            return null;
+          }
+        } catch (accessError) {
+          // El archivo no es accesible o no existe realmente
+          console.warn(`⚠️  Sparticuz Chromium path no es accesible: ${executablePath}`, (accessError as Error).message);
+          return null;
         }
       } else if (executablePath) {
         // El path existe pero el archivo no está descargado aún
