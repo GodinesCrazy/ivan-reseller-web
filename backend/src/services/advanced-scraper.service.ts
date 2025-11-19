@@ -258,7 +258,8 @@ export class AdvancedMarketplaceScraper {
   };
 
   async init(): Promise<void> {
-    console.log('🚀 Iniciando navegador con evasión anti-bot...');
+    const { logger } = await import('../config/logger');
+    logger.info('[SCRAPER] Iniciando navegador con evasión anti-bot');
 
     const { executablePath, args: chromiumArgs, headless, defaultViewport } = await getChromiumLaunchConfig([
       '--disable-setuid-sandbox',
@@ -276,9 +277,9 @@ export class AdvancedMarketplaceScraper {
     // Confiar en lo que retorna getChromiumLaunchConfig() y usarlo directamente
     // Solo si Puppeteer falla al usarlo, entonces usar fallbacks
     if (executablePath) {
-      console.log(`✅ Chromium encontrado en ruta preferida: ${executablePath}`);
+      logger.info('[SCRAPER] Chromium encontrado en ruta preferida', { path: executablePath });
     } else {
-      console.log(`ℹ️  Usando Chromium de Puppeteer (sin executablePath especificado)`);
+      logger.info('[SCRAPER] Usando Chromium de Puppeteer (sin executablePath especificado)');
     }
 
     try {
@@ -291,7 +292,7 @@ export class AdvancedMarketplaceScraper {
         defaultViewport,
       };
 
-      console.log(`🔧 Lanzando Chromium en: ${executablePath || 'Puppeteer default'}`);
+      logger.info('[SCRAPER] Lanzando Chromium', { path: executablePath || 'Puppeteer default' });
 
       // ✅ Intentar lanzar con timeout para evitar cuelgues
       try {
@@ -307,11 +308,17 @@ export class AdvancedMarketplaceScraper {
           throw new Error('Browser launched but not connected');
         }
         
-        console.log('✅ Navegador iniciado exitosamente');
+        logger.info('[SCRAPER] Navegador iniciado exitosamente', { executablePath: executablePath || 'Puppeteer default' });
       } catch (launchError: any) {
+        logger.error('[SCRAPER] Error al lanzar navegador', {
+          error: launchError?.message || String(launchError),
+          executablePath: executablePath || 'none',
+          stack: launchError?.stack
+        });
+        
         // ✅ SI HAY ENOENT: El archivo no existe realmente, buscar chromium del sistema directamente
         if (launchError.message?.includes('ENOENT') && executablePath) {
-          console.warn(`⚠️  Error ENOENT con executablePath ${executablePath} - el archivo no existe realmente`);
+          logger.warn('[SCRAPER] Error ENOENT - el archivo no existe realmente', { executablePath });
           
           // ✅ En ENOENT, buscar chromium del sistema directamente (Railway/Nixpacks lo instala en /app/.chromium/chromium)
           // No usar resolveChromiumExecutable() porque ya probamos Sparticuz - buscar directamente en rutas del sistema
@@ -336,7 +343,7 @@ export class AdvancedMarketplaceScraper {
                     }
                   } catch {}
                   
-                  console.log(`🔄 Intentando con chromium del sistema encontrado: ${systemPath}`);
+                  logger.info('[SCRAPER] Intentando con chromium del sistema', { path: systemPath });
                   launchOptions.executablePath = systemPath;
                   
                   try {
@@ -355,10 +362,13 @@ export class AdvancedMarketplaceScraper {
                     const testPage = await this.browser.newPage();
                     await testPage.close();
                     
-                    console.log('✅ Navegador iniciado exitosamente con chromium del sistema');
+                    logger.info('[SCRAPER] Navegador iniciado exitosamente con chromium del sistema', { path: systemPath });
                     return; // ✅ Éxito, retornar inmediatamente
                   } catch (systemChromiumError: any) {
-                    console.warn(`⚠️  Falló con ${systemPath}: ${systemChromiumError.message}`);
+                    logger.warn('[SCRAPER] Falló con chromium del sistema', {
+                      path: systemPath,
+                      error: systemChromiumError?.message || String(systemChromiumError)
+                    });
                     // Continuar con siguiente path
                     continue;
                   }
@@ -371,7 +381,7 @@ export class AdvancedMarketplaceScraper {
           }
           
           // ✅ Si no se encuentra chromium del sistema, intentar SIN executablePath
-          console.warn(`⚠️  No se encontró chromium del sistema, intentando sin executablePath...`);
+          logger.warn('[SCRAPER] No se encontró chromium del sistema, intentando sin executablePath');
           delete launchOptions.executablePath;
           
           try {
@@ -390,18 +400,22 @@ export class AdvancedMarketplaceScraper {
             const testPage = await this.browser.newPage();
             await testPage.close();
             
-            console.log('✅ Navegador iniciado exitosamente sin executablePath');
+            logger.info('[SCRAPER] Navegador iniciado exitosamente sin executablePath');
             return; // ✅ Éxito, retornar inmediatamente
           } catch (noExecPathError: any) {
             // Si también falla sin executablePath, continuar con fallbacks normales
-            console.warn('⚠️  También falló sin executablePath, usando fallbacks...');
+            logger.warn('[SCRAPER] También falló sin executablePath, usando fallbacks', {
+              error: noExecPathError?.message || String(noExecPathError)
+            });
             throw noExecPathError;
           }
         }
         
         // ✅ Si hay error de "Target closed", intentar cerrar y relanzar
         if (launchError.message?.includes('Target closed') || launchError.message?.includes('Protocol error')) {
-          console.warn('⚠️  Error de protocolo detectado, intentando con configuración más simple...');
+          logger.warn('[SCRAPER] Error de protocolo detectado, intentando con configuración más simple', {
+            error: launchError?.message || String(launchError)
+          });
           // Cerrar navegador si existe pero está en mal estado
           if (this.browser) {
             try {
@@ -416,11 +430,14 @@ export class AdvancedMarketplaceScraper {
       }
     } catch (error: any) {
       const errorMsg = error.message || String(error);
-      console.error('❌ Error al iniciar navegador:', errorMsg);
+      logger.error('[SCRAPER] Error al iniciar navegador', {
+        error: errorMsg,
+        stack: error?.stack
+      });
       
       // ✅ Fallback 1: Configuración mínima con Chromium del sistema
       try {
-        console.log('🔄 Intentando con configuración mínima (Chromium sistema)...');
+        logger.info('[SCRAPER] Intentando con configuración mínima (Chromium sistema)');
         const minimalOptions: any = {
           headless: true,
           args: [
@@ -484,14 +501,17 @@ export class AdvancedMarketplaceScraper {
           throw new Error(`Browser test failed: ${testError.message}`);
         }
         
-        console.log('✅ Navegador iniciado con configuración mínima');
+        logger.info('[SCRAPER] Navegador iniciado con configuración mínima');
       } catch (fallbackError: any) {
         const fallbackMsg = fallbackError.message || String(fallbackError);
-        console.error('❌ Error con configuración mínima:', fallbackMsg);
+        logger.error('[SCRAPER] Error con configuración mínima', {
+          error: fallbackMsg,
+          stack: fallbackError?.stack
+        });
         
         // ✅ Fallback 2: Intentar sin executablePath (usar Chromium de Puppeteer)
         try {
-          console.log('🔄 Intentando sin executablePath (Chromium Puppeteer)...');
+          logger.info('[SCRAPER] Intentando sin executablePath (Chromium Puppeteer)');
           const puppeteerChromiumOptions: any = {
             headless: 'new', // Usar nuevo modo headless si está disponible
             args: [
@@ -521,12 +541,15 @@ export class AdvancedMarketplaceScraper {
           const testPage = await this.browser.newPage();
           await testPage.close();
           
-          console.log('✅ Navegador iniciado con Chromium de Puppeteer');
+          logger.info('[SCRAPER] Navegador iniciado con Chromium de Puppeteer');
         } catch (puppeteerError: any) {
           const puppeteerMsg = puppeteerError.message || String(puppeteerError);
-          console.error('❌ Error crítico al iniciar navegador:', puppeteerMsg);
-          console.error('   Todos los métodos de inicio fallaron');
-          console.warn('⚠️  Continuando sin navegador - se usará bridge Python como alternativa');
+          logger.error('[SCRAPER] Error crítico al iniciar navegador', {
+            error: puppeteerMsg,
+            stack: puppeteerError?.stack,
+            message: 'Todos los métodos de inicio fallaron'
+          });
+          logger.warn('[SCRAPER] Continuando sin navegador - se usará bridge Python como alternativa');
           this.browser = null;
         }
       }
