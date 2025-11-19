@@ -271,7 +271,19 @@ export class AdvancedMarketplaceScraper {
       '--window-size=1920,1080',
     ]);
 
-    console.log(`✅ Chromium encontrado en ruta preferida: ${executablePath}`);
+    // ✅ MODIFICADO: Verificar que executablePath existe antes de usarlo
+    let finalExecutablePath = executablePath;
+    if (executablePath && !fs.existsSync(executablePath)) {
+      console.warn(`⚠️  Chromium path especificado pero archivo no existe: ${executablePath}`);
+      console.warn(`⚠️  Usando Chromium de Puppeteer (descargará automáticamente si es necesario)`);
+      finalExecutablePath = undefined; // Forzar que Puppeteer use su propio Chromium
+    }
+    
+    if (finalExecutablePath) {
+      console.log(`✅ Chromium encontrado en ruta preferida: ${finalExecutablePath}`);
+    } else {
+      console.log(`ℹ️  Usando Chromium de Puppeteer (sin executablePath especificado)`);
+    }
 
     try {
       const launchOptions: any = {
@@ -279,11 +291,18 @@ export class AdvancedMarketplaceScraper {
         args: ['--no-sandbox', ...chromiumArgs],
         ignoreDefaultArgs: ['--enable-automation'],
         ignoreHTTPSErrors: true,
-        executablePath,
         defaultViewport,
       };
-
-      console.log(`🔧 Lanzando Chromium en: ${executablePath}`);
+      
+      // ✅ Solo incluir executablePath si existe realmente
+      if (finalExecutablePath && fs.existsSync(finalExecutablePath)) {
+        launchOptions.executablePath = finalExecutablePath;
+        console.log(`🔧 Lanzando Chromium en: ${finalExecutablePath}`);
+      } else {
+        // Si no hay executablePath, Puppeteer usará su propio Chromium (puede descargar automáticamente)
+        console.log('ℹ️  Puppeteer usará su propio Chromium (puede tardar en descargar en Railway)');
+        console.log('🔧 Lanzando Chromium (Puppeteer descargará automáticamente si es necesario)');
+      }
 
       // ✅ Intentar lanzar con timeout para evitar cuelgues
       try {
