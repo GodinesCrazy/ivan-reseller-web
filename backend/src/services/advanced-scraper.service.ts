@@ -1523,11 +1523,14 @@ export class AdvancedMarketplaceScraper {
 
           // ✅ Prioridad 3: Intentar extraer precio del texto completo del producto
           if (!resolvedPrice && fullText) {
-            // Buscar patrones de precio en el texto (ej: "$5.330", "$1.371", "US $8.025", etc.)
+            // Buscar patrones de precio en el texto (ej: "$5.330", "$1.371", "US $8.025", "$26.600", etc.)
+            // ✅ Mejorar patrones para detectar CLP (formato chileno con punto como separador de miles)
             const pricePatterns = [
-              /US\s*\$?\s*([\d,]+\.?\d*)/i,
-              /\$?\s*([\d,]+\.?\d*)/,
+              /US\s*\$?\s*([\d,]+\.?\d*)/i,  // USD explícito
+              /\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)/,  // Formato chileno: $26.600 o $26.600,50
+              /\$?\s*([\d,]+\.?\d*)/,  // Formato general
               /([\d,]+\.?\d*)\s*USD/i,
+              /([\d,]+\.?\d*)\s*CLP/i,
               /([\d,]+\.?\d*)\s*\$/
             ];
 
@@ -1535,13 +1538,23 @@ export class AdvancedMarketplaceScraper {
               const match = fullText.match(pattern);
               if (match && match[1]) {
                 const priceStr = match[1].replace(/,/g, '');
+                // ✅ Incluir contexto completo del texto para mejor detección de moneda
                 const resolution = resolvePrice({
                   raw: priceStr,
                   itemCurrencyHints: [],
-                  textHints: [fullText],
+                  textHints: [fullText, priceElementText || '', dataPrice || ''],
                 });
                 if (resolution.amount > 0 && resolution.amountInBase > 0) {
                   resolvedPrice = resolution;
+                  logger.debug('[DOM] Precio resuelto desde fullText', {
+                    pattern: pattern.toString(),
+                    priceStr,
+                    detectedCurrency: resolution.sourceCurrency,
+                    amount: resolution.amount,
+                    amountInBase: resolution.amountInBase,
+                    query,
+                    userId
+                  });
                   break;
                 }
               }

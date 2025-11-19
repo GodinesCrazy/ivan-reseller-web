@@ -211,12 +211,41 @@ class FXService {
     const f = from.toUpperCase();
     const t = to.toUpperCase();
     if (f === t) return amount;
+    
+    // ✅ Verificar que tenemos las tasas necesarias
     if (!this.rates[f] || !this.rates[t]) {
-      logger.warn('FXService: missing rate for conversion', { from: f, to: t });
+      logger.warn('FXService: missing rate for conversion', { 
+        from: f, 
+        to: t,
+        availableRates: Object.keys(this.rates).slice(0, 10),
+        hasFromRate: !!this.rates[f],
+        hasToRate: !!this.rates[t]
+      });
+      // Si falta la tasa, intentar refrescar
+      if (this.providerEnabled && !this.refreshInFlight) {
+        this.refreshRates().catch(() => {
+          // Si falla el refresh, retornar amount sin convertir
+        });
+      }
       return amount;
     }
+    
     const amountInBase = amount / this.rates[f];
-    return amountInBase * this.rates[t];
+    const converted = amountInBase * this.rates[t];
+    
+    // ✅ Logging para diagnóstico (solo para conversiones importantes)
+    if (f === 'CLP' || t === 'CLP' || amount > 1000) {
+      logger.debug('FXService: conversion', {
+        from: f,
+        to: t,
+        originalAmount: amount,
+        convertedAmount: converted,
+        fromRate: this.rates[f],
+        toRate: this.rates[t]
+      });
+    }
+    
+    return converted;
   }
 }
 
