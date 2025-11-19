@@ -1220,10 +1220,27 @@ export class AdvancedMarketplaceScraper {
               item.querySelector('[data-pl="shipping"]') ||
               item.querySelector('[class*="shipping"]');
 
-            const linkElement =
-              item.querySelector('a[href][data-pl="product-title"]') ||
-              item.querySelector('a[href*="/item/"]') ||
-              item.querySelector('a[href]');
+            // ✅ Buscar enlace del producto con múltiples selectores
+            let linkElement: any = null;
+            const linkSelectors = [
+              'a[href][data-pl="product-title"]',
+              'a[href*="/item/"]',
+              'a[href*="/product/"]',
+              'a[href*="aliexpress.com/item"]',
+              'a[href*="aliexpress.com/product"]',
+              '[data-pl="product-title"] a[href]',
+              '[class*="product-title"] a[href]',
+              '[class*="title"] a[href]',
+              'a[href]:first-of-type',
+              'a[href]'
+            ];
+            
+            for (const selector of linkSelectors) {
+              linkElement = item.querySelector(selector);
+              if (linkElement && linkElement.getAttribute('href')) {
+                break;
+              }
+            }
 
             const attrPriceRaw =
               item.getAttribute('data-price') ||
@@ -1340,15 +1357,30 @@ export class AdvancedMarketplaceScraper {
 
             let productUrl = '';
             if (url) {
-              if (url.startsWith('http')) {
-                productUrl = url;
-              } else if (url.startsWith('/')) {
-                productUrl = `https://www.aliexpress.com${url}`;
-              } else if (url.startsWith('//')) {
-                productUrl = `https:${url}`;
+              // Limpiar la URL de parámetros de tracking y otros
+              let cleanUrl = url.split('?')[0].split('#')[0];
+              
+              if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
+                productUrl = cleanUrl;
+              } else if (cleanUrl.startsWith('//')) {
+                productUrl = `https:${cleanUrl}`;
+              } else if (cleanUrl.startsWith('/')) {
+                productUrl = `https://www.aliexpress.com${cleanUrl}`;
+              } else if (cleanUrl.startsWith('./')) {
+                productUrl = `https://www.aliexpress.com${cleanUrl.substring(1)}`;
               } else {
-                productUrl = `https://www.aliexpress.com/${url}`;
+                // Intentar construir URL si parece ser una ruta relativa
+                if (cleanUrl.includes('/item/') || cleanUrl.includes('/product/')) {
+                  productUrl = `https://www.aliexpress.com/${cleanUrl}`;
+                } else {
+                  productUrl = `https://www.aliexpress.com/item/${cleanUrl}`;
+                }
               }
+            }
+
+            // ✅ Logging para diagnóstico
+            if (!productUrl || productUrl.length < 10) {
+              extractionLogs.push(`Producto ${index}: URL inválida o vacía. url="${url}", productUrl="${productUrl}"`);
             }
 
             extractedCount++;
@@ -1657,6 +1689,17 @@ export class AdvancedMarketplaceScraper {
         return [];
       }
 
+      // ✅ Validar que todos los productos tengan URL
+      const productsWithoutUrl = productsWithResolvedPrices.filter((p: any) => !p.productUrl || p.productUrl.length < 10);
+      if (productsWithoutUrl.length > 0) {
+        logger.warn(`[SCRAPER] ${productsWithoutUrl.length} productos sin URL válida de ${productsWithResolvedPrices.length} totales`, {
+          query,
+          userId,
+          titles: productsWithoutUrl.map((p: any) => p.title?.substring(0, 50)),
+          missingUrls: productsWithoutUrl.length
+        });
+      }
+
       logger.info('[SCRAPER] Extraídos productos REALES de AliExpress desde DOM', {
         count: productsWithResolvedPrices.length,
         query,
@@ -1665,7 +1708,9 @@ export class AdvancedMarketplaceScraper {
           title: p.title?.substring(0, 50), 
           price: p.price, 
           currency: p.currency,
-          sourcePrice: p.sourcePrice 
+          sourcePrice: p.sourcePrice,
+          productUrl: p.productUrl?.substring(0, 80) || 'NO_URL',
+          hasUrl: !!p.productUrl && p.productUrl.length >= 10
         }))
       });
 
