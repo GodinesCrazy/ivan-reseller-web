@@ -1322,69 +1322,15 @@ export class AdvancedMarketplaceScraper {
               item.skuActivityAmount,
             ];
 
-            const priceRangeInfo = resolvePriceRange({
-              rawRange: rangeCandidates,
-              itemCurrencyHints: currencyHints,
+            // ✅ Extraer datos brutos del precio (sin resolver) para procesarlos fuera de page.evaluate()
+            const rawPriceData = {
+              priceCandidates,
+              currencyHints,
               textHints,
-            });
-
-            let resolvedPrice:
-              | {
-                  amount: number;
-                  sourceCurrency: string;
-                  amountInBase: number;
-                  baseCurrency: string;
-                }
-              | null = null;
-
-            if (priceRangeInfo && priceRangeInfo.maxAmountInBase > 0) {
-              resolvedPrice = {
-                amount: priceRangeInfo.maxAmount,
-                sourceCurrency: priceRangeInfo.currency,
-                amountInBase: priceRangeInfo.maxAmountInBase,
-                baseCurrency: priceRangeInfo.baseCurrency,
-              };
-            }
-
-            if (!resolvedPrice) {
-              for (const candidate of priceCandidates) {
-                if (candidate === undefined || candidate === null || candidate === '') {
-                  continue;
-                }
-                const hints = [...textHints, typeof candidate === 'string' ? candidate : null];
-                const resolution = resolvePrice({
-                  raw: candidate,
-                  itemCurrencyHints: currencyHints,
-                  textHints: hints,
-                });
-                if (resolution.amount > 0 && resolution.amountInBase > 0) {
-                  resolvedPrice = resolution;
-                  break;
-                }
-              }
-            }
-
-            if (!resolvedPrice || resolvedPrice.amountInBase <= 0) {
-              debugInfo.discardReason = 'precio_invalido';
-              debugInfo.priceCandidatesCount = priceCandidates.filter(c => c !== null && c !== undefined && c !== '').length;
-              debugInfo.hasResolvedPrice = !!resolvedPrice;
-              debugInfo.resolvedPriceAmount = resolvedPrice?.amountInBase || 0;
-              extractionLogs.push(`Producto ${index} descartado (precio inválido): ${JSON.stringify(debugInfo)}`);
-              discardedCount++;
-              return null as any;
-            }
-
-            const price = resolvedPrice.amountInBase;
-            const baseCurrency = resolvedPrice.baseCurrency;
-            const sourcePrice = resolvedPrice.amount;
-            const sourceCurrency = resolvedPrice.sourceCurrency;
-
-            const priceMinBase = priceRangeInfo ? priceRangeInfo.minAmountInBase : price;
-            const priceMaxBase = priceRangeInfo ? priceRangeInfo.maxAmountInBase : price;
-            const priceMinSource = priceRangeInfo ? priceRangeInfo.minAmount : sourcePrice;
-            const priceMaxSource = priceRangeInfo ? priceRangeInfo.maxAmount : sourcePrice;
-            const priceRangeSourceCurrency = priceRangeInfo ? priceRangeInfo.currency : sourceCurrency;
-            const priceSource = priceRangeInfo ? 'range:max' : 'single';
+              rangeCandidates,
+              priceElementText: priceElement?.textContent?.trim() || '',
+              attrPriceRaw
+            };
 
             const image =
               item.imageUrl ||
@@ -1403,12 +1349,11 @@ export class AdvancedMarketplaceScraper {
               item.url ||
               (linkElement?.getAttribute('href') || '');
 
-            if (!title || price <= 0 || !url) {
+            if (!title || !url) {
               debugInfo.discardReason = 'validacion_final';
-              debugInfo.price = price;
               debugInfo.hasUrl = !!url;
               debugInfo.urlLength = url?.length || 0;
-              extractionLogs.push(`Producto ${index} descartado (validación final): ${JSON.stringify(debugInfo)}`);
+              extractionLogs.push(`Producto ${index} descartado (validación final - sin título o URL): ${JSON.stringify(debugInfo)}`);
               discardedCount++;
               return null as any;
             }
@@ -1432,16 +1377,7 @@ export class AdvancedMarketplaceScraper {
             extractedCount++;
             return {
               title: String(title).trim().substring(0, 150),
-              price,
-              currency: baseCurrency,
-              sourcePrice,
-              sourceCurrency,
-              priceMin: priceMinBase,
-              priceMax: priceMaxBase,
-              priceMinSource,
-              priceMaxSource,
-              priceRangeSourceCurrency,
-              priceSource,
+              rawPriceData, // ✅ Incluir datos brutos para resolver fuera
               imageUrl: image
                 ? image.startsWith('//')
                   ? `https:${image}`
@@ -1496,7 +1432,125 @@ export class AdvancedMarketplaceScraper {
         }
       });
 
-      if (productsFromDom.length === 0) {
+      // ✅ Resolver precios fuera de page.evaluate() (donde están disponibles resolvePrice y resolvePriceRange)
+      const productsWithResolvedPrices = productsFromDom.map((product: any) => {
+        if (!product.rawPriceData) {
+          return null;
+        }
+
+        const { priceCandidates, currencyHints, textHints, rangeCandidates } = product.rawPriceData;
+
+        try {
+          // Intentar resolver rango de precios primero
+          const priceRangeInfo = resolvePriceRange({
+            rawRange: rangeCandidates,
+            itemCurrencyHints: currencyHints,
+            textHints,
+          });
+
+          let resolvedPrice:
+            | {
+                amount: number;
+                sourceCurrency: string;
+                amountInBase: number;
+                baseCurrency: string;
+              }
+            | null = null;
+
+          if (priceRangeInfo && priceRangeInfo.maxAmountInBase > 0) {
+            resolvedPrice = {
+              amount: priceRangeInfo.maxAmount,
+              sourceCurrency: priceRangeInfo.currency,
+              amountInBase: priceRangeInfo.maxAmountInBase,
+              baseCurrency: priceRangeInfo.baseCurrency,
+            };
+          }
+
+          // Si no se resolvió el rango, intentar con candidatos individuales
+          if (!resolvedPrice) {
+            for (const candidate of priceCandidates) {
+              if (candidate === undefined || candidate === null || candidate === '') {
+                continue;
+              }
+              const hints = [...textHints, typeof candidate === 'string' ? candidate : null];
+              const resolution = resolvePrice({
+                raw: candidate,
+                itemCurrencyHints: currencyHints,
+                textHints: hints,
+              });
+              if (resolution.amount > 0 && resolution.amountInBase > 0) {
+                resolvedPrice = resolution;
+                break;
+              }
+            }
+          }
+
+          if (!resolvedPrice || resolvedPrice.amountInBase <= 0) {
+            logger.warn('[DOM] Producto descartado (precio inválido después de resolver)', {
+              title: product.title?.substring(0, 50),
+              priceCandidatesCount: priceCandidates.filter((c: any) => c !== null && c !== undefined && c !== '').length,
+              query,
+              userId
+            });
+            return null;
+          }
+
+          const price = resolvedPrice.amountInBase;
+          const baseCurrency = resolvedPrice.baseCurrency;
+          const sourcePrice = resolvedPrice.amount;
+          const sourceCurrency = resolvedPrice.sourceCurrency;
+
+          const priceMinBase = priceRangeInfo ? priceRangeInfo.minAmountInBase : price;
+          const priceMaxBase = priceRangeInfo ? priceRangeInfo.maxAmountInBase : price;
+          const priceMinSource = priceRangeInfo ? priceRangeInfo.minAmount : sourcePrice;
+          const priceMaxSource = priceRangeInfo ? priceRangeInfo.maxAmount : sourcePrice;
+          const priceRangeSourceCurrency = priceRangeInfo ? priceRangeInfo.currency : sourceCurrency;
+          const priceSource = priceRangeInfo ? 'range:max' : 'single';
+
+          // Validación final con precio resuelto
+          if (price <= 0 || !product.title || !product.productUrl) {
+            logger.warn('[DOM] Producto descartado (validación final después de resolver precio)', {
+              title: product.title?.substring(0, 50),
+              price,
+              hasUrl: !!product.productUrl,
+              query,
+              userId
+            });
+            return null;
+          }
+
+          return {
+            title: product.title,
+            price,
+            currency: baseCurrency,
+            sourcePrice,
+            sourceCurrency,
+            priceMin: priceMinBase,
+            priceMax: priceMaxBase,
+            priceMinSource,
+            priceMaxSource,
+            priceRangeSourceCurrency,
+            priceSource,
+            imageUrl: product.imageUrl,
+            productUrl: product.productUrl,
+            rating: product.rating,
+            reviewCount: product.reviewCount,
+            seller: product.seller,
+            shipping: product.shipping,
+            availability: product.availability,
+          };
+        } catch (error) {
+          logger.error('[DOM] Error resolviendo precio', {
+            error: error instanceof Error ? error.message : String(error),
+            title: product.title?.substring(0, 50),
+            query,
+            userId
+          });
+          return null;
+        }
+      }).filter((p: any) => p !== null);
+
+      if (productsWithResolvedPrices.length === 0) {
         console.warn('⚠️  [SCRAPER] No se encontraron productos en el DOM después de todos los métodos de extracción');
         console.warn('⚠️  [SCRAPER] Debug: query="' + query + '", userId=' + userId);
         console.warn('⚠️  [SCRAPER] Resumen de intentos:');
@@ -1613,14 +1667,19 @@ export class AdvancedMarketplaceScraper {
         return [];
       }
 
-      console.log(`✅ [SCRAPER] Extraídos ${productsFromDom.length} productos REALES de AliExpress desde DOM`);
-      console.log(`   Primeros productos DOM:`, productsFromDom.slice(0, 3).map((p: any) => ({ 
-        title: p.title?.substring(0, 50), 
-        price: p.price, 
-        currency: p.currency,
-        sourcePrice: p.sourcePrice 
-      })));
-      return productsFromDom;
+      logger.info('[SCRAPER] Extraídos productos REALES de AliExpress desde DOM', {
+        count: productsWithResolvedPrices.length,
+        query,
+        userId,
+        firstProducts: productsWithResolvedPrices.slice(0, 3).map((p: any) => ({ 
+          title: p.title?.substring(0, 50), 
+          price: p.price, 
+          currency: p.currency,
+          sourcePrice: p.sourcePrice 
+        }))
+      });
+
+      return productsWithResolvedPrices;
 
     } catch (error) {
       if (error instanceof ManualAuthRequiredError) {
