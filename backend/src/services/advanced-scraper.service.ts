@@ -309,6 +309,35 @@ export class AdvancedMarketplaceScraper {
         
         console.log('✅ Navegador iniciado exitosamente');
       } catch (launchError: any) {
+        // ✅ SI HAY ENOENT: El archivo no existe realmente, intentar SIN executablePath inmediatamente
+        if (launchError.message?.includes('ENOENT') && executablePath) {
+          console.warn(`⚠️  Error ENOENT con executablePath ${executablePath} - el archivo no existe realmente`);
+          console.warn(`⚠️  Intentando sin executablePath (Puppeteer usará su propio Chromium)...`);
+          
+          // Eliminar executablePath e intentar inmediatamente sin él
+          delete launchOptions.executablePath;
+          
+          try {
+            this.browser = await Promise.race([
+              puppeteer.launch(launchOptions),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Browser launch timeout after 30s')), 30000)
+              )
+            ]) as Browser;
+            
+            if (!this.browser || !this.browser.isConnected()) {
+              throw new Error('Browser launched but not connected (without executablePath)');
+            }
+            
+            console.log('✅ Navegador iniciado exitosamente sin executablePath');
+            return; // ✅ Éxito, retornar inmediatamente
+          } catch (noExecPathError: any) {
+            // Si también falla sin executablePath, continuar con fallbacks normales
+            console.warn('⚠️  También falló sin executablePath, usando fallbacks...');
+            throw noExecPathError;
+          }
+        }
+        
         // ✅ Si hay error de "Target closed", intentar cerrar y relanzar
         if (launchError.message?.includes('Target closed') || launchError.message?.includes('Protocol error')) {
           console.warn('⚠️  Error de protocolo detectado, intentando con configuración más simple...');
@@ -363,10 +392,12 @@ export class AdvancedMarketplaceScraper {
           ],
         };
 
-        // ✅ Usar executablePath si está disponible (como funcionaba antes)
-        if (executablePath) {
+        // ✅ Solo usar executablePath si NO falló con ENOENT antes
+        // Si llegamos aquí con ENOENT, NO usar executablePath en fallback
+        if (executablePath && !errorMsg.includes('ENOENT')) {
           minimalOptions.executablePath = executablePath;
         }
+        // Si hubo ENOENT, no incluir executablePath para que Puppeteer use el suyo
 
         // ✅ Intentar lanzar con timeout también en fallback
         this.browser = await Promise.race([
