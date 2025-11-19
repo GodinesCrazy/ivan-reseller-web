@@ -271,16 +271,49 @@ export class AdvancedMarketplaceScraper {
       '--window-size=1920,1080',
     ]);
 
-    // ✅ MODIFICADO: Verificar que executablePath existe antes de usarlo
+    // ✅ MODIFICADO: Verificar que executablePath existe y es accesible ANTES de usarlo
     let finalExecutablePath = executablePath;
-    if (executablePath && !fs.existsSync(executablePath)) {
-      console.warn(`⚠️  Chromium path especificado pero archivo no existe: ${executablePath}`);
-      console.warn(`⚠️  Usando Chromium de Puppeteer (descargará automáticamente si es necesario)`);
-      finalExecutablePath = undefined; // Forzar que Puppeteer use su propio Chromium
+    if (executablePath) {
+      try {
+        // Verificar que el archivo existe Y es accesible
+        if (!fs.existsSync(executablePath)) {
+          console.warn(`⚠️  Chromium path especificado pero archivo no existe: ${executablePath}`);
+          console.warn(`⚠️  Usando Chromium de Puppeteer (descargará automáticamente si es necesario)`);
+          finalExecutablePath = undefined;
+        } else {
+          // Verificar permisos de ejecución (solo en Unix)
+          const isWindows = os.platform() === 'win32';
+          if (!isWindows) {
+            try {
+              fs.accessSync(executablePath, fs.constants.X_OK);
+            } catch (permError) {
+              console.warn(`⚠️  Chromium existe pero no tiene permisos de ejecución: ${executablePath}`);
+              console.warn(`⚠️  Intentando dar permisos...`);
+              try {
+                fs.chmodSync(executablePath, 0o755);
+                console.log(`✅ Permisos de ejecución otorgados a: ${executablePath}`);
+              } catch (chmodError) {
+                console.warn(`⚠️  No se pudieron otorgar permisos, usando Puppeteer directamente`);
+                finalExecutablePath = undefined;
+              }
+            }
+          }
+          
+          // Verificar que es un archivo (no un directorio)
+          const stats = fs.statSync(executablePath);
+          if (!stats.isFile()) {
+            console.warn(`⚠️  Chromium path no es un archivo: ${executablePath}`);
+            finalExecutablePath = undefined;
+          }
+        }
+      } catch (error) {
+        console.warn(`⚠️  Error verificando Chromium path: ${executablePath}`, (error as Error).message);
+        finalExecutablePath = undefined;
+      }
     }
     
     if (finalExecutablePath) {
-      console.log(`✅ Chromium encontrado en ruta preferida: ${finalExecutablePath}`);
+      console.log(`✅ Chromium encontrado y verificado en: ${finalExecutablePath}`);
     } else {
       console.log(`ℹ️  Usando Chromium de Puppeteer (sin executablePath especificado)`);
     }
