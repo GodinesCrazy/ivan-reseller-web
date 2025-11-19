@@ -1145,7 +1145,10 @@ export class AdvancedMarketplaceScraper {
           return [];
         }
 
+        console.log(`[DOM] Iniciando extracción de ${items.length} productos...`);
         const results: any[] = [];
+        let extractedCount = 0;
+        let discardedCount = 0;
 
         items.forEach((item: any, index: number) => {
           if (index >= 40) return;
@@ -1343,6 +1346,17 @@ export class AdvancedMarketplaceScraper {
             }
 
             if (!resolvedPrice || resolvedPrice.amountInBase <= 0) {
+              // Logging para diagnóstico: por qué se descarta el producto
+              const debugInfo = {
+                hasTitle: !!title,
+                titleLength: title?.length || 0,
+                priceElement: !!priceElement,
+                priceElementText: priceElement?.textContent?.substring(0, 50) || 'none',
+                priceCandidates: priceCandidates.filter(c => c !== null && c !== undefined && c !== '').length,
+                hasResolvedPrice: !!resolvedPrice,
+                resolvedPriceAmount: resolvedPrice?.amountInBase || 0
+              };
+              console.warn(`[DOM] Producto descartado (precio inválido):`, debugInfo);
               return null;
             }
 
@@ -1376,6 +1390,17 @@ export class AdvancedMarketplaceScraper {
               '';
 
             if (!title || price <= 0 || !url) {
+              // Logging para diagnóstico: por qué se descarta el producto
+              const debugInfo = {
+                hasTitle: !!title,
+                titleLength: title?.length || 0,
+                price: price,
+                hasUrl: !!url,
+                urlLength: url?.length || 0,
+                linkElement: !!linkElement,
+                linkElementHref: linkElement?.getAttribute('href')?.substring(0, 50) || 'none'
+              };
+              console.warn(`[DOM] Producto descartado (validación final):`, debugInfo);
               return null;
             }
 
@@ -1395,6 +1420,7 @@ export class AdvancedMarketplaceScraper {
               item.numberOfOrders ||
               0;
 
+            extractedCount++;
             return {
               title: String(title).trim().substring(0, 150),
               price,
@@ -1422,11 +1448,16 @@ export class AdvancedMarketplaceScraper {
               availability: item.availability || 'In stock',
             };
           } catch (error) {
-            console.error('Error extracting product:', error);
+            discardedCount++;
+            console.error(`[DOM] Error extrayendo producto ${index}:`, error instanceof Error ? error.message : String(error));
+            return null;
           }
         });
 
-        return results;
+        const validResults = results.filter(r => r !== null);
+        console.log(`[DOM] Extracción completada: ${validResults.length} válidos de ${items.length} totales (${extractedCount} extraídos, ${discardedCount} descartados)`);
+        
+        return validResults;
       });
 
       if (productsFromDom.length === 0) {
