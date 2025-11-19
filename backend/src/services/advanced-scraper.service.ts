@@ -3,6 +3,7 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Browser, Page, Protocol, Frame, HTTPResponse } from 'puppeteer';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import axios from 'axios';
 import { getChromiumLaunchConfig } from '../utils/chromium';
 import { CredentialsManager } from './credentials-manager.service';
