@@ -16,8 +16,9 @@ const createProductSchema = z.object({
   suggestedPrice: z.number().positive(),
   finalPrice: z.number().positive().optional().nullable(),
   currency: z.string().optional().nullable(),
-  imageUrl: z.union([z.string().url(), z.string().startsWith('//'), z.string().startsWith('/')]).optional().nullable(),
-  imageUrls: z.array(z.union([z.string().url(), z.string().startsWith('//'), z.string().startsWith('/')])).optional().nullable(),
+  // ✅ Simplificar imageUrl - aceptar cualquier string y validarlo después
+  imageUrl: z.string().optional().nullable(),
+  imageUrls: z.array(z.string()).optional().nullable(),
   category: z.string().optional().nullable(),
   tags: z.array(z.string()).optional().nullable(),
   shippingCost: z.number().optional().nullable(),
@@ -28,9 +29,10 @@ const createProductSchema = z.object({
   if (data.imageUrl && typeof data.imageUrl === 'string') {
     const url = data.imageUrl.trim();
     // Aceptar URLs completas, protocolo relativo (//), o rutas relativas (/)
+    // Si no es ninguna de estas, debe ser al menos una cadena válida sin espacios
     return url.startsWith('http://') || url.startsWith('https://') || 
            url.startsWith('//') || url.startsWith('/') || 
-           !url.includes(' ') && url.length > 3;
+           (!url.includes(' ') && url.length > 3);
   }
   return true;
 }, {
