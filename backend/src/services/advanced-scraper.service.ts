@@ -320,9 +320,9 @@ export class AdvancedMarketplaceScraper {
       const errorMsg = error.message || String(error);
       console.error('❌ Error al iniciar navegador:', errorMsg);
       
-      // Fallback con configuración mínima
+      // ✅ Fallback 1: Configuración mínima con Chromium del sistema
       try {
-        console.log('🔄 Intentando con configuración mínima...');
+        console.log('🔄 Intentando con configuración mínima (Chromium sistema)...');
         const minimalOptions: any = {
           headless: true,
           args: [
@@ -330,7 +330,28 @@ export class AdvancedMarketplaceScraper {
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
             '--disable-gpu',
-            '--single-process', // ✅ Útil para contenedores con recursos limitados
+            '--disable-software-rasterizer',
+            '--disable-extensions',
+            '--disable-background-networking',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-breakpad',
+            '--disable-client-side-phishing-detection',
+            '--disable-default-apps',
+            '--disable-features=TranslateUI',
+            '--disable-ipc-flooding-protection',
+            '--disable-popup-blocking',
+            '--disable-prompt-on-repost',
+            '--disable-renderer-backgrounding',
+            '--disable-sync',
+            '--disable-translate',
+            '--metrics-recording-only',
+            '--no-first-run',
+            '--safebrowsing-disable-auto-update',
+            '--enable-automation',
+            '--password-store=basic',
+            '--use-mock-keychain',
+            '--single-process', // ✅ Crítico para Railway/contenedores
           ],
         };
 
@@ -347,21 +368,66 @@ export class AdvancedMarketplaceScraper {
         ]) as Browser;
         
         // ✅ Esperar un momento para que el navegador se estabilice
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         // ✅ Verificar conexión
         if (!this.browser || !this.browser.isConnected()) {
           throw new Error('Browser launched but not connected (fallback)');
         }
         
+        // ✅ Verificar que el navegador puede crear una página
+        try {
+          const testPage = await this.browser.newPage();
+          await testPage.close();
+        } catch (testError: any) {
+          throw new Error(`Browser test failed: ${testError.message}`);
+        }
+        
         console.log('✅ Navegador iniciado con configuración mínima');
       } catch (fallbackError: any) {
         const fallbackMsg = fallbackError.message || String(fallbackError);
-        console.error('❌ Error crítico al iniciar navegador:', fallbackMsg);
-        // ✅ NO lanzar error - permitir que el sistema continúe sin navegador
-        // El bridge Python puede funcionar como alternativa
-        console.warn('⚠️  Continuando sin navegador - se usará bridge Python como alternativa');
-        this.browser = null;
+        console.error('❌ Error con configuración mínima:', fallbackMsg);
+        
+        // ✅ Fallback 2: Intentar sin executablePath (usar Chromium de Puppeteer)
+        try {
+          console.log('🔄 Intentando sin executablePath (Chromium Puppeteer)...');
+          const puppeteerChromiumOptions: any = {
+            headless: 'new', // Usar nuevo modo headless si está disponible
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-gpu',
+              '--single-process',
+            ],
+          };
+
+          // NO especificar executablePath - dejar que Puppeteer use el suyo
+          this.browser = await Promise.race([
+            puppeteer.launch(puppeteerChromiumOptions),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Puppeteer Chromium launch timeout')), 30000)
+            )
+          ]) as Browser;
+          
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          if (!this.browser || !this.browser.isConnected()) {
+            throw new Error('Puppeteer Chromium not connected');
+          }
+          
+          // ✅ Verificar que puede crear páginas
+          const testPage = await this.browser.newPage();
+          await testPage.close();
+          
+          console.log('✅ Navegador iniciado con Chromium de Puppeteer');
+        } catch (puppeteerError: any) {
+          const puppeteerMsg = puppeteerError.message || String(puppeteerError);
+          console.error('❌ Error crítico al iniciar navegador:', puppeteerMsg);
+          console.error('   Todos los métodos de inicio fallaron');
+          console.warn('⚠️  Continuando sin navegador - se usará bridge Python como alternativa');
+          this.browser = null;
+        }
       }
     }
   }
@@ -410,9 +476,10 @@ export class AdvancedMarketplaceScraper {
       }
     }
 
-    console.log(`🔍 Scraping REAL AliExpress: "${query}" (environment: ${environment})`);
+      console.log(`🔍 Scraping REAL AliExpress: "${query}" (environment: ${environment}, userId: ${userId})`);
 
     const cookies = await this.fetchAliExpressCookies(userId, environment);
+    console.log(`📋 Cookies encontradas: ${cookies.length}`);
 
     const hasManualCookies = cookies.length > 0;
 
@@ -482,26 +549,56 @@ export class AdvancedMarketplaceScraper {
       try {
         const url = response.url();
         if (!url) return;
-        if (!url.includes('api.mgsearch.alibaba.com') && !url.includes('gpsfront.aliexpress.com')) {
+        
+        // ✅ Capturar más endpoints de AliExpress que pueden contener productos
+        const aliExpressApiPatterns = [
+          'api.mgsearch.alibaba.com',
+          'gpsfront.aliexpress.com',
+          'wholesale.aliexpress.com',
+          'search.aliexpress.com',
+          '/api/search',
+          '/search/api',
+          'aliexpress.com/api'
+        ];
+        
+        if (!aliExpressApiPatterns.some(pattern => url.includes(pattern))) {
           return;
         }
+        
         const status = response.status();
-        if (status < 200 || status >= 400) return;
+        if (status < 200 || status >= 400) {
+          console.debug(`⚠️  API response con status ${status}: ${url.substring(0, 80)}`);
+          return;
+        }
+        
         const key = `${url}|${response.request().method()}`;
         if (seenApiResponses.has(key)) return;
+        
         const headers = response.headers() || {};
         const contentType = headers['content-type'] || headers['Content-Type'] || '';
-        if (contentType && !contentType.includes('json')) {
+        if (contentType && !contentType.includes('json') && !contentType.includes('text')) {
           return;
         }
+        
         const text = await response.text().catch(() => '');
         if (!text) return;
         seenApiResponses.add(key);
+        
         let data: any = null;
         try {
           data = JSON.parse(text);
         } catch {
-          return;
+          // Intentar extraer JSON si está embebido en texto
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try {
+              data = JSON.parse(jsonMatch[0]);
+            } catch {
+              return;
+            }
+          } else {
+            return;
+          }
         }
 
         const candidates =
@@ -511,11 +608,13 @@ export class AdvancedMarketplaceScraper {
           data?.data?.result?.resultList ||
           data?.data?.resultList ||
           data?.data?.mods?.itemList?.content ||
+          data?.content ||
+          (Array.isArray(data) ? data : []) ||
           [];
 
         if (Array.isArray(candidates) && candidates.length > 0) {
           apiCapturedItems.push(...candidates);
-          console.log(`✅ Capturados ${candidates.length} productos desde API interna (${url})`);
+          console.log(`✅ Capturados ${candidates.length} productos desde API interna (${url.substring(0, 80)}...)`);
         }
       } catch (error) {
         console.warn('⚠️  Error procesando respuesta API AliExpress:', (error as Error).message);
@@ -526,30 +625,124 @@ export class AdvancedMarketplaceScraper {
       page.on('response', apiResponseHandler);
       await this.setupRealBrowser(page);
 
-      const searchUrl = `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(query)}.html`;
+      // ✅ Probar múltiples formatos de URL de búsqueda (AliExpress puede cambiar el formato)
+      const searchUrls = [
+        `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(query)}.html`,
+        `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`,
+        `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}&SortType=total_tranpro_desc`,
+        `https://www.aliexpress.com/w/wholesale?SearchText=${encodeURIComponent(query)}&g=y`,
+      ];
+      
+      let searchUrl = searchUrls[0];
+      let navigationSuccess = false;
+      
+      // Intentar navegar con el primer formato
       console.log(`📡 Navegando a: ${searchUrl}`);
-
-      // ✅ Navegar con manejo robusto de errores
       try {
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.goto(searchUrl, { 
+          waitUntil: 'domcontentloaded', 
+          timeout: 30000 
+        });
+        navigationSuccess = true;
       } catch (navError: any) {
-        // Si hay error de navegación, intentar con timeout más corto
-        if (navError.message?.includes('timeout') || navError.message?.includes('Navigation')) {
-          console.warn('⚠️  Timeout en navegación inicial, intentando con timeout reducido...');
+        console.warn(`⚠️  Error navegando con formato 1: ${navError.message}`);
+        
+        // Intentar con formatos alternativos
+        for (let i = 1; i < searchUrls.length; i++) {
           try {
-            await page.goto(searchUrl, { waitUntil: 'networkidle0', timeout: 15000 });
-          } catch (retryError: any) {
-            console.error('❌ Error al navegar a AliExpress:', retryError.message);
-            throw new Error(`Failed to navigate to AliExpress: ${retryError.message}`);
+            searchUrl = searchUrls[i];
+            console.log(`📡 Intentando formato alternativo ${i + 1}: ${searchUrl}`);
+            await page.goto(searchUrl, { 
+              waitUntil: 'domcontentloaded', 
+              timeout: 25000 
+            });
+            navigationSuccess = true;
+            console.log(`✅ Navegación exitosa con formato ${i + 1}`);
+            break;
+          } catch (altError: any) {
+            console.warn(`⚠️  Formato ${i + 1} también falló: ${altError.message}`);
+            if (i === searchUrls.length - 1) {
+              // Último intento con timeout más corto
+              try {
+                await page.goto(searchUrl, { 
+                  waitUntil: 'networkidle0', 
+                  timeout: 15000 
+                });
+                navigationSuccess = true;
+              } catch (finalError: any) {
+                console.error('❌ Error al navegar a AliExpress con todos los formatos:', finalError.message);
+                throw new Error(`Failed to navigate to AliExpress: ${finalError.message}`);
+              }
+            }
           }
-        } else {
-          throw navError;
+        }
+      }
+      
+      if (!navigationSuccess) {
+        throw new Error('Failed to navigate to AliExpress with any URL format');
+      }
+
+      // ✅ Esperar más tiempo para que la página cargue completamente y ejecutar JavaScript
+      console.log('⏳ Esperando que la página cargue completamente...');
+      
+      // Esperar a que la página esté lista
+      try {
+        await page.waitForFunction(() => {
+          const w = (globalThis as any).window;
+          return w.document && w.document.readyState === 'complete';
+        }, { timeout: 10000 });
+      } catch (e) {
+        console.warn('⚠️  Timeout esperando readyState, continuando...');
+      }
+      
+      // Esperar tiempo adicional para que JavaScript ejecute
+      await page.waitForTimeout(3000); // ✅ Aumentar de 2s a 3s
+      
+      // Intentar hacer scroll para activar lazy loading
+      try {
+        await page.evaluate(() => {
+          const w = (globalThis as any).window;
+          if (w.scrollTo) {
+            w.scrollTo(0, 500);
+          }
+        });
+        await page.waitForTimeout(1000);
+      } catch (e) {
+        // Ignorar errores de scroll
+      }
+      
+      // ✅ Verificar si hay CAPTCHA o bloqueo antes de intentar extraer productos
+      const hasCaptcha = await page.evaluate(() => {
+        const captchaSelectors = [
+          '.captcha',
+          '#captcha',
+          '[class*="captcha"]',
+          '[id*="captcha"]',
+          'iframe[src*="captcha"]',
+          '.security-check',
+          '.verification'
+        ];
+        return captchaSelectors.some(sel => document.querySelector(sel) !== null);
+      }).catch(() => false);
+      
+      if (hasCaptcha) {
+        console.warn('⚠️  CAPTCHA detectado en la página de AliExpress');
+        const currentUrl = page.url();
+        await this.captureAliExpressSnapshot(page, `captcha-detected-${Date.now()}`);
+        
+        // Verificar si hay sesión manual pendiente antes de lanzar error
+        const { ManualAuthService } = await import('./manual-auth.service');
+        const manualSession = await ManualAuthService.getActiveSession(userId, 'aliexpress');
+        
+        if (manualSession && manualSession.status === 'pending') {
+          throw new ManualAuthRequiredError('aliexpress', manualSession.token, currentUrl, manualSession.expiresAt);
         }
       }
 
       // Extraer runParams con los productos renderizados por la propia página
       let products: any[] = [];
       try {
+        // ✅ Intentar extraer runParams inmediatamente después de cargar
         const runParamsFromScript = await this.extractRunParamsFromPage(page);
         if (runParamsFromScript) {
           const list =
@@ -578,20 +771,54 @@ export class AdvancedMarketplaceScraper {
           }
         }
 
+        // ✅ Esperar más tiempo si no se encontraron productos inicialmente
+        console.log('⏳ Esperando runParams...');
+        
+        // Hacer scroll adicional para activar carga
+        try {
+          await page.evaluate(() => {
+            const w = (globalThis as any).window;
+            for (let i = 0; i < 3; i++) {
+              w.scrollBy?.(0, 300);
+              // Pequeña pausa entre scrolls
+            }
+          });
+          await page.waitForTimeout(2000);
+        } catch (e) {
+          // Ignorar errores
+        }
+        
         await page.waitForFunction(() => {
           const w = (globalThis as any).window;
-          const params = w?.runParams;
+          const params = w?.runParams || 
+                         w?.__runParams__ ||
+                         w?.__INITIAL_STATE__?.main?.search?.items ||
+                         w?.window?.runParams;
           if (!params) return false;
-          return Boolean(params?.resultList?.length || params?.mods?.itemList?.content?.length);
-        }, { timeout: 15000 });
+          return Boolean(
+            params?.resultList?.length || 
+            params?.mods?.itemList?.content?.length ||
+            params?.items?.length ||
+            (params?.data && (params.data.resultList || params.data.items))
+          );
+        }, { timeout: 25000 }); // ✅ Aumentar timeout de 20s a 25s
         const runParams = await page.evaluate(() => {
           const w = (globalThis as any).window;
-          return w?.runParams || null;
+          // Intentar múltiples ubicaciones para runParams
+          return w?.runParams || 
+                 w?.__runParams__ ||
+                 w?.__INITIAL_STATE__?.main?.search?.items ||
+                 w?.window?.runParams ||
+                 null;
         });
         const list =
           runParams?.mods?.itemList?.content ||
+          runParams?.mods?.itemList?.items ||
           runParams?.resultList ||
           runParams?.items ||
+          runParams?.data?.resultList ||
+          runParams?.data?.items ||
+          (runParams?.data?.mods && runParams.data.mods.itemList?.content) ||
           [];
 
         if (Array.isArray(list) && list.length > 0) {
@@ -647,8 +874,10 @@ export class AdvancedMarketplaceScraper {
         return scriptProducts;
       }
 
-      // Si todo lo anterior falló, intentar con scraping DOM clásico
-      await new Promise(resolve => setTimeout(resolve, 4000));
+      // ✅ Si todo lo anterior falló, intentar con scraping DOM clásico
+      // Esperar más tiempo para que los productos se rendericen completamente
+      console.log('⏳ Esperando que los productos se rendericen en el DOM...');
+      await new Promise(resolve => setTimeout(resolve, 5000)); // ✅ Aumentar de 4s a 5s
 
       // ✅ Esperar a que carguen los productos con múltiples selectores alternativos
       let productsLoaded = false;
@@ -663,22 +892,68 @@ export class AdvancedMarketplaceScraper {
         'div[data-widgetid*="manhattan"]',
         '[data-list-id="product"]',
         '.manhattan--container--1lP57Ag',
+        '.search-item-card-wrapper',
+        '[class*="search-item"]',
+        '[class*="product-card"]',
+        '[class*="item-card"]',
+        'a[href*="/item/"]',
+        'a[href*="/product/"]'
       ];
 
-      for (const selector of selectors) {
-        try {
-          await page.waitForSelector(selector, { timeout: 5000 });
-          productsLoaded = true;
-          console.log(`✅ Productos encontrados con selector: ${selector}`);
-          break;
-        } catch {
-          // continuar con el siguiente selector
+      // Intentar múltiples veces con diferentes esperas
+      for (let attempt = 0; attempt < 3; attempt++) {
+        for (const selector of selectors) {
+          try {
+            await page.waitForSelector(selector, { timeout: 8000 });
+            const count = await page.evaluate((sel) => {
+              const doc = (globalThis as any).document;
+              return doc ? doc.querySelectorAll(sel).length : 0;
+            }, selector);
+            
+            if (count > 0) {
+              productsLoaded = true;
+              console.log(`✅ Productos encontrados con selector: ${selector} (${count} items)`);
+              break;
+            }
+          } catch {
+            // continuar con el siguiente selector
+          }
+        }
+        
+        if (productsLoaded) break;
+        
+        // Si no se encontraron, hacer scroll y esperar más
+        if (attempt < 2) {
+          console.log(`⏳ Intento ${attempt + 1} falló, haciendo scroll y esperando más...`);
+          await page.evaluate(() => {
+            const w = (globalThis as any).window;
+            w.scrollBy?.(0, 1000);
+          });
+          await page.waitForTimeout(3000);
         }
       }
 
       if (!productsLoaded) {
         console.warn('⚠️  No se encontraron productos con ningún selector, intentando extraer de todos modos...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // Hacer scroll completo de la página para activar lazy loading
+        await page.evaluate(() => {
+          const w = (globalThis as any).window;
+          const scrollHeight = w.document?.documentElement?.scrollHeight || 0;
+          const clientHeight = w.document?.documentElement?.clientHeight || 0;
+          const maxScroll = scrollHeight - clientHeight;
+          
+          // Scroll progresivo
+          let currentScroll = 0;
+          const scrollStep = 500;
+          const scrollInterval = setInterval(() => {
+            currentScroll += scrollStep;
+            w.scrollTo?.(0, Math.min(currentScroll, maxScroll));
+            if (currentScroll >= maxScroll) {
+              clearInterval(scrollInterval);
+            }
+          }, 300);
+        });
+        await new Promise(resolve => setTimeout(resolve, 5000)); // Esperar 5s para lazy loading
       }
 
       await this.autoScroll(page);
@@ -692,11 +967,17 @@ export class AdvancedMarketplaceScraper {
           '.item-card-wrapper-gallery',
           '[class*="item-card"]',
           '[class*="product-item"]',
+          '[class*="search-item"]',
           'div[data-pl="product"]',
           'div[data-pl="product-card"]',
           'div[data-widgetid*="manhattan"]',
           '.manhattan--container--1lP57Ag',
           '[data-list-id="product"]',
+          '.search-item-card-wrapper',
+          'a[href*="/item/"]',
+          'a[href*="/product/"]',
+          '[class*="gallery-item"]',
+          '[class*="card-item"]'
         ];
 
         let items: any = null;
@@ -1009,6 +1290,40 @@ export class AdvancedMarketplaceScraper {
         console.warn('   - Scripts embebidos: falló');
         console.warn('   - DOM scraping: falló');
         console.warn('⚠️  [SCRAPER] URL final:', page.url());
+        
+        // ✅ Verificar si hay CAPTCHA o bloqueo antes de retornar vacío
+        const hasCaptchaOrBlock = await page.evaluate(() => {
+          const captchaSelectors = [
+            '.captcha', '#captcha', '[class*="captcha"]', '[id*="captcha"]',
+            'iframe[src*="captcha"]', '.security-check', '.verification',
+            '.block-message', '[class*="block"]', '.access-denied'
+          ];
+          return captchaSelectors.some(sel => document.querySelector(sel) !== null) ||
+                 document.body.innerText.toLowerCase().includes('captcha') ||
+                 document.body.innerText.toLowerCase().includes('blocked') ||
+                 document.body.innerText.toLowerCase().includes('access denied');
+        }).catch(() => false);
+        
+        if (hasCaptchaOrBlock) {
+          console.warn('⚠️  [SCRAPER] CAPTCHA o bloqueo detectado en la página');
+          const currentUrl = page.url();
+          await this.captureAliExpressSnapshot(page, `captcha-block-${Date.now()}`).catch(() => {});
+          
+          // Verificar si hay sesión manual pendiente
+          try {
+            const { ManualAuthService } = await import('./manual-auth.service');
+            const manualSession = await ManualAuthService.getActiveSession(userId, 'aliexpress');
+            
+            if (manualSession && manualSession.status === 'pending') {
+              throw new ManualAuthRequiredError('aliexpress', manualSession.token, currentUrl, manualSession.expiresAt);
+            }
+          } catch (authError: any) {
+            if (authError instanceof ManualAuthRequiredError) {
+              throw authError;
+            }
+          }
+        }
+        
         console.warn('⚠️  [SCRAPER] Intentando capturar snapshot para diagnóstico...');
         await this.captureAliExpressSnapshot(page, `no-products-${Date.now()}`).catch((err) => {
           console.warn('⚠️  No se pudo capturar snapshot:', err.message);
@@ -1021,12 +1336,23 @@ export class AdvancedMarketplaceScraper {
               '.error-message',
               '[class*="error"]',
               '[class*="Error"]',
-              'div:contains("No results")',
-              'div:contains("no encontrado")',
+              '[class*="empty"]',
+              '[class*="no-results"]',
+              '[class*="no-products"]'
             ];
             for (const sel of errorSelectors) {
               const el = document.querySelector(sel);
-              if (el) return el.textContent?.trim() || 'Error desconocido';
+              if (el && el.textContent) {
+                const text = el.textContent.trim().toLowerCase();
+                if (text.includes('no results') || text.includes('no encontrado') || text.includes('sin resultados')) {
+                  return el.textContent.trim();
+                }
+              }
+            }
+            // Verificar también en el body
+            const bodyText = document.body.innerText.toLowerCase();
+            if (bodyText.includes('no results') || bodyText.includes('no encontrado') || bodyText.includes('sin resultados')) {
+              return 'No se encontraron resultados';
             }
             return null;
           });
@@ -1047,6 +1373,7 @@ export class AdvancedMarketplaceScraper {
           }
         }
         
+        // ✅ NO lanzar error - retornar vacío y dejar que el sistema maneje el caso
         return [];
       }
 
@@ -1240,31 +1567,93 @@ export class AdvancedMarketplaceScraper {
    * Configurar página para parecer navegador real
    */
   private async setupRealBrowser(page: Page): Promise<void> {
-    // User agent realista
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    // ✅ User agent realista y actualizado
+    const userAgents = [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    ];
+    const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+    await page.setUserAgent(randomUA);
 
-    // Viewport realista
-    await page.setViewport({ width: 1920, height: 1080 });
+    // ✅ Viewport realista y variado
+    const viewports = [
+      { width: 1920, height: 1080 },
+      { width: 1366, height: 768 },
+      { width: 1440, height: 900 },
+      { width: 1536, height: 864 }
+    ];
+    const randomViewport = viewports[Math.floor(Math.random() * viewports.length)];
+    await page.setViewport(randomViewport);
 
-    // Headers adicionales
+    // ✅ Headers adicionales más completos
     await page.setExtraHTTPHeaders({
-      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
       'Accept-Encoding': 'gzip, deflate, br',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
       'Connection': 'keep-alive',
       'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-User': '?1',
+      'Cache-Control': 'max-age=0',
+      'DNT': '1'
     });
 
-    // Interceptar requests para parecer más humano
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      // Bloquear algunos recursos para acelerar
-      if (req.resourceType() === 'stylesheet' || req.resourceType() === 'font') {
-        req.abort();
-      } else {
-        req.continue();
-      }
+    // ✅ Ocultar indicadores de automatización
+    await page.evaluateOnNewDocument(() => {
+      // Ocultar webdriver
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined,
+      });
+      
+      // Sobrescribir plugins
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      });
+      
+      // Sobrescribir languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en', 'es'],
+      });
+      
+      // Sobrescribir permissions
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters: any) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: Notification.permission } as PermissionStatus) :
+          originalQuery(parameters)
+      );
     });
+
+    // ✅ NO bloquear recursos críticos - AliExpress necesita CSS y JS para renderizar productos
+    // Solo bloquear imágenes y videos opcionales si es necesario
+    try {
+      await page.setRequestInterception(true);
+      page.on('request', (req) => {
+        const resourceType = req.resourceType();
+        const url = req.url();
+        
+        // Bloquear solo recursos pesados no esenciales
+        if (
+          resourceType === 'media' || 
+          resourceType === 'websocket' ||
+          url.includes('analytics') ||
+          url.includes('tracking') ||
+          url.includes('ads') ||
+          url.includes('advertising')
+        ) {
+          req.abort();
+        } else {
+          req.continue();
+        }
+      });
+    } catch (error) {
+      // Si falla, continuar sin intercepción
+      console.warn('⚠️  No se pudo configurar intercepción de requests:', (error as Error).message);
+    }
   }
 
   /**
@@ -1339,7 +1728,7 @@ export class AdvancedMarketplaceScraper {
   }
 
   /**
-   * Auto scroll para cargar más contenido
+   * Auto scroll para cargar más contenido (lazy loading)
    */
   private async autoScroll(page: Page): Promise<void> {
     await page.evaluate(async () => {
@@ -1379,23 +1768,55 @@ export class AdvancedMarketplaceScraper {
 
   private async extractRunParamsFromPage(page: Page): Promise<any | null> {
     try {
+      // ✅ Método 1: Intentar desde HTML directamente
       const html = await page.content();
-      const match = html.match(/window\.runParams\s*=\s*(\{[\s\S]*?\});/);
-      if (!match || match.length < 2) {
-        return null;
+      const patterns = [
+        /window\.runParams\s*=\s*(\{[\s\S]*?\});/,
+        /window\.__runParams__\s*=\s*(\{[\s\S]*?\});/,
+        /__INITIAL_STATE__\s*=\s*(\{[\s\S]*?\});/,
+        /runParams\s*:\s*(\{[\s\S]*?\})/,
+      ];
+      
+      for (const pattern of patterns) {
+        const match = html.match(pattern);
+        if (match && match.length >= 2) {
+          try {
+            const runParamsString = match[1];
+            // Usar Function para evaluar el objeto (runParams contiene comillas simples y estructuras no JSON)
+            const runParams = Function(`"use strict";return (${runParamsString});`)();
+            if (runParams && (runParams.resultList || runParams.mods || runParams.items)) {
+              console.log('✅ runParams encontrado en HTML con pattern:', pattern.toString().substring(0, 50));
+              return runParams;
+            }
+          } catch (evalError) {
+            // Continuar con siguiente pattern
+            continue;
+          }
+        }
       }
-
-      const runParamsString = match[1];
+      
+      // ✅ Método 2: Intentar desde window directamente
       try {
-        // Usar Function para evaluar el objeto (runParams contiene comillas simples y estructuras no JSON)
-        const runParams = Function(`"use strict";return (${runParamsString});`)();
-        return runParams;
+        const runParams = await page.evaluate(() => {
+          const w = (globalThis as any).window;
+          return w?.runParams || 
+                 w?.__runParams__ ||
+                 w?.__INITIAL_STATE__?.main?.search ||
+                 w?.window?.runParams ||
+                 null;
+        });
+        
+        if (runParams && (runParams.resultList || runParams.mods || runParams.items || runParams.data)) {
+          console.log('✅ runParams encontrado en window object');
+          return runParams;
+        }
       } catch (evalError) {
-        console.log('⚠️  Error evaluando runParams con Function:', (evalError as Error).message);
-        return null;
+        console.warn('⚠️  Error evaluando runParams desde window:', (evalError as Error).message);
       }
+      
+      return null;
     } catch (error) {
-      console.log('⚠️  Error extrayendo runParams del HTML:', (error as Error).message);
+      console.warn('⚠️  Error extrayendo runParams del HTML:', (error as Error).message);
       return null;
     }
   }

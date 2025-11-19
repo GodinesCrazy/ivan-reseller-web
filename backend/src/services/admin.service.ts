@@ -448,50 +448,30 @@ export class AdminService {
       throw new Error('Usuario no encontrado');
     }
 
-    // Aquí integrarías con tu servicio de email
-    // Por ahora retornamos la información que se debe enviar
-    const emailContent = {
-      to: user.email,
-      subject: 'Acceso a Ivan Reseller - Credenciales de ingreso',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #2563eb;">¡Bienvenido a Ivan Reseller!</h2>
-          
-          <p>Hola ${user.fullName || user.username},</p>
-          
-          <p>Tu cuenta ha sido creada exitosamente. Aquí tienes tus credenciales de acceso:</p>
-          
-          <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p><strong>URL de acceso:</strong> <a href="${credentials.accessUrl}">${credentials.accessUrl}</a></p>
-            <p><strong>Usuario:</strong> ${credentials.username}</p>
-            <p><strong>Contraseña temporal:</strong> ${credentials.temporaryPassword}</p>
-          </div>
-          
-          <p><strong>⚠️ IMPORTANTE:</strong> Por seguridad, cambia tu contraseña en el primer inicio de sesión.</p>
-          
-          <h3>¿Cómo usar el sistema?</h3>
-          <ol>
-            <li>Accede al link proporcionado</li>
-            <li>Inicia sesión con tus credenciales</li>
-            <li>Cambia tu contraseña temporal</li>
-            <li>Explora el dashboard y sus funcionalidades</li>
-            <li>Configura tus APIs de marketplace (opcional)</li>
-          </ol>
-          
-          <p>Si tienes preguntas, contacta al administrador.</p>
-          
-          <p>¡Éxito en tus ventas!</p>
-          <p><strong>Ivan Reseller Team</strong></p>
-        </div>
-      `
-    };
-
-    console.log('📧 Email a enviar:', emailContent);
-    
-    // TODO: Implementar envío real de email aquí
-    // await emailService.send(emailContent);
-
-    return true;
+    // ✅ Enviar email de bienvenida con credenciales
+    try {
+      const emailService = (await import('./email.service')).default;
+      const sent = await emailService.sendWelcomeEmail(user.email, credentials);
+      
+      if (sent) {
+        const { logger } = await import('../config/logger');
+        logger.info('Welcome email sent successfully', { userId, email: user.email });
+      } else {
+        const { logger } = await import('../config/logger');
+        logger.warn('Failed to send welcome email', { userId, email: user.email });
+      }
+      
+      return sent;
+    } catch (error) {
+      const { logger } = await import('../config/logger');
+      logger.error('Error sending welcome email', {
+        error: error instanceof Error ? error.message : String(error),
+        userId,
+        email: user.email
+      });
+      // No fallar la creación de usuario si el email falla
+      return false;
+    }
   }
 }
 

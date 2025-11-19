@@ -4,11 +4,22 @@ import opportunityFinder from '../../services/opportunity-finder.service';
 import ManualAuthRequiredError from '../../errors/manual-auth-required.error';
 import { notificationService } from '../../services/notification.service';
 import opportunityPersistence from '../../services/opportunity.service';
+import { z } from 'zod';
+import { logger } from '../../config/logger';
 
 const router = Router();
 
 // Require authentication for all endpoints
 router.use(authenticate);
+
+// ✅ API-002: Validation schema para query parameters
+const opportunitiesQuerySchema = z.object({
+  query: z.string().optional().default(''),
+  maxItems: z.string().optional().transform(val => val ? parseInt(val, 10) : 10).pipe(z.number().int().min(1).max(50)),
+  marketplaces: z.string().optional().default('ebay,amazon,mercadolibre'),
+  region: z.string().optional().default('us'),
+  environment: z.enum(['sandbox', 'production']).optional(),
+});
 
 // GET /api/opportunities
 // query params: query, maxItems, marketplaces (csv), region
@@ -21,12 +32,14 @@ router.get('/', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
 
-    const query = String(req.query.query || '').trim();
-    const maxItems = parseInt(String(req.query.maxItems || '10'), 10);
-    const region = String(req.query.region || 'us');
-    const marketplacesParam = String(req.query.marketplaces || 'ebay,amazon,mercadolibre');
+    // ✅ API-002: Validar query parameters con Zod
+    const validatedQuery = opportunitiesQuerySchema.parse(req.query);
+    const query = validatedQuery.query.trim();
+    const maxItems = validatedQuery.maxItems;
+    const region = validatedQuery.region;
+    const marketplacesParam = validatedQuery.marketplaces;
     const marketplaces = marketplacesParam.split(',').map(s => s.trim()).filter(Boolean) as Array<'ebay'|'amazon'|'mercadolibre'>;
-    const environment = (req.query.environment as 'sandbox' | 'production' | undefined) || undefined; // Opcional, se obtiene del usuario si no se especifica
+    const environment = validatedQuery.environment; // Opcional, se obtiene del usuario si no se especifica
 
     if (!query) {
       return res.json({ success: true, items: [], count: 0, query, targetMarketplaces: marketplaces, data_source: 'real_analysis' });
@@ -96,7 +109,7 @@ router.get('/', async (req, res) => {
         'Intenta con un término de búsqueda más específico',
         'Espera unos minutos y vuelve a intentar (puede ser rate limiting)'
       ];
-      console.warn('⚠️  No se encontraron oportunidades para query:', query, debugInfo);
+      logger.warn('No se encontraron oportunidades para query', { query, debugInfo });
     }
 
     // Notify completion
@@ -162,7 +175,11 @@ router.get('/', async (req, res) => {
       });
     }
 
-    console.error('Error in /api/opportunities:', error);
+    logger.error('Error in /api/opportunities', { 
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      userId: req.user?.userId
+    });
     try {
       const userId = req.user?.userId;
       if (userId) {

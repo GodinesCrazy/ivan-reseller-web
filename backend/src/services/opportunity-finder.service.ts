@@ -150,19 +150,35 @@ class OpportunityFinderService {
     const baseCurrency = fxService.getBase();
 
     try {
-      console.log(`🔍 [OPPORTUNITY-FINDER] Iniciando búsqueda para: "${query}" (userId: ${userId}, environment: ${environment})`);
-      console.log('🔍 Usando scraping nativo local (Puppeteer) para:', query);
+      logger.info('[OPPORTUNITY-FINDER] Starting search', { query, userId, environment });
+      logger.debug('[OPPORTUNITY-FINDER] Using native local scraping (Puppeteer)', { query });
       
       // ✅ Inicializar scraper explícitamente antes de usar
       if (!scraper['browser']) {
-        console.log('🚀 Inicializando navegador...');
-        await scraper['init']();
-        scraperInitialized = true;
+        logger.debug('[OPPORTUNITY-FINDER] Initializing browser');
+        try {
+          await scraper['init']();
+          scraperInitialized = true;
+          logger.info('[OPPORTUNITY-FINDER] Browser initialized successfully');
+        } catch (initError: any) {
+          logger.error('[OPPORTUNITY-FINDER] Browser initialization failed', {
+            error: initError?.message || String(initError),
+            stack: initError?.stack
+          });
+          throw initError;
+        }
       }
       
-      console.log(`📡 [OPPORTUNITY-FINDER] Llamando a scrapeAliExpress...`);
+      logger.debug('[OPPORTUNITY-FINDER] Calling scrapeAliExpress', { query, userId, environment });
+      const scrapeStartTime = Date.now();
       const items = await scraper.scrapeAliExpress(userId, query, environment);
-      console.log(`📦 [OPPORTUNITY-FINDER] scrapeAliExpress retornó ${items?.length || 0} items`);
+      const scrapeDuration = Date.now() - scrapeStartTime;
+      logger.info('[OPPORTUNITY-FINDER] scrapeAliExpress completed', { 
+        count: items?.length || 0,
+        duration: `${scrapeDuration}ms`,
+        query,
+        userId
+      });
       
       products = (items || [])
         .slice(0, maxItems)
@@ -383,11 +399,23 @@ class OpportunityFinderService {
         nativeError: nativeErrorForLogs?.message || null,
         bridgeAttempted: true,
       });
+      
+      // ✅ Si hay un error de autenticación manual pendiente, lanzarlo para que el frontend lo maneje
+      if (manualAuthPending && manualAuthError) {
+        logger.info('Lanzando error de autenticación manual pendiente', {
+          service: 'opportunity-finder',
+          userId,
+          error: manualAuthError.message
+        });
+        throw manualAuthError;
+      }
+      
+      // ✅ Retornar vacío si no hay productos pero no hay error de autenticación
       return [];
     }
 
     // 2) Analizar competencia real (placeholder hasta integrar servicios específicos)
-    console.log(`📊 Procesando ${products.length} productos scrapeados para encontrar oportunidades...`);
+    logger.info('[OPPORTUNITY-FINDER] Processing scraped products to find opportunities', { productCount: products.length });
     const opportunities: OpportunityItem[] = [];
     let skippedInvalid = 0;
     let skippedLowMargin = 0;
@@ -396,12 +424,20 @@ class OpportunityFinderService {
     for (const product of products) {
       if (!product.title || !product.price || product.price <= 0) {
         skippedInvalid++;
-        console.log(`⏭️  Producto descartado (inválido): title="${product.title?.substring(0, 50)}", price=${product.price}`);
+        logger.debug('[OPPORTUNITY-FINDER] Product discarded (invalid)', { 
+          title: product.title?.substring(0, 50), 
+          price: product.price 
+        });
         continue;
       }
 
       processedCount++;
-      console.log(`🔍 [${processedCount}/${products.length}] Analizando: "${product.title.substring(0, 60)}..." (precio: ${product.price} ${product.currency})`);
+      logger.debug('[OPPORTUNITY-FINDER] Analyzing product', { 
+        progress: `${processedCount}/${products.length}`,
+        title: product.title.substring(0, 60),
+        price: product.price,
+        currency: product.currency
+      });
 
       let analysis: Record<string, any> = {};
       try {

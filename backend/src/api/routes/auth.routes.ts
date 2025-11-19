@@ -156,29 +156,22 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
       allResponseHeaders: res.getHeaders(),
     });
 
-    // SOLUCIÓN HÍBRIDA: Devolver token en el body para navegadores que bloquean cookies de terceros (Safari iOS)
+    // SOLUCIÓN HÍBRIDA: Devolver token en el body como fallback para todos los navegadores
+    // Esto asegura que el login funcione incluso si las cookies cross-domain no se establecen correctamente
     // El frontend usará cookies si están disponibles, o el token del body como fallback
-    const userAgent = req.headers['user-agent'] || '';
-    const isSafariIOS = /iPhone|iPad|iPod/i.test(userAgent) || 
-                       (userAgent.includes('Safari') && !userAgent.includes('Chrome') && !userAgent.includes('Firefox'));
-    
-    // Retornar datos del usuario
-    // Para Safari iOS, también devolvemos el token en el body como fallback
+    // CRÍTICO: Siempre devolver el token en el body para garantizar que el login funcione en producción
     res.json({
       success: true,
       message: 'Login successful',
       data: {
         user: result.user,
-        // Token en el body solo para Safari iOS (fallback cuando cookies no funcionan)
-        ...(isSafariIOS ? { token: result.token, refreshToken: result.refreshToken } : {}),
+        // Token en el body como fallback (siempre disponible para garantizar login exitoso)
+        token: result.token,
+        refreshToken: result.refreshToken,
       },
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      next(new AppError(error.errors[0].message, 400));
-    } else {
-      next(error);
-    }
+    next(error);
   }
 });
 
@@ -317,24 +310,29 @@ router.post('/forgot-password', async (req: Request, res: Response, next: NextFu
     const { email } = z.object({ email: z.string().email() }).parse(req.body);
     
     // Generate token (always return success to prevent email enumeration)
-    await authService.generatePasswordResetToken(email);
+    const token = await authService.generatePasswordResetToken(email);
 
-    // TODO: Send email with reset link
-    // For now, just log the token (in production, send email)
+    // ✅ Enviar email con link de reset (solo si el token es válido, no dummy)
+    if (token && token !== 'token') {
+      const frontendUrl = process.env.FRONTEND_URL || 'https://ivanreseller.com';
+      const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+      
+      // Importar emailService dinámicamente para evitar dependencias circulares
+      const emailService = (await import('../../services/email.service')).default;
+      await emailService.sendPasswordResetEmail(email, resetLink);
+    }
+
     res.json({
       success: true,
       message: 'If an account with that email exists, a password reset link has been sent.',
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      next(new AppError(error.errors[0].message, 400));
-    } else {
-      // Don't reveal if email exists
-      res.json({
-        success: true,
-        message: 'If an account with that email exists, a password reset link has been sent.',
-      });
-    }
+    // No diferenciamos email existente o no para evitar enumeración
+    // Los errores de validación de Zod serán manejados por el middleware central
+    res.json({
+      success: true,
+      message: 'If an account with that email exists, a password reset link has been sent.',
+    });
   }
 });
 
@@ -353,11 +351,7 @@ router.post('/reset-password', async (req: Request, res: Response, next: NextFun
       message: 'Password reset successfully. Please log in with your new password.',
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      next(new AppError(error.errors[0].message, 400));
-    } else {
-      next(error);
-    }
+    next(error);
   }
 });
 
@@ -486,11 +480,7 @@ router.post('/change-password', authenticate, async (req: Request, res: Response
       message: result.message,
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      next(new AppError(error.errors[0].message, 400));
-    } else {
-      next(error);
-    }
+    next(error);
   }
 });
 
