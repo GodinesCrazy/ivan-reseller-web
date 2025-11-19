@@ -107,6 +107,58 @@ class AliExpressAuthMonitor {
   private async handleUser(userId: number, source: 'startup' | 'interval' | 'manual', options: RefreshOptions = {}) {
     const status = await marketplaceAuthStatusService.getStatus(userId, 'aliexpress');
 
+    // ✅ Verificar si realmente hay una sesión manual activa pendiente
+    let hasActiveManualSession = false;
+    if (status?.status === 'manual_required') {
+      try {
+        const { ManualAuthService } = await import('./manual-auth.service');
+        const activeSession = await ManualAuthService.getActiveSession(userId, 'aliexpress');
+        hasActiveManualSession = activeSession !== null && activeSession.status === 'pending' && 
+                                 (!activeSession.expiresAt || activeSession.expiresAt > new Date());
+      } catch (error) {
+        logger.debug('AliExpressAuthMonitor: error checking active manual session', { userId, error });
+      }
+    }
+
+    // ✅ MODIFICADO: Si el estado es 'manual_required' pero NO hay sesión manual real pendiente,
+    // limpiar el estado obsoleto (probablemente de antes cuando se requerían cookies)
+    if (status?.status === 'manual_required' && !hasActiveManualSession && !options.force) {
+      logger.debug('AliExpressAuthMonitor: cleaning up stale manual_required status (no real session pending)', { userId });
+      
+      // En startup, limpiar directamente sin evaluar cookies
+      if (source === 'startup') {
+        await marketplaceAuthStatusService.setStatus(userId, 'aliexpress', 'unknown', {
+          message: 'El sistema funcionará en modo público. Las cookies son opcionales pero mejoran la experiencia.',
+          requiresManual: false,
+        });
+        logger.info('AliExpressAuthMonitor: cleaned stale manual_required status at startup', { userId });
+      } else {
+        // En interval, evaluar cookies para limpiar el estado obsoleto
+        const cookieHealth = await this.evaluateCookieHealth(userId, status);
+        if (!cookieHealth.manualRequired) {
+          // El estado ya se actualizó en evaluateCookieHealth, continuar normalmente
+          logger.debug('AliExpressAuthMonitor: stale manual_required status cleaned', { userId });
+        } else {
+          // Realmente necesita manual intervention (CAPTCHA/bloqueo), mantener estado
+          logger.info('AliExpressAuthMonitor: user requires manual intervention due to cookie health', {
+            userId,
+            reason: cookieHealth.status,
+          });
+          return {
+            skipped: true,
+            reason: cookieHealth.status,
+            message: cookieHealth.message,
+          };
+        }
+      }
+    }
+
+    // ✅ Solo saltar si realmente hay sesión manual pendiente activa
+    if (status?.status === 'manual_required' && hasActiveManualSession && !options.force) {
+      logger.info('AliExpressAuthMonitor: skipping user (manual intervention pending with active session)', { userId });
+      return { skipped: true, reason: 'manual_required' as const };
+    }
+
     // ✅ MODIFICADO: NO requerir cookies en modo startup (el sistema puede funcionar en modo público)
     // Solo evaluar cookie health si es un refresh manual o intervalo, NO en startup
     if (source !== 'startup') {
@@ -127,11 +179,6 @@ class AliExpressAuthMonitor {
       logger.debug('AliExpressAuthMonitor: startup cycle - skipping cookie health check (system can work in public mode)', {
         userId,
       });
-    }
-
-    if (status?.status === 'manual_required' && !options.force) {
-      logger.info('AliExpressAuthMonitor: skipping user (manual intervention pending)', { userId });
-      return { skipped: true, reason: 'manual_required' as const };
     }
 
     const now = Date.now();
