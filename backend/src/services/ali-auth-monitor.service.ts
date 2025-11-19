@@ -107,17 +107,26 @@ class AliExpressAuthMonitor {
   private async handleUser(userId: number, source: 'startup' | 'interval' | 'manual', options: RefreshOptions = {}) {
     const status = await marketplaceAuthStatusService.getStatus(userId, 'aliexpress');
 
-    const cookieHealth = await this.evaluateCookieHealth(userId, status?.status as MarketplaceAuthState | undefined);
-    if (cookieHealth.manualRequired) {
-      logger.info('AliExpressAuthMonitor: user requires manual intervention due to cookie health', {
+    // ✅ MODIFICADO: NO requerir cookies en modo startup (el sistema puede funcionar en modo público)
+    // Solo evaluar cookie health si es un refresh manual o intervalo, NO en startup
+    if (source !== 'startup') {
+      const cookieHealth = await this.evaluateCookieHealth(userId, status?.status as MarketplaceAuthState | undefined);
+      if (cookieHealth.manualRequired) {
+        logger.info('AliExpressAuthMonitor: user requires manual intervention due to cookie health', {
+          userId,
+          reason: cookieHealth.status,
+        });
+        return {
+          skipped: true,
+          reason: cookieHealth.status,
+          message: cookieHealth.message,
+        };
+      }
+    } else {
+      // ✅ En startup, solo loguear pero NO bloquear ni enviar notificaciones
+      logger.debug('AliExpressAuthMonitor: startup cycle - skipping cookie health check (system can work in public mode)', {
         userId,
-        reason: cookieHealth.status,
       });
-      return {
-        skipped: true,
-        reason: cookieHealth.status,
-        message: cookieHealth.message,
-      };
     }
 
     if (status?.status === 'manual_required' && !options.force) {
@@ -207,14 +216,22 @@ class AliExpressAuthMonitor {
       });
 
       if (!entry || !entry.credentials) {
-        return await this.handleMissingCookies(userId, currentStatus);
+        // ✅ NO enviar notificación si no hay credenciales (el sistema puede funcionar en modo público)
+        return await this.handleMissingCookies(userId, currentStatus, { 
+          skipNotification: true,
+          reason: 'No hay credenciales de AliExpress configuradas. El sistema funcionará en modo público.'
+        });
       }
 
       const credentials = entry.credentials as Record<string, any>;
       const cookies = Array.isArray(credentials.cookies) ? credentials.cookies : [];
 
       if (!cookies.length) {
-        return await this.handleMissingCookies(userId, currentStatus);
+        // ✅ NO enviar notificación si no hay cookies (el sistema puede funcionar en modo público)
+        return await this.handleMissingCookies(userId, currentStatus, { 
+          skipNotification: true,
+          reason: 'No hay cookies de AliExpress guardadas. El sistema funcionará en modo público.'
+        });
       }
 
       const soonestExpiry = this.getSoonestCookieExpiry(cookies);
@@ -281,50 +298,59 @@ class AliExpressAuthMonitor {
   private async handleMissingCookies(
     userId: number,
     currentStatus?: MarketplaceAuthState,
-    options: { reason?: string } = {}
+    options: { reason?: string; skipNotification?: boolean } = {}
   ): Promise<CookieHealthDecision> {
     const message =
       options.reason ||
-      'No encontramos cookies manuales vigentes para AliExpress. Debes subir nuevas cookies para continuar.';
+      'No encontramos cookies manuales vigentes para AliExpress. El sistema puede funcionar en modo público, pero las cookies mejoran la experiencia.';
 
-    const session = await ManualAuthService.startSession(userId, 'aliexpress', DEFAULT_MANUAL_LOGIN_URL);
-    await marketplaceAuthStatusService.setStatus(userId, 'aliexpress', 'manual_required', {
-      message,
-      requiresManual: true,
-    });
-
-    if (this.shouldSendCookieNotification(userId, 'expired')) {
-      await notificationService.sendToUser(userId, {
-        type: 'USER_ACTION',
-        title: 'Necesitamos tus cookies de AliExpress',
+    // ✅ NO crear sesión manual ni marcar como required si se solicita omitir notificación
+    // Esto evita interferir con el login normal del usuario
+    if (!options.skipNotification) {
+      const session = await ManualAuthService.startSession(userId, 'aliexpress', DEFAULT_MANUAL_LOGIN_URL);
+      await marketplaceAuthStatusService.setStatus(userId, 'aliexpress', 'manual_required', {
         message,
-        priority: 'HIGH',
-        category: 'USER',
-        actions: [
-          {
-            id: 'open_manual_login',
-            label: 'Actualizar cookies',
-            url: `/manual-login/${session.token}`,
-            variant: 'primary',
+        requiresManual: true,
+      });
+
+      if (this.shouldSendCookieNotification(userId, 'expired')) {
+        await notificationService.sendToUser(userId, {
+          type: 'USER_ACTION',
+          title: 'Necesitamos tus cookies de AliExpress',
+          message,
+          priority: 'HIGH',
+          category: 'USER',
+          actions: [
+            {
+              id: 'open_manual_login',
+              label: 'Actualizar cookies',
+              url: `/manual-login/${session.token}`,
+              variant: 'primary',
+            },
+            {
+              id: 'open_api_settings',
+              label: 'Ver instrucciones',
+              url: '/app/api-settings',
+              variant: 'secondary',
+            },
+          ],
+          data: {
+            provider: 'aliexpress',
+            expiresAt: null,
+            sessionToken: session.token,
           },
-          {
-            id: 'open_api_settings',
-            label: 'Ver instrucciones',
-            url: '/app/api-settings',
-            variant: 'secondary',
-          },
-        ],
-        data: {
-          provider: 'aliexpress',
-          expiresAt: null,
-          sessionToken: session.token,
-        },
+        });
+      }
+    } else {
+      // ✅ Solo loguear pero NO enviar notificación ni crear sesión manual
+      logger.debug('AliExpressAuthMonitor: cookies missing but skipping notification (system can work in public mode)', {
+        userId,
       });
     }
 
     return {
       status: 'missing',
-      manualRequired: true,
+      manualRequired: !options.skipNotification, // Solo requerir manual si no omitimos notificación
       message,
     };
   }

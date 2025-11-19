@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../stores/authStore';
+import { log } from '@/utils/logger';
 
 export interface NotificationPayload {
   id: string;
@@ -45,7 +46,7 @@ export const useNotifications = (): UseNotificationsReturn => {
       return;
     }
 
-    console.log('🔌 Initializing Socket.IO connection...');
+    log.info('🔌 Initializing Socket.IO connection...');
 
     const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
       auth: {
@@ -57,7 +58,7 @@ export const useNotifications = (): UseNotificationsReturn => {
     });
 
     newSocket.on('connect', () => {
-      console.log('✅ Socket.IO connected');
+      log.info('✅ Socket.IO connected');
       setIsConnected(true);
       
       // Join user-specific room
@@ -65,18 +66,18 @@ export const useNotifications = (): UseNotificationsReturn => {
     });
 
     newSocket.on('disconnect', (reason: Socket.DisconnectReason) => {
-      console.log('❌ Socket.IO disconnected:', reason);
+      log.warn('❌ Socket.IO disconnected:', reason);
       setIsConnected(false);
     });
 
     newSocket.on('connect_error', (error: Error) => {
-      console.error('🔌 Socket.IO connection error:', error);
+      log.error('🔌 Socket.IO connection error:', error);
       setIsConnected(false);
     });
 
     // Listen for notifications
     newSocket.on('notification', (notification: NotificationPayload) => {
-      console.log('📨 New notification:', notification);
+      log.debug('📨 New notification:', notification);
       
       setNotifications(prev => {
         // Avoid duplicates
@@ -104,7 +105,7 @@ export const useNotifications = (): UseNotificationsReturn => {
     // Request notification permission
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().then(permission => {
-        console.log('📱 Notification permission:', permission);
+        log.info('📱 Notification permission:', permission);
       });
     }
 
@@ -112,7 +113,7 @@ export const useNotifications = (): UseNotificationsReturn => {
 
     // Cleanup on unmount
     return () => {
-      console.log('🔌 Cleaning up Socket.IO connection...');
+      log.info('🔌 Cleaning up Socket.IO connection...');
       newSocket.close();
     };
   }, [token, user]);
@@ -161,9 +162,9 @@ export const useNotifications = (): UseNotificationsReturn => {
         throw new Error('Failed to send test notification');
       }
 
-      console.log('✅ Test notification sent');
+      log.info('✅ Test notification sent');
     } catch (error) {
-      console.error('❌ Failed to send test notification:', error);
+      log.error('❌ Failed to send test notification:', error);
     }
   }, [token]);
 
@@ -211,15 +212,29 @@ function showBrowserNotification(notification: NotificationPayload) {
       }
     };
   } catch (error) {
-    console.error('Failed to show browser notification:', error);
+    log.error('Failed to show browser notification:', error);
   }
 }
 
 // Helper function to play notification sound
 function playNotificationSound() {
   try {
-    // Create a simple beep sound
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    // ✅ Verificar que el audio context esté disponible y no esté suspendido
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) {
+      return; // Audio no disponible, silenciosamente salir
+    }
+
+    const audioContext = new AudioContextClass();
+    
+    // ✅ Si el audio context está suspendido, intentar reanudarlo
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().catch(() => {
+        // Si no se puede reanudar, no reproducir sonido
+        return;
+      });
+    }
+
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
 
@@ -233,9 +248,27 @@ function playNotificationSound() {
     gainNode.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.01);
     gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
 
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.5);
+    // ✅ Usar try-catch para manejar errores de play() interrumpido
+    try {
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.5);
+    } catch (startError) {
+      // Si start() o stop() fallan (por ejemplo, ya está iniciado), ignorar silenciosamente
+      if (startError instanceof Error && !startError.message.includes('play')) {
+        log.debug('Audio oscillator error (non-critical):', startError);
+      }
+    }
+    
+    // ✅ Limpiar después de que termine
+    oscillator.addEventListener('ended', () => {
+      audioContext.close().catch(() => {
+        // Ignorar errores al cerrar
+      });
+    }, { once: true });
   } catch (error) {
-    console.error('Failed to play notification sound:', error);
+    // ✅ Solo loguear errores críticos, no errores de audio que son esperados en algunos navegadores
+    if (error instanceof Error && !error.message.includes('play') && !error.message.includes('pause')) {
+      log.debug('Failed to play notification sound (non-critical):', error);
+    }
   }
 }
