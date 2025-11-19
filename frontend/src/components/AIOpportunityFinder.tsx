@@ -260,14 +260,6 @@ export default function AIOpportunityFinder() {
                     <li key={i}>{suggestion}</li>
                   ))}
                 </ul>
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                  <button
-                    onClick={() => navigate('/api-settings')}
-                    className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium text-xs"
-                  >
-                    Ir a API Settings para verificar AliExpress →
-                  </button>
-                </div>
               </div>
             </div>,
             { duration: 15000 }
