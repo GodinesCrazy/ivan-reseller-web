@@ -478,11 +478,14 @@ export class AdvancedMarketplaceScraper {
 
       console.log(`🔍 Scraping REAL AliExpress: "${query}" (environment: ${environment}, userId: ${userId})`);
 
+    // ✅ MODIFICADO: NO requerir cookies o login antes de hacer scraping
+    // El scraping debe funcionar en modo público primero, y solo solicitar autenticación si detecta CAPTCHA/bloqueo
     const cookies = await this.fetchAliExpressCookies(userId, environment);
     console.log(`📋 Cookies encontradas: ${cookies.length}`);
 
     const hasManualCookies = cookies.length > 0;
 
+    // ✅ Si hay cookies guardadas, usarlas (mejora, pero NO requerido)
     if (hasManualCookies) {
       const tempPage = await this.browser!.newPage();
       try {
@@ -511,34 +514,14 @@ export class AdvancedMarketplaceScraper {
       } finally {
         await tempPage.close().catch(() => {});
       }
-    }
-    // ✅ Intentar login solo si hay credenciales, pero NO bloquear si falla
-    if (!hasManualCookies) {
-      try {
-        const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', environment);
-        if (credentials && (credentials as any).email && (credentials as any).password) {
-          console.log('🔐 Intentando login automático de AliExpress...');
-          await Promise.race([
-            this.ensureAliExpressLogin(userId),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Login timeout')), 30000)) // Timeout de 30s
-          ]).catch((error: any) => {
-            // NO lanzar error, solo loguear y continuar en modo público
-            if (error instanceof ManualAuthRequiredError) {
-              console.warn('⚠️  AliExpress requiere autenticación manual. Continuando en modo público...');
-            } else {
-              console.warn('⚠️  Login automático falló o expiró. Continuando en modo público:', error?.message || error);
-            }
-          });
-        } else {
-          console.log('ℹ️  No hay credenciales de AliExpress configuradas. Continuando en modo público...');
-        }
-      } catch (loginError: any) {
-        // NO bloquear el proceso si el login falla
-        console.warn('⚠️  Error al intentar login de AliExpress. Continuando en modo público:', loginError?.message || loginError);
-      }
     } else {
-      console.log('✅ Using manual AliExpress session without automated login attempt');
+      // ✅ NO hay cookies - continuar en modo público (como funcionaba antes del 8 de noviembre)
+      console.log('ℹ️  No hay cookies guardadas. Continuando en modo público (sin autenticación)...');
+      console.log('ℹ️  Si detectamos CAPTCHA o bloqueo, entonces solicitaremos autenticación manual.');
     }
+    
+    // ✅ ELIMINADO: No intentar login automático antes de hacer scraping
+    // El login automático solo se intentará si detectamos CAPTCHA/bloqueo durante el scraping
 
     const page = await this.browser!.newPage();
 
@@ -1309,18 +1292,37 @@ export class AdvancedMarketplaceScraper {
           const currentUrl = page.url();
           await this.captureAliExpressSnapshot(page, `captcha-block-${Date.now()}`).catch(() => {});
           
-          // Verificar si hay sesión manual pendiente
+          // ✅ Solo solicitar autenticación manual si realmente hay CAPTCHA/bloqueo
+          // No bloquear el proceso, solo informar y retornar vacío si no hay sesión pendiente
           try {
             const { ManualAuthService } = await import('./manual-auth.service');
             const manualSession = await ManualAuthService.getActiveSession(userId, 'aliexpress');
             
             if (manualSession && manualSession.status === 'pending') {
+              // ✅ Hay sesión manual pendiente - lanzar error para que el frontend la maneje
               throw new ManualAuthRequiredError('aliexpress', manualSession.token, currentUrl, manualSession.expiresAt);
+            } else {
+              // ✅ NO hay sesión pendiente - solo crear una nueva si no existe
+              console.warn('⚠️  [SCRAPER] CAPTCHA/bloqueo detectado pero no hay sesión manual pendiente. Creando sesión manual...');
+              try {
+                const newSession = await ManualAuthService.startSession(userId, 'aliexpress', currentUrl);
+                throw new ManualAuthRequiredError('aliexpress', newSession.token, newSession.loginUrl, newSession.expiresAt);
+              } catch (sessionError: any) {
+                if (sessionError instanceof ManualAuthRequiredError) {
+                  throw sessionError;
+                }
+                // Si no se pudo crear la sesión, retornar vacío
+                console.warn('⚠️  [SCRAPER] No se pudo crear sesión manual. Retornando vacío.');
+                return [];
+              }
             }
           } catch (authError: any) {
             if (authError instanceof ManualAuthRequiredError) {
               throw authError;
             }
+            // Si hay otro error, retornar vacío
+            console.warn('⚠️  [SCRAPER] Error al manejar CAPTCHA/bloqueo. Retornando vacío.');
+            return [];
           }
         }
         
