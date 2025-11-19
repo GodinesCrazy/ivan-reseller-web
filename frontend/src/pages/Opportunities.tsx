@@ -392,7 +392,8 @@ export default function Opportunities() {
         </div>
       )}
 
-      {aliStatus?.status === 'manual_required' && (
+      {/* ✅ SOLO mostrar banner si realmente hay sesión manual pendiente (por CAPTCHA/bloqueo), NO si solo faltan cookies */}
+      {aliStatus?.status === 'manual_required' && aliStatus?.manualSession?.token && aliStatus?.requiresManual && (
         <div className="px-4 py-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <span className="font-semibold">Necesitamos que confirmes tu sesión de AliExpress</span>

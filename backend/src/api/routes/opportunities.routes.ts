@@ -99,17 +99,19 @@ router.get('/', async (req, res) => {
     if (items.length === 0) {
       debugInfo.message = 'No se encontraron productos en AliExpress. Posibles causas:';
       debugInfo.possibleCauses = [
-        'La sesión de AliExpress puede haber expirado (revisa API Settings)',
+        'El scraping puede estar fallando (Puppeteer no inició correctamente en Railway)',
         'AliExpress puede estar bloqueando el scraping (CAPTCHA o rate limiting)',
         'El término de búsqueda puede no tener resultados disponibles',
-        'El bridge Python puede no estar disponible o configurado'
+        'El bridge Python puede no estar disponible o configurado',
+        '⚠️ NOTA: Las cookies NO son requeridas - el sistema funciona en modo público'
       ];
       debugInfo.suggestions = [
-        'Verifica que AliExpress tenga sesión activa en API Settings',
+        'El sistema funciona en modo público sin cookies. Si ves CAPTCHA, entonces sí necesitarás cookies',
         'Intenta con un término de búsqueda más específico',
-        'Espera unos minutos y vuelve a intentar (puede ser rate limiting)'
+        'Espera unos minutos y vuelve a intentar (puede ser rate limiting)',
+        'Revisa los logs del servidor para más detalles'
       ];
-      logger.warn('No se encontraron oportunidades para query', { query, debugInfo });
+      logger.warn('No se encontraron oportunidades para query', { query, debugInfo, userId, environment });
     }
 
     // Notify completion
