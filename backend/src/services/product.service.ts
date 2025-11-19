@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, ProductStatus } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 
 const prisma = new PrismaClient();
@@ -41,12 +40,32 @@ function buildImagePayload(primary?: string, additional?: string[]): string {
   const urls = new Set<string>();
 
   const addUrl = (value?: string) => {
-    if (!value) return;
+    if (!value || typeof value !== 'string') return;
     const trimmed = value.trim();
-    if (!trimmed) return;
-    // Asegurar que sea URL absoluta http/https
-    if (!/^https?:\/\//i.test(trimmed)) return;
-    urls.add(trimmed);
+    if (!trimmed || trimmed.length < 3) return;
+    
+    // ✅ Normalizar URL a formato absoluto http/https
+    let normalizedUrl = trimmed;
+    if (!/^https?:\/\//i.test(normalizedUrl)) {
+      if (normalizedUrl.startsWith('//')) {
+        normalizedUrl = `https:${normalizedUrl}`;
+      } else if (normalizedUrl.startsWith('/')) {
+        normalizedUrl = `https://www.aliexpress.com${normalizedUrl}`;
+      } else if (!normalizedUrl.includes(' ') && normalizedUrl.length > 3) {
+        normalizedUrl = `https://${normalizedUrl}`;
+      } else {
+        // URL inválida, saltar
+        return;
+      }
+    }
+    
+    // Solo agregar si es una URL válida
+    try {
+      new URL(normalizedUrl);
+      urls.add(normalizedUrl);
+    } catch {
+      // URL inválida, saltar
+    }
   };
 
   addUrl(primary);
@@ -172,7 +191,13 @@ export class ProductService {
     });
   }
 
-  async getProductById(id: number) {
+  /**
+   * Get product by ID with optional ownership validation
+   * @param id - Product ID
+   * @param userId - Optional user ID to validate ownership (if provided, non-admin users can only see their own products)
+   * @param isAdmin - Whether the requesting user is an admin (admins can see all products)
+   */
+  async getProductById(id: number, userId?: number, isAdmin: boolean = false) {
     const product = await prisma.product.findUnique({
       where: { id },
       include: {
@@ -195,11 +220,17 @@ export class ProductService {
       throw new AppError('Producto no encontrado', 404);
     }
 
+    // ✅ C2: Validar ownership - usuarios no-admin solo pueden ver sus propios productos
+    if (userId && !isAdmin && product.userId !== userId) {
+      throw new AppError('No tienes permiso para ver este producto', 403);
+    }
+
     return product;
   }
 
   async updateProduct(id: number, userId: number, data: UpdateProductDto) {
-    const product = await this.getProductById(id);
+    // ✅ C2: Pasar userId e isAdmin para validar ownership
+    const product = await this.getProductById(id, userId, false);
 
     if (product.userId !== userId) {
       throw new AppError('No tienes permiso para editar este producto', 403);
@@ -285,8 +316,9 @@ export class ProductService {
     return updated;
   }
 
-  async updateProductStatus(id: string, status: ProductStatus, adminId: string) {
-    const product = await this.getProductById(id);
+  async updateProductStatus(id: number, status: ProductStatus, adminId: number) {
+    // ✅ C2: Admin puede ver todos los productos
+    const product = await this.getProductById(id, adminId, true);
 
     const updated = await prisma.product.update({
       where: { id },
@@ -326,7 +358,8 @@ export class ProductService {
   }
 
   async deleteProduct(id: number, userId: number, isAdmin: boolean = false) {
-    const product = await this.getProductById(id);
+    // ✅ C2: Pasar userId e isAdmin para validar ownership
+    const product = await this.getProductById(id, userId, isAdmin);
 
     if (!isAdmin && product.userId !== userId) {
       throw new AppError('No tienes permiso para eliminar este producto', 403);
