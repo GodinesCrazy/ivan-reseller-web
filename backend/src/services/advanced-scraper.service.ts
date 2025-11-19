@@ -2247,28 +2247,40 @@ export class AdvancedMarketplaceScraper {
        await this.init();
      }
  
+     // ✅ VERIFICAR: Si el navegador sigue siendo null después de init(), no podemos continuar
+     if (!this.browser) {
+       console.warn('⚠️  No se pudo inicializar el navegador. No se puede realizar login automático.');
+       await marketplaceAuthStatusService.markError(
+         userId,
+         'aliexpress',
+         'No se pudo inicializar el navegador. El scraping puede no estar disponible en este momento.',
+         { lastAutomaticAttempt: new Date() }
+       );
+       return;
+     }
+
      if (this.isLoggedIn && this.loggedInUserId === userId) {
        return;
      }
- 
+
      const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', 'production');
      if (!credentials) {
        console.warn('⚠️  AliExpress credentials not configured for user', userId);
        return;
      }
- 
+
      const { email, password, twoFactorEnabled, twoFactorSecret } = credentials as AliExpressCredentials;
      if (!email || !password) {
        console.warn('⚠️  AliExpress credentials incomplete for user', userId);
        return;
      }
- 
+
     await marketplaceAuthStatusService.markRefreshing(
       userId,
       'Intentando renovar sesión de AliExpress automáticamente'
     );
 
-    const loginPage = await this.browser!.newPage();
+    const loginPage = await this.browser.newPage();
  
      try {
        await this.setupRealBrowser(loginPage);
