@@ -272,43 +272,47 @@ export class AdvancedMarketplaceScraper {
       '--window-size=1920,1080',
     ]);
 
-    // ✅ MODIFICADO: Verificar que executablePath existe y es accesible ANTES de usarlo
+    // ✅ MODIFICADO: Si el path viene de Sparticuz pero el archivo no existe realmente al verificar,
+    // NO confiar en él y usar Puppeteer directamente (para evitar ENOENT)
     let finalExecutablePath = executablePath;
     if (executablePath) {
+      // ✅ Verificación más rigurosa: verificar que el archivo existe Y es accesible
+      // Si falla, usar Puppeteer directamente sin executablePath
       try {
-        // Verificar que el archivo existe Y es accesible
+        // Primero verificar que el archivo existe realmente
         if (!fs.existsSync(executablePath)) {
           console.warn(`⚠️  Chromium path especificado pero archivo no existe: ${executablePath}`);
-          console.warn(`⚠️  Usando Chromium de Puppeteer (descargará automáticamente si es necesario)`);
+          console.warn(`⚠️  Esto ocurre cuando @sparticuz/chromium retorna un path pero el archivo no está descargado`);
+          console.warn(`⚠️  Usando Chromium de Puppeteer directamente (sin executablePath)`);
           finalExecutablePath = undefined;
         } else {
-          // Verificar permisos de ejecución (solo en Unix)
-          const isWindows = os.platform() === 'win32';
-          if (!isWindows) {
-            try {
-              fs.accessSync(executablePath, fs.constants.X_OK);
-            } catch (permError) {
-              console.warn(`⚠️  Chromium existe pero no tiene permisos de ejecución: ${executablePath}`);
-              console.warn(`⚠️  Intentando dar permisos...`);
-              try {
-                fs.chmodSync(executablePath, 0o755);
-                console.log(`✅ Permisos de ejecución otorgados a: ${executablePath}`);
-              } catch (chmodError) {
-                console.warn(`⚠️  No se pudieron otorgar permisos, usando Puppeteer directamente`);
-                finalExecutablePath = undefined;
-              }
-            }
-          }
-          
-          // Verificar que es un archivo (no un directorio)
+          // Verificar que es un archivo (no directorio) y accesible
           const stats = fs.statSync(executablePath);
           if (!stats.isFile()) {
             console.warn(`⚠️  Chromium path no es un archivo: ${executablePath}`);
             finalExecutablePath = undefined;
+          } else {
+            // Verificar permisos de ejecución (solo en Unix)
+            const isWindows = os.platform() === 'win32';
+            if (!isWindows) {
+              try {
+                fs.accessSync(executablePath, fs.constants.X_OK);
+              } catch (permError) {
+                console.warn(`⚠️  Chromium existe pero no tiene permisos de ejecución: ${executablePath}`);
+                try {
+                  fs.chmodSync(executablePath, 0o755);
+                  console.log(`✅ Permisos de ejecución otorgados a: ${executablePath}`);
+                } catch (chmodError) {
+                  console.warn(`⚠️  No se pudieron otorgar permisos, usando Puppeteer directamente`);
+                  finalExecutablePath = undefined;
+                }
+              }
+            }
           }
         }
       } catch (error) {
         console.warn(`⚠️  Error verificando Chromium path: ${executablePath}`, (error as Error).message);
+        console.warn(`⚠️  Usando Puppeteer directamente sin executablePath`);
         finalExecutablePath = undefined;
       }
     }
@@ -316,7 +320,7 @@ export class AdvancedMarketplaceScraper {
     if (finalExecutablePath) {
       console.log(`✅ Chromium encontrado y verificado en: ${finalExecutablePath}`);
     } else {
-      console.log(`ℹ️  Usando Chromium de Puppeteer (sin executablePath especificado)`);
+      console.log(`ℹ️  Usando Chromium de Puppeteer directamente (sin executablePath especificado)`);
     }
 
     try {
