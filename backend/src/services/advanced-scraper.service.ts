@@ -358,6 +358,29 @@ export class AdvancedMarketplaceScraper {
         
         console.log('✅ Navegador iniciado exitosamente');
       } catch (launchError: any) {
+        // ✅ Si hay error de ENOENT con executablePath, eliminar executablePath e intentar sin él
+        if (launchError.message?.includes('ENOENT') && finalExecutablePath) {
+          console.warn(`⚠️  Error ENOENT con executablePath ${finalExecutablePath}`);
+          console.warn(`⚠️  El archivo existe en verificación pero no cuando Puppeteer intenta usarlo`);
+          console.warn(`⚠️  Intentando sin executablePath (Puppeteer usará su propio Chromium)...`);
+          // Eliminar executablePath e intentar con Puppeteer directamente
+          delete launchOptions.executablePath;
+          // Reintentar sin executablePath
+          this.browser = await Promise.race([
+            puppeteer.launch(launchOptions),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Browser launch timeout after 30s')), 30000)
+            )
+          ]) as Browser;
+          
+          if (!this.browser || !this.browser.isConnected()) {
+            throw new Error('Browser launched but not connected (without executablePath)');
+          }
+          
+          console.log('✅ Navegador iniciado exitosamente sin executablePath');
+          return;
+        }
+        
         // ✅ Si hay error de "Target closed", intentar cerrar y relanzar
         if (launchError.message?.includes('Target closed') || launchError.message?.includes('Protocol error')) {
           console.warn('⚠️  Error de protocolo detectado, intentando con configuración más simple...');
