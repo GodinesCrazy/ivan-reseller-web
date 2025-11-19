@@ -24,6 +24,7 @@ import api from '../services/api';
 import { useAuthStatusStore } from '@stores/authStatusStore';
 import { useAuthStore } from '@stores/authStore';
 import toast from 'react-hot-toast';
+import { log } from '../utils/logger';
 
 // Tipos según backend
 interface APICredential {
@@ -433,7 +434,7 @@ export default function APISettings() {
               },
             ] as const;
           } catch (diagError: any) {
-            console.warn(`No se pudo obtener diagnóstico de ${mp}:`, diagError?.message || diagError);
+            log.warn(`No se pudo obtener diagnóstico de ${mp}:`, diagError?.message || diagError);
             return [
               mp,
               {
@@ -538,7 +539,7 @@ export default function APISettings() {
 
       setStatuses(statusMap);
     } catch (err: any) {
-      console.error('Error loading credentials:', err);
+      log.error('Error loading credentials:', err);
       if (err.response?.status === 404) {
         setError('Route not found. Verificando configuración del backend...');
       } else {
@@ -786,12 +787,12 @@ export default function APISettings() {
           if (inputElement) {
             domValue = inputElement.value || '';
             if (domValue && domValue.trim()) {
-              console.log(`[APISettings] Valor leído del DOM para ${fieldLabel}:`, domValue.substring(0, 30) + (domValue.length > 30 ? '...' : ''));
+              log.debug(`[APISettings] Valor leído del DOM para ${fieldLabel}:`, domValue.substring(0, 30) + (domValue.length > 30 ? '...' : ''));
             }
           }
         } catch (error) {
           // Si falla al leer del DOM, continuar con otros métodos
-          console.warn(`[APISettings] Error al leer valor del DOM para ${fieldLabel}:`, error);
+          log.warn(`[APISettings] Error al leer valor del DOM para ${fieldLabel}:`, error);
         }
         
         // Determinar el valor final: priorizar formData, luego DOM, luego defaultValue
@@ -802,7 +803,7 @@ export default function APISettings() {
         } else if (domValue && domValue.trim()) {
           // Si no hay valor en formData pero hay valor en el DOM, usarlo
           value = domValue;
-          console.log(`[APISettings] Usando valor del DOM para ${fieldLabel} (no estaba en formData)`);
+          log.debug(`[APISettings] Usando valor del DOM para ${fieldLabel} (no estaba en formData)`);
         } else if (defaultValue && defaultValue.trim()) {
           // Si no hay valor en formData ni DOM pero hay defaultValue, usarlo
           value = defaultValue;
@@ -813,7 +814,7 @@ export default function APISettings() {
 
         // Log para debugging (solo para campos requeridos que fallan)
         if (fieldRequired && !value.toString().trim()) {
-          console.warn(`[APISettings] Campo requerido vacío: ${fieldLabel}`, {
+          log.warn(`[APISettings] Campo requerido vacío: ${fieldLabel}`, {
             fieldKey,
             rawValue,
             defaultValue,
@@ -827,7 +828,7 @@ export default function APISettings() {
           });
         } else if (fieldRequired && value.toString().trim()) {
           // Log cuando el campo requerido SÍ tiene valor (para debugging)
-          console.log(`[APISettings] Campo requerido ${fieldLabel} tiene valor:`, {
+          log.debug(`[APISettings] Campo requerido ${fieldLabel} tiene valor:`, {
             fieldKey,
             valueLength: value.length,
             valuePreview: value.substring(0, 20) + (value.length > 20 ? '...' : ''),
@@ -854,12 +855,12 @@ export default function APISettings() {
             credentials[backendKey] = value.trim().toLowerCase() === 'true';
           } else if (value.trim()) {
             credentials[backendKey] = value.trim();
-            console.log(`[APISettings] Agregando campo ${fieldKey} -> ${backendKey} con valor (longitud: ${value.trim().length})`);
+            log.debug(`[APISettings] Agregando campo ${fieldKey} -> ${backendKey} con valor (longitud: ${value.trim().length})`);
           }
         } else if (fieldRequired) {
           // Si es un campo requerido pero está vacío, ya deberíamos haber lanzado un error antes
           // Pero por si acaso, agregar logging adicional
-          console.error(`[APISettings] ERROR: Campo requerido ${fieldLabel} está vacío pero no se lanzó error de validación`);
+          log.error(`[APISettings] ERROR: Campo requerido ${fieldLabel} está vacío pero no se lanzó error de validación`);
         }
       }
 
@@ -906,7 +907,7 @@ export default function APISettings() {
 
       // Verificar que redirectUri esté presente si es eBay
       if (apiName === 'ebay' && !credentials.redirectUri) {
-        console.error(`[APISettings] ERROR: redirectUri no está en credentials para eBay`, {
+        log.error(`[APISettings] ERROR: redirectUri no está en credentials para eBay`, {
           credentialKeys: Object.keys(credentials),
           credentials: Object.keys(credentials).reduce((acc, key) => {
             acc[key] = key.includes('password') || key.includes('token') || key.includes('secret') || key.includes('cert') 
@@ -917,7 +918,7 @@ export default function APISettings() {
         });
       }
 
-      console.log(`[APISettings] Saving ${apiName}:`, {
+      log.debug(`[APISettings] Saving ${apiName}:`, {
         apiName,
         environment: currentEnvironment,
         credentialKeys: Object.keys(credentials),
@@ -935,7 +936,7 @@ export default function APISettings() {
       });
 
       // Guardar credencial usando /api/credentials
-      console.log(`[APISettings] Sending request to save ${apiName} with scope:`, scopeToPersist);
+      log.debug(`[APISettings] Sending request to save ${apiName} with scope:`, scopeToPersist);
       const response = await api.post('/api/credentials', {
         apiName,
         environment: currentEnvironment,
@@ -944,7 +945,7 @@ export default function APISettings() {
         scope: scopeToPersist,
       });
 
-      console.log(`[APISettings] Save response for ${apiName}:`, response.data);
+      log.debug(`[APISettings] Save response for ${apiName}:`, response.data);
       
       if (!response.data?.success) {
         throw new Error(response.data?.error || response.data?.message || 'Error desconocido al guardar');
@@ -965,7 +966,7 @@ export default function APISettings() {
           new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
         ]);
       } catch (reloadError) {
-        console.warn('Error al recargar credenciales después de guardar:', reloadError);
+        log.warn('Error al recargar credenciales después de guardar:', reloadError);
         // Continuar aunque falle la recarga
       }
 
@@ -975,7 +976,7 @@ export default function APISettings() {
 
       toast.success(`✅ Credenciales de ${apiDef.displayName} guardadas exitosamente`);
     } catch (err: any) {
-      console.error('Error saving credentials:', err);
+      log.error('Error saving credentials:', err);
       const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Error al guardar credenciales';
       setError(errorMessage);
       if (err.response?.data?.details) {
@@ -1020,7 +1021,7 @@ export default function APISettings() {
           }
         } catch (loadError) {
           // Si no se pueden cargar, continuar sin credenciales del formulario
-          console.warn('No se pudieron cargar credenciales para test:', loadError);
+          log.warn('No se pudieron cargar credenciales para test:', loadError);
         }
       }
       
@@ -1136,7 +1137,7 @@ export default function APISettings() {
         },
       }));
     } catch (err: any) {
-      console.error('Error testing API:', err);
+      log.error('Error testing API:', err);
       
       // Manejar diferentes tipos de errores
       let errorMsg = 'Error al probar conexión';
@@ -1203,7 +1204,7 @@ export default function APISettings() {
       let ruName = storedCreds.redirectUri || storedCreds.ruName || storedCreds.RuName;
       
       // Logging detallado para debugging
-      console.log('[APISettings] eBay credentials before OAuth:', {
+      log.debug('[APISettings] eBay credentials before OAuth:', {
         hasAppId: !!storedCreds.appId,
         appIdLength: storedCreds.appId?.length || 0,
         appIdPreview: storedCreds.appId ? storedCreds.appId.substring(0, 20) + '...' : 'N/A',
@@ -1227,12 +1228,13 @@ export default function APISettings() {
       
       // Advertencia si contiene espacios (eBay requiere coincidencia exacta)
       if (ruName.includes(' ')) {
-        console.warn('[APISettings] Redirect URI contains spaces:', {
+        log.warn('[APISettings] Redirect URI contains spaces:', {
           ruName,
           spacesCount: (ruName.match(/ /g) || []).length,
         });
-        toast.warning('⚠️ El Redirect URI contiene espacios. eBay requiere que coincida EXACTAMENTE con el registrado. Verifica que no haya espacios adicionales.', {
+        toast('⚠️ El Redirect URI contiene espacios. eBay requiere que coincida EXACTAMENTE con el registrado. Verifica que no haya espacios adicionales.', {
           duration: 6000,
+          icon: '⚠️'
         });
       }
       if (apiName === 'ebay') {
@@ -1285,7 +1287,7 @@ export default function APISettings() {
       
       // Mostrar advertencia si existe (pero no bloquear)
       if (oauthWarning) {
-        console.warn('[APISettings] OAuth warning:', oauthWarning);
+        log.warn('[APISettings] OAuth warning:', oauthWarning);
         toast(oauthWarning, { 
           duration: 8000,
           icon: '⚠️'
@@ -1293,7 +1295,7 @@ export default function APISettings() {
       }
       
       // Logging para debugging
-      console.log('[APISettings] OAuth response:', {
+      log.debug('[APISettings] OAuth response:', {
         success: data.success,
         hasAuthUrl: !!authUrl,
         authUrlLength: authUrl?.length,
@@ -1302,7 +1304,7 @@ export default function APISettings() {
       });
       
       if (!authUrl || !authUrl.trim()) {
-        console.error('[APISettings] No authUrl received from backend');
+        log.error('[APISettings] No authUrl received from backend');
         toast.error('Error: No se recibió la URL de autorización del servidor. Por favor, intenta de nuevo o contacta al administrador.');
         setError('No se recibió la URL de autorización');
         setOauthing(null);
@@ -1313,7 +1315,7 @@ export default function APISettings() {
       try {
         new URL(authUrl);
       } catch (urlError: any) {
-        console.error('[APISettings] Invalid authUrl received:', {
+        log.error('[APISettings] Invalid authUrl received:', {
           authUrl,
           error: urlError.message,
         });
@@ -1331,7 +1333,7 @@ export default function APISettings() {
       }
       
       // Abrir ventana de OAuth
-      console.log('[APISettings] Opening OAuth window with URL:', {
+      log.debug('[APISettings] Opening OAuth window with URL:', {
         url: authUrl.substring(0, 100) + '...',
         fullUrl: authUrl,
         urlLength: authUrl.length,
@@ -1340,37 +1342,47 @@ export default function APISettings() {
       let oauthWindow: Window | null = null;
       try {
         oauthWindow = window.open(authUrl, '_blank', 'noopener,noreferrer,width=800,height=600');
-        console.log('[APISettings] window.open() result:', {
+        log.debug('[APISettings] window.open() result:', {
           oauthWindow: !!oauthWindow,
           oauthWindowType: typeof oauthWindow,
         });
       } catch (openError: any) {
-        console.error('[APISettings] Error calling window.open():', {
+        log.error('[APISettings] Error calling window.open():', {
           error: openError.message,
           stack: openError.stack,
         });
       }
       
-      // Verificar inmediatamente si el popup fue bloqueado
-      // Esperar un momento para que el navegador procese la apertura
+      // ✅ Verificar si el popup fue bloqueado - aumentar tiempo de espera y mejorar detección
+      // Esperar más tiempo para permitir que el navegador procese la apertura (especialmente para redirecciones externas)
       setTimeout(() => {
         // Verificar si la ventana fue bloqueada o cerrada inmediatamente
         const isBlocked = !oauthWindow || oauthWindow.closed;
         
-        // Intentar acceder al document para verificar si realmente se abrió
+        // ✅ Intentar acceder al document para verificar si realmente se abrió
+        // Para ventanas externas (cross-origin), esto causará error pero no significa que esté bloqueada
         let hasDocument = false;
+        let isCrossOrigin = false;
         try {
           hasDocument = oauthWindow?.document ? true : false;
         } catch (e) {
-          // Si hay error al acceder al document, probablemente fue bloqueado
-          hasDocument = false;
+          // ✅ Si hay error al acceder al document, puede ser cross-origin (normal para OAuth)
+          // Verificar si la ventana aún existe y no está cerrada
+          if (oauthWindow && !oauthWindow.closed) {
+            isCrossOrigin = true; // Probablemente cross-origin, no bloqueada
+            hasDocument = true; // Considerar como "válida" si existe y no está cerrada
+          } else {
+            hasDocument = false;
+          }
         }
         
-        if (isBlocked || !hasDocument) {
-          console.error('[APISettings] Failed to open OAuth window - popup blocked or closed immediately', {
+        // ✅ Solo considerar bloqueado si realmente no existe, está cerrada, Y no es cross-origin
+        if ((isBlocked || !hasDocument) && !isCrossOrigin) {
+          log.error('[APISettings] Failed to open OAuth window - popup blocked or closed immediately', {
             oauthWindow: !!oauthWindow,
             closed: oauthWindow?.closed,
             hasDocument: hasDocument,
+            isCrossOrigin: isCrossOrigin,
           });
           
           // Mostrar modal personalizado en lugar de confirm() (que puede ser bloqueado)
@@ -1384,9 +1396,17 @@ export default function APISettings() {
           return;
         }
         
+        // ✅ Si es cross-origin, asumir que se abrió correctamente (es normal para OAuth)
+        if (isCrossOrigin) {
+          log.info('[APISettings] OAuth window opened (cross-origin detected - normal for OAuth)', {
+            oauthWindow: !!oauthWindow,
+            closed: oauthWindow?.closed,
+          });
+        }
+        
         // Si llegamos aquí, la ventana se abrió correctamente
         if (oauthWindow) {
-          console.log('[APISettings] OAuth window opened successfully', {
+          log.debug('[APISettings] OAuth window opened successfully', {
             oauthWindow: !!oauthWindow,
             closed: oauthWindow.closed,
           });
@@ -1405,7 +1425,7 @@ export default function APISettings() {
                   await fetchAuthStatuses();
                   await loadCredentials();
                 } catch (err) {
-                  console.warn('Error al recargar credenciales después de OAuth:', err);
+                  log.warn('Error al recargar credenciales después de OAuth:', err);
                 }
               }, 2000);
             }
@@ -1414,9 +1434,9 @@ export default function APISettings() {
           // Limpiar intervalo después de 5 minutos
           setTimeout(() => clearInterval(checkInterval), 300000);
         }
-      }, 100);
+      }, 500); // ✅ Aumentar tiempo de espera de 100ms a 500ms para redirecciones externas
     } catch (err: any) {
-      console.error('Error iniciando OAuth:', err);
+      log.error('Error iniciando OAuth:', err);
       const message = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Error iniciando OAuth';
       toast.error(message);
     } finally {
@@ -1448,7 +1468,7 @@ export default function APISettings() {
 
       toast.success(`${!currentActive ? 'Activada' : 'Desactivada'} ${API_DEFINITIONS[apiName].displayName} (${environment})`);
     } catch (err: any) {
-      console.error('Error toggling API:', err);
+      log.error('Error toggling API:', err);
       setError(err.response?.data?.message || 'Error al cambiar estado');
     }
   };
@@ -1479,7 +1499,7 @@ export default function APISettings() {
 
       toast.success(`Credenciales de ${API_DEFINITIONS[apiName].displayName} (${environment}) eliminadas`);
     } catch (err: any) {
-      console.error('Error deleting credentials:', err);
+      log.error('Error deleting credentials:', err);
       setError(err.response?.data?.message || err.response?.data?.error || 'Error al eliminar credenciales');
     } finally {
       setDeleting(null);
@@ -1552,7 +1572,7 @@ export default function APISettings() {
     throw new Error('Error enviando cookies: ' + response.status + ' ' + text);
   }
 
-  console.log('✅ Cookies enviadas. Vuelve a la plataforma para confirmar.');
+  log.debug('✅ Cookies enviadas. Vuelve a la plataforma para confirmar.');
 })();`;
   }, [apiBaseUrl, apiBaseHasApiSuffix, manualSessionToken]);
 
@@ -1643,7 +1663,7 @@ export default function APISettings() {
         setManualSessionStatus('pending');
       }
     } catch (error) {
-      console.error('Error polling manual session:', error);
+      log.error('Error polling manual session:', error);
       setManualSessionError('No se pudo verificar el estado de la sesión manual.');
     }
   };
@@ -1669,7 +1689,7 @@ export default function APISettings() {
         setManualSessionError('No se pudo crear la sesión manual. Intenta nuevamente.');
       }
     } catch (error: any) {
-      console.error('Error creando sesión manual:', error);
+      log.error('Error creando sesión manual:', error);
       setManualSessionError(error.response?.data?.message || 'No se pudo iniciar la sesión manual.');
     } finally {
       setManualSessionLoading(false);
@@ -1699,7 +1719,7 @@ export default function APISettings() {
       await navigator.clipboard.writeText(automatedCookieSnippet);
       toast.success('Snippet automatizado copiado al portapapeles.');
     } catch (error) {
-      console.error('No se pudo copiar el snippet automatizado:', error);
+      log.error('No se pudo copiar el snippet automatizado:', error);
       toast.error('No fue posible copiar automáticamente. Copia manualmente el texto.');
     }
   };
@@ -1709,7 +1729,7 @@ export default function APISettings() {
       await navigator.clipboard.writeText(fallbackCookieSnippet);
       toast.success('Snippet manual copiado.');
     } catch (error) {
-      console.error('No se pudo copiar el snippet manual:', error);
+      log.error('No se pudo copiar el snippet manual:', error);
       toast.error('No fue posible copiar automáticamente. Copia manualmente el texto.');
     }
   };
@@ -2104,44 +2124,49 @@ export default function APISettings() {
                         ) : null}
                         {apiDef.name === 'aliexpress' ? (
                           <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              onClick={async () => {
-                                try {
-                                  await requestAuthRefresh('aliexpress');
-                                } catch {
-                                  /* handled in store */
-                                }
-                              }}
-                              className="inline-flex items-center gap-1 px-3 py-1 rounded border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition text-xs"
-                            >
-                              <RefreshCw className="w-3 h-3" />
-                              Reintentar automático
-                            </button>
-                            <button
-                              onClick={openManualCookieModal}
-                              className="inline-flex items-center gap-1 px-3 py-1 rounded border border-green-200 text-green-700 bg-green-50 hover:bg-green-100 transition text-xs"
-                              title="Pega el JSON de cookies generado desde la consola de AliExpress"
-                            >
-                              <ClipboardPaste className="w-3 h-3" />
-                              Guardar cookies manualmente
-                            </button>
-                            {statusInfo.manualSession?.token ? (
-                              <a
-                                href={
-                                  statusInfo.manualSession.loginUrl?.startsWith('http')
-                                    ? statusInfo.manualSession.loginUrl
-                                    : `${window.location.origin}${
-                                        statusInfo.manualSession.loginUrl ||
-                                        `/manual-login/${statusInfo.manualSession.token}`
-                                      }`
-                                }
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-3 py-1 rounded border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition text-xs"
+                            {/* ✅ SOLO mostrar botones si el estado es realmente 'manual_required' (por CAPTCHA/bloqueo), NO si solo faltan cookies */}
+                            {statusInfo.status === 'manual_required' && statusInfo.manualSession?.token ? (
+                              <>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await requestAuthRefresh('aliexpress');
+                                    } catch {
+                                      /* handled in store */
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1 px-3 py-1 rounded border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition text-xs"
+                                >
+                                  <RefreshCw className="w-3 h-3" />
+                                  Reintentar automático
+                                </button>
+                                <a
+                                  href={
+                                    statusInfo.manualSession.loginUrl?.startsWith('http')
+                                      ? statusInfo.manualSession.loginUrl
+                                      : `${window.location.origin}${
+                                          statusInfo.manualSession.loginUrl ||
+                                          `/manual-login/${statusInfo.manualSession.token}`
+                                        }`
+                                  }
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-3 py-1 rounded border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition text-xs"
+                                >
+                                  Abrir login manual
+                                </a>
+                              </>
+                            ) : (
+                              // ✅ Si NO hay manual_required real, solo mostrar botón opcional para guardar cookies
+                              <button
+                                onClick={openManualCookieModal}
+                                className="inline-flex items-center gap-1 px-3 py-1 rounded border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition text-xs"
+                                title="Las cookies son opcionales. El sistema funciona en modo público, pero las cookies mejoran la experiencia."
                               >
-                                Abrir login manual
-                              </a>
-                            ) : null}
+                                <ClipboardPaste className="w-3 h-3" />
+                                Guardar cookies (opcional)
+                              </button>
+                            )}
                           </div>
                         ) : null}
                       </div>

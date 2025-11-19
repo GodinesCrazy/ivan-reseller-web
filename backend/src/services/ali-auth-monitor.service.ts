@@ -342,6 +342,16 @@ class AliExpressAuthMonitor {
         });
       }
     } else {
+      // ✅ NO crear sesión manual ni marcar como required
+      // Cambiar el estado existente a 'unknown' o mantener 'healthy' si no hay cookies (el sistema funciona en modo público)
+      if (currentStatus?.status === 'manual_required') {
+        // Si el estado anterior era manual_required pero ahora no hay cookies y no son requeridas,
+        // cambiar el estado a algo más neutral
+        await marketplaceAuthStatusService.setStatus(userId, 'aliexpress', 'unknown', {
+          message: 'El sistema funcionará en modo público. Las cookies son opcionales pero mejoran la experiencia.',
+          requiresManual: false,
+        });
+      }
       // ✅ Solo loguear pero NO enviar notificación ni crear sesión manual
       logger.debug('AliExpressAuthMonitor: cookies missing but skipping notification (system can work in public mode)', {
         userId,
