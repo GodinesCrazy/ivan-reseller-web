@@ -331,7 +331,7 @@ export class AdvancedMarketplaceScraper {
                 if (stats.isFile()) {
                   // Intentar hacer ejecutable si no lo es
                   try {
-                    if (!isWindows) {
+                    if (os.platform() !== 'win32') {
                       fs.chmodSync(systemPath, 0o755);
                     }
                   } catch {}
