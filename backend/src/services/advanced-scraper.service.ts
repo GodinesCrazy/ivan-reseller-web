@@ -1108,7 +1108,7 @@ export class AdvancedMarketplaceScraper {
 
       await this.autoScroll(page);
 
-      const productsFromDom = await page.evaluate(() => {
+      const domExtractionResult = await page.evaluate(() => {
         const selectors = [
           '.search-item-card-wrapper-gallery',
           '[data-item-id]',
@@ -1131,27 +1131,34 @@ export class AdvancedMarketplaceScraper {
         ];
 
         let items: any = null;
+        let usedSelector = '';
         for (const selector of selectors) {
           const doc = (globalThis as any).document;
           items = doc ? doc.querySelectorAll(selector) : [];
           if (items && items.length > 0) {
-            console.log(`✅ Encontrados ${items.length} productos con selector: ${selector}`);
+            usedSelector = selector;
             break;
           }
         }
 
         if (!items || items.length === 0) {
-          console.warn('⚠️  No se encontraron productos con ningún selector');
-          return [];
+          return {
+            products: [],
+            debug: {
+              itemsFound: 0,
+              usedSelector: '',
+              extractionLogs: ['No se encontraron productos con ningún selector']
+            }
+          };
         }
 
-        console.log(`[DOM] Iniciando extracción de ${items.length} productos...`);
-        const results: any[] = [];
+        const extractionLogs: string[] = [];
         let extractedCount = 0;
         let discardedCount = 0;
 
-        items.forEach((item: any, index: number) => {
-          if (index >= 40) return;
+        extractionLogs.push(`Iniciando extracción de ${items.length} productos con selector: ${usedSelector}`);
+
+        const results = Array.from(items).slice(0, 40).map((item: any, index: number) => {
 
           try {
             const titleSelectors = [
@@ -1236,6 +1243,18 @@ export class AdvancedMarketplaceScraper {
                 .filter((line: string) => line.length > 0);
               title = textLines[0] || '';
             }
+
+            // Logging detallado para diagnóstico
+            const debugInfo: any = {
+              index,
+              hasTitleElement: !!titleElement,
+              hasPriceElement: !!priceElement,
+              hasImageElement: !!imageElement,
+              hasLinkElement: !!linkElement,
+              title: title ? title.substring(0, 50) : 'none',
+              priceElementText: priceElement?.textContent?.substring(0, 50) || 'none',
+              linkElementHref: linkElement?.getAttribute('href')?.substring(0, 50) || 'none'
+            };
 
             const priceCandidates: unknown[] = [
               item.actSkuCalPrice,
@@ -1346,18 +1365,13 @@ export class AdvancedMarketplaceScraper {
             }
 
             if (!resolvedPrice || resolvedPrice.amountInBase <= 0) {
-              // Logging para diagnóstico: por qué se descarta el producto
-              const debugInfo = {
-                hasTitle: !!title,
-                titleLength: title?.length || 0,
-                priceElement: !!priceElement,
-                priceElementText: priceElement?.textContent?.substring(0, 50) || 'none',
-                priceCandidates: priceCandidates.filter(c => c !== null && c !== undefined && c !== '').length,
-                hasResolvedPrice: !!resolvedPrice,
-                resolvedPriceAmount: resolvedPrice?.amountInBase || 0
-              };
-              console.warn(`[DOM] Producto descartado (precio inválido):`, debugInfo);
-              return null;
+              debugInfo.discardReason = 'precio_invalido';
+              debugInfo.priceCandidatesCount = priceCandidates.filter(c => c !== null && c !== undefined && c !== '').length;
+              debugInfo.hasResolvedPrice = !!resolvedPrice;
+              debugInfo.resolvedPriceAmount = resolvedPrice?.amountInBase || 0;
+              extractionLogs.push(`Producto ${index} descartado (precio inválido): ${JSON.stringify(debugInfo)}`);
+              discardedCount++;
+              return null as any;
             }
 
             const price = resolvedPrice.amountInBase;
@@ -1387,21 +1401,16 @@ export class AdvancedMarketplaceScraper {
               item.itemDetailUrl ||
               item.targetUrl ||
               item.url ||
-              '';
+              (linkElement?.getAttribute('href') || '');
 
             if (!title || price <= 0 || !url) {
-              // Logging para diagnóstico: por qué se descarta el producto
-              const debugInfo = {
-                hasTitle: !!title,
-                titleLength: title?.length || 0,
-                price: price,
-                hasUrl: !!url,
-                urlLength: url?.length || 0,
-                linkElement: !!linkElement,
-                linkElementHref: linkElement?.getAttribute('href')?.substring(0, 50) || 'none'
-              };
-              console.warn(`[DOM] Producto descartado (validación final):`, debugInfo);
-              return null;
+              debugInfo.discardReason = 'validacion_final';
+              debugInfo.price = price;
+              debugInfo.hasUrl = !!url;
+              debugInfo.urlLength = url?.length || 0;
+              extractionLogs.push(`Producto ${index} descartado (validación final): ${JSON.stringify(debugInfo)}`);
+              discardedCount++;
+              return null as any;
             }
 
             const rating =
@@ -1449,15 +1458,42 @@ export class AdvancedMarketplaceScraper {
             };
           } catch (error) {
             discardedCount++;
-            console.error(`[DOM] Error extrayendo producto ${index}:`, error instanceof Error ? error.message : String(error));
-            return null;
+            extractionLogs.push(`Error extrayendo producto ${index}: ${error instanceof Error ? error.message : String(error)}`);
+            return null as any;
           }
         });
 
         const validResults = results.filter(r => r !== null);
-        console.log(`[DOM] Extracción completada: ${validResults.length} válidos de ${items.length} totales (${extractedCount} extraídos, ${discardedCount} descartados)`);
+        extractionLogs.push(`Extracción completada: ${validResults.length} válidos de ${items.length} totales (${extractedCount} extraídos, ${discardedCount} descartados)`);
         
-        return validResults;
+        return {
+          products: validResults,
+          debug: {
+            itemsFound: items.length,
+            usedSelector,
+            extractionLogs
+          }
+        };
+      });
+
+      // Registrar logs de debug fuera de page.evaluate()
+      const { products: productsFromDom, debug: domDebug } = domExtractionResult;
+      
+      logger.debug('[DOM] Resultado de extracción DOM', {
+        itemsFound: domDebug.itemsFound,
+        usedSelector: domDebug.usedSelector,
+        productsExtracted: productsFromDom.length,
+        query,
+        userId
+      });
+
+      // Registrar cada log de extracción
+      domDebug.extractionLogs.forEach((logMsg: string) => {
+        if (logMsg.includes('descartado') || logMsg.includes('Error')) {
+          logger.warn(`[DOM] ${logMsg}`, { query, userId });
+        } else {
+          logger.debug(`[DOM] ${logMsg}`, { query, userId });
+        }
       });
 
       if (productsFromDom.length === 0) {
