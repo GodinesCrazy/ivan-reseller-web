@@ -272,55 +272,13 @@ export class AdvancedMarketplaceScraper {
       '--window-size=1920,1080',
     ]);
 
-    // ✅ MODIFICADO: Si el path viene de Sparticuz pero el archivo no existe realmente al verificar,
-    // NO confiar en él y usar Puppeteer directamente (para evitar ENOENT)
-    let finalExecutablePath = executablePath;
+    // ✅ RESTAURADO: Lógica simple que funcionaba antes
+    // Confiar en lo que retorna getChromiumLaunchConfig() y usarlo directamente
+    // Solo si Puppeteer falla al usarlo, entonces usar fallbacks
     if (executablePath) {
-      // ✅ Verificación más rigurosa: verificar que el archivo existe Y es accesible
-      // Si falla, usar Puppeteer directamente sin executablePath
-      try {
-        // Primero verificar que el archivo existe realmente
-        if (!fs.existsSync(executablePath)) {
-          console.warn(`⚠️  Chromium path especificado pero archivo no existe: ${executablePath}`);
-          console.warn(`⚠️  Esto ocurre cuando @sparticuz/chromium retorna un path pero el archivo no está descargado`);
-          console.warn(`⚠️  Usando Chromium de Puppeteer directamente (sin executablePath)`);
-          finalExecutablePath = undefined;
-        } else {
-          // Verificar que es un archivo (no directorio) y accesible
-          const stats = fs.statSync(executablePath);
-          if (!stats.isFile()) {
-            console.warn(`⚠️  Chromium path no es un archivo: ${executablePath}`);
-            finalExecutablePath = undefined;
-          } else {
-            // Verificar permisos de ejecución (solo en Unix)
-            const isWindows = os.platform() === 'win32';
-            if (!isWindows) {
-              try {
-                fs.accessSync(executablePath, fs.constants.X_OK);
-              } catch (permError) {
-                console.warn(`⚠️  Chromium existe pero no tiene permisos de ejecución: ${executablePath}`);
-                try {
-                  fs.chmodSync(executablePath, 0o755);
-                  console.log(`✅ Permisos de ejecución otorgados a: ${executablePath}`);
-                } catch (chmodError) {
-                  console.warn(`⚠️  No se pudieron otorgar permisos, usando Puppeteer directamente`);
-                  finalExecutablePath = undefined;
-                }
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.warn(`⚠️  Error verificando Chromium path: ${executablePath}`, (error as Error).message);
-        console.warn(`⚠️  Usando Puppeteer directamente sin executablePath`);
-        finalExecutablePath = undefined;
-      }
-    }
-    
-    if (finalExecutablePath) {
-      console.log(`✅ Chromium encontrado y verificado en: ${finalExecutablePath}`);
+      console.log(`✅ Chromium encontrado en ruta preferida: ${executablePath}`);
     } else {
-      console.log(`ℹ️  Usando Chromium de Puppeteer directamente (sin executablePath especificado)`);
+      console.log(`ℹ️  Usando Chromium de Puppeteer (sin executablePath especificado)`);
     }
 
     try {
@@ -329,18 +287,11 @@ export class AdvancedMarketplaceScraper {
         args: ['--no-sandbox', ...chromiumArgs],
         ignoreDefaultArgs: ['--enable-automation'],
         ignoreHTTPSErrors: true,
+        executablePath,
         defaultViewport,
       };
-      
-      // ✅ Solo incluir executablePath si existe realmente
-      if (finalExecutablePath && fs.existsSync(finalExecutablePath)) {
-        launchOptions.executablePath = finalExecutablePath;
-        console.log(`🔧 Lanzando Chromium en: ${finalExecutablePath}`);
-      } else {
-        // Si no hay executablePath, Puppeteer usará su propio Chromium (puede descargar automáticamente)
-        console.log('ℹ️  Puppeteer usará su propio Chromium (puede tardar en descargar en Railway)');
-        console.log('🔧 Lanzando Chromium (Puppeteer descargará automáticamente si es necesario)');
-      }
+
+      console.log(`🔧 Lanzando Chromium en: ${executablePath || 'Puppeteer default'}`);
 
       // ✅ Intentar lanzar con timeout para evitar cuelgues
       try {
@@ -358,29 +309,6 @@ export class AdvancedMarketplaceScraper {
         
         console.log('✅ Navegador iniciado exitosamente');
       } catch (launchError: any) {
-        // ✅ Si hay error de ENOENT con executablePath, eliminar executablePath e intentar sin él
-        if (launchError.message?.includes('ENOENT') && finalExecutablePath) {
-          console.warn(`⚠️  Error ENOENT con executablePath ${finalExecutablePath}`);
-          console.warn(`⚠️  El archivo existe en verificación pero no cuando Puppeteer intenta usarlo`);
-          console.warn(`⚠️  Intentando sin executablePath (Puppeteer usará su propio Chromium)...`);
-          // Eliminar executablePath e intentar con Puppeteer directamente
-          delete launchOptions.executablePath;
-          // Reintentar sin executablePath
-          this.browser = await Promise.race([
-            puppeteer.launch(launchOptions),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Browser launch timeout after 30s')), 30000)
-            )
-          ]) as Browser;
-          
-          if (!this.browser || !this.browser.isConnected()) {
-            throw new Error('Browser launched but not connected (without executablePath)');
-          }
-          
-          console.log('✅ Navegador iniciado exitosamente sin executablePath');
-          return;
-        }
-        
         // ✅ Si hay error de "Target closed", intentar cerrar y relanzar
         if (launchError.message?.includes('Target closed') || launchError.message?.includes('Protocol error')) {
           console.warn('⚠️  Error de protocolo detectado, intentando con configuración más simple...');
@@ -435,11 +363,10 @@ export class AdvancedMarketplaceScraper {
           ],
         };
 
-        // ✅ Solo incluir executablePath si existe y es válido
-        if (finalExecutablePath && fs.existsSync(finalExecutablePath)) {
-          minimalOptions.executablePath = finalExecutablePath;
+        // ✅ Usar executablePath si está disponible (como funcionaba antes)
+        if (executablePath) {
+          minimalOptions.executablePath = executablePath;
         }
-        // Si no hay executablePath, Puppeteer usará su propio Chromium
 
         // ✅ Intentar lanzar con timeout también en fallback
         this.browser = await Promise.race([
