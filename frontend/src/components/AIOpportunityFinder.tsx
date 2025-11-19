@@ -391,6 +391,7 @@ export default function AIOpportunityFinder() {
     try {
       setImportingId(opp.id);
 
+      // ✅ Preparar payload con toda la información disponible
       const payload: Record<string, any> = {
         title: opp.product,
         aliexpressUrl: opp.aliexpressUrl,
@@ -399,27 +400,85 @@ export default function AIOpportunityFinder() {
         currency: 'USD',
       };
 
+      // ✅ Incluir imagen si está disponible
       if (opp.image && /^https?:\/\//i.test(opp.image)) {
         payload.imageUrl = opp.image;
       }
 
+      // ✅ Incluir categoría si está disponible
+      if (opp.category && opp.category !== 'General') {
+        payload.category = opp.category;
+      }
+
+      // ✅ Incluir descripción con información de análisis si está disponible
+      const descriptionParts: string[] = [];
+      if (opp.aiAnalysis?.strengths?.length > 0) {
+        descriptionParts.push(`Fortalezas: ${opp.aiAnalysis.strengths.join(', ')}`);
+      }
+      if (opp.aiAnalysis?.recommendations?.length > 0) {
+        descriptionParts.push(`Recomendaciones: ${opp.aiAnalysis.recommendations.join(', ')}`);
+      }
+      if (descriptionParts.length > 0) {
+        payload.description = descriptionParts.join('\n\n');
+      }
+
+      // ✅ Incluir keywords si están disponibles
+      if (opp.keywords && opp.keywords.length > 0) {
+        payload.tags = opp.keywords;
+      }
+
+      // ✅ Guardar metadata completa del análisis de oportunidad en productData
+      // Esto incluye toda la información del análisis que puede ser útil más adelante
+      payload.productData = {
+        source: 'ai_opportunity_finder',
+        opportunityId: opp.id,
+        profitMargin: opp.profitMargin,
+        competition: opp.competition,
+        demand: opp.demand,
+        trend: opp.trend,
+        confidence: opp.confidence,
+        monthlySales: opp.monthlySales,
+        suppliers: opp.suppliers,
+        targetMarketplaces: opp.targetMarketplaces,
+        marketplace: opp.marketplace,
+        estimatedFields: opp.estimatedFields,
+        estimationNotes: opp.estimationNotes,
+        aiAnalysis: opp.aiAnalysis,
+        importedAt: new Date().toISOString(),
+      };
+
+      // ✅ Crear producto - El backend lo guardará con estado PENDING automáticamente
+      // El producto quedará disponible en "Pendientes de publicación" para que
+      // el sistema (modo automático) o el usuario (modo manual) lo publique
       const productResponse = await api.post('/api/products', payload);
       const productId = productResponse.data?.id || productResponse.data?.product?.id;
+      
       if (!productId) {
         throw new Error('No se pudo obtener el ID del producto creado');
       }
 
-      const marketplace = opp.targetMarketplaces?.[0] || opp.marketplace || 'ebay';
-      const publishResponse = await api.post('/api/marketplace/publish', {
-        productId: Number(productId),
-        marketplace,
-      });
-
-      if (publishResponse.data?.success) {
-        toast.success(`Producto importado y publicado en ${marketplace}`);
-      } else {
-        throw new Error(publishResponse.data?.error || 'Error al publicar');
-      }
+      // ✅ Producto importado exitosamente - queda en estado PENDING
+      // El usuario o el sistema (según configuración) lo publicará desde "Pendientes de publicación"
+      toast.success(
+        (t) => (
+          <div className="flex flex-col gap-1">
+            <span className="font-semibold">✅ Producto importado exitosamente</span>
+            <span className="text-sm text-gray-600">
+              El producto está en "Pendientes de publicación". Puedes aprobarlo y publicarlo desde allí.
+            </span>
+            <button
+              onClick={() => {
+                navigate('/intelligent-publisher');
+                toast.dismiss(t.id);
+              }}
+              className="mt-2 text-left text-sm text-blue-600 hover:text-blue-700 underline"
+            >
+              Ir a Pendientes de publicación →
+            </button>
+          </div>
+        ),
+        { duration: 6000 }
+      );
     } catch (error: any) {
       log.error('Error importing product from AI finder:', error);
       const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Error al importar el producto';
