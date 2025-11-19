@@ -601,11 +601,23 @@ class OpportunityFinderService {
         estimationNotes.push(...selectedDiag.warnings.map(warning => `[${best.mp}] ${warning}`));
       }
 
+      // ✅ Validar que el producto tenga URL antes de crear la oportunidad
+      if (!product.productUrl || product.productUrl.length < 10) {
+        logger.warn('Producto sin URL válida, saltando oportunidad', {
+          service: 'opportunity-finder',
+          title: product.title?.substring(0, 50),
+          hasUrl: !!product.productUrl,
+          urlLength: product.productUrl?.length || 0,
+          productUrl: product.productUrl?.substring(0, 80) || 'NO_URL'
+        });
+        continue; // Saltar productos sin URL válida
+      }
+
       const opp: OpportunityItem = {
         productId: product.productId,
         title: product.title,
         sourceMarketplace: 'aliexpress',
-        aliexpressUrl: product.productUrl,
+        aliexpressUrl: product.productUrl || '', // Asegurar que siempre haya una URL
         image: product.imageUrl,
         costUsd: product.price,
         costAmount:
