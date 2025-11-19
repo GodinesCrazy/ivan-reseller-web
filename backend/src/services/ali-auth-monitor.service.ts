@@ -200,6 +200,41 @@ class AliExpressAuthMonitor {
       }
     }
 
+    // ✅ RESTAURADO: NO intentar login automático en segundo plano
+    // El sistema funciona en modo público sin cookies
+    // Solo intentar renovar sesión si hay cookies guardadas Y están expiradas
+    const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', 'production');
+    const hasCookies = credentials && (credentials as any).cookies && Array.isArray((credentials as any).cookies) && (credentials as any).cookies.length > 0;
+    const hasEmailPassword = credentials && (credentials as any).email && (credentials as any).password;
+    
+    // ✅ Solo intentar login automático si:
+    // 1. Hay cookies guardadas (para renovarlas) O hay email/password configurado
+    // 2. Y la sesión realmente necesita renovación (status es 'error' o 'expired')
+    // 3. Y NO es startup (en startup, solo limpiar estados obsoletos, no hacer login)
+    const needsRefresh = status?.status === 'error' || status?.status === 'expired';
+    const shouldAttemptRefresh = (hasCookies || hasEmailPassword) && needsRefresh && source !== 'startup';
+    
+    if (!shouldAttemptRefresh) {
+      // ✅ No intentar login automático - el sistema funciona en modo público
+      logger.debug('AliExpressAuthMonitor: skipping automatic login (system works in public mode)', {
+        userId,
+        hasCookies,
+        hasEmailPassword,
+        status: status?.status,
+        source
+      });
+      
+      // Si no hay cookies ni credenciales, y el estado no es healthy, marcarlo como unknown (modo público)
+      if (!hasCookies && !hasEmailPassword && status?.status !== 'healthy') {
+        await marketplaceAuthStatusService.setStatus(userId, 'aliexpress', 'unknown', {
+          message: 'El sistema funcionará en modo público. Las cookies son opcionales pero mejoran la experiencia.',
+          requiresManual: false,
+        });
+      }
+      
+      return { success: false, skipped: true, reason: 'public_mode' };
+    }
+
     await marketplaceAuthStatusService.markRefreshing(
       userId,
       'Renovando sesión de AliExpress en segundo plano'
