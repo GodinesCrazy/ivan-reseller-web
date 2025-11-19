@@ -374,9 +374,11 @@ export class AdvancedMarketplaceScraper {
           ],
         };
 
-        if (executablePath) {
-          minimalOptions.executablePath = executablePath;
+        // ✅ Solo incluir executablePath si existe y es válido
+        if (finalExecutablePath && fs.existsSync(finalExecutablePath)) {
+          minimalOptions.executablePath = finalExecutablePath;
         }
+        // Si no hay executablePath, Puppeteer usará su propio Chromium
 
         // ✅ Intentar lanzar con timeout también en fallback
         this.browser = await Promise.race([
