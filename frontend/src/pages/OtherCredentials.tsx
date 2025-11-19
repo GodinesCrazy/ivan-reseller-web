@@ -108,6 +108,12 @@ export default function OtherCredentials() {
       if (value !== null && value !== undefined) {
         if (typeof value === 'boolean') {
           normalized[key] = value ? 'true' : 'false';
+        } else if (key === 'cookies' && Array.isArray(value)) {
+          // ✅ Si cookies es un array, convertirlo a JSON string
+          normalized[key] = JSON.stringify(value, null, 2);
+        } else if (typeof value === 'object') {
+          // ✅ Para otros objetos, también convertirlos a JSON
+          normalized[key] = JSON.stringify(value);
         } else {
           normalized[key] = String(value);
         }
@@ -140,6 +146,29 @@ export default function OtherCredentials() {
 
       if (processed.twoFactorEnabled !== undefined) {
         processed.twoFactorEnabled = String(processed.twoFactorEnabled).toLowerCase() === 'true';
+      }
+
+      // ✅ Si cookies es un string JSON, intentar parsearlo; si ya es un array, mantenerlo
+      if (processed.cookies !== undefined && processed.cookies !== null && processed.cookies !== '') {
+        if (typeof processed.cookies === 'string') {
+          try {
+            const parsed = JSON.parse(processed.cookies);
+            if (Array.isArray(parsed)) {
+              processed.cookies = parsed;
+            } else {
+              // Si no es un array válido, eliminar cookies
+              delete processed.cookies;
+            }
+          } catch (parseError) {
+            // Si no es JSON válido, eliminar cookies y mostrar error
+            throw new Error('Invalid cookies format. Cookies must be a valid JSON array.');
+          }
+        } else if (Array.isArray(processed.cookies)) {
+          // Ya es un array, mantenerlo
+        } else {
+          // Formato inválido, eliminar
+          delete processed.cookies;
+        }
       }
 
       // Basic validation for required fields
