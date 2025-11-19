@@ -69,7 +69,14 @@ export default function Navbar() {
   }, [pendingManualSession, navigate]);
 
   const aliStatus = statuses.aliexpress;
-  const statusKey = aliStatus?.status || 'unknown';
+  // ✅ Si el estado es 'manual_required' pero no hay sesión manual pendiente real, 
+  // probablemente es solo porque faltan cookies (no es realmente requerido)
+  // En ese caso, mostrar estado como 'unknown' en lugar de 'Acción requerida'
+  let statusKey = aliStatus?.status || 'unknown';
+  if (statusKey === 'manual_required' && !aliStatus?.manualSession?.token && !aliStatus?.requiresManual) {
+    // No hay sesión manual real pendiente, solo faltan cookies (opcional)
+    statusKey = 'unknown';
+  }
   const styleInfo = statusStyles[statusKey] || statusStyles.unknown;
 
   const handleForceRefresh = async () => {
