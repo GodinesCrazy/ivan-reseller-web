@@ -546,48 +546,63 @@ export class AdvancedMarketplaceScraper {
    * Scraping REAL de AliExpress con evasión completa
    */
   async scrapeAliExpress(userId: number, query: string, environment: 'sandbox' | 'production' = 'production'): Promise<ScrapedProduct[]> {
+    const { logger } = await import('../config/logger');
+    
+    logger.info('[SCRAPER] scrapeAliExpress iniciado', { query, userId, environment });
+    
     // ✅ Intentar inicializar navegador, pero si falla, retornar array vacío (no lanzar error)
     if (!this.browser) {
+      logger.debug('[SCRAPER] Navegador no disponible, intentando inicializar...');
       try {
         await this.init();
         // Verificar que el navegador se inicializó correctamente
         if (!this.browser || !this.browser.isConnected()) {
-          console.warn('⚠️  [SCRAPER] Navegador no disponible después de init, continuando sin scraping nativo');
+          logger.warn('[SCRAPER] Navegador no disponible después de init, continuando sin scraping nativo', {
+            hasBrowser: !!this.browser,
+            isConnected: this.browser?.isConnected() || false
+          });
           return [];
         }
+        logger.info('[SCRAPER] Navegador inicializado correctamente');
       } catch (initError: any) {
-        console.warn('⚠️  [SCRAPER] No se pudo inicializar navegador:', initError.message);
-        console.warn('⚠️  [SCRAPER] Continuando sin scraping nativo - se usará bridge Python como alternativa');
+        logger.error('[SCRAPER] No se pudo inicializar navegador', {
+          error: initError?.message || String(initError),
+          stack: initError?.stack
+        });
+        logger.warn('[SCRAPER] Continuando sin scraping nativo - se usará bridge Python como alternativa');
         return [];
       }
     }
     
     // ✅ Verificar que el navegador sigue conectado antes de usar
     if (this.browser && !this.browser.isConnected()) {
-      console.warn('⚠️  [SCRAPER] Navegador desconectado, intentando reinicializar...');
+      logger.warn('[SCRAPER] Navegador desconectado, intentando reinicializar...');
       try {
         await this.init();
         if (!this.browser || !this.browser.isConnected()) {
-          console.warn('⚠️  [SCRAPER] No se pudo reinicializar navegador, retornando vacío');
+          logger.warn('[SCRAPER] No se pudo reinicializar navegador, retornando vacío');
           return [];
         }
       } catch (reinitError: any) {
-        console.warn('⚠️  [SCRAPER] Error al reinicializar navegador:', reinitError.message);
+        logger.error('[SCRAPER] Error al reinicializar navegador', {
+          error: reinitError?.message || String(reinitError)
+        });
         return [];
       }
     }
 
-      console.log(`🔍 Scraping REAL AliExpress: "${query}" (environment: ${environment}, userId: ${userId})`);
+    logger.info('[SCRAPER] Scraping REAL AliExpress', { query, environment, userId });
 
     // ✅ MODIFICADO: NO requerir cookies o login antes de hacer scraping
     // El scraping debe funcionar en modo público primero, y solo solicitar autenticación si detecta CAPTCHA/bloqueo
     const cookies = await this.fetchAliExpressCookies(userId, environment);
-    console.log(`📋 Cookies encontradas: ${cookies.length}`);
+    logger.debug('[SCRAPER] Cookies encontradas', { count: cookies.length, userId, environment });
 
     const hasManualCookies = cookies.length > 0;
 
     // ✅ Si hay cookies guardadas, usarlas (mejora, pero NO requerido)
     if (hasManualCookies) {
+      logger.info('[SCRAPER] Cookies disponibles, inyectándolas en el navegador', { count: cookies.length });
       const tempPage = await this.browser!.newPage();
       try {
         await tempPage.goto('https://www.aliexpress.com', { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
@@ -602,7 +617,7 @@ export class AdvancedMarketplaceScraper {
           sameSite: cookie.sameSite as any,
         }));
         await tempPage.setCookie(...mappedCookies);
-        console.log(`✅ Injected ${cookies.length} AliExpress cookies for user ${userId}`);
+        logger.info('[SCRAPER] Cookies inyectadas exitosamente', { count: cookies.length, userId });
         this.isLoggedIn = true;
         this.loggedInUserId = userId;
         await marketplaceAuthStatusService.markHealthy(
@@ -611,14 +626,17 @@ export class AdvancedMarketplaceScraper {
           'Sesión restaurada automáticamente usando cookies guardadas'
         );
       } catch (cookieError) {
-        console.warn('⚠️  Unable to inject AliExpress cookies:', (cookieError as Error).message);
+        logger.warn('[SCRAPER] No se pudieron inyectar cookies', {
+          error: cookieError instanceof Error ? cookieError.message : String(cookieError),
+          userId
+        });
       } finally {
         await tempPage.close().catch(() => {});
       }
     } else {
       // ✅ NO hay cookies - continuar en modo público (como funcionaba antes del 8 de noviembre)
-      console.log('ℹ️  No hay cookies guardadas. Continuando en modo público (sin autenticación)...');
-      console.log('ℹ️  Si detectamos CAPTCHA o bloqueo, entonces solicitaremos autenticación manual.');
+      logger.info('[SCRAPER] No hay cookies guardadas. Continuando en modo público (sin autenticación)', { userId });
+      logger.debug('[SCRAPER] Si detectamos CAPTCHA o bloqueo, entonces solicitaremos autenticación manual');
     }
     
     // ✅ ELIMINADO: No intentar login automático antes de hacer scraping
@@ -698,10 +716,17 @@ export class AdvancedMarketplaceScraper {
 
         if (Array.isArray(candidates) && candidates.length > 0) {
           apiCapturedItems.push(...candidates);
-          console.log(`✅ Capturados ${candidates.length} productos desde API interna (${url.substring(0, 80)}...)`);
+          logger.info('[SCRAPER] Productos capturados desde API interna', {
+            count: candidates.length,
+            url: url.substring(0, 80),
+            query
+          });
         }
       } catch (error) {
-        console.warn('⚠️  Error procesando respuesta API AliExpress:', (error as Error).message);
+        logger.warn('[SCRAPER] Error procesando respuesta API AliExpress', {
+          error: error instanceof Error ? error.message : String(error),
+          query
+        });
       }
     };
 
@@ -721,30 +746,38 @@ export class AdvancedMarketplaceScraper {
       let navigationSuccess = false;
       
       // Intentar navegar con el primer formato
-      console.log(`📡 Navegando a: ${searchUrl}`);
+      logger.info('[SCRAPER] Navegando a URL de búsqueda', { url: searchUrl, query });
       try {
         await page.goto(searchUrl, { 
           waitUntil: 'domcontentloaded', 
           timeout: 30000 
         });
         navigationSuccess = true;
+        logger.info('[SCRAPER] Navegación exitosa', { url: searchUrl });
       } catch (navError: any) {
-        console.warn(`⚠️  Error navegando con formato 1: ${navError.message}`);
+        logger.warn('[SCRAPER] Error navegando con formato inicial', {
+          error: navError?.message || String(navError),
+          url: searchUrl
+        });
         
         // Intentar con formatos alternativos
         for (let i = 1; i < searchUrls.length; i++) {
           try {
             searchUrl = searchUrls[i];
-            console.log(`📡 Intentando formato alternativo ${i + 1}: ${searchUrl}`);
+            logger.debug('[SCRAPER] Intentando formato alternativo', { format: i + 1, url: searchUrl });
             await page.goto(searchUrl, { 
               waitUntil: 'domcontentloaded', 
               timeout: 25000 
             });
             navigationSuccess = true;
-            console.log(`✅ Navegación exitosa con formato ${i + 1}`);
+            logger.info('[SCRAPER] Navegación exitosa con formato alternativo', { format: i + 1, url: searchUrl });
             break;
           } catch (altError: any) {
-            console.warn(`⚠️  Formato ${i + 1} también falló: ${altError.message}`);
+            logger.warn('[SCRAPER] Formato alternativo también falló', {
+              format: i + 1,
+              error: altError?.message || String(altError),
+              url: searchUrl
+            });
             if (i === searchUrls.length - 1) {
               // Último intento con timeout más corto
               try {
@@ -754,7 +787,11 @@ export class AdvancedMarketplaceScraper {
                 });
                 navigationSuccess = true;
               } catch (finalError: any) {
-                console.error('❌ Error al navegar a AliExpress con todos los formatos:', finalError.message);
+                logger.error('[SCRAPER] Error al navegar a AliExpress con todos los formatos', {
+                  error: finalError?.message || String(finalError),
+                  query,
+                  userId
+                });
                 throw new Error(`Failed to navigate to AliExpress: ${finalError.message}`);
               }
             }
@@ -767,7 +804,7 @@ export class AdvancedMarketplaceScraper {
       }
 
       // ✅ Esperar más tiempo para que la página cargue completamente y ejecutar JavaScript
-      console.log('⏳ Esperando que la página cargue completamente...');
+      logger.debug('[SCRAPER] Esperando que la página cargue completamente', { query });
       
       // Esperar a que la página esté lista
       try {
@@ -775,12 +812,16 @@ export class AdvancedMarketplaceScraper {
           const w = (globalThis as any).window;
           return w.document && w.document.readyState === 'complete';
         }, { timeout: 10000 });
+        logger.debug('[SCRAPER] Página lista (readyState complete)');
       } catch (e) {
-        console.warn('⚠️  Timeout esperando readyState, continuando...');
+        logger.warn('[SCRAPER] Timeout esperando readyState, continuando...', {
+          error: e instanceof Error ? e.message : String(e)
+        });
       }
       
       // Esperar tiempo adicional para que JavaScript ejecute
-      await page.waitForTimeout(3000); // ✅ Aumentar de 2s a 3s
+      await new Promise(resolve => setTimeout(resolve, 3000)); // ✅ Aumentar de 2s a 3s
+      logger.debug('[SCRAPER] Tiempo de espera adicional completado');
       
       // Intentar hacer scroll para activar lazy loading
       try {
@@ -790,9 +831,11 @@ export class AdvancedMarketplaceScraper {
             w.scrollTo(0, 500);
           }
         });
-        await page.waitForTimeout(1000);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        logger.debug('[SCRAPER] Scroll realizado para activar lazy loading');
       } catch (e) {
         // Ignorar errores de scroll
+        logger.debug('[SCRAPER] Error al hacer scroll (ignorado)');
       }
       
       // ✅ Verificar si hay CAPTCHA o bloqueo antes de intentar extraer productos
@@ -810,7 +853,7 @@ export class AdvancedMarketplaceScraper {
       }).catch(() => false);
       
       if (hasCaptcha) {
-        console.warn('⚠️  CAPTCHA detectado en la página de AliExpress');
+        logger.warn('[SCRAPER] CAPTCHA detectado en la página de AliExpress', { query, userId });
         const currentUrl = page.url();
         await this.captureAliExpressSnapshot(page, `captcha-detected-${Date.now()}`);
         
@@ -867,7 +910,7 @@ export class AdvancedMarketplaceScraper {
               // Pequeña pausa entre scrolls
             }
           });
-          await page.waitForTimeout(2000);
+          await new Promise(resolve => setTimeout(resolve, 2000));
         } catch (e) {
           // Ignorar errores
         }
@@ -1013,7 +1056,7 @@ export class AdvancedMarketplaceScraper {
             const w = (globalThis as any).window;
             w.scrollBy?.(0, 1000);
           });
-          await page.waitForTimeout(3000);
+          await new Promise(resolve => setTimeout(resolve, 3000));
         }
       }
 
