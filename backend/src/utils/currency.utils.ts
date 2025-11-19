@@ -30,11 +30,40 @@ const CURRENCY_SYMBOL_PATTERNS: Array<{ code: string; patterns: RegExp[] }> = [
 function detectCurrencyFromText(texts: Array<string | undefined | null>): string | null {
   const joined = texts.filter(Boolean).map(String).join(' ');
   if (!joined) return null;
+  
+  // ✅ Prioridad 1: Buscar códigos de moneda explícitos (CLP, USD, EUR, etc.)
   for (const entry of CURRENCY_SYMBOL_PATTERNS) {
     if (entry.patterns.some(regex => regex.test(joined))) {
       return entry.code;
     }
   }
+  
+  // ✅ Prioridad 2: Detección heurística basada en formato numérico
+  // CLP típicamente usa punto como separador de miles y valores altos (>1000)
+  // Ejemplo: "$26.600" en Chile es CLP, no USD
+  const pricePattern = joined.match(/[\$]?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)/);
+  if (pricePattern) {
+    const priceStr = pricePattern[1];
+    // Si tiene punto como separador de miles (formato chileno) y valor > 1000, probablemente es CLP
+    if (priceStr.includes('.') && !priceStr.includes(',')) {
+      const numericValue = parseFloat(priceStr.replace(/\./g, ''));
+      // Valores > 1000 con formato chileno (punto como separador de miles) suelen ser CLP
+      if (numericValue > 1000 && numericValue < 1000000) {
+        // Verificar contexto: si hay indicadores de Chile o español
+        const lowerJoined = joined.toLowerCase();
+        if (lowerJoined.includes('chile') || lowerJoined.includes('clp') || 
+            lowerJoined.includes('peso') || lowerJoined.includes('envío desde chile')) {
+          return 'CLP';
+        }
+        // Si el valor es muy alto para USD pero razonable para CLP, asumir CLP
+        // $26.600 sería ~$30 USD, lo cual es razonable
+        if (numericValue > 10000 && numericValue < 500000) {
+          return 'CLP';
+        }
+      }
+    }
+  }
+  
   return null;
 }
 
@@ -155,7 +184,29 @@ export function resolvePrice(input: PriceResolutionInput): {
   );
 
   const amount = parseLocalizedNumber(input.raw, sourceCurrency);
+  
+  // ✅ Logging detallado para diagnóstico de conversión
+  const logger = require('../config/logger').logger;
+  logger.debug('[CURRENCY] Resolving price', {
+    raw: String(input.raw).substring(0, 50),
+    detectedCurrency: sourceCurrency,
+    parsedAmount: amount,
+    baseCurrency,
+    textHints: input.textHints?.slice(0, 3).map(t => String(t).substring(0, 30))
+  });
+  
   const amountInBase = fxService.convert(amount, sourceCurrency, baseCurrency);
+  
+  // ✅ Logging de conversión
+  if (sourceCurrency !== baseCurrency) {
+    logger.debug('[CURRENCY] Conversion result', {
+      from: sourceCurrency,
+      to: baseCurrency,
+      originalAmount: amount,
+      convertedAmount: amountInBase,
+      rate: amount > 0 ? amountInBase / amount : 0
+    });
+  }
 
   return {
     amount,

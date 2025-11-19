@@ -117,6 +117,19 @@ export class ProductService {
 
     const metadataPayload = Object.keys(metadata).length ? JSON.stringify(metadata) : null;
 
+    // ✅ Logging antes de crear el producto
+    const logger = require('../config/logger').logger;
+    logger.info('[PRODUCT-SERVICE] Creating product', {
+      userId,
+      title: rest.title?.substring(0, 50),
+      aliexpressUrl: rest.aliexpressUrl?.substring(0, 80),
+      aliexpressPrice: rest.aliexpressPrice,
+      suggestedPrice: rest.suggestedPrice,
+      hasImage: !!imageUrl || (imageUrls && imageUrls.length > 0),
+      hasProductData: !!productData && Object.keys(productData).length > 0,
+      status: 'PENDING'
+    });
+
     const product = await prisma.product.create({
       data: {
         userId,
@@ -143,6 +156,16 @@ export class ProductService {
       },
     });
 
+    // ✅ Logging después de crear el producto
+    logger.info('[PRODUCT-SERVICE] Product created successfully', {
+      productId: product.id,
+      userId,
+      title: product.title?.substring(0, 50),
+      status: product.status,
+      aliexpressPrice: product.aliexpressPrice,
+      suggestedPrice: product.suggestedPrice
+    });
+
     // Registrar actividad
     await prisma.activity.create({
       data: {
@@ -151,6 +174,9 @@ export class ProductService {
         description: `Producto creado: ${product.title}`,
         metadata: JSON.stringify({ productId: product.id }),
       },
+    }).catch(err => {
+      // No fallar si no se puede crear la actividad
+      logger.warn('[PRODUCT-SERVICE] Failed to create activity', { error: err instanceof Error ? err.message : String(err) });
     });
 
     return product;
