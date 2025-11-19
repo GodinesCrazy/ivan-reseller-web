@@ -128,24 +128,49 @@ async function ensureChromiumFromSparticuz(): Promise<string | null> {
         }
 
         // ✅ Verificación adicional: intentar acceder al archivo directamente
+        // IMPORTANTE: Verificar que el archivo existe Y es accesible JUSTO ANTES de retornarlo
         try {
+          // Verificar que el archivo existe realmente (no solo que el path existe)
+          if (!fs.existsSync(executablePath)) {
+            console.warn(`⚠️  Sparticuz Chromium path retornado pero archivo no existe realmente: ${executablePath}`);
+            console.warn(`⚠️  Esto puede ocurrir en Railway si @sparticuz/chromium no descargó el ejecutable correctamente`);
+            return null;
+          }
+          
+          // Verificar permisos de acceso
           fs.accessSync(executablePath, fs.constants.F_OK | (isWindows ? 0 : fs.constants.X_OK));
+          
+          // Verificar que es un archivo (no directorio)
           const stats = fs.statSync(executablePath);
           if (!stats.isFile()) {
             console.warn(`⚠️  Sparticuz Chromium path no es un archivo: ${executablePath}`);
             return null;
           }
           
+          // Verificar que es ejecutable
           if (isExecutable(executablePath)) {
             console.log(`✅ Chromium de Sparticuz verificado y ejecutable: ${executablePath}`);
             return executablePath;
           } else {
+            // Intentar dar permisos de ejecución
+            try {
+              if (!isWindows) {
+                fs.chmodSync(executablePath, 0o755);
+                if (isExecutable(executablePath)) {
+                  console.log(`✅ Chromium de Sparticuz verificado (permisos otorgados): ${executablePath}`);
+                  return executablePath;
+                }
+              }
+            } catch (chmodError) {
+              // Ignorar si no se pueden otorgar permisos
+            }
             console.warn(`⚠️  Sparticuz Chromium existe pero no es ejecutable: ${executablePath}`);
             return null;
           }
         } catch (accessError) {
           // El archivo no es accesible o no existe realmente
           console.warn(`⚠️  Sparticuz Chromium path no es accesible: ${executablePath}`, (accessError as Error).message);
+          console.warn(`⚠️  Esto puede ocurrir si el archivo fue eliminado o nunca se descargó correctamente`);
           return null;
         }
       } else if (executablePath) {
