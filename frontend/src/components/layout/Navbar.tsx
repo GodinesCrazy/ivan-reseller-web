@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LogOut, RefreshCcw, ShieldCheck, ShieldAlert, Loader2, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@stores/authStore';
@@ -33,6 +34,7 @@ const statusStyles: Record<string, { className: string; label: string; icon: JSX
 };
 
 export default function Navbar() {
+  const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const statuses = useAuthStatusStore((state) => state.statuses);
   const loadingStatus = useAuthStatusStore((state) => state.loading);
@@ -54,17 +56,17 @@ export default function Navbar() {
       toast.info(
         <div className="flex flex-col gap-2">
           <span>AliExpress necesita que confirmes la sesión manual.</span>
-          <a
-            href="/api-settings"
+          <button
+            onClick={() => navigate('/api-settings')}
             className="inline-flex w-fit items-center gap-1 rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700"
           >
             Abrir configuración
-          </a>
+          </button>
         </div>,
         { duration: 8000 }
       );
     }
-  }, [pendingManualSession]);
+  }, [pendingManualSession, navigate]);
 
   const aliStatus = statuses.aliexpress;
   const statusKey = aliStatus?.status || 'unknown';

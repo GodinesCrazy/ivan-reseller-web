@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '@services/api';
 import {
@@ -22,6 +23,7 @@ import {
   Users,
   Eye
 } from 'lucide-react';
+import { log } from '@/utils/logger';
 
 interface MarketOpportunity {
   id: string;
@@ -69,6 +71,7 @@ interface SearchProgress {
 }
 
 export default function AIOpportunityFinder() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [opportunities, setOpportunities] = useState<MarketOpportunity[]>([]);
@@ -258,16 +261,12 @@ export default function AIOpportunityFinder() {
                   ))}
                 </ul>
                 <div className="mt-3 pt-3 border-t border-gray-200">
-                  <a
-                    href="/api-settings"
+                  <button
+                    onClick={() => navigate('/api-settings')}
                     className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium text-xs"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      window.location.href = '/api-settings';
-                    }}
                   >
                     Ir a API Settings para verificar AliExpress →
-                  </a>
+                  </button>
                 </div>
               </div>
             </div>,
@@ -278,7 +277,7 @@ export default function AIOpportunityFinder() {
       
       setInsights(realInsights);
     } catch (error: any) {
-      console.error('Error searching opportunities:', error);
+      log.error('Error searching opportunities:', error);
       if (error?.response?.status === 428) {
         const data = error.response?.data || {};
         const manualPath = data.manualUrl || (data.token ? `/manual-login/${data.token}` : null);
@@ -430,7 +429,7 @@ export default function AIOpportunityFinder() {
         throw new Error(publishResponse.data?.error || 'Error al publicar');
       }
     } catch (error: any) {
-      console.error('Error importing product from AI finder:', error);
+      log.error('Error importing product from AI finder:', error);
       const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Error al importar el producto';
       toast.error(msg);
     } finally {
