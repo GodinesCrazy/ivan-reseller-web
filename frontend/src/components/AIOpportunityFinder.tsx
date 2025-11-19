@@ -404,8 +404,32 @@ export default function AIOpportunityFinder() {
   };
 
   const handleImportProduct = async (opp: MarketOpportunity) => {
-    if (!opp.aliexpressUrl) {
-      toast.error('No se puede importar porque falta el enlace de AliExpress.');
+    // ✅ Validar que tenemos todos los campos requeridos
+    if (!opp.aliexpressUrl || !opp.aliexpressUrl.startsWith('http')) {
+      toast.error('No se puede importar porque falta el enlace de AliExpress o no es válido.', {
+        duration: 5000
+      });
+      return;
+    }
+
+    if (!opp.product || opp.product.length < 5) {
+      toast.error('El título del producto es muy corto o no es válido.', {
+        duration: 5000
+      });
+      return;
+    }
+
+    if (!opp.currentPrice || opp.currentPrice <= 0) {
+      toast.error('El precio actual del producto no es válido.', {
+        duration: 5000
+      });
+      return;
+    }
+
+    if (!opp.suggestedPrice || opp.suggestedPrice <= 0) {
+      toast.error('El precio sugerido del producto no es válido.', {
+        duration: 5000
+      });
       return;
     }
 
@@ -414,21 +438,41 @@ export default function AIOpportunityFinder() {
 
       // ✅ Preparar payload con toda la información disponible
       const payload: Record<string, any> = {
-        title: opp.product,
-        aliexpressUrl: opp.aliexpressUrl,
-        aliexpressPrice: opp.currentPrice,
-        suggestedPrice: opp.suggestedPrice,
+        title: String(opp.product).trim(),
+        aliexpressUrl: String(opp.aliexpressUrl).trim(),
+        aliexpressPrice: Number(opp.currentPrice),
+        suggestedPrice: Number(opp.suggestedPrice),
         currency: 'USD',
       };
 
-      // ✅ Incluir imagen si está disponible
-      if (opp.image && /^https?:\/\//i.test(opp.image)) {
-        payload.imageUrl = opp.image;
+      // ✅ Validar que los números sean válidos
+      if (isNaN(payload.aliexpressPrice) || payload.aliexpressPrice <= 0) {
+        throw new Error('El precio actual debe ser un número positivo válido');
+      }
+      if (isNaN(payload.suggestedPrice) || payload.suggestedPrice <= 0) {
+        throw new Error('El precio sugerido debe ser un número positivo válido');
+      }
+
+      // ✅ Incluir imagen si está disponible (validar que sea URL válida)
+      if (opp.image && typeof opp.image === 'string' && opp.image.trim().length > 0) {
+        const imageUrl = String(opp.image).trim();
+        // Validar que sea una URL válida o construir URL absoluta desde relativa
+        if (/^https?:\/\//i.test(imageUrl)) {
+          payload.imageUrl = imageUrl;
+        } else if (imageUrl.startsWith('//')) {
+          payload.imageUrl = `https:${imageUrl}`;
+        } else if (imageUrl.startsWith('/')) {
+          payload.imageUrl = `https://www.aliexpress.com${imageUrl}`;
+        } else if (imageUrl.length > 10 && !imageUrl.includes(' ')) {
+          // Si parece ser una URL relativa sin protocolo, intentar construirla
+          payload.imageUrl = `https://${imageUrl}`;
+        }
+        // Si no pasa ninguna validación, no incluir imageUrl (es opcional)
       }
 
       // ✅ Incluir categoría si está disponible
-      if (opp.category && opp.category !== 'General') {
-        payload.category = opp.category;
+      if (opp.category && opp.category !== 'General' && opp.category.trim().length > 0) {
+        payload.category = String(opp.category).trim();
       }
 
       // ✅ Incluir descripción con información de análisis si está disponible
@@ -444,8 +488,8 @@ export default function AIOpportunityFinder() {
       }
 
       // ✅ Incluir keywords si están disponibles
-      if (opp.keywords && opp.keywords.length > 0) {
-        payload.tags = opp.keywords;
+      if (opp.keywords && Array.isArray(opp.keywords) && opp.keywords.length > 0) {
+        payload.tags = opp.keywords.filter(k => k && String(k).trim().length > 0);
       }
 
       // ✅ Guardar metadata completa del análisis de oportunidad en productData
@@ -453,30 +497,74 @@ export default function AIOpportunityFinder() {
       payload.productData = {
         source: 'ai_opportunity_finder',
         opportunityId: opp.id,
-        profitMargin: opp.profitMargin,
-        competition: opp.competition,
-        demand: opp.demand,
-        trend: opp.trend,
-        confidence: opp.confidence,
-        monthlySales: opp.monthlySales,
-        suppliers: opp.suppliers,
-        targetMarketplaces: opp.targetMarketplaces,
-        marketplace: opp.marketplace,
-        estimatedFields: opp.estimatedFields,
-        estimationNotes: opp.estimationNotes,
-        aiAnalysis: opp.aiAnalysis,
+        profitMargin: typeof opp.profitMargin === 'number' ? opp.profitMargin : 0,
+        competition: opp.competition || 'unknown',
+        demand: opp.demand || 'unknown',
+        trend: opp.trend || 'stable',
+        confidence: typeof opp.confidence === 'number' ? opp.confidence : 0,
+        monthlySales: typeof opp.monthlySales === 'number' ? opp.monthlySales : 0,
+        suppliers: typeof opp.suppliers === 'number' ? opp.suppliers : 0,
+        targetMarketplaces: Array.isArray(opp.targetMarketplaces) ? opp.targetMarketplaces : [],
+        marketplace: opp.marketplace || 'ebay',
+        estimatedFields: Array.isArray(opp.estimatedFields) ? opp.estimatedFields : [],
+        estimationNotes: Array.isArray(opp.estimationNotes) ? opp.estimationNotes : [],
+        aiAnalysis: opp.aiAnalysis || {},
         importedAt: new Date().toISOString(),
       };
+
+      log.debug('Importing product with payload:', {
+        title: payload.title?.substring(0, 50),
+        aliexpressUrl: payload.aliexpressUrl?.substring(0, 80),
+        aliexpressPrice: payload.aliexpressPrice,
+        suggestedPrice: payload.suggestedPrice,
+        hasImage: !!payload.imageUrl,
+        hasCategory: !!payload.category,
+        hasDescription: !!payload.description,
+        hasTags: !!payload.tags && payload.tags.length > 0,
+        hasProductData: !!payload.productData
+      });
 
       // ✅ Crear producto - El backend lo guardará con estado PENDING automáticamente
       // El producto quedará disponible en "Pendientes de publicación" para que
       // el sistema (modo automático) o el usuario (modo manual) lo publique
+      log.debug('Sending product creation request to backend', {
+        title: payload.title?.substring(0, 50),
+        aliexpressUrl: payload.aliexpressUrl?.substring(0, 80),
+        aliexpressPrice: payload.aliexpressPrice,
+        suggestedPrice: payload.suggestedPrice,
+        hasImageUrl: !!payload.imageUrl,
+        hasProductData: !!payload.productData
+      });
+      
       const productResponse = await api.post('/api/products', payload);
-      const productId = productResponse.data?.id || productResponse.data?.product?.id;
+      
+      // ✅ El backend devuelve el producto directamente en response.data
+      const product = productResponse.data;
+      
+      // ✅ Intentar obtener el ID del producto de diferentes formas posibles
+      let productId = product?.id || product?.product?.id || productResponse.data?.id || productResponse.data?.product?.id;
+      
+      // Si el ID viene como número, convertirlo a string si es necesario
+      if (typeof productId === 'number') {
+        productId = String(productId);
+      }
       
       if (!productId) {
-        throw new Error('No se pudo obtener el ID del producto creado');
+        log.error('Product response does not contain ID:', {
+          response: productResponse,
+          data: productResponse.data,
+          status: productResponse.status,
+          productKeys: product ? Object.keys(product) : [],
+          productType: typeof product
+        });
+        throw new Error('No se pudo obtener el ID del producto creado. El servidor no devolvió un ID válido.');
       }
+
+      log.info('Product imported successfully:', {
+        productId,
+        title: product.title?.substring(0, 50),
+        status: product.status
+      });
 
       // ✅ Producto importado exitosamente - queda en estado PENDING
       // El usuario o el sistema (según configuración) lo publicará desde "Pendientes de publicación"
@@ -501,9 +589,45 @@ export default function AIOpportunityFinder() {
         { duration: 6000 }
       );
     } catch (error: any) {
-      log.error('Error importing product from AI finder:', error);
-      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Error al importar el producto';
-      toast.error(msg);
+      log.error('Error importing product from AI finder:', {
+        error,
+        message: error?.message,
+        response: error?.response?.data,
+        status: error?.response?.status,
+        opportunityId: opp.id,
+        title: opp.product?.substring(0, 50),
+        aliexpressUrl: opp.aliexpressUrl?.substring(0, 80)
+      });
+
+      // ✅ Proporcionar mensajes de error más específicos
+      let errorMessage = 'Error al importar el producto';
+      
+      if (error?.response?.status === 400) {
+        // Error de validación
+        if (error?.response?.data?.error) {
+          errorMessage = `Error de validación: ${error.response.data.error}`;
+        } else if (error?.response?.data?.message) {
+          errorMessage = `Error de validación: ${error.response.data.message}`;
+        } else if (error?.response?.data?.errors) {
+          // Si hay múltiples errores de validación (Zod)
+          const zodErrors = Array.isArray(error.response.data.errors)
+            ? error.response.data.errors.map((e: any) => `${e.path?.join('.') || ''}: ${e.message || ''}`).filter(Boolean).join(', ')
+            : JSON.stringify(error.response.data.errors);
+          errorMessage = `Error de validación: ${zodErrors}`;
+        } else {
+          errorMessage = 'Error de validación: Los datos enviados no son válidos. Por favor, verifica que todos los campos requeridos estén presentes.';
+        }
+      } else if (error?.response?.status === 401 || error?.response?.status === 403) {
+        errorMessage = 'No tienes permiso para importar productos. Por favor, inicia sesión nuevamente.';
+      } else if (error?.response?.status >= 500) {
+        errorMessage = 'Error del servidor al importar el producto. Por favor, intenta nuevamente más tarde.';
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+
+      toast.error(errorMessage, {
+        duration: 8000
+      });
     } finally {
       setImportingId(null);
     }
