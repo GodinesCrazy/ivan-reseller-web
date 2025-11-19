@@ -208,16 +208,57 @@ export async function resolveChromiumExecutable(): Promise<string | null> {
   const isHeroku = process.env.HEROKU_APP_ID;
   const isServerless = isRailway || isHeroku || process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
   
-  if (isServerless) {
-    console.log('🌐 Entorno serverless detectado, priorizando Sparticuz Chromium...');
+  // ✅ MODIFICADO: En Railway, Sparticuz Chromium puede fallar con ENOENT aunque pase la verificación
+  // Si está deshabilitado explícitamente o si sabemos que falla, usar Puppeteer directamente
+  const disableSparticuz = process.env.DISABLE_SPARTICUZ_CHROMIUM === 'true' || process.env.SKIP_SPARTICUZ === 'true';
+  
+  if (isServerless && !disableSparticuz) {
+    console.log('🌐 Entorno serverless detectado, intentando Sparticuz Chromium...');
     
-    // ✅ En entornos serverless, priorizar Sparticuz (optimizado para contenedores)
+    // ✅ En entornos serverless, intentar Sparticuz (pero NO confiar completamente en él en Railway)
     const sparticuzPath = await ensureChromiumFromSparticuz();
-    if (sparticuzPath && fs.existsSync(sparticuzPath)) {
-      process.env.PUPPETEER_EXECUTABLE_PATH = sparticuzPath;
-      process.env.CHROMIUM_PATH = sparticuzPath;
-      console.log(`✅ Chromium obtenido de Sparticuz (serverless): ${sparticuzPath}`);
-      return sparticuzPath;
+    
+    // ✅ VERIFICACIÓN RIGUROSA: En Railway, verificar que el archivo existe REALMENTE justo antes de retornar
+    if (sparticuzPath) {
+      // Verificar múltiples veces que el archivo existe y es accesible
+      let fileExists = false;
+      let isAccessible = false;
+      
+      try {
+        // Verificar que existe
+        fileExists = fs.existsSync(sparticuzPath);
+        if (fileExists) {
+          // Verificar que es accesible y ejecutable
+          try {
+            fs.accessSync(sparticuzPath, fs.constants.F_OK | (isWindows ? 0 : fs.constants.X_OK));
+            const stats = fs.statSync(sparticuzPath);
+            isAccessible = stats.isFile() && (isWindows || isExecutable(sparticuzPath));
+          } catch (accessError) {
+            console.warn(`⚠️  Sparticuz Chromium no es accesible: ${sparticuzPath}`, (accessError as Error).message);
+            isAccessible = false;
+          }
+        }
+      } catch (checkError) {
+        console.warn(`⚠️  Error verificando Sparticuz Chromium: ${sparticuzPath}`, (checkError as Error).message);
+        fileExists = false;
+        isAccessible = false;
+      }
+      
+      // ✅ En Railway, si el archivo no existe o no es accesible, NO usarlo
+      // Esto previene el error ENOENT cuando Puppeteer intenta usarlo
+      if (isRailway && (!fileExists || !isAccessible)) {
+        console.warn(`⚠️  Sparticuz Chromium no está disponible en Railway (archivo no existe o no es accesible)`);
+        console.warn(`⚠️  Usando Puppeteer directamente sin executablePath (Railway puede tener limitaciones)`);
+        return null; // Retornar null para usar Puppeteer directamente
+      }
+      
+      // ✅ Si pasó todas las verificaciones, usarlo
+      if (fileExists && isAccessible) {
+        process.env.PUPPETEER_EXECUTABLE_PATH = sparticuzPath;
+        process.env.CHROMIUM_PATH = sparticuzPath;
+        console.log(`✅ Chromium obtenido de Sparticuz (serverless): ${sparticuzPath}`);
+        return sparticuzPath;
+      }
     }
     
     console.warn('⚠️  Sparticuz Chromium no disponible, intentando Puppeteer...');
@@ -233,6 +274,13 @@ export async function resolveChromiumExecutable(): Promise<string | null> {
     
     // ✅ Si ambos fallan, retornar null para que Puppeteer use su propio Chromium (descargará automáticamente)
     console.warn('⚠️  No se encontró Chromium preinstalado, Puppeteer usará su propio Chromium (puede tardar en descargar)');
+    if (isRailway) {
+      console.warn('⚠️  NOTA: Railway puede tener limitaciones para ejecutar navegadores. Si falla, considerar usar un servicio de scraping externo.');
+    }
+    return null;
+  } else if (isServerless && disableSparticuz) {
+    // ✅ Si Sparticuz está deshabilitado explícitamente, usar Puppeteer directamente
+    console.log('ℹ️  Sparticuz Chromium deshabilitado, usando Puppeteer directamente...');
     return null;
   } else {
     // ✅ En entornos normales, primero intentar rutas del sistema
