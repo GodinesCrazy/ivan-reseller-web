@@ -10,34 +10,19 @@ router.use(authenticate);
 // Validación para crear producto
 const createProductSchema = z.object({
   title: z.string().min(5).max(200),
-  description: z.string().optional().nullable(),
+  description: z.string().optional(),
   aliexpressUrl: z.string().url(),
   aliexpressPrice: z.number().positive(),
   suggestedPrice: z.number().positive(),
-  finalPrice: z.number().positive().optional().nullable(),
-  currency: z.string().optional().nullable(),
-  // ✅ Simplificar imageUrl - aceptar cualquier string y validarlo después
-  imageUrl: z.string().optional().nullable(),
-  imageUrls: z.array(z.string()).optional().nullable(),
-  category: z.string().optional().nullable(),
-  tags: z.array(z.string()).optional().nullable(),
-  shippingCost: z.number().optional().nullable(),
-  estimatedDeliveryDays: z.number().optional().nullable(),
-  productData: z.record(z.any()).optional().nullable(),
-}).refine((data) => {
-  // ✅ Validar imageUrl si está presente (puede ser URL completa, relativa, o protocolo relativo)
-  if (data.imageUrl && typeof data.imageUrl === 'string') {
-    const url = data.imageUrl.trim();
-    // Aceptar URLs completas, protocolo relativo (//), o rutas relativas (/)
-    // Si no es ninguna de estas, debe ser al menos una cadena válida sin espacios
-    return url.startsWith('http://') || url.startsWith('https://') || 
-           url.startsWith('//') || url.startsWith('/') || 
-           (!url.includes(' ') && url.length > 3);
-  }
-  return true;
-}, {
-  message: 'imageUrl debe ser una URL válida o una ruta relativa válida',
-  path: ['imageUrl']
+  finalPrice: z.number().positive().optional(),
+  currency: z.string().optional(),
+  imageUrl: z.string().url().optional(),
+  imageUrls: z.array(z.string().url()).optional(),
+  category: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  shippingCost: z.number().optional(),
+  estimatedDeliveryDays: z.number().optional(),
+  productData: z.record(z.any()).optional(),
 });
 
 const updateProductSchema = createProductSchema.partial();
