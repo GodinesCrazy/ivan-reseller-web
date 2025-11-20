@@ -253,7 +253,10 @@ router.patch('/:id/price', async (req: Request, res: Response, next: NextFunctio
       return res.status(400).json({ error: 'Price must be a positive number' });
     }
 
-    const { MarketplaceService } = await import('../../services/marketplace.service');
+    // ✅ CORREGIDO: Importar MarketplaceService correctamente (como named export)
+    const marketplaceServiceModule = await import('../../services/marketplace.service');
+    // MarketplaceService está exportado tanto como named como default
+    const MarketplaceService = marketplaceServiceModule.MarketplaceService || marketplaceServiceModule.default;
     const marketplaceService = new MarketplaceService();
     
     const result = await marketplaceService.syncProductPrice(
