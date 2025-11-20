@@ -577,7 +577,7 @@ export default function AIOpportunityFinder() {
             </span>
             <button
               onClick={() => {
-                navigate('/intelligent-publisher');
+                navigate('/products');
                 toast.dismiss(t.id);
               }}
               className="mt-2 text-left text-sm text-blue-600 hover:text-blue-700 underline"
