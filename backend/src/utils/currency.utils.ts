@@ -182,6 +182,8 @@ export interface PriceResolutionInput {
   itemCurrencyHints?: Array<unknown>;
   textHints?: Array<string | undefined | null>;
   fallbackCurrency?: string;
+  userBaseCurrency?: string; // ✅ Moneda base del usuario (desde Settings)
+  sourceCurrency?: string; // ✅ Moneda fuente explícita (moneda local de AliExpress)
 }
 
 export function resolvePrice(input: PriceResolutionInput): {
@@ -190,8 +192,14 @@ export function resolvePrice(input: PriceResolutionInput): {
   amountInBase: number;
   baseCurrency: string;
 } {
-  const baseCurrency = fxService.getBase();
-  const sourceCurrency = resolveCurrency(
+  // ✅ Prioridad 1: Usar moneda base del usuario si está disponible
+  // ✅ Prioridad 2: Fallback a moneda del sistema (USD)
+  const baseCurrency = input.userBaseCurrency || fxService.getBase();
+  
+  // ✅ Prioridad 1: Usar moneda fuente explícita si está disponible (moneda local de AliExpress)
+  // ✅ Prioridad 2: Intentar detectar desde texto/patrones
+  // ✅ Prioridad 3: Fallback a moneda base
+  const sourceCurrency = input.sourceCurrency || resolveCurrency(
     input.itemCurrencyHints || [],
     input.textHints || [],
     input.fallbackCurrency || baseCurrency
@@ -206,6 +214,8 @@ export function resolvePrice(input: PriceResolutionInput): {
     detectedCurrency: sourceCurrency,
     parsedAmount: amount,
     baseCurrency,
+    userBaseCurrency: input.userBaseCurrency,
+    explicitSourceCurrency: input.sourceCurrency,
     textHints: input.textHints?.slice(0, 3).map(t => String(t).substring(0, 30))
   });
   
@@ -235,6 +245,8 @@ export interface PriceRangeResolutionInput {
   itemCurrencyHints?: Array<unknown>;
   textHints?: Array<string | undefined | null>;
   fallbackCurrency?: string;
+  userBaseCurrency?: string; // ✅ Moneda base del usuario (desde Settings)
+  sourceCurrency?: string; // ✅ Moneda fuente explícita (moneda local de AliExpress)
 }
 
 export interface PriceRangeResolutionResult {
@@ -315,8 +327,14 @@ function collectNumericCandidates(value: unknown, push: (num: number) => void, c
 export function resolvePriceRange(
   input: PriceRangeResolutionInput
 ): PriceRangeResolutionResult | null {
-  const baseCurrency = fxService.getBase();
-  const currency = resolveCurrency(
+  // ✅ Prioridad 1: Usar moneda base del usuario si está disponible
+  // ✅ Prioridad 2: Fallback a moneda del sistema (USD)
+  const baseCurrency = input.userBaseCurrency || fxService.getBase();
+  
+  // ✅ Prioridad 1: Usar moneda fuente explícita si está disponible (moneda local de AliExpress)
+  // ✅ Prioridad 2: Intentar detectar desde texto/patrones
+  // ✅ Prioridad 3: Fallback a moneda base
+  const currency = input.sourceCurrency || resolveCurrency(
     input.itemCurrencyHints || [],
     input.textHints || [],
     input.fallbackCurrency || baseCurrency

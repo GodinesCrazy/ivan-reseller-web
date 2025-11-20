@@ -34,6 +34,7 @@ import LoadingSpinner, { CardSkeleton } from '@/components/ui/LoadingSpinner';
 
 import AIOpportunityFinder from '../components/AIOpportunityFinder';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
+import { log } from '@/utils/logger';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -67,20 +68,39 @@ export default function Dashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      // ✅ CARGAR DATOS REALES DE LA API
-      const [statsRes, activityRes] = await Promise.all([
+      // ✅ B6: CARGAR DATOS REALES DE LA API (completado)
+      const [statsRes, activityRes, opportunitiesRes, aiSuggestionsRes, automationRes] = await Promise.all([
         api.get('/api/dashboard/stats').catch(err => {
-          console.warn('Error loading stats:', err);
+          log.warn('Error loading stats:', err);
           return { data: {} };
         }),
         api.get('/api/dashboard/recent-activity?limit=10').catch(err => {
-          console.warn('Error loading activity:', err);
+          log.warn('Error loading activity:', err);
           return { data: { activities: [] } };
+        }),
+        // ✅ B6: Cargar count de oportunidades desde API
+        api.get('/api/opportunities/list', { params: { page: 1, limit: 1 } }).catch(err => {
+          log.warn('Error loading opportunities count:', err);
+          return { data: { count: 0 } };
+        }),
+        // ✅ B6: Cargar sugerencias IA desde API
+        api.get('/api/ai-suggestions', { params: { limit: 1 } }).catch(err => {
+          log.warn('Error loading AI suggestions:', err);
+          return { data: { suggestions: [], count: 0 } };
+        }),
+        // ✅ B6: Cargar configuración de automatización para contar workflows
+        api.get('/api/automation/config').catch(err => {
+          log.warn('Error loading automation config:', err);
+          return { data: { workflows: [] } };
         })
       ]);
 
       const stats = statsRes.data || {};
       const activities = activityRes.data?.activities || [];
+      const opportunitiesCount = opportunitiesRes.data?.count || 0;
+      const aiSuggestionsCount = aiSuggestionsRes.data?.count || aiSuggestionsRes.data?.suggestions?.length || 0;
+      const automationWorkflows = automationRes.data?.workflows || [];
+      const automationRulesCount = automationWorkflows.length || 0;
 
       // Calcular total de ventas y ganancias desde estadísticas reales
       // El backend devuelve: { products: {...}, sales: {...}, commissions: {...} }
@@ -92,9 +112,9 @@ export default function Dashboard() {
         totalSales,
         totalProfit,
         activeProducts,
-        totalOpportunities: 0, // Se cargará desde opportunities API
-        aiSuggestions: 0, // Se cargará desde AI suggestions API
-        automationRules: 0 // Se cargará desde automation API
+        totalOpportunities: opportunitiesCount, // ✅ B6: Cargado desde API
+        aiSuggestions: aiSuggestionsCount, // ✅ B6: Cargado desde API
+        automationRules: automationRulesCount // ✅ B6: Cargado desde API
       });
 
       // Formatear actividad reciente desde datos reales
@@ -134,7 +154,7 @@ export default function Dashboard() {
 
       setRecentActivity(formattedActivities);
     } catch (error: any) {
-      console.error('Error loading dashboard data:', error);
+      log.error('Error loading dashboard data:', error);
       toast.error('Error al cargar datos del dashboard');
     } finally {
       setLoading(false);

@@ -569,10 +569,10 @@ export class AdvancedMarketplaceScraper {
   /**
    * Scraping REAL de AliExpress con evasión completa
    */
-  async scrapeAliExpress(userId: number, query: string, environment: 'sandbox' | 'production' = 'production'): Promise<ScrapedProduct[]> {
+  async scrapeAliExpress(userId: number, query: string, environment: 'sandbox' | 'production' = 'production', userBaseCurrency?: string): Promise<ScrapedProduct[]> {
     const { logger } = await import('../config/logger');
     
-    logger.info('[SCRAPER] scrapeAliExpress iniciado', { query, userId, environment });
+    logger.info('[SCRAPER] scrapeAliExpress iniciado', { query, userId, environment, userBaseCurrency });
     
     // ✅ Intentar inicializar navegador, pero si falla, retornar array vacío (no lanzar error)
     if (!this.browser) {
@@ -847,6 +847,94 @@ export class AdvancedMarketplaceScraper {
       await new Promise(resolve => setTimeout(resolve, 3000)); // ✅ Aumentar de 2s a 3s
       logger.debug('[SCRAPER] Tiempo de espera adicional completado');
       
+      // ✅ Extraer moneda local de AliExpress desde la página (selector de ubicación/moneda)
+      // Ejemplo: "Concepción/ES/CLP" → moneda local = "CLP"
+      let aliExpressLocalCurrency: string | null = null;
+      try {
+        aliExpressLocalCurrency = await page.evaluate(() => {
+          const w = (globalThis as any).window;
+          const doc = w?.document;
+          if (!doc) return null;
+          
+          // Buscar en el selector de ubicación/moneda (ej: "Concepción/ES/CLP")
+          // AliExpress muestra esto en varios lugares, intentar múltiples selectores
+          const currencySelectors = [
+            '[data-role="currency-switcher"]',
+            '[data-spm="currency"]',
+            '.currency-selector',
+            '[class*="currency"]',
+            '[class*="location"]',
+            '[class*="shipping"]',
+            'span[title*="/"]', // Títulos que contienen "/" (ej: "Concepción/ES/CLP")
+            'div[title*="/"]',
+            'a[title*="/"]',
+            // Buscar en el texto del header/navbar
+            '[class*="header"] [class*="shipping"]',
+            '[class*="nav"] [class*="shipping"]',
+          ];
+          
+          for (const selector of currencySelectors) {
+            const element = doc.querySelector(selector);
+            if (element) {
+              const text = (element.textContent || element.getAttribute('title') || '').trim();
+              // Buscar patrón de moneda (ej: "CLP", "USD", "EUR" después de "/")
+              const match = text.match(/\/([A-Z]{3})\b/);
+              if (match && match[1]) {
+                return match[1].toUpperCase();
+              }
+            }
+          }
+          
+          // Buscar en el texto completo de la página por patrones de moneda conocidos
+          const bodyText = doc.body?.textContent || '';
+          const currencyPatterns = [
+            /\/(CLP|USD|EUR|GBP|MXN|BRL|ARS|COP|PEN)\b/i,
+            /Currency:\s*([A-Z]{3})\b/i,
+            /currency:\s*([A-Z]{3})\b/i,
+            /Moneda:\s*([A-Z]{3})\b/i,
+          ];
+          
+          for (const pattern of currencyPatterns) {
+            const match = bodyText.match(pattern);
+            if (match && match[1]) {
+              return match[1].toUpperCase();
+            }
+          }
+          
+          // Buscar en variables globales de JavaScript (AliExpress puede tener esto)
+          if (w?.__INITIAL_STATE__?.locale?.currency) {
+            return String(w.__INITIAL_STATE__.locale.currency).toUpperCase();
+          }
+          if (w?.__INITIAL_STATE__?.main?.currency) {
+            return String(w.__INITIAL_STATE__.main.currency).toUpperCase();
+          }
+          if (w?.runParams?.locale?.currency) {
+            return String(w.runParams.locale.currency).toUpperCase();
+          }
+          
+          return null;
+        });
+        
+        if (aliExpressLocalCurrency) {
+          logger.info('[SCRAPER] Moneda local de AliExpress detectada', { 
+            localCurrency: aliExpressLocalCurrency,
+            userBaseCurrency: userBaseCurrency || 'USD',
+            query,
+            userId
+          });
+        } else {
+          logger.warn('[SCRAPER] No se pudo detectar moneda local de AliExpress, usando USD como fallback', { query, userId });
+          aliExpressLocalCurrency = 'USD'; // Fallback
+        }
+      } catch (currencyError: any) {
+        logger.warn('[SCRAPER] Error al extraer moneda local de AliExpress', {
+          error: currencyError?.message || String(currencyError),
+          query,
+          userId
+        });
+        aliExpressLocalCurrency = 'USD'; // Fallback
+      }
+      
       // Intentar hacer scroll para activar lazy loading
       try {
         await page.evaluate(() => {
@@ -1004,7 +1092,7 @@ export class AdvancedMarketplaceScraper {
 
       if (apiCapturedItems.length > 0) {
         const normalizedApi = apiCapturedItems
-          .map(item => this.normalizeAliExpressItem(item))
+          .map(item => this.normalizeAliExpressItem(item, aliExpressLocalCurrency || undefined, userBaseCurrency || undefined))
           .filter((item): item is ScrapedProduct => Boolean(item));
         if (normalizedApi.length > 0) {
           console.log(`✅ Extraídos ${normalizedApi.length} productos desde API interna`);
@@ -1012,14 +1100,14 @@ export class AdvancedMarketplaceScraper {
         }
       }
 
-      const niDataProducts = await this.extractProductsFromNiData(page);
+      const niDataProducts = await this.extractProductsFromNiData(page, aliExpressLocalCurrency || undefined, userBaseCurrency || undefined);
       if (niDataProducts.length > 0) {
         console.log(`✅ Extraídos ${niDataProducts.length} productos desde __NI_DATA__`);
         return niDataProducts;
       }
 
       // ✅ Intentar extracción desde scripts con __AER_DATA__ u otros preloads
-      const scriptProducts = await this.extractProductsFromScripts(page);
+      const scriptProducts = await this.extractProductsFromScripts(page, aliExpressLocalCurrency || undefined, userBaseCurrency || undefined);
       if (scriptProducts.length > 0) {
         console.log(`✅ Extraídos ${scriptProducts.length} productos desde scripts embebidos`);
         return scriptProducts;
@@ -1504,6 +1592,8 @@ export class AdvancedMarketplaceScraper {
               raw: dataPrice,
               itemCurrencyHints: [],
               textHints: [dataPrice],
+              sourceCurrency: aliExpressLocalCurrency || undefined, // ✅ Moneda local de AliExpress
+              userBaseCurrency: userBaseCurrency || undefined, // ✅ Moneda base del usuario
             });
             if (resolution.amount > 0 && resolution.amountInBase > 0) {
               resolvedPrice = resolution;
@@ -1516,6 +1606,8 @@ export class AdvancedMarketplaceScraper {
               raw: priceElementText,
               itemCurrencyHints: [],
               textHints: [priceElementText],
+              sourceCurrency: aliExpressLocalCurrency || undefined, // ✅ Moneda local de AliExpress
+              userBaseCurrency: userBaseCurrency || undefined, // ✅ Moneda base del usuario
             });
             if (resolution.amount > 0 && resolution.amountInBase > 0) {
               resolvedPrice = resolution;
@@ -1544,6 +1636,8 @@ export class AdvancedMarketplaceScraper {
                   raw: priceStr,
                   itemCurrencyHints: [],
                   textHints: [fullText, priceElementText || '', dataPrice || ''],
+                  sourceCurrency: aliExpressLocalCurrency || undefined, // ✅ Moneda local de AliExpress
+                  userBaseCurrency: userBaseCurrency || undefined, // ✅ Moneda base del usuario
                 });
                 if (resolution.amount > 0 && resolution.amountInBase > 0) {
                   resolvedPrice = resolution;
@@ -2252,7 +2346,7 @@ export class AdvancedMarketplaceScraper {
     }
   }
 
-  private async extractProductsFromNiData(page: Page): Promise<ScrapedProduct[]> {
+  private async extractProductsFromNiData(page: Page, aliExpressLocalCurrency?: string, userBaseCurrency?: string): Promise<ScrapedProduct[]> {
     try {
       const niData = await page.evaluate(() => {
         const w = (globalThis as any).window;
@@ -2287,7 +2381,7 @@ export class AdvancedMarketplaceScraper {
       if (collected.length === 0) return [];
 
       const normalized = collected
-        .map(item => this.normalizeAliExpressItem(item))
+        .map(item => this.normalizeAliExpressItem(item, aliExpressLocalCurrency, userBaseCurrency))
         .filter((item): item is ScrapedProduct => Boolean(item));
 
       return normalized.slice(0, 40);
@@ -2297,7 +2391,7 @@ export class AdvancedMarketplaceScraper {
     }
   }
 
-  private async extractProductsFromScripts(page: Page): Promise<ScrapedProduct[]> {
+  private async extractProductsFromScripts(page: Page, aliExpressLocalCurrency?: string, userBaseCurrency?: string): Promise<ScrapedProduct[]> {
     try {
       const scripts = await page.evaluate(() => {
         const doc = (globalThis as any).document;
@@ -2354,7 +2448,7 @@ export class AdvancedMarketplaceScraper {
         const productArray = this.findProductArrayDeep(data);
         if (productArray && productArray.length > 0) {
           const normalized = productArray
-            .map(item => this.normalizeAliExpressItem(item))
+            .map(item => this.normalizeAliExpressItem(item, aliExpressLocalCurrency, userBaseCurrency))
             .filter((item): item is ScrapedProduct => Boolean(item));
 
           if (normalized.length > 0) {
@@ -2402,7 +2496,7 @@ export class AdvancedMarketplaceScraper {
     return null;
   }
 
-  private normalizeAliExpressItem(item: any): ScrapedProduct | null {
+  private normalizeAliExpressItem(item: any, aliExpressLocalCurrency?: string, userBaseCurrency?: string): ScrapedProduct | null {
     if (!item || typeof item !== 'object') return null;
 
     const title =
@@ -2483,6 +2577,8 @@ export class AdvancedMarketplaceScraper {
       rawRange: rangeCandidates,
       itemCurrencyHints: currencyHints,
       textHints,
+      sourceCurrency: aliExpressLocalCurrency || undefined, // ✅ Moneda local de AliExpress
+      userBaseCurrency: userBaseCurrency || undefined, // ✅ Moneda base del usuario
     });
 
     let resolvedPrice:
@@ -2513,6 +2609,8 @@ export class AdvancedMarketplaceScraper {
           raw: candidate,
           itemCurrencyHints: currencyHints,
           textHints: hints,
+          sourceCurrency: aliExpressLocalCurrency || undefined, // ✅ Moneda local de AliExpress
+          userBaseCurrency: userBaseCurrency || undefined, // ✅ Moneda base del usuario
         });
         if (resolution.amount > 0 && resolution.amountInBase > 0) {
           resolvedPrice = resolution;

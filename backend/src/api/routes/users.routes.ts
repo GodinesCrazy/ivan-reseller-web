@@ -1,9 +1,9 @@
-// @ts-nocheck
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { userService } from '../../services/user.service';
 import { registerPasswordSchema } from '../../utils/password-validation';
 import { z } from 'zod';
+import { logger } from '../../config/logger';
 
 const router = Router();
 
@@ -44,44 +44,43 @@ router.get('/', authorize('ADMIN'), async (req: Request, res: Response, next: Ne
 // POST /api/users (Admin only) - Create new user
 router.post('/', authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = createUserSchema.parse(req.body);
-    const user = await userService.createUser(data);
+    const validatedData = createUserSchema.parse(req.body);
+    // Asegurar que los campos requeridos estén presentes después de validación
+    if (!validatedData.username || !validatedData.email || !validatedData.password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Campos requeridos faltantes: username, email, password'
+      });
+    }
+    const user = await userService.createUser({
+      username: validatedData.username,
+      email: validatedData.email,
+      password: validatedData.password,
+      fullName: validatedData.fullName,
+      role: validatedData.role,
+      commissionRate: validatedData.commissionRate,
+      fixedMonthlyCost: validatedData.fixedMonthlyCost,
+      isActive: validatedData.isActive
+    });
     res.status(201).json({ 
       success: true, 
       data: user,
       message: 'User created successfully'
     });
-  } catch (error: any) {
-    // Log error for debugging
-    console.error('[Users Route] Error creating user:', error);
-    
-    // If it's a validation error from Zod
-    if (error.name === 'ZodError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.errors
-      });
+  } catch (error) {
+    if (error instanceof Error) {
+      logger.error('[Users Route] Error creating user', { error: error.message, stack: error.stack });
     }
-    
+
     // If it's a Prisma error
-    if (error.code === 'P2002') {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
       return res.status(409).json({
         success: false,
         message: 'User with this email or username already exists'
       });
     }
     
-    // If it's a known error with message
-    if (error.message) {
-      return res.status(400).json({
-        success: false,
-        message: error.message
-      });
-    }
-    
-    // Otherwise, pass to error handler
-    next(error);
+    return next(error);
   }
 });
 

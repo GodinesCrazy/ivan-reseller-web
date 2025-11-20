@@ -622,10 +622,31 @@ export class EbayService {
    */
   async testConnection(): Promise<{ success: boolean; message: string }> {
     try {
+      // ✅ Si no hay token OAuth, no es un error crítico (aún se pueden guardar credenciales)
+      if (!this.accessToken && !this.credentials.token && !this.credentials.authToken) {
+        return { 
+          success: false, 
+          message: 'OAuth token required. Complete OAuth authorization first. This is normal if you just saved credentials.' 
+        };
+      }
+
       await this.getAccountInfo();
       return { success: true, message: 'eBay connection successful' };
     } catch (error: any) {
-      return { success: false, message: error.message };
+      // ✅ Si es "Resource not found", puede ser normal en Sandbox o si la cuenta no tiene seller profile configurado
+      const errorMessage = error.response?.data?.errors?.[0]?.message || error.message || 'Unknown error';
+      
+      if (errorMessage.includes('Resource not found') || errorMessage.includes('not found')) {
+        // En Sandbox, esto puede ser normal - las cuentas de prueba pueden no tener todos los recursos
+        if (this.credentials.sandbox) {
+          return { 
+            success: false, 
+            message: 'Account info not available (common in Sandbox). Credentials saved successfully. Complete OAuth to use eBay API.' 
+          };
+        }
+      }
+      
+      return { success: false, message: errorMessage };
     }
   }
 

@@ -1,5 +1,5 @@
 import { automatedBusinessSystem } from './automated-business.service';
-import notificationService from './notification.service';
+import { notificationService } from './notification.service';
 
 // Runtime patch to add stage controls and one-shot cycle helpers without editing the original class file
 

@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
 import { notificationService } from '../../services/notification.service';
 import { z } from 'zod';
@@ -135,7 +135,7 @@ router.get('/history', async (req: Request, res: Response) => {
  *       500:
  *         description: Server error
  */
-router.post('/send', async (req: Request, res: Response) => {
+router.post('/send', async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Only admins can send custom notifications
     if (req.user!.role !== 'ADMIN') {
@@ -165,18 +165,7 @@ router.post('/send', async (req: Request, res: Response) => {
       message: 'Notification sent successfully'
     });
   } catch (error) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid notification data',
-        details: error.errors
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      error: 'Failed to send notification'
-    });
+    next(error);
   }
 });
 

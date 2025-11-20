@@ -63,6 +63,36 @@ npx prisma generate --silent
 npx prisma db push --accept-data-loss --silent
 npx prisma db seed --silent
 
+# ✅ F4: Verificar/Crear .env para backend
+Write-Host "📝 Verificando configuración backend..." -ForegroundColor Cyan
+if (!(Test-Path ".env")) {
+    Write-Host "   Creando .env para desarrollo..." -ForegroundColor Yellow
+    @"
+NODE_ENV=development
+PORT=3000
+
+# Database
+# IMPORTANTE: Configura tu DATABASE_URL a PostgreSQL
+# Ejemplo LOCAL (si tienes Postgres instalado):
+# DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ivan_reseller?schema=public"
+# Ejemplo RAILWAY (usar la URL pública copiada de Railway):
+# DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/railway?sslmode=require"
+
+# Security (OBLIGATORIAS - usar valores seguros en producción)
+JWT_SECRET=ivan-reseller-super-secure-jwt-secret-key-2025-minimum-32-chars
+ENCRYPTION_KEY=
+JWT_EXPIRES_IN=7d
+
+# URLs - Desarrollo (local)
+FRONTEND_URL=http://localhost:5173
+CORS_ORIGIN=http://localhost:5173
+
+# URLs - Producción (descomentar en producción)
+# FRONTEND_URL=https://ivanreseller.com
+# CORS_ORIGIN=https://ivanreseller.com,https://www.ivanreseller.com
+"@ | Out-File -FilePath ".env" -Encoding UTF8
+}
+
 Write-Host "🚀 Iniciando backend (Puerto 3000)..." -ForegroundColor Green
 # Asegurar que el backend conozca el puente del scraper (SCRAPER_BRIDGE_URL)
 $env:SCRAPER_BRIDGE_URL = "http://127.0.0.1:8077"
@@ -72,6 +102,28 @@ Set-Location ../frontend
 
 Write-Host "📦 Instalando dependencias del frontend..." -ForegroundColor Cyan
 npm install --silent
+
+# ✅ F4: Verificar/Crear .env para frontend
+Write-Host "📝 Verificando configuración frontend..." -ForegroundColor Cyan
+if (!(Test-Path ".env")) {
+    Write-Host "   Creando .env para desarrollo..." -ForegroundColor Yellow
+    @"
+# API URLs - Desarrollo (local)
+VITE_API_URL=http://localhost:3000
+VITE_WS_URL=ws://localhost:3000
+
+# API URLs - Producción (descomentar en producción)
+# VITE_API_URL=https://api.ivanreseller.com
+# VITE_WS_URL=wss://api.ivanreseller.com
+"@ | Out-File -FilePath ".env" -Encoding UTF8
+} else {
+    # Verificar que tenga las variables necesarias
+    $envContent = Get-Content ".env" -Raw
+    if ($envContent -notmatch "VITE_API_URL") {
+        Add-Content ".env" "`nVITE_API_URL=http://localhost:3000"
+        Add-Content ".env" "VITE_WS_URL=ws://localhost:3000"
+    }
+}
 
 Write-Host "🌐 Iniciando frontend (Puerto 5173)..." -ForegroundColor Green
 $frontend = Start-Process -FilePath "npm" -ArgumentList "run", "dev" -PassThru -WindowStyle Hidden

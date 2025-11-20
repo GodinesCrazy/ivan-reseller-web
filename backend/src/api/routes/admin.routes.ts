@@ -4,9 +4,24 @@ import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { prisma } from '../../config/database';
 import { userService } from '../../services/user.service';
 import bcrypt from 'bcryptjs';
+import { logger } from '../../config/logger';
+import { z } from 'zod';
+import { registerPasswordSchema } from '../../utils/password-validation';
 
 const router = express.Router();
 const adminService = new AdminService();
+
+// ✅ API-005: Validation schema para crear usuario (reemplazar validación manual)
+const createUserSchema = z.object({
+  username: z.string().min(3).max(50),
+  email: z.string().email(),
+  password: registerPasswordSchema,
+  fullName: z.string().optional(),
+  role: z.enum(['ADMIN', 'USER']).optional().default('USER'),
+  commissionRate: z.number().min(0).max(1).optional(),
+  fixedMonthlyCost: z.number().min(0).optional(),
+  isActive: z.boolean().optional().default(true),
+});
 
 /**
  * 📋 OBTENER TODOS LOS USUARIOS (Solo Admin)
@@ -61,64 +76,30 @@ router.get('/users/:id/stats', authenticate, authorize('ADMIN'), async (req, res
 router.post('/users', authenticate, authorize('ADMIN'), async (req, res, next) => {
   try {
     const adminId = req.user!.userId;
-    const userData = req.body;
+    
+    // ✅ API-005: Usar Zod en lugar de validación manual
+    const validatedData = createUserSchema.parse(req.body);
 
-    // Validar campos requeridos
-    if (!userData.username || !userData.email || !userData.password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Username, email and password are required',
-        error: 'Missing required fields'
-      });
-    }
+    // ✅ C11: Logging de acción crítica - creación de usuario por admin
+    logger.info('[Admin] Creating new user', {
+      service: 'admin',
+      adminId,
+      newUserUsername: validatedData.username,
+      newUserEmail: validatedData.email,
+      newUserRole: validatedData.role || 'USER',
+      hasFullName: !!validatedData.fullName
+    });
 
-    // Validar formato de email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(userData.email)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid email format',
-        error: 'Email validation failed'
-      });
-    }
-
-    // Validar longitud de password
-    if (userData.password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 6 characters',
-        error: 'Password too short'
-      });
-    }
-
-    // Validar username
-    if (userData.username.length < 3) {
-      return res.status(400).json({
-        success: false,
-        message: 'Username must be at least 3 characters',
-        error: 'Username too short'
-      });
-    }
-
-    // Validar role
-    if (userData.role && !['ADMIN', 'USER'].includes(userData.role)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid role. Must be ADMIN or USER',
-        error: 'Invalid role'
-      });
-    }
-
-    // Normalizar datos
+    // Normalizar datos (los datos ya están validados por Zod)
     const normalizedData = {
-      username: userData.username.trim(),
-      email: userData.email.trim().toLowerCase(),
-      password: userData.password,
-      fullName: userData.fullName?.trim() || undefined,
-      role: (userData.role || 'USER') as 'ADMIN' | 'USER',
-      commissionRate: userData.commissionRate || 0.15,
-      fixedMonthlyCost: userData.fixedMonthlyCost || 17.0,
-      isActive: userData.isActive !== undefined ? userData.isActive : true
+      username: validatedData.username.trim(),
+      email: validatedData.email.trim().toLowerCase(),
+      password: validatedData.password,
+      fullName: validatedData.fullName?.trim() || undefined,
+      role: (validatedData.role || 'USER') as 'ADMIN' | 'USER',
+      commissionRate: validatedData.commissionRate ?? 0.20, // 20% por defecto
+      fixedMonthlyCost: validatedData.fixedMonthlyCost ?? 0.0, // $0 USD por defecto
+      isActive: validatedData.isActive !== undefined ? validatedData.isActive : true
     };
 
     const result = await adminService.createUser(adminId, normalizedData);
@@ -130,7 +111,10 @@ router.post('/users', authenticate, authorize('ADMIN'), async (req, res, next) =
         accessUrl: result.accessUrl
       });
     } catch (emailError) {
-      console.warn('Failed to send user credentials email:', emailError);
+      logger.warn('Failed to send user credentials email', { 
+        error: emailError instanceof Error ? emailError.message : String(emailError),
+        userId: result.user.id
+      });
       // No fallar la creación si el email falla
     }
 
@@ -143,23 +127,31 @@ router.post('/users', authenticate, authorize('ADMIN'), async (req, res, next) =
         emailSent: true
       }
     });
-  } catch (error: any) {
+  } catch (error) {
     // Mejorar mensajes de error
-    if (error.message?.includes('ya existe') || error.message?.includes('already exists')) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('ya existe') || errorMessage.includes('already exists')) {
       return res.status(409).json({
         success: false,
-        message: error.message,
+        message: errorMessage,
         error: 'User already exists'
       });
     }
     
-    if (error.message?.includes('administradores')) {
+    if (errorMessage.includes('administradores')) {
       return res.status(403).json({
         success: false,
-        message: error.message,
+        message: errorMessage,
         error: 'Admin only'
       });
     }
+    
+    // Log error no manejado
+    logger.error('[Admin] Error creating user', { 
+      error: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+      adminId: req.user?.userId
+    });
 
     next(error);
   }

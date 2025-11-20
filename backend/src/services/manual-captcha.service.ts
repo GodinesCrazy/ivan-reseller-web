@@ -224,7 +224,12 @@ export class ManualCaptchaService {
           return true;
         }
       } catch (error: any) {
-        logger.error('Error checking CAPTCHA status with Puppeteer', { error: error.message, token });
+        // ✅ C4: Redactar token en logs
+        logger.error('Error checking CAPTCHA status with Puppeteer', { 
+          error: error.message, 
+          tokenLength: token?.length || 0,
+          hasToken: !!token
+        });
       }
     }
 
@@ -270,10 +275,19 @@ export class ManualCaptchaService {
           category: 'SYSTEM',
         });
 
-        logger.info(`Manual CAPTCHA session completed for user ${dbSession.userId}`, { token });
+        // ✅ C4: Redactar token en logs
+        logger.info(`Manual CAPTCHA session completed for user ${dbSession.userId}`, { 
+          tokenLength: token?.length || 0,
+          hasToken: !!token
+        });
       }
     } catch (error: any) {
-      logger.error('Error completing CAPTCHA session', { error: error.message, token });
+      // ✅ C4: Redactar token en logs
+      logger.error('Error completing CAPTCHA session', { 
+        error: error.message, 
+        tokenLength: token?.length || 0,
+        hasToken: !!token
+      });
     }
   }
 

@@ -1,11 +1,43 @@
 import { Router } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
 import reportsService, { ReportFilters } from '../../services/reports.service';
+import scheduledReportsService from '../../services/scheduled-reports.service';
+import { logger } from '../../config/logger';
+import { z } from 'zod';
 
 const router = Router();
 
 // Apply authentication middleware to all routes
 router.use(authenticate);
+
+/**
+ * ✅ A3: Helper function to validate and set userId filter based on user role
+ * - USER can only access their own data (or no userId = their own)
+ * - ADMIN can access any userId
+ */
+function validateAndSetUserIdFilter(req: any, filters: ReportFilters): void {
+  const userRole = req.user?.role?.toUpperCase();
+  const isAdmin = userRole === 'ADMIN';
+  const currentUserId = req.user?.userId;
+
+  if (req.query.userId) {
+    const requestedUserId = parseInt(req.query.userId as string);
+    
+    // If USER tries to access another user's data, deny access
+    if (!isAdmin && requestedUserId !== currentUserId) {
+      throw new Error('Access denied: You can only access your own reports');
+    }
+    
+    // Set the userId filter
+    filters.userId = requestedUserId;
+  } else {
+    // If no userId provided, USER gets their own data, ADMIN gets all (undefined)
+    if (!isAdmin && currentUserId) {
+      filters.userId = currentUserId;
+    }
+    // ADMIN can leave it undefined to get all users' data
+  }
+}
 
 /**
  * Generate sales report
@@ -16,15 +48,15 @@ router.get('/sales', async (req, res) => {
   try {
     const filters: ReportFilters = {};
     
+    // ✅ A3: Validate and set userId filter (prevents unauthorized access)
+    validateAndSetUserIdFilter(req, filters);
+    
     // Parse query parameters
     if (req.query.startDate) {
       filters.startDate = new Date(req.query.startDate as string);
     }
     if (req.query.endDate) {
       filters.endDate = new Date(req.query.endDate as string);
-    }
-    if (req.query.userId) {
-      filters.userId = parseInt(req.query.userId as string);
     }
     if (req.query.marketplace) {
       filters.marketplace = req.query.marketplace as string;
@@ -48,9 +80,23 @@ router.get('/sales', async (req, res) => {
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${excelFileName}"`);
         
-        // Notify user
+        // Notify user and save to history
         if (req.user?.userId) {
-          await reportsService.notifyReportGeneration(req.user.userId, 'ventas', excelFileName);
+          await reportsService.notifyReportGeneration(req.user.userId, 'sales', excelFileName);
+          await reportsService.saveReportHistory(
+            req.user.userId,
+            'sales',
+            'excel',
+            excelFileName,
+            excelBuffer.length,
+            undefined,
+            filters,
+            {
+              totalSales: salesData.length,
+              totalRevenue: salesData.reduce((sum, sale) => sum + sale.salePrice, 0),
+              totalProfit: salesData.reduce((sum, sale) => sum + sale.profit, 0)
+            }
+          );
         }
         
         return res.send(excelBuffer);
@@ -67,9 +113,23 @@ router.get('/sales', async (req, res) => {
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${pdfFileName}"`);
         
-        // Notify user
+        // Notify user and save to history
         if (req.user?.userId) {
-          await reportsService.notifyReportGeneration(req.user.userId, 'ventas', pdfFileName);
+          await reportsService.notifyReportGeneration(req.user.userId, 'sales', pdfFileName);
+          await reportsService.saveReportHistory(
+            req.user.userId,
+            'sales',
+            'pdf',
+            pdfFileName,
+            pdfBuffer.length,
+            undefined,
+            filters,
+            {
+              totalSales: salesData.length,
+              totalRevenue: salesData.reduce((sum, sale) => sum + sale.salePrice, 0),
+              totalProfit: salesData.reduce((sum, sale) => sum + sale.profit, 0)
+            }
+          );
         }
         
         return res.send(pdfBuffer);
@@ -85,23 +145,44 @@ router.get('/sales', async (req, res) => {
 
       default:
         // JSON format
+        const summary = {
+          totalSales: salesData.length,
+          totalRevenue: salesData.reduce((sum, sale) => sum + sale.salePrice, 0),
+          totalProfit: salesData.reduce((sum, sale) => sum + sale.profit, 0),
+          totalCommissions: salesData.reduce((sum, sale) => sum + sale.commission, 0),
+          averageOrderValue: salesData.length > 0 ? 
+            salesData.reduce((sum, sale) => sum + sale.salePrice, 0) / salesData.length : 0
+        };
+        
+        // Save to history
+        if (req.user?.userId) {
+          const jsonFileName = `ventas_${new Date().toISOString().split('T')[0]}.json`;
+          await reportsService.saveReportHistory(
+            req.user.userId,
+            'sales',
+            'json',
+            jsonFileName,
+            undefined,
+            undefined,
+            filters,
+            summary
+          );
+        }
+        
         res.json({
           success: true,
           data: salesData,
-          summary: {
-            totalSales: salesData.length,
-            totalRevenue: salesData.reduce((sum, sale) => sum + sale.salePrice, 0),
-            totalProfit: salesData.reduce((sum, sale) => sum + sale.profit, 0),
-            totalCommissions: salesData.reduce((sum, sale) => sum + sale.commission, 0),
-            averageOrderValue: salesData.length > 0 ? 
-              salesData.reduce((sum, sale) => sum + sale.salePrice, 0) / salesData.length : 0
-          },
+          summary,
           filters,
           generatedAt: new Date().toISOString()
         });
     }
   } catch (error) {
-    console.error('Error generating sales report:', error);
+    logger.error('Error generating sales report', { 
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      userId: req.user?.userId
+    });
     res.status(500).json({
       success: false,
       error: 'Error al generar el reporte de ventas'
@@ -117,9 +198,9 @@ router.get('/products', async (req, res) => {
   try {
     const filters: ReportFilters = {};
     
-    if (req.query.userId) {
-      filters.userId = parseInt(req.query.userId as string);
-    }
+    // ✅ A3: Validate and set userId filter (prevents unauthorized access)
+    validateAndSetUserIdFilter(req, filters);
+    
     if (req.query.status) {
       filters.status = req.query.status as string;
     }
@@ -184,7 +265,11 @@ router.get('/products', async (req, res) => {
         });
     }
   } catch (error) {
-    console.error('Error generating products report:', error);
+    logger.error('Error generating products report', { 
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      userId: req.user?.userId
+    });
     res.status(500).json({
       success: false,
       error: 'Error al generar el reporte de productos'
@@ -258,7 +343,11 @@ router.get('/users', async (req, res) => {
         });
     }
   } catch (error) {
-    console.error('Error generating users report:', error);
+    logger.error('Error generating users report', { 
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      userId: req.user?.userId
+    });
     res.status(500).json({
       success: false,
       error: 'Error al generar el reporte de usuarios'
@@ -305,7 +394,11 @@ router.get('/marketplace-analytics', async (req, res) => {
         });
     }
   } catch (error) {
-    console.error('Error generating marketplace analytics:', error);
+    logger.error('Error generating marketplace analytics', { 
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      userId: req.user?.userId
+    });
     res.status(500).json({
       success: false,
       error: 'Error al generar analytics de marketplaces'
@@ -374,7 +467,11 @@ router.get('/executive', async (req, res) => {
         });
     }
   } catch (error) {
-    console.error('Error generating executive report:', error);
+    logger.error('Error generating executive report', { 
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      userId: req.user?.userId
+    });
     res.status(500).json({
       success: false,
       error: 'Error al generar el reporte ejecutivo'
@@ -441,10 +538,10 @@ router.get('/types', (req, res) => {
 /**
  * Schedule automatic report generation
  * POST /api/reports/schedule
+ * Body: { reportType, reportFormat, scheduleType, scheduleValue, filters?, recipients? }
  */
 router.post('/schedule', async (req, res) => {
   try {
-    const { reportType, format, filters, schedule, email } = req.body;
     const userId = req.user?.userId;
 
     if (!userId) {
@@ -454,25 +551,40 @@ router.post('/schedule', async (req, res) => {
       });
     }
 
-    // TODO: Implement report scheduling with job system
-    // This would integrate with the job service to schedule recurring reports
+    // Validate request body
+    const schema = z.object({
+      reportType: z.enum(['sales', 'products', 'users', 'marketplace-analytics', 'executive']),
+      reportFormat: z.enum(['json', 'excel', 'pdf', 'html']),
+      scheduleType: z.enum(['daily', 'weekly', 'monthly']),
+      scheduleValue: z.string(),
+      filters: z.any().optional(),
+      recipients: z.array(z.string().email()).optional()
+    });
+
+    const validatedData = schema.parse(req.body);
+
+    // Create scheduled report
+    const scheduledReport = await scheduledReportsService.createScheduledReport({
+      userId,
+      reportType: validatedData.reportType,
+      reportFormat: validatedData.reportFormat,
+      scheduleType: validatedData.scheduleType,
+      scheduleValue: validatedData.scheduleValue,
+      filters: validatedData.filters,
+      recipients: validatedData.recipients
+    });
 
     res.json({
       success: true,
       message: 'Reporte programado exitosamente',
-      scheduledReport: {
-        id: Date.now(), // Temporary ID
-        userId,
-        reportType,
-        format,
-        filters,
-        schedule,
-        email,
-        createdAt: new Date()
-      }
+      data: scheduledReport
     });
   } catch (error) {
-    console.error('Error scheduling report:', error);
+    logger.error('Error scheduling report', { 
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      userId: req.user?.userId
+    });
     res.status(500).json({
       success: false,
       error: 'Error al programar el reporte'
@@ -481,31 +593,171 @@ router.post('/schedule', async (req, res) => {
 });
 
 /**
+ * Get scheduled reports
+ * GET /api/reports/scheduled?isActive=true
+ */
+router.get('/scheduled', async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Usuario no autenticado'
+      });
+    }
+
+    const isActive = req.query.isActive === 'true' ? true : 
+                     req.query.isActive === 'false' ? false : 
+                     undefined;
+
+    const scheduledReports = await scheduledReportsService.getScheduledReports(userId, isActive);
+
+    res.json({
+      success: true,
+      data: scheduledReports
+    });
+  } catch (error) {
+    logger.error('Error getting scheduled reports', { 
+      error: error instanceof Error ? error.message : String(error),
+      userId: req.user?.userId
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener reportes programados'
+    });
+  }
+});
+
+/**
+ * Update scheduled report
+ * PUT /api/reports/scheduled/:id
+ */
+router.put('/scheduled/:id', async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const id = parseInt(req.params.id);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Usuario no autenticado'
+      });
+    }
+
+    const schema = z.object({
+      reportType: z.enum(['sales', 'products', 'users', 'marketplace-analytics', 'executive']).optional(),
+      reportFormat: z.enum(['json', 'excel', 'pdf', 'html']).optional(),
+      scheduleType: z.enum(['daily', 'weekly', 'monthly']).optional(),
+      scheduleValue: z.string().optional(),
+      filters: z.any().optional(),
+      recipients: z.array(z.string().email()).optional(),
+      isActive: z.boolean().optional()
+    });
+
+    const validatedData = schema.parse(req.body);
+
+    const updated = await scheduledReportsService.updateScheduledReport(id, userId, validatedData);
+
+    res.json({
+      success: true,
+      message: 'Reporte programado actualizado exitosamente',
+      data: updated
+    });
+  } catch (error) {
+    logger.error('Error updating scheduled report', { 
+      error: error instanceof Error ? error.message : String(error),
+      id: req.params.id,
+      userId: req.user?.userId
+    });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error && error.message === 'Scheduled report not found' 
+        ? 'Reporte programado no encontrado'
+        : 'Error al actualizar el reporte programado'
+    });
+  }
+});
+
+/**
+ * Delete scheduled report
+ * DELETE /api/reports/scheduled/:id
+ */
+router.delete('/scheduled/:id', async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const id = parseInt(req.params.id);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Usuario no autenticado'
+      });
+    }
+
+    await scheduledReportsService.deleteScheduledReport(id, userId);
+
+    res.json({
+      success: true,
+      message: 'Reporte programado eliminado exitosamente'
+    });
+  } catch (error) {
+    logger.error('Error deleting scheduled report', { 
+      error: error instanceof Error ? error.message : String(error),
+      id: req.params.id,
+      userId: req.user?.userId
+    });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error && error.message === 'Scheduled report not found'
+        ? 'Reporte programado no encontrado'
+        : 'Error al eliminar el reporte programado'
+    });
+  }
+});
+
+/**
  * Get report generation history
- * GET /api/reports/history
+ * GET /api/reports/history?reportType=sales&page=1&limit=10
  */
 router.get('/history', async (req, res) => {
   try {
     const userId = req.user?.userId;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Usuario no autenticado'
+      });
+    }
 
-    // TODO: Implement report history tracking
-    // This would require a reports_history table to track generated reports
+    // Parse query parameters
+    const reportType = req.query.reportType as string | undefined;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = (page - 1) * limit;
+
+    // Get history and count
+    const [history, total] = await Promise.all([
+      reportsService.getReportHistory(userId, reportType, limit, offset),
+      reportsService.getReportHistoryCount(userId, reportType)
+    ]);
 
     res.json({
       success: true,
-      data: [],
+      data: history,
       pagination: {
         page,
         limit,
-        total: 0,
-        pages: 0
-      },
-      message: 'Historial de reportes (pendiente de implementación)'
+        total,
+        pages: Math.ceil(total / limit)
+      }
     });
   } catch (error) {
-    console.error('Error getting report history:', error);
+    logger.error('Error getting report history', { 
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      userId: req.user?.userId
+    });
     res.status(500).json({
       success: false,
       error: 'Error al obtener el historial de reportes'

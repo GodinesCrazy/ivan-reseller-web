@@ -470,8 +470,8 @@ Password: admin123
 Venta: $100
 Costo: $60
 Ganancia bruta: $40
-Comisión (10%): $4
-Ganancia neta usuario: $36
+Comisión admin (20%): $8  // ✅ D10: Corregido según cálculo real del sistema
+Ganancia neta usuario: $32  // ✅ $40 - $8 = $32
 ```
 
 ---
@@ -956,6 +956,109 @@ Ganancia neta usuario: $36
 
 <a name="troubleshooting"></a>
 # 5️⃣ SOLUCIÓN DE PROBLEMAS
+
+## ⚠️ Limitaciones Conocidas
+
+> **✅ D9: Sección de limitaciones conocidas agregada al manual**
+
+Esta sección documenta limitaciones y funcionalidades parcialmente implementadas del sistema. Estas limitaciones no impiden el uso normal del sistema, pero es importante conocerlas para evitar confusiones.
+
+### 📋 Limitaciones Generales
+
+**1. Registro Público Deshabilitado**
+- ❌ El registro público de usuarios está **deshabilitado** por diseño
+- ✅ Solo los administradores pueden crear nuevos usuarios
+- ✅ **Solución:** Contacta al administrador para crear tu cuenta
+
+**2. Amazon SP-API - Implementación Parcial**
+- ⚠️ Amazon SP-API está implementado al **70%**
+- ✅ Funcionalidades básicas funcionan
+- ⚠️ Algunas funcionalidades avanzadas pueden no estar disponibles
+- ✅ **Workaround:** Usar eBay o MercadoLibre para operaciones completas
+
+**3. Generación de Reportes PDF**
+- ⚠️ La generación de reportes en formato **PDF es un placeholder**
+- ✅ Exportación a Excel (`.xlsx`) funciona correctamente
+- ✅ Exportación a JSON funciona correctamente
+- ✅ Exportación a HTML funciona correctamente
+- ⚠️ **PDF:** Actualmente solo genera HTML, no PDF real
+- ✅ **Solución:** Usar Excel para reportes detallados
+
+**4. Autopilot Workflows**
+- ⚠️ El sistema de **workflows del Autopilot** tiene placeholders
+- ✅ El Autopilot básico funciona correctamente
+- ✅ Búsqueda automática y publicación funcionan
+- ⚠️ Workflows avanzados (endpoints `/api/autopilot/workflows`) están en desarrollo
+- ✅ **Solución:** Usar configuración básica del Autopilot que está completamente funcional
+
+**5. Programación de Reportes**
+- ⚠️ La **programación automática de reportes** está marcada como TODO
+- ✅ Generación manual de reportes funciona correctamente
+- ✅ Exportación de reportes funciona correctamente
+- ⚠️ **Programación:** No se puede programar reportes automáticos aún
+- ✅ **Solución:** Generar reportes manualmente cuando necesites
+
+**6. Historial de Reportes**
+- ⚠️ El **historial de reportes generados** tiene placeholder
+- ✅ Generación de reportes funciona correctamente
+- ⚠️ No se guarda historial de reportes previos en base de datos
+- ✅ **Solución:** Guarda manualmente los reportes exportados
+
+**7. Socket.io Notificaciones**
+- ✅ Sistema de notificaciones en tiempo real **implementado y funcionando**
+- ✅ Notificaciones por email funcionan
+- ✅ Notificaciones por SMS funcionan
+- ✅ Notificaciones por Slack/Discord funcionan
+- ⚠️ **Nota:** Si las notificaciones no funcionan, verifica configuración de credenciales
+
+### 🔧 Limitaciones Técnicas
+
+**1. Código con `@ts-nocheck`**
+- ⚠️ Algunos archivos tienen `@ts-nocheck` (13 archivos identificados)
+- ✅ Esto no afecta la funcionalidad
+- ⚠️ **Impacto:** Puede haber menos validación de tipos TypeScript
+- ✅ **Estado:** Mejora gradual programada
+
+**2. Endpoints Deprecados**
+- ⚠️ Algunos endpoints antiguos están deprecados pero aún disponibles
+- ✅ `/api/settings/apis/:apiId` retorna HTTP 410 con mensaje de migración
+- ✅ **Nuevo endpoint:** `/api/credentials` (usar este)
+- ✅ **Estado:** Retrocompatibilidad mantenida durante migración
+
+**3. Archivos Legacy**
+- ⚠️ Algunos archivos antiguos existen pero no se usan:
+  - `backend/src/routes/settings.routes.old.ts` (deprecado)
+- ✅ No afectan el funcionamiento del sistema
+- ✅ **Estado:** Se eliminarán en versión futura
+
+### 📊 Limitaciones de APIs
+
+**1. Límites de Rate Limiting**
+- ✅ Rate limiting está configurado para proteger las APIs
+- ⚠️ Si excedes los límites, las peticiones se rechazan temporalmente
+- ✅ **Solución:** Espera unos minutos o contacta al administrador
+
+**2. APIs Requieren Credenciales Propias**
+- ✅ Cada usuario debe configurar sus propias credenciales de marketplace
+- ⚠️ No hay credenciales compartidas para eBay, Amazon, MercadoLibre
+- ✅ **Razón:** Políticas de los marketplaces requieren credenciales individuales
+- ✅ **Solución:** Cada usuario configura sus propias APIs en Settings
+
+### 🎯 Workarounds y Soluciones
+
+**Para limitaciones críticas:**
+1. ✅ **Registro:** Contacta al administrador
+2. ✅ **Amazon:** Usa eBay o MercadoLibre como alternativa
+3. ✅ **PDF:** Usa Excel para reportes detallados
+4. ✅ **Workflows:** Usa configuración básica del Autopilot
+5. ✅ **Reportes programados:** Genera reportes manualmente
+
+**Para limitaciones técnicas:**
+1. ✅ **Endpoints deprecados:** Usa nuevos endpoints (`/api/credentials`)
+2. ✅ **Rate limiting:** Respeta los límites o espera
+3. ✅ **APIs:** Configura tus propias credenciales
+
+---
 
 ## 🚨 Errores Comunes
 

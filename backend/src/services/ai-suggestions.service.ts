@@ -414,8 +414,12 @@ export class AISuggestionsService {
       userRecentOpportunities,
       userOperations
     ] = await Promise.all([
+      // ✅ A1-A2: Filtrar por userId para prevenir data leakage
       prisma.opportunity.findMany({
-        where: { createdAt: { gte: currentStart } },
+        where: { 
+          userId, // ✅ Solo oportunidades del usuario actual
+          createdAt: { gte: currentStart } 
+        },
         select: {
           title: true,
           costUsd: true,
@@ -430,8 +434,10 @@ export class AISuggestionsService {
         orderBy: { createdAt: 'desc' },
         take: 300,
       }),
+      // ✅ A1-A2: Filtrar por userId para prevenir data leakage
       prisma.opportunity.findMany({
         where: {
+          userId, // ✅ Solo oportunidades del usuario actual
           createdAt: {
             gte: previousStart,
             lt: currentStart,

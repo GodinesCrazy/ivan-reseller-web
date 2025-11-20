@@ -96,19 +96,7 @@ router.post('/publish', marketplaceRateLimit, async (req: Request, res: Response
       });
     }
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.errors,
-      });
-    }
-    
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: error.message,
-    });
+    next(error);
   }
 });
 
@@ -136,19 +124,7 @@ router.post('/publish-multiple', async (req: Request, res: Response) => {
       data: results,
     });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.errors,
-      });
-    }
-    
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: error.message,
-    });
+    next(error);
   }
 });
 
@@ -162,10 +138,7 @@ router.post('/credentials', async (req: Request, res: Response) => {
     await marketplaceService.saveCredentials(req.user!.userId, data.marketplace, data.credentials);
     res.json({ success: true, message: 'Credentials saved' });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ success: false, message: 'Validation error', errors: error.errors });
-    }
-    res.status(500).json({ success: false, message: 'Failed to save credentials', error: error.message });
+    next(error);
   }
 });
 
@@ -215,19 +188,7 @@ router.post('/credentials', async (req: Request, res: Response) => {
       message: 'Credentials saved successfully',
     });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.errors,
-      });
-    }
-    
-    res.status(500).json({
-      success: false,
-      message: 'Failed to save credentials',
-      error: error.message,
-    });
+    next(error);
   }
 });
 
@@ -334,19 +295,7 @@ router.post('/sync-inventory', async (req: Request, res: Response) => {
       message: 'Inventory synced successfully',
     });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.errors,
-      });
-    }
-    
-    res.status(500).json({
-      success: false,
-      message: 'Failed to sync inventory',
-      error: error.message,
-    });
+    next(error);
   }
 });
 

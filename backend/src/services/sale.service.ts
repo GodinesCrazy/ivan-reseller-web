@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 import logger from '../config/logger';
@@ -287,7 +286,13 @@ export class SaleService {
     });
   }
 
-  async getSaleById(id: string) {
+  /**
+   * Get sale by ID with optional ownership validation
+   * @param id - Sale ID
+   * @param userId - Optional user ID to validate ownership (if provided, non-admin users can only see their own sales)
+   * @param isAdmin - Whether the requesting user is an admin (admins can see all sales)
+   */
+  async getSaleById(id: number, userId?: number, isAdmin: boolean = false) {
     const sale = await prisma.sale.findUnique({
       where: { id },
       include: {
@@ -307,11 +312,17 @@ export class SaleService {
       throw new AppError('Venta no encontrada', 404);
     }
 
+    // ✅ C2: Validar ownership - usuarios no-admin solo pueden ver sus propias ventas
+    if (userId && !isAdmin && sale.userId !== userId) {
+      throw new AppError('No tienes permiso para ver esta venta', 403);
+    }
+
     return sale;
   }
 
-  async updateSaleStatus(id: string, status: string) {
-    const sale = await this.getSaleById(id);
+  async updateSaleStatus(id: number, status: string, userId?: number, isAdmin: boolean = false) {
+    // ✅ C2: Pasar userId e isAdmin para validar ownership
+    const sale = await this.getSaleById(id, userId, isAdmin);
 
     const updateData: any = { status };
 
@@ -319,7 +330,7 @@ export class SaleService {
     if (status === 'DELIVERED' && !sale.isCompleteCycle) {
       const { successfulOperationService } = await import('./successful-operation.service');
       
-      if (await successfulOperationService.canMarkAsSuccessful(parseInt(id))) {
+      if (await successfulOperationService.canMarkAsSuccessful(id)) {
         // Marcar como ciclo completo (sin devoluciones ni problemas por defecto)
         updateData.isCompleteCycle = true;
         updateData.completedAt = new Date();
@@ -329,7 +340,7 @@ export class SaleService {
           const operation = await successfulOperationService.markAsSuccessful({
             userId: sale.userId,
             productId: sale.productId,
-            saleId: parseInt(id),
+            saleId: id,
             startDate: sale.createdAt,
             completionDate: new Date(),
             totalProfit: sale.netProfit,

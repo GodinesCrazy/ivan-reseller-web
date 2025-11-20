@@ -147,7 +147,11 @@ class OpportunityFinderService {
     // PRIORIDAD 1: Scraping nativo local (Puppeteer) - más rápido y sin dependencias externas
     const scraper = new AdvancedMarketplaceScraper();
     let scraperInitialized = false;
-    const baseCurrency = fxService.getBase();
+    
+    // ✅ Obtener moneda base del usuario desde Settings
+    const userSettingsService = (await import('./user-settings.service')).default;
+    const baseCurrency = await userSettingsService.getUserBaseCurrency(userId);
+    logger.info('[OPPORTUNITY-FINDER] Using user base currency', { userId, baseCurrency });
 
     try {
       logger.info('[OPPORTUNITY-FINDER] Starting search', { query, userId, environment });
@@ -169,9 +173,9 @@ class OpportunityFinderService {
         }
       }
       
-      logger.debug('[OPPORTUNITY-FINDER] Calling scrapeAliExpress', { query, userId, environment });
+      logger.debug('[OPPORTUNITY-FINDER] Calling scrapeAliExpress', { query, userId, environment, baseCurrency });
       const scrapeStartTime = Date.now();
-      const items = await scraper.scrapeAliExpress(userId, query, environment);
+      const items = await scraper.scrapeAliExpress(userId, query, environment, baseCurrency);
       const scrapeDuration = Date.now() - scrapeStartTime;
       logger.info('[OPPORTUNITY-FINDER] scrapeAliExpress completed', { 
         count: items?.length || 0,
@@ -202,40 +206,10 @@ class OpportunityFinderService {
           let priceInBase = basePriceCandidates.length > 0 ? basePriceCandidates[0] : 0;
           let detectedCurrency = rangeCurrency;
 
-          // ✅ VALIDACIÓN: Si priceInBase es muy alto (>1000) y es casi igual a sourcePrice,
-          // es probable que ambos sean CLP y no se convirtió correctamente
-          // Ejemplos: priceInBase=2560, sourcePrice=2560 → deberían ser 2560 CLP (~$2.7 USD)
-          //           priceInBase=58400, sourcePrice=58400 → deberían ser 58400 CLP (~$61 USD)
-          if (priceInBase > 1000 && sourcePrice > 0) {
-            const priceDiff = Math.abs(priceInBase - sourcePrice);
-            const priceSimilarity = priceDiff / Math.max(priceInBase, sourcePrice);
-            
-            // Si los precios son muy similares (<10% diferencia) y ambos son altos,
-            // probablemente ambos son CLP sin convertir
-            if (priceSimilarity < 0.1) {
-              // Intentar convertir como CLP
-              const convertedFromCLP = fxService.convert(sourcePrice, 'CLP', baseCurrency);
-              
-              // Si la conversión da un valor razonable (<1000 USD) y es menor que el precio actual,
-              // entonces eran CLP
-              if (convertedFromCLP > 0 && convertedFromCLP < 1000 && convertedFromCLP < priceInBase) {
-                logger.warn('[OPPORTUNITY-FINDER] Detected CLP misdetected as USD, correcting conversion', {
-                  originalPriceInBase: priceInBase,
-                  originalSourcePrice: sourcePrice,
-                  originalCurrency: rangeCurrency,
-                  suspectedCLP: sourcePrice,
-                  correctedPriceInBase: convertedFromCLP,
-                  correctedCurrency: 'CLP',
-                  title: p.title?.substring(0, 50)
-                });
-                
-                // Actualizar valores corregidos
-                priceInBase = convertedFromCLP;
-                detectedCurrency = 'CLP';
-                // sourcePrice ya es correcto (es el valor en CLP)
-              }
-            }
-          }
+          // ✅ NOTA: La conversión ahora se hace correctamente en el scraper usando:
+          // 1. Moneda local de AliExpress (extraída de la página)
+          // 2. Moneda base del usuario (desde Settings)
+          // Ya no necesitamos esta validación de reconversión porque la conversión inicial es correcta
 
           if (priceInBase <= 0 && sourcePrice > 0) {
             priceInBase = fxService.convert(sourcePrice, detectedCurrency, baseCurrency);

@@ -551,21 +551,56 @@ class ReportsService {
   }
 
   /**
-   * Generate PDF report (HTML to PDF conversion)
+   * Generate PDF report (HTML to PDF conversion using Puppeteer)
    */
   async generatePDFReport(htmlContent: string): Promise<Buffer> {
     try {
-      // For now, we'll use a simple HTML to PDF approach
-      // In production, you might want to use Puppeteer or similar
-      
-      // This is a placeholder - in a real implementation,
-      // you would use Puppeteer to convert HTML to PDF
-      const htmlToPdfBuffer = Buffer.from(htmlContent, 'utf-8');
-      
-      return htmlToPdfBuffer;
+      const puppeteer = await import('puppeteer');
+      const { logger } = await import('../config/logger');
+
+      // Launch browser (headless mode)
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--disable-gpu'
+        ]
+      });
+
+      try {
+        const page = await browser.newPage();
+
+        // Set content and wait for rendering
+        await page.setContent(htmlContent, {
+          waitUntil: 'networkidle0'
+        });
+
+        // Generate PDF with options
+        const pdfBuffer = await page.pdf({
+          format: 'A4',
+          printBackground: true,
+          margin: {
+            top: '20mm',
+            right: '15mm',
+            bottom: '20mm',
+            left: '15mm'
+          },
+          preferCSSPageSize: false
+        });
+
+        return Buffer.from(pdfBuffer);
+      } finally {
+        await browser.close();
+      }
     } catch (error) {
       const { logger } = await import('../config/logger');
-      logger.error('Error generating PDF', { error });
+      logger.error('Error generating PDF', { 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       throw new Error('Failed to generate PDF');
     }
   }
@@ -1005,6 +1040,121 @@ class ReportsService {
         }
       ]
     });
+  }
+
+  /**
+   * Save report to history
+   */
+  async saveReportHistory(
+    userId: number,
+    reportType: string,
+    reportFormat: string,
+    fileName: string,
+    fileSize?: number,
+    filePath?: string,
+    filters?: ReportFilters,
+    summary?: any,
+    status: string = 'completed',
+    error?: string
+  ): Promise<void> {
+    try {
+      await prisma.reportHistory.create({
+        data: {
+          userId,
+          reportType,
+          reportFormat,
+          fileName,
+          fileSize,
+          filePath,
+          filters: filters ? JSON.stringify(filters) : null,
+          summary: summary ? JSON.stringify(summary) : null,
+          status,
+          error
+        }
+      });
+    } catch (error) {
+      const { logger } = await import('../config/logger');
+      logger.error('Error saving report history', { 
+        error: error instanceof Error ? error.message : String(error),
+        userId,
+        reportType
+      });
+      // Don't throw error - history is not critical for report generation
+    }
+  }
+
+  /**
+   * Get report history for a user
+   */
+  async getReportHistory(
+    userId: number,
+    reportType?: string,
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<any[]> {
+    try {
+      const where: any = { userId };
+      if (reportType) {
+        where.reportType = reportType;
+      }
+
+      const history = await prisma.reportHistory.findMany({
+        where,
+        orderBy: {
+          generatedAt: 'desc'
+        },
+        take: limit,
+        skip: offset,
+        select: {
+          id: true,
+          reportType: true,
+          reportFormat: true,
+          fileName: true,
+          fileSize: true,
+          filePath: true,
+          filters: true,
+          summary: true,
+          status: true,
+          error: true,
+          generatedAt: true,
+          createdAt: true
+        }
+      });
+
+      return history.map(item => ({
+        ...item,
+        filters: item.filters ? JSON.parse(item.filters) : null,
+        summary: item.summary ? JSON.parse(item.summary) : null
+      }));
+    } catch (error) {
+      const { logger } = await import('../config/logger');
+      logger.error('Error getting report history', { 
+        error: error instanceof Error ? error.message : String(error),
+        userId
+      });
+      throw new Error('Failed to get report history');
+    }
+  }
+
+  /**
+   * Get report history count for a user
+   */
+  async getReportHistoryCount(userId: number, reportType?: string): Promise<number> {
+    try {
+      const where: any = { userId };
+      if (reportType) {
+        where.reportType = reportType;
+      }
+
+      return await prisma.reportHistory.count({ where });
+    } catch (error) {
+      const { logger } = await import('../config/logger');
+      logger.error('Error getting report history count', { 
+        error: error instanceof Error ? error.message : String(error),
+        userId
+      });
+      throw new Error('Failed to get report history count');
+    }
   }
 }
 

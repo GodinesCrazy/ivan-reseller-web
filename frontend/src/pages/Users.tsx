@@ -27,6 +27,7 @@ import {
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useAuthStore } from '@stores/authStore';
+import { log } from '@/utils/logger';
 
 interface User {
   id: number;
@@ -156,7 +157,7 @@ export default function Users() {
         }
 
         // Si no hay usuario en el store, validar token con timeout
-        console.log('Verificando autenticación y rol de usuario...');
+        log.info('Verificando autenticación y rol de usuario...');
         
         const timeoutPromise = new Promise<boolean>((_, reject) => {
           timeoutId = setTimeout(() => {
@@ -187,7 +188,7 @@ export default function Users() {
         if (!isMounted) return;
         
         if (!updatedUser) {
-          console.error('User information not available after checkAuth');
+          log.error('User information not available after checkAuth');
           toast.error('User information not available');
           navigate('/dashboard');
           return;
@@ -197,7 +198,7 @@ export default function Users() {
         const userRole = updatedUser.role?.toUpperCase();
         
         if (!userRole || userRole !== 'ADMIN') {
-          console.warn('Access denied - User role:', userRole, 'Expected: ADMIN');
+          log.warn('Access denied - User role:', userRole, 'Expected: ADMIN');
           toast.error('Access denied. Admin only.');
           setTimeout(() => {
             if (isMounted) {
@@ -215,7 +216,7 @@ export default function Users() {
         if (timeoutId) {
           clearTimeout(timeoutId);
         }
-        console.warn('Error o timeout verificando autenticación:', error);
+        log.warn('Error o timeout verificando autenticación:', error);
         
         // Si hay error, verificar si hay usuario en el store de todas formas
         const fallbackUser = useAuthStore.getState().user;
@@ -328,7 +329,7 @@ export default function Users() {
       
       setShowDetailsModal(true);
     } catch (error: any) {
-      console.error('Error loading user profile:', error);
+      log.error('Error loading user profile:', error);
       toast.error('Error loading user details: ' + (error.response?.data?.message || error.message));
     }
   };
@@ -423,11 +424,11 @@ export default function Users() {
         isActive: formData.isActive !== undefined ? formData.isActive : true
       };
 
-      console.log('Creating user with data:', { ...backendData, password: '***' });
+      log.debug('Creating user with data', { ...backendData, password: '***' });
 
       const response = await api.post('/api/users', backendData);
       
-      console.log('User created successfully:', response.data);
+      log.info('User created successfully', response.data);
       
       toast.success('User created successfully');
       setShowNewUserModal(false);
@@ -446,8 +447,7 @@ export default function Users() {
       
       loadUsers();
     } catch (error: any) {
-      console.error('Error creating user:', error);
-      console.error('Error response:', error.response?.data);
+      log.error('Error creating user', { error, response: error.response?.data });
       
       // Mostrar error detallado
       const errorMessage = error.response?.data?.message || 

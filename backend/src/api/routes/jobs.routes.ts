@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
 import { jobService, ScrapingJobData, PublishingJobData, PayoutJobData, publishingQueue } from '../../services/job.service';
 import { z } from 'zod';
@@ -34,7 +34,7 @@ const payoutJobSchema = z.object({
  * POST /api/jobs/scraping
  * Add scraping job to queue
  */
-router.post('/scraping', async (req: Request, res: Response) => {
+router.post('/scraping', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = scrapingJobSchema.parse(req.body);
     
@@ -55,19 +55,7 @@ router.post('/scraping', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.errors,
-      });
-    }
-    
-    res.status(500).json({
-      success: false,
-      message: 'Failed to add scraping job',
-      error: error.message,
-    });
+    next(error);
   }
 });
 
@@ -75,7 +63,7 @@ router.post('/scraping', async (req: Request, res: Response) => {
  * POST /api/jobs/publishing
  * Add publishing job to queue
  */
-router.post('/publishing', async (req: Request, res: Response) => {
+router.post('/publishing', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = publishingJobSchema.parse(req.body);
     
@@ -98,19 +86,7 @@ router.post('/publishing', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.errors,
-      });
-    }
-    
-    res.status(500).json({
-      success: false,
-      message: 'Failed to add publishing job',
-      error: error.message,
-    });
+    next(error);
   }
 });
 
@@ -118,7 +94,7 @@ router.post('/publishing', async (req: Request, res: Response) => {
  * POST /api/jobs/payout
  * Add payout job to queue (admin only)
  */
-router.post('/payout', async (req: Request, res: Response) => {
+router.post('/payout', async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Check if user is admin
     if (req.user!.role !== 'ADMIN') {
@@ -146,19 +122,7 @@ router.post('/payout', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.errors,
-      });
-    }
-    
-    res.status(500).json({
-      success: false,
-      message: 'Failed to add payout job',
-      error: error.message,
-    });
+    next(error);
   }
 });
 

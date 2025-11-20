@@ -341,10 +341,12 @@ router.post('/', async (req: Request, res: Response, next) => {
     }
 
     // Validar credenciales antes de guardar (health check inmediato)
+    // ✅ NO validar inmediatamente si es eBay y no hay token OAuth (normal después de guardar credenciales base)
     let validationResult: { success: boolean; message?: string } | null = null;
     const shouldValidate = ['ebay', 'amazon', 'mercadolibre'].includes(apiName.toLowerCase());
+    const isEbayWithoutToken = apiName.toLowerCase() === 'ebay' && !credentials.token && !credentials.authToken;
     
-    if (shouldValidate && validation.valid) {
+    if (shouldValidate && validation.valid && !isEbayWithoutToken) {
       try {
         const { MarketplaceService } = await import('../../services/marketplace.service');
         const marketplaceService = new MarketplaceService();
@@ -363,10 +365,18 @@ router.post('/', async (req: Request, res: Response, next) => {
         
         if (!testResult.success) {
           // Credentials are invalid, but still save them (user might fix later)
-          logger.warn(`Credentials validation failed for ${apiName}`, {
-            userId: ownerUserId,
-            error: testResult.message,
-          });
+          // ✅ Para eBay sin token, esto es esperado - no es un error real
+          if (isEbayWithoutToken || testResult.message?.includes('OAuth token required')) {
+            logger.info(`eBay credentials saved (OAuth pending). This is expected.`, {
+              userId: ownerUserId,
+              message: testResult.message,
+            });
+          } else {
+            logger.warn(`Credentials validation failed for ${apiName}`, {
+              userId: ownerUserId,
+              error: testResult.message,
+            });
+          }
         }
       } catch (error: any) {
         logger.warn(`Error validating credentials for ${apiName}`, {
@@ -375,6 +385,11 @@ router.post('/', async (req: Request, res: Response, next) => {
         });
         // Continue saving even if validation fails (might be temporary issue)
       }
+    } else if (isEbayWithoutToken) {
+      // ✅ eBay sin token OAuth: normal después de guardar credenciales base
+      logger.info(`eBay base credentials saved. Complete OAuth authorization to use the API.`, {
+        userId: ownerUserId,
+      });
     }
 
     // Guardar credenciales usando CredentialsManager
@@ -492,13 +507,6 @@ router.post('/', async (req: Request, res: Response, next) => {
       }
     });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Invalid credentials format', 
-        details: error.errors 
-      });
-    }
     next(error);
   }
 });

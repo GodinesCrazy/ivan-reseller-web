@@ -429,4 +429,89 @@ router.all('/apis/:apiId', authenticate, (req, res) => {
   });
 });
 
+/**
+ * GET /api/settings
+ * Obtener settings del usuario actual
+ */
+router.get('/', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const userSettingsService = (await import('../services/user-settings.service')).default;
+    const settings = await userSettingsService.getUserSettings(userId);
+
+    res.json({
+      success: true,
+      data: {
+        language: settings.language,
+        timezone: settings.timezone,
+        dateFormat: settings.dateFormat,
+        currencyFormat: settings.currencyFormat,
+        theme: settings.theme
+      }
+    });
+  } catch (error: any) {
+    const { logger } = await import('../config/logger');
+    logger.error('Error getting user settings', {
+      error: error?.message || String(error),
+      userId: req.user?.userId
+    });
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener configuración',
+      error: error?.message || 'Unknown error'
+    });
+  }
+});
+
+/**
+ * POST /api/settings
+ * Actualizar settings del usuario actual
+ */
+router.post('/', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const userSettingsService = (await import('../services/user-settings.service')).default;
+    const { language, timezone, dateFormat, currencyFormat, theme } = req.body;
+
+    // Validar que al menos un campo esté presente
+    if (!language && !timezone && !dateFormat && !currencyFormat && !theme) {
+      return res.status(400).json({
+        success: false,
+        message: 'Al menos un campo debe estar presente para actualizar'
+      });
+    }
+
+    const settings = await userSettingsService.updateUserSettings(userId, {
+      language,
+      timezone,
+      dateFormat,
+      currencyFormat,
+      theme
+    });
+
+    res.json({
+      success: true,
+      message: 'Configuración actualizada correctamente',
+      data: {
+        language: settings.language,
+        timezone: settings.timezone,
+        dateFormat: settings.dateFormat,
+        currencyFormat: settings.currencyFormat,
+        theme: settings.theme
+      }
+    });
+  } catch (error: any) {
+    const { logger } = await import('../config/logger');
+    logger.error('Error updating user settings', {
+      error: error?.message || String(error),
+      userId: req.user?.userId
+    });
+    res.status(500).json({
+      success: false,
+      message: error?.message || 'Error al actualizar configuración',
+      error: error?.message || 'Unknown error'
+    });
+  }
+});
+
 export default router;
