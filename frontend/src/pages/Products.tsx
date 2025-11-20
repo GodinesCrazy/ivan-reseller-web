@@ -398,12 +398,37 @@ export default function Products() {
               </button>
             </div>
             <div className="p-6 space-y-4">
-              {selectedProduct.imageUrl && (
-                <img 
-                  src={selectedProduct.imageUrl} 
-                  alt={selectedProduct.title}
-                  className="w-full h-64 object-cover rounded-lg"
-                />
+              {/* ✅ Imagen del producto en el modal de detalles */}
+              {selectedProduct.imageUrl ? (
+                <div className="flex justify-center">
+                  <img 
+                    src={selectedProduct.imageUrl} 
+                    alt={selectedProduct.title}
+                    className="w-full max-w-md h-64 object-cover rounded-lg shadow-md"
+                    onError={(e) => {
+                      // Si la imagen falla, mostrar placeholder
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const placeholder = target.nextElementSibling as HTMLElement;
+                      if (placeholder) placeholder.style.display = 'flex';
+                    }}
+                  />
+                  <div className="w-full max-w-md h-64 bg-gray-200 rounded-lg flex items-center justify-center hidden">
+                    <div className="text-center">
+                      <Package className="w-16 h-16 text-gray-400 mx-auto mb-2" />
+                      <p className="text-gray-500 text-sm">Imagen no disponible</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-center">
+                  <div className="w-full max-w-md h-64 bg-gray-200 rounded-lg flex items-center justify-center">
+                    <div className="text-center">
+                      <Package className="w-16 h-16 text-gray-400 mx-auto mb-2" />
+                      <p className="text-gray-500 text-sm">Sin imagen</p>
+                    </div>
+                  </div>
+                </div>
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
