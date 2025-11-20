@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
 import { autopilotSystem } from '../../services/autopilot.service';
 import { workflowConfigService } from '../../services/workflow-config.service';
@@ -96,9 +95,8 @@ router.post('/start', async (req: Request, res: Response, next) => {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
 
-    // TODO: Pasar userId al método start() cuando esté disponible
-    // Por ahora usar método existente
-    await autopilotSystem.start();
+    // ✅ Pasar userId al método start() (ahora es obligatorio)
+    await autopilotSystem.start(userId);
     
     res.json({
       success: true,
@@ -123,7 +121,8 @@ router.post('/stop', async (req: Request, res: Response, next) => {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
 
-    autopilotSystem.stop();
+    // ✅ Pasar userId para validación (opcional pero recomendado)
+    autopilotSystem.stop(userId);
     
     res.json({
       success: true,

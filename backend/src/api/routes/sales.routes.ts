@@ -82,7 +82,12 @@ router.get('/stats', async (req: Request, res: Response, next) => {
 // GET /api/sales/:id - Obtener por ID
 router.get('/:id', async (req: Request, res: Response, next) => {
   try {
-    const sale = await saleService.getSaleById(req.params.id);
+    // ✅ C2: Validar ownership - pasar userId y isAdmin
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = req.user?.userId;
+    
+    const sale = await saleService.getSaleById(Number(req.params.id), userId, isAdmin);
     res.json(sale);
   } catch (error) {
     next(error);
@@ -108,9 +113,6 @@ router.post('/', async (req: Request, res: Response, next) => {
     const sale = await saleService.createSale(req.user!.userId, data);
     res.status(201).json(sale);
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ error: 'Datos inválidos', details: error.errors });
-    }
     next(error);
   }
 });
@@ -122,7 +124,8 @@ router.patch('/:id/status', authorize('ADMIN'), async (req: Request, res: Respon
     if (!['PENDING', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED', 'REFUNDED'].includes(status)) {
       return res.status(400).json({ error: 'Estado inválido' });
     }
-    const sale = await saleService.updateSaleStatus(String(req.params.id), status as 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'COMPLETED' | 'RETURNED');
+    // ✅ C2: Admin puede actualizar cualquier venta
+    const sale = await saleService.updateSaleStatus(Number(req.params.id), status as 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'COMPLETED' | 'RETURNED', req.user!.userId, true);
     res.json(sale);
   } catch (error) {
     next(error);

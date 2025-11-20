@@ -51,6 +51,9 @@ model User {
   passwordResetTokens     PasswordResetToken[]
   apiStatusHistory        APIStatusHistory[]
   apiStatusSnapshots      APIStatusSnapshot[]
+  reportHistory           ReportHistory[]
+  scheduledReports        ScheduledReport[]
+  userSettings            UserSettings?
 
   @@index([email])
   @@index([username])
@@ -216,6 +219,25 @@ model UserWorkflowConfig {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_workflow_configs")
+}
+
+// ✅ CONFIGURACIÓN DE SETTINGS POR USUARIO
+model UserSettings {
+  id             Int    @id @default(autoincrement())
+  userId         Int    @unique
+  language       String @default("en") // en, es, pt, etc.
+  timezone       String @default("America/New_York") // Timezone IANA
+  dateFormat     String @default("MM/DD/YYYY") // MM/DD/YYYY, DD/MM/YYYY, etc.
+  currencyFormat String @default("USD") // USD, EUR, GBP, CLP, MXN, BRL, etc.
+  theme          String @default("light") // light, dark, auto
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
 }
 
 // ✅ COMISIONES DE ADMIN POR USUARIOS CREADOS
@@ -508,4 +530,53 @@ model APIStatusSnapshot {
   @@index([userId, apiName, environment])
   @@index([status, isAvailable])
   @@map("api_status_snapshots")
+}
+
+model ReportHistory {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  reportType   String // "sales", "products", "users", "marketplace-analytics", "executive"
+  reportFormat String // "json", "excel", "pdf", "html"
+  fileName     String // Nombre del archivo generado
+  fileSize     Int? // Tamaño del archivo en bytes (si está almacenado)
+  filePath     String? // Ruta al archivo almacenado (si se guarda físicamente)
+  filters      String? // JSON string con filtros aplicados
+  summary      String? // JSON string con resumen del reporte
+  status       String   @default("completed") // "pending", "processing", "completed", "failed"
+  error        String? // Mensaje de error si falló
+  generatedAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, reportType])
+  @@index([userId, generatedAt])
+  @@index([reportType, status])
+  @@index([generatedAt])
+  @@map("report_history")
+}
+
+model ScheduledReport {
+  id            Int       @id @default(autoincrement())
+  userId        Int
+  reportType    String // "sales", "products", "users", "marketplace-analytics", "executive"
+  reportFormat  String    @default("excel") // "json", "excel", "pdf", "html"
+  scheduleType  String // "daily", "weekly", "monthly", "custom"
+  scheduleValue String // Valor de la programación (ej: "08:00", "monday", "1")
+  filters       String? // JSON string con filtros aplicados
+  recipients    String? // JSON string con emails de destinatarios
+  isActive      Boolean   @default(true)
+  lastRunAt     DateTime? // Fecha de última ejecución
+  nextRunAt     DateTime? // Fecha de próxima ejecución
+  error         String? // Último error (si falló)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([isActive, nextRunAt])
+  @@index([scheduleType])
+  @@map("scheduled_reports")
 }

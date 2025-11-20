@@ -56,7 +56,6 @@ import manualAuthRoutes from './api/routes/manual-auth.routes';
 import authStatusRoutes from './api/routes/auth-status.routes';
 import configAuditRoutes from './api/routes/config-audit.routes';
 import manualCaptchaRoutes from './api/routes/manual-captcha.routes';
-// import adminRoutes from './api/routes/admin.routes'; // Temporarily disabled
 
 const app: Application = express();
 app.set('trust proxy', 1);
@@ -66,7 +65,24 @@ app.set('trust proxy', 1);
 // ====================================
 
 // Security
-app.use(helmet());
+// ✅ C8: Configurar CSP (Content Security Policy) para prevenir XSS
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"], // Necesario para algunos estilos inline
+      scriptSrc: ["'self'"], // Solo scripts del mismo origen
+      imgSrc: ["'self'", "data:", "https:"], // Permitir imágenes de cualquier HTTPS
+      connectSrc: ["'self'", "https://api.ebay.com", "https://api.sandbox.ebay.com", "https://api.mercadolibre.com", "https://sellingpartnerapi-na.amazon.com"], // APIs de marketplaces
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+      upgradeInsecureRequests: env.NODE_ENV === 'production' ? [] : null, // Solo en producción
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Deshabilitar para compatibilidad con APIs externas
+}));
 
 // CORS
 const allowedOrigins = env.CORS_ORIGIN.split(',')

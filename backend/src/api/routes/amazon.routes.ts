@@ -250,6 +250,94 @@ router.put('/inventory', validateInventoryUpdate, amazonController.updateInvento
 
 /**
  * @swagger
+ * /api/amazon/price:
+ *   patch:
+ *     tags: [Amazon]
+ *     summary: Update listing price
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sku, price]
+ *             properties:
+ *               sku:
+ *                 type: string
+ *               price:
+ *                 type: number
+ *               currency:
+ *                 type: string
+ *                 description: Currency code (default USD)
+ *     responses:
+ *       200:
+ *         description: Price update result
+ */
+router.patch('/price', amazonController.updatePrice);
+
+/**
+ * @swagger
+ * /api/amazon/listings:
+ *   get:
+ *     tags: [Amazon]
+ *     summary: Get seller listings
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *       - in: query
+ *         name: nextToken
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Listings
+ */
+router.get('/listings', amazonController.getListings);
+
+/**
+ * @swagger
+ * /api/amazon/listings:
+ *   post:
+ *     tags: [Amazon]
+ *     summary: Create a product listing
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sku, title, description, price, quantity]
+ *             properties:
+ *               sku: { type: string }
+ *               title: { type: string }
+ *               description: { type: string }
+ *               price: { type: number }
+ *               currency: { type: string }
+ *               quantity: { type: integer }
+ *               images: { type: array, items: { type: string, format: uri } }
+ *               category: { type: string }
+ *               brand: { type: string }
+ *               manufacturer: { type: string }
+ *               attributes: { type: object, additionalProperties: true }
+ *     responses:
+ *       200:
+ *         description: Listing created
+ */
+router.post('/listings', amazonController.createListing);
+
+/**
+ * @swagger
  * /api/amazon/marketplace/{marketplace}/config:
  *   get:
  *     tags: [Amazon]
@@ -276,5 +364,232 @@ router.put('/inventory', validateInventoryUpdate, amazonController.updateInvento
  *                   type: object
  */
 router.get('/marketplace/:marketplace/config', amazonController.getMarketplaceConfig);
+
+/**
+ * @swagger
+ * /api/amazon/prices/bulk:
+ *   patch:
+ *     tags: [Amazon]
+ *     summary: Update multiple prices in bulk
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [updates]
+ *             properties:
+ *               updates:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [sku, price]
+ *                   properties:
+ *                     sku: { type: string }
+ *                     price: { type: number }
+ *                     currency: { type: string }
+ *     responses:
+ *       200:
+ *         description: Bulk price update result
+ */
+router.patch('/prices/bulk', amazonController.updatePricesBulk);
+
+/**
+ * @swagger
+ * /api/amazon/inventory/bulk:
+ *   put:
+ *     tags: [Amazon]
+ *     summary: Update multiple inventory quantities in bulk
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [updates]
+ *             properties:
+ *               updates:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [sku, quantity]
+ *                   properties:
+ *                     sku: { type: string }
+ *                     quantity: { type: number, minimum: 0 }
+ *     responses:
+ *       200:
+ *         description: Bulk inventory update result
+ */
+router.put('/inventory/bulk', amazonController.updateInventoryBulk);
+
+/**
+ * @swagger
+ * /api/amazon/orders:
+ *   get:
+ *     tags: [Amazon]
+ *     summary: Get orders from Amazon
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: createdAfter
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: createdBefore
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: lastUpdatedAfter
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: lastUpdatedBefore
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: orderStatuses
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
+ *       - in: query
+ *         name: maxResultsPerPage
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *       - in: query
+ *         name: nextToken
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Orders retrieved successfully
+ */
+router.get('/orders', amazonController.getOrders);
+
+/**
+ * @swagger
+ * /api/amazon/orders/{orderId}:
+ *   get:
+ *     tags: [Amazon]
+ *     summary: Get specific order by order ID
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Order retrieved successfully
+ *       404:
+ *         description: Order not found
+ */
+router.get('/orders/:orderId', amazonController.getOrder);
+
+/**
+ * @swagger
+ * /api/amazon/orders/{orderId}/items:
+ *   get:
+ *     tags: [Amazon]
+ *     summary: Get order items for a specific order
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Order items retrieved successfully
+ */
+router.get('/orders/:orderId/items', amazonController.getOrderItems);
+
+/**
+ * @swagger
+ * /api/amazon/listings/{sku}:
+ *   get:
+ *     tags: [Amazon]
+ *     summary: Get listing by SKU
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sku
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Listing retrieved successfully
+ *       404:
+ *         description: Listing not found
+ */
+router.get('/listings/:sku', amazonController.getListingBySku);
+
+/**
+ * @swagger
+ * /api/amazon/listings/{sku}:
+ *   patch:
+ *     tags: [Amazon]
+ *     summary: Update listing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sku
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string }
+ *               description: { type: string }
+ *               price: { type: number }
+ *               quantity: { type: integer }
+ *               images: { type: array, items: { type: string, format: uri } }
+ *     responses:
+ *       200:
+ *         description: Listing updated successfully
+ */
+router.patch('/listings/:sku', amazonController.updateListing);
+
+/**
+ * @swagger
+ * /api/amazon/listings/{sku}:
+ *   delete:
+ *     tags: [Amazon]
+ *     summary: Delete listing
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sku
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Listing deleted successfully
+ */
+router.delete('/listings/:sku', amazonController.deleteListing);
 
 export default router;

@@ -1,3 +1,4 @@
+import http from 'http';
 import app from './app';
 import { env } from './config/env';
 import { prisma, connectWithRetry } from './config/database';
@@ -8,11 +9,36 @@ import { scheduledTasksService } from './services/scheduled-tasks.service';
 import { aliExpressAuthMonitor } from './services/ali-auth-monitor.service';
 import { apiHealthMonitor } from './services/api-health-monitor.service';
 import { apiAvailability } from './services/api-availability.service';
+import { notificationService } from './services/notification.service';
+import scheduledReportsService from './services/scheduled-reports.service';
 import bcrypt from 'bcryptjs';
 import { resolveChromiumExecutable } from './utils/chromium';
 
 const execAsync = promisify(exec);
 const PORT = parseInt(env.PORT, 10);
+
+/**
+ * ✅ A3: Validar ENCRYPTION_KEY al inicio del servidor
+ * Falla temprano si no está configurado correctamente
+ */
+function validateEncryptionKey(): void {
+  const encryptionKey = process.env.ENCRYPTION_KEY?.trim();
+  const jwtSecret = process.env.JWT_SECRET?.trim();
+  
+  const rawKey = encryptionKey || jwtSecret;
+  
+  if (!rawKey || rawKey.length < 32) {
+    const error = new Error(
+      'CRITICAL SECURITY ERROR: ENCRYPTION_KEY or JWT_SECRET environment variable must be set and be at least 32 characters long.\n' +
+      'Without a proper encryption key, credentials cannot be securely stored.\n' +
+      'Please set ENCRYPTION_KEY in your environment variables before starting the application.'
+    );
+    console.error('❌', error.message);
+    process.exit(1);
+  }
+  
+  console.log('✅ Encryption key validated (length: ' + rawKey.length + ' characters)');
+}
 
 async function ensureAdminUser() {
   try {
@@ -192,6 +218,10 @@ async function runMigrations(maxRetries = 3): Promise<void> {
 
 async function startServer() {
   try {
+    // ✅ A3: Validar ENCRYPTION_KEY antes de iniciar cualquier servicio
+    console.log('🔒 Validating encryption key...');
+    validateEncryptionKey();
+    
     process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
     try {
       const chromiumPath = await resolveChromiumExecutable();
@@ -262,9 +292,16 @@ async function startServer() {
       console.log('⚠️  Redis no configurado, continuando sin Redis');
     }
 
-    // Start server
+    // Start HTTP server for Socket.io support
     console.log('🌐 Iniciando servidor HTTP...');
-    app.listen(PORT, '0.0.0.0', async () => {
+    const httpServer = http.createServer(app);
+    
+    // ✅ CRÍTICO: Inicializar Socket.io antes de que el servidor escuche
+    console.log('🔌 Inicializando Socket.IO...');
+    notificationService.initialize(httpServer);
+    console.log('✅ Socket.IO notification service initialized');
+    
+    httpServer.listen(PORT, '0.0.0.0', async () => {
       console.log('');
       console.log('🚀 Ivan Reseller API Server');
       console.log('================================');
@@ -276,6 +313,15 @@ async function startServer() {
       console.log('✅ Scheduled tasks initialized');
       console.log('  - Financial alerts: Daily at 6:00 AM');
       console.log('  - Commission processing: Daily at 2:00 AM');
+      console.log('');
+      
+      // Initialize scheduled reports
+      try {
+        await scheduledReportsService.initializeScheduledReports();
+        console.log('✅ Scheduled reports initialized');
+      } catch (error: any) {
+        console.warn('⚠️  Warning: Could not initialize scheduled reports:', error.message);
+      }
       console.log('');
       
       // Recover persisted API statuses

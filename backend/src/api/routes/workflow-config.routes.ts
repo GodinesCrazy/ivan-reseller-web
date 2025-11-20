@@ -72,7 +72,8 @@ router.put('/config', async (req: Request, res: Response, next) => {
             type: 'SYSTEM_ALERT',
             title: 'Ambiente cambiado',
             message: `El ambiente ha sido cambiado de ${oldEnvironment} a ${newEnvironment}. Las próximas publicaciones usarán el nuevo ambiente.`,
-            priority: 'MEDIUM',
+            priority: 'NORMAL',
+            category: 'SYSTEM',
             data: {
               oldEnvironment,
               newEnvironment,
@@ -92,9 +93,6 @@ router.put('/config', async (req: Request, res: Response, next) => {
     
     res.json({ success: true, config });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ success: false, error: 'Invalid input', details: error.errors });
-    }
     next(error);
   }
 });
@@ -211,9 +209,12 @@ router.post('/continue-stage', async (req: Request, res: Response, next) => {
         if (stage === 'scrape' || stage === 'analyze' || stage === 'publish') {
           // Notificar a AutomatedBusinessService para continuar
           const { automatedBusinessSystem } = await import('../../services/automated-business.service');
-          if (automatedBusinessSystem && typeof automatedBusinessSystem.resumeStage === 'function') {
-            automatedBusinessSystem.resumeStage(stage as any);
-            await automatedBusinessSystem.runOneCycle();
+          const system: any = automatedBusinessSystem;
+          if (system && typeof system.resumeStage === 'function') {
+            system.resumeStage(stage as any);
+            if (typeof system.runOneCycle === 'function') {
+              await system.runOneCycle();
+            }
           }
         }
         
@@ -225,6 +226,7 @@ router.post('/continue-stage', async (req: Request, res: Response, next) => {
             title: `Etapa ${stage} continuada`,
             message: `Has continuado la etapa ${stage} en modo guided. El proceso continuará automáticamente.`,
             priority: 'LOW',
+            category: 'JOB',
             data: {
               stage,
               action: 'continued',
@@ -287,9 +289,6 @@ router.post('/continue-stage', async (req: Request, res: Response, next) => {
       });
     }
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ success: false, error: 'Invalid input', details: error.errors });
-    }
     next(error);
   }
 });

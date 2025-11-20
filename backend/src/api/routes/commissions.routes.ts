@@ -88,9 +88,6 @@ router.post('/:id/schedule', authorize('ADMIN'), async (req: Request, res: Respo
     const commission = await commissionService.scheduleCommission(Number(req.params.id), new Date(scheduledDate));
     res.json(commission);
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ error: 'Datos inválidos', details: error.errors });
-    }
     next(error);
   }
 });
@@ -117,9 +114,6 @@ router.post('/batch-pay', authorize('ADMIN'), async (req: Request, res: Response
     const result = await commissionService.batchPayCommissions(commissionIds, paypalBatchId);
     res.json(result);
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ error: 'Datos inválidos', details: error.errors });
-    }
     next(error);
   }
 });

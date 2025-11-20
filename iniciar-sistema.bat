@@ -87,18 +87,37 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5173"') do taskkill /F /PID
 echo OK - Puertos disponibles
 echo.
 
-:: Configurar Backend
+:: ✅ F4: Configurar Backend con variables de entorno y soporte para producción
 echo [7/11] Configurando Backend...
 cd /d "%~dp0backend"
 if not exist .env (
+    echo # Environment
     echo NODE_ENV=development > .env
     echo PORT=3000 >> .env
-    echo DATABASE_URL=file:./dev.db >> .env
+    echo. >> .env
+    echo # Database
+    echo # IMPORTANTE: Configurar PostgreSQL (NO SQLite) >> .env
+    echo # Ejemplo LOCAL: >> .env
+    echo # DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ivan_reseller?schema=public >> .env
+    echo # Ejemplo RAILWAY (usar la URL publica de Railway): >> .env
+    echo # DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/railway?sslmode=require >> .env
+    echo. >> .env
+    echo # Security (OBLIGATORIAS - usar valores seguros en producción)
     echo JWT_SECRET=ivan-reseller-super-secure-jwt-secret-key-2025-minimum-32-chars >> .env
+    echo ENCRYPTION_KEY= >> .env
     echo JWT_EXPIRES_IN=7d >> .env
-    echo FRONTEND_URL=http://%PUBLIC_IP%:5173 >> .env
-    echo CORS_ORIGIN=http://%PUBLIC_IP%:5173 >> .env
-    echo ALLOWED_ORIGINS=http://localhost:5173,http://%LOCAL_IP%:5173,http://%PUBLIC_IP%:5173 >> .env
+    echo. >> .env
+    echo # URLs - Desarrollo (local)
+    echo FRONTEND_URL=http://localhost:5173 >> .env
+    echo CORS_ORIGIN=http://localhost:5173,http://%LOCAL_IP%:5173,http://%PUBLIC_IP%:5173 >> .env
+    echo. >> .env
+    echo # URLs - Producción (descomentar y configurar en producción)
+    echo # FRONTEND_URL=https://ivanreseller.com >> .env
+    echo # CORS_ORIGIN=https://ivanreseller.com,https://www.ivanreseller.com >> .env
+    echo. >> .env
+    echo # Para producción, usar:
+    echo # FRONTEND_URL=https://ivanreseller.com >> .env
+    echo # CORS_ORIGIN=https://ivanreseller.com,https://www.ivanreseller.com >> .env
 )
 if not exist node_modules call npm install >nul 2>&1
 call npx prisma generate >nul 2>&1
@@ -108,10 +127,29 @@ cd /d "%~dp0"
 echo OK - Backend configurado
 echo.
 
-:: Configurar Frontend
+:: ✅ F4: Configurar Frontend con variables de entorno y soporte para producción
 echo [8/11] Configurando Frontend...
 cd /d "%~dp0frontend"
-echo VITE_API_URL=http://%PUBLIC_IP%:3000 > .env
+if not exist .env (
+    echo # API URLs - Desarrollo (local)
+    echo VITE_API_URL=http://localhost:3000 > .env
+    echo VITE_WS_URL=ws://localhost:3000 >> .env
+    echo. >> .env
+    echo # API URLs - Producción (descomentar y configurar en producción)
+    echo # VITE_API_URL=https://api.ivanreseller.com >> .env
+    echo # VITE_WS_URL=wss://api.ivanreseller.com >> .env
+    echo. >> .env
+    echo # Para producción, usar:
+    echo # VITE_API_URL=https://api.ivanreseller.com >> .env
+    echo # VITE_WS_URL=wss://api.ivanreseller.com >> .env
+) else (
+    echo # Verificando .env existente...
+    findstr /C:"VITE_API_URL" .env >nul 2>&1
+    if errorlevel 1 (
+        echo VITE_API_URL=http://localhost:3000 >> .env
+        echo VITE_WS_URL=ws://localhost:3000 >> .env
+    )
+)
 if not exist node_modules call npm install >nul 2>&1
 cd /d "%~dp0"
 echo OK - Frontend configurado

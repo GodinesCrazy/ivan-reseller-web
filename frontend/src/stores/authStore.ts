@@ -32,8 +32,20 @@ export const useAuthStore = create<AuthState>()(
         // Si recibimos un token, lo guardamos en localStorage como fallback
         if (token && token !== 'cookie') {
           localStorage.setItem('auth_token', token);
+        } else {
+          // Si no hay token pero hay uno en localStorage, usarlo
+          const storedToken = localStorage.getItem('auth_token');
+          if (storedToken) {
+            token = storedToken;
+          }
         }
-        set({ user, token: token || 'cookie', isAuthenticated: true });
+        // CRÍTICO: Asegurar que isAuthenticated se establezca en true
+        set({ 
+          user, 
+          token: token || 'cookie', 
+          isAuthenticated: true,
+          isCheckingAuth: false 
+        });
       },
       logout: async () => {
         try {

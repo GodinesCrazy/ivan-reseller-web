@@ -38,6 +38,7 @@ import {
   Target
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { log } from '@/utils/logger';
 
 interface ReportFilters {
   startDate?: Date;
@@ -178,7 +179,7 @@ export default function Reports() {
       const result = await response.json();
       setExecutiveData(result.data);
     } catch (error) {
-      console.error('Error loading executive report:', error);
+      log.error('Error loading executive report:', error);
       toast.error('Error al cargar el reporte ejecutivo');
     } finally {
       setLoading(false);
@@ -196,7 +197,7 @@ export default function Reports() {
       setSuccessStats(statsRes.data?.stats);
       setLearningPatterns(patternsRes.data?.patterns);
     } catch (error) {
-      console.error('Error loading successful operations:', error);
+      log.error('Error loading successful operations:', error);
       toast.error('Error al cargar operaciones exitosas');
     } finally {
       setLoading(false);
@@ -227,10 +228,17 @@ export default function Reports() {
         params.append('format', filters.format);
       }
 
+      // Build headers conditionally (solo añadir Authorization si existe token)
+      const headers: Record<string, string> = {};
+      const token = localStorage.getItem('token');
+      if (token && token !== 'null' && token !== 'undefined') {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`/api/reports/${activeTab}?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        headers,
+        // Incluir cookies httpOnly si están presentes (producción usa cookies)
+        credentials: 'include'
       });
 
       if (!response.ok) {
@@ -269,7 +277,7 @@ export default function Reports() {
         toast.success('Reporte generado exitosamente');
       }
     } catch (error) {
-      console.error('Error generating report:', error);
+      log.error('Error generating report:', error);
       toast.error('Error al generar el reporte');
     } finally {
       setLoading(false);

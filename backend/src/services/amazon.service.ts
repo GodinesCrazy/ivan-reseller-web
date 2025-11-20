@@ -1,10 +1,9 @@
-// @ts-nocheck
 import axios, { AxiosInstance } from 'axios';
 import crypto from 'crypto';
 import { prisma } from '../config/database';
 import { signAwsRequest } from '../utils/aws-sigv4';
 import { retryMarketplaceOperation } from '../utils/retry.util';
-import logger from '../config/logger';
+import { logger } from '../config/logger';
 
 // Amazon SP-API Configuration
 interface AmazonCredentials {
@@ -137,9 +136,9 @@ class AmazonService {
       // Save credentials to database (encrypted)
       await this.saveCredentials(credentials);
       
-      console.log('✅ Amazon SP-API credentials configured successfully');
+      logger.info('Amazon SP-API credentials configured successfully');
     } catch (error) {
-      console.error('❌ Failed to configure Amazon credentials:', error);
+      logger.error('Failed to configure Amazon credentials', { error });
       throw new Error(`Amazon API configuration failed: ${error}`);
     }
   }
@@ -204,10 +203,10 @@ class AmazonService {
       // Set authorization header
       this.httpClient.defaults.headers['x-amz-access-token'] = accessToken;
 
-      console.log('✅ Amazon SP-API authentication successful');
+      logger.info('Amazon SP-API authentication successful');
       return accessToken;
     } catch (error) {
-      console.error('❌ Amazon authentication failed:', error);
+      logger.error('Amazon authentication failed', { error });
       throw new Error(`Amazon authentication failed: ${error}`);
     }
   }
@@ -272,11 +271,11 @@ class AmazonService {
         lastSyncAmazon: new Date()
       });
 
-      console.log(`✅ Amazon listing created: SKU ${product.sku}, Status: ${listingResult.status}`);
+      logger.info('Amazon listing created', { sku: product.sku, status: listingResult.status });
       return listingResult;
 
     } catch (error) {
-      console.error('❌ Failed to create Amazon listing:', error);
+      logger.error('Failed to create Amazon listing', { error, sku: product.sku });
       return {
         success: false,
         sku: product.sku,
@@ -307,11 +306,19 @@ class AmazonService {
         lastSyncAmazon: new Date()
       });
 
-      console.log(`✅ Amazon inventory updated: SKU ${sku}, Quantity: ${quantity}`);
+      logger.info('Amazon inventory updated', { sku, quantity });
       return true;
 
-    } catch (error) {
-      console.error('❌ Failed to update Amazon inventory:', error);
+    } catch (error: any) {
+      const classified = this.classifyAmazonError(error);
+      logger.error('Failed to update Amazon inventory', { 
+        error: classified.message,
+        type: classified.type,
+        retryable: classified.retryable,
+        sku, 
+        quantity,
+        stack: error.stack 
+      });
       return false;
     }
   }
@@ -344,12 +351,106 @@ class AmazonService {
         lastUpdated: new Date()
       }));
 
-      console.log(`✅ Retrieved ${inventory.length} Amazon inventory items`);
+      logger.info('Retrieved Amazon inventory items', { count: inventory.length });
       return inventory;
 
-    } catch (error) {
-      console.error('❌ Failed to get Amazon inventory:', error);
+    } catch (error: any) {
+      const classified = this.classifyAmazonError(error);
+      logger.error('Failed to get Amazon inventory', { 
+        error: classified.message,
+        type: classified.type,
+        retryable: classified.retryable,
+        stack: error.stack 
+      });
       return [];
+    }
+  }
+
+  /**
+   * Update listing price on Amazon (Pricing API)
+   */
+  async updatePrice(sku: string, price: number, currency?: string): Promise<boolean> {
+    if (!this.credentials?.accessToken) {
+      await this.authenticate();
+    }
+
+    try {
+      const path = `/listings/2021-08-01/items/${this.credentials?.marketplace}/${encodeURIComponent(sku)}`;
+      const body: any = {
+        productType: 'PRODUCT',
+        patches: [
+          {
+            op: 'replace',
+            path: '/attributes/price',
+            value: [
+              {
+                marketplace_id: this.credentials?.marketplace,
+                value_with_tax: {
+                  amount: price,
+                  currency: currency || 'USD',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const headers = this.signHeaders('PATCH', path);
+      const response = await this.httpClient.patch(path, body, { headers });
+
+      const ok = response.status >= 200 && response.status < 300;
+      if (ok) {
+        logger.info('Amazon price updated', { sku, price });
+      } else {
+        logger.warn('Amazon price update responded non-2xx', { sku, status: response.status });
+      }
+      return ok;
+    } catch (error: any) {
+      const classified = this.classifyAmazonError(error);
+      logger.error('Failed to update Amazon price', { 
+        error: classified.message, 
+        type: classified.type,
+        retryable: classified.retryable,
+        sku, 
+        price,
+        stack: error.stack 
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Get seller listings (basic pagination via nextToken)
+   */
+  async getMyListings(limit: number = 20, nextToken?: string): Promise<{ items: any[]; nextToken?: string }> {
+    if (!this.credentials?.accessToken) {
+      await this.authenticate();
+    }
+
+    try {
+      const path = '/listings/2021-08-01/items';
+      const params: any = {
+        marketplaceIds: this.credentials?.marketplace,
+        pageSize: Math.min(Math.max(limit, 1), 100),
+      };
+      if (nextToken) params.nextToken = nextToken;
+
+      const headers = this.signHeaders('GET', path, params);
+      const response = await this.httpClient.get(path, { params, headers });
+
+      const items = response.data?.items || [];
+      const token = response.data?.nextToken;
+      logger.info('Fetched Amazon listings', { count: items.length, hasNext: Boolean(token) });
+      return { items, nextToken: token };
+    } catch (error: any) {
+      const classified = this.classifyAmazonError(error);
+      logger.error('Failed to fetch Amazon listings', { 
+        error: classified.message,
+        type: classified.type,
+        retryable: classified.retryable,
+        stack: error.stack 
+      });
+      return { items: [] };
     }
   }
 
@@ -378,11 +479,11 @@ class AmazonService {
         requirements: item.categories?.[0]?.requirements || []
       }));
 
-      console.log(`✅ Found ${categories.length} Amazon categories for: ${searchTerm}`);
+      logger.info('Found Amazon categories', { count: categories.length, searchTerm });
       return categories;
 
     } catch (error) {
-      console.error('❌ Failed to get Amazon categories:', error);
+      logger.error('Failed to get Amazon categories', { error, searchTerm });
       return [];
     }
   }
@@ -417,11 +518,11 @@ class AmazonService {
         image: item.images?.[0]?.images?.[0]?.link
       }));
 
-      console.log(`✅ Found ${products.length} Amazon products for: ${query}`);
+      logger.info('Found Amazon products', { count: products.length, query });
       return products;
 
     } catch (error) {
-      console.error('❌ Failed to search Amazon products:', error);
+      logger.error('Failed to search Amazon products', { error, query });
       return [];
     }
   }
@@ -440,11 +541,15 @@ class AmazonService {
       const response = await this.httpClient.get(path, { headers });
 
       const isValid = response.status === 200 && response.data.payload;
-      console.log(isValid ? '✅ Amazon connection test successful' : '❌ Amazon connection test failed');
+      if (isValid) {
+        logger.info('Amazon connection test successful');
+      } else {
+        logger.warn('Amazon connection test failed');
+      }
       return isValid;
 
     } catch (error) {
-      console.error('❌ Amazon connection test failed:', error);
+      logger.error('Amazon connection test failed', { error });
       return false;
     }
   }
@@ -537,7 +642,7 @@ class AmazonService {
         await new Promise(resolve => setTimeout(resolve, 5000));
         
       } catch (error) {
-        console.error(`Poll attempt ${attempt + 1} failed:`, error);
+        logger.warn('Amazon feed poll attempt failed', { attempt: attempt + 1, error });
       }
     }
 
@@ -595,23 +700,35 @@ class AmazonService {
       await CredentialsManager.saveCredentials(
         1,
         'amazon',
-        credentials,
+        credentials as any,
         'production',
         { scope: 'global', sharedByUserId: 1 }
       );
     } catch (e) {
-      console.warn('Failed to persist Amazon credentials', e);
+      logger.warn('Failed to persist Amazon credentials', { error: e });
     }
   }
 
   /**
-   * Update product in database
+   * Update marketplace listing record related to Amazon
    */
   private async updateProductInDatabase(sku: string, updates: any): Promise<void> {
-    await prisma.product.updateMany({
-      where: { sku: sku },
-      data: updates
-    });
+    try {
+      // Try to update existing marketplace listing for Amazon by SKU
+      await prisma.marketplaceListing.updateMany({
+        where: {
+          marketplace: 'amazon',
+          sku: sku,
+        },
+        data: {
+          listingId: updates?.amazonASIN ?? undefined,
+          listingUrl: updates?.listingUrl ?? undefined,
+          updatedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      logger.warn('Failed to update Amazon marketplace listing record', { error, sku });
+    }
   }
 
   /**
@@ -637,6 +754,444 @@ class AmazonService {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&apos;');
+  }
+
+  /**
+   * ✅ A4: Update multiple prices in bulk (Pricing API)
+   */
+  async updatePricesBulk(updates: Array<{ sku: string; price: number; currency?: string }>): Promise<{
+    success: number;
+    failed: number;
+    results: Array<{ sku: string; success: boolean; error?: string }>;
+  }> {
+    if (!this.credentials?.accessToken) {
+      await this.authenticate();
+    }
+
+    const results: Array<{ sku: string; success: boolean; error?: string }> = [];
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const update of updates) {
+      try {
+        const success = await this.updatePrice(update.sku, update.price, update.currency);
+        results.push({ sku: update.sku, success });
+        if (success) {
+          successCount++;
+        } else {
+          failedCount++;
+          results[results.length - 1].error = 'Price update failed';
+        }
+      } catch (error: any) {
+        failedCount++;
+        results.push({
+          sku: update.sku,
+          success: false,
+          error: error.message || 'Unknown error'
+        });
+      }
+    }
+
+    logger.info('Amazon bulk price update completed', { total: updates.length, success: successCount, failed: failedCount });
+    return { success: successCount, failed: failedCount, results };
+  }
+
+  /**
+   * ✅ A4: Update multiple inventory quantities in bulk (FBA Inventory API)
+   */
+  async updateInventoryBulk(updates: Array<{ sku: string; quantity: number }>): Promise<{
+    success: number;
+    failed: number;
+    results: Array<{ sku: string; success: boolean; error?: string }>;
+  }> {
+    if (!this.credentials?.accessToken) {
+      await this.authenticate();
+    }
+
+    const results: Array<{ sku: string; success: boolean; error?: string }> = [];
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const update of updates) {
+      try {
+        const success = await this.updateInventoryQuantity(update.sku, update.quantity);
+        results.push({ sku: update.sku, success });
+        if (success) {
+          successCount++;
+        } else {
+          failedCount++;
+          results[results.length - 1].error = 'Inventory update failed';
+        }
+      } catch (error: any) {
+        failedCount++;
+        results.push({
+          sku: update.sku,
+          success: false,
+          error: error.message || 'Unknown error'
+        });
+      }
+    }
+
+    logger.info('Amazon bulk inventory update completed', { total: updates.length, success: successCount, failed: failedCount });
+    return { success: successCount, failed: failedCount, results };
+  }
+
+  /**
+   * ✅ A4: Get orders from Amazon (Orders API v0)
+   */
+  async getOrders(params?: {
+    createdAfter?: Date;
+    createdBefore?: Date;
+    lastUpdatedAfter?: Date;
+    lastUpdatedBefore?: Date;
+    orderStatuses?: string[];
+    fulfillmentChannels?: string[];
+    paymentMethods?: string[];
+    maxResultsPerPage?: number;
+    nextToken?: string;
+  }): Promise<{ orders: any[]; nextToken?: string }> {
+    if (!this.credentials?.accessToken) {
+      await this.authenticate();
+    }
+
+    try {
+      const path = '/orders/v0/orders';
+      const queryParams: any = {
+        MarketplaceIds: this.credentials?.marketplace,
+        MaxResultsPerPage: Math.min(Math.max(params?.maxResultsPerPage || 20, 1), 100),
+      };
+
+      if (params?.createdAfter) {
+        queryParams.CreatedAfter = params.createdAfter.toISOString();
+      }
+      if (params?.createdBefore) {
+        queryParams.CreatedBefore = params.createdBefore.toISOString();
+      }
+      if (params?.lastUpdatedAfter) {
+        queryParams.LastUpdatedAfter = params.lastUpdatedAfter.toISOString();
+      }
+      if (params?.lastUpdatedBefore) {
+        queryParams.LastUpdatedBefore = params.lastUpdatedBefore.toISOString();
+      }
+      if (params?.orderStatuses && params.orderStatuses.length > 0) {
+        queryParams.OrderStatuses = params.orderStatuses;
+      }
+      if (params?.fulfillmentChannels && params.fulfillmentChannels.length > 0) {
+        queryParams.FulfillmentChannels = params.fulfillmentChannels;
+      }
+      if (params?.paymentMethods && params.paymentMethods.length > 0) {
+        queryParams.PaymentMethods = params.paymentMethods;
+      }
+      if (params?.nextToken) {
+        queryParams.NextToken = params.nextToken;
+      }
+
+      const headers = this.signHeaders('GET', path, queryParams);
+      const response = await this.httpClient.get(path, { params: queryParams, headers });
+
+      const orders = response.data?.payload?.Orders || [];
+      const nextToken = response.data?.payload?.NextToken;
+
+      logger.info('Retrieved Amazon orders', { count: orders.length, hasNext: Boolean(nextToken) });
+      return { orders, nextToken };
+    } catch (error: any) {
+      logger.error('Failed to get Amazon orders', { error: error.message, stack: error.stack });
+      return { orders: [] };
+    }
+  }
+
+  /**
+   * ✅ A4: Get specific order by order ID (Orders API v0)
+   */
+  async getOrder(orderId: string): Promise<any | null> {
+    if (!this.credentials?.accessToken) {
+      await this.authenticate();
+    }
+
+    try {
+      const path = `/orders/v0/orders/${orderId}`;
+      const queryParams = {
+        MarketplaceIds: this.credentials?.marketplace,
+      };
+
+      const headers = this.signHeaders('GET', path, queryParams);
+      const response = await this.httpClient.get(path, { params: queryParams, headers });
+
+      const order = response.data?.payload;
+      if (order) {
+        logger.info('Retrieved Amazon order', { orderId });
+      }
+      return order || null;
+    } catch (error: any) {
+      logger.error('Failed to get Amazon order', { error: error.message, orderId });
+      return null;
+    }
+  }
+
+  /**
+   * ✅ A4: Get order items for a specific order (Orders API v0)
+   */
+  async getOrderItems(orderId: string): Promise<any[]> {
+    if (!this.credentials?.accessToken) {
+      await this.authenticate();
+    }
+
+    try {
+      const path = `/orders/v0/orders/${orderId}/orderItems`;
+      const headers = this.signHeaders('GET', path);
+      const response = await this.httpClient.get(path, { headers });
+
+      const items = response.data?.payload?.OrderItems || [];
+      logger.info('Retrieved Amazon order items', { orderId, count: items.length });
+      return items;
+    } catch (error: any) {
+      logger.error('Failed to get Amazon order items', { error: error.message, orderId });
+      return [];
+    }
+  }
+
+  /**
+   * ✅ A4: Update listing (Listings API)
+   */
+  async updateListing(sku: string, updates: {
+    title?: string;
+    description?: string;
+    price?: number;
+    quantity?: number;
+    images?: string[];
+  }): Promise<boolean> {
+    if (!this.credentials?.accessToken) {
+      await this.authenticate();
+    }
+
+    try {
+      const path = `/listings/2021-08-01/items/${this.credentials?.marketplace}/${encodeURIComponent(sku)}`;
+      const patches: any[] = [];
+
+      if (updates.title !== undefined) {
+        patches.push({
+          op: 'replace',
+          path: '/attributes/title',
+          value: [{ marketplace_id: this.credentials?.marketplace, value: updates.title }]
+        });
+      }
+
+      if (updates.description !== undefined) {
+        patches.push({
+          op: 'replace',
+          path: '/attributes/product_description',
+          value: [{ marketplace_id: this.credentials?.marketplace, value: updates.description }]
+        });
+      }
+
+      if (updates.price !== undefined) {
+        patches.push({
+          op: 'replace',
+          path: '/attributes/price',
+          value: [{
+            marketplace_id: this.credentials?.marketplace,
+            value_with_tax: {
+              amount: updates.price,
+              currency: 'USD'
+            }
+          }]
+        });
+      }
+
+      if (updates.quantity !== undefined) {
+        patches.push({
+          op: 'replace',
+          path: '/attributes/quantity',
+          value: [{ marketplace_id: this.credentials?.marketplace, value: updates.quantity }]
+        });
+      }
+
+      if (updates.images && updates.images.length > 0) {
+        patches.push({
+          op: 'replace',
+          path: '/attributes/images',
+          value: [{
+            marketplace_id: this.credentials?.marketplace,
+            images: updates.images.map(url => ({ link: url }))
+          }]
+        });
+      }
+
+      if (patches.length === 0) {
+        logger.warn('No updates provided for listing', { sku });
+        return false;
+      }
+
+      const body = {
+        productType: 'PRODUCT',
+        patches
+      };
+
+      const headers = this.signHeaders('PATCH', path);
+      const response = await this.httpClient.patch(path, body, { headers });
+
+      const success = response.status >= 200 && response.status < 300;
+      if (success) {
+        logger.info('Amazon listing updated', { sku });
+        await this.updateProductInDatabase(sku, { lastSyncAmazon: new Date() });
+      } else {
+        logger.warn('Amazon listing update responded non-2xx', { sku, status: response.status });
+      }
+      return success;
+    } catch (error: any) {
+      logger.error('Failed to update Amazon listing', { error: error.message, sku, stack: error.stack });
+      return false;
+    }
+  }
+
+  /**
+   * ✅ A4: Delete listing (Listings API)
+   */
+  async deleteListing(sku: string): Promise<boolean> {
+    if (!this.credentials?.accessToken) {
+      await this.authenticate();
+    }
+
+    try {
+      const path = `/listings/2021-08-01/items/${this.credentials?.marketplace}/${encodeURIComponent(sku)}`;
+      const headers = this.signHeaders('DELETE', path);
+      const response = await this.httpClient.delete(path, { headers });
+
+      const success = response.status >= 200 && response.status < 300;
+      if (success) {
+        logger.info('Amazon listing deleted', { sku });
+        // Update local database to mark as deleted (remove listingId to mark as deleted)
+        await prisma.marketplaceListing.updateMany({
+          where: { marketplace: 'amazon', sku },
+          data: { listingId: null, updatedAt: new Date() }
+        });
+      } else {
+        logger.warn('Amazon listing deletion responded non-2xx', { sku, status: response.status });
+      }
+      return success;
+    } catch (error: any) {
+      logger.error('Failed to delete Amazon listing', { error: error.message, sku, stack: error.stack });
+      return false;
+    }
+  }
+
+  /**
+   * ✅ A4: Get listing by SKU (Listings API)
+   */
+  async getListingBySku(sku: string): Promise<any | null> {
+    if (!this.credentials?.accessToken) {
+      await this.authenticate();
+    }
+
+    try {
+      const path = `/listings/2021-08-01/items/${this.credentials?.marketplace}/${encodeURIComponent(sku)}`;
+      const queryParams = {
+        includedData: 'summaries,attributes,issues'
+      };
+      const headers = this.signHeaders('GET', path, queryParams);
+      const response = await this.httpClient.get(path, { params: queryParams, headers });
+
+      const listing = response.data;
+      if (listing) {
+        logger.info('Retrieved Amazon listing', { sku });
+      }
+      return listing || null;
+    } catch (error: any) {
+      logger.error('Failed to get Amazon listing', { error: error.message, sku, stack: error.stack });
+      return null;
+    }
+  }
+
+  /**
+   * ✅ A4: Classify Amazon API errors for better error handling
+   */
+  private classifyAmazonError(error: any): {
+    type: 'rate_limit' | 'auth' | 'feed_error' | 'inventory_error' | 'pricing_error' | 'listing_error' | 'order_error' | 'unknown';
+    message: string;
+    retryable: boolean;
+    statusCode?: number;
+  } {
+    const statusCode = error.response?.status || error.status;
+    const errorMessage = error.response?.data?.errors?.[0]?.message || error.message || 'Unknown error';
+    const errorCode = error.response?.data?.errors?.[0]?.code || error.code;
+
+    // Rate limiting
+    if (statusCode === 429 || errorCode === 'QuotaExceeded') {
+      return {
+        type: 'rate_limit',
+        message: 'Amazon API rate limit exceeded. Please wait before retrying.',
+        retryable: true,
+        statusCode: 429
+      };
+    }
+
+    // Authentication errors
+    if (statusCode === 401 || statusCode === 403 || errorCode === 'Unauthorized' || errorCode === 'InvalidAccessToken') {
+      return {
+        type: 'auth',
+        message: 'Amazon API authentication failed. Please check your credentials.',
+        retryable: false,
+        statusCode
+      };
+    }
+
+    // Feed processing errors
+    if (errorCode?.includes('Feed') || errorCode?.includes('Processing') || errorMessage?.includes('feed')) {
+      return {
+        type: 'feed_error',
+        message: `Amazon feed processing error: ${errorMessage}`,
+        retryable: true,
+        statusCode
+      };
+    }
+
+    // Inventory errors
+    if (errorCode?.includes('Inventory') || errorMessage?.includes('inventory') || errorMessage?.includes('FBA')) {
+      return {
+        type: 'inventory_error',
+        message: `Amazon inventory error: ${errorMessage}`,
+        retryable: true,
+        statusCode
+      };
+    }
+
+    // Pricing errors
+    if (errorCode?.includes('Pricing') || errorMessage?.includes('price') || errorMessage?.includes('Pricing')) {
+      return {
+        type: 'pricing_error',
+        message: `Amazon pricing error: ${errorMessage}`,
+        retryable: false,
+        statusCode
+      };
+    }
+
+    // Listing errors
+    if (errorCode?.includes('Listing') || errorMessage?.includes('listing') || errorMessage?.includes('SKU')) {
+      return {
+        type: 'listing_error',
+        message: `Amazon listing error: ${errorMessage}`,
+        retryable: false,
+        statusCode
+      };
+    }
+
+    // Order errors
+    if (errorCode?.includes('Order') || errorMessage?.includes('order')) {
+      return {
+        type: 'order_error',
+        message: `Amazon order error: ${errorMessage}`,
+        retryable: true,
+        statusCode
+      };
+    }
+
+    // Unknown error
+    return {
+      type: 'unknown',
+      message: errorMessage,
+      retryable: statusCode >= 500 || statusCode === 429,
+      statusCode
+    };
   }
 
   /**

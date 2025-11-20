@@ -1,0 +1,1576 @@
+================================================================================
+                    MANUAL COMPLETO DEL SISTEMA IVAN RESELLER
+                    Plataforma de Dropshipping Automatizado con IA
+================================================================================
+
+Fecha de Creación: 2025-11-15
+Versión del Sistema: 1.0
+Sitio Web: www.ivanreseller.com / ivanreseller.com
+
+================================================================================
+                            TABLA DE CONTENIDOS
+================================================================================
+
+PARTE 1: MANUAL DEL USUARIO
+  1.1 Acceso al Sistema
+  1.2 Primer Acceso y Registro
+  1.3 Configuración Inicial
+  1.4 Búsqueda de Oportunidades
+  1.5 Gestión de Productos
+  1.6 Sistema Autopilot
+  1.7 Publicación en Marketplaces
+  1.8 Gestión de Ventas
+  1.9 Dashboard y Finanzas
+  1.10 Configuración de APIs
+  1.11 Configuración de Workflow
+  1.12 Notificaciones y Alertas
+  1.13 Solución de Problemas
+
+PARTE 2: MANUAL DEL ADMINISTRADOR
+  2.1 Acceso como Administrador
+  2.2 Gestión de Usuarios
+  2.3 Configuración del Sistema
+  2.4 Monitoreo y Logs
+  2.5 Reportes y Analytics
+  2.6 Gestión de Comisiones
+  2.7 Configuración Regional
+
+PARTE 3: EXPLICACIÓN TÉCNICA
+  3.1 Arquitectura del Sistema
+  3.2 Tecnologías Utilizadas
+  3.3 Base de Datos
+  3.4 Seguridad y Encriptación
+  3.5 APIs Integradas
+  3.6 Sistema Multi-Tenant
+  3.7 Flujos de Datos
+
+PARTE 4: FUNCIONALIDADES DETALLADAS
+  4.1 Sistema de Oportunidades
+  4.2 Sistema Autopilot
+  4.3 Gestión de Capital
+  4.4 Publicación Automática
+  4.5 Análisis de Competencia
+  4.6 Sistema de Comisiones
+  4.7 Notificaciones en Tiempo Real
+
+PARTE 5: MODELO DE NEGOCIO
+  5.1 Modelo para Usuarios
+  5.2 Modelo para Administrador
+  5.3 Cálculo de Comisiones
+  5.4 Estructura de Costos
+  5.5 Proyecciones de Rentabilidad
+
+PARTE 6: GUÍAS DE USO AVANZADO
+  6.1 Optimización de Búsquedas
+  6.2 Configuración de Autopilot
+  6.3 Estrategias de Publicación
+  6.4 Gestión de Capital
+  6.5 Mejores Prácticas
+
+================================================================================
+                        PARTE 1: MANUAL DEL USUARIO
+================================================================================
+
+1.1 ACCESO AL SISTEMA
+--------------------
+
+URL de Acceso:
+  - www.ivanreseller.com
+  - ivanreseller.com
+
+Requisitos:
+  - Navegador web moderno (Chrome, Firefox, Edge, Safari)
+  - Conexión a Internet estable
+  - Credenciales proporcionadas por el administrador
+
+Nota: El registro público está deshabilitado. Solo el administrador puede crear
+      cuentas de usuario.
+
+1.2 PRIMER ACCESO Y REGISTRO
+----------------------------
+
+Si el administrador te creó una cuenta:
+  1. Accede a www.ivanreseller.com
+  2. Haz clic en "Iniciar Sesión" o "Login"
+  3. Ingresa tus credenciales:
+     - Email: (proporcionado por el admin)
+     - Contraseña: (proporcionada por el admin)
+  4. Haz clic en "Iniciar Sesión"
+
+Primera vez:
+  - Se recomienda cambiar la contraseña después del primer acceso
+  - Configura tus APIs antes de usar el sistema
+  - Revisa el Dashboard para familiarizarte con la interfaz
+
+1.3 CONFIGURACIÓN INICIAL
+-------------------------
+
+PASO 1: Configurar APIs (OBLIGATORIO)
+  Sin APIs configuradas, el sistema no puede funcionar.
+
+  Menú → "API Keys" o "Configuración" → "API Settings"
+
+  APIs Requeridas:
+    - eBay API (para publicar en eBay)
+    - MercadoLibre API (para publicar en MercadoLibre)
+    - Amazon SP-API (para publicar en Amazon)
+    - AliExpress (para buscar productos)
+    - GROQ AI (para análisis inteligente)
+    - ScraperAPI o ZenRows (para scraping)
+    - PayPal (para pagos)
+
+  Cómo obtener credenciales:
+    - eBay: https://developer.ebay.com/
+    - MercadoLibre: https://developers.mercadolibre.com/
+    - Amazon: https://developer.amazonservices.com/
+    - AliExpress: https://developers.aliexpress.com/
+    - GROQ: https://console.groq.com/
+    - ScraperAPI: https://www.scraperapi.com/
+    - PayPal: https://developer.paypal.com/
+
+PASO 2: Configurar Workflow
+  Menú → "Workflow Config"
+
+  Configuraciones disponibles:
+    - Environment: Sandbox (pruebas) o Production (real)
+    - Workflow Mode: Manual, Automatic, o Hybrid
+    - Por Etapa:
+      * Scrape: manual/automatic/guided
+      * Analyze: manual/automatic/guided
+      * Publish: manual/automatic/guided
+      * Purchase: manual/automatic/guided
+      * Fulfillment: manual/automatic/guided
+      * Customer Service: manual/automatic/guided
+    - Capital de Trabajo: Monto disponible en USD (ej: $500)
+    - Umbrales de Auto-Aprobación:
+      * Auto-Approve Threshold: Confianza mínima para auto-aprobar
+      * Auto-Publish Threshold: Confianza mínima para auto-publicar
+      * Max Auto-Investment: Inversión máxima para operaciones automáticas
+
+PASO 3: Configuración Regional
+  Menú → "Regional Config"
+
+  Configuraciones:
+    - País/Región de operación
+    - Moneda preferida
+    - Zona horaria
+    - Idioma
+
+1.4 BÚSQUEDA DE OPORTUNIDADES
+------------------------------
+
+Hay dos formas de buscar oportunidades:
+
+MÉTODO 1: Página de Oportunidades
+  Menú → "Opportunities"
+
+  Pasos:
+    1. Ingresa término de búsqueda (ej: "auriculares bluetooth")
+    2. Selecciona región (US, UK, MX, DE, ES, BR, etc.)
+    3. Selecciona cantidad de resultados (1-10)
+    4. Selecciona marketplaces (eBay, Amazon, MercadoLibre)
+    5. Haz clic en "Search"
+
+  El sistema mostrará:
+    - Título del producto
+    - Costo en AliExpress (USD)
+    - Precio sugerido de venta (USD)
+    - Margen de ganancia (%)
+    - ROI (Retorno de Inversión %)
+    - Nivel de competencia (low/medium/high)
+    - Puntuación de confianza (0-100%)
+    - Enlace a AliExpress
+
+  Interpretación de resultados:
+    ✅ BUENA OPORTUNIDAD:
+      - Margen >30%
+      - ROI >50%
+      - Competencia: baja o media
+      - Confianza >70%
+
+    ❌ EVITAR:
+      - Margen <20%
+      - ROI <30%
+      - Competencia alta
+      - Confianza <60%
+
+MÉTODO 2: Dashboard con IA
+  Dashboard → Pestaña "Oportunidades IA"
+
+  Características:
+    - Búsqueda inteligente con IA
+    - Análisis automático de oportunidades
+    - Recomendaciones personalizadas
+    - Filtros avanzados:
+      * Por marketplace
+      * Por nivel de competencia
+      * Por margen de ganancia
+      * Por tendencias del mercado
+
+  Pasos:
+    1. Ingresa término de búsqueda
+    2. Aplica filtros (opcional)
+    3. Haz clic en "Analizar Oportunidades"
+    4. Revisa análisis detallado con insights de IA
+
+1.5 GESTIÓN DE PRODUCTOS
+-------------------------
+
+Ver Productos:
+  Menú → "Products"
+
+  Vista de productos muestra:
+    - Lista de todos tus productos
+    - Estado: Pending, Approved, Published, Inactive
+    - Información: Título, precio, categoría, SKU
+    - Acciones: Editar, Eliminar, Publicar, Ver en AliExpress
+
+Crear Producto:
+  Opción A: Desde Oportunidad
+    1. En la página de Oportunidades, encuentra un producto
+    2. Haz clic en "Crear Producto"
+    3. El sistema pre-llenará los datos
+    4. Revisa y ajusta si es necesario
+    5. Haz clic en "Guardar"
+
+  Opción B: Scraping Automático
+    1. Menú → "Products" → "Add Product"
+    2. Selecciona "Scraping Automático"
+    3. Pega URL de AliExpress
+    4. Haz clic en "Scrape"
+    5. Revisa datos extraídos
+    6. Ajusta precio sugerido si es necesario
+    7. Haz clic en "Crear Producto"
+
+  Opción C: Entrada Manual
+    1. Menú → "Products" → "Add Product"
+    2. Selecciona "Entrada Manual"
+    3. Completa formulario:
+       - Título
+       - Descripción
+       - URL de AliExpress
+       - Precio de AliExpress
+       - Precio sugerido
+       - Categoría
+       - Imágenes
+    4. Haz clic en "Crear Producto"
+
+Editar Producto:
+  1. Menú → "Products"
+  2. Haz clic en el producto que quieres editar
+  3. Haz clic en "Editar"
+  4. Modifica los campos necesarios
+  5. Haz clic en "Guardar"
+
+Eliminar Producto:
+  1. Menú → "Products"
+  2. Haz clic en el producto
+  3. Haz clic en "Eliminar"
+  4. Confirma eliminación
+
+1.6 SISTEMA AUTOPILOT
+---------------------
+
+El Autopilot es un sistema autónomo que opera 24/7 buscando y publicando
+productos automáticamente.
+
+Acceso:
+  Menú → "Autopilot"
+
+Configuración Inicial:
+  1. Activa el sistema: Toggle "Enabled"
+  2. Configura intervalo: Cada cuántos minutos ejecutar (ej: 60 minutos)
+  3. Selecciona modo de publicación:
+     - Manual: Productos van a cola de aprobación
+     - Automatic: Publicación directa en marketplace
+  4. Selecciona marketplace objetivo: eBay, MercadoLibre, o Amazon
+  5. Configura límites:
+     - Máximo de oportunidades por ciclo (ej: 5)
+     - Capital de trabajo disponible (ej: $500)
+     - Ganancia mínima (ej: $10 USD)
+     - ROI mínimo (ej: 50%)
+  6. Agrega queries de búsqueda:
+     - Ejemplos: "auriculares bluetooth", "smartwatch", "organizador cocina"
+  7. Activa optimización (opcional):
+     - El sistema aprenderá qué categorías funcionan mejor
+     - Priorizará categorías exitosas
+
+Funcionamiento:
+  El sistema ejecuta ciclos automáticamente:
+    1. Selecciona query inteligentemente (basado en performance)
+    2. Busca oportunidades en AliExpress
+    3. Analiza cada producto:
+       - Calcula margen y ROI
+       - Verifica competencia
+       - Valida reglas de negocio
+    4. Filtra por capital disponible
+    5. Procesa oportunidades:
+       - Modo Automático → Publica directamente
+       - Modo Manual → Envía a cola de aprobación
+    6. Actualiza métricas de performance
+    7. Programa siguiente ciclo
+
+Monitoreo:
+  El dashboard de Autopilot muestra:
+    - Estado: Idle, Running, Paused, Error
+    - Estadísticas:
+      * Total de ciclos ejecutados
+      * Productos publicados
+      * Productos en aprobación
+      * Capital usado
+      * Tasa de éxito
+    - Performance por categoría:
+      * Total de ciclos
+      * Tasa de éxito
+      * ROI promedio
+      * Margen promedio
+    - Última ejecución
+    - Próxima ejecución
+
+Controles:
+  - Iniciar: Activa el sistema
+  - Pausar: Pausa temporalmente
+  - Detener: Detiene completamente
+  - Ejecutar Ciclo Manual: Ejecuta un ciclo inmediatamente
+  - Ver Reporte: Muestra reporte detallado de performance
+
+1.7 PUBLICACIÓN EN MARKETPLACES
+--------------------------------
+
+Publicación Manual:
+  Menú → "Intelligent Publisher" o "Products" → Seleccionar producto → "Publish"
+
+  Pasos:
+    1. Selecciona el producto a publicar
+    2. Selecciona marketplace(s): eBay, MercadoLibre, Amazon
+    3. El sistema generará automáticamente:
+       - Título optimizado
+       - Descripción mejorada con IA
+       - Precio sugerido
+       - Categoría
+    4. Revisa y ajusta si es necesario
+    5. Haz clic en "Publicar"
+
+  Características:
+    - Generación automática de títulos y descripciones
+    - Optimización de precios
+    - Selección inteligente de categorías
+    - Manejo de imágenes
+    - Sincronización automática
+
+Publicación Automática (Autopilot):
+  Si el Autopilot está en modo "Automatic", publicará automáticamente productos
+  que cumplan los criterios configurados.
+
+Sincronización:
+  El sistema sincroniza automáticamente:
+    - Cambios de precio
+    - Cambios de stock
+    - Estado de publicaciones
+    - Ventas recibidas
+
+1.8 GESTIÓN DE VENTAS
+---------------------
+
+Ver Ventas:
+  Menú → "Sales"
+
+  La página muestra:
+    - Lista de todas las ventas
+    - Información: Producto, cliente, precio, fecha
+    - Estado: Pending, Processing, Shipped, Delivered, Cancelled
+    - Acciones: Ver detalles, Procesar, Marcar como enviado
+
+Procesar Venta:
+  Cuando recibes una venta:
+    1. El sistema notifica automáticamente
+    2. Ve a "Sales" → Selecciona la venta
+    3. Revisa detalles:
+       - Producto vendido
+       - Precio de venta
+       - Cliente
+       - Dirección de envío
+    4. Si el workflow está en modo automático:
+       - El sistema comprará automáticamente en AliExpress
+    5. Si está en modo manual:
+       - Haz clic en "Procesar Venta"
+       - El sistema te guiará para comprar en AliExpress
+    6. Una vez comprado, marca como "Processing"
+    7. Cuando recibas tracking, marca como "Shipped"
+    8. Cuando el cliente reciba, marca como "Delivered"
+
+Cálculo Automático:
+  El sistema calcula automáticamente:
+    - Ingresos: Precio de venta
+    - Costos: Precio AliExpress + fees del marketplace
+    - Utilidad Bruta (Gross Profit): Ingresos - Costos
+    - Comisión del Admin: 20% de la utilidad bruta
+    - Ganancia Neta: Utilidad bruta - Comisión
+
+1.9 DASHBOARD Y FINANZAS
+-------------------------
+
+Dashboard Principal:
+  Menú → "Dashboard"
+
+  Métricas mostradas:
+    - Balance Actual: Dinero disponible
+    - Ventas Totales: Número de ventas
+    - Ingresos Totales: Suma de todas las ventas
+    - Ganancias Totales: Suma de ganancias netas
+    - Comisiones Pendientes: Comisiones por pagar al admin
+    - Productos Activos: Productos publicados
+    - Productos Pendientes: En cola de aprobación
+
+  Gráficas:
+    - Ventas por período (diario, semanal, mensual)
+    - Ganancias por período
+    - Productos más vendidos
+    - Performance de marketplaces
+
+Dashboard Financiero:
+  Menú → "Finance"
+
+  Información detallada:
+    - Balance y transacciones
+    - Ingresos y gastos
+    - Comisiones pagadas y pendientes
+    - Proyecciones de ganancias
+    - Análisis de rentabilidad
+
+Reportes:
+  Menú → "Reports"
+
+  Reportes disponibles:
+    - Reporte de Ventas
+    - Reporte de Ganancias
+    - Reporte de Productos
+    - Reporte de Performance
+    - Reporte de Comisiones
+    - Reporte Personalizado
+
+1.10 CONFIGURACIÓN DE APIs
+---------------------------
+
+Acceso:
+  Menú → "API Keys" o "APIConfiguration"
+
+APIs Disponibles:
+
+  MARKETPLACES:
+    - eBay API
+      * App ID
+      * Dev ID
+      * Cert ID
+      * RuName (Redirect URI)
+      * Ambientes: Sandbox / Production
+
+    - Amazon SP-API
+      * Access Key ID
+      * Secret Access Key
+      * Seller ID
+      * Marketplace ID
+      * Region
+      * Ambientes: Sandbox / Production
+
+    - MercadoLibre API
+      * Client ID
+      * Client Secret
+      * Ambientes: Sandbox / Production
+
+  INTELIGENCIA ARTIFICIAL:
+    - GROQ AI
+      * API Key
+
+  WEB SCRAPING:
+    - ScraperAPI
+      * API Key
+
+    - ZenRows
+      * API Key
+
+    - 2Captcha
+      * API Key
+
+  PAGOS:
+    - PayPal
+      * Client ID
+      * Client Secret
+      * Ambientes: Sandbox / Production
+
+  COMPRA AUTOMATIZADA:
+    - AliExpress Auto-Purchase
+      * Email
+      * Password
+      * 2FA (si aplica)
+
+Configuración:
+  1. Selecciona la API que quieres configurar
+  2. Completa los campos requeridos
+  3. Selecciona ambiente (Sandbox o Production) si aplica
+  4. Haz clic en "Test Connection" para verificar
+  5. Si la prueba es exitosa, haz clic en "Save"
+  6. El sistema encriptará y guardará tus credenciales
+
+Seguridad:
+  - Todas las credenciales se encriptan con AES-256-GCM
+  - Solo tú puedes ver tus credenciales
+  - Los administradores pueden ver credenciales globales (si las configuran)
+  - Las credenciales nunca se exponen en logs
+
+1.11 CONFIGURACIÓN DE WORKFLOW
+-------------------------------
+
+Acceso:
+  Menú → "Workflow Config"
+
+Configuraciones:
+
+  Environment (Ambiente):
+    - Sandbox: Para pruebas, no realiza operaciones reales
+    - Production: Operaciones reales con dinero real
+
+  Workflow Mode (Modo de Workflow):
+    - Manual: Requiere aprobación en cada etapa
+    - Automatic: Ejecuta todo automáticamente
+    - Hybrid: Algunas etapas automáticas, otras manuales
+
+  Por Etapa (Stage Configuration):
+    Cada etapa puede configurarse independientemente:
+
+    - Scrape (Búsqueda y Scraping):
+      * Manual: Tú ejecutas las búsquedas
+      * Automatic: El sistema busca automáticamente
+      * Guided: El sistema sugiere, tú decides
+
+    - Analyze (Análisis):
+      * Manual: Tú analizas cada oportunidad
+      * Automatic: El sistema analiza automáticamente
+      * Guided: El sistema analiza y te muestra resultados
+
+    - Publish (Publicación):
+      * Manual: Tú apruebas cada publicación
+      * Automatic: El sistema publica automáticamente
+      * Guided: El sistema sugiere, tú apruebas
+
+    - Purchase (Compra):
+      * Manual: Tú compras manualmente en AliExpress
+      * Automatic: El sistema compra automáticamente
+      * Guided: El sistema te guía en la compra
+
+    - Fulfillment (Envío):
+      * Manual: Tú gestionas los envíos
+      * Automatic: El sistema gestiona automáticamente
+      * Guided: El sistema te guía
+
+    - Customer Service (Atención al Cliente):
+      * Manual: Tú atiendes a los clientes
+      * Automatic: El sistema responde automáticamente (si está disponible)
+      * Guided: El sistema sugiere respuestas
+
+  Capital de Trabajo (Working Capital):
+    - Monto disponible en USD para operaciones
+    - Ejemplo: $500, $1000, $5000
+    - El sistema usa esto para calcular cuántos productos puede procesar
+
+  Umbrales de Auto-Aprobación:
+    - Auto-Approve Threshold: Confianza mínima (0-100%) para auto-aprobar
+    - Auto-Publish Threshold: Confianza mínima (0-100%) para auto-publicar
+    - Max Auto-Investment: Inversión máxima por operación automática
+
+Guardar Configuración:
+  1. Ajusta todas las configuraciones según tus preferencias
+  2. Haz clic en "Save Configuration"
+  3. El sistema aplicará los cambios inmediatamente
+
+1.12 NOTIFICACIONES Y ALERTAS
+------------------------------
+
+El sistema envía notificaciones para:
+  - Nuevas oportunidades encontradas
+  - Productos publicados exitosamente
+  - Nuevas ventas recibidas
+  - Productos pendientes de aprobación
+  - Errores en operaciones
+  - Alertas de capital bajo
+  - Actualizaciones del sistema
+
+Ver Notificaciones:
+  - Icono de campana en la barra superior
+  - Menú → "Notifications" (si está disponible)
+
+Tipos de Notificaciones:
+  - INFO: Información general
+  - SUCCESS: Operación exitosa
+  - WARNING: Advertencia
+  - ERROR: Error que requiere atención
+  - USER_ACTION: Requiere acción del usuario
+
+1.13 SOLUCIÓN DE PROBLEMAS
+---------------------------
+
+Problema: "No puedo iniciar sesión"
+  Soluciones:
+    1. Verifica que estés usando las credenciales correctas
+    2. Verifica que la URL sea www.ivanreseller.com o ivanreseller.com
+    3. Limpia la caché del navegador
+    4. Intenta desde otro navegador
+    5. Contacta al administrador
+
+Problema: "Error al buscar oportunidades"
+  Soluciones:
+    1. Verifica que las APIs estén configuradas (API Keys)
+    2. Verifica que las credenciales sean correctas
+    3. Verifica que no hayas excedido los límites de la API
+    4. Espera unos minutos y vuelve a intentar
+    5. Revisa los logs del sistema (si eres admin)
+
+Problema: "No puedo publicar productos"
+  Soluciones:
+    1. Verifica que las APIs de marketplace estén configuradas
+    2. Verifica que hayas completado el OAuth de los marketplaces
+    3. Verifica que el producto esté en estado "Approved"
+    4. Verifica que tengas credenciales válidas
+    5. Revisa los logs de error
+
+Problema: "El Autopilot no funciona"
+  Soluciones:
+    1. Verifica que el Autopilot esté activado
+    2. Verifica que tengas queries configuradas
+    3. Verifica que tengas capital de trabajo configurado
+    4. Verifica que las APIs necesarias estén configuradas
+    5. Revisa el estado del Autopilot en el dashboard
+
+Problema: "No recibo notificaciones"
+  Soluciones:
+    1. Verifica que las notificaciones estén habilitadas en tu navegador
+    2. Verifica la configuración de notificaciones en el sistema
+    3. Revisa la bandeja de notificaciones en el sistema
+
+================================================================================
+                    PARTE 2: MANUAL DEL ADMINISTRADOR
+================================================================================
+
+2.1 ACCESO COMO ADMINISTRADOR
+-------------------------------
+
+URL de Acceso:
+  - www.ivanreseller.com
+  - ivanreseller.com
+
+Credenciales:
+  - Las credenciales de administrador son proporcionadas al configurar el sistema
+  - Se recomienda cambiar la contraseña después del primer acceso
+
+Funciones Exclusivas del Admin:
+  - Gestión de usuarios (crear, editar, eliminar)
+  - Ver todos los datos del sistema
+  - Configuración global del sistema
+  - Acceso a logs y monitoreo
+  - Gestión de comisiones
+  - Reportes globales
+
+2.2 GESTIÓN DE USUARIOS
+-----------------------
+
+Acceso:
+  Menú → "Users"
+
+Crear Usuario:
+  1. Haz clic en "Create User" o "Nuevo Usuario"
+  2. Completa el formulario:
+     - Username: Nombre de usuario único
+     - Email: Email válido
+     - Password: Contraseña segura
+     - Full Name: Nombre completo (opcional)
+     - Role: USER (por defecto)
+     - Commission Rate: Porcentaje de comisión (ej: 0.20 = 20%)
+     - Fixed Monthly Cost: Costo fijo mensual en USD (ej: 17.00)
+  3. Haz clic en "Create User"
+  4. El sistema creará automáticamente:
+     - Cuenta de usuario
+     - Configuración de workflow por defecto
+     - Registro de actividad
+
+Editar Usuario:
+  1. Selecciona el usuario de la lista
+  2. Haz clic en "Edit"
+  3. Modifica los campos necesarios:
+     - Información personal
+     - Commission Rate
+     - Fixed Monthly Cost
+     - Estado (Active/Inactive)
+  4. Haz clic en "Save"
+
+Eliminar Usuario:
+  1. Selecciona el usuario
+  2. Haz clic en "Delete"
+  3. Confirma eliminación
+  NOTA: Esto eliminará todos los datos del usuario (productos, ventas, etc.)
+
+Ver Detalles del Usuario:
+  - Información personal
+  - Estadísticas: Ventas, ganancias, productos
+  - Configuración de workflow
+  - APIs configuradas
+  - Actividad reciente
+
+2.3 CONFIGURACIÓN DEL SISTEMA
+-----------------------------
+
+Acceso:
+  Menú → "Settings" o "System Settings"
+
+Configuraciones Globales:
+
+  Variables de Entorno:
+    - JWT_SECRET: Clave secreta para tokens JWT
+    - ENCRYPTION_KEY: Clave para encriptar credenciales
+    - DATABASE_URL: URL de conexión a la base de datos
+    - REDIS_URL: URL de conexión a Redis (cache)
+    - CORS_ORIGIN: Orígenes permitidos para CORS
+
+  Configuración de APIs Globales:
+    - Puedes configurar credenciales globales que todos los usuarios pueden usar
+    - Útil para APIs compartidas o de prueba
+    - Scope: "global" en lugar de "user"
+
+  Configuración de Email:
+    - SMTP Host
+    - SMTP Port
+    - Email User
+    - Email Password
+    - From Address
+
+  Configuración de Notificaciones:
+    - Twilio (SMS)
+    - Slack (Notificaciones al equipo)
+    - Webhooks
+
+2.4 MONITOREO Y LOGS
+--------------------
+
+Acceso:
+  Menú → "System Logs" o "Logs"
+
+Información Disponible:
+  - Logs del sistema
+  - Errores y excepciones
+  - Actividad de usuarios
+  - Operaciones de APIs
+  - Performance del sistema
+
+Filtros:
+  - Por usuario
+  - Por tipo de log (INFO, WARN, ERROR)
+  - Por fecha
+  - Por acción
+
+Monitoreo en Tiempo Real:
+  - Estado de APIs
+  - Uso de recursos
+  - Performance de queries
+  - Errores activos
+
+2.5 REPORTES Y ANALYTICS
+------------------------
+
+Acceso:
+  Menú → "Reports" o "Advanced Reports"
+
+Reportes Disponibles:
+
+  Reporte Global de Ventas:
+    - Ventas totales del sistema
+    - Ventas por usuario
+    - Ventas por marketplace
+    - Ventas por período
+
+  Reporte de Ganancias:
+    - Ganancias totales
+    - Ganancias por usuario
+    - Comisiones recaudadas
+    - Proyecciones
+
+  Reporte de Usuarios:
+    - Usuarios activos
+    - Usuarios inactivos
+    - Performance por usuario
+    - Usuarios más exitosos
+
+  Reporte de Productos:
+    - Productos más vendidos
+    - Productos por categoría
+    - Performance de productos
+    - Productos pendientes
+
+  Reporte de Comisiones:
+    - Comisiones pendientes
+    - Comisiones pagadas
+    - Comisiones por usuario
+    - Proyecciones de comisiones
+
+Exportar Reportes:
+  - CSV
+  - Excel
+  - PDF
+
+2.6 GESTIÓN DE COMISIONES
+-------------------------
+
+Acceso:
+  Menú → "Commissions" o "Admin Commissions"
+
+Ver Comisiones:
+  - Comisiones pendientes por usuario
+  - Comisiones pagadas
+  - Total de comisiones recaudadas
+  - Comisiones por período
+
+Marcar como Pagado:
+  1. Selecciona la comisión
+  2. Haz clic en "Mark as Paid"
+  3. El sistema actualizará el estado
+
+Configuración de Comisiones:
+  - Commission Rate por usuario (por defecto: 20%)
+  - Fixed Monthly Cost por usuario (por defecto: $17)
+  - Puedes ajustar estos valores al crear o editar usuarios
+
+2.7 CONFIGURACIÓN REGIONAL
+--------------------------
+
+Acceso:
+  Menú → "Regional Config"
+
+Configuraciones:
+  - País/Región por defecto
+  - Moneda por defecto
+  - Zona horaria del servidor
+  - Idioma por defecto
+  - Formatos de fecha y número
+
+================================================================================
+                      PARTE 3: EXPLICACIÓN TÉCNICA
+================================================================================
+
+3.1 ARQUITECTURA DEL SISTEMA
+----------------------------
+
+Arquitectura General:
+  ┌─────────────────────────────────────────────────────────────┐
+  │                     NGINX (Reverse Proxy)                    │
+  │                    www.ivanreseller.com                      │
+  └──────────────────┬────────────────────┬─────────────────────┘
+                     │                    │
+         ┌───────────▼─────────┐  ┌──────▼──────┐
+         │   Frontend React     │  │   Backend   │
+         │   (Vite + TypeScript)│  │  (Express) │
+         │   Port: 5173         │  │  Port: 3000│
+         └──────────────────────┘  └──────┬──────┘
+                                          │
+                  ┌───────────────────────┼───────────────────────┐
+                  │                       │                       │
+          ┌───────▼────────┐  ┌──────────▼──────┐  ┌──────────▼────────┐
+          │   PostgreSQL   │  │     Redis         │  │   BullMQ Jobs      │
+          │   (Database)    │  │    (Cache)        │  │  (Background)     │
+          └────────────────┘  └───────────────────┘  └───────────────────┘
+
+Stack Tecnológico:
+  Frontend:
+    - React 18
+    - TypeScript
+    - Vite (build tool)
+    - Tailwind CSS (estilos)
+    - Zustand (state management)
+    - React Router (routing)
+    - Axios (HTTP client)
+    - Lucide React (iconos)
+
+  Backend:
+    - Node.js 20+
+    - Express.js
+    - TypeScript
+    - Prisma ORM (base de datos)
+    - JWT (autenticación)
+    - Winston (logging)
+    - BullMQ (jobs en background)
+    - Zod (validación)
+
+  Base de Datos:
+    - PostgreSQL 16
+    - Redis (cache y jobs)
+
+  Infraestructura:
+    - Docker (contenedores)
+    - Docker Compose (orquestación)
+    - NGINX (reverse proxy)
+
+3.2 TECNOLOGÍAS UTILIZADAS
+---------------------------
+
+Backend:
+  - Node.js: Runtime de JavaScript
+  - Express.js: Framework web
+  - TypeScript: Tipado estático
+  - Prisma: ORM para base de datos
+  - JWT: Autenticación con tokens
+  - Winston: Sistema de logging estructurado
+  - BullMQ: Sistema de colas para jobs
+  - Zod: Validación de esquemas
+  - Crypto: Encriptación AES-256-GCM
+
+Frontend:
+  - React: Biblioteca de UI
+  - TypeScript: Tipado estático
+  - Vite: Build tool rápido
+  - Tailwind CSS: Framework de estilos
+  - Zustand: State management ligero
+  - React Router: Routing
+  - Axios: Cliente HTTP
+  - React Hot Toast: Notificaciones
+
+Base de Datos:
+  - PostgreSQL: Base de datos relacional
+  - Redis: Cache y cola de jobs
+
+3.3 BASE DE DATOS
+-----------------
+
+Modelo de Datos Principal:
+
+  User (Usuarios):
+    - id, username, email, password
+    - role (ADMIN/USER)
+    - commissionRate (porcentaje de comisión)
+    - fixedMonthlyCost (costo fijo mensual)
+    - balance, totalEarnings, totalSales
+    - isActive, lastLoginAt, createdAt, updatedAt
+
+  Product (Productos):
+    - id, userId, aliexpressUrl, title, description
+    - aliexpressPrice, suggestedPrice, finalPrice
+    - category, images, sku
+    - status (PENDING/APPROVED/PUBLISHED/INACTIVE)
+    - isPublished, createdAt, updatedAt
+
+  Sale (Ventas):
+    - id, userId, productId
+    - marketplace, marketplaceOrderId
+    - salePrice, aliexpressCost, marketplaceFee
+    - grossProfit, netProfit
+    - status, createdAt, updatedAt
+
+  Commission (Comisiones):
+    - id, userId, saleId
+    - amount, status (PENDING/PAID)
+    - createdAt, updatedAt
+
+  ApiCredential (Credenciales de API):
+    - id, userId, apiName, environment
+    - credentials (encriptado), isActive
+    - scope (user/global)
+    - createdAt, updatedAt
+
+  UserWorkflowConfig (Configuración de Workflow):
+    - id, userId, environment, workflowMode
+    - stageScrape, stageAnalyze, stagePublish
+    - stagePurchase, stageFulfillment, stageCustomerService
+    - workingCapital, autoApproveThreshold
+    - autoPublishThreshold, maxAutoInvestment
+
+  Opportunity (Oportunidades):
+    - id, userId, title, description, url
+    - estimatedCost, estimatedPrice, estimatedProfit
+    - roi, margin, competition, confidence
+    - category, region, marketplaces
+    - createdAt
+
+  SystemConfig (Configuración del Sistema):
+    - key, value, description
+    - updatedAt
+
+Índices:
+  - Optimizados para búsquedas rápidas
+  - Índices en userId, apiName, status, createdAt
+  - Índices compuestos para queries complejas
+
+3.4 SEGURIDAD Y ENCRIPTACIÓN
+-----------------------------
+
+Capas de Seguridad:
+
+  Layer 1: Frontend - Filtrado de UI
+    - Menú lateral filtra opciones según rol
+    - Rutas protegidas con ProtectedRoute
+
+  Layer 2: Frontend - Route Guards
+    - Verificación de autenticación
+    - Verificación de roles
+    - Redirección automática si no autorizado
+
+  Layer 3: Backend - JWT Verification
+    - Middleware de autenticación
+    - Verificación de token en cada request
+    - Expiración de tokens (24 horas)
+
+  Layer 4: Backend - Ownership Check
+    - Verificación de propiedad de recursos
+    - Filtrado automático por userId
+    - Admin bypass para soporte
+
+  Layer 5: Data Encryption
+    - Encriptación AES-256-GCM de credenciales
+    - IV único por credencial
+    - Authentication Tag para integridad
+
+  Layer 6: Database Level
+    - Aislamiento de datos por usuario
+    - Constraints de integridad
+    - Transacciones para operaciones críticas
+
+Encriptación:
+  - Algoritmo: AES-256-GCM
+  - Clave: ENCRYPTION_KEY (32 bytes en hex)
+  - IV: Generado aleatoriamente para cada credencial
+  - Auth Tag: Para verificar integridad
+
+3.5 APIs INTEGRADAS
+-------------------
+
+Marketplaces:
+  - eBay API: OAuth 2.0, publicación de productos, gestión de órdenes
+  - Amazon SP-API: OAuth 2.0, publicación, inventario, órdenes
+  - MercadoLibre API: OAuth 2.0, publicación, gestión de ventas
+
+Inteligencia Artificial:
+  - GROQ AI: Análisis de oportunidades, mejora de descripciones
+  - OpenAI (opcional): Análisis avanzado, traducciones
+
+Web Scraping:
+  - ScraperAPI: Scraping de AliExpress con proxies
+  - ZenRows: Alternativa de scraping
+  - 2Captcha: Resolución de captchas
+
+Pagos:
+  - PayPal: Procesamiento de pagos, payouts
+
+Compra Automatizada:
+  - AliExpress: Compra automática de productos
+
+Notificaciones (opcionales):
+  - Email SMTP: Emails transaccionales
+  - Twilio: SMS y WhatsApp
+  - Slack: Notificaciones al equipo
+
+3.6 SISTEMA MULTI-TENANT
+------------------------
+
+Concepto:
+  Múltiples usuarios (tenants) comparten la misma aplicación e
+  infraestructura, pero cada uno tiene sus datos completamente aislados.
+
+Aislamiento de Datos:
+  - Cada query filtra automáticamente por userId
+  - Admin puede ver todos los datos (para soporte)
+  - Usuarios solo ven sus propios datos
+
+Ventajas:
+  - Eficiencia de costos
+  - Mantenimiento simplificado
+  - Escalabilidad
+  - Seguridad garantizada
+
+3.7 FLUJOS DE DATOS
+-------------------
+
+Flujo de Autenticación:
+  1. Usuario ingresa credenciales en frontend
+  2. Frontend envía POST /api/auth/login
+  3. Backend verifica credenciales
+  4. Backend genera JWT token
+  5. Frontend guarda token en localStorage
+  6. Frontend incluye token en headers de requests siguientes
+
+Flujo de Búsqueda de Oportunidades:
+  1. Usuario ingresa término de búsqueda
+  2. Frontend envía POST /api/opportunities/search
+  3. Backend usa OpportunityFinderService
+  4. Service hace scraping de AliExpress
+  5. Service analiza competencia en marketplaces
+  6. Service calcula margen, ROI, confianza
+  7. Backend retorna oportunidades
+  8. Frontend muestra resultados
+
+Flujo de Publicación:
+  1. Usuario selecciona producto
+  2. Frontend envía POST /api/products/:id/publish
+  3. Backend usa MarketplaceService
+  4. Service obtiene credenciales (encriptadas)
+  5. Service genera título y descripción con IA
+  6. Service publica en marketplace via API
+  7. Service guarda listing ID en base de datos
+  8. Backend retorna resultado
+  9. Frontend actualiza estado del producto
+
+Flujo de Autopilot:
+  1. Sistema ejecuta ciclo automáticamente
+  2. Selecciona query basado en performance
+  3. Busca oportunidades
+  4. Filtra por reglas de negocio
+  5. Filtra por capital disponible
+  6. Publica o envía a aprobación
+  7. Actualiza métricas
+  8. Programa siguiente ciclo
+
+================================================================================
+                    PARTE 4: FUNCIONALIDADES DETALLADAS
+================================================================================
+
+4.1 SISTEMA DE OPORTUNIDADES
+-----------------------------
+
+Características:
+  - Búsqueda inteligente en AliExpress
+  - Análisis de competencia en marketplaces
+  - Cálculo automático de márgenes y ROI
+  - Validación de oportunidades
+  - Scoring de confianza
+
+Proceso:
+  1. Scraping de AliExpress con stealth
+  2. Extracción de datos del producto
+  3. Búsqueda de competencia en marketplaces
+  4. Cálculo de precios sugeridos
+  5. Cálculo de margen y ROI
+  6. Análisis de competencia
+  7. Scoring de confianza
+  8. Filtrado por criterios configurables
+
+4.2 SISTEMA AUTOPILOT
+---------------------
+
+Características:
+  - Operación 24/7 sin intervención
+  - Selección inteligente de queries
+  - Gestión automática de capital
+  - Publicación automática o manual
+  - Tracking de performance
+  - Optimización continua
+
+Ciclo Completo:
+  1. Selección de query (80% performance, 20% exploración)
+  2. Verificación de capital disponible
+  3. Búsqueda de oportunidades
+  4. Validación de reglas de negocio
+  5. Filtrado por capital
+  6. Procesamiento:
+     - Modo Automático → Publicación directa
+     - Modo Manual → Cola de aprobación
+  7. Actualización de métricas
+  8. Programación de siguiente ciclo
+
+Métricas Tracked:
+  - Total de ciclos ejecutados
+  - Productos publicados
+  - Productos en aprobación
+  - Capital usado
+  - Tasa de éxito
+  - Performance por categoría
+
+4.3 GESTIÓN DE CAPITAL
+----------------------
+
+Cálculo de Capital Disponible:
+  Capital Disponible = Capital Total - Pedidos Pendientes - Productos Aprobados
+
+Control:
+  - Tracking en tiempo real
+  - Reserva automática por producto
+  - Prevención de sobre-compromiso
+  - Cálculo dinámico
+
+4.4 PUBLICACIÓN AUTOMÁTICA
+---------------------------
+
+Características:
+  - Generación automática de títulos
+  - Mejora de descripciones con IA
+  - Optimización de precios
+  - Selección inteligente de categorías
+  - Manejo de imágenes
+  - Sincronización automática
+
+Proceso:
+  1. Validación del producto
+  2. Obtención de credenciales
+  3. Generación de contenido con IA
+  4. Publicación en marketplace
+  5. Guardado de listing ID
+  6. Actualización de estado
+
+4.5 ANÁLISIS DE COMPETENCIA
+---------------------------
+
+Métricas Analizadas:
+  - Precios de competidores
+  - Cantidad de vendedores
+  - Calificaciones promedio
+  - Volumen de ventas estimado
+  - Tendencias de precios
+
+Niveles de Competencia:
+  - Low: Pocos competidores, fácil destacar
+  - Medium: Competencia moderada, balanceado
+  - High: Mucha competencia, difícil destacar
+
+4.6 SISTEMA DE COMISIONES
+-------------------------
+
+Cálculo:
+  Comisión = Gross Profit × Commission Rate
+
+Ejemplo:
+  Venta: $50
+  Costo AliExpress: $25
+  Marketplace Fee (12.5%): $6.25
+  Gross Profit: $18.75
+  Commission Rate: 20%
+  Comisión: $3.75
+  Net Profit Usuario: $15.00
+
+Estados:
+  - PENDING: Pendiente de pago
+  - PAID: Pagada
+
+4.7 NOTIFICACIONES EN TIEMPO REAL
+----------------------------------
+
+Tipos:
+  - Nuevas oportunidades
+  - Productos publicados
+  - Nuevas ventas
+  - Productos pendientes
+  - Errores
+  - Alertas de capital
+
+Canales:
+  - In-app (notificaciones en el sistema)
+  - Email (si está configurado)
+  - SMS (si está configurado Twilio)
+  - Slack (si está configurado)
+
+================================================================================
+                        PARTE 5: MODELO DE NEGOCIO
+================================================================================
+
+5.1 MODELO PARA USUARIOS
+------------------------
+
+Estructura de Costos:
+  1. Costo Fijo Mensual: $17 USD (configurable por admin)
+  2. Comisión por Venta: 20% de la utilidad bruta (gross profit)
+  3. Capital de Trabajo: Propiedad y administración del usuario
+
+Flujo de Ingresos:
+  Venta → Ingresos → Costos → Utilidad Bruta → Comisión Admin (20%) → Ganancia Neta
+
+Ejemplo Real:
+  Venta: $50.00
+  Costo AliExpress: $25.00
+  Marketplace Fee (12.5%): $6.25
+  Total Costos: $31.25
+  Gross Profit: $18.75
+  Comisión Admin (20%): $3.75
+  Net Profit Usuario: $15.00
+
+Punto de Equilibrio:
+  Costo Fijo Mensual: $17.00
+  Ganancia Neta por Venta: $15.00
+  Ventas Necesarias: $17.00 / $15.00 = 1.13 ventas/mes
+  Redondeado: 2 ventas/mes para cubrir costo fijo
+
+Proyecciones:
+  - 10 ventas/mes: $150 ganancia neta - $17 costo = $133 neto
+  - 30 ventas/mes: $450 ganancia neta - $17 costo = $433 neto
+  - 100 ventas/mes: $1,500 ganancia neta - $17 costo = $1,483 neto
+
+5.2 MODELO PARA ADMINISTRADOR
+------------------------------
+
+Estructura de Ingresos:
+  1. Ingresos Recurrentes (MRR): $17 USD × Usuarios Activos
+  2. Ingresos por Performance: 20% de Gross Profit de cada venta
+
+Flujo de Ingresos:
+  Usuario Activo → Costo Fijo ($17/mes) + Comisiones (20% de cada venta)
+
+Ejemplo por Usuario:
+  Usuario Promedio (10 ventas/mes):
+    Costo Fijo: $17.00
+    Comisiones: 10 × $18.75 × 20% = $37.50
+    Total: $54.50/mes
+
+  Usuario Exitoso (30 ventas/mes):
+    Costo Fijo: $17.00
+    Comisiones: 30 × $18.75 × 20% = $112.50
+    Total: $129.50/mes
+
+  Usuario Power (100 ventas/mes):
+    Costo Fijo: $17.00
+    Comisiones: 100 × $18.75 × 20% = $375.00
+    Total: $392.00/mes
+
+Proyecciones con Múltiples Usuarios:
+  10 Usuarios Activos (8 promedio + 2 exitosos):
+    MRR: 10 × $17 = $170/mes
+    Comisiones: Variable según ventas
+    Proyección conservadora: $170 + $75 = $245/mes
+
+  50 Usuarios Activos:
+    MRR: 50 × $17 = $850/mes
+    Comisiones: Variable
+    Proyección conservadora: $850 + $375 = $1,225/mes
+
+  100 Usuarios Activos:
+    MRR: 100 × $17 = $1,700/mes
+    Comisiones: Variable
+    Proyección conservadora: $1,700 + $750 = $2,450/mes
+
+5.3 CÁLCULO DE COMISIONES
+--------------------------
+
+Fórmula:
+  Comisión = Gross Profit × Commission Rate
+
+Donde:
+  - Gross Profit = Sale Price - AliExpress Cost - Marketplace Fee
+  - Commission Rate = Porcentaje configurado (por defecto: 20%)
+
+Ejemplo Detallado:
+  Venta: $50.00
+  Costo AliExpress: $25.00
+  Marketplace Fee (12.5% de $50): $6.25
+  Gross Profit: $50.00 - $25.00 - $6.25 = $18.75
+  Commission Rate: 20%
+  Comisión: $18.75 × 0.20 = $3.75
+  Net Profit Usuario: $18.75 - $3.75 = $15.00
+
+5.4 ESTRUCTURA DE COSTOS
+------------------------
+
+Para el Usuario:
+  - Costo Fijo Mensual: $17 USD
+  - Comisión por Venta: 20% de gross profit
+  - Capital de Trabajo: Propio del usuario
+
+Para el Administrador:
+  - Infraestructura del servidor
+  - Mantenimiento del sistema
+  - Soporte técnico
+  - Desarrollo de nuevas funcionalidades
+
+5.5 PROYECCIONES DE RENTABILIDAD
+--------------------------------
+
+Escenario Conservador (Usuario):
+  - 10 ventas/mes
+  - Gross Profit promedio: $18.75
+  - Ganancia Neta: $15.00 × 10 = $150
+  - Costo Fijo: $17
+  - Neto Mensual: $133
+  - Neto Anual: $1,596
+
+Escenario Realista (Usuario):
+  - 30 ventas/mes
+  - Gross Profit promedio: $18.75
+  - Ganancia Neta: $15.00 × 30 = $450
+  - Costo Fijo: $17
+  - Neto Mensual: $433
+  - Neto Anual: $5,196
+
+Escenario Optimista (Usuario):
+  - 100 ventas/mes
+  - Gross Profit promedio: $18.75
+  - Ganancia Neta: $15.00 × 100 = $1,500
+  - Costo Fijo: $17
+  - Neto Mensual: $1,483
+  - Neto Anual: $17,796
+
+Escenario Conservador (Admin - 10 usuarios):
+  - MRR: $170/mes
+  - Comisiones: $75/mes (estimado)
+  - Total: $245/mes
+  - Anual: $2,940
+
+Escenario Realista (Admin - 50 usuarios):
+  - MRR: $850/mes
+  - Comisiones: $375/mes (estimado)
+  - Total: $1,225/mes
+  - Anual: $14,700
+
+Escenario Optimista (Admin - 100 usuarios):
+  - MRR: $1,700/mes
+  - Comisiones: $750/mes (estimado)
+  - Total: $2,450/mes
+  - Anual: $29,400
+
+================================================================================
+                    PARTE 6: GUÍAS DE USO AVANZADO
+================================================================================
+
+6.1 OPTIMIZACIÓN DE BÚSQUEDAS
+------------------------------
+
+Consejos:
+  1. Usa términos específicos:
+     ❌ Mal: "productos"
+     ✅ Bien: "auriculares bluetooth cancelación ruido"
+
+  2. Busca productos con demanda:
+     - Productos estacionales
+     - Productos trending
+     - Productos que resuelven problemas
+
+  3. Analiza la competencia:
+     - Competencia baja: Más fácil vender
+     - Competencia media: Balanceado
+     - Competencia alta: Difícil destacar
+
+  4. Revisa el margen:
+     - Mínimo recomendado: 30%
+     - Ideal: 40-50%
+
+  5. Verifica la confianza:
+     - Alta (>80%): Muy confiable
+     - Media (60-80%): Revisar manualmente
+     - Baja (<60%): Investigar más
+
+6.2 CONFIGURACIÓN DE AUTOPILOT
+-------------------------------
+
+Configuración Recomendada para Principiantes:
+  - Enabled: true
+  - Cycle Interval: 60 minutos
+  - Publication Mode: manual (para revisar antes de publicar)
+  - Max Opportunities: 3-5 por ciclo
+  - Working Capital: $500
+  - Min Profit: $10
+  - Min ROI: 50%
+  - Optimization: false (activar después de tener datos)
+
+Configuración para Usuarios Avanzados:
+  - Enabled: true
+  - Cycle Interval: 30 minutos
+  - Publication Mode: automatic
+  - Max Opportunities: 10 por ciclo
+  - Working Capital: $2,000+
+  - Min Profit: $15
+  - Min ROI: 60%
+  - Optimization: true
+
+Queries Recomendadas:
+  - Categorías populares: "auriculares", "smartwatch", "organizador"
+  - Nichos específicos: "auriculares gaming", "smartwatch deportivo"
+  - Productos trending: Busca en Google Trends primero
+
+6.3 ESTRATEGIAS DE PUBLICACIÓN
+-------------------------------
+
+Estrategia 1: Publicación Gradual
+  - Empieza con 5-10 productos
+  - Monitorea performance
+  - Escala productos exitosos
+  - Elimina productos con bajo performance
+
+Estrategia 2: Enfoque en Nichos
+  - Enfócate en 2-3 categorías
+  - Conviértete en experto en esas categorías
+  - Optimiza títulos y descripciones
+  - Construye reputación
+
+Estrategia 3: Diversificación
+  - Publica en múltiples categorías
+  - Reduce riesgo
+  - Aprovecha tendencias estacionales
+  - Escala lo que funciona
+
+6.4 GESTIÓN DE CAPITAL
+----------------------
+
+Reglas de Oro:
+  1. Nunca comprometas más del 80% de tu capital
+  2. Mantén reserva para oportunidades urgentes
+  3. Monitorea capital disponible diariamente
+  4. Ajusta working capital según tu volumen
+
+Cálculo de Capital Necesario:
+  Capital Mínimo = (Precio Promedio Producto × Productos Simultáneos) × 1.2
+
+Ejemplo:
+  Precio promedio: $25
+  Productos simultáneos: 20
+  Capital necesario: $25 × 20 × 1.2 = $600
+
+Recomendaciones:
+  - Principiantes: $500 - $1,000
+  - Intermedios: $1,000 - $2,500
+  - Avanzados: $2,500+
+
+6.5 MEJORES PRÁCTICAS
+---------------------
+
+General:
+  1. Configura todas las APIs antes de empezar
+  2. Empieza en modo Sandbox para pruebas
+  3. Revisa el Dashboard diariamente
+  4. Monitorea tus métricas semanalmente
+  5. Ajusta estrategia basado en datos
+
+Búsqueda de Oportunidades:
+  1. Busca diariamente nuevas oportunidades
+  2. Usa filtros para encontrar mejores productos
+  3. Revisa manualmente productos con baja confianza
+  4. Actúa rápido en oportunidades trending
+
+Gestión de Productos:
+  1. Revisa productos pendientes regularmente
+  2. Aproba productos con alta confianza rápidamente
+  3. Optimiza títulos y descripciones
+  4. Actualiza precios según competencia
+
+Autopilot:
+  1. Empieza en modo manual
+  2. Revisa productos antes de publicar
+  3. Una vez confiado, activa modo automático
+  4. Monitorea performance regularmente
+  5. Ajusta configuración según resultados
+
+Ventas:
+  1. Procesa ventas rápidamente
+  2. Compra en AliExpress inmediatamente
+  3. Actualiza tracking cuando esté disponible
+  4. Comunícate con clientes si hay problemas
+  5. Marca como entregado cuando el cliente reciba
+
+Finanzas:
+  1. Revisa balance semanalmente
+  2. Calcula ganancias netas mensualmente
+  3. Paga comisiones puntualmente
+  4. Reinvierte ganancias para escalar
+
+================================================================================
+                              CONCLUSIÓN
+================================================================================
+
+Este manual cubre todas las funcionalidades del sistema Ivan Reseller. Para
+soporte adicional, contacta al administrador o revisa la documentación técnica.
+
+Sitio Web: www.ivanreseller.com / ivanreseller.com
+Versión: 1.0
+Fecha: 2025-11-15
+
+================================================================================
+                            FIN DEL MANUAL
+================================================================================
+

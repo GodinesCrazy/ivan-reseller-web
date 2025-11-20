@@ -93,9 +93,6 @@ router.post('/configs', async (req: Request, res: Response, next) => {
 
     res.status(201).json({ success: true, config: newConfig });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ success: false, error: 'Invalid data', details: error.errors });
-    }
     next(error);
   }
 });
@@ -140,9 +137,6 @@ router.put('/configs/:id', async (req: Request, res: Response, next) => {
 
     res.json({ success: true, config: configs[configIndex] });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ success: false, error: 'Invalid data', details: error.errors });
-    }
     next(error);
   }
 });

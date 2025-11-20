@@ -115,10 +115,37 @@ export default function Settings() {
 
   const loadSettings = async () => {
     try {
-      // El endpoint /api/settings no existe, usar valores por defecto
-      // Si en el futuro se implementa, usar: await api.get('/api/settings');
+      // ✅ Intentar cargar desde el backend
+      const { data } = await api.get('/api/settings');
+      if (data?.success && data?.data) {
+        setGeneralSettings({
+          language: data.data.language || 'en',
+          timezone: data.data.timezone || 'America/New_York',
+          dateFormat: data.data.dateFormat || 'MM/DD/YYYY',
+          currencyFormat: data.data.currencyFormat || 'USD',
+          theme: data.data.theme || 'light'
+        });
+        return;
+      }
     } catch (error: any) {
-      console.error('Error loading settings:', error);
+      // ✅ Fallback: intentar cargar desde localStorage
+      console.warn('Error loading settings from backend, trying localStorage:', error);
+      try {
+        const saved = localStorage.getItem('userSettings');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setGeneralSettings({
+            language: parsed.language || 'en',
+            timezone: parsed.timezone || 'America/New_York',
+            dateFormat: parsed.dateFormat || 'MM/DD/YYYY',
+            currencyFormat: parsed.currencyFormat || 'USD',
+            theme: parsed.theme || 'light'
+          });
+          return;
+        }
+      } catch (localError) {
+        console.error('Error loading settings from localStorage:', localError);
+      }
     }
   };
 
@@ -181,11 +208,24 @@ export default function Settings() {
   const saveGeneralSettings = async () => {
     setSaving(true);
     try {
-      // El endpoint /api/settings no existe aún, guardar en localStorage como fallback
-      localStorage.setItem('userSettings', JSON.stringify(generalSettings));
-      toast.success('Settings saved successfully');
+      // ✅ Intentar guardar en el backend
+      const { data } = await api.post('/api/settings', generalSettings);
+      if (data?.success) {
+        // ✅ También guardar en localStorage como backup
+        localStorage.setItem('userSettings', JSON.stringify(generalSettings));
+        toast.success('Settings saved successfully');
+      } else {
+        throw new Error(data?.message || 'Failed to save settings');
+      }
     } catch (error: any) {
-      toast.error('Error saving settings: ' + (error.response?.data?.error || error.message));
+      // ✅ Fallback: guardar en localStorage si falla el backend
+      console.warn('Error saving settings to backend, using localStorage fallback:', error);
+      try {
+        localStorage.setItem('userSettings', JSON.stringify(generalSettings));
+        toast.success('Settings saved locally (backend unavailable)');
+      } catch (localError) {
+        toast.error('Error saving settings: ' + (error.response?.data?.error || error.message));
+      }
     } finally {
       setSaving(false);
     }

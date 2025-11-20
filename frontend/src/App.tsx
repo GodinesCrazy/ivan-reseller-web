@@ -1,6 +1,8 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@stores/authStore';
+import { Toaster } from 'react-hot-toast';
+import { log } from '@/utils/logger';
 const Login = lazy(() => import('@pages/Login'));
 const Dashboard = lazy(() => import('@pages/Dashboard'));
 const Opportunities = lazy(() => import('@pages/Opportunities'));
@@ -41,8 +43,13 @@ function AppContent() {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     
     const validateToken = async () => {
+      // Verificar token en store O en localStorage (fallback)
+      const tokenInStore = token;
+      const tokenInStorage = localStorage.getItem('auth_token');
+      const hasToken = tokenInStore || tokenInStorage;
+      
       // Si no hay token, mostrar login inmediatamente
-      if (!token) {
+      if (!hasToken) {
         if (isMounted) {
           setIsInitialized(true);
         }
@@ -71,7 +78,7 @@ function AppContent() {
         if (timeoutId) {
           clearTimeout(timeoutId);
         }
-        console.warn('Error o timeout validando token, continuando:', error);
+        log.warn('Error o timeout validando token, continuando:', error);
         // Si falla, limpiar token inválido y continuar
         if (isMounted) {
           // No limpiar el token aquí, solo continuar
@@ -101,16 +108,21 @@ function AppContent() {
   // Si no hay token o estamos en login, mostrar la app inmediatamente
   const isLoginPage = location.pathname === '/login';
   
+  // Verificar token en store O en localStorage (fallback)
+  const tokenInStore = token;
+  const tokenInStorage = localStorage.getItem('auth_token');
+  const hasToken = tokenInStore || tokenInStorage;
+  
   // Si estamos en login o no hay token, inicializar inmediatamente
   useEffect(() => {
-    if (isLoginPage || !token) {
+    if (isLoginPage || !hasToken) {
       if (!isInitialized) {
         setIsInitialized(true);
       }
     }
-  }, [isLoginPage, token, isInitialized]);
+  }, [isLoginPage, hasToken, isInitialized]);
   
-  if (!isLoginPage && token && !isInitialized && isCheckingAuth) {
+  if (!isLoginPage && hasToken && !isInitialized && isCheckingAuth) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
@@ -187,6 +199,7 @@ function AppContent() {
       {/* 404 */}
       <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+      <Toaster />
     </Suspense>
   );
 }

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { EventEmitter } from 'events';
 import axios from 'axios';
 import { logger } from '../config/logger';
@@ -122,6 +121,7 @@ export class AutopilotSystem extends EventEmitter {
   private isRunning: boolean = false;
   private cycleTimer: NodeJS.Timeout | null = null;
   private lastCycleResult: CycleResult | null = null;
+  private currentUserId: number | null = null; // ✅ Usuario actual que está ejecutando el Autopilot
 
   constructor() {
     super();
@@ -294,11 +294,20 @@ export class AutopilotSystem extends EventEmitter {
 
   /**
    * Start the autopilot system
+   * @param userId - ID del usuario que inicia el Autopilot (OBLIGATORIO)
    */
-  public async start(): Promise<void> {
+  public async start(userId: number): Promise<void> {
+    if (!userId || userId <= 0) {
+      throw new Error('Autopilot: userId is required and must be greater than 0');
+    }
+
     if (this.isRunning) {
-      logger.warn('Autopilot: Already running');
-      return;
+      if (this.currentUserId === userId) {
+        logger.warn('Autopilot: Already running for this user', { userId });
+        return;
+      } else {
+        throw new Error(`Autopilot: Already running for user ${this.currentUserId}. Stop it first before starting for user ${userId}`);
+      }
     }
 
     if (!this.config.enabled) {
@@ -306,14 +315,13 @@ export class AutopilotSystem extends EventEmitter {
       return;
     }
 
-      // ✅ CHECK: Verify required APIs are configured
-      logger.info('Autopilot: Checking API availability...');
-      
-      // ✅ Obtener userId del parámetro o usar admin por defecto
-      const currentUserId = 1; // TODO: Pasar userId como parámetro al método start()
+    // ✅ CHECK: Verify required APIs are configured
+    logger.info('Autopilot: Checking API availability...', { userId });
     
-    const capabilities = await apiAvailability.getCapabilities(currentUserId);
-    const apiStatuses = await apiAvailability.getAllAPIStatus(currentUserId);
+    this.currentUserId = userId; // ✅ Guardar userId del usuario actual
+    
+    const capabilities = await apiAvailability.getCapabilities(userId);
+    const apiStatuses = await apiAvailability.getAllAPIStatus(userId);
 
     const missingAPIs: string[] = [];
     
@@ -359,14 +367,15 @@ export class AutopilotSystem extends EventEmitter {
     this.stats.currentStatus = 'running';
     
     logger.info('Autopilot: System started', {
+      userId,
       cycleInterval: this.config.cycleIntervalMinutes,
       publicationMode: this.config.publicationMode
     });
 
-    this.emit('started', { timestamp: new Date() });
+    this.emit('started', { timestamp: new Date(), userId });
 
-    // Start first cycle immediately
-    await this.runSingleCycle();
+    // Start first cycle immediately with userId
+    await this.runSingleCycle(undefined, userId);
 
     // Schedule recurring cycles
     this.scheduleNextCycle();
@@ -374,35 +383,46 @@ export class AutopilotSystem extends EventEmitter {
 
   /**
    * Stop the autopilot system
+   * @param userId - ID del usuario que detiene el Autopilot (opcional, para validación)
    */
-  public stop(): void {
+  public stop(userId?: number): void {
     if (!this.isRunning) {
       logger.warn('Autopilot: Not running');
       return;
     }
 
+    // ✅ Validar que el usuario que detiene es el mismo que lo inició (si se proporciona)
+    if (userId && this.currentUserId !== userId) {
+      throw new Error(`Autopilot: Cannot stop - running for user ${this.currentUserId}, not ${userId}`);
+    }
+
+    const stoppedUserId = this.currentUserId;
     this.isRunning = false;
     this.stats.currentStatus = 'idle';
+    this.currentUserId = null;
 
     if (this.cycleTimer) {
       clearTimeout(this.cycleTimer);
       this.cycleTimer = null;
     }
 
-    logger.info('Autopilot: System stopped');
-    this.emit('stopped', { timestamp: new Date() });
+    logger.info('Autopilot: System stopped', { userId: stoppedUserId });
+    this.emit('stopped', { timestamp: new Date(), userId: stoppedUserId });
   }
 
   /**
    * Schedule next cycle
    */
   private scheduleNextCycle(): void {
-    if (!this.isRunning) return;
+    if (!this.isRunning || !this.currentUserId) {
+      return;
+    }
 
     const intervalMs = this.config.cycleIntervalMinutes * 60 * 1000;
     
     this.cycleTimer = setTimeout(async () => {
-      await this.runSingleCycle();
+      // ✅ Usar currentUserId del sistema cuando se ejecuta automáticamente
+      await this.runSingleCycle(undefined, this.currentUserId!);
       this.scheduleNextCycle();
     }, intervalMs);
 
@@ -413,13 +433,38 @@ export class AutopilotSystem extends EventEmitter {
 
   /**
    * Run a single complete cycle
+   * @param query - Query de búsqueda opcional
+   * @param userId - ID del usuario (OBLIGATORIO si Autopilot no está corriendo, opcional si ya está corriendo)
+   * @param environment - Ambiente (sandbox/production), se obtiene del usuario si no se especifica
    */
   public async runSingleCycle(query?: string, userId?: number, environment?: 'sandbox' | 'production'): Promise<CycleResult> {
     const cycleStart = Date.now();
     
-    // ✅ Definir userId y environment
-    const currentUserId = userId || 1;
-    const userEnvironment = environment || 'sandbox';
+    // ✅ Obtener userId: usar el proporcionado, o el del sistema si está corriendo, o lanzar error
+    let currentUserId: number;
+    if (userId && userId > 0) {
+      currentUserId = userId;
+    } else if (this.isRunning && this.currentUserId) {
+      currentUserId = this.currentUserId;
+    } else {
+      throw new Error('Autopilot: userId is required. Either provide userId parameter or start Autopilot first with start(userId)');
+    }
+    
+    // ✅ Obtener environment del usuario si no se especifica
+    let userEnvironment: 'sandbox' | 'production';
+    if (environment) {
+      userEnvironment = environment;
+    } else {
+      try {
+        userEnvironment = await workflowConfigService.getUserEnvironment(currentUserId);
+      } catch (error: any) {
+        logger.warn('Autopilot: Could not get user environment, defaulting to sandbox', {
+          userId: currentUserId,
+          error: error?.message || String(error)
+        });
+        userEnvironment = 'sandbox';
+      }
+    }
     
     try {
       this.stats.currentStatus = 'running';
@@ -431,7 +476,7 @@ export class AutopilotSystem extends EventEmitter {
       const selectedQuery = query || this.selectOptimalQuery();
       const category = this.getQueryCategory(selectedQuery);
 
-      logger.info('Autopilot: Selected query', { query: selectedQuery, category });
+      logger.info('Autopilot: Selected query', { query: selectedQuery, category, userId: currentUserId });
 
       // 2. Check available capital (con userId)
       const availableCapital = await this.getAvailableCapital(currentUserId);
@@ -627,19 +672,23 @@ export class AutopilotSystem extends EventEmitter {
 
   /**
    * ✅ Search for opportunities using stealth scraping (con userId y environment)
+   * @param query - Query de búsqueda
+   * @param userId - ID del usuario (OBLIGATORIO)
+   * @param environment - Ambiente (sandbox/production)
    */
-  private async searchOpportunities(query: string, userId?: number, environment?: 'sandbox' | 'production'): Promise<Opportunity[]> {
+  private async searchOpportunities(query: string, userId: number, environment?: 'sandbox' | 'production'): Promise<Opportunity[]> {
+    if (!userId || userId <= 0) {
+      throw new Error('searchOpportunities: userId is required and must be greater than 0');
+    }
+    
     try {
       // Build AliExpress search URL
       const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}&SortType=total_tranpro_desc`;
       
-      // ✅ Usar userId proporcionado o admin por defecto
-      const currentUserId = userId || 1;
-      
       // ✅ USAR SERVICIO REAL DE OPORTUNIDADES (con userId y environment)
       // Usar opportunity-finder service que hace scraping real
       const opportunityFinder = await import('./opportunity-finder.service');
-      const foundItems = await opportunityFinder.default.findOpportunities(currentUserId, {
+      const foundItems = await opportunityFinder.default.findOpportunities(userId, {
         query,
         maxItems: this.config.maxOpportunitiesPerCycle,
         marketplaces: [this.config.targetMarketplace as 'ebay' | 'amazon' | 'mercadolibre'],
@@ -693,18 +742,21 @@ export class AutopilotSystem extends EventEmitter {
 
   /**
    * ✅ Get available working capital (con userId - desde UserWorkflowConfig)
+   * @param userId - ID del usuario (OBLIGATORIO)
    */
-  private async getAvailableCapital(userId?: number): Promise<number> {
+  private async getAvailableCapital(userId: number): Promise<number> {
+    if (!userId || userId <= 0) {
+      throw new Error('getAvailableCapital: userId is required and must be greater than 0');
+    }
+    
     try {
-      const currentUserId = userId || 1;
-      
       // ✅ Obtener capital del usuario desde UserWorkflowConfig
-      const totalCapital = await workflowConfigService.getWorkingCapital(currentUserId);
+      const totalCapital = await workflowConfigService.getWorkingCapital(userId);
 
       // ✅ Get pending orders cost del usuario
       const pendingOrders = await prisma.sale.findMany({
         where: {
-          userId: currentUserId,
+          userId: userId,
           status: {
             in: ['PENDING', 'PROCESSING']
           }
@@ -718,7 +770,7 @@ export class AutopilotSystem extends EventEmitter {
       // ✅ Get approved but not published products del usuario
       const approvedProducts = await prisma.product.findMany({
         where: {
-          userId: currentUserId,
+          userId: userId,
           status: 'APPROVED',
           isPublished: false
         }
@@ -808,13 +860,17 @@ export class AutopilotSystem extends EventEmitter {
    */
   private async processOpportunities(
     opportunities: Opportunity[],
-    userId?: number,
+    userId: number,
     environment?: 'sandbox' | 'production',
     publishMode?: 'manual' | 'automatic' | 'guided'
   ): Promise<{ published: number; approved: number }> {
+    if (!userId || userId <= 0) {
+      throw new Error('processOpportunities: userId is required and must be greater than 0');
+    }
+    
     let published = 0;
     let approved = 0;
-    const currentUserId = userId || 1;
+    const currentUserId = userId;
     const currentEnvironment = environment || 'sandbox';
     const currentPublishMode = publishMode || this.config.publicationMode;
 
@@ -851,10 +907,15 @@ export class AutopilotSystem extends EventEmitter {
 
   /**
    * ✅ Publish opportunity to marketplace (con userId y environment)
+   * @param userId - ID del usuario (OBLIGATORIO)
    */
-  private async publishToMarketplace(opportunity: Opportunity, userId?: number, environment?: 'sandbox' | 'production'): Promise<{ success: boolean }> {
+  private async publishToMarketplace(opportunity: Opportunity, userId: number, environment?: 'sandbox' | 'production'): Promise<{ success: boolean }> {
+    if (!userId || userId <= 0) {
+      throw new Error('publishToMarketplace: userId is required and must be greater than 0');
+    }
+    
     try {
-      const currentUserId = userId || 1;
+      const currentUserId = userId;
       const currentEnvironment = environment || 'sandbox';
       
       // ✅ Verificar etapa PUBLISH antes de publicar
@@ -1052,10 +1113,15 @@ export class AutopilotSystem extends EventEmitter {
 
   /**
    * ✅ Send opportunity to manual approval queue (con userId)
+   * @param userId - ID del usuario (OBLIGATORIO)
    */
-  private async sendToApprovalQueue(opportunity: Opportunity, userId?: number): Promise<void> {
+  private async sendToApprovalQueue(opportunity: Opportunity, userId: number): Promise<void> {
+    if (!userId || userId <= 0) {
+      throw new Error('sendToApprovalQueue: userId is required and must be greater than 0');
+    }
+    
     try {
-      const currentUserId = userId || 1;
+      const currentUserId = userId;
       
       // ✅ CORRECCIÓN: Status debe ser 'PENDING' para que aparezca en cola de aprobación
       const product = await prisma.product.create({

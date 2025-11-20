@@ -109,9 +109,6 @@ router.post('/rules', async (req: Request, res: Response, next) => {
 
     res.status(201).json({ success: true, rule: newRule });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ success: false, error: 'Invalid data', details: error.errors });
-    }
     next(error);
   }
 });
@@ -156,9 +153,6 @@ router.put('/rules/:id', async (req: Request, res: Response, next) => {
 
     res.json({ success: true, rule: rules[ruleIndex] });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ success: false, error: 'Invalid data', details: error.errors });
-    }
     next(error);
   }
 });
@@ -236,9 +230,6 @@ router.post('/suppliers', async (req: Request, res: Response, next) => {
 
     res.status(201).json({ success: true, supplier: newSupplier });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ success: false, error: 'Invalid data', details: error.errors });
-    }
     next(error);
   }
 });
@@ -283,9 +274,6 @@ router.put('/suppliers/:id', async (req: Request, res: Response, next) => {
 
     res.json({ success: true, supplier: suppliers[supplierIndex] });
   } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ success: false, error: 'Invalid data', details: error.errors });
-    }
     next(error);
   }
 });

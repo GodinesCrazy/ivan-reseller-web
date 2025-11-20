@@ -6,23 +6,34 @@ import { secureCredentialManager } from '../../services/security.service';
 import { apiAvailability } from '../../services/api-availability.service';
 import { authenticate } from '../../middleware/auth.middleware';
 import { AppError } from '../../middleware/error.middleware';
+import { z } from 'zod';
+import { logger } from '../../config/logger';
 
 const router = Router();
+
+// ✅ A7: Validation schema para refresh-api-cache
+const refreshApiCacheSchema = z.object({
+  api: z.string().optional(),
+});
 
 router.get('/health/detailed', async (_req: Request, res: Response) => {
   const checks: any = { db: false, scraper: false, time: new Date().toISOString() };
   try {
     await prisma.$queryRaw`SELECT 1`;
     checks.db = true;
-  } catch (e) {
-    checks.db_error = String((e as any)?.message || e);
+  } catch (e: any) {
+    // ✅ A8: Mejor manejo de errores
+    checks.db_error = String(e?.message || e);
+    logger.error('Database health check failed', { error: e?.message });
   }
   try {
     const h = await scraperBridge.health().catch(() => null);
     checks.scraper = !!(h && (h.status === 'ok' || h.status === 'healthy'));
     if (!checks.scraper) checks.scraper_details = h;
-  } catch (e) {
-    checks.scraper_error = String((e as any)?.message || e);
+  } catch (e: any) {
+    // ✅ A8: Mejor manejo de errores
+    checks.scraper_error = String(e?.message || e);
+    logger.error('Scraper health check failed', { error: e?.message });
   }
   const cfg = automatedBusinessSystem.getConfig();
   res.json({ success: true, data: { checks, mode: cfg.mode, environment: cfg.environment, uptime: process.uptime() } });
@@ -77,8 +88,25 @@ router.get('/api-status', authenticate, async (req: Request, res: Response) => {
         }
       }
     });
-  } catch (error) {
-    throw new AppError('Failed to check API status', 500);
+  } catch (error: any) {
+    // ✅ A8: Mejor manejo de errores con logger
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
+    logger.error('Error in /api/system/api-status', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.userId
+    });
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check API status'
+    });
   }
 });
 
@@ -95,8 +123,25 @@ router.get('/capabilities', authenticate, async (req: Request, res: Response) =>
 
     const capabilities = await apiAvailability.getCapabilities(userId);
     res.json({ success: true, data: capabilities });
-  } catch (error) {
-    throw new AppError('Failed to get system capabilities', 500);
+  } catch (error: any) {
+    // ✅ A8: Mejor manejo de errores con logger
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
+    logger.error('Error in /api/system/capabilities', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.userId
+    });
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get system capabilities'
+    });
   }
 });
 
@@ -106,21 +151,29 @@ router.get('/capabilities', authenticate, async (req: Request, res: Response) =>
  */
 router.post('/refresh-api-cache', authenticate, async (req: Request, res: Response) => {
   try {
+    // ✅ A7: Validar request body
+    const body = refreshApiCacheSchema.parse(req.body);
+    
     const userId = req.user?.userId;
     if (!userId) {
       throw new AppError('User not authenticated', 401);
     }
 
-    const { api } = req.body;
-    if (api) {
-      await apiAvailability.clearAPICache(userId, api);
-      res.json({ success: true, message: `Cache cleared for ${api}` });
+    if (body.api) {
+      await apiAvailability.clearAPICache(userId, body.api);
+      res.json({ success: true, message: `Cache cleared for ${body.api}` });
     } else {
       await apiAvailability.clearUserCache(userId);
       res.json({ success: true, message: 'All API caches cleared for user' });
     }
-  } catch (error) {
-    throw new AppError('Failed to clear cache', 500);
+  } catch (error: any) {
+    // ✅ A8: Mejor manejo de errores con logger y middleware centralizado
+    logger.error('Error in /api/system/refresh-api-cache', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.userId
+    });
+    next(error);
   }
 });
 
