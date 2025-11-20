@@ -95,6 +95,24 @@ function mergeProductMetadata(dto: CreateProductDto | UpdateProductDto): Record<
   return Object.keys(meta).length ? meta : undefined;
 }
 
+/**
+ * Extraer imageUrl del campo images (JSON string)
+ */
+function extractImageUrl(imagesString: string | null | undefined): string | null {
+  if (!imagesString) return null;
+  
+  try {
+    const images = JSON.parse(imagesString);
+    if (Array.isArray(images) && images.length > 0 && typeof images[0] === 'string') {
+      return images[0];
+    }
+  } catch (error) {
+    // Si no es JSON válido, retornar null
+  }
+  
+  return null;
+}
+
 export class ProductService {
   async createProduct(userId: number, data: CreateProductDto) {
     const {
@@ -360,14 +378,20 @@ export class ProductService {
       },
     });
 
+    // ✅ Preparar metadata como string JSON explícitamente
+    const metadataString = JSON.stringify({ productId: id, newStatus: status });
+
     // Registrar actividad del admin
     await prisma.activity.create({
       data: {
         userId: adminId,
         action: 'PRODUCT_STATUS_CHANGED',
         description: `Estado del producto "${product.title}" cambiado a ${status}`,
-        metadata: { productId: id, newStatus: status },
+        metadata: metadataString, // ✅ Asegurar que es string, no objeto
       },
+    }).catch(err => {
+      // No fallar si no se puede crear la actividad
+      logger.warn('[PRODUCT-SERVICE] Failed to create admin activity', { error: err instanceof Error ? err.message : String(err) });
     });
 
     // Registrar actividad del usuario dueño
@@ -376,8 +400,11 @@ export class ProductService {
         userId: product.userId,
         action: 'PRODUCT_STATUS_CHANGED',
         description: `Tu producto "${product.title}" ahora está ${status}`,
-        metadata: { productId: id, newStatus: status },
+        metadata: metadataString, // ✅ Asegurar que es string, no objeto
       },
+    }).catch(err => {
+      // No fallar si no se puede crear la actividad
+      logger.warn('[PRODUCT-SERVICE] Failed to create user activity', { error: err instanceof Error ? err.message : String(err) });
     });
 
     return updated;

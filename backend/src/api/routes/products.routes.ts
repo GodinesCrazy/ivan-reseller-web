@@ -37,19 +37,39 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const status = req.query.status as string | undefined;
     const products = await productService.getProducts(userId, status);
     
+    // ✅ Función helper para extraer imageUrl del campo images (JSON)
+    const extractImageUrl = (imagesString: string | null | undefined): string | null => {
+      if (!imagesString) return null;
+      try {
+        const images = JSON.parse(imagesString);
+        if (Array.isArray(images) && images.length > 0 && typeof images[0] === 'string') {
+          return images[0];
+        }
+      } catch {
+        // Si no es JSON válido, retornar null
+      }
+      return null;
+    };
+    
     // ✅ Mapear datos del backend al formato esperado por el frontend
     const mappedProducts = products.map((product) => {
       // Calcular profit (precio final - precio AliExpress)
       const calculatedProfit = (product.finalPrice || product.suggestedPrice || 0) - product.aliexpressPrice;
+      
+      // ✅ Extraer imageUrl del campo images (JSON)
+      const imageUrl = extractImageUrl(product.images);
       
       return {
         id: String(product.id),
         title: product.title,
         description: product.description || '',
         status: product.status,
+        sku: String(product.id), // SKU temporal basado en ID
         marketplace: 'unknown', // Productos no tienen marketplace directamente, se obtiene de listings
         price: product.finalPrice || product.suggestedPrice || product.aliexpressPrice || 0,
+        stock: 0, // Valor por defecto
         profit: calculatedProfit > 0 ? calculatedProfit : 0,
+        imageUrl: imageUrl || undefined, // ✅ Incluir imageUrl extraído
         createdAt: product.createdAt?.toISOString() || new Date().toISOString()
       };
     });
@@ -83,7 +103,32 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
     const userId = req.user?.userId;
     
     const product = await productService.getProductById(Number(req.params.id), userId, isAdmin);
-    res.json(product);
+    
+    // ✅ Función helper para extraer imageUrl del campo images (JSON)
+    const extractImageUrl = (imagesString: string | null | undefined): string | null => {
+      if (!imagesString) return null;
+      try {
+        const images = JSON.parse(imagesString);
+        if (Array.isArray(images) && images.length > 0 && typeof images[0] === 'string') {
+          return images[0];
+        }
+      } catch {
+        // Si no es JSON válido, retornar null
+      }
+      return null;
+    };
+    
+    // ✅ Mapear producto para incluir imageUrl
+    const mappedProduct = {
+      ...product,
+      imageUrl: extractImageUrl(product.images) || undefined, // ✅ Incluir imageUrl extraído
+      sku: String(product.id), // SKU temporal basado en ID
+      stock: 0, // Valor por defecto
+      marketplace: 'unknown',
+      profit: ((product.finalPrice || product.suggestedPrice || 0) - product.aliexpressPrice) || 0
+    };
+    
+    res.json(mappedProduct);
   } catch (error) {
     next(error);
   }
@@ -114,14 +159,37 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     
     const product = await productService.createProduct(req.user!.userId, validatedData as CreateProductDto);
     
+    // ✅ Función helper para extraer imageUrl del campo images (JSON)
+    const extractImageUrl = (imagesString: string | null | undefined): string | null => {
+      if (!imagesString) return null;
+      try {
+        const images = JSON.parse(imagesString);
+        if (Array.isArray(images) && images.length > 0 && typeof images[0] === 'string') {
+          return images[0];
+        }
+      } catch {
+        // Si no es JSON válido, retornar null
+      }
+      return null;
+    };
+    
+    // ✅ Extraer imageUrl del campo images y agregarlo al producto retornado
+    const imageUrl = extractImageUrl(product.images);
+    
     logger.info('POST /api/products - Product created successfully', {
       productId: product.id,
       title: product.title?.substring(0, 50),
       status: product.status,
-      userId: req.user?.userId
+      userId: req.user?.userId,
+      hasImageUrl: !!imageUrl,
+      imagesField: product.images?.substring(0, 100) // Log primeros 100 caracteres del campo images
     });
     
-    res.status(201).json(product);
+    // ✅ Retornar producto con imageUrl extraído
+    res.status(201).json({
+      ...product,
+      imageUrl: imageUrl || undefined
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       logger.warn('Validation error in POST /api/products', { 
