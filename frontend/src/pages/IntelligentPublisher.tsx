@@ -165,6 +165,22 @@ export default function IntelligentPublisher() {
           <div key={p.id} className="p-4 border-b flex items-center justify-between gap-4">
             <div className="flex items-start gap-3 flex-1">
               <input type="checkbox" className="mt-1" checked={!!selected[p.id]} onChange={(e)=>setSelected(s=>({ ...s, [p.id]: e.target.checked }))} />
+              {/* ✅ Imagen del producto al inicio de cada barra */}
+              {p.imageUrl ? (
+                <img 
+                  src={p.imageUrl} 
+                  alt={p.title} 
+                  className="w-16 h-16 rounded object-cover flex-shrink-0"
+                  onError={(e) => {
+                    // Si la imagen falla, ocultar el elemento
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
+                  <span className="text-gray-400 text-xs">No img</span>
+                </div>
+              )}
               <div className="flex-1">
                 <div className="font-medium">{p.title}</div>
                 <div className="text-xs text-gray-500 mt-1 space-y-1">
