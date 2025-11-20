@@ -192,7 +192,7 @@ class OpportunityFinderService {
             typeof p.sourcePrice === 'number' && p.sourcePrice > 0 ? p.sourcePrice : null,
             typeof p.priceMinSource === 'number' && p.priceMinSource > 0 ? p.priceMinSource : null,
           ].filter((value): value is number => typeof value === 'number');
-          const sourcePrice = sourcePriceCandidates.length > 0 ? sourcePriceCandidates[0] : 0;
+          let sourcePrice = sourcePriceCandidates.length > 0 ? sourcePriceCandidates[0] : 0;
 
           const basePriceCandidates = [
             typeof p.priceMax === 'number' && p.priceMax > 0 ? p.priceMax : null,
@@ -200,9 +200,45 @@ class OpportunityFinderService {
             typeof p.priceMin === 'number' && p.priceMin > 0 ? p.priceMin : null,
           ].filter((value): value is number => typeof value === 'number');
           let priceInBase = basePriceCandidates.length > 0 ? basePriceCandidates[0] : 0;
+          let detectedCurrency = rangeCurrency;
+
+          // ✅ VALIDACIÓN: Si priceInBase es muy alto (>1000) y es casi igual a sourcePrice,
+          // es probable que ambos sean CLP y no se convirtió correctamente
+          // Ejemplos: priceInBase=2560, sourcePrice=2560 → deberían ser 2560 CLP (~$2.7 USD)
+          //           priceInBase=58400, sourcePrice=58400 → deberían ser 58400 CLP (~$61 USD)
+          if (priceInBase > 1000 && sourcePrice > 0) {
+            const priceDiff = Math.abs(priceInBase - sourcePrice);
+            const priceSimilarity = priceDiff / Math.max(priceInBase, sourcePrice);
+            
+            // Si los precios son muy similares (<10% diferencia) y ambos son altos,
+            // probablemente ambos son CLP sin convertir
+            if (priceSimilarity < 0.1) {
+              // Intentar convertir como CLP
+              const convertedFromCLP = fxService.convert(sourcePrice, 'CLP', baseCurrency);
+              
+              // Si la conversión da un valor razonable (<1000 USD) y es menor que el precio actual,
+              // entonces eran CLP
+              if (convertedFromCLP > 0 && convertedFromCLP < 1000 && convertedFromCLP < priceInBase) {
+                logger.warn('[OPPORTUNITY-FINDER] Detected CLP misdetected as USD, correcting conversion', {
+                  originalPriceInBase: priceInBase,
+                  originalSourcePrice: sourcePrice,
+                  originalCurrency: rangeCurrency,
+                  suspectedCLP: sourcePrice,
+                  correctedPriceInBase: convertedFromCLP,
+                  correctedCurrency: 'CLP',
+                  title: p.title?.substring(0, 50)
+                });
+                
+                // Actualizar valores corregidos
+                priceInBase = convertedFromCLP;
+                detectedCurrency = 'CLP';
+                // sourcePrice ya es correcto (es el valor en CLP)
+              }
+            }
+          }
 
           if (priceInBase <= 0 && sourcePrice > 0) {
-            priceInBase = fxService.convert(sourcePrice, rangeCurrency, baseCurrency);
+            priceInBase = fxService.convert(sourcePrice, detectedCurrency, baseCurrency);
           }
 
           const priceMinBase =
@@ -220,11 +256,11 @@ class OpportunityFinderService {
                 ? p.priceMinSource
                 : sourcePrice,
             priceMaxSource: sourcePrice,
-            priceRangeSourceCurrency: rangeCurrency,
+            priceRangeSourceCurrency: detectedCurrency, // ✅ Usar moneda detectada/corregida
             priceSource: p.priceSource,
             currency: baseCurrency,
             sourcePrice: sourcePrice,
-            sourceCurrency: rangeCurrency,
+            sourceCurrency: detectedCurrency, // ✅ Usar moneda detectada/corregida
             productUrl: p.productUrl,
             imageUrl: p.imageUrl,
             productId: p.productId || p.productUrl?.split('/').pop()?.split('.html')[0],

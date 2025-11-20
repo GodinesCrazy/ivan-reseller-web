@@ -12,6 +12,7 @@ import ManualAuthService from './manual-auth.service';
 import ManualAuthRequiredError from '../errors/manual-auth-required.error';
 import { marketplaceAuthStatusService } from './marketplace-auth-status.service';
 import { resolvePrice, resolvePriceRange } from '../utils/currency.utils';
+import fxService from './fx.service';
 
 // Configurar Puppeteer con plugin stealth para evadir detección
 puppeteer.use(StealthPlugin());
@@ -1598,17 +1599,60 @@ export class AdvancedMarketplaceScraper {
             return null;
           }
 
+          // ✅ VALIDACIÓN ADICIONAL: Si el precio base es muy alto (>1000) y la moneda fuente es USD,
+          // pero el precio fuente también es alto y similar, probablemente es CLP sin detectar
+          // Ejemplo: price=2560, sourceCurrency=USD, sourcePrice=2560 → debería ser CLP
+          let finalPrice = price;
+          let finalSourcePrice = sourcePrice;
+          let finalSourceCurrency = sourceCurrency;
+          
+          if (price > 1000 && sourceCurrency === baseCurrency && Math.abs(price - sourcePrice) < sourcePrice * 0.1) {
+            // Ambos precios son muy similares y altos, probablemente son CLP sin convertir
+            const convertedFromCLP = fxService.convert(sourcePrice, 'CLP', baseCurrency);
+            
+            // Si la conversión da un valor razonable (<1000 USD) y es menor que el precio actual,
+            // entonces eran CLP
+            if (convertedFromCLP > 0 && convertedFromCLP < 1000 && convertedFromCLP < price) {
+              logger.warn('[SCRAPER] Detected possible CLP misdetected as USD in scraper output', {
+                originalPrice: price,
+                originalSourcePrice: sourcePrice,
+                originalSourceCurrency: sourceCurrency,
+                correctedPrice: convertedFromCLP,
+                correctedSourceCurrency: 'CLP',
+                title: product.title?.substring(0, 50),
+                query,
+                userId
+              });
+              
+              finalPrice = convertedFromCLP;
+              finalSourcePrice = sourcePrice; // Mantener el valor original en CLP
+              finalSourceCurrency = 'CLP';
+            }
+          }
+
+          logger.debug('[DOM] Producto con precios finales', {
+            title: product.title?.substring(0, 50),
+            productUrl: product.productUrl,
+            imageUrl: product.imageUrl,
+            finalPrice,
+            finalSourcePrice,
+            finalSourceCurrency,
+            baseCurrency,
+            query,
+            userId
+          });
+
           return {
             title: product.title,
-            price,
+            price: finalPrice,
             currency: baseCurrency,
-            sourcePrice,
-            sourceCurrency,
-            priceMin: priceMinBase,
-            priceMax: priceMaxBase,
+            sourcePrice: finalSourcePrice,
+            sourceCurrency: finalSourceCurrency,
+            priceMin: priceMinBase === price ? finalPrice : priceMinBase,
+            priceMax: priceMaxBase === price ? finalPrice : priceMaxBase,
             priceMinSource,
-            priceMaxSource,
-            priceRangeSourceCurrency,
+            priceMaxSource: finalSourcePrice,
+            priceRangeSourceCurrency: finalSourceCurrency,
             priceSource,
             imageUrl: product.imageUrl,
             productUrl: product.productUrl,

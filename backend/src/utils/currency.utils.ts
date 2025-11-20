@@ -44,20 +44,34 @@ function detectCurrencyFromText(texts: Array<string | undefined | null>): string
   const pricePattern = joined.match(/[\$]?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)/);
   if (pricePattern) {
     const priceStr = pricePattern[1];
-    // Si tiene punto como separador de miles (formato chileno) y valor > 1000, probablemente es CLP
-    if (priceStr.includes('.') && !priceStr.includes(',')) {
+    // Si tiene punto como separador de miles (formato chileno)
+    if (priceStr.includes('.')) {
       const numericValue = parseFloat(priceStr.replace(/\./g, ''));
-      // Valores > 1000 con formato chileno (punto como separador de miles) suelen ser CLP
-      if (numericValue > 1000 && numericValue < 1000000) {
-        // Verificar contexto: si hay indicadores de Chile o español
+      
+      // ✅ MEJORADO: Detectar CLP basándose en el valor y formato
+      // Valores entre 1,000 y 1,000,000 con formato chileno (punto como separador de miles)
+      // generalmente son CLP, no USD
+      // Ejemplos: 2.560 CLP (~$2.7 USD), 19.400 CLP (~$20 USD), 58.400 CLP (~$61 USD)
+      if (numericValue >= 1000 && numericValue < 10000000) {
+        // Verificar contexto: si hay indicadores de Chile, español, o AliExpress
         const lowerJoined = joined.toLowerCase();
-        if (lowerJoined.includes('chile') || lowerJoined.includes('clp') || 
-            lowerJoined.includes('peso') || lowerJoined.includes('envío desde chile')) {
+        const hasChileContext = lowerJoined.includes('chile') || 
+                               lowerJoined.includes('clp') || 
+                               lowerJoined.includes('peso') || 
+                               lowerJoined.includes('envío desde chile') ||
+                               lowerJoined.includes('aliexpress') ||
+                               // Si no hay indicador explícito de USD
+                               (!lowerJoined.includes('usd') && !lowerJoined.includes('us$') && !lowerJoined.includes('dollar'));
+        
+        // ✅ Valores > 10,000 casi siempre son CLP (excepto productos muy caros)
+        // Valores entre 1,000 y 100,000 con formato chileno son muy probables CLP
+        if (numericValue > 10000 || (numericValue > 1000 && hasChileContext)) {
           return 'CLP';
         }
-        // Si el valor es muy alto para USD pero razonable para CLP, asumir CLP
-        // $26.600 sería ~$30 USD, lo cual es razonable
-        if (numericValue > 10000 && numericValue < 500000) {
+        
+        // ✅ Si el valor es razonable para USD (1-1,000), pero tiene formato chileno,
+        // y hay contexto de AliExpress/Chile, probablemente es CLP
+        if (numericValue >= 100 && numericValue <= 10000 && hasChileContext) {
           return 'CLP';
         }
       }
