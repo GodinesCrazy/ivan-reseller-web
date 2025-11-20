@@ -7,7 +7,8 @@
     <meta name="theme-color" content="#1d4ed8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- ✅ C8: Content Security Policy para prevenir XSS -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: https:; connect-src 'self' https://api.ebay.com https://api.sandbox.ebay.com https://api.mercadolibre.com https://sellingpartnerapi-na.amazon.com; font-src 'self' data:; object-src 'none'; frame-src 'none';">
+    <!-- ✅ Permite conexiones al backend de Railway y APIs externas -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: https:; connect-src 'self' https://*.railway.app https://*.up.railway.app https://api.ebay.com https://api.sandbox.ebay.com https://api.mercadolibre.com https://sellingpartnerapi-na.amazon.com; font-src 'self' data:; object-src 'none'; frame-src 'none';">
     <title>Ivan Reseller - Dropshipping Platform</title>
   </head>
   <body>
