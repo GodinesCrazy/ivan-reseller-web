@@ -1028,12 +1028,19 @@ export class AutopilotSystem extends EventEmitter {
         }, currentEnvironment);
 
         if (publishResult.success) {
-          // Actualizar producto como publicado
+          // ✅ CORREGIDO: Usar función helper para sincronizar estado e isPublished
+          const { productService } = await import('./product.service');
+          await productService.updateProductStatusSafely(
+            product.id,
+            'PUBLISHED',
+            true,
+            currentUserId
+          );
+          
+          // Actualizar productData con información de publicación
           await prisma.product.update({
             where: { id: product.id },
-            data: { 
-              isPublished: true, 
-              status: 'PUBLISHED',
+            data: {
               productData: JSON.stringify({
                 ...JSON.parse(product.productData || '{}'),
                 marketplaceListingId: publishResult.listingId,
@@ -1061,11 +1068,24 @@ export class AutopilotSystem extends EventEmitter {
             environment: currentEnvironment
           });
           
-          // Mantener producto en PENDING si falla la publicación
+          // ✅ CORREGIDO: Mantener producto en APPROVED si falla la publicación (no revertir a PENDING)
+          // Si falla la publicación pero el producto ya estaba aprobado, mantener APPROVED
+          // Solo revertir a PENDING si el producto nunca fue aprobado
+          const { productService } = await import('./product.service');
+          const currentStatus = product.status;
+          const newStatus = currentStatus === 'APPROVED' ? 'APPROVED' : 'PENDING';
+          
+          await productService.updateProductStatusSafely(
+            product.id,
+            newStatus,
+            false, // No está publicado si falló
+            currentUserId
+          );
+          
+          // Actualizar productData con información del error
           await prisma.product.update({
             where: { id: product.id },
-            data: { 
-              status: 'PENDING',
+            data: {
               productData: JSON.stringify({
                 ...JSON.parse(product.productData || '{}'),
                 publishError: publishResult.error,

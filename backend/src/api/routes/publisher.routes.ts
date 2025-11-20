@@ -215,21 +215,42 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
         userEnvironment
       );
 
-      const anySuccess = publishResults.some(r => r.success);
+      // ✅ CORREGIDO: Manejo mejorado de fallos parciales
+      const successResults = publishResults.filter(r => r.success);
+      const failedResults = publishResults.filter(r => !r.success);
+      const anySuccess = successResults.length > 0;
+
       if (anySuccess) {
-        await prisma.product.update({ 
-          where: { id }, 
-          data: { 
-            isPublished: true, 
-            publishedAt: new Date(), 
-            status: 'PUBLISHED',
+        // ✅ Solo marcar como PUBLISHED si al menos un marketplace fue exitoso
+        // Actualizar productData con información de publicación
+        const currentProductData = product.productData ? JSON.parse(product.productData) : {};
+        await productService.updateProductStatusSafely(
+          id,
+          'PUBLISHED',
+          true,
+          req.user!.userId
+        );
+        
+        // Actualizar productData con información adicional
+        await prisma.product.update({
+          where: { id },
+          data: {
             productData: JSON.stringify({
-              ...(product.productData ? JSON.parse(product.productData) : {}),
+              ...currentProductData,
               approvedAt: new Date().toISOString(),
               approvedBy: req.user!.userId,
-              publishedEnvironment: userEnvironment
+              publishedEnvironment: userEnvironment,
+              publishedMarketplaces: successResults.map(r => r.marketplace),
+              failedMarketplaces: failedResults.length > 0 ? failedResults.map(r => ({ marketplace: r.marketplace, error: r.error })) : undefined
             })
-          } 
+          }
+        });
+      } else {
+        // ✅ Si todos fallan, mantener en APPROVED (no cambiar a PUBLISHED)
+        logger.warn('[PUBLISHER] All marketplace publications failed', {
+          productId: id,
+          userId: req.user!.userId,
+          failedResults: failedResults.map(r => ({ marketplace: r.marketplace, error: r.error }))
         });
       }
     }

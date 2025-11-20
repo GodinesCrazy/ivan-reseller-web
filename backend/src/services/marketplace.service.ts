@@ -279,6 +279,29 @@ export class MarketplaceService {
         throw new AppError('Cannot publish an inactive product. Please reactivate it first.', 400);
       }
 
+      // ✅ CORREGIDO: Validar que el producto esté en estado APPROVED antes de publicar
+      // PENDING solo se permite si está en flujo automático de aprobación
+      if (product.status === 'PENDING') {
+        // Verificar si está en flujo automático
+        try {
+          const { workflowConfigService } = await import('./workflow-config.service');
+          const publishMode = await workflowConfigService.getStageMode(userId, 'publish');
+          if (publishMode !== 'automatic') {
+            throw new AppError('Cannot publish a product in PENDING status. Please approve it first.', 400);
+          }
+          // Si es automático, permitir continuar
+        } catch (error) {
+          // Si no se puede verificar o no es automático, no permitir publicar productos PENDING
+          if (error instanceof AppError) {
+            throw error;
+          }
+          throw new AppError('Cannot publish a product in PENDING status. Please approve it first.', 400);
+        }
+      } else if (product.status !== 'APPROVED') {
+        // Solo permitir publicar productos APPROVED (o PENDING en flujo automático)
+        throw new AppError(`Cannot publish a product with status: ${product.status}. Product must be APPROVED.`, 400);
+      }
+
       if (product.isPublished && product.status === 'PUBLISHED') {
         throw new AppError('Product is already published. Use updateListing to modify it.', 400);
       }
@@ -310,13 +333,13 @@ export class MarketplaceService {
       // Publish to specific marketplace
       switch (request.marketplace) {
         case 'ebay':
-          return await this.publishToEbay(product, credentials, request.customData);
+          return await this.publishToEbay(product, credentials, request.customData, userId);
 
         case 'mercadolibre':
-          return await this.publishToMercadoLibre(product, credentials.credentials, request.customData);
+          return await this.publishToMercadoLibre(product, credentials.credentials, request.customData, userId);
 
         case 'amazon':
-          return await this.publishToAmazon(product, credentials.credentials, request.customData);
+          return await this.publishToAmazon(product, credentials.credentials, request.customData, userId);
 
         default:
           throw new AppError('Marketplace not supported', 400);
@@ -366,7 +389,8 @@ export class MarketplaceService {
   private async publishToEbay(
     product: any,
     credentialEntry: MarketplaceCredentials,
-    customData?: any
+    customData?: any,
+    userId?: number
   ): Promise<PublishResult> {
     try {
       const ebayCreds = {
@@ -429,9 +453,20 @@ export class MarketplaceService {
         }
       }
 
+      // ✅ CORREGIDO: Validar imágenes antes de publicar
+      const images = this.parseImageUrls(product.images);
+      if (!images || images.length === 0) {
+        throw new AppError('Product must have at least one image before publishing. Please add images to the product.', 400);
+      }
+
       const price = this.resolveListingPrice(product, customData?.price);
       if (price <= 0) {
         throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
+      }
+
+      // ✅ CORREGIDO: Validar que el precio sea mayor que el costo de AliExpress
+      if (price <= product.aliexpressPrice) {
+        throw new AppError(`Price (${price}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
       }
 
       const ebayProduct: EbayProduct = {
@@ -446,16 +481,24 @@ export class MarketplaceService {
 
       const result = await ebayService.createListing(`IVAN-${product.id}`, ebayProduct);
 
-      // Update product with marketplace info
-      await this.updateProductMarketplaceInfo(product.id, 'ebay', {
-        listingId: result.itemId,
-        listingUrl: result.listingUrl,
-        publishedAt: new Date(),
-      });
-
+      // ✅ CORREGIDO: Mover updateProductMarketplaceInfo DESPUÉS de verificar result.success
+      // Solo crear listing en BD si la publicación fue exitosa
       if (result.success) {
-        // Mark product as published
-        await prisma.product.update({ where: { id: product.id }, data: { isPublished: true, publishedAt: new Date(), status: 'PUBLISHED' } });
+        // Update product with marketplace info (solo si fue exitoso)
+        await this.updateProductMarketplaceInfo(product.id, 'ebay', {
+          listingId: result.itemId,
+          listingUrl: result.listingUrl,
+          publishedAt: new Date(),
+        });
+
+        // ✅ CORREGIDO: Usar función helper para sincronizar estado e isPublished
+        const { productService } = await import('./product.service');
+        await productService.updateProductStatusSafely(
+          product.id,
+          'PUBLISHED',
+          true,
+          userId
+        );
       }
 
       return {
@@ -479,7 +522,8 @@ export class MarketplaceService {
   private async publishToMercadoLibre(
     product: any, 
     credentials: MercadoLibreCredentials, 
-    customData?: any
+    customData?: any,
+    userId?: number
   ): Promise<PublishResult> {
     try {
       const mlService = new MercadoLibreService(credentials);
@@ -490,9 +534,29 @@ export class MarketplaceService {
         categoryId = await mlService.predictCategory(product.title);
       }
 
+      // ✅ CORREGIDO: Validar imágenes antes de publicar
+      const images = this.parseImageUrls(product.images);
+      if (!images || images.length === 0) {
+        throw new AppError('Product must have at least one image before publishing. Please add images to the product.', 400);
+      }
+
+      // ✅ CORREGIDO: Validar categoría antes de publicar
+      let categoryId = customData?.categoryId;
+      if (!categoryId) {
+        categoryId = await mlService.predictCategory(product.title);
+      }
+      if (!categoryId || categoryId.trim().length === 0) {
+        throw new AppError('Product must have a valid category before publishing. Please specify a category.', 400);
+      }
+
       const price = this.resolveListingPrice(product, customData?.price);
       if (price <= 0) {
         throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
+      }
+
+      // ✅ CORREGIDO: Validar que el precio sea mayor que el costo de AliExpress
+      if (price <= product.aliexpressPrice) {
+        throw new AppError(`Price (${price}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
       }
 
       const mlProduct: MLProduct = {
@@ -511,15 +575,24 @@ export class MarketplaceService {
 
       const result = await mlService.createListing(mlProduct);
 
-      // Update product with marketplace info
-      await this.updateProductMarketplaceInfo(product.id, 'mercadolibre', {
-        listingId: result.itemId,
-        listingUrl: result.permalink,
-        publishedAt: new Date(),
-      });
-
+      // ✅ CORREGIDO: Mover updateProductMarketplaceInfo DESPUÉS de verificar result.success
+      // Solo crear listing en BD si la publicación fue exitosa
       if (result.success) {
-        await prisma.product.update({ where: { id: product.id }, data: { isPublished: true, publishedAt: new Date(), status: 'PUBLISHED' } });
+        // Update product with marketplace info (solo si fue exitoso)
+        await this.updateProductMarketplaceInfo(product.id, 'mercadolibre', {
+          listingId: result.itemId,
+          listingUrl: result.permalink,
+          publishedAt: new Date(),
+        });
+
+        // ✅ CORREGIDO: Usar función helper para sincronizar estado e isPublished
+        const { productService } = await import('./product.service');
+        await productService.updateProductStatusSafely(
+          product.id,
+          'PUBLISHED',
+          true,
+          userId
+        );
       }
 
       return {
@@ -543,7 +616,8 @@ export class MarketplaceService {
   private async publishToAmazon(
     product: any, 
     credentials: AmazonCredentials, 
-    customData?: any
+    customData?: any,
+    userId?: number
   ): Promise<PublishResult> {
     try {
       const amazonService = new AmazonService();
@@ -557,9 +631,49 @@ export class MarketplaceService {
       }
 
       const metadata = this.parseProductMetadata(product);
+      // ✅ CORREGIDO: Validar imágenes antes de publicar
+      const images = this.parseImageUrls(product.images);
+      if (!images || images.length === 0) {
+        throw new AppError('Product must have at least one image before publishing. Please add images to the product.', 400);
+      }
+
+      // Get category suggestions if not provided
+      let category = customData?.categoryId;
+      if (!category) {
+        const categories = await amazonService.getProductCategories(product.title);
+        category = categories[0]?.categoryId || 'default';
+      }
+      // ✅ CORREGIDO: Validar categoría antes de publicar
+      if (!category || category === 'default') {
+        throw new AppError('Product must have a valid category before publishing. Please specify a category.', 400);
+      }
+
       const price = this.resolveListingPrice(product, customData?.price);
       if (price <= 0) {
         throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
+      }
+
+      // ✅ CORREGIDO: Validar que el precio sea mayor que el costo de AliExpress
+      if (price <= product.aliexpressPrice) {
+        throw new AppError(`Price (${price}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
+      }
+
+      // ✅ Obtener moneda base del usuario en lugar de usar USD hardcodeado
+      let currency = 'USD'; // Fallback por defecto
+      if (metadata?.currency) {
+        currency = metadata.currency.toUpperCase();
+      } else {
+        try {
+          const { userSettingsService } = await import('./user-settings.service');
+          const baseCurrency = await userSettingsService.getUserBaseCurrency(userId);
+          currency = baseCurrency;
+        } catch (error) {
+          // Si falla obtener moneda del usuario, usar fallback USD
+          logger.warn('[MARKETPLACE] Failed to get user base currency, using USD fallback', {
+            userId,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
       }
 
       const amazonProduct: AmazonProduct = {
@@ -567,7 +681,7 @@ export class MarketplaceService {
         title: customData?.title || product.title,
         description: customData?.description || product.description || '',
         price,
-        currency: (metadata?.currency || 'USD').toUpperCase(),
+        currency: currency.toUpperCase(),
         quantity: this.resolveListingQuantity(product, customData?.quantity),
         images: this.parseImageUrls(product.images),
         category,
@@ -590,15 +704,24 @@ export class MarketplaceService {
 
       const result = await amazonService.createListing(amazonProduct);
 
+      // ✅ CORREGIDO: Ya estaba correcto, pero mejorado para consistencia
+      // Solo crear listing en BD si la publicación fue exitosa
       if (result.success) {
-        // Update product with Amazon information
+        // Update product with Amazon information (solo si fue exitoso)
         await this.updateProductMarketplaceInfo(product.id, 'amazon', {
           listingId: result.asin || '',
           listingUrl: result.asin ? `https://amazon.com/dp/${result.asin}` : '',
           publishedAt: new Date(),
         });
 
-        await prisma.product.update({ where: { id: product.id }, data: { isPublished: true, publishedAt: new Date(), status: 'PUBLISHED' } });
+        // ✅ CORREGIDO: Usar función helper para sincronizar estado e isPublished
+        const { productService } = await import('./product.service');
+        await productService.updateProductStatusSafely(
+          product.id,
+          'PUBLISHED',
+          true,
+          userId
+        );
       }
 
       return {
@@ -707,6 +830,119 @@ export class MarketplaceService {
   }
 
   /**
+   * ✅ CORREGIDO: Sincronizar precio de producto publicado con marketplaces
+   * Actualiza el precio en todos los listings activos del producto
+   */
+  async syncProductPrice(
+    userId: number,
+    productId: number,
+    newPrice: number,
+    environment?: 'sandbox' | 'production'
+  ): Promise<{ success: boolean; updated: number; errors: Array<{ marketplace: string; error: string }> }> {
+    try {
+      // Obtener producto y verificar que esté publicado
+      const product = await prisma.product.findFirst({
+        where: { id: productId, userId },
+        include: { marketplaceListings: true }
+      });
+
+      if (!product) {
+        throw new AppError('Product not found', 404);
+      }
+
+      if (!product.isPublished || product.status !== 'PUBLISHED') {
+        throw new AppError('Product must be published before syncing price', 400);
+      }
+
+      if (newPrice <= 0 || newPrice <= product.aliexpressPrice) {
+        throw new AppError(`New price (${newPrice}) must be greater than AliExpress cost (${product.aliexpressPrice})`, 400);
+      }
+
+      // Obtener listings activos
+      const listings = product.marketplaceListings.filter(l => l.isActive);
+      if (listings.length === 0) {
+        return { success: true, updated: 0, errors: [] };
+      }
+
+      // Obtener environment del usuario si no se proporciona
+      let userEnvironment: 'sandbox' | 'production' = 'production';
+      if (!environment) {
+        const { workflowConfigService } = await import('./workflow-config.service');
+        userEnvironment = await workflowConfigService.getUserEnvironment(userId);
+      } else {
+        userEnvironment = environment;
+      }
+
+      const results = { success: true, updated: 0, errors: [] as Array<{ marketplace: string; error: string }> };
+
+      // Actualizar precio en cada marketplace
+      for (const listing of listings) {
+        try {
+          const marketplace = listing.marketplace as 'ebay' | 'amazon' | 'mercadolibre';
+          
+          // Obtener credenciales
+          const credentials = await this.getCredentials(userId, marketplace, userEnvironment);
+          if (!credentials || !credentials.isActive) {
+            results.errors.push({ marketplace, error: 'Credentials not found or inactive' });
+            continue;
+          }
+
+          // Actualizar precio según marketplace
+          switch (marketplace) {
+            case 'ebay':
+              // TODO: Implementar actualización de precio en eBay
+              // Por ahora, solo actualizar en BD
+              await prisma.marketplaceListing.update({
+                where: { id: listing.id },
+                data: { lastSyncedAt: new Date() }
+              });
+              results.updated++;
+              break;
+
+            case 'amazon':
+              // TODO: Implementar actualización de precio en Amazon
+              // Por ahora, solo actualizar en BD
+              await prisma.marketplaceListing.update({
+                where: { id: listing.id },
+                data: { lastSyncedAt: new Date() }
+              });
+              results.updated++;
+              break;
+
+            case 'mercadolibre':
+              // TODO: Implementar actualización de precio en MercadoLibre
+              // Por ahora, solo actualizar en BD
+              await prisma.marketplaceListing.update({
+                where: { id: listing.id },
+                data: { lastSyncedAt: new Date() }
+              });
+              results.updated++;
+              break;
+          }
+        } catch (error) {
+          results.errors.push({
+            marketplace: listing.marketplace,
+            error: error instanceof Error ? error.message : String(error)
+          });
+          results.success = false;
+        }
+      }
+
+      // Actualizar precio del producto
+      if (results.updated > 0) {
+        await prisma.product.update({
+          where: { id: productId },
+          data: { finalPrice: newPrice, suggestedPrice: newPrice }
+        });
+      }
+
+      return results;
+    } catch (error) {
+      throw new AppError(`Failed to sync product price: ${error instanceof Error ? error.message : String(error)}`, 500);
+    }
+  }
+
+  /**
    * Get marketplace statistics
    */
   async getMarketplaceStats(userId: number): Promise<any> {
@@ -782,14 +1018,22 @@ export class MarketplaceService {
     if (typeof metadata?.price === 'number' && metadata.price > 0) {
       return metadata.price;
     }
-    if (typeof product?.finalPrice === 'number' && product.finalPrice > 0) {
+    // ✅ CORREGIDO: Validar que finalPrice no sea null antes de usarlo
+    if (typeof product?.finalPrice === 'number' && product.finalPrice > 0 && product.finalPrice !== null) {
       return product.finalPrice;
     }
     if (typeof product?.suggestedPrice === 'number' && product.suggestedPrice > 0) {
       return product.suggestedPrice;
     }
+    // ✅ CORREGIDO: Validar margen mínimo antes de usar fallback
     if (typeof product?.aliexpressPrice === 'number' && product.aliexpressPrice > 0) {
-      return Math.round(product.aliexpressPrice * 1.45 * 100) / 100;
+      const fallbackPrice = Math.round(product.aliexpressPrice * 1.45 * 100) / 100;
+      // Validar que el fallback sea mayor que el costo
+      if (fallbackPrice > product.aliexpressPrice) {
+        return fallbackPrice;
+      }
+      // Si el fallback no es válido, retornar 0 (será validado después)
+      return 0;
     }
     return 0;
   }

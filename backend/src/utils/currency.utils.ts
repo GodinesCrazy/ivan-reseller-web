@@ -125,7 +125,8 @@ function determineSeparators(raw: string): { thousand: string | null; decimal: s
 
 export function parseLocalizedNumber(value: unknown, currency?: string): number {
   if (typeof value === 'number' && isFinite(value)) {
-    return value;
+    // ✅ Redondear según moneda si es número
+    return roundNumberByCurrency(value, currency);
   }
 
   const stringValue = String(value ?? '').trim();
@@ -147,14 +148,57 @@ export function parseLocalizedNumber(value: unknown, currency?: string): number 
     cleaned = cleaned.replace(decimalRegex, '.');
   }
 
-  // If currency typically has no decimals, round to integer
+  // ✅ Monedas que no usan decimales
   const zeroDecimalCurrencies = new Set(['CLP', 'JPY', 'KRW', 'VND', 'IDR']);
-  if (!decimal && zeroDecimalCurrencies.has((currency || '').toUpperCase())) {
+  const currencyCode = (currency || '').toUpperCase();
+  const isZeroDecimal = zeroDecimalCurrencies.has(currencyCode);
+
+  // Si es moneda sin decimales, eliminar decimales antes de parsear
+  if (isZeroDecimal) {
     cleaned = cleaned.replace(/\./g, '');
   }
 
   const parsed = parseFloat(cleaned);
-  return isFinite(parsed) ? parsed : 0;
+  if (!isFinite(parsed)) return 0;
+
+  // ✅ Redondear según tipo de moneda
+  return roundNumberByCurrency(parsed, currency);
+}
+
+/**
+ * ✅ Función helper para redondear números según tipo de moneda
+ * - Monedas sin decimales (CLP, JPY, etc.): redondear a entero
+ * - Otras monedas: redondear a 2 decimales (centavos)
+ */
+function roundNumberByCurrency(value: number, currency?: string): number {
+  if (!isFinite(value)) return 0;
+  const zeroDecimalCurrencies = new Set(['CLP', 'JPY', 'KRW', 'VND', 'IDR']);
+  const currencyCode = (currency || '').toUpperCase();
+  
+  if (zeroDecimalCurrencies.has(currencyCode)) {
+    // ✅ Monedas sin decimales: redondear a entero
+    return Math.round(value);
+  } else {
+    // ✅ Otras monedas: redondear a 2 decimales (centavos)
+    return Math.round(value * 100) / 100;
+  }
+}
+
+/**
+ * ✅ Función helper para formatear precio como string según tipo de moneda
+ * - Monedas sin decimales (CLP, JPY, etc.): sin decimales
+ * - Otras monedas: 2 decimales (centavos)
+ */
+export function formatPriceByCurrency(value: number, currency?: string): string {
+  if (!isFinite(value)) return '0';
+  const zeroDecimalCurrencies = new Set(['CLP', 'JPY', 'KRW', 'VND', 'IDR']);
+  const currencyCode = (currency || '').toUpperCase();
+  
+  if (zeroDecimalCurrencies.has(currencyCode)) {
+    return Math.round(value).toString(); // ✅ Sin decimales
+  } else {
+    return value.toFixed(2); // ✅ 2 decimales (centavos)
+  }
 }
 
 export function resolveCurrency(
