@@ -192,7 +192,48 @@ async function runMigrations(maxRetries = 3): Promise<void> {
                          error.stderr?.includes('P1000') ||
                          error.stderr?.includes('Authentication failed');
       
-      if (isAuthError) {
+      const isFailedMigrationError = error.message?.includes('P3009') || 
+                                     error.stderr?.includes('P3009') ||
+                                     error.message?.includes('failed migrations') ||
+                                     error.stderr?.includes('failed migrations');
+      
+      // ✅ Manejar migraciones fallidas automáticamente (P3009)
+      if (isFailedMigrationError) {
+        console.log('⚠️  Detected failed migration (P3009), attempting to resolve automatically...');
+        try {
+          // Conectar a la base de datos para resolver el estado
+          await prisma.$connect();
+          
+          // Marcar todas las migraciones fallidas como revertidas automáticamente
+          const result = await prisma.$executeRaw`
+            UPDATE _prisma_migrations 
+            SET rolled_back_at = NOW(), finished_at = NOW()
+            WHERE finished_at IS NULL AND rolled_back_at IS NULL
+          `;
+          
+          console.log(`   ✅ Marked ${result} failed migration(s) as rolled back`);
+          console.log('   Retrying migrations after cleanup...');
+          
+          // Reintentar la migración después de limpiar (continuar el loop)
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        } catch (cleanupError: any) {
+          console.error('   ⚠️  Could not automatically resolve failed migrations:', cleanupError.message?.substring(0, 200));
+          
+          if (isLastAttempt) {
+            console.error('');
+            console.error('❌ ERROR DE MIGRACIÓN FALLIDA PERSISTENTE:');
+            console.error('   - Hay una migración fallida en la base de datos que no se puede resolver automáticamente');
+            console.error('   - Por favor, ejecuta manualmente: npx prisma migrate resolve --rolled-back <migration_name>');
+            console.error('');
+            throw error;
+          } else {
+            // Reintentar después de un delay
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            continue;
+          }
+        }
+      } else if (isAuthError) {
         console.error(`⚠️  Migration error (attempt ${attempt + 1}/${maxRetries}):`);
         console.error(`   ${error.message || error.stderr || 'Unknown error'}`);
         
@@ -209,7 +250,7 @@ async function runMigrations(maxRetries = 3): Promise<void> {
           await new Promise(resolve => setTimeout(resolve, 3000));
         }
       } else {
-        // Si no es error de autenticación, lanzar inmediatamente
+        // Si no es error de autenticación ni de migración fallida, lanzar inmediatamente
         throw error;
       }
     }
