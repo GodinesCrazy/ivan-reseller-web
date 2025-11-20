@@ -97,13 +97,32 @@ router.get('/pending', async (req: Request, res: Response) => {
       productIds: items.slice(0, 5).map(i => i.id)
     });
     
+    // ✅ Helper para extraer imageUrl del campo images (JSON string)
+    const extractImageUrl = (images: string | null | undefined): string | null => {
+      if (!images) return null;
+      try {
+        const parsed = typeof images === 'string' ? JSON.parse(images) : images;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return String(parsed[0]);
+        }
+        if (typeof parsed === 'string') {
+          return parsed;
+        }
+      } catch (error) {
+        logger.warn('[PUBLISHER] Failed to parse images field', { error });
+      }
+      return null;
+    };
+
     // ✅ Enriquecer con información adicional
     const enrichedItems = await Promise.all(
       items.map(async (item) => {
         try {
           const productData = item.productData ? JSON.parse(item.productData as string) : {};
+          const imageUrl = extractImageUrl(item.images) || null;
           return {
             ...item,
+            imageUrl: imageUrl || undefined, // ✅ Incluir imageUrl extraído
             source: (productData as any).source || 'manual',
             queuedAt: (productData as any).queuedAt || item.createdAt,
             queuedBy: (productData as any).queuedBy || 'user',
@@ -117,7 +136,12 @@ router.get('/pending', async (req: Request, res: Response) => {
             productId: item.id,
             error: parseError instanceof Error ? parseError.message : String(parseError)
           });
-          return item;
+          // Incluso si falla el parse, incluir imageUrl
+          const imageUrl = extractImageUrl(item.images) || null;
+          return {
+            ...item,
+            imageUrl: imageUrl || undefined
+          };
         }
       })
     );
@@ -154,13 +178,25 @@ router.get('/listings', async (req: Request, res: Response) => {
 
 // POST /api/publisher/approve/:id
 // ✅ MEJORADO: Usa ambiente del usuario y mejor logging
-router.post('/approve/:id', authorize('ADMIN'), async (req: Request, res: Response) => {
+// ✅ Cambiado: Permitir a cualquier usuario autenticado aprobar sus propios productos
+router.post('/approve/:id', async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     const { marketplaces = [], customData, environment } = req.body || {};
+    const userId = req.user!.userId;
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
 
-    // ✅ C2: Admin puede ver todos los productos
-    const product = await productService.getProductById(id, req.user!.userId, true);
+    // ✅ C2: Admin puede ver todos los productos, usuarios solo los suyos
+    const product = await productService.getProductById(id, userId, isAdmin);
+    
+    // ✅ Verificar que el producto pertenece al usuario (si no es admin)
+    if (!isAdmin && product.userId !== userId) {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'No tienes permiso para aprobar este producto' 
+      });
+    }
     
     // ✅ Obtener ambiente del usuario si no se proporciona
     const { workflowConfigService } = await import('../../services/workflow-config.service');
