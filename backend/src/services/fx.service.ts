@@ -17,6 +17,9 @@ class FXService {
   private providerUrl = process.env.FX_PROVIDER_URL || 'https://open.er-api.com/v6/latest/{base}';
   private providerSymbols = process.env.FX_PROVIDER_SYMBOLS;
   private refreshInFlight: Promise<void> | null = null;
+  
+  // ✅ Monedas que no usan decimales (redondear a enteros)
+  private readonly zeroDecimalCurrencies = new Set(['CLP', 'JPY', 'KRW', 'VND', 'IDR']);
 
   constructor() {
     this.seedRates();
@@ -206,11 +209,29 @@ class FXService {
     return this.refreshInFlight;
   }
 
+  /**
+   * ✅ Redondear cantidad según tipo de moneda
+   * - Monedas sin decimales (CLP, JPY, etc.): redondear a entero
+   * - Otras monedas: redondear a 2 decimales (centavos)
+   */
+  private roundCurrency(amount: number, currency: string): number {
+    if (!isFinite(amount)) return 0;
+    const currencyCode = currency.toUpperCase();
+    
+    if (this.zeroDecimalCurrencies.has(currencyCode)) {
+      // ✅ Monedas sin decimales: redondear a entero
+      return Math.round(amount);
+    } else {
+      // ✅ Otras monedas: redondear a 2 decimales (centavos)
+      return Math.round(amount * 100) / 100;
+    }
+  }
+
   convert(amount: number, from: string, to: string): number {
     if (!isFinite(amount)) return 0;
     const f = from.toUpperCase();
     const t = to.toUpperCase();
-    if (f === t) return amount;
+    if (f === t) return this.roundCurrency(amount, t);
     
     // ✅ Verificar que tenemos las tasas necesarias
     if (!this.rates[f] || !this.rates[t]) {
@@ -221,31 +242,36 @@ class FXService {
         hasFromRate: !!this.rates[f],
         hasToRate: !!this.rates[t]
       });
-      // Si falta la tasa, intentar refrescar
+      // Si falta la tasa, intentar refrescar (pero no esperar)
       if (this.providerEnabled && !this.refreshInFlight) {
         this.refreshRates().catch(() => {
-          // Si falla el refresh, retornar amount sin convertir
+          // Si falla el refresh, se lanzará error en siguiente intento
         });
       }
-      return amount;
+      // ✅ CORREGIDO: Lanzar error si falta tasa en lugar de retornar amount sin convertir
+      throw new Error(`Missing exchange rate for conversion: ${f} to ${t}. Available rates: ${Object.keys(this.rates).slice(0, 10).join(', ')}`);
     }
     
     const amountInBase = amount / this.rates[f];
     const converted = amountInBase * this.rates[t];
     
+    // ✅ Redondear según tipo de moneda destino
+    const rounded = this.roundCurrency(converted, t);
+    
     // ✅ Logging para diagnóstico (solo para conversiones importantes)
-    if (f === 'CLP' || t === 'CLP' || amount > 1000) {
+    if (f === 'CLP' || t === 'CLP' || amount > 1000 || Math.abs(converted - rounded) > 0.01) {
       logger.debug('FXService: conversion', {
         from: f,
         to: t,
         originalAmount: amount,
         convertedAmount: converted,
+        roundedAmount: rounded,
         fromRate: this.rates[f],
         toRate: this.rates[t]
       });
     }
     
-    return converted;
+    return rounded;
   }
 }
 

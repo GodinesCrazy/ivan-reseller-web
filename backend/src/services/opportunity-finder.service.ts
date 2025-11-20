@@ -7,6 +7,7 @@ import costCalculator from './cost-calculator.service';
 import opportunityPersistence from './opportunity.service';
 import MarketplaceService from './marketplace.service';
 import fxService from './fx.service';
+import { formatPriceByCurrency } from '../utils/currency.utils';
 import { workflowConfigService } from './workflow-config.service';
 import { logger } from '../config/logger';
 import {
@@ -509,11 +510,10 @@ class OpportunityFinderService {
             typeof product.priceMaxSource === 'number' && product.priceMaxSource > 0
               ? product.priceMaxSource
               : product.sourcePrice;
+          // ✅ Formatear precio según moneda
           const formatSource = (value: number | undefined) =>
-            typeof value === 'number'
-              ? value >= 10
-                ? value.toFixed(0)
-                : value.toFixed(2)
+            typeof value === 'number' && isFinite(value)
+              ? formatPriceByCurrency(value, product.sourceCurrency || baseCurrency)
               : 'N/A';
           const sourceCurrencyLabel = product.sourceCurrency || baseCurrency;
           estimationNotes.push(
@@ -536,10 +536,15 @@ class OpportunityFinderService {
             { shippingCost: 0, taxesPct: 0, otherCosts: 0 }
           );
           if (margin > best.margin) {
+            // ✅ Verificar si competitivePrice ya está en baseCurrency para evitar conversión doble
+            const competitivePriceInBase = (a.currency || 'USD').toUpperCase() === baseCurrency.toUpperCase()
+              ? a.competitivePrice // Ya está en moneda base
+              : fxService.convert(a.competitivePrice, a.currency || 'USD', baseCurrency); // Convertir solo si es necesario
+            
             best = {
               margin,
               price: a.competitivePrice,
-              priceBase: fxService.convert(a.competitivePrice, a.currency || 'USD', baseCurrency),
+              priceBase: competitivePriceInBase,
               mp: a.marketplace,
               currency: a.currency || 'USD',
             };
@@ -581,9 +586,10 @@ class OpportunityFinderService {
           });
           continue;
         }
+        // ✅ No convertir baseCurrency → baseCurrency (conversión redundante)
         best = {
           margin: fallbackMargin,
-          price: fxService.convert(fallbackPriceBase, baseCurrency, baseCurrency),
+          price: fallbackPriceBase, // Ya está en baseCurrency
           priceBase: fallbackPriceBase,
           mp: marketplaces[0],
           currency: baseCurrency,
@@ -658,7 +664,7 @@ class OpportunityFinderService {
         service: 'opportunity-finder',
         title: opp.title.substring(0, 50),
         margin: (opp.profitMargin * 100).toFixed(1),
-        suggestedPrice: `${opp.suggestedPriceUsd.toFixed(2)} ${opp.suggestedPriceCurrency}`
+        suggestedPrice: `${formatPriceByCurrency(opp.suggestedPriceUsd, opp.suggestedPriceCurrency)} ${opp.suggestedPriceCurrency}`
       });
 
       try {

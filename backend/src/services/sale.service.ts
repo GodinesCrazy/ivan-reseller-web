@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 import logger from '../config/logger';
+import fxService from './fx.service';
 
 const prisma = new PrismaClient();
 
@@ -47,13 +48,55 @@ export class SaleService {
       throw new AppError('Cost price must be greater than 0', 400);
     }
 
-    // ✅ Validar que salePrice sea mayor que costPrice
-    if (data.salePrice <= data.costPrice) {
-      throw new AppError('Sale price must be greater than cost price to generate profit', 400);
+    // ✅ CORREGIDO: Sincronizar monedas antes de calcular utilidades
+    // Obtener moneda base del usuario
+    let baseCurrency = 'USD'; // Fallback por defecto
+    try {
+      const { userSettingsService } = await import('./user-settings.service');
+      baseCurrency = await userSettingsService.getUserBaseCurrency(userId);
+    } catch (error) {
+      logger.warn('[SALE] Failed to get user base currency, using USD fallback', {
+        userId,
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
 
-    // Calcular ganancias y comisiones
-    const grossProfit = data.salePrice - data.costPrice;
+    // Determinar monedas de salePrice y costPrice
+    // Por defecto asumir que están en baseCurrency si no se especifica
+    const saleCurrency = data.currency || baseCurrency;
+    const costCurrency = baseCurrency; // costPrice siempre está en baseCurrency (aliExpressPrice convertido)
+    
+    // ✅ Convertir costPrice a saleCurrency si es necesario
+    let costPriceInSaleCurrency = data.costPrice;
+    if (saleCurrency.toUpperCase() !== costCurrency.toUpperCase()) {
+      try {
+        costPriceInSaleCurrency = fxService.convert(data.costPrice, costCurrency, saleCurrency);
+        logger.debug('[SALE] Converted cost price to sale currency', {
+          userId,
+          productId: data.productId,
+          from: costCurrency,
+          to: saleCurrency,
+          originalCost: data.costPrice,
+          convertedCost: costPriceInSaleCurrency
+        });
+      } catch (conversionError) {
+        logger.error('[SALE] Failed to convert cost price, using original value', {
+          userId,
+          productId: data.productId,
+          error: conversionError instanceof Error ? conversionError.message : String(conversionError)
+        });
+        // Si falla la conversión, usar valor original (puede causar cálculo incorrecto)
+        // Esto es mejor que fallar completamente
+      }
+    }
+
+    // ✅ Validar que salePrice sea mayor que costPrice (ambos en misma moneda)
+    if (data.salePrice <= costPriceInSaleCurrency) {
+      throw new AppError(`Sale price (${data.salePrice} ${saleCurrency}) must be greater than cost price (${costPriceInSaleCurrency} ${saleCurrency}) to generate profit`, 400);
+    }
+
+    // ✅ Calcular ganancias y comisiones (ambos en saleCurrency)
+    const grossProfit = data.salePrice - costPriceInSaleCurrency;
     const platformFees = data.platformFees || 0;
     
     // ✅ Obtener usuario con información de creador para calcular comisión admin

@@ -242,6 +242,38 @@ router.patch('/:id/status', authorize('ADMIN'), async (req: Request, res: Respon
   }
 });
 
+// PATCH /api/products/:id/price - ✅ CORREGIDO: Sincronizar precio con marketplaces
+router.patch('/:id/price', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { price, environment } = req.body;
+    const productId = Number(req.params.id);
+    const userId = req.user!.userId;
+
+    if (!price || typeof price !== 'number' || price <= 0) {
+      return res.status(400).json({ error: 'Price must be a positive number' });
+    }
+
+    const { MarketplaceService } = await import('../../services/marketplace.service');
+    const marketplaceService = new MarketplaceService();
+    
+    const result = await marketplaceService.syncProductPrice(
+      userId,
+      productId,
+      price,
+      environment
+    );
+
+    return res.json({
+      success: result.success,
+      message: `Price synced: ${result.updated} marketplace(s) updated, ${result.errors.length} error(s)`,
+      updated: result.updated,
+      errors: result.errors
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // DELETE /api/products/:id - Eliminar producto
 router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {

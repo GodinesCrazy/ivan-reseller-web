@@ -156,7 +156,9 @@ export class ProductService {
         description: rest.description || null,
         aliexpressPrice: rest.aliexpressPrice,
         suggestedPrice: rest.suggestedPrice,
-        finalPrice: finalPrice ?? rest.suggestedPrice,
+        // ✅ CORREGIDO: Asegurar que finalPrice siempre tenga un valor válido
+        // Si no se proporciona finalPrice, usar suggestedPrice o aliexpressPrice * 1.45 como fallback
+        finalPrice: finalPrice ?? rest.suggestedPrice ?? (rest.aliexpressPrice ? Math.round(rest.aliexpressPrice * 1.45 * 100) / 100 : 0),
         category: rest.category || null,
         images: imagesPayload,
         productData: metadataPayload,
@@ -297,10 +299,16 @@ export class ProductService {
     if (typeof rest.description === 'string') updateData.description = rest.description;
     if (typeof rest.aliexpressPrice === 'number') updateData.aliexpressPrice = rest.aliexpressPrice;
     if (typeof rest.suggestedPrice === 'number') updateData.suggestedPrice = rest.suggestedPrice;
+    // ✅ CORREGIDO: Sincronizar finalPrice cuando se actualiza suggestedPrice
+    // Si se actualiza suggestedPrice pero no finalPrice, sincronizar finalPrice
     if (typeof rest.finalPrice === 'number') {
       updateData.finalPrice = rest.finalPrice;
     } else if (typeof rest.suggestedPrice === 'number') {
+      // Sincronizar finalPrice con suggestedPrice si no se proporciona explícitamente
       updateData.finalPrice = rest.suggestedPrice;
+    } else if (typeof updateData.suggestedPrice === 'number') {
+      // Si solo se actualizó suggestedPrice en este mismo update, sincronizar
+      updateData.finalPrice = updateData.suggestedPrice;
     }
     if (typeof rest.category === 'string') updateData.category = rest.category;
 
@@ -360,13 +368,53 @@ export class ProductService {
     return updated;
   }
 
-  async updateProductStatus(id: number, status: ProductStatus, adminId: number) {
-    // ✅ C2: Admin puede ver todos los productos
-    const product = await this.getProductById(id, adminId, true);
+  /**
+   * ✅ CORREGIDO: Función helper para actualizar estado y isPublished de forma sincronizada
+   * Asegura que: status === 'PUBLISHED' → isPublished === true
+   */
+  async updateProductStatusSafely(
+    id: number,
+    status: ProductStatus,
+    isPublished?: boolean,
+    adminId?: number
+  ) {
+    // ✅ Obtener producto actual para verificar publishedAt
+    const currentProduct = await prisma.product.findUnique({
+      where: { id },
+      select: { publishedAt: true, title: true, userId: true }
+    });
+
+    if (!currentProduct) {
+      throw new AppError('Product not found', 404);
+    }
+
+    // ✅ Validar consistencia: si status es PUBLISHED, isPublished debe ser true
+    const shouldBePublished = status === 'PUBLISHED';
+    const finalIsPublished = isPublished !== undefined ? isPublished : shouldBePublished;
+
+    // ✅ Si status no es PUBLISHED pero isPublished es true, corregir isPublished
+    const correctedIsPublished = status === 'PUBLISHED' 
+      ? true 
+      : (status !== 'PENDING' && status !== 'APPROVED' ? false : finalIsPublished);
+
+    // ✅ Preparar datos de actualización
+    const updateData: any = {
+      status,
+      isPublished: correctedIsPublished,
+    };
+
+    // ✅ CORREGIDO: Actualizar publishedAt solo si cambia el estado a PUBLISHED o desde PUBLISHED
+    // Asegurar que publishedAt se limpia cuando status !== 'PUBLISHED'
+    if (status === 'PUBLISHED' && !currentProduct.publishedAt) {
+      updateData.publishedAt = new Date();
+    } else if (status !== 'PUBLISHED') {
+      // ✅ Limpiar publishedAt si el estado no es PUBLISHED
+      updateData.publishedAt = null;
+    }
 
     const updated = await prisma.product.update({
       where: { id },
-      data: { status },
+      data: updateData,
       include: {
         user: {
           select: {
@@ -377,6 +425,64 @@ export class ProductService {
         },
       },
     });
+
+    // Registrar actividad si hay adminId
+    if (adminId) {
+      const metadataString = JSON.stringify({ productId: id, newStatus: status, isPublished: correctedIsPublished });
+
+      await prisma.activity.create({
+        data: {
+          userId: adminId,
+          action: 'PRODUCT_STATUS_CHANGED',
+          description: `Estado del producto "${updated.title}" cambiado a ${status}`,
+          metadata: metadataString,
+        },
+      }).catch(() => {});
+
+      await prisma.activity.create({
+        data: {
+          userId: updated.userId,
+          action: 'PRODUCT_STATUS_CHANGED',
+          description: `Tu producto "${updated.title}" ahora está ${status}`,
+          metadata: metadataString,
+        },
+      }).catch(() => {});
+    }
+
+    return updated;
+  }
+
+  async updateProductStatus(id: number, status: ProductStatus, adminId: number) {
+    // ✅ C2: Admin puede ver todos los productos
+    const product = await this.getProductById(id, adminId, true);
+
+    // ✅ CORREGIDO: Si se rechaza el producto, limpiar listings existentes
+    if (status === 'REJECTED') {
+      try {
+        // Eliminar listings del marketplace si existen
+        await prisma.marketplaceListing.deleteMany({
+          where: { productId: id }
+        });
+        logger.info('[PRODUCT-SERVICE] Cleaned up marketplace listings for rejected product', {
+          productId: id,
+          adminId
+        });
+      } catch (error) {
+        // No fallar si no se pueden eliminar listings, solo loguear
+        logger.warn('[PRODUCT-SERVICE] Failed to cleanup marketplace listings', {
+          productId: id,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+
+    // ✅ Usar updateProductStatusSafely para sincronizar estado e isPublished
+    const updated = await this.updateProductStatusSafely(
+      id,
+      status,
+      status === 'PUBLISHED' ? true : false, // isPublished solo si es PUBLISHED
+      adminId
+    );
 
     // ✅ Preparar metadata como string JSON explícitamente
     const metadataString = JSON.stringify({ productId: id, newStatus: status });

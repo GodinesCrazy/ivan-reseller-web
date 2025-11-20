@@ -39,7 +39,8 @@ export class CostCalculatorService {
     const otherCosts = opts?.otherCosts ?? 0;
     const totalCost = sourceCostUsd + marketplaceFee + paymentFee + shippingCost + taxes + otherCosts;
     const netProfit = salePriceUsd - totalCost;
-    const margin = salePriceUsd > 0 ? netProfit / salePriceUsd : 0;
+    // ✅ Redondear margen a 4 decimales para evitar problemas de precisión
+    const margin = salePriceUsd > 0 ? Math.round((netProfit / salePriceUsd) * 10000) / 10000 : 0;
 
     const breakdown: CostBreakdown = {
       marketplaceFee,
@@ -79,7 +80,8 @@ export class CostCalculatorService {
     const paymentFee = salePrice * cfg.paymentFee;
     const totalCost = costInSaleCurrency + marketplaceFee + paymentFee + shippingCost + taxes + otherCosts;
     const netProfit = salePrice - totalCost;
-    const margin = salePrice > 0 ? netProfit / salePrice : 0;
+    // ✅ Redondear margen a 4 decimales para evitar problemas de precisión
+    const margin = salePrice > 0 ? Math.round((netProfit / salePrice) * 10000) / 10000 : 0;
 
     return {
       breakdown: { marketplaceFee, paymentFee, shippingCost, taxes, otherCosts, totalCost },
