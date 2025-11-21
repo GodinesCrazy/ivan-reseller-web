@@ -11,7 +11,7 @@ router.get('/calculate', async (req: Request, res: Response, next) => {
     const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
     const period = (req.query.period as 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly') || 'monthly';
 
-    // Verificar permisos
+    // Verificar permisos)
     if (userId && req.user!.role !== 'ADMIN' && req.user!.userId !== userId) {
       return res.status(403).json({
         success: false,
