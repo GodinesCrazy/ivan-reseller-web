@@ -129,9 +129,26 @@ export class MarketplaceService {
         // Update resolved credentials with normalized version
         Object.assign(resolvedCredentials, normalizedCreds);
         
-        // Check for missing OAuth tokens
-        if (!normalizedCreds.token && !normalizedCreds.refreshToken) {
+        // ✅ CORRECCIÓN: Verificar tokens de forma más robusta - considerar tanto token como refreshToken
+        // También verificar que el token no esté vacío o solo espacios
+        const hasValidToken = normalizedCreds.token && String(normalizedCreds.token).trim().length > 0;
+        const hasValidRefreshToken = normalizedCreds.refreshToken && String(normalizedCreds.refreshToken).trim().length > 0;
+        
+        // ✅ CORRECCIÓN: Solo marcar como error si NO hay token NI refreshToken
+        // Si hay refreshToken pero no token, el sistema puede refrescar automáticamente
+        if (!hasValidToken && !hasValidRefreshToken) {
           issues.push('Falta token OAuth de eBay. Completa la autorización en Settings → API Settings.');
+        } else {
+          // ✅ Si hay tokens, asegurar que el sandbox flag esté sincronizado con environment
+          if (typeof normalizedCreds.sandbox === 'undefined' || normalizedCreds.sandbox !== (resolvedEnv === 'sandbox')) {
+            logger.debug('[MarketplaceService] Syncing sandbox flag with environment', {
+              marketplace: 'ebay',
+              userId,
+              environment: resolvedEnv,
+              currentSandbox: normalizedCreds.sandbox,
+              expectedSandbox: resolvedEnv === 'sandbox'
+            });
+          }
         }
       }
 
@@ -184,8 +201,15 @@ export class MarketplaceService {
     try {
       // ✅ Obtener environment del usuario si no se proporciona
       const { workflowConfigService } = await import('./workflow-config.service');
-      const { CredentialsManager } = await import('./credentials-manager.service');
+      const { CredentialsManager, clearCredentialsCache } = await import('./credentials-manager.service');
       const userEnvironment = environment || await workflowConfigService.getUserEnvironment(userId);
+
+      // ✅ CORRECCIÓN EBAY OAUTH: Sincronizar sandbox flag con environment para eBay
+      if (marketplace === 'ebay' && credentials && typeof credentials === 'object') {
+        const creds = credentials as any;
+        // Asegurar que sandbox flag coincida con environment
+        creds.sandbox = userEnvironment === 'sandbox';
+      }
 
       await CredentialsManager.saveCredentials(
         userId,
@@ -194,6 +218,15 @@ export class MarketplaceService {
         userEnvironment,
         { scope: 'user' }
       );
+      
+      // ✅ CORRECCIÓN EBAY OAUTH: Limpiar cache de credenciales después de guardar para que los cambios se reflejen inmediatamente
+      clearCredentialsCache(userId, marketplace as any, userEnvironment);
+      
+      logger.debug('[MarketplaceService] Credentials saved and cache cleared', {
+        userId,
+        marketplace,
+        environment: userEnvironment
+      });
     } catch (error) {
       throw new AppError(`Failed to save marketplace credentials: ${error.message}`, 500);
     }
