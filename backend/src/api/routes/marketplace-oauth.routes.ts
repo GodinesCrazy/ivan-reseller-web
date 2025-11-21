@@ -224,22 +224,40 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         expiresIn: tokens.expiresIn
       });
       
-      const newCreds = { ...(cred?.credentials || {}), token: tokens.token, refreshToken: tokens.refreshToken };
+      // ✅ CORRECCIÓN: Sincronizar sandbox flag con environment y asegurar que tokens se guarden correctamente
+      const newCreds = { 
+        ...(cred?.credentials || {}), 
+        token: tokens.token, 
+        refreshToken: tokens.refreshToken,
+        // ✅ CRÍTICO: Sincronizar sandbox flag con environment para que la validación funcione
+        sandbox: environment === 'sandbox'
+      };
       
       logger.info('[OAuth Callback] Saving credentials', {
         service: 'marketplace-oauth',
         userId,
         environment,
-        credentialKeys: Object.keys(newCreds)
+        sandbox: newCreds.sandbox,
+        credentialKeys: Object.keys(newCreds),
+        hasToken: !!newCreds.token,
+        hasRefreshToken: !!newCreds.refreshToken
       });
       
+      // ✅ CORRECCIÓN: Guardar credenciales con environment explícito
       await marketplaceService.saveCredentials(userId, 'ebay', newCreds, environment);
+      
+      // ✅ CORRECCIÓN EBAY OAUTH: Limpiar cache de credenciales para que la próxima consulta obtenga los tokens nuevos
+      // Limpiar tanto sandbox como production por si acaso hay cache mixto
+      const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
+      clearCredentialsCache(userId, 'ebay', environment);
+      clearCredentialsCache(userId, 'ebay', environment === 'sandbox' ? 'production' : 'sandbox');
       
       logger.info('[OAuth Callback] Credentials saved successfully', {
         service: 'marketplace-oauth',
         userId,
         environment,
-        duration: Date.now() - startTime
+        duration: Date.now() - startTime,
+        cacheCleared: true
       });
     } else if (marketplace === 'mercadolibre') {
       const cred = await marketplaceService.getCredentials(userId, 'mercadolibre', environment);
