@@ -97,6 +97,8 @@ export default function Opportunities() {
     amazon: { sandbox: createEmptyEnvStatus(), production: createEmptyEnvStatus() },
     mercadolibre: { sandbox: createEmptyEnvStatus(), production: createEmptyEnvStatus() },
   });
+  const [showAliExpressModal, setShowAliExpressModal] = useState(false);
+  const [pendingSearchUrl, setPendingSearchUrl] = useState<string | null>(null);
 
   const marketplacesParam = useMemo(() => marketplaces.join(','), [marketplaces]);
   const hasEstimatedValues = useMemo(
@@ -124,16 +126,18 @@ export default function Opportunities() {
       await fetchAuthStatuses();
     } catch (e: any) {
       if (e?.response?.status === 428) {
+        // ✅ P0.3: Mostrar modal explicativo antes de abrir ventana
         const data = e.response?.data || {};
         const manualPath = data.manualUrl || (data.token ? `/manual-login/${data.token}` : null);
         const targetUrl = manualPath
           ? (manualPath.startsWith('http') ? manualPath : `${window.location.origin}${manualPath}`)
           : data.loginUrl;
-        setError('Se requiere iniciar sesión en AliExpress. Abre la ventana y guarda la sesión.');
-        toast.warning('Necesitamos que inicies sesión manualmente en AliExpress. Se abrirá una ventana con instrucciones.');
-        if (targetUrl) {
-          window.open(targetUrl, '_blank', 'noopener,noreferrer');
-        }
+        
+        // Guardar URL para abrir después de confirmar en modal
+        setPendingSearchUrl(targetUrl || null);
+        setShowAliExpressModal(true);
+        
+        setError('Se requiere iniciar sesión en AliExpress para continuar.');
         await fetchAuthStatuses();
       } else {
         setError(e?.response?.data?.error || e.message || 'Error fetching opportunities');
@@ -145,6 +149,16 @@ export default function Opportunities() {
       setLoading(false);
     }
   }
+
+  // ✅ P0.3: Handler para abrir ventana de login después de confirmar en modal
+  const handleOpenAliExpressLogin = () => {
+    if (pendingSearchUrl) {
+      window.open(pendingSearchUrl, '_blank', 'noopener,noreferrer');
+      setShowAliExpressModal(false);
+      setPendingSearchUrl(null);
+      toast.success('Ventana de login abierta. Completa el inicio de sesión y guarda la sesión.');
+    }
+  };
 
   const loadMarketplaceEnvStatus = useCallback(async () => {
     const createNormalizedState = (): Record<Marketplace, MarketplaceEnvStatusMap> => ({
@@ -445,6 +459,44 @@ export default function Opportunities() {
           >
             Reintentar ahora
           </button>
+        </div>
+      )}
+
+      {/* ✅ P0.3: Modal explicativo antes de abrir ventana de login AliExpress */}
+      {showAliExpressModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
+            <h2 className="text-xl font-bold text-gray-900">Inicio de sesión requerido en AliExpress</h2>
+            <p className="text-gray-600">
+              Para buscar oportunidades en AliExpress, necesitamos que inicies sesión en tu cuenta de AliExpress.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded p-4 space-y-2">
+              <p className="font-semibold text-blue-900">Pasos a seguir:</p>
+              <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
+                <li>Se abrirá una ventana nueva con instrucciones</li>
+                <li>Inicia sesión en AliExpress en esa ventana</li>
+                <li>Guarda tu sesión siguiendo las instrucciones</li>
+                <li>Vuelve aquí y vuelve a intentar la búsqueda</li>
+              </ol>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleOpenAliExpressLogin}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+              >
+                Abrir ventana de login
+              </button>
+              <button
+                onClick={() => {
+                  setShowAliExpressModal(false);
+                  setPendingSearchUrl(null);
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

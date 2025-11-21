@@ -56,6 +56,7 @@ import manualAuthRoutes from './api/routes/manual-auth.routes';
 import authStatusRoutes from './api/routes/auth-status.routes';
 import configAuditRoutes from './api/routes/config-audit.routes';
 import manualCaptchaRoutes from './api/routes/manual-captcha.routes';
+import accessRequestsRoutes from './api/routes/access-requests.routes';
 
 const app: Application = express();
 app.set('trust proxy', 1);
@@ -216,6 +217,7 @@ app.get('/health', async (_req: Request, res: Response) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/access-requests', accessRequestsRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/sales', saleRoutes);

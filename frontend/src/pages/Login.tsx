@@ -113,6 +113,20 @@ export default function Login() {
           >
             {isLoading ? 'Signing in...' : 'Sign in'}
           </button>
+
+          {/* ✅ P0.5: Botón para solicitar acceso */}
+          <div className="mt-4 text-center">
+            <p className="text-sm text-gray-600 mb-2">
+              Don't have an account?
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/request-access')}
+              className="text-sm font-medium text-primary-600 hover:text-primary-700"
+            >
+              Request Access
+            </button>
+          </div>
         </form>
       </div>
     </div>

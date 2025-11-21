@@ -21,12 +21,15 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
-// POST /api/auth/register - DISABLED: Solo admin puede crear usuarios
+// POST /api/auth/register - DISABLED: Redirigir a solicitud de acceso
 router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
-  // ✅ REGISTRO PÚBLICO DESHABILITADO: Solo admin puede crear usuarios
+  // ✅ P0.5: REGISTRO PÚBLICO DESHABILITADO: Redirigir a solicitud de acceso
   return res.status(403).json({
     success: false,
-    message: 'Public registration is disabled. Please contact an administrator to create an account.',
+    message: 'Public registration is disabled. Please request access instead.',
+    action: 'request_access',
+    requestUrl: '/api/access-requests',
+    frontendUrl: '/request-access'
   });
 });
 

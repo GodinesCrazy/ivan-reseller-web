@@ -1,5 +1,5 @@
-import { Router, Request, Response } from 'express';
-import { MarketplaceService } from '../../services/marketplace.service';
+import { Router, Request, Response, NextFunction } from 'express';
+import { MarketplaceService, MarketplaceName } from '../../services/marketplace.service';
 import { EbayService } from '../../services/ebay.service';
 import { MercadoLibreService } from '../../services/mercadolibre.service';
 import crypto from 'crypto';
@@ -64,13 +64,122 @@ const syncInventorySchema = z.object({
 });
 
 /**
+ * GET /api/marketplace/validate/:marketplace
+ * ✅ P0.4: Validar credenciales de un marketplace antes de publicar
+ */
+router.get('/validate/:marketplace', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const marketplace = req.params.marketplace as MarketplaceName;
+    const environment = req.query.environment as 'sandbox' | 'production' | undefined;
+    const userId = req.user!.userId;
+    
+    // Obtener ambiente del usuario si no se proporciona
+    let userEnvironment: 'sandbox' | 'production' = 'production';
+    if (!environment) {
+      const { workflowConfigService } = await import('../../services/workflow-config.service');
+      userEnvironment = await workflowConfigService.getUserEnvironment(userId);
+    } else {
+      userEnvironment = environment;
+    }
+    
+    // Validar que el marketplace es válido
+    if (!['ebay', 'amazon', 'mercadolibre'].includes(marketplace)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid marketplace',
+        message: `Marketplace must be one of: ebay, amazon, mercadolibre`
+      });
+    }
+    
+    // Verificar credenciales
+    const credentials = await marketplaceService.getCredentials(
+      userId,
+      marketplace as MarketplaceName,
+      userEnvironment
+    );
+    
+    if (!credentials || !credentials.isActive) {
+      return res.status(200).json({
+        success: false,
+        hasCredentials: false,
+        message: `Please configure your ${marketplace} credentials before publishing.`,
+        action: 'configure_credentials',
+        settingsUrl: '/settings?tab=api-credentials'
+      });
+    }
+    
+    // Probar conexión
+    const testResult = await marketplaceService.testConnection(
+      userId,
+      marketplace as MarketplaceName,
+      userEnvironment
+    );
+    
+    if (!testResult.success) {
+      return res.status(200).json({
+        success: false,
+        hasCredentials: true,
+        isValid: false,
+        message: testResult.message || `Your ${marketplace} credentials are invalid or expired.`,
+        action: 'update_credentials',
+        settingsUrl: '/settings?tab=api-credentials'
+      });
+    }
+    
+    return res.json({
+      success: true,
+      hasCredentials: true,
+      isValid: true,
+      message: `${marketplace} credentials are valid and ready to use.`
+    });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
  * POST /api/marketplace/publish
  * Publish product to a single marketplace
+ * ✅ P0.4: Validar credenciales antes de publicar
  */
 // ✅ Rate limit específico por marketplace
-router.post('/publish', marketplaceRateLimit, async (req: Request, res: Response) => {
+router.post('/publish', marketplaceRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = publishProductSchema.parse(req.body);
+    
+    // ✅ P0.4: Validar credenciales antes de publicar
+    const credentials = await marketplaceService.getCredentials(
+      req.user!.userId,
+      data.marketplace,
+      data.environment
+    );
+    
+    if (!credentials || !credentials.isActive) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing credentials',
+        message: `Please configure your ${data.marketplace} credentials before publishing.`,
+        action: 'configure_credentials',
+        settingsUrl: '/settings?tab=api-credentials'
+      });
+    }
+    
+    // Probar conexión antes de publicar
+    const testResult = await marketplaceService.testConnection(
+      req.user!.userId,
+      data.marketplace,
+      data.environment
+    );
+    
+    if (!testResult.success) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid credentials',
+        message: testResult.message || `Your ${data.marketplace} credentials are invalid or expired. Please update them in Settings.`,
+        action: 'update_credentials',
+        settingsUrl: '/settings?tab=api-credentials'
+      });
+    }
     
     const result = await marketplaceService.publishProduct(
       req.user!.userId,
@@ -104,7 +213,7 @@ router.post('/publish', marketplaceRateLimit, async (req: Request, res: Response
  * POST /api/marketplace/publish-multiple
  * Publish product to multiple marketplaces
  */
-router.post('/publish-multiple', async (req: Request, res: Response) => {
+router.post('/publish-multiple', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = multipleMarketplacesSchema.parse(req.body);
     
@@ -129,18 +238,8 @@ router.post('/publish-multiple', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/marketplace/credentials
- * Save or update marketplace credentials for current user
+ * POST /api/marketplace/credentials (duplicate - removing old one)
  */
-router.post('/credentials', async (req: Request, res: Response) => {
-  try {
-    const data = credentialsSchema.parse(req.body);
-    await marketplaceService.saveCredentials(req.user!.userId, data.marketplace, data.credentials);
-    res.json({ success: true, message: 'Credentials saved' });
-  } catch (error: any) {
-    next(error);
-  }
-});
 
 /**
  * GET /api/marketplace/credentials
@@ -152,7 +251,7 @@ router.get('/credentials', async (req: Request, res: Response) => {
     if (!['ebay', 'mercadolibre', 'amazon'].includes(marketplace)) {
       return res.status(400).json({ success: false, message: 'Invalid marketplace' });
     }
-    const cred = await marketplaceService.getCredentials(req.user!.userId, marketplace);
+    const cred = await marketplaceService.getCredentials(req.user!.userId, marketplace as MarketplaceName);
     res.json({
       success: true,
       data: {
@@ -173,7 +272,7 @@ router.get('/credentials', async (req: Request, res: Response) => {
  * POST /api/marketplace/credentials
  * Save marketplace credentials
  */
-router.post('/credentials', async (req: Request, res: Response) => {
+router.post('/credentials', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = credentialsSchema.parse(req.body);
     
@@ -207,7 +306,7 @@ router.get('/credentials/:marketplace', async (req: Request, res: Response) => {
       });
     }
 
-    const credentials = await marketplaceService.getCredentials(req.user!.userId, marketplace);
+    const credentials = await marketplaceService.getCredentials(req.user!.userId, marketplace as MarketplaceName);
     
     if (!credentials) {
       return res.status(404).json({
@@ -261,7 +360,7 @@ router.post('/test-connection/:marketplace', async (req: Request, res: Response)
       });
     }
 
-    const result = await marketplaceService.testConnection(req.user!.userId, marketplace);
+    const result = await marketplaceService.testConnection(req.user!.userId, marketplace as MarketplaceName);
     
     res.json({
       success: result.success,
@@ -280,7 +379,7 @@ router.post('/test-connection/:marketplace', async (req: Request, res: Response)
  * POST /api/marketplace/sync-inventory
  * Sync inventory across all marketplaces
  */
-router.post('/sync-inventory', async (req: Request, res: Response) => {
+router.post('/sync-inventory', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = syncInventorySchema.parse(req.body);
     
