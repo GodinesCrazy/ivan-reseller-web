@@ -73,7 +73,11 @@ router.get('/balance', async (req: Request, res: Response, next) => {
 // GET /api/commissions/:id - Obtener por ID
 router.get('/:id', async (req: Request, res: Response, next) => {
   try {
-    const commission = await commissionService.getCommissionById(Number(req.params.id));
+    // ✅ P0.1: Validar ownership antes de retornar comisión
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? undefined : req.user?.userId;
+    const commission = await commissionService.getCommissionById(Number(req.params.id), userId, isAdmin);
     res.json(commission);
   } catch (error) {
     next(error);
@@ -85,7 +89,8 @@ router.post('/:id/schedule', authorize('ADMIN'), async (req: Request, res: Respo
   try {
     const schema = z.object({ scheduledDate: z.string().datetime() });
     const { scheduledDate } = schema.parse(req.body);
-    const commission = await commissionService.scheduleCommission(Number(req.params.id), new Date(scheduledDate));
+    // ✅ P0.1: Admin puede programar cualquier comisión
+    const commission = await commissionService.scheduleCommission(Number(req.params.id), new Date(scheduledDate), req.user?.userId, true);
     res.json(commission);
   } catch (error: any) {
     next(error);
@@ -96,7 +101,8 @@ router.post('/:id/schedule', authorize('ADMIN'), async (req: Request, res: Respo
 router.post('/:id/pay', authorize('ADMIN'), async (req: Request, res: Response, next) => {
   try {
     const { paypalTransactionId } = req.body;
-    const commission = await commissionService.markAsPaid(Number(req.params.id), paypalTransactionId);
+    // ✅ P0.1: Admin puede marcar como pagada cualquier comisión
+    const commission = await commissionService.markAsPaid(Number(req.params.id), paypalTransactionId, req.user?.userId, true);
     res.json(commission);
   } catch (error) {
     next(error);
@@ -111,7 +117,8 @@ router.post('/batch-pay', authorize('ADMIN'), async (req: Request, res: Response
       paypalBatchId: z.string().optional(),
     });
     const { commissionIds, paypalBatchId } = schema.parse(req.body);
-    const result = await commissionService.batchPayCommissions(commissionIds, paypalBatchId);
+    // ✅ P0.1: Admin puede pagar cualquier comisión en lote
+    const result = await commissionService.batchPayCommissions(commissionIds, paypalBatchId, req.user?.userId, true);
     res.json(result);
   } catch (error: any) {
     next(error);
@@ -142,7 +149,8 @@ router.post('/request-payout', async (req: Request, res: Response, next) => {
     nextPayoutDate.setDate(nextPayoutDate.getDate() + 7); // Pago en 7 días
 
     for (const comm of pendingCommissions) {
-      await commissionService.scheduleCommission(comm.id, nextPayoutDate);
+      // ✅ P0.1: Usuario solo puede programar sus propias comisiones
+      await commissionService.scheduleCommission(comm.id, nextPayoutDate, userId, false);
     }
 
     res.json({

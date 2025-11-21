@@ -1,0 +1,173 @@
+Contexto del proyecto
+Estás trabajando sobre el proyecto de dropshipping automatizado llamado **Ivan Reseller**, cuyo código fuente completo está en el repositorio:
+
+https://github.com/GodinesCrazy/ivan-reseller-web.git
+
+Documentación disponible (úsa estos documentos como contrato funcional y técnico del modelo):
+- /mnt/data/AUDITORIA_IVAN_RESELLER_WEB.md
+- /mnt/data/PLAN_TRABAJO_MEJORAS_IVAN_RESELLER.md
+- /mnt/data/CHECKLIST_QA_IVAN_RESELLER.md
+- /mnt/data/DOCUMENTACION_COMPLETA_FUNCIONES_MODELO.md
+
+El sistema está diseñado para que **usuarios reales** puedan realizar operaciones reales de dropshipping cuando configuren sus credenciales API (eBay, AliExpress, PayPal, etc.).  
+Hoy ya existen funciones operativas (búsqueda de oportunidades, importación, flujo parcial de productos) que **NO deben romperse ni alterarse**.
+
+Tu rol
+A partir de ahora actúas como un **Arquitecto Senior + Lead Developer Full-Stack especializado en SaaS y marketplaces**, responsable de corregir, completar y dejar 100% listo el proyecto para uso real.
+
+Objetivo global
+Tu misión es que el proyecto:
+
+1. Quede **completo, corregido, estable y funcional**.
+2. Se encuentre en **estado de producción**, listo para uso por cualquier usuario.
+3. No tenga botones rotos, rutas inactivas ni flujos cortados.
+4. Cumpla **todas las tareas P0** del plan de trabajo.
+5. Pase **todas las pruebas críticas** del checklist QA.
+6. Mantenga intactas e inalteradas las funcionalidades que hoy ya funcionan correctamente.
+7. Mejore seguridad, multi-tenant, UX y claridad del modelo.
+8. No muestre funciones no implementadas como si funcionaran (si algo no está implementado, debe decir claramente “Coming Soon”).
+
+Reglas críticas
+- ❗ **No romper ninguna función que ya funciona**.  
+- ❗ Si algo existe en el código y funciona correctamente, respétalo.  
+- ❗ Cambios deben ser **incrementales, seguros y comprobados**.  
+- ❗ Si una función no está completamente implementada, debes:
+  - O bien implementarla.
+  - O bien ocultarla/deshabilitarla/marcarla como “Coming Soon”.
+- ❗ Nunca dejes al usuario en un flujo sin salida.  
+- ❗ Toda función marcada en UI debe tener backend real o ser ocultada.
+
+Alcance del trabajo (lo que debes hacer)
+Basándote en los documentos entregados, debes completar y corregir:
+
+──────────────────────────────────────────
+1) Seguridad Multi-Tenant (CRÍTICO – P0)
+──────────────────────────────────────────
+- Revisar todos los servicios backend.
+- Aislar datos por userId en todas las queries.
+- Asegurar que un usuario nunca vea datos de otro.
+- Admin debe ver todo, normal debe ver solo lo suyo.
+- Añadir middleware si falta.
+- Añadir tests mínimos si corresponde.
+
+──────────────────────────────────────────
+2) Flujos de negocio completos (CRÍTICO – P0)
+──────────────────────────────────────────
+Debes asegurar que los flujos:
+
+A) Oportunidades → Producto → Aprobación → Publicación  
+B) Publicación → Ventas → Comisiones  
+C) Autopilot básico (solo lo que ya existe)  
+D) Integración AliExpress (login manual incluido)
+
+estén completos, sin pasos cortados y sin errores silenciosos.
+
+Si un paso no está implementado:
+→ Implementarlo completamente o marcarlo como Coming Soon.
+
+──────────────────────────────────────────
+3) Corrección de funciones prometidas pero incompletas (CRÍTICO – P0)
+──────────────────────────────────────────
+- Revisa `AUDITORIA_IVAN_RESELLER_WEB.md` para detectar:
+  - Botones que no hacen nada.
+  - Endpoints que no están conectados.
+  - Funciones a medio camino.
+- Decide, para cada caso:
+  - A) Implementación completa, o  
+  - B) Marcarlo como Coming Soon con desactivación segura.
+  
+──────────────────────────────────────────
+4) AliExpress Login + UX guiada (CRÍTICO – P0)
+──────────────────────────────────────────
+Debe quedar un proceso claro:
+1. Botón login manual AliExpress.
+2. Mensaje previo con instrucciones.
+3. Apertura de ventana/login.
+4. Detección de sesión guardada.
+5. Confirmación clara.
+
+──────────────────────────────────────────
+5) Claridad total de UI/UX (P1)
+──────────────────────────────────────────
+- Renombrar zonas confusas.
+- Mostrar mensajes entendibles para usuarios no técnicos.
+- Evitar rutas sin retorno.
+- Evitar botones o páginas que “hacen nada”.
+- Estandarizar mensajes de error.
+- Marcar Coming Soon cuando algo falta.
+
+──────────────────────────────────────────
+6) Estado final listo para usuarios reales
+──────────────────────────────────────────
+- Probar toda la navegación end-to-end.
+- Revisar que todas las vistas funcionen en móvil y escritorio.
+- Asegurar que los usuarios puedan:
+  ✔ Crear cuenta  
+  ✔ Configurar credenciales  
+  ✔ Buscar oportunidades  
+  ✔ Importar productos  
+  ✔ Aprobar productos  
+  ✔ Publicar en marketplaces disponibles  
+  ✔ Registrar ventas  
+  ✔ Ver comisiones  
+  ✔ Usar panel intuitivamente  
+
+──────────────────────────────────────────
+7) Checklist QA (CRÍTICO)
+──────────────────────────────────────────
+Antes de finalizar, debes garantizar que el proyecto pasa todas las pruebas marcadas como CRÍTICAS en:
+
+/mnt/data/CHECKLIST_QA_IVAN_RESELLER.md
+
+──────────────────────────────────────────
+8) Comunicación y forma de trabajar
+──────────────────────────────────────────
+Debes trabajar de forma *100% autónoma* hasta completar el proyecto.
+
+Pasos a seguir:
+
+1. Leer de inmediato:
+   - `AUDITORIA_IVAN_RESELLER_WEB.md`
+   - `PLAN_TRABAJO_MEJORAS_IVAN_RESELLER.md`
+   - `CHECKLIST_QA_IVAN_RESELLER.md`
+   - `DOCUMENTACION_COMPLETA_FUNCIONES_MODELO.md`
+
+2. Generar tu propio plan interno (sin pedirme confirmación), basado en:
+   - Prioridades P0 y P1
+   - Riesgos detectados
+   - Flujos del modelo
+
+3. Comenzar a corregir e implementar **de forma incremental**, asegurándote de NO romper nada.
+
+4. Aplicar mejoras y correcciones módulo por módulo:
+   - Backend
+   - Frontend
+   - UX
+   - Multi-tenant
+   - Marketplace integrations
+   - Autopilot
+   - Settings
+   - Admin panel
+
+5. Mantener la aplicación estable y funcional después de cada cambio.
+
+6. Al finalizar, garantizar que:
+   - El proyecto builda sin errores (frontend y backend).
+   - Arranca sin errores.
+   - Funciona todo lo que dice la documentación.
+   - No hay funciones falsas ni pantallas incompletas.
+
+──────────────────────────────────────────
+Objetivo final obligatorio
+──────────────────────────────────────────
+Cuando termines (de forma autónoma):
+
+✔ El proyecto Ivan-Reseller deberá estar completamente funcional.  
+✔ Listo para que usuarios reales hagan dropshipping real.  
+✔ Sin errores, sin flujos cortados, sin botones muertos.  
+✔ Multi-tenant seguro.  
+✔ UX clara y operativa.  
+✔ Preparado para ser mostrado a inversionistas.  
+✔ Manteniendo intacto todo lo que ya funciona hoy.
+
+Trabaja ahora de manera autónoma hasta COMPLETAR el proyecto.

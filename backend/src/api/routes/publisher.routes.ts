@@ -179,6 +179,7 @@ router.get('/listings', async (req: Request, res: Response) => {
 // POST /api/publisher/approve/:id
 // ✅ MEJORADO: Usa ambiente del usuario y mejor logging
 // ✅ Cambiado: Permitir a cualquier usuario autenticado aprobar sus propios productos
+// ✅ P0.4: Validar credenciales antes de publicar
 router.post('/approve/:id', async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
@@ -201,6 +202,71 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
     // ✅ Obtener ambiente del usuario si no se proporciona
     const { workflowConfigService } = await import('../../services/workflow-config.service');
     const userEnvironment = environment || await workflowConfigService.getUserEnvironment(product.userId);
+    
+    // ✅ P0.4: Validar credenciales antes de publicar
+    if (Array.isArray(marketplaces) && marketplaces.length > 0) {
+      const service = new MarketplaceService();
+      const missingCredentials: string[] = [];
+      const invalidCredentials: string[] = [];
+      
+      // Verificar credenciales para cada marketplace
+      for (const marketplace of marketplaces) {
+        try {
+          const credentials = await service.getCredentials(
+            product.userId, 
+            marketplace as 'ebay' | 'amazon' | 'mercadolibre', 
+            userEnvironment
+          );
+          
+          if (!credentials || !credentials.isActive) {
+            missingCredentials.push(marketplace);
+            continue;
+          }
+          
+          // Validar conexión si las credenciales existen
+          const testResult = await service.testConnection(
+            product.userId,
+            marketplace as 'ebay' | 'amazon' | 'mercadolibre',
+            userEnvironment
+          );
+          
+          if (!testResult.success) {
+            invalidCredentials.push(marketplace);
+          }
+        } catch (error) {
+          logger.warn(`[PUBLISHER] Error validating credentials for ${marketplace}`, {
+            userId: product.userId,
+            marketplace,
+            error: error instanceof Error ? error.message : String(error)
+          });
+          missingCredentials.push(marketplace);
+        }
+      }
+      
+      // Si faltan credenciales, retornar error descriptivo
+      if (missingCredentials.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing credentials',
+          message: `Please configure your ${missingCredentials.join(', ')} credentials before publishing.`,
+          missingCredentials,
+          action: 'configure_credentials',
+          settingsUrl: '/settings?tab=api-credentials'
+        });
+      }
+      
+      // Si las credenciales son inválidas, retornar error descriptivo
+      if (invalidCredentials.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid credentials',
+          message: `Your ${invalidCredentials.join(', ')} credentials are invalid or expired. Please update them in Settings.`,
+          invalidCredentials,
+          action: 'update_credentials',
+          settingsUrl: '/settings?tab=api-credentials'
+        });
+      }
+    }
     
     await productService.updateProductStatus(id, 'APPROVED', req.user!.userId);
 

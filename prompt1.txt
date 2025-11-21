@@ -1,0 +1,251 @@
+Contexto del proyecto
+Estoy trabajando en un sistema web completo llamado **Ivan Reseller**, un modelo de dropshipping automatizado multi-tenant con frontend en React + TypeScript, backend en Node.js + Express, base de datos PostgreSQL con Prisma, y despliegue en Railway + GitHub.
+
+Repositorio principal (código fuente):
+- https://github.com/GodinesCrazy/ivan-reseller-web.git
+
+El sistema incluye (según la documentación funcional):
+- Frontend con ~23 páginas para usuario y admin (React + TS, React Query, Socket.IO).
+- Backend con ~194 endpoints REST y +58 servicios especializados (autenticación JWT, productos, ventas, comisiones, autopilot, reports, etc.).
+- BD multi-tenant en PostgreSQL (usuarios, productos, ventas, comisiones, oportunidades, jobs, etc.).
+- Integraciones externas previstas: AliExpress (scraping), eBay, Amazon SP-API, MercadoLibre, PayPal.
+- Módulos clave de negocio:  
+  - Autenticación y sesión  
+  - Dashboard principal  
+  - Buscador de oportunidades (AliExpress + análisis competencia)  
+  - Gestión completa de productos (ciclo PENDING → APPROVED → PUBLISHED → INACTIVE)  
+  - Publicador inteligente a marketplaces (publisher)  
+  - Gestión de ventas y órdenes  
+  - Sistema de comisiones y pagos a usuarios  
+  - Autopilot / automatización de ciclos de dropshipping  
+  - Dashboard financiero, métricas, proyecciones y reports  
+  - Configuración personal del usuario (settings)  
+  - Panel de administración y gestión de usuarios  
+  - Logs del sistema, jobs en segundo plano, health checks, status, etc.  
+
+Tu rol
+Actúa como un **arquitecto de software senior y auditor de código** con experiencia en:
+- Sistemas SaaS multi-tenant
+- Plataformas de e-commerce / dropshipping
+- Integraciones con marketplaces y APIs externas
+- UX para usuarios no técnicos
+- Preparación de productos para **lanzamiento a usuarios reales e inversionistas**
+
+Objetivo principal de esta sesión
+Realizar una **AUDITORÍA PROFUNDA E INTEGRAL** del proyecto `ivan-reseller-web` para:
+
+1. Detectar:
+   - Errores potenciales o reales en el código (backend y frontend).
+   - Inconsistencias entre la documentación funcional y la implementación real.
+   - Cuellos de botella en el flujo completo de dropshipping (desde oportunidad → publicación → venta → comisión).
+   - Puntos donde el flujo se puede cortar, quedar a medias o ser confuso para el usuario.
+   - Redundancias, endpoints/páginas muertas, enlaces rotos o rutas inalcanzables.
+   - Problemas de seguridad, manejo de credenciales, roles y permisos.
+   - Riesgos de rendimiento, escalabilidad o estabilidad (jobs, scraping, autopilot, etc.).
+
+2. Evaluar:
+   - Qué tan **intuitiva y fácil de usar** es la app para un usuario sin conocimientos técnicos.
+   - Coherencia del flujo desde el punto de vista de negocio (dropshipping automatizado).
+   - Claridad entre modos sandbox / producción y manejo de credenciales.
+   - Calidad y mantenibilidad del código (estructura de carpetas, patrones, separación de responsabilidades).
+   - Preparación del sistema para ser mostrado a **inversionistas y usuarios finales**.
+
+3. Entregar:
+   - Un **informe de auditoría completo**, sin hacer cambios en el código.
+   - Un **plan de trabajo de mejoras y correcciones** priorizado.
+   - Listas de chequeo por módulo, para poder ir cerrando puntos uno por uno.
+
+Restricción crítica
+⚠️ **IMPORTANTE:**  
+En esta auditoría **NO DEBES realizar ningún cambio en el código** (ni crear commits, ni refactors, ni auto-fixes).  
+Tu trabajo es:
+- Leer, entender, mapear y auditar.
+- Señalar qué habría que cambiar, cómo y dónde.
+- Proponer soluciones concretas, pero solo por escrito.
+
+Si propones cambios, hazlo siempre en forma de:
+- “En el archivo X, módulo Y, función Z: sugeriría cambiar A por B porque…”
+Sin aplicar esos cambios tú mismo.
+
+Alcance de la auditoría (qué quiero que revises)
+Quiero una revisión en profundidad siguiendo, al menos, estos ejes:
+
+1) Arquitectura y estructura general
+- Mapa de carpetas y módulos (frontend y backend).
+- Organización de capas: controladores, servicios, repositorios, modelos, hooks, componentes, etc.
+- Detección de acoplamientos innecesarios, duplicación de lógica o código muerto.
+- Revisión de patrones de diseño utilizados (o ausencia de ellos).
+
+2) Flujos críticos de negocio (end-to-end)
+Valida que los siguientes flujos estén completos, sin pasos cortados y sin “callejones sin salida”:
+
+a) Flujo de usuario estándar (manual)
+   1. Registro/login → dashboard
+   2. Búsqueda de oportunidades en AliExpress
+   3. Selección e importación de producto
+   4. Revisión y aprobación del producto
+   5. Publicación en marketplaces (al menos eBay como caso base)
+   6. Recepción/registro de una venta
+   7. Cálculo de comisiones y actualización de balances
+   8. Visualización en dashboards / reportes
+
+b) Flujo Autopilot
+   1. Configurar autopilot (queries, márgenes, marketplaces, capital, etc.).
+   2. Inicio de autopilot y jobs programados.
+   3. Creación/actualización automática de productos y publicaciones.
+   4. Notificaciones al usuario.
+   5. Coherencia entre autopilot y flujo manual (no deben contradecirse).
+
+c) Gestión de credenciales y modos sandbox/producción
+   - Pantallas y APIs donde el usuario/admin configura credenciales de eBay, Amazon, MercadoLibre, AliExpress, PayPal.
+   - Cómo se distingue sandbox vs producción.
+   - Qué pasa si faltan credenciales o son inválidas (UX + seguridad).
+
+d) Panel Admin y multi-tenant
+   - Gestión de usuarios, roles y permisos.
+   - Que un USER no pueda ver ni tocar recursos de otros usuarios.
+   - Que un ADMIN tenga visibilidad global sin romper el modelo de permisos.
+
+Para cada flujo:
+- Indica si el flujo está completo o si hay puntos donde:
+  - El usuario se queda sin feedback.
+  - Falta una pantalla intermedia.
+  - Hay endpoints definidos pero no conectados en el frontend.
+  - Hay promesas “futuro” que aún no están implementadas (pero sí expuestas en UI).
+
+3) Auditoría de UX / facilidad de uso
+- ¿La navegación es clara y consistente? (menús, rutas, nombres de secciones).
+- ¿Hay pantallas que muestren demasiada información técnica para un usuario no experto?
+- ¿Los textos y labels ayudan a entender qué hacer en cada paso?
+- ¿Hay botones, links o acciones que no hacen nada, dan error silencioso o redirigen a rutas inexistentes?
+- Recomendaciones concretas para:
+  - Simplificar flujo.
+  - Ordenar menús.
+  - Renombrar secciones o botones para que sean más comprensibles.
+  - Evitar que el usuario se “pierda” o bloquee el proceso de dropshipping.
+
+4) API, servicios y contrato backend/frontend
+- Revisión de los endpoints clave (auth, products, opportunities, publisher, sales, commissions, autopilot, reports, settings, admin, logs, jobs).
+- Comprueba:
+  - Consistencia de nombres.
+  - Manejo de errores (status codes, mensajes claros).
+  - Validación de datos (inputs, payloads).
+  - Si hay endpoints sin usar desde el frontend (código muerto).
+  - Si hay llamadas desde el frontend a rutas inexistentes o mal definidas.
+- Detecta posibles cuellos de botella:
+  - Consultas sin paginación.
+  - Loops innecesarios.
+  - Procesos sin jobs en background que podrían bloquear.
+
+5) Seguridad y permisos
+- Verifica:
+  - Manejo de JWT (creación, expiración, refresh).
+  - Middleware de autorización y control de roles.
+  - Protección de rutas críticas (admin, finanzas, comisiones).
+  - Almacenamiento de credenciales de terceros (API keys, tokens).
+  - Posibles fugas de información sensible en logs o respuestas.
+
+6) Rendimiento y escalabilidad
+- Busca:
+  - Consultas muy pesadas sin índices ni paginación.
+  - Falta de caché donde sería razonable.
+  - Jobs en background que podrían fallar o quedar colgados.
+  - Procesos de scraping o integración que puedan saturar recursos.
+- Sugiere mejoras realistas de corto y mediano plazo, priorizando:
+  - Lo que afecta directamente la experiencia del usuario.
+  - Lo que amenaza la estabilidad del sistema en producción.
+
+7) Logs, monitoreo y manejo de errores
+- Revisa el sistema de logs (niveles, formato, centralización).
+- Verifica si:
+  - Los errores importantes quedan registrados con suficiente contexto.
+  - El usuario recibe mensajes amigables cuando algo falla.
+  - Hay endpoints de health/status coherentes para monitorear el sistema.
+
+Forma de trabajar que quiero que sigas
+Organiza tu trabajo en **fases**, dejando constancia escrita en cada una:
+
+1. Fase 1 – Mapeo y entendimiento
+   - Identifica el entrypoint del backend y frontend.
+   - Resume brevemente la arquitectura real del proyecto.
+   - Enumera los módulos y páginas principales.
+
+2. Fase 2 – Auditoría de flujos críticos
+   - Recorre el código siguiendo los flujos descritos arriba.
+   - Para cada flujo, responde:
+     - ¿Está completo?
+     - ¿Qué partes están implementadas?
+     - ¿Qué partes parecen incompletas, simuladas o en estado “stub”?
+     - Puntos donde el usuario podría quedarse bloqueado.
+
+3. Fase 3 – Auditoría técnica (código, rendimiento, seguridad)
+   - Backend: estructura, servicios, controladores, modelos, manejo de errores.
+   - Frontend: rutas, componentes, hooks, llamadas a API, manejo de estados, errores.
+   - Seguridad: auth, permisos, datos sensibles.
+   - Rendimiento: consultas, jobs, uso de recursos.
+
+4. Fase 4 – Auditoría de UX y claridad del modelo
+   - Examina la organización de rutas/páginas.
+   - Nombres de menús, botones, secciones.
+   - Coherencia entre concepto de negocio y lo que ve el usuario.
+
+5. Fase 5 – Síntesis y entregables
+   - Genera los archivos de salida que describo abajo.
+
+Entregables esperados
+Quiero que generes al menos estos archivos (solo texto/markdown, sin tocar el código fuente):
+
+1. `AUDITORIA_IVAN_RESELLER_WEB.md`
+   Contenido mínimo:
+   - Resumen ejecutivo (visión general y veredicto).
+   - Lista de fortalezas del sistema.
+   - Lista de riesgos y debilidades, clasificados por:
+     - Críticos (bloquean uso real o demo a inversionistas).
+     - Altos.
+     - Medios.
+     - Bajos.
+   - Secciones por tema:
+     - Flujos de negocio
+     - Backend
+     - Frontend
+     - Seguridad
+     - Rendimiento
+     - UX / usabilidad
+     - Multi-tenant y permisos
+   - Para cada problema:
+     - Descripción clara
+     - Impacto (qué rompe o qué riesgo implica)
+     - Ubicación técnica aproximada (archivo/módulo/ruta)
+     - Sugerencia de solución (a alto nivel)
+
+2. `PLAN_TRABAJO_MEJORAS_IVAN_RESELLER.md`
+   - Lista de tareas accionables y priorizadas para dejar el sistema:
+     - Listo para usuarios reales
+     - Listo para demos con inversionistas
+   - Agrupa tareas por prioridad:
+     - P0 – Críticas (deben resolverse antes de permitir uso real).
+     - P1 – Altas (mejoran mucho estabilidad/claridad).
+     - P2 – Medias (mejoran experiencia, rendimiento o mantenibilidad).
+     - P3 – Bajas (nice to have).
+   - Para cada tarea:
+     - Descripción concreta del cambio
+     - Tipo (bugfix, refactor, UX, docs, seguridad, performance, etc.)
+     - Módulo/ruta afectada
+     - Complejidad estimada (baja/media/alta)
+
+3. (Opcional pero deseable) `CHECKLIST_QA_IVAN_RESELLER.md`
+   - Lista de pruebas mínimas que habría que ejecutar antes de:
+     - Abrir acceso a nuevos usuarios
+     - Hacer demo a inversionistas
+
+Estilo de respuesta
+- Sé directo, profesional y muy específico.
+- No te quedes en generalidades.
+- Cuando detectes un problema, explica:
+  - Por qué es un problema.
+  - Cómo afectaría a un usuario real o a un inversionista al ver el sistema.
+  - Qué cambio propondrías para solucionarlo.
+
+Recuerda:
+- No modifiques el código.
+- Esta auditoría debe ser tan crítica y minuciosa como si fuera **el último control de calidad** antes de abrir el sistema a usuarios reales y presentarlo a potenciales inversionistas.

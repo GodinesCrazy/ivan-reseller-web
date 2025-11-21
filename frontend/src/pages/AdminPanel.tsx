@@ -87,6 +87,13 @@ export default function AdminPanel() {
   const [adminCommissionStats, setAdminCommissionStats] = useState<AdminCommissionStats | null>(null);
   const [loadingCommissions, setLoadingCommissions] = useState(false);
   const [showCommissionsTab, setShowCommissionsTab] = useState(false);
+  const [accessRequests, setAccessRequests] = useState<any[]>([]);
+  const [loadingAccessRequests, setLoadingAccessRequests] = useState(false);
+  const [showAccessRequestsTab, setShowAccessRequestsTab] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [tempPassword, setTempPassword] = useState('');
 
   const {
     register,
@@ -106,6 +113,7 @@ export default function AdminPanel() {
   useEffect(() => {
     loadDashboard();
     loadAdminCommissions();
+    loadAccessRequests();
   }, []);
 
   const loadAdminCommissions = async () => {
@@ -178,6 +186,65 @@ export default function AdminPanel() {
     }
   };
 
+  // ✅ P0.5: Cargar solicitudes de acceso
+  const loadAccessRequests = async () => {
+    try {
+      setLoadingAccessRequests(true);
+      const response = await api.get('/api/access-requests');
+      setAccessRequests(response.data?.data || []);
+    } catch (error: any) {
+      console.error('Error loading access requests:', error);
+      toast.error('Error cargando solicitudes de acceso');
+    } finally {
+      setLoadingAccessRequests(false);
+    }
+  };
+
+  // ✅ P0.5: Aprobar solicitud de acceso
+  const handleApproveRequest = async () => {
+    if (!selectedRequest || !tempPassword || tempPassword.length < 8) {
+      toast.error('La contraseña debe tener al menos 8 caracteres');
+      return;
+    }
+
+    try {
+      setLoadingAccessRequests(true);
+      const response = await api.post(`/api/access-requests/${selectedRequest.id}/approve`, {
+        password: tempPassword
+      });
+      toast.success('Solicitud aprobada y usuario creado exitosamente');
+      setShowApproveModal(false);
+      setSelectedRequest(null);
+      setTempPassword('');
+      loadAccessRequests();
+      loadDashboard(); // Recargar usuarios
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Error aprobando solicitud');
+    } finally {
+      setLoadingAccessRequests(false);
+    }
+  };
+
+  // ✅ P0.5: Rechazar solicitud de acceso
+  const handleRejectRequest = async (reason?: string) => {
+    if (!selectedRequest) return;
+
+    try {
+      setLoadingAccessRequests(true);
+      await api.post(`/api/access-requests/${selectedRequest.id}/reject`, {
+        reason: reason || 'Rechazado por administrador'
+      });
+      toast.success('Solicitud rechazada exitosamente');
+      setShowRejectModal(false);
+      setSelectedRequest(null);
+      loadAccessRequests();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Error rechazando solicitud');
+    } finally {
+      setLoadingAccessRequests(false);
+    }
+  };
+
   if (!dashboardData) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -232,6 +299,22 @@ export default function AdminPanel() {
           className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-medium"
         >
           {showCommissionsTab ? '👁️ Ocultar' : '💰 Ver'} Comisiones Admin
+        </button>
+        <button
+          onClick={() => {
+            setShowAccessRequestsTab(!showAccessRequestsTab);
+            if (!showAccessRequestsTab) {
+              loadAccessRequests();
+            }
+          }}
+          className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium relative"
+        >
+          {showAccessRequestsTab ? '👁️ Ocultar' : '📋 Ver'} Solicitudes de Acceso
+          {accessRequests.filter(r => r.status === 'PENDING').length > 0 && (
+            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              {accessRequests.filter(r => r.status === 'PENDING').length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -354,6 +437,102 @@ export default function AdminPanel() {
                 </table>
               </div>
             </>
+          )}
+        </div>
+      )}
+
+      {/* ✅ P0.5: Solicitudes de Acceso */}
+      {showAccessRequestsTab && (
+        <div className="bg-white rounded-lg shadow-md mb-6">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-800">Solicitudes de Acceso</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Gestiona las solicitudes de acceso al sistema
+            </p>
+          </div>
+
+          {loadingAccessRequests ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {accessRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                        No hay solicitudes de acceso
+                      </td>
+                    </tr>
+                  ) : (
+                    accessRequests.map((request) => (
+                      <tr key={request.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">{request.email}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{request.username || '-'}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{request.fullName || '-'}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                              request.status === 'APPROVED'
+                                ? 'bg-green-100 text-green-800'
+                                : request.status === 'REJECTED'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}
+                          >
+                            {request.status === 'APPROVED' ? 'Aprobada' : request.status === 'REJECTED' ? 'Rechazada' : 'Pendiente'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(request.requestedAt || request.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          {request.status === 'PENDING' && (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  setSelectedRequest(request);
+                                  setShowApproveModal(true);
+                                }}
+                                className="text-green-600 hover:text-green-900"
+                              >
+                                Aprobar
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedRequest(request);
+                                  setShowRejectModal(true);
+                                }}
+                                className="text-red-600 hover:text-red-900"
+                              >
+                                Rechazar
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -554,6 +733,101 @@ export default function AdminPanel() {
               onSave={updateCommissions}
               onCancel={() => setShowCommissionModal(false)}
             />
+          </div>
+        </div>
+      )}
+
+      {/* ✅ P0.5: Modal Aprobar Solicitud */}
+      {showApproveModal && selectedRequest && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Aprobar Solicitud de Acceso</h2>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-600">Email: <strong>{selectedRequest.email}</strong></p>
+                <p className="text-sm text-gray-600">Username: <strong>{selectedRequest.username}</strong></p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Contraseña Temporal (mínimo 8 caracteres) *
+                </label>
+                <input
+                  type="password"
+                  value={tempPassword}
+                  onChange={(e) => setTempPassword(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                  placeholder="Ingresa una contraseña temporal"
+                  minLength={8}
+                />
+                <p className="text-xs text-gray-500 mt-1">El usuario deberá cambiar esta contraseña en su primer login</p>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleApproveRequest}
+                  disabled={loadingAccessRequests || !tempPassword || tempPassword.length < 8}
+                  className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-md disabled:opacity-50"
+                >
+                  {loadingAccessRequests ? 'Aprobando...' : 'Aprobar y Crear Usuario'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowApproveModal(false);
+                    setSelectedRequest(null);
+                    setTempPassword('');
+                  }}
+                  className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ P0.5: Modal Rechazar Solicitud */}
+      {showRejectModal && selectedRequest && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Rechazar Solicitud de Acceso</h2>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-600">Email: <strong>{selectedRequest.email}</strong></p>
+                <p className="text-sm text-gray-600">Username: <strong>{selectedRequest.username}</strong></p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Razón del Rechazo (opcional)
+                </label>
+                <textarea
+                  id="rejectionReason"
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                  placeholder="Especifica el motivo del rechazo (opcional)"
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    const reason = (document.getElementById('rejectionReason') as HTMLTextAreaElement)?.value || undefined;
+                    handleRejectRequest(reason);
+                  }}
+                  disabled={loadingAccessRequests}
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-md disabled:opacity-50"
+                >
+                  {loadingAccessRequests ? 'Rechazando...' : 'Rechazar Solicitud'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRejectModal(false);
+                    setSelectedRequest(null);
+                  }}
+                  className="flex-1 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-md"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

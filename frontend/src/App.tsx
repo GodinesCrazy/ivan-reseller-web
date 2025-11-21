@@ -30,6 +30,7 @@ const HelpCenter = lazy(() => import('@pages/HelpCenter'));
 const WorkflowConfig = lazy(() => import('@pages/WorkflowConfig'));
 const ManualLogin = lazy(() => import('@pages/ManualLogin'));
 const ResolveCaptcha = lazy(() => import('@pages/ResolveCaptcha'));
+const RequestAccess = lazy(() => import('@pages/RequestAccess'));
 import Layout from '@components/layout/Layout';
 
 function AppContent() {
@@ -141,6 +142,7 @@ function AppContent() {
         path="/login"
         element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />}
       />
+      <Route path="/request-access" element={<RequestAccess />} />
       <Route path="/manual-login/:token" element={<ManualLogin />} />
       <Route path="/resolve-captcha/:token" element={<ResolveCaptcha />} />
 

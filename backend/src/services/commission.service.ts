@@ -37,7 +37,13 @@ export class CommissionService {
     });
   }
 
-  async getCommissionById(id: number) {
+  /**
+   * Get commission by ID with optional ownership validation
+   * @param id - Commission ID
+   * @param userId - Optional user ID to validate ownership (if provided, non-admin users can only see their own commissions)
+   * @param isAdmin - Whether the requesting user is an admin (admins can see all commissions)
+   */
+  async getCommissionById(id: number, userId?: number, isAdmin: boolean = false) {
     const commission = await prisma.commission.findUnique({
       where: { id },
       include: {
@@ -60,11 +66,17 @@ export class CommissionService {
       throw new AppError('Comisión no encontrada', 404);
     }
 
+    // ✅ P0.1: Validar ownership - usuarios no-admin solo pueden ver sus propias comisiones
+    if (userId && !isAdmin && commission.userId !== userId) {
+      throw new AppError('No tienes permiso para ver esta comisión', 403);
+    }
+
     return commission;
   }
 
-  async scheduleCommission(id: number, scheduledDate: Date) {
-    const commission = await this.getCommissionById(id);
+  async scheduleCommission(id: number, scheduledDate: Date, userId?: number, isAdmin: boolean = false) {
+    // ✅ P0.1: Validar ownership antes de programar
+    const commission = await this.getCommissionById(id, userId, isAdmin);
 
     if (commission.status !== 'PENDING') {
       throw new AppError('Solo se pueden programar comisiones pendientes', 400);
@@ -105,8 +117,9 @@ export class CommissionService {
     return updated;
   }
 
-  async markAsPaid(id: number, paypalTransactionId?: string) {
-    const commission = await this.getCommissionById(id);
+  async markAsPaid(id: number, paypalTransactionId?: string, userId?: number, isAdmin: boolean = false) {
+    // ✅ P0.1: Validar ownership antes de marcar como pagada
+    const commission = await this.getCommissionById(id, userId, isAdmin);
 
     if (commission.status === 'PAID') {
       throw new AppError('Esta comisión ya fue pagada', 400);
@@ -151,9 +164,10 @@ export class CommissionService {
     return updated;
   }
 
-  async batchPayCommissions(commissionIds: number[], paypalBatchId?: string) {
+  async batchPayCommissions(commissionIds: number[], paypalBatchId?: string, userId?: number, isAdmin: boolean = false) {
+    // ✅ P0.1: Validar ownership para cada comisión antes de pagar en lote
     const commissions = await Promise.all(
-      commissionIds.map(id => this.getCommissionById(id))
+      commissionIds.map(id => this.getCommissionById(id, userId, isAdmin))
     );
 
     // Verificar que todas estén programadas o pendientes

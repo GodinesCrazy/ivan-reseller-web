@@ -54,6 +54,7 @@ model User {
   reportHistory           ReportHistory[]
   scheduledReports        ScheduledReport[]
   userSettings            UserSettings?
+  accessRequestsReviewed  AccessRequest[] @relation("AccessRequestReviewer") // Solicitudes de acceso revisadas por este admin
 
   @@index([email])
   @@index([username])
@@ -579,4 +580,29 @@ model ScheduledReport {
   @@index([isActive, nextRunAt])
   @@index([scheduleType])
   @@map("scheduled_reports")
+}
+
+// ✅ P0.5: Tabla para solicitudes de acceso (sistema de registro)
+model AccessRequest {
+  id          Int       @id @default(autoincrement())
+  username    String
+  email       String
+  fullName    String?
+  company     String?
+  reason      String? // Razón por la que quiere acceso
+  status      String   @default("PENDING") // "PENDING", "APPROVED", "REJECTED"
+  reviewedBy  Int? // ID del admin que revisó la solicitud
+  reviewedAt  DateTime?
+  rejectionReason String? // Razón de rechazo (si aplica)
+  notes       String? // Notas internas del admin
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  reviewer    User? @relation("AccessRequestReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@unique([email])
+  @@index([status])
+  @@index([createdAt])
+  @@index([reviewedBy])
+  @@map("access_requests")
 }
