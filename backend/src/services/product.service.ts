@@ -1,7 +1,11 @@
-import { PrismaClient, ProductStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
+import logger from '../config/logger';
 
 const prisma = new PrismaClient();
+
+// ✅ Definir ProductStatus localmente si no está en Prisma
+type ProductStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PUBLISHED' | 'INACTIVE';
 
 export interface CreateProductDto {
   title: string;

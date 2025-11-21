@@ -540,10 +540,9 @@ export class MarketplaceService {
         throw new AppError('Product must have at least one image before publishing. Please add images to the product.', 400);
       }
 
-      // ✅ CORREGIDO: Validar categoría antes de publicar
-      let categoryId = customData?.categoryId;
-      if (!categoryId) {
-        categoryId = await mlService.predictCategory(product.title);
+      // ✅ CORREGIDO: Validar categoría antes de publicar (ya se obtuvo arriba, no redeclarar)
+      if (!categoryId || categoryId.trim().length === 0) {
+        throw new AppError('Product must have a valid category before publishing. Please specify a category.', 400);
       }
       if (!categoryId || categoryId.trim().length === 0) {
         throw new AppError('Product must have a valid category before publishing. Please specify a category.', 400);
@@ -622,13 +621,6 @@ export class MarketplaceService {
     try {
       const amazonService = new AmazonService();
       await amazonService.setCredentials(credentials);
-
-      // Get category suggestions if not provided
-      let category = customData?.categoryId;
-      if (!category) {
-        const categories = await amazonService.getProductCategories(product.title);
-        category = categories[0]?.categoryId || 'default';
-      }
 
       const metadata = this.parseProductMetadata(product);
       // ✅ CORREGIDO: Validar imágenes antes de publicar
@@ -891,30 +883,30 @@ export class MarketplaceService {
           switch (marketplace) {
             case 'ebay':
               // TODO: Implementar actualización de precio en eBay
-              // Por ahora, solo actualizar en BD
+              // Por ahora, solo actualizar updatedAt en BD
               await prisma.marketplaceListing.update({
                 where: { id: listing.id },
-                data: { lastSyncedAt: new Date() }
+                data: { updatedAt: new Date() }
               });
               results.updated++;
               break;
 
             case 'amazon':
               // TODO: Implementar actualización de precio en Amazon
-              // Por ahora, solo actualizar en BD
+              // Por ahora, solo actualizar updatedAt en BD
               await prisma.marketplaceListing.update({
                 where: { id: listing.id },
-                data: { lastSyncedAt: new Date() }
+                data: { updatedAt: new Date() }
               });
               results.updated++;
               break;
 
             case 'mercadolibre':
               // TODO: Implementar actualización de precio en MercadoLibre
-              // Por ahora, solo actualizar en BD
+              // Por ahora, solo actualizar updatedAt en BD
               await prisma.marketplaceListing.update({
                 where: { id: listing.id },
-                data: { lastSyncedAt: new Date() }
+                data: { updatedAt: new Date() }
               });
               results.updated++;
               break;
