@@ -991,17 +991,50 @@ export class AdvancedMarketplaceScraper {
             [];
 
           if (Array.isArray(list) && list.length > 0) {
-            products = list.map((item: any) => ({
-              title: String(item.title || item.productTitle || '').trim().substring(0, 150),
-              price: Number(item.actSkuCalPrice || item.skuCalPrice || item.salePrice || 0),
-              imageUrl: (item.image?.imgUrl || item.imageUrl || '').replace(/^\//, 'https://'),
-              productUrl: (item.productUrl || item.detailUrl || '').startsWith('http') ? (item.productUrl || item.detailUrl) : `https:${item.productUrl || item.detailUrl || ''}`,
-              rating: Number(item.evaluationRate) || Number(item.evaluationScore) || 0,
-              reviewCount: Number(item.evaluationCount) || Number(item.reviewNum) || 0,
-              seller: item.storeName || 'AliExpress Vendor',
-              shipping: item.logistics?.desc || item.logisticsDesc || 'Varies',
-              availability: 'In stock',
-            })).filter((p: any) => p.title && p.price);
+            products = list.map((item: any) => {
+              // ✅ TAREA 1: Extraer y normalizar URL de imagen con múltiples fallbacks
+              let imageUrl = item.image?.imgUrl || item.imageUrl || item.image?.url || item.imgUrl || '';
+              
+              // Limpiar y normalizar URL
+              if (imageUrl) {
+                imageUrl = String(imageUrl).replace(/^\//, 'https://').trim();
+                // Si no empieza con http, agregarlo
+                if (imageUrl && !imageUrl.startsWith('http')) {
+                  if (imageUrl.startsWith('//')) {
+                    imageUrl = 'https:' + imageUrl;
+                  } else {
+                    imageUrl = 'https://' + imageUrl;
+                  }
+                }
+              }
+              
+              // Si aún no hay imagen válida, intentar construir desde productId o usar placeholder
+              if (!imageUrl || imageUrl.length < 10) {
+                const productId = item.productId || item.id;
+                if (productId) {
+                  const idStr = String(productId);
+                  if (idStr.length >= 8) {
+                    imageUrl = `https://ae01.alicdn.com/kf/${idStr.substring(0, 2)}/${idStr}.jpg`;
+                  }
+                }
+                // Último fallback: placeholder
+                if (!imageUrl || imageUrl.length < 10) {
+                  imageUrl = 'https://via.placeholder.com/300x300?text=No+Image';
+                }
+              }
+              
+              return {
+                title: String(item.title || item.productTitle || '').trim().substring(0, 150),
+                price: Number(item.actSkuCalPrice || item.skuCalPrice || item.salePrice || 0),
+                imageUrl: imageUrl,
+                productUrl: (item.productUrl || item.detailUrl || '').startsWith('http') ? (item.productUrl || item.detailUrl) : `https:${item.productUrl || item.detailUrl || ''}`,
+                rating: Number(item.evaluationRate) || Number(item.evaluationScore) || 0,
+                reviewCount: Number(item.evaluationCount) || Number(item.reviewNum) || 0,
+                seller: item.storeName || 'AliExpress Vendor',
+                shipping: item.logistics?.desc || item.logisticsDesc || 'Varies',
+                availability: 'In stock',
+              };
+            }).filter((p: any) => p.title && p.price);
 
             if (products.length > 0) {
               console.log(`✅ Extraídos ${products.length} productos desde runParams (script)`);

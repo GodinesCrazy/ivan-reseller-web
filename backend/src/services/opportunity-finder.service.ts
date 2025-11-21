@@ -237,7 +237,7 @@ class OpportunityFinderService {
             sourcePrice: sourcePrice,
             sourceCurrency: detectedCurrency, // ✅ Usar moneda detectada/corregida
             productUrl: p.productUrl,
-            imageUrl: p.imageUrl,
+            imageUrl: p.imageUrl || 'https://via.placeholder.com/300x300?text=No+Image',
             productId: p.productId || p.productUrl?.split('/').pop()?.split('.html')[0],
           };
         })
@@ -332,7 +332,7 @@ class OpportunityFinderService {
               sourcePrice,
               sourceCurrency,
               productUrl: p.url || p.productUrl,
-              imageUrl: p.images?.[0] || p.image || p.imageUrl,
+              imageUrl: p.images?.[0] || p.image || p.imageUrl || 'https://via.placeholder.com/300x300?text=No+Image',
               productId: p.productId,
             };
           })
@@ -629,12 +629,47 @@ class OpportunityFinderService {
         continue; // Saltar productos sin URL válida
       }
 
+      // ✅ TAREA 1: Validar y normalizar URL de imagen con fallback
+      let imageUrl = product.imageUrl;
+      if (!imageUrl || typeof imageUrl !== 'string' || imageUrl.trim().length === 0) {
+        // Intentar extraer imagen de la URL del producto si está disponible
+        if (product.productUrl) {
+          try {
+            // Algunos productos de AliExpress tienen imágenes en su URL
+            const urlMatch = product.productUrl.match(/(\d+\.html)/);
+            if (urlMatch) {
+              const productId = urlMatch[1]?.replace('.html', '');
+              if (productId) {
+                imageUrl = `https://ae01.alicdn.com/kf/${productId.substring(0, 2)}/${productId}.jpg`;
+              }
+            }
+          } catch (e) {
+            // Ignorar errores de parsing
+          }
+        }
+        // Si aún no hay imagen válida, usar placeholder
+        if (!imageUrl || !imageUrl.startsWith('http')) {
+          imageUrl = 'https://via.placeholder.com/300x300?text=No+Image';
+        }
+      } else {
+        // Asegurar que la URL esté completa (agregar https:// si falta)
+        if (!imageUrl.startsWith('http')) {
+          if (imageUrl.startsWith('//')) {
+            imageUrl = 'https:' + imageUrl;
+          } else if (imageUrl.startsWith('/')) {
+            imageUrl = 'https://www.aliexpress.com' + imageUrl;
+          } else {
+            imageUrl = 'https://' + imageUrl;
+          }
+        }
+      }
+
       const opp: OpportunityItem = {
         productId: product.productId,
         title: product.title,
         sourceMarketplace: 'aliexpress',
         aliexpressUrl: product.productUrl || '', // Asegurar que siempre haya una URL
-        image: product.imageUrl,
+        image: imageUrl, // ✅ TAREA 1: URL de imagen validada y normalizada
         costUsd: product.price,
         costAmount:
           typeof product.priceMaxSource === 'number' && product.priceMaxSource > 0
