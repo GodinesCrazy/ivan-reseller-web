@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@stores/authStore';
 import { Toaster } from 'react-hot-toast';
 import { log } from '@/utils/logger';
+import { useTheme } from '@/hooks/useTheme';
 const Login = lazy(() => import('@pages/Login'));
 const Dashboard = lazy(() => import('@pages/Dashboard'));
 const Opportunities = lazy(() => import('@pages/Opportunities'));
@@ -37,6 +38,9 @@ function AppContent() {
   const location = useLocation();
   const { isAuthenticated, isCheckingAuth, checkAuth, token } = useAuthStore();
   const [isInitialized, setIsInitialized] = useState(false);
+  
+  // ✅ CORRECCIÓN TEMA: Inicializar tema al cargar la app
+  useTheme();
 
   // Validar token al iniciar la app (solo si hay token)
   useEffect(() => {

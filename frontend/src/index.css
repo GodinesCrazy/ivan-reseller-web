@@ -17,6 +17,14 @@
 body {
   min-height: 100vh;
   background-color: #f9fafb;
+  /* ✅ CORRECCIÓN TEMA: Transición suave para cambios de tema */
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* ✅ CORRECCIÓN TEMA: Estilos para dark mode */
+.dark body {
+  background-color: #111827;
+  color: #f9fafb;
 }
 
 #root {

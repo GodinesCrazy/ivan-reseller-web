@@ -419,14 +419,26 @@ export default function APISettings() {
       const diagPairs = await Promise.all(
         marketplacesToCheck.map(async (mp) => {
           try {
+            // ✅ CORRECCIÓN EBAY OAUTH: Obtener environment para esta API desde selectedEnvironment
+            // Si no hay environment seleccionado, intentar obtenerlo de las credenciales configuradas
+            let env = selectedEnvironment[mp] || 'production';
+            const configuredCred = creds.find(c => c.apiName === mp);
+            if (!env && configuredCred) {
+              env = configuredCred.environment || 'production';
+            }
+            
             const { data } = await api.get('/api/marketplace/credentials', {
-              params: { marketplace: mp },
+              params: { 
+                marketplace: mp,
+                // ✅ CORRECCIÓN EBAY OAUTH: Pasar environment explícito para evitar ambigüedad
+                environment: env
+              },
             });
             const payload = data?.data || {};
             return [
               mp,
               {
-                environment: payload.environment,
+                environment: payload.environment || env,
                 issues: Array.isArray(payload.issues) ? payload.issues : [],
                 warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
                 isActive: payload.isActive,
@@ -438,7 +450,7 @@ export default function APISettings() {
             return [
               mp,
               {
-                environment: undefined,
+                environment: selectedEnvironment[mp] || undefined,
                 issues: [`No se pudo obtener el estado de ${mp.toUpperCase()}.`],
                 warnings: [],
                 isActive: false,
@@ -1419,15 +1431,26 @@ export default function APISettings() {
           const checkInterval = setInterval(() => {
             if (!oauthWindow || oauthWindow.closed) {
               clearInterval(checkInterval);
-              // Esperar un momento y luego verificar si las credenciales se actualizaron
+              // ✅ CORRECCIÓN EBAY OAUTH: Esperar un momento para asegurar que el cache se haya limpiado
+              // Aumentar delay de 2s a 3s para dar más tiempo al backend
               setTimeout(async () => {
                 try {
                   await fetchAuthStatuses();
+                  // ✅ CORRECCIÓN EBAY OAUTH: loadCredentials() ya incluye loadMarketplaceDiagnostics()
+                  // que recarga los marketplace diagnostics automáticamente
                   await loadCredentials();
+                  // Forzar recarga después de un momento adicional para asegurar cache limpio
+                  setTimeout(async () => {
+                    try {
+                      await loadCredentials();
+                    } catch (err) {
+                      log.warn('Error en recarga adicional después de OAuth:', err);
+                    }
+                  }, 1000);
                 } catch (err) {
                   log.warn('Error al recargar credenciales después de OAuth:', err);
                 }
-              }, 2000);
+              }, 3000);
             }
           }, 1000);
           

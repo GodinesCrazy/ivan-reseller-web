@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
+import { useTheme } from '../hooks/useTheme';
 
 interface UserSettings {
   language: string;
@@ -57,6 +58,7 @@ interface ApiStatus {
 
 export default function Settings() {
   const navigate = useNavigate();
+  const { updateTheme } = useTheme(); // ✅ CORRECCIÓN TEMA: Hook para actualizar tema
   const [activeTab, setActiveTab] = useState<'general' | 'apis' | 'notifications' | 'profile'>('general');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -118,13 +120,16 @@ export default function Settings() {
       // ✅ Intentar cargar desde el backend
       const { data } = await api.get('/api/settings');
       if (data?.success && data?.data) {
+        const loadedTheme = data.data.theme || 'light';
         setGeneralSettings({
           language: data.data.language || 'en',
           timezone: data.data.timezone || 'America/New_York',
           dateFormat: data.data.dateFormat || 'MM/DD/YYYY',
           currencyFormat: data.data.currencyFormat || 'USD',
-          theme: data.data.theme || 'light'
+          theme: loadedTheme
         });
+        // ✅ CORRECCIÓN TEMA: Aplicar tema al cargar desde backend
+        updateTheme(loadedTheme as 'light' | 'dark' | 'auto');
         return;
       }
     } catch (error: any) {
@@ -134,13 +139,16 @@ export default function Settings() {
         const saved = localStorage.getItem('userSettings');
         if (saved) {
           const parsed = JSON.parse(saved);
+          const loadedTheme = parsed.theme || 'light';
           setGeneralSettings({
             language: parsed.language || 'en',
             timezone: parsed.timezone || 'America/New_York',
             dateFormat: parsed.dateFormat || 'MM/DD/YYYY',
             currencyFormat: parsed.currencyFormat || 'USD',
-            theme: parsed.theme || 'light'
+            theme: loadedTheme
           });
+          // ✅ CORRECCIÓN TEMA: Aplicar tema al cargar desde localStorage
+          updateTheme(loadedTheme as 'light' | 'dark' | 'auto');
           return;
         }
       } catch (localError) {
@@ -213,6 +221,8 @@ export default function Settings() {
       if (data?.success) {
         // ✅ También guardar en localStorage como backup
         localStorage.setItem('userSettings', JSON.stringify(generalSettings));
+        // ✅ CORRECCIÓN TEMA: Aplicar tema inmediatamente después de guardar
+        updateTheme(generalSettings.theme as 'light' | 'dark' | 'auto');
         toast.success('Settings saved successfully');
       } else {
         throw new Error(data?.message || 'Failed to save settings');
@@ -222,6 +232,8 @@ export default function Settings() {
       console.warn('Error saving settings to backend, using localStorage fallback:', error);
       try {
         localStorage.setItem('userSettings', JSON.stringify(generalSettings));
+        // ✅ CORRECCIÓN TEMA: Aplicar tema incluso si falla el backend
+        updateTheme(generalSettings.theme as 'light' | 'dark' | 'auto');
         toast.success('Settings saved locally (backend unavailable)');
       } catch (localError) {
         toast.error('Error saving settings: ' + (error.response?.data?.error || error.message));

@@ -248,10 +248,20 @@ router.post('/publish-multiple', async (req: Request, res: Response, next: NextF
 router.get('/credentials', async (req: Request, res: Response) => {
   try {
     const marketplace = String(req.query.marketplace || '').toLowerCase();
+    // ✅ CORRECCIÓN EBAY OAUTH: Aceptar environment como query param para evitar ambigüedad
+    const environment = (req.query.environment as 'sandbox' | 'production' | undefined);
+    
     if (!['ebay', 'mercadolibre', 'amazon'].includes(marketplace)) {
       return res.status(400).json({ success: false, message: 'Invalid marketplace' });
     }
-    const cred = await marketplaceService.getCredentials(req.user!.userId, marketplace as MarketplaceName);
+    
+    // ✅ CORRECCIÓN EBAY OAUTH: Pasar environment explícito para evitar usar workflow config incorrecto
+    const cred = await marketplaceService.getCredentials(
+      req.user!.userId, 
+      marketplace as MarketplaceName,
+      environment // ✅ Pasar environment explícito (puede ser undefined si no se proporciona)
+    );
+    
     res.json({
       success: true,
       data: {
@@ -298,6 +308,8 @@ router.post('/credentials', async (req: Request, res: Response, next: NextFuncti
 router.get('/credentials/:marketplace', async (req: Request, res: Response) => {
   try {
     const { marketplace } = req.params;
+    // ✅ CORRECCIÓN EBAY OAUTH: Aceptar environment como query param para evitar ambigüedad
+    const environment = (req.query.environment as 'sandbox' | 'production' | undefined);
     
     if (!['ebay', 'mercadolibre', 'amazon'].includes(marketplace)) {
       return res.status(400).json({
@@ -306,7 +318,12 @@ router.get('/credentials/:marketplace', async (req: Request, res: Response) => {
       });
     }
 
-    const credentials = await marketplaceService.getCredentials(req.user!.userId, marketplace as MarketplaceName);
+    // ✅ CORRECCIÓN EBAY OAUTH: Pasar environment explícito para evitar usar workflow config incorrecto
+    const credentials = await marketplaceService.getCredentials(
+      req.user!.userId, 
+      marketplace as MarketplaceName,
+      environment
+    );
     
     if (!credentials) {
       return res.status(404).json({
