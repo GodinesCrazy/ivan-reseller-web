@@ -57,7 +57,7 @@ export default function Sidebar() {
   });
 
   return (
-    <aside className="w-64 bg-white shadow-sm border-r border-gray-200 min-h-[calc(100vh-73px)] overflow-y-auto">
+    <aside className="w-64 bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 min-h-[calc(100vh-73px)] overflow-y-auto transition-colors">
       <nav className="p-4 space-y-1">
         {visibleItems.map((item) => (
           <NavLink
@@ -66,8 +66,8 @@ export default function Sidebar() {
             className={({ isActive }) =>
               `flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-colors text-sm ${
                 isActive
-                  ? 'bg-primary-50 text-primary-700 font-medium'
-                  : 'text-gray-600 hover:bg-gray-50'
+                  ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 font-medium'
+                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`
             }
           >

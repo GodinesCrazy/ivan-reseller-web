@@ -7,27 +7,27 @@ import { useAuthStatusStore } from '@stores/authStatusStore';
 
 const statusStyles: Record<string, { className: string; label: string; icon: JSX.Element }> = {
   healthy: {
-    className: 'bg-green-100 text-green-700 border-green-200',
+    className: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 border-green-200 dark:border-green-700',
     label: 'Sesión activa',
     icon: <ShieldCheck className="w-4 h-4" />,
   },
   refreshing: {
-    className: 'bg-amber-100 text-amber-700 border-amber-200',
+    className: 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-700',
     label: 'Renovando sesión…',
     icon: <Loader2 className="w-4 h-4 animate-spin" />,
   },
   manual_required: {
-    className: 'bg-red-100 text-red-700 border-red-200',
+    className: 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 border-red-200 dark:border-red-700',
     label: 'Acción requerida',
     icon: <ShieldAlert className="w-4 h-4" />,
   },
   error: {
-    className: 'bg-orange-100 text-orange-700 border-orange-200',
+    className: 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-700',
     label: 'Error al renovar',
     icon: <ShieldAlert className="w-4 h-4" />,
   },
   unknown: {
-    className: 'bg-gray-100 text-gray-600 border-gray-200',
+    className: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600',
     label: 'Estado desconocido',
     icon: <ShieldAlert className="w-4 h-4" />,
   },
@@ -88,11 +88,11 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="bg-white shadow-sm border-b border-gray-200">
+    <nav className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors">
       <div className="px-8 py-4 flex justify-between items-center">
         <div className="flex items-center space-x-6">
           <div className="flex items-center space-x-3">
-            <div className="h-12 w-12 rounded-2xl overflow-hidden border border-blue-100 shadow-md bg-white">
+            <div className="h-12 w-12 rounded-2xl overflow-hidden border border-blue-100 dark:border-blue-900 shadow-md bg-white dark:bg-gray-700 transition-colors">
               <img
                 src="/brand-logo.png"
                 alt="Logotipo Ivan Reseller"
@@ -101,13 +101,13 @@ export default function Navbar() {
               />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-primary-600 leading-tight">Ivan Reseller</h1>
-              <span className="text-sm text-gray-500">Inteligencia para oportunidades</span>
+              <h1 className="text-2xl font-bold text-primary-600 dark:text-primary-400 leading-tight">Ivan Reseller</h1>
+              <span className="text-sm text-gray-500 dark:text-gray-400">Inteligencia para oportunidades</span>
             </div>
           </div>
 
           <div className="hidden md:flex flex-col">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
               Estado de AliExpress
             </span>
             <div
@@ -117,7 +117,7 @@ export default function Navbar() {
               <span>{styleInfo.label}</span>
             </div>
             {aliStatus?.message ? (
-              <span className="text-xs text-gray-500 mt-1 max-w-xs line-clamp-1">
+              <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xs line-clamp-1">
                 {aliStatus.message}
               </span>
             ) : null}
@@ -128,23 +128,23 @@ export default function Navbar() {
           <button
             onClick={handleForceRefresh}
             disabled={loadingStatus || statusKey === 'refreshing'}
-            className="hidden md:inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="hidden md:inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RefreshCcw className="w-4 h-4" />
             {statusKey === 'refreshing' ? 'Renovando...' : 'Forzar reintento'}
           </button>
 
           <div className="flex items-center space-x-2">
-            <User className="w-5 h-5 text-gray-500" />
-            <span className="text-sm font-medium">{user?.username}</span>
-            <span className="text-xs text-gray-500 px-2 py-1 bg-gray-100 rounded">
+            <User className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+            <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{user?.username}</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">
               {user?.role}
             </span>
           </div>
 
           <button
             onClick={logout}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
+            className="flex items-center space-x-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
           >
             <LogOut className="w-5 h-5" />
             <span>Logout</span>

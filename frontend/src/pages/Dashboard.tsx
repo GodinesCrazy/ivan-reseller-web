@@ -189,7 +189,7 @@ export default function Dashboard() {
       case 'opportunity': return <Brain className="h-4 w-4 text-blue-600" />;
       case 'automation': return <Settings className="h-4 w-4 text-purple-600" />;
       case 'inventory': return <ShoppingBag className="h-4 w-4 text-orange-600" />;
-      default: return <Activity className="h-4 w-4 text-gray-600" />;
+      default: return <Activity className="h-4 w-4 text-gray-600 dark:text-gray-400" />;
     }
   };
 
@@ -199,7 +199,7 @@ export default function Dashboard() {
       case 'info': return 'bg-blue-50 border-blue-200';
       case 'warning': return 'bg-yellow-50 border-yellow-200';
       case 'alert': return 'bg-red-50 border-red-200';
-      default: return 'bg-gray-50 border-gray-200';
+      default: return 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700';
     }
   };
 
@@ -210,11 +210,11 @@ export default function Dashboard() {
         <CardSkeleton count={6} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
-          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Ventas Totales</p>
-                <p className="text-2xl font-bold text-gray-900">${dashboardData.totalSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Ventas Totales</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${dashboardData.totalSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                 <DollarSign className="h-6 w-6 text-green-600" />
@@ -222,11 +222,11 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Comisiones Totales</p>
-                <p className="text-2xl font-bold text-gray-900">${dashboardData.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Comisiones Totales</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${dashboardData.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                 <TrendingUp className="h-6 w-6 text-blue-600" />
@@ -234,11 +234,11 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Productos Publicados</p>
-                <p className="text-2xl font-bold text-gray-900">{dashboardData.activeProducts}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Productos Publicados</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{dashboardData.activeProducts}</p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
                 <ShoppingBag className="h-6 w-6 text-purple-600" />
@@ -249,8 +249,8 @@ export default function Dashboard() {
         <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Oportunidades IA</p>
-              <p className="text-2xl font-bold text-gray-900">{dashboardData.totalOpportunities}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Oportunidades IA</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{dashboardData.totalOpportunities}</p>
             </div>
             <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
               <Brain className="h-6 w-6 text-white" />
@@ -261,8 +261,8 @@ export default function Dashboard() {
         <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Sugerencias IA</p>
-              <p className="text-2xl font-bold text-gray-900">{dashboardData.aiSuggestions}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Sugerencias IA</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{dashboardData.aiSuggestions}</p>
             </div>
             <div className="w-12 h-12 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center">
               <Lightbulb className="h-6 w-6 text-white" />
@@ -273,8 +273,8 @@ export default function Dashboard() {
         <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Automatización</p>
-              <p className="text-2xl font-bold text-gray-900">{dashboardData.automationRules}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Automatización</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{dashboardData.automationRules}</p>
             </div>
             <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-teal-600 rounded-xl flex items-center justify-center">
               <Settings className="h-6 w-6 text-white" />
@@ -286,9 +286,9 @@ export default function Dashboard() {
 
       {/* Actividad reciente */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 transition-colors">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Actividad Reciente</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Actividad Reciente</h3>
             <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
               Ver todo
             </button>

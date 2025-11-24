@@ -501,21 +501,21 @@ export default function Autopilot() {
       </div>
 
       {/* Status Banner */}
-      <div className={`border rounded-lg p-4 flex items-center gap-3 ${
-        autopilotRunning ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
+      <div className={`border rounded-lg p-4 flex items-center gap-3 transition-colors ${
+        autopilotRunning ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'
       }`}>
-        <div className={`p-3 rounded-full ${autopilotRunning ? 'bg-green-100' : 'bg-gray-100'}`}>
+        <div className={`p-3 rounded-full ${autopilotRunning ? 'bg-green-100 dark:bg-green-900' : 'bg-gray-100 dark:bg-gray-700'}`}>
           {autopilotRunning ? (
-            <Activity className="w-6 h-6 text-green-600 animate-pulse" />
+            <Activity className="w-6 h-6 text-green-600 dark:text-green-400 animate-pulse" />
           ) : (
-            <Pause className="w-6 h-6 text-gray-600" />
+            <Pause className="w-6 h-6 text-gray-600 dark:text-gray-400" />
           )}
         </div>
         <div className="flex-1">
-          <div className="font-semibold text-gray-900">
+          <div className="font-semibold text-gray-900 dark:text-gray-100">
             Autopilot Status: {autopilotRunning ? 'Running' : 'Stopped'}
           </div>
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
             {autopilotRunning 
               ? `${stats?.activeWorkflows || 0} active workflows executing automatically`
               : 'No workflows are running. Start autopilot to enable scheduled executions.'}
@@ -525,27 +525,27 @@ export default function Autopilot() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-colors">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-blue-100 rounded-lg">
               <Zap className="w-6 h-6 text-blue-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600">Active Workflows</div>
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-sm text-gray-600 dark:text-gray-400">Active Workflows</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {stats?.activeWorkflows || 0}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-colors">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-purple-100 rounded-lg">
               <BarChart3 className="w-6 h-6 text-purple-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600">Total Runs</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Total Runs</div>
               <div className="text-2xl font-bold text-gray-900">
                 {stats?.totalRuns || 0}
               </div>
@@ -553,13 +553,13 @@ export default function Autopilot() {
           </div>
         </div>
 
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-colors">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-green-100 rounded-lg">
               <CheckCircle className="w-6 h-6 text-green-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600">Success Rate</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Success Rate</div>
               <div className="text-2xl font-bold text-gray-900">
                 {stats?.successRate?.toFixed(1) || 0}%
               </div>
@@ -567,13 +567,13 @@ export default function Autopilot() {
           </div>
         </div>
 
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-colors">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-yellow-100 rounded-lg">
               <Target className="w-6 h-6 text-yellow-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600">Items Processed</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Items Processed</div>
               <div className="text-2xl font-bold text-gray-900">
                 {stats?.itemsProcessed || 0}
               </div>
@@ -604,7 +604,7 @@ export default function Autopilot() {
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {workflows.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
@@ -720,8 +720,8 @@ export default function Autopilot() {
 
       {/* Modal: Create/Edit Workflow */}
       {showWorkflowModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto transition-colors">
             <div className="p-6 border-b flex items-center justify-between">
               <h3 className="text-xl font-semibold">
                 {selectedWorkflow ? 'Edit Workflow' : 'Create New Workflow'}
@@ -871,8 +871,8 @@ export default function Autopilot() {
 
       {/* Modal: Workflow Logs */}
       {showLogsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto transition-colors">
             <div className="p-6 border-b flex items-center justify-between">
               <h3 className="text-xl font-semibold">Workflow Execution Logs</h3>
               <button onClick={() => setShowLogsModal(false)} className="text-gray-400 hover:text-gray-600">
@@ -892,7 +892,7 @@ export default function Autopilot() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Errors</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {logs.length === 0 && (
                       <tr>
                         <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
