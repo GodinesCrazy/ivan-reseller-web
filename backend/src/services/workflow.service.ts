@@ -37,9 +37,9 @@ export class WorkflowService {
    * Validar expresión cron básica usando node-cron
    * Formato: minuto hora día mes día-semana
    * Ejemplos válidos:
-   * - "0 */6 * * *" para cada 6 horas
+   * - "0 0/6 * * *" para cada 6 horas
    * - "0 0 * * *" para diario a medianoche
-   * - "*/15 * * * *" para cada 15 minutos
+   * - "0/15 * * * *" para cada 15 minutos
    * - "manual" para solo ejecución manual
    */
   private validateCronExpression(schedule?: string): boolean {

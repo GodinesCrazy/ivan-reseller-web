@@ -118,18 +118,19 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
     // Logging para debug (solo en desarrollo)
     if (process.env.NODE_ENV !== 'production') {
       logger.debug('Configurando cookies', {
-      secure: cookieOptions.secure,
-      sameSite: cookieOptions.sameSite,
-      domain: cookieOptions.domain,
-      isHttps,
-      requestProtocol,
-      frontendUrl,
-      hasToken: !!result.token,
-      origin: req.headers.origin,
-      referer: req.headers.referer,
-      'x-forwarded-proto': req.headers['x-forwarded-proto'],
-      protocol: req.protocol,
-    });
+        secure: cookieOptions.secure,
+        sameSite: cookieOptions.sameSite,
+        domain: cookieOptions.domain,
+        isHttps,
+        requestProtocol,
+        frontendUrl,
+        hasToken: !!result.token,
+        origin: req.headers.origin,
+        referer: req.headers.referer,
+        'x-forwarded-proto': req.headers['x-forwarded-proto'],
+        protocol: req.protocol,
+      });
+    }
 
     // IMPORTANTE: Para cookies cross-domain con sameSite: 'none', necesitamos asegurar que
     // el header Access-Control-Allow-Credentials esté presente (CORS ya lo maneja, pero lo verificamos)
