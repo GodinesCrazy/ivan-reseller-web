@@ -5,6 +5,7 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { loginRateLimit } from '../../middleware/rate-limit.middleware';
 import { changePasswordSchema as changePasswordValidationSchema, registerPasswordSchema } from '../../utils/password-validation';
 import { z } from 'zod';
+import logger from '../../config/logger';
 
 const router = Router();
 
@@ -114,8 +115,9 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
     };
 
-    // Logging para debug (siempre activo para diagnosticar)
-    console.log('🍪 Configurando cookies:', {
+    // Logging para debug (solo en desarrollo)
+    if (process.env.NODE_ENV !== 'production') {
+      logger.debug('Configurando cookies', {
       secure: cookieOptions.secure,
       sameSite: cookieOptions.sameSite,
       domain: cookieOptions.domain,
@@ -144,20 +146,21 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
     res.cookie('token', result.token, cookieOptions);
     res.cookie('refreshToken', result.refreshToken, refreshCookieOptions);
 
-    // Logging adicional para verificar que las cookies se establecieron
-    const setCookieHeaders = res.getHeader('Set-Cookie');
-    console.log('✅ Cookies establecidas:', {
-      tokenLength: result.token.length,
-      refreshTokenLength: result.refreshToken.length,
-      cookieOptions,
-      responseHeaders: {
-        'set-cookie': setCookieHeaders,
-        'access-control-allow-origin': res.getHeader('Access-Control-Allow-Origin'),
-        'access-control-allow-credentials': res.getHeader('Access-Control-Allow-Credentials'),
-      },
-      requestOrigin: requestOrigin,
-      allResponseHeaders: res.getHeaders(),
-    });
+    // Logging adicional para verificar que las cookies se establecieron (solo en desarrollo)
+    if (process.env.NODE_ENV !== 'production') {
+      const setCookieHeaders = res.getHeader('Set-Cookie');
+      logger.debug('Cookies establecidas', {
+        tokenLength: result.token.length,
+        refreshTokenLength: result.refreshToken.length,
+        cookieOptions,
+        responseHeaders: {
+          'set-cookie': setCookieHeaders,
+          'access-control-allow-origin': res.getHeader('Access-Control-Allow-Origin'),
+          'access-control-allow-credentials': res.getHeader('Access-Control-Allow-Credentials'),
+        },
+        requestOrigin: requestOrigin,
+      });
+    }
 
     // SOLUCIÓN HÍBRIDA: Devolver token en el body como fallback para todos los navegadores
     // Esto asegura que el login funcione incluso si las cookies cross-domain no se establecen correctamente

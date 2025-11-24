@@ -149,7 +149,7 @@ export class AutomationService {
     error?: string;
   }> {
     try {
-      console.log(`🎯 Procesando oportunidad: ${opportunityData.product}`);
+      logger.info('Procesando oportunidad', { product: opportunityData.product });
 
       // 1. Validar y enriquecer datos con IA
       const enrichedOpportunity = await this.aiEngine.analyzeOpportunity(opportunityData);

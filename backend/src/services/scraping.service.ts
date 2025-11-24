@@ -115,7 +115,11 @@ export class AdvancedScrapingService {
         return productData;
       }
     } catch (error: any) {
-      console.error('Scraping error:', error);
+      logger.error('Scraping error', {
+        error: error.message || String(error),
+        stack: error.stack,
+        url: productUrl
+      });
       throw new AppError(`Failed to scrape product: ${error.message}`, 500);
     }
   }
@@ -314,7 +318,10 @@ export class AdvancedScrapingService {
 
       return response.data.choices[0]?.message?.content || description;
     } catch (error) {
-      console.error('AI enhancement failed:', error);
+      logger.error('AI enhancement failed', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return description; // Fall back to original description
     }
   }
@@ -494,7 +501,11 @@ export class AdvancedScrapingService {
       return result;
 
     } catch (error) {
-      console.error(`Scraping error (attempt ${retries + 1}):`, error);
+      logger.error(`Scraping error (attempt ${retries + 1})`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        retries
+      });
       
       // Reintentar con delay exponencial
       if (retries < this.config.maxRetries) {
@@ -566,7 +577,7 @@ export class AdvancedScrapingService {
     // Scraping secuencial para evitar detección
     for (const marketplace of marketplaces) {
       try {
-        console.log(`Scraping ${marketplace.name}...`);
+        logger.debug(`Scraping ${marketplace.name}...`);
         
         const products = await this.robustScrape(marketplace.url, async (page) => {
           return await this.scrapeMarketplaceProducts(page, marketplace.name as any);
@@ -578,7 +589,11 @@ export class AdvancedScrapingService {
         await new Promise(resolve => setTimeout(resolve, 5000));
         
       } catch (error) {
-        console.error(`Failed to scrape ${marketplace.name}:`, error);
+        logger.error(`Failed to scrape ${marketplace.name}`, {
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          marketplace: marketplace.name
+        });
         // Continuar con el siguiente marketplace
       }
     }
@@ -607,7 +622,11 @@ export class AdvancedScrapingService {
           return [];
       }
     } catch (error) {
-      console.error(`Error scraping ${marketplace}:`, error);
+      logger.error(`Error scraping ${marketplace}`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        marketplace
+      });
       return [];
     }
   }
@@ -654,14 +673,20 @@ export class AdvancedScrapingService {
               }
             }
           } catch (error) {
-            console.log('Error parsing product:', error);
+            logger.warn('Error parsing product', {
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined
+            });
           }
         });
 
         return products;
       });
     } catch (error) {
-      console.error('AliExpress scraping failed:', error);
+      logger.error('AliExpress scraping failed', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return [];
     }
   }
@@ -708,14 +733,20 @@ export class AdvancedScrapingService {
               }
             }
           } catch (error) {
-            console.log('Error parsing Amazon product:', error);
+            logger.warn('Error parsing Amazon product', {
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined
+            });
           }
         });
 
         return products;
       });
     } catch (error) {
-      console.error('Amazon scraping failed:', error);
+      logger.error('Amazon scraping failed', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return [];
     }
   }
@@ -762,14 +793,20 @@ export class AdvancedScrapingService {
               }
             }
           } catch (error) {
-            console.log('Error parsing eBay product:', error);
+            logger.warn('Error parsing eBay product', {
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined
+            });
           }
         });
 
         return products;
       });
     } catch (error) {
-      console.error('eBay scraping failed:', error);
+      logger.error('eBay scraping failed', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return [];
     }
   }

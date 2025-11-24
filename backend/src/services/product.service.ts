@@ -139,6 +139,22 @@ export class ProductService {
 
     const metadataPayload = Object.keys(metadata).length ? JSON.stringify(metadata) : null;
 
+    // ✅ P7: Validar que suggestedPrice sea mayor que aliexpressPrice
+    if (rest.suggestedPrice <= rest.aliexpressPrice) {
+      throw new AppError(
+        `Suggested price (${rest.suggestedPrice}) must be greater than AliExpress price (${rest.aliexpressPrice}) to generate profit.`,
+        400
+      );
+    }
+
+    // ✅ P7: Validar que finalPrice (si se proporciona) sea mayor que aliexpressPrice
+    if (finalPrice !== undefined && finalPrice <= rest.aliexpressPrice) {
+      throw new AppError(
+        `Final price (${finalPrice}) must be greater than AliExpress price (${rest.aliexpressPrice}) to generate profit.`,
+        400
+      );
+    }
+
     // ✅ Logging antes de crear el producto
     const logger = require('../config/logger').logger;
     logger.info('[PRODUCT-SERVICE] Creating product', {
@@ -373,8 +389,9 @@ export class ProductService {
   }
 
   /**
-   * ✅ CORREGIDO: Función helper para actualizar estado y isPublished de forma sincronizada
+   * ✅ P3: Función helper para actualizar estado y isPublished de forma sincronizada
    * Asegura que: status === 'PUBLISHED' → isPublished === true
+   * Detecta y corrige inconsistencias automáticamente
    */
   async updateProductStatusSafely(
     id: number,
@@ -382,24 +399,58 @@ export class ProductService {
     isPublished?: boolean,
     adminId?: number
   ) {
-    // ✅ Obtener producto actual para verificar publishedAt
+    // ✅ Obtener producto actual para verificar estado actual y detectar inconsistencias
     const currentProduct = await prisma.product.findUnique({
       where: { id },
-      select: { publishedAt: true, title: true, userId: true }
+      select: { 
+        status: true,
+        isPublished: true,
+        publishedAt: true, 
+        title: true, 
+        userId: true 
+      }
     });
 
     if (!currentProduct) {
       throw new AppError('Product not found', 404);
     }
 
+    // ✅ P3: Detectar y corregir inconsistencias existentes antes de actualizar
+    const hasInconsistency = 
+      (currentProduct.status === 'PUBLISHED' && !currentProduct.isPublished) ||
+      (currentProduct.status !== 'PUBLISHED' && currentProduct.isPublished);
+    
+    if (hasInconsistency) {
+      logger.warn('Product status inconsistency detected and will be corrected', {
+        productId: id,
+        currentStatus: currentProduct.status,
+        currentIsPublished: currentProduct.isPublished,
+        newStatus: status,
+        userId: currentProduct.userId
+      });
+    }
+
     // ✅ Validar consistencia: si status es PUBLISHED, isPublished debe ser true
     const shouldBePublished = status === 'PUBLISHED';
     const finalIsPublished = isPublished !== undefined ? isPublished : shouldBePublished;
 
-    // ✅ Si status no es PUBLISHED pero isPublished es true, corregir isPublished
-    const correctedIsPublished = status === 'PUBLISHED' 
-      ? true 
-      : (status !== 'PENDING' && status !== 'APPROVED' ? false : finalIsPublished);
+    // ✅ P3: Corrección mejorada de isPublished basada en status
+    // Si status es PUBLISHED, isPublished DEBE ser true
+    // Si status no es PUBLISHED pero es APPROVED y había listings, mantener isPublished si corresponde
+    // Si status es REJECTED o INACTIVE, isPublished DEBE ser false
+    let correctedIsPublished: boolean;
+    if (status === 'PUBLISHED') {
+      correctedIsPublished = true; // Siempre true para PUBLISHED
+    } else if (status === 'REJECTED' || status === 'INACTIVE') {
+      correctedIsPublished = false; // Siempre false para REJECTED/INACTIVE
+    } else if (status === 'APPROVED') {
+      // Para APPROVED, usar el valor proporcionado o mantener el actual si tenía listings
+      // Pero mejor usar el valor proporcionado explícitamente
+      correctedIsPublished = finalIsPublished;
+    } else {
+      // Para PENDING u otros estados, false por defecto
+      correctedIsPublished = false;
+    }
 
     // ✅ Preparar datos de actualización
     const updateData: any = {
@@ -454,6 +505,133 @@ export class ProductService {
     }
 
     return updated;
+  }
+
+  /**
+   * ✅ P3: Detectar productos con inconsistencias entre status e isPublished
+   * @returns Array de productos inconsistentes
+   */
+  async detectInconsistencies(): Promise<Array<{ id: number; userId: number; status: string; isPublished: boolean; title: string }>> {
+    const inconsistentProducts = await prisma.product.findMany({
+      where: {
+        OR: [
+          { status: 'PUBLISHED', isPublished: false }, // PUBLISHED pero isPublished = false
+          { status: { not: 'PUBLISHED' }, isPublished: true, status: { not: 'APPROVED' } }, // No PUBLISHED pero isPublished = true (excepto APPROVED que puede tener listings)
+        ]
+      },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        isPublished: true,
+        title: true
+      }
+    });
+
+    // También detectar APPROVED con isPublished = true pero sin listings activos
+    const approvedWithIsPublished = await prisma.product.findMany({
+      where: {
+        status: 'APPROVED',
+        isPublished: true
+      },
+      include: {
+        marketplaceListings: {
+          where: {
+            // Listings activos
+          }
+        }
+      }
+    });
+
+    const approvedWithoutListings = approvedWithIsPublished
+      .filter(p => p.marketplaceListings.length === 0)
+      .map(p => ({
+        id: p.id,
+        userId: p.userId,
+        status: p.status,
+        isPublished: p.isPublished,
+        title: p.title
+      }));
+
+    return [...inconsistentProducts, ...approvedWithoutListings];
+  }
+
+  /**
+   * ✅ P3: Corregir inconsistencias detectadas en productos
+   * @returns Número de productos corregidos
+   */
+  async fixInconsistencies(): Promise<{ fixed: number; errors: number }> {
+    const inconsistencies = await this.detectInconsistencies();
+    let fixed = 0;
+    let errors = 0;
+
+    for (const product of inconsistencies) {
+      try {
+        // Determinar el estado correcto basado en isPublished y listings
+        let correctStatus: ProductStatus = product.status as ProductStatus;
+        let correctIsPublished = product.isPublished;
+
+        if (product.status === 'PUBLISHED' && !product.isPublished) {
+          // Si está marcado como PUBLISHED pero isPublished = false, verificar si realmente tiene listings
+          const productWithListings = await prisma.product.findUnique({
+            where: { id: product.id },
+            include: { marketplaceListings: true }
+          });
+          
+          if (productWithListings && productWithListings.marketplaceListings.length > 0) {
+            // Tiene listings, corregir isPublished a true
+            correctIsPublished = true;
+          } else {
+            // No tiene listings, cambiar status a APPROVED
+            correctStatus = 'APPROVED';
+            correctIsPublished = false;
+          }
+        } else if (product.status !== 'PUBLISHED' && product.isPublished) {
+          // Si isPublished = true pero status no es PUBLISHED
+          if (product.status === 'APPROVED') {
+            // Verificar si tiene listings
+            const productWithListings = await prisma.product.findUnique({
+              where: { id: product.id },
+              include: { marketplaceListings: true }
+            });
+            
+            if (!productWithListings || productWithListings.marketplaceListings.length === 0) {
+              // No tiene listings, corregir isPublished a false
+              correctIsPublished = false;
+            }
+          } else {
+            // Para otros estados (PENDING, REJECTED, INACTIVE), isPublished debe ser false
+            correctIsPublished = false;
+          }
+        }
+
+        // Aplicar corrección usando updateProductStatusSafely
+        if (correctStatus !== product.status || correctIsPublished !== product.isPublished) {
+          await this.updateProductStatusSafely(
+            product.id,
+            correctStatus,
+            correctIsPublished,
+            undefined // Sin adminId para correcciones automáticas
+          );
+          fixed++;
+          logger.info('Product inconsistency fixed', {
+            productId: product.id,
+            oldStatus: product.status,
+            oldIsPublished: product.isPublished,
+            newStatus: correctStatus,
+            newIsPublished: correctIsPublished
+          });
+        }
+      } catch (error: any) {
+        errors++;
+        logger.error('Error fixing product inconsistency', {
+          productId: product.id,
+          error: error.message
+        });
+      }
+    }
+
+    return { fixed, errors };
   }
 
   async updateProductStatus(id: number, status: ProductStatus, adminId: number) {

@@ -18,13 +18,18 @@ import {
   ClipboardPaste,
   Clock,
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  Wand2
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuthStatusStore } from '@stores/authStatusStore';
 import { useAuthStore } from '@stores/authStore';
 import toast from 'react-hot-toast';
 import { log } from '../utils/logger';
+import APIConfigurationWizard, { WizardData } from '../components/api-configuration/APIConfigurationWizard';
+import FieldTooltip from '../components/api-configuration/FieldTooltip';
+import ValidationIndicator from '../components/api-configuration/ValidationIndicator';
+import ErrorMessageWithSolution from '../components/api-configuration/ErrorMessageWithSolution';
 
 // Tipos según backend
 interface APICredential {
@@ -53,14 +58,47 @@ interface APICredential {
 
 interface APIStatus {
   apiName: string;
-  environment: string;
-  available: boolean;
+  name?: string; // El backend puede retornar 'name' además de 'apiName'
+  environment?: string;
+  available?: boolean;
+  isAvailable?: boolean; // El backend usa 'isAvailable'
+  isConfigured?: boolean;
   status?: 'healthy' | 'degraded' | 'unhealthy' | 'unknown'; // Estado de salud
   message?: string;
-  lastChecked?: string;
+  error?: string; // El backend puede retornar 'error'
+  lastChecked?: string | Date;
   latency?: number; // Latencia en ms
   trustScore?: number; // Score de confianza 0-100
   optional?: boolean;
+  isOptional?: boolean; // El backend puede usar 'isOptional'
+}
+
+// Tipos para datos del backend
+interface BackendAPIDefinition {
+  apiName?: string;
+  name?: string;
+  displayName?: string;
+  description?: string;
+  fields?: APIField[];
+  supportsEnvironments?: boolean;
+  environments?: Record<string, {
+    available?: boolean;
+    summary?: string;
+    error?: string;
+    fields?: APIField[]; // Los environments pueden tener fields propios
+  }>;
+  [key: string]: unknown;
+}
+
+interface BackendCredentialRecord {
+  id: number;
+  apiName: string;
+  environment: string;
+  scope?: 'user' | 'global';
+  ownerUserId?: number | null;
+  userId?: number | null;
+  updatedAt?: string;
+  [key: string]: unknown;
 }
 
 const makeEnvKey = (apiName: string, environment: string) => `${apiName}-${environment}`;
@@ -104,7 +142,9 @@ interface APIField {
   key: string;
   label: string;
   required: boolean;
-  type: 'text' | 'password';
+  type: 'text' | 'password' | 'email';
+  disabled?: boolean; // Campo puede estar deshabilitado
+  value?: string | number; // Valor por defecto del campo
   placeholder?: string;
   helpText?: string;
 }
@@ -268,6 +308,18 @@ export default function APISettings() {
   const requestAuthRefresh = useAuthStatusStore((state) => state.requestRefresh);
   const pendingManualSession = useAuthStatusStore((state) => state.pendingManualSession);
   const markManualHandled = useAuthStatusStore((state) => state.markManualHandled);
+  
+  // ✅ MEJORA UX: Wizard de configuración
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardInitialAPI, setWizardInitialAPI] = useState<string | undefined>(undefined);
+  
+  // ✅ MEJORA UX: Estado para validación en tiempo real de campos
+  type FieldValidationStatus = 'idle' | 'validating' | 'valid' | 'invalid';
+  interface FieldValidationState {
+    status: FieldValidationStatus;
+    message?: string;
+  }
+  const [fieldValidation, setFieldValidation] = useState<Record<string, FieldValidationState>>({});
 
   useEffect(() => {
     loadCredentials();
@@ -280,7 +332,7 @@ export default function APISettings() {
   }, [authStatuses, fetchAuthStatuses]);
 
   // Estado para almacenar las definiciones de APIs del backend
-  const [backendApiDefinitions, setBackendApiDefinitions] = useState<Record<string, any>>({});
+  const [backendApiDefinitions, setBackendApiDefinitions] = useState<Record<string, BackendAPIDefinition>>({});
 
   const loadCredentials = async () => {
     setLoading(true);
@@ -291,8 +343,8 @@ export default function APISettings() {
       const apisData = apisResponse.data?.data || [];
       
       // Crear un mapa de definiciones de APIs del backend (para usar campos correctos)
-      const backendDefs: Record<string, any> = {};
-      apisData.forEach((api: any) => {
+      const backendDefs: Record<string, BackendAPIDefinition> = {};
+      apisData.forEach((api: BackendAPIDefinition) => {
         if (api.apiName) {
           backendDefs[api.apiName] = api;
         }
@@ -301,13 +353,13 @@ export default function APISettings() {
       
       // Cargar credenciales configuradas desde /api/credentials
       const credsResponse = await api.get('/api/credentials');
-      const configuredApisRaw: any[] = Array.isArray(credsResponse.data?.data)
+      const configuredApisRaw: BackendCredentialRecord[] = Array.isArray(credsResponse.data?.data)
         ? credsResponse.data.data
         : [];
       
       // Crear un mapa de APIs configuradas por apiName-environment priorizando credenciales personales del usuario actual
-      const configuredMap = new Map<string, any>();
-      configuredApisRaw.forEach((record: any) => {
+      const configuredMap = new Map<string, BackendCredentialRecord>();
+      configuredApisRaw.forEach((record: BackendCredentialRecord) => {
         const env = record.environment || 'production';
         const key = makeEnvKey(record.apiName, env);
         const ownerId = record.ownerUserId ?? record.userId ?? null;
@@ -353,21 +405,24 @@ export default function APISettings() {
       const newScopeSelection: Record<string, 'user' | 'global'> = {};
       const creds: APICredential[] = [];
       
-      apisData.forEach((api: any) => {
+      apisData.forEach((api: BackendAPIDefinition) => {
+        const apiName = api.apiName || api.name || '';
+        if (!apiName) return; // Skip si no hay nombre de API
+        
         if (api.supportsEnvironments && api.environments) {
           const envKeys = Object.keys(api.environments);
-          const preferredEnv = envKeys.find(env => configuredMap.has(makeEnvKey(api.apiName, env)))
+          const preferredEnv = envKeys.find(env => configuredMap.has(makeEnvKey(apiName, env)))
             || (envKeys.includes('production') ? 'production' : envKeys[0]);
-          defaultEnvSelection[api.apiName] = preferredEnv;
+          defaultEnvSelection[apiName] = preferredEnv;
           envKeys.forEach((env: string) => {
             const envData = (api.environments?.[env] ?? {}) as any;
-            const key = makeEnvKey(api.apiName, env);
+            const key = makeEnvKey(apiName, env);
             const configured = configuredMap.get(key) as any;
             const scope = (configured?.scope as 'user' | 'global') || 'user';
             newScopeSelection[key] = scope;
             creds.push({
               id: configured?.id ?? 0,
-              apiName: api.apiName,
+              apiName,
               environment: env,
               isActive: configured?.isActive ?? envData.isActive ?? false,
               createdAt: configured?.updatedAt || envData.lastUpdated || new Date().toISOString(),
@@ -380,14 +435,14 @@ export default function APISettings() {
             });
           });
         } else {
-          const key = makeEnvKey(api.apiName, 'production');
+          const key = makeEnvKey(apiName, 'production');
           const configured = configuredMap.get(key) as any;
-          defaultEnvSelection[api.apiName] = 'production';
+          defaultEnvSelection[apiName] = 'production';
           const scope = (configured?.scope as 'user' | 'global') || 'user';
           newScopeSelection[key] = scope;
           creds.push({
             id: configured?.id ?? 0,
-            apiName: api.apiName,
+            apiName,
             environment: 'production',
             isActive: configured?.isActive ?? api.isActive ?? false,
             createdAt: configured?.updatedAt || api.lastUpdated || new Date().toISOString(),
@@ -405,7 +460,7 @@ export default function APISettings() {
       setLoadingEnvironment({});
       setMaskedScopes({});
       setScopeSelection(newScopeSelection);
-      setSelectedEnvironment(prev => {
+      setSelectedEnvironment((prev: Record<string, string>) => {
         const next = { ...prev };
         Object.entries(defaultEnvSelection).forEach(([apiName, env]) => {
           if (!next[apiName]) {
@@ -445,8 +500,9 @@ export default function APISettings() {
                 present: payload.present,
               },
             ] as const;
-          } catch (diagError: any) {
-            log.warn(`No se pudo obtener diagnóstico de ${mp}:`, diagError?.message || diagError);
+          } catch (diagError: unknown) {
+            const errorMessage = diagError instanceof Error ? diagError.message : String(diagError);
+            log.warn(`No se pudo obtener diagnóstico de ${mp}:`, errorMessage);
             return [
               mp,
               {
@@ -498,23 +554,23 @@ export default function APISettings() {
         const normalize = (value: string) => value?.toString().toLowerCase().replace(/[^a-z0-9]/g, '') || '';
         const statusLookup = new Map<string, any>();
         if (Array.isArray(statusData)) {
-          statusData.forEach((item: any) => {
-            const normalizedName = normalize(item.apiName || item.name);
+          statusData.forEach((item: APIStatus) => {
+            const normalizedName = normalize(item.apiName || item.name || '');
             if (normalizedName) {
               statusLookup.set(normalizedName, item);
               const env = typeof item.environment === 'string' ? item.environment : 'production';
-                const apiNameRaw = (item.apiName || item.name || normalizedName) as string;
-                const apiNameKey = apiNameRaw.toLowerCase();
-                const envKey = makeEnvKey(apiNameKey, env);
+              const apiNameRaw = (item.apiName || item.name || normalizedName) as string;
+              const apiNameKey = apiNameRaw.toLowerCase();
+              const envKey = makeEnvKey(apiNameKey, env);
               const messageValue = item.message ?? item.error;
               statusMap[envKey] = {
-                  apiName: apiNameKey,
+                apiName: apiNameKey,
                 environment: env,
                 available: Boolean(item.isAvailable ?? item.available),
                 message:
                   messageValue !== undefined && messageValue !== null ? String(messageValue) : undefined,
                 lastChecked: item.lastChecked ? String(item.lastChecked) : undefined,
-                optional: Boolean(item.isOptional),
+                optional: Boolean(item.isOptional ?? item.optional),
               };
             }
           });
@@ -550,12 +606,14 @@ export default function APISettings() {
       }
 
       setStatuses(statusMap);
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error('Error loading credentials:', err);
-      if (err.response?.status === 404) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const axiosError = err && typeof err === 'object' && 'response' in err ? err as { response?: { status?: number; data?: { message?: string } } } : null;
+      if (axiosError?.response?.status === 404) {
         setError('Route not found. Verificando configuración del backend...');
       } else {
-        setError(err.response?.data?.message || err.message || 'Error al cargar credenciales');
+        setError(axiosError?.response?.data?.message || errorMessage || 'Error al cargar credenciales');
       }
     } finally {
       setLoading(false);
@@ -573,7 +631,7 @@ export default function APISettings() {
       return;
     }
 
-    setLoadingEnvironment(prev => ({ ...prev, [formKey]: true }));
+    setLoadingEnvironment((prev: Record<string, boolean>) => ({ ...prev, [formKey]: true }));
     try {
       const scopeKey = makeEnvKey(apiName, environment);
       
@@ -596,13 +654,13 @@ export default function APISettings() {
       // Solo actualizar scopeSelection si no hay un scopeOverride explícito
       // Esto evita que se sobrescriba cuando el usuario selecciona 'user'
       if (responseScope && !scopeOverride) {
-        setScopeSelection(prev => ({
+        setScopeSelection((prev: Record<string, 'user' | 'global'>) => ({
           ...prev,
           [scopeKey]: responseScope,
         }));
       } else if (scopeOverride) {
         // Si hay un scopeOverride, mantenerlo
-        setScopeSelection(prev => ({
+        setScopeSelection((prev: Record<string, 'user' | 'global'>) => ({
           ...prev,
           [scopeKey]: scopeOverride,
         }));
@@ -611,7 +669,7 @@ export default function APISettings() {
       // No marcar como masked si el usuario ha seleccionado explícitamente 'user'
       // Esto permite que el usuario edite incluso si hay credenciales globales
       const userSelectedPersonal = scopeOverride === 'user' || scopeSelection[scopeKey] === 'user';
-      setMaskedScopes(prev => {
+      setMaskedScopes((prev: Record<string, boolean>) => {
         const next = { ...prev };
         if (masked && !userSelectedPersonal) {
           next[formKey] = true;
@@ -639,20 +697,20 @@ export default function APISettings() {
       // normalized queda como objeto vacío {}
       // Los valores por defecto se mostrarán en el input a través de field.value
 
-      setFormData(prev => ({ ...prev, [formKey]: normalized }));
+      setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: normalized }));
     } catch (error) {
-      setFormData(prev => ({ ...prev, [formKey]: prev[formKey] || {} }));
+      setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: prev[formKey] || {} }));
     } finally {
-      setLoadingEnvironment(prev => ({ ...prev, [formKey]: false }));
+      setLoadingEnvironment((prev: Record<string, boolean>) => ({ ...prev, [formKey]: false }));
     }
   };
 
   const handleEnvironmentSelect = (apiName: string, environment: string) => {
-    setSelectedEnvironment(prev => ({ ...prev, [apiName]: environment }));
+    setSelectedEnvironment((prev: Record<string, string>) => ({ ...prev, [apiName]: environment }));
     const scopeKey = makeEnvKey(apiName, environment);
     const credential = getCredentialForAPI(apiName, environment);
     const scopeForEnv = credential?.scope || scopeSelection[scopeKey] || 'user';
-    setScopeSelection(prev => ({ ...prev, [scopeKey]: scopeForEnv }));
+    setScopeSelection((prev: Record<string, 'user' | 'global'>) => ({ ...prev, [scopeKey]: scopeForEnv }));
     loadEnvironmentForm(apiName, environment, true, scopeForEnv);
   };
 
@@ -661,10 +719,10 @@ export default function APISettings() {
       return;
     }
     const scopeKey = makeEnvKey(apiName, environment);
-    setScopeSelection(prev => ({ ...prev, [scopeKey]: scope }));
+    setScopeSelection((prev: Record<string, 'user' | 'global'>) => ({ ...prev, [scopeKey]: scope }));
     // Limpiar datos del formulario para evitar inconsistencias
     // Pero mantener los valores por defecto de los campos si existen
-    setFormData(prev => {
+    setFormData((prev: Record<string, Record<string, string>>) => {
       const formKey = makeFormKey(apiName, environment);
       const next = { ...prev };
       // Si cambiamos a modo personal, limpiar el formulario pero mantener estructura
@@ -682,13 +740,139 @@ export default function APISettings() {
 
   const handleInputChange = (apiName: string, environment: string, fieldKey: string, value: string) => {
     const formKey = makeFormKey(apiName, environment);
-    setFormData(prev => ({
+    setFormData((prev: Record<string, Record<string, string>>) => ({
       ...prev,
       [formKey]: {
         ...(prev[formKey] || {}),
         [fieldKey]: value,
       },
     }));
+
+    // ✅ MEJORA UX: Validación en tiempo real
+    const validationKey = `${formKey}::${fieldKey}`;
+    validateField(apiName, fieldKey, value, validationKey);
+  };
+
+  // ✅ MEJORA UX: Función de validación en tiempo real
+  const validateField = (apiName: string, fieldKey: string, value: string, validationKey: string) => {
+    const apiDef = API_DEFINITIONS[apiName];
+    if (!apiDef) return;
+
+    const field = apiDef.fields.find(f => f.key === fieldKey || f.key.toLowerCase().includes(fieldKey.toLowerCase()));
+    if (!field) return;
+
+    setFieldValidation((prev: Record<string, FieldValidationState>) => ({ ...prev, [validationKey]: { status: 'validating' } }));
+
+    setTimeout(() => {
+      let isValid = true;
+      let errorMessage: string | undefined;
+
+      if (field.required && !value.trim()) {
+        isValid = false;
+        errorMessage = `${field.label} es requerido`;
+      }
+
+      if (value.trim()) {
+        if (apiName === 'ebay' && (fieldKey.includes('appId') || fieldKey.includes('APP_ID'))) {
+          if (!value.startsWith('YourAppI-')) {
+            isValid = false;
+            errorMessage = 'App ID debe comenzar con "YourAppI-"';
+          }
+        }
+
+        if (apiName === 'amazon' && (fieldKey.includes('clientId') || fieldKey.includes('CLIENT_ID'))) {
+          if (!value.startsWith('amzn1.application-oa2-client')) {
+            isValid = false;
+            errorMessage = 'Client ID debe comenzar con "amzn1.application-oa2-client"';
+          }
+        }
+
+        if (fieldKey.includes('url') || fieldKey.includes('redirect') || fieldKey.includes('URI')) {
+          try {
+            new URL(value);
+          } catch {
+            isValid = false;
+            errorMessage = 'Debe ser una URL válida';
+          }
+        }
+
+        if (fieldKey.includes('email')) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(value)) {
+            isValid = false;
+            errorMessage = 'Debe ser un email válido';
+          }
+        }
+
+        if (field.type === 'password' && value.length < 8) {
+          isValid = false;
+          errorMessage = 'Debe tener al menos 8 caracteres';
+        }
+      }
+
+      setFieldValidation((prev: Record<string, FieldValidationState>) => ({
+        ...prev,
+        [validationKey]: {
+          status: isValid ? ('valid' as FieldValidationStatus) : ('invalid' as FieldValidationStatus),
+          message: errorMessage
+        }
+      }));
+    }, 500);
+  };
+
+  // ✅ MEJORA UX: Función helper para obtener solución según error global
+  const getSolutionForError = (error: string): string => {
+    const lowerError = error.toLowerCase();
+    
+    if (lowerError.includes('credenciales') && lowerError.includes('globales')) {
+      return 'Las credenciales globales solo pueden ser modificadas por un administrador. Si necesitas usar credenciales personales, selecciona "Personal" en el selector de scope.';
+    }
+    
+    if (lowerError.includes('marketplaces') && lowerError.includes('personales')) {
+      return 'Las credenciales de marketplaces (eBay, Amazon, MercadoLibre) y PayPal deben ser personales. Cada usuario debe configurar sus propias credenciales.';
+    }
+    
+    if (lowerError.includes('validación') || lowerError.includes('inválid')) {
+      return 'Verifica que todos los campos requeridos estén completos y tengan el formato correcto. Revisa los mensajes de error en cada campo.';
+    }
+    
+    if (lowerError.includes('oauth') || lowerError.includes('token')) {
+      return 'Completa el flujo OAuth haciendo clic en el botón "OAuth" después de guardar las credenciales básicas.';
+    }
+    
+    return 'Revisa la documentación de la API o contacta al soporte si el problema persiste.';
+  };
+
+  // ✅ MEJORA UX: Función helper para obtener solución según campo y error
+  const getSolutionForField = (apiName: string, fieldKey: string, error: string): string => {
+    const lowerError = error.toLowerCase();
+    
+    if (lowerError.includes('requerido')) {
+      return `Este campo es obligatorio. Por favor, ingresa un valor válido para ${fieldKey}.`;
+    }
+    
+    if (lowerError.includes('debe comenzar')) {
+      if (apiName === 'ebay' && fieldKey.includes('appId')) {
+        return 'El App ID de eBay debe comenzar con "YourAppI-". Verifica que copiaste correctamente desde el eBay Developer Portal.';
+      }
+      if (apiName === 'amazon' && fieldKey.includes('clientId')) {
+        return 'El Client ID de Amazon debe comenzar con "amzn1.application-oa2-client". Verifica que copiaste correctamente desde Amazon SP-API.';
+      }
+    }
+    
+    if (lowerError.includes('url válida')) {
+      return 'Ingresa una URL completa que incluya el protocolo (http:// o https://). Ejemplo: https://example.com/callback';
+    }
+    
+    if (lowerError.includes('email válido')) {
+      return 'Ingresa un email válido con el formato: usuario@dominio.com';
+    }
+    
+    if (lowerError.includes('caracteres')) {
+      return 'El valor ingresado no cumple con la longitud mínima requerida. Verifica que copiaste el valor completo.';
+    }
+    
+    return `Revisa la documentación oficial de ${apiName} para obtener el valor correcto de este campo.`;
   };
 
   const handleSave = async (apiName: string) => {
@@ -926,7 +1110,7 @@ export default function APISettings() {
               ? '[HIDDEN]' 
               : credentials[key];
             return acc;
-          }, {} as Record<string, any>),
+          }, {} as Record<string, string | boolean | number>),
         });
       }
 
@@ -963,7 +1147,7 @@ export default function APISettings() {
         throw new Error(response.data?.error || response.data?.message || 'Error desconocido al guardar');
       }
 
-      setScopeSelection(prev => ({
+      setScopeSelection((prev: Record<string, 'user' | 'global'>) => ({
         ...prev,
         [scopeKey]: scopeToPersist,
       }));
@@ -983,16 +1167,22 @@ export default function APISettings() {
       }
 
       // Limpiar formulario
-      setFormData(prev => ({ ...prev, [formKey]: {} }));
+      setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: {} }));
       setExpandedApi(null);
 
       toast.success(`✅ Credenciales de ${apiDef.displayName} guardadas exitosamente`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error('Error saving credentials:', err);
-      const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || 'Error al guardar credenciales';
+      // ✅ MEJORA UX: Usar mensajes de error mejorados
+      const axiosError = err && typeof err === 'object' && 'response' in err ? err as { response?: { data?: { error?: string; message?: string; details?: unknown } } } : null;
+      const errorMessage = axiosError?.response?.data?.error || axiosError?.response?.data?.message || (err instanceof Error ? err.message : String(err)) || 'Error al guardar credenciales';
+      const errorSolution = getSolutionForError(errorMessage);
       setError(errorMessage);
-      if (err.response?.data?.details) {
-        setError(`${errorMessage}: ${JSON.stringify(err.response.data.details)}`);
+      toast.error(`${errorMessage}\n\n💡 ${errorSolution}`, {
+        duration: 5000,
+      });
+      if (axiosError?.response?.data?.details) {
+        setError(`${errorMessage}: ${JSON.stringify(axiosError.response.data.details)}`);
       }
     } finally {
       setSaving(null);
@@ -1038,7 +1228,7 @@ export default function APISettings() {
       }
       
       // ✅ Si hay datos en el formulario (o cargados), prepararlos para el test
-      let testCredentials: any = null;
+          let testCredentials: Record<string, unknown> | null = null;
       if (Object.keys(currentFormData).length > 0) {
         const backendDef = backendApiDefinitions[apiName];
         const supportsEnv = backendDef?.supportsEnvironments || false;
@@ -1138,7 +1328,7 @@ export default function APISettings() {
       }
 
       // Actualizar estado
-      setStatuses(prev => ({
+      setStatuses((prev: Record<string, APIStatus>) => ({
         ...prev,
         [makeEnvKey(apiName, environment)]: {
           apiName,
@@ -1148,23 +1338,24 @@ export default function APISettings() {
           lastChecked: status.lastChecked || status.checkedAt || new Date().toISOString(),
         },
       }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error('Error testing API:', err);
       
       // Manejar diferentes tipos de errores
       let errorMsg = 'Error al probar conexión';
+      const axiosError = err && typeof err === 'object' && 'response' in err ? err as { response?: { status?: number; statusText?: string; data?: { error?: string; message?: string } }; request?: unknown } : null;
       
-      if (err.response) {
+      if (axiosError?.response) {
         // Error del servidor
-        errorMsg = err.response.data?.error || 
-                   err.response.data?.message || 
-                   `Error del servidor: ${err.response.status} ${err.response.statusText}`;
-      } else if (err.request) {
+        errorMsg = axiosError.response.data?.error || 
+                   axiosError.response.data?.message || 
+                   `Error del servidor: ${axiosError.response.status} ${axiosError.response.statusText}`;
+      } else if (axiosError?.request) {
         // Error de red (sin respuesta del servidor)
         errorMsg = 'Error de conexión: No se pudo conectar con el servidor. Verifica tu conexión a internet.';
       } else {
         // Otro tipo de error
-        errorMsg = err.message || 'Error desconocido al probar la conexión';
+        errorMsg = err instanceof Error ? err.message : 'Error desconocido al probar la conexión';
       }
       
       setError(errorMsg);
@@ -1326,12 +1517,13 @@ export default function APISettings() {
       // Validar que la URL sea válida
       try {
         new URL(authUrl);
-      } catch (urlError: any) {
+      } catch (urlError: unknown) {
+        const errorMessage = urlError instanceof Error ? urlError.message : String(urlError);
         log.error('[APISettings] Invalid authUrl received:', {
           authUrl,
-          error: urlError.message,
+          error: errorMessage,
         });
-        toast.error(`Error: La URL de autorización recibida no es válida: ${urlError.message}`);
+        toast.error(`Error: La URL de autorización recibida no es válida: ${errorMessage}`);
         setError('URL de autorización inválida');
         setOauthing(null);
         return;
@@ -1358,10 +1550,12 @@ export default function APISettings() {
           oauthWindow: !!oauthWindow,
           oauthWindowType: typeof oauthWindow,
         });
-      } catch (openError: any) {
+      } catch (openError: unknown) {
+        const errorMessage = openError instanceof Error ? openError.message : String(openError);
+        const errorStack = openError instanceof Error ? openError.stack : undefined;
         log.error('[APISettings] Error calling window.open():', {
-          error: openError.message,
-          stack: openError.stack,
+          error: errorMessage,
+          stack: errorStack,
         });
       }
       
@@ -1458,9 +1652,10 @@ export default function APISettings() {
           setTimeout(() => clearInterval(checkInterval), 300000);
         }
       }, 500); // ✅ Aumentar tiempo de espera de 100ms a 500ms para redirecciones externas
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error('Error iniciando OAuth:', err);
-      const message = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Error iniciando OAuth';
+      const axiosError = err && typeof err === 'object' && 'response' in err ? err as { response?: { data?: { message?: string; error?: string } } } : null;
+      const message = axiosError?.response?.data?.message || axiosError?.response?.data?.error || (err instanceof Error ? err.message : String(err)) || 'Error iniciando OAuth';
       toast.error(message);
     } finally {
       setOauthing(null);
@@ -1490,9 +1685,10 @@ export default function APISettings() {
       await fetchAuthStatuses();
 
       toast.success(`${!currentActive ? 'Activada' : 'Desactivada'} ${API_DEFINITIONS[apiName].displayName} (${environment})`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error('Error toggling API:', err);
-      setError(err.response?.data?.message || 'Error al cambiar estado');
+      const axiosError = err && typeof err === 'object' && 'response' in err ? err as { response?: { data?: { message?: string } } } : null;
+      setError(axiosError?.response?.data?.message || 'Error al cambiar estado');
     }
   };
 
@@ -1521,9 +1717,10 @@ export default function APISettings() {
       await loadCredentials();
 
       toast.success(`Credenciales de ${API_DEFINITIONS[apiName].displayName} (${environment}) eliminadas`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error('Error deleting credentials:', err);
-      setError(err.response?.data?.message || err.response?.data?.error || 'Error al eliminar credenciales');
+      const axiosError = err && typeof err === 'object' && 'response' in err ? err as { response?: { data?: { message?: string; error?: string } } } : null;
+      setError(axiosError?.response?.data?.message || axiosError?.response?.data?.error || 'Error al eliminar credenciales');
     } finally {
       setDeleting(null);
     }
@@ -1711,9 +1908,10 @@ export default function APISettings() {
       } else {
         setManualSessionError('No se pudo crear la sesión manual. Intenta nuevamente.');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       log.error('Error creando sesión manual:', error);
-      setManualSessionError(error.response?.data?.message || 'No se pudo iniciar la sesión manual.');
+      const axiosError = error && typeof error === 'object' && 'response' in error ? error as { response?: { data?: { message?: string } } } : null;
+      setManualSessionError(axiosError?.response?.data?.message || 'No se pudo iniciar la sesión manual.');
     } finally {
       setManualSessionLoading(false);
     }
@@ -1839,11 +2037,12 @@ export default function APISettings() {
       setManualCookieInput('');
       await requestAuthRefresh('aliexpress');
       await loadCredentials();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const axiosError = err && typeof err === 'object' && 'response' in err ? err as { response?: { data?: { message?: string; error?: string } } } : null;
       const message =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        err?.message ||
+        axiosError?.response?.data?.message ||
+        axiosError?.response?.data?.error ||
+        (err instanceof Error ? err.message : String(err)) ||
         'No se pudieron guardar las cookies.';
       setManualCookieError(message);
     } finally {
@@ -1952,12 +2151,12 @@ export default function APISettings() {
 
   const optionalCoverage = useMemo(() => {
     if (!auditSummary?.optionalApis) return [];
-    return (auditSummary.optionalApis as Array<any>).map((entry) => {
-      const configured = entry.environments?.some((env: any) => env?.summary);
+    return (auditSummary.optionalApis as Array<{ apiName: string; environments?: Array<{ summary?: string; error?: string; environment?: string }> }>).map((entry) => {
+      const configured = entry.environments?.some((env) => env?.summary);
       const errors =
         entry.environments
-          ?.filter((env: any) => env?.error)
-          ?.map((env: any) => `${env.environment}: ${env.error}`) ?? [];
+          ?.filter((env) => env?.error)
+          ?.map((env) => `${env.environment}: ${env.error}`) ?? [];
       return {
         apiName: entry.apiName,
         configured,
@@ -1981,11 +2180,25 @@ export default function APISettings() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <Settings className="w-8 h-8 text-blue-600" />
-          <h1 className="text-3xl font-bold text-gray-800">Configuración de APIs</h1>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <Settings className="w-8 h-8 text-blue-600" />
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Configuración de APIs</h1>
+          </div>
+          {/* ✅ MEJORA UX: Botón para abrir wizard */}
+          <button
+            onClick={() => {
+              setWizardInitialAPI(undefined);
+              setWizardOpen(true);
+            }}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2 transition-colors shadow-sm"
+          >
+            <Wand2 className="w-5 h-5" />
+            <span className="hidden sm:inline">Asistente de Configuración</span>
+            <span className="sm:hidden">Asistente</span>
+          </button>
         </div>
-        <p className="text-gray-600">
+        <p className="text-gray-600 dark:text-gray-400">
           Configura tus credenciales para las APIs de marketplaces y servicios. Las credenciales se guardan encriptadas.
         </p>
         {missingOptional.length > 0 && (
@@ -2004,17 +2217,14 @@ export default function APISettings() {
         )}
       </div>
 
-      {/* Error Global */}
+      {/* ✅ MEJORA UX: Error Global mejorado */}
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-          <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-red-800 font-medium">Error</p>
-            <p className="text-red-600 text-sm">{error}</p>
-          </div>
-          <button onClick={() => setError(null)} className="text-red-600 hover:text-red-800">
-            ×
-          </button>
+        <div className="mb-4">
+          <ErrorMessageWithSolution
+            error={error}
+            solution={getSolutionForError(error)}
+            onDismiss={() => setError(null)}
+          />
         </div>
       )}
 
@@ -2023,7 +2233,9 @@ export default function APISettings() {
         {Object.values(API_DEFINITIONS).map((apiDef) => {
           const backendDef = backendApiDefinitions[apiDef.name];
           const supportsEnv = backendDef?.supportsEnvironments && backendDef?.environments;
-          const envOptions: string[] = supportsEnv ? Object.keys(backendDef.environments) : ['production'];
+          const envOptions: string[] = supportsEnv && backendDef.environments 
+            ? Object.keys(backendDef.environments) 
+            : ['production'];
           const currentEnvironment = supportsEnv
             ? selectedEnvironment[apiDef.name] || envOptions[0] || 'production'
             : 'production';
@@ -2057,8 +2269,8 @@ export default function APISettings() {
             ? false 
             : ((!isAdmin && isGlobalScope) || !!maskedScopes[formKey]);
 
-          const fieldsToUse = supportsEnv
-            ? backendDef?.environments?.[currentEnvironment]?.fields || apiDef.fields
+          const fieldsToUse = supportsEnv && backendDef?.environments?.[currentEnvironment]?.fields
+            ? backendDef.environments[currentEnvironment].fields
             : backendDef?.fields || apiDef.fields;
           const displayName = backendDef?.name || apiDef.displayName;
           const description = backendDef?.description || apiDef.description;
@@ -2429,7 +2641,7 @@ export default function APISettings() {
                       </div>
                     )}
 
-                    {fieldsToUse.map((field: any) => {
+                    {fieldsToUse.map((field: APIField) => {
                       // Normalizar campo del backend o del frontend
                       const fieldKey = field.key;
                       const fieldLabel = field.label;
@@ -2442,29 +2654,58 @@ export default function APISettings() {
                       const defaultValue = field.value !== undefined && field.value !== null ? String(field.value) : '';
                       const inputDisabled = isDisabled || isReadOnly;
 
+                      // ✅ MEJORA UX: Obtener estado de validación
+                      const validationKey = `${formKey}::${fieldKey}`;
+                      const validation = fieldValidation[validationKey] || { status: 'idle' as const };
+                      const fieldValue = formData[formKey]?.[fieldKey] ?? defaultValue;
+
                       return (
                         <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
                             {fieldLabel}
-                            {fieldRequired && <span className="text-red-500 ml-1">*</span>}
+                            {fieldRequired && <span className="text-red-500">*</span>}
+                            {/* ✅ MEJORA UX: Tooltip de ayuda */}
+                            {fieldHelpText && (
+                              <FieldTooltip
+                                content={fieldHelpText}
+                                example={fieldPlaceholder}
+                                documentationUrl={apiDef.docsUrl}
+                              />
+                            )}
                           </label>
                           <div className="relative">
                             <input
                               type={fieldType === 'password' && !showPasswords[showKey] ? 'password' : 'text'}
-                              value={formData[formKey]?.[fieldKey] ?? defaultValue}
+                              value={fieldValue}
                               onChange={(e) => handleInputChange(apiDef.name, currentEnvironment, fieldKey, e.target.value)}
                               placeholder={fieldPlaceholder}
                               disabled={inputDisabled}
                               data-form-key={formKey}
                               data-field-key={fieldKey}
                               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                inputDisabled ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'border-gray-300'
+                                inputDisabled 
+                                  ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
+                                  : validation.status === 'invalid'
+                                  ? 'border-red-500 bg-red-50'
+                                  : validation.status === 'valid'
+                                  ? 'border-green-500 bg-green-50'
+                                  : 'border-gray-300'
                               }`}
                             />
+                            {/* ✅ MEJORA UX: Indicador de validación */}
+                            {validation.status !== 'idle' && !inputDisabled && (
+                              <div className="absolute right-10 top-1/2 -translate-y-1/2">
+                                <ValidationIndicator
+                                  status={validation.status}
+                                  message={validation.message}
+                                  size="sm"
+                                />
+                              </div>
+                            )}
                             {fieldType === 'password' && (
                               <button
                                 type="button"
-                                onClick={() => setShowPasswords(prev => ({ ...prev, [showKey]: !prev[showKey] }))}
+                                onClick={() => setShowPasswords((prev: Record<string, boolean>) => ({ ...prev, [showKey]: !prev[showKey] }))}
                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                               >
                                 {showPasswords[showKey] ? (
@@ -2475,7 +2716,17 @@ export default function APISettings() {
                               </button>
                             )}
                           </div>
-                          {fieldHelpText && (
+                          {/* ✅ MEJORA UX: Mensaje de error mejorado */}
+                          {validation.status === 'invalid' && validation.message && (
+                            <div className="mt-1">
+                              <ErrorMessageWithSolution
+                                error={validation.message}
+                                solution={getSolutionForField(apiDef.name, fieldKey, validation.message)}
+                                documentationUrl={apiDef.docsUrl}
+                              />
+                            </div>
+                          )}
+                          {fieldHelpText && validation.status === 'idle' && (
                             <p className="mt-1 text-xs text-gray-500">{fieldHelpText}</p>
                           )}
                         </div>
@@ -2503,7 +2754,7 @@ export default function APISettings() {
                       <button
                         onClick={() => {
                           setExpandedApi(null);
-                          setFormData(prev => ({ ...prev, [formKey]: {} }));
+                          setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: {} }));
                         }}
                         className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
                       >
@@ -2799,6 +3050,21 @@ export default function APISettings() {
           </div>
         </div>
       )}
+
+      {/* ✅ MEJORA UX: Wizard de configuración */}
+      <APIConfigurationWizard
+        isOpen={wizardOpen}
+        onClose={() => {
+          setWizardOpen(false);
+          setWizardInitialAPI(undefined);
+          loadCredentials(); // Recargar credenciales después de cerrar
+        }}
+        onComplete={(wizardData: WizardData) => {
+          toast.success(`Configuración de ${wizardData.selectedAPI} completada exitosamente`);
+          loadCredentials(); // Recargar credenciales después de completar
+        }}
+        initialAPI={wizardInitialAPI}
+      />
     </div>
   );
 }

@@ -380,6 +380,17 @@ async function startServer() {
       console.log('');
       
       aliExpressAuthMonitor.start();
+      
+      // ✅ FASE 5: Inicializar Workflow Scheduler
+      try {
+        const { workflowSchedulerService } = await import('./services/workflow-scheduler.service');
+        await workflowSchedulerService.initialize();
+        console.log('✅ Workflow Scheduler initialized');
+        console.log('  - Personal workflows will run according to their schedules');
+      } catch (error: any) {
+        console.warn('⚠️  Warning: Could not initialize workflow scheduler:', error.message);
+      }
+      console.log('');
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
@@ -393,6 +404,15 @@ process.on('SIGINT', async () => {
   apiHealthMonitor.stop();
   aliExpressAuthMonitor.stop();
   await scheduledTasksService.shutdown();
+  
+  // ✅ FASE 5: Detener Workflow Scheduler
+  try {
+    const { workflowSchedulerService } = await import('./services/workflow-scheduler.service');
+    await workflowSchedulerService.shutdown();
+  } catch (error: any) {
+    console.warn('⚠️  Warning: Error shutting down workflow scheduler:', error.message);
+  }
+  
   await prisma.$disconnect();
   if (isRedisAvailable) {
     await redis.quit();

@@ -74,7 +74,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       };
     });
     
-    res.json({ products: mappedProducts });
+    res.json({ success: true, data: { products: mappedProducts }, count: mappedProducts.length });
   } catch (error) {
     next(error);
   }
@@ -88,7 +88,7 @@ router.get('/stats', async (req: Request, res: Response, next: NextFunction) => 
     const isAdmin = userRole === 'ADMIN';
     const userId = isAdmin ? undefined : req.user?.userId;
     const stats = await productService.getProductStats(userId);
-    res.json(stats);
+    res.json({ success: true, data: stats });
   } catch (error) {
     next(error);
   }
@@ -128,7 +128,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
       profit: ((product.finalPrice || product.suggestedPrice || 0) - product.aliexpressPrice) || 0
     };
     
-    res.json(mappedProduct);
+    res.json({ success: true, data: mappedProduct });
   } catch (error) {
     next(error);
   }
@@ -154,7 +154,11 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
         hasAliExpressPrice: !!validatedData.aliexpressPrice,
         hasSuggestedPrice: !!validatedData.suggestedPrice
       });
-      return res.status(400).json({ error: 'Campos requeridos faltantes: title, aliexpressUrl, aliexpressPrice, suggestedPrice' });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Campos requeridos faltantes: title, aliexpressUrl, aliexpressPrice, suggestedPrice',
+        errorCode: 'VALIDATION_ERROR'
+      });
     }
     
     const product = await productService.createProduct(req.user!.userId, validatedData as CreateProductDto);
@@ -187,8 +191,12 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     
     // ✅ Retornar producto con imageUrl extraído
     res.status(201).json({
-      ...product,
-      imageUrl: imageUrl || undefined
+      success: true,
+      message: 'Product created successfully',
+      data: {
+        ...product,
+        imageUrl: imageUrl || undefined
+      }
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -219,7 +227,7 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = updateProductSchema.parse(req.body);
     const product = await productService.updateProduct(Number(req.params.id), req.user!.userId, data);
-    res.json(product);
+    res.json({ success: true, message: 'Product updated successfully', data: product });
   } catch (error) {
     if (error instanceof z.ZodError) {
       logger.warn('Validation error in PUT /api/products/:id', { errors: error.errors });
@@ -233,7 +241,11 @@ router.patch('/:id/status', authorize('ADMIN'), async (req: Request, res: Respon
   try {
     const { status } = req.body;
     if (!['PENDING', 'APPROVED', 'REJECTED', 'PUBLISHED'].includes(status)) {
-      return res.status(400).json({ error: 'Estado inválido' });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Estado inválido',
+        errorCode: 'VALIDATION_ERROR'
+      });
     }
     const product = await productService.updateProductStatus(Number(req.params.id), status, req.user!.userId);
     res.json(product);
@@ -250,7 +262,11 @@ router.patch('/:id/price', async (req: Request, res: Response, next: NextFunctio
     const userId = req.user!.userId;
 
     if (!price || typeof price !== 'number' || price <= 0) {
-      return res.status(400).json({ error: 'Price must be a positive number' });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Price must be a positive number',
+        errorCode: 'VALIDATION_ERROR'
+      });
     }
 
     // ✅ CORREGIDO: Importar MarketplaceService correctamente (como named export)
@@ -284,7 +300,36 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
     const result = await productService.deleteProduct(Number(req.params.id), req.user!.userId, isAdmin);
-    res.json(result);
+    res.json({ success: true, message: 'Product deleted successfully', data: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ✅ P3: GET /api/products/maintenance/inconsistencies - Detectar inconsistencias de estado (Admin only)
+router.get('/maintenance/inconsistencies', authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const inconsistencies = await productService.detectInconsistencies();
+    res.json({
+      success: true,
+      count: inconsistencies.length,
+      inconsistencies
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ✅ P3: POST /api/products/maintenance/fix-inconsistencies - Corregir inconsistencias de estado (Admin only)
+router.post('/maintenance/fix-inconsistencies', authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await productService.fixInconsistencies();
+    res.json({
+      success: true,
+      message: `Inconsistencies fixed: ${result.fixed} products corrected, ${result.errors} errors`,
+      fixed: result.fixed,
+      errors: result.errors
+    });
   } catch (error) {
     next(error);
   }

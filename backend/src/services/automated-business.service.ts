@@ -4,6 +4,7 @@ import { AIOpportunityEngine } from './ai-opportunity.service';
 import { notificationService } from './notification.service';
 import { AdvancedScrapingService } from './scraping.service';
 import { jobService } from './job.service';
+import logger from '../config/logger';
 
 interface AutomationConfig {
   mode: 'manual' | 'automatic';
@@ -190,7 +191,7 @@ export class AutomatedBusinessService {
    * Iniciar el motor de automatización
    */
   private startAutomationEngine(): void {
-    console.log('🤖 Iniciando motor de automatización...');
+    logger.info('🤖 Iniciando motor de automatización...');
     
     // Monitoreo continuo cada 5 minutos
     setInterval(() => {
@@ -367,7 +368,7 @@ export class AutomatedBusinessService {
     salePrice: number;
     marketplace: string;
   }): Promise<Transaction> {
-    console.log(`💰 Nueva venta recibida: ${saleData.productTitle}`);
+    logger.info('💰 Nueva venta recibida', { productTitle: saleData.productTitle, orderId: saleData.orderId });
     
     const transaction: Transaction = {
       id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -421,7 +422,7 @@ export class AutomatedBusinessService {
    */
   private async autoProcessPurchase(transaction: Transaction): Promise<void> {
     try {
-      console.log(`🛒 Procesando compra automática para: ${transaction.productTitle}`);
+      logger.info('🛒 Procesando compra automática', { productTitle: transaction.productTitle, transactionId: transaction.id });
       
       transaction.status = 'processing';
       transaction.automation.actions.push('auto_purchase_initiated');
@@ -462,7 +463,11 @@ export class AutomatedBusinessService {
       });
 
     } catch (error) {
-      console.error('❌ Error en compra automática:', error);
+      logger.error('❌ Error en compra automática', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        transactionId: transaction.id
+      });
       transaction.status = 'error';
       transaction.automation.actions.push(`error: ${error.message}`);
       
@@ -498,7 +503,11 @@ export class AutomatedBusinessService {
       })[0];
 
     } catch (error) {
-      console.error('❌ Error buscando proveedores:', error);
+      logger.error('❌ Error buscando proveedores', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        transactionId: transaction.id
+      });
       return null;
     }
   }
@@ -530,7 +539,7 @@ export class AutomatedBusinessService {
   private async executePurchase(supplier: any, transaction: Transaction): Promise<any> {
     if (this.config.environment === 'sandbox') {
       // En sandbox, simular la compra
-      console.log('🧪 SANDBOX: Simulando compra automática');
+      logger.info('🧪 SANDBOX: Simulando compra automática', { transactionId: transaction.id });
       return {
         orderId: `sandbox_${Date.now()}`,
         price: supplier.price,
@@ -540,7 +549,7 @@ export class AutomatedBusinessService {
     }
 
     // En producción, realizar compra real
-    console.log('🌐 PRODUCCIÓN: Ejecutando compra real');
+    logger.info('PRODUCCIÓN: Ejecutando compra real', { supplier: supplier.marketplace });
     
     // Aquí iría la integración real con el proveedor
     // Por ejemplo, usando APIs de AliExpress, eBay, etc.
@@ -574,7 +583,10 @@ export class AutomatedBusinessService {
     };
 
     // Guardar orden de dropshipping (en BD real)
-    console.log('📦 Configurando envío directo:', dropshippingOrder);
+    logger.info('📦 Configurando envío directo', { 
+      transactionId: dropshippingOrder.transactionId,
+      supplierOrderId: dropshippingOrder.supplierOrderId
+    });
 
     // Programar seguimiento automático (usando instancia importada)
     // await jobService.scheduleTrackingUpdate(transaction.id, purchaseResult.trackingNumber);
@@ -593,11 +605,11 @@ export class AutomatedBusinessService {
   private async autoCreateListing(opportunity: any): Promise<void> {
     try {
       if (this.config.environment === 'sandbox') {
-        console.log('🧪 SANDBOX: Simulando creación de listing');
+        logger.info('🧪 SANDBOX: Simulando creación de listing', { opportunityTitle: opportunity.title });
         return;
       }
 
-      console.log(`📝 Creando listing automático: ${opportunity.title}`);
+      logger.info('📝 Creando listing automático', { opportunityTitle: opportunity.title });
       
       const listingData = {
         title: opportunity.title,
@@ -618,7 +630,11 @@ export class AutomatedBusinessService {
       });
 
     } catch (error) {
-      console.error('❌ Error creando listing automático:', error);
+      logger.error('❌ Error creando listing automático', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        opportunityTitle: opportunity.title
+      });
     }
   }
 
@@ -652,7 +668,10 @@ ${opportunity.aiAnalysis.strengths.map(s => `• ${s}`).join('\n')}
       const images = await this.scrapingService.getProductImages(productTitle);
       return images.slice(0, 5); // Máximo 5 imágenes
     } catch (error) {
-      console.warn('⚠️ Error obteniendo imágenes:', error.message);
+      logger.warn('⚠️ Error obteniendo imágenes', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return [];
     }
   }
@@ -673,7 +692,11 @@ ${opportunity.aiAnalysis.strengths.map(s => `• ${s}`).join('\n')}
           this.activeTransactions.delete(id);
         }
       } catch (error) {
-        console.error(`❌ Error monitoreando transacción ${id}:`, error);
+        logger.error('❌ Error monitoreando transacción', {
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          transactionId: id
+        });
       }
     }
   }
@@ -701,7 +724,10 @@ ${opportunity.aiAnalysis.strengths.map(s => `• ${s}`).join('\n')}
       }
 
     } catch (error) {
-      console.warn('⚠️ Error actualizando tracking:', error.message);
+      logger.warn('⚠️ Error actualizando tracking', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   }
 
@@ -717,7 +743,7 @@ ${opportunity.aiAnalysis.strengths.map(s => `• ${s}`).join('\n')}
    */
   updateConfig(newConfig: Partial<AutomationConfig>): void {
     this.config = { ...this.config, ...newConfig };
-    console.log(`⚙️ Configuración actualizada:`, this.config);
+    logger.info('⚙️ Configuración actualizada', { config: this.config });
     
     // Notificar cambio de modo
     if (newConfig.mode) {

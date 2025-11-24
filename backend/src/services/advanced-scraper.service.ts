@@ -13,6 +13,7 @@ import ManualAuthRequiredError from '../errors/manual-auth-required.error';
 import { marketplaceAuthStatusService } from './marketplace-auth-status.service';
 import { resolvePrice, resolvePriceRange } from '../utils/currency.utils';
 import fxService from './fx.service';
+import logger from '../config/logger';
 
 // Configurar Puppeteer con plugin stealth para evadir detección
 puppeteer.use(StealthPlugin());
@@ -1037,14 +1038,14 @@ export class AdvancedMarketplaceScraper {
             }).filter((p: any) => p.title && p.price);
 
             if (products.length > 0) {
-              console.log(`✅ Extraídos ${products.length} productos desde runParams (script)`);
+              logger.info('Extraídos productos desde runParams (script)', { count: products.length });
               return products;
             }
           }
         }
 
         // ✅ Esperar más tiempo si no se encontraron productos inicialmente
-        console.log('⏳ Esperando runParams...');
+        logger.debug('Esperando runParams...');
         
         // Hacer scroll adicional para activar carga
         try {
@@ -1107,48 +1108,48 @@ export class AdvancedMarketplaceScraper {
           })).filter((p: any) => p.title && p.price);
 
           if (products.length > 0) {
-            console.log(`✅ Extraídos ${products.length} productos desde runParams (window)`);
+            logger.info('Extraídos productos desde runParams (window)', { count: products.length });
             return products;
           }
         }
-        console.log('⚠️  runParams no retornó productos o estructura no reconocida');
+        logger.warn('runParams no retornó productos o estructura no reconocida');
       } catch (runParamsError: any) {
-        console.log('⚠️  No se pudo analizar runParams:', runParamsError?.message || runParamsError);
+        logger.warn('No se pudo analizar runParams', { error: runParamsError?.message || String(runParamsError) });
       }
 
       if (products.length > 0) {
-        console.log(`✅ [SCRAPER] Productos encontrados desde runParams/API: ${products.length}`);
+        logger.info('Productos encontrados desde runParams/API', { count: products.length });
         return products;
       }
       
-      console.log(`⚠️  [SCRAPER] No se encontraron productos desde runParams/API, intentando DOM scraping...`);
+      logger.debug('No se encontraron productos desde runParams/API, intentando DOM scraping...');
 
       if (apiCapturedItems.length > 0) {
         const normalizedApi = apiCapturedItems
           .map(item => this.normalizeAliExpressItem(item, aliExpressLocalCurrency || undefined, userBaseCurrency || undefined))
           .filter((item): item is ScrapedProduct => Boolean(item));
         if (normalizedApi.length > 0) {
-          console.log(`✅ Extraídos ${normalizedApi.length} productos desde API interna`);
+          logger.info('Extraídos productos desde API interna', { count: normalizedApi.length });
           return normalizedApi.slice(0, 40);
         }
       }
 
       const niDataProducts = await this.extractProductsFromNiData(page, aliExpressLocalCurrency || undefined, userBaseCurrency || undefined);
       if (niDataProducts.length > 0) {
-        console.log(`✅ Extraídos ${niDataProducts.length} productos desde __NI_DATA__`);
+        logger.info('Extraídos productos desde __NI_DATA__', { count: niDataProducts.length });
         return niDataProducts;
       }
 
       // ✅ Intentar extracción desde scripts con __AER_DATA__ u otros preloads
       const scriptProducts = await this.extractProductsFromScripts(page, aliExpressLocalCurrency || undefined, userBaseCurrency || undefined);
       if (scriptProducts.length > 0) {
-        console.log(`✅ Extraídos ${scriptProducts.length} productos desde scripts embebidos`);
+        logger.info('Extraídos productos desde scripts embebidos', { count: scriptProducts.length });
         return scriptProducts;
       }
 
       // ✅ Si todo lo anterior falló, intentar con scraping DOM clásico
       // Esperar más tiempo para que los productos se rendericen completamente
-      console.log('⏳ Esperando que los productos se rendericen en el DOM...');
+      logger.debug('Esperando que los productos se rendericen en el DOM...');
       await new Promise(resolve => setTimeout(resolve, 5000)); // ✅ Aumentar de 4s a 5s
 
       // ✅ Esperar a que carguen los productos con múltiples selectores alternativos
@@ -1184,7 +1185,7 @@ export class AdvancedMarketplaceScraper {
             
             if (count > 0) {
               productsLoaded = true;
-              console.log(`✅ Productos encontrados con selector: ${selector} (${count} items)`);
+              logger.info('Productos encontrados con selector', { selector, count });
               break;
             }
           } catch {
@@ -1196,7 +1197,7 @@ export class AdvancedMarketplaceScraper {
         
         // Si no se encontraron, hacer scroll y esperar más
         if (attempt < 2) {
-          console.log(`⏳ Intento ${attempt + 1} falló, haciendo scroll y esperando más...`);
+          logger.debug(`⏳ Intento ${attempt + 1} falló, haciendo scroll y esperando más...`, { attempt, userId, query });
           await page.evaluate(() => {
             const w = (globalThis as any).window;
             w.scrollBy?.(0, 1000);
@@ -1206,7 +1207,7 @@ export class AdvancedMarketplaceScraper {
       }
 
       if (!productsLoaded) {
-        console.warn('⚠️  No se encontraron productos con ningún selector, intentando extraer de todos modos...');
+        logger.warn('No se encontraron productos con ningún selector, intentando extraer de todos modos...');
         // Hacer scroll completo de la página para activar lazy loading
         await page.evaluate(() => {
           const w = (globalThis as any).window;
@@ -1801,16 +1802,19 @@ export class AdvancedMarketplaceScraper {
       }).filter((p: any) => p !== null);
 
       if (productsWithResolvedPrices.length === 0) {
-        console.warn('⚠️  [SCRAPER] No se encontraron productos en el DOM después de todos los métodos de extracción');
-        console.warn('⚠️  [SCRAPER] Debug: query="' + query + '", userId=' + userId);
-        console.warn('⚠️  [SCRAPER] Resumen de intentos:');
-        console.warn('   - runParams desde script: falló');
-        console.warn('   - runParams desde window: falló');
-        console.warn('   - API responses capturadas: ' + (apiCapturedItems.length > 0 ? apiCapturedItems.length + ' items' : 'ninguna'));
-        console.warn('   - __NI_DATA__: falló');
-        console.warn('   - Scripts embebidos: falló');
-        console.warn('   - DOM scraping: falló');
-        console.warn('⚠️  [SCRAPER] URL final:', page.url());
+        logger.warn('[SCRAPER] No se encontraron productos en el DOM después de todos los métodos de extracción', {
+          query,
+          userId,
+          url: page.url(),
+          attempts: {
+            runParamsScript: 'falló',
+            runParamsWindow: 'falló',
+            apiResponses: apiCapturedItems.length > 0 ? `${apiCapturedItems.length} items` : 'ninguna',
+            niData: 'falló',
+            embeddedScripts: 'falló',
+            domScraping: 'falló'
+          }
+        });
         
         // ✅ Verificar si hay CAPTCHA o bloqueo antes de retornar vacío
         const hasCaptchaOrBlock = await page.evaluate(() => {
@@ -1826,7 +1830,7 @@ export class AdvancedMarketplaceScraper {
         }).catch(() => false);
         
         if (hasCaptchaOrBlock) {
-          console.warn('⚠️  [SCRAPER] CAPTCHA o bloqueo detectado en la página');
+          logger.warn('[SCRAPER] CAPTCHA o bloqueo detectado en la página', { userId, query, url: page.url() });
           const currentUrl = page.url();
           await this.captureAliExpressSnapshot(page, `captcha-block-${Date.now()}`).catch(() => {});
           
@@ -1841,7 +1845,7 @@ export class AdvancedMarketplaceScraper {
               throw new ManualAuthRequiredError('aliexpress', manualSession.token, currentUrl, manualSession.expiresAt);
             } else {
               // ✅ NO hay sesión pendiente - solo crear una nueva si no existe
-              console.warn('⚠️  [SCRAPER] CAPTCHA/bloqueo detectado pero no hay sesión manual pendiente. Creando sesión manual...');
+              logger.info('[SCRAPER] CAPTCHA/bloqueo detectado pero no hay sesión manual pendiente. Creando sesión manual...', { userId });
               try {
                 const newSession = await ManualAuthService.startSession(userId, 'aliexpress', currentUrl);
                 throw new ManualAuthRequiredError('aliexpress', newSession.token, newSession.loginUrl, newSession.expiresAt);
@@ -1850,7 +1854,7 @@ export class AdvancedMarketplaceScraper {
                   throw sessionError;
                 }
                 // Si no se pudo crear la sesión, retornar vacío
-                console.warn('⚠️  [SCRAPER] No se pudo crear sesión manual. Retornando vacío.');
+                logger.warn('[SCRAPER] No se pudo crear sesión manual. Retornando vacío.', { userId, error: sessionError.message });
                 return [];
               }
             }
@@ -1859,14 +1863,14 @@ export class AdvancedMarketplaceScraper {
               throw authError;
             }
             // Si hay otro error, retornar vacío
-            console.warn('⚠️  [SCRAPER] Error al manejar CAPTCHA/bloqueo. Retornando vacío.');
+            logger.warn('[SCRAPER] Error al manejar CAPTCHA/bloqueo. Retornando vacío.', { userId, error: authError.message });
             return [];
           }
         }
         
-        console.warn('⚠️  [SCRAPER] Intentando capturar snapshot para diagnóstico...');
+        logger.debug('[SCRAPER] Intentando capturar snapshot para diagnóstico...', { userId, query });
         await this.captureAliExpressSnapshot(page, `no-products-${Date.now()}`).catch((err) => {
-          console.warn('⚠️  No se pudo capturar snapshot:', err.message);
+          logger.warn('[SCRAPER] No se pudo capturar snapshot', { userId, error: err.message });
         });
         
         // Verificar si hay algún error visible en la página
@@ -1897,7 +1901,7 @@ export class AdvancedMarketplaceScraper {
             return null;
           });
           if (pageError) {
-            console.warn('⚠️  [SCRAPER] Error detectado en la página de AliExpress:', pageError);
+            logger.warn('[SCRAPER] Error detectado en la página de AliExpress', { userId, query, pageError });
           }
         } catch (evalErr) {
           // Ignorar errores de evaluación
@@ -1907,9 +1911,9 @@ export class AdvancedMarketplaceScraper {
         if (process.env.NODE_ENV !== 'production') {
           try {
             const screenshot = await page.screenshot({ encoding: 'base64' });
-            console.log('📸 [SCRAPER] Screenshot capturado (base64, length:', screenshot.length, ')');
+            logger.debug('[SCRAPER] Screenshot capturado', { userId, query, screenshotLength: screenshot.length });
           } catch (e) {
-            console.warn('⚠️  No se pudo capturar screenshot:', (e as Error).message);
+            logger.warn('[SCRAPER] No se pudo capturar screenshot', { userId, query, error: (e as Error).message });
           }
         }
         
@@ -1948,7 +1952,12 @@ export class AdvancedMarketplaceScraper {
       if (error instanceof ManualAuthRequiredError) {
         throw error;
       }
-      console.error('❌ Error scraping AliExpress:', error);
+      logger.error('[SCRAPER] Error scraping AliExpress', { 
+        userId, 
+        query, 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return [];
     } finally {
       page.off('response', apiResponseHandler);
@@ -1962,7 +1971,7 @@ export class AdvancedMarketplaceScraper {
   async scrapeEbay(query: string): Promise<ScrapedProduct[]> {
     if (!this.browser) await this.init();
 
-    console.log(`🔍 Scraping REAL eBay: "${query}"`);
+    logger.info('[SCRAPER] Scraping REAL eBay', { query });
 
     const page = await this.browser!.newPage();
 
@@ -1970,7 +1979,7 @@ export class AdvancedMarketplaceScraper {
       await this.setupRealBrowser(page);
 
       const searchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&_sacat=0&LH_BIN=1`;
-      console.log(`📡 Navegando a: ${searchUrl}`);
+      logger.debug('[SCRAPER] Navegando a eBay', { query, url: searchUrl });
 
       await page.goto(searchUrl, {
         waitUntil: 'networkidle2',
@@ -2014,18 +2023,22 @@ export class AdvancedMarketplaceScraper {
               });
             }
           } catch (error) {
-            console.error('Error extracting eBay product:', error);
+            logger.debug('[SCRAPER] Error extracting eBay product', { error: error instanceof Error ? error.message : String(error) });
           }
         });
 
         return results;
       });
 
-      console.log(`✅ Extraídos ${products.length} productos REALES de eBay`);
+      logger.info('[SCRAPER] Extraídos productos REALES de eBay', { query, count: products.length });
       return products;
 
     } catch (error) {
-      console.error('❌ Error scraping eBay:', error);
+      logger.error('[SCRAPER] Error scraping eBay', { 
+        query, 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return [];
     } finally {
       await page.close();
@@ -2038,7 +2051,7 @@ export class AdvancedMarketplaceScraper {
   async scrapeAmazon(query: string): Promise<ScrapedProduct[]> {
     if (!this.browser) await this.init();
 
-    console.log(`🔍 Scraping REAL Amazon: "${query}"`);
+    logger.info('[SCRAPER] Scraping REAL Amazon', { query });
 
     const page = await this.browser!.newPage();
 
@@ -2047,7 +2060,7 @@ export class AdvancedMarketplaceScraper {
 
       // Amazon detecta bots fácilmente, usar múltiples estrategias
       const searchUrl = `https://www.amazon.com/s?k=${encodeURIComponent(query)}&ref=sr_pg_1`;
-      console.log(`📡 Navegando a: ${searchUrl}`);
+      logger.debug('[SCRAPER] Navegando a Amazon', { query, url: searchUrl });
 
       await page.goto(searchUrl, {
         waitUntil: 'networkidle2',
@@ -2065,7 +2078,7 @@ export class AdvancedMarketplaceScraper {
       try {
         await page.waitForSelector('[data-component-type="s-search-result"]', { timeout: 10000 });
       } catch {
-        console.log('⚠️  No se encontraron productos estándar, intentando selector alternativo...');
+        logger.debug('[SCRAPER] No se encontraron productos estándar, intentando selector alternativo', { query });
         await page.waitForSelector('.s-result-item', { timeout: 10000 });
       }
 
@@ -2103,18 +2116,22 @@ export class AdvancedMarketplaceScraper {
               });
             }
           } catch (error) {
-            console.error('Error extracting Amazon product:', error);
+            logger.debug('[SCRAPER] Error extracting Amazon product', { error: error instanceof Error ? error.message : String(error) });
           }
         });
 
         return results;
       });
 
-      console.log(`✅ Extraídos ${products.length} productos REALES de Amazon`);
+      logger.info('[SCRAPER] Extraídos productos REALES de Amazon', { query, count: products.length });
       return products;
 
     } catch (error) {
-      console.error('❌ Error scraping Amazon:', error);
+      logger.error('[SCRAPER] Error scraping Amazon', { 
+        query, 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return this.useAmazonAlternative(query);
     } finally {
       await page.close();

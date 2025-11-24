@@ -62,34 +62,40 @@ export default function Products() {
 
   const handleApprove = async (productId: string) => {
     try {
-      await api.patch(`/api/products/${productId}/status`, { status: 'APPROVED' });
-      toast.success('Producto aprobado');
+      const response = await api.patch(`/api/products/${productId}/status`, { status: 'APPROVED' });
+      const message = response.data?.message || 'Producto aprobado';
+      toast.success(message);
       fetchProducts();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error approving product:', error);
-      toast.error('Error al aprobar producto');
+      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || 'Error al aprobar producto';
+      toast.error(errorMessage);
     }
   };
 
   const handleReject = async (productId: string) => {
     try {
-      await api.patch(`/api/products/${productId}/status`, { status: 'REJECTED' });
-      toast.success('Producto rechazado');
+      const response = await api.patch(`/api/products/${productId}/status`, { status: 'REJECTED' });
+      const message = response.data?.message || 'Producto rechazado';
+      toast.success(message);
       fetchProducts();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error rejecting product:', error);
-      toast.error('Error al rechazar producto');
+      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || 'Error al rechazar producto';
+      toast.error(errorMessage);
     }
   };
 
   const handlePublish = async (productId: string) => {
     try {
-      await api.patch(`/api/products/${productId}/status`, { status: 'PUBLISHED' });
-      toast.success('Producto publicado');
+      const response = await api.patch(`/api/products/${productId}/status`, { status: 'PUBLISHED' });
+      const message = response.data?.message || 'Producto publicado';
+      toast.success(message);
       fetchProducts();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error publishing product:', error);
-      toast.error('Error al publicar producto');
+      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || 'Error al publicar producto';
+      toast.error(errorMessage);
     }
   };
 
@@ -97,12 +103,14 @@ export default function Products() {
     if (!confirm('¿Estás seguro de eliminar este producto?')) return;
     
     try {
-      await api.delete(`/api/products/${productId}`);
-      toast.success('Producto eliminado');
+      const response = await api.delete(`/api/products/${productId}`);
+      const message = response.data?.message || 'Producto eliminado';
+      toast.success(message);
       fetchProducts();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting product:', error);
-      toast.error('Error al eliminar producto');
+      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || 'Error al eliminar producto';
+      toast.error(errorMessage);
     }
   };
 

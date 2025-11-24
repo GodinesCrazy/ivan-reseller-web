@@ -54,7 +54,8 @@ model User {
   reportHistory           ReportHistory[]
   scheduledReports        ScheduledReport[]
   userSettings            UserSettings?
-  accessRequestsReviewed  AccessRequest[] @relation("AccessRequestReviewer") // Solicitudes de acceso revisadas por este admin
+  accessRequestsReviewed  AccessRequest[]         @relation("AccessRequestReviewer") // Solicitudes de acceso revisadas por este admin
+  autopilotWorkflows      AutopilotWorkflow[] // Workflows personalizados del usuario
 
   @@index([email])
   @@index([username])
@@ -584,25 +585,53 @@ model ScheduledReport {
 
 // ✅ P0.5: Tabla para solicitudes de acceso (sistema de registro)
 model AccessRequest {
-  id          Int       @id @default(autoincrement())
-  username    String
-  email       String
-  fullName    String?
-  company     String?
-  reason      String? // Razón por la que quiere acceso
-  status      String   @default("PENDING") // "PENDING", "APPROVED", "REJECTED"
-  reviewedBy  Int? // ID del admin que revisó la solicitud
-  reviewedAt  DateTime?
+  id              Int       @id @default(autoincrement())
+  username        String
+  email           String
+  fullName        String?
+  company         String?
+  reason          String? // Razón por la que quiere acceso
+  status          String    @default("PENDING") // "PENDING", "APPROVED", "REJECTED"
+  reviewedBy      Int? // ID del admin que revisó la solicitud
+  reviewedAt      DateTime?
   rejectionReason String? // Razón de rechazo (si aplica)
-  notes       String? // Notas internas del admin
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  reviewer    User? @relation("AccessRequestReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  notes           String? // Notas internas del admin
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  reviewer User? @relation("AccessRequestReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
 
   @@unique([email])
   @@index([status])
   @@index([createdAt])
   @@index([reviewedBy])
   @@map("access_requests")
+}
+
+// ✅ WORKFLOWS PERSONALIZADOS DE AUTOPILOT
+model AutopilotWorkflow {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  name        String
+  description String?
+  type        String // search, analyze, publish, reprice, custom
+  enabled     Boolean   @default(true)
+  schedule    String? // Cron expression (ej: "0 */6 * * *" para cada 6 horas)
+  conditions  Json? // JSON con condiciones para ejecutar el workflow
+  actions     Json? // JSON con acciones a ejecutar
+  lastRun     DateTime? // Última vez que se ejecutó
+  nextRun     DateTime? // Próxima ejecución programada
+  runCount    Int       @default(0) // Contador de ejecuciones
+  logs        Json? // JSON array con logs de ejecuciones (últimos 50)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, enabled])
+  @@index([userId, type])
+  @@index([enabled, nextRun])
+  @@index([nextRun])
+  @@map("autopilot_workflows")
 }

@@ -297,7 +297,7 @@ export class MarketplaceService {
           id: request.productId,
           userId: userId,
         },
-      });
+      }) as any; // Type assertion para permitir todos los estados posibles
 
       if (!product) {
         throw new AppError('Product not found', 404);
@@ -335,7 +335,8 @@ export class MarketplaceService {
         throw new AppError(`Cannot publish a product with status: ${product.status}. Product must be APPROVED.`, 400);
       }
 
-      if (product.isPublished && product.status === 'PUBLISHED') {
+      // ✅ Verificar si el producto ya está publicado
+      if (product.isPublished || product.status === 'PUBLISHED') {
         throw new AppError('Product is already published. Use updateListing to modify it.', 400);
       }
 
@@ -502,9 +503,29 @@ export class MarketplaceService {
         throw new AppError(`Price (${price}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
       }
 
+      // ✅ Q6: Generar título y descripción con IA si está disponible (solo si no se proporcionan en customData)
+      let finalTitle = customData?.title || product.title;
+      let finalDescription = customData?.description || product.description || '';
+      
+      if (!customData?.title && userId) {
+        try {
+          finalTitle = await this.generateAITitle(product, 'eBay', userId);
+        } catch (error) {
+          logger.debug('Failed to generate AI title for eBay, using original', { error });
+        }
+      }
+      
+      if (!customData?.description && userId) {
+        try {
+          finalDescription = await this.generateAIDescription(product, 'eBay', userId);
+        } catch (error) {
+          logger.debug('Failed to generate AI description for eBay, using original', { error });
+        }
+      }
+
       const ebayProduct: EbayProduct = {
-        title: customData?.title || product.title,
-        description: customData?.description || product.description || '',
+        title: finalTitle,
+        description: finalDescription,
         categoryId,
         startPrice: price,
         quantity: this.resolveListingQuantity(product, customData?.quantity),
@@ -514,9 +535,8 @@ export class MarketplaceService {
 
       const result = await ebayService.createListing(`IVAN-${product.id}`, ebayProduct);
 
-      // ✅ CORREGIDO: Mover updateProductMarketplaceInfo DESPUÉS de verificar result.success
-      // Solo crear listing en BD si la publicación fue exitosa
-      if (result.success) {
+      // ✅ P1: Solo actualizar BD y estado si la publicación fue exitosa
+      if (result.success && result.itemId) {
         // Update product with marketplace info (solo si fue exitoso)
         await this.updateProductMarketplaceInfo(product.id, 'ebay', {
           listingId: result.itemId,
@@ -524,7 +544,10 @@ export class MarketplaceService {
           publishedAt: new Date(),
         });
 
-        // ✅ CORREGIDO: Usar función helper para sincronizar estado e isPublished
+        // ✅ NOTA: El estado del producto se actualizará desde publisher.routes.ts
+        // después de evaluar todos los resultados de múltiples marketplaces.
+        // Si se llama desde un flujo de publicación única, aquí se actualiza.
+        // Si se llama desde publishToMultipleMarketplaces, el estado se maneja allí.
         const { productService } = await import('./product.service');
         await productService.updateProductStatusSafely(
           product.id,
@@ -534,12 +557,21 @@ export class MarketplaceService {
         );
       }
 
-      return {
-        success: true,
-        marketplace: 'ebay',
-        listingId: result.itemId,
-        listingUrl: result.listingUrl,
-      };
+      // ✅ P1: Retornar resultado correcto según éxito o fallo
+      if (result.success && result.itemId) {
+        return {
+          success: true,
+          marketplace: 'ebay',
+          listingId: result.itemId,
+          listingUrl: result.listingUrl,
+        };
+      } else {
+        return {
+          success: false,
+          marketplace: 'ebay',
+          error: result.error || 'Failed to create listing on eBay',
+        };
+      }
     } catch (error) {
       return {
         success: false,
@@ -591,9 +623,29 @@ export class MarketplaceService {
         throw new AppError(`Price (${price}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
       }
 
+      // ✅ Q6: Generar título y descripción con IA si está disponible
+      let finalTitle = customData?.title || product.title;
+      let finalDescription = customData?.description || product.description || '';
+      
+      if (!customData?.title && userId) {
+        try {
+          finalTitle = await this.generateAITitle(product, 'MercadoLibre', userId);
+        } catch (error) {
+          logger.debug('Failed to generate AI title for MercadoLibre, using original', { error });
+        }
+      }
+      
+      if (!customData?.description && userId) {
+        try {
+          finalDescription = await this.generateAIDescription(product, 'MercadoLibre', userId);
+        } catch (error) {
+          logger.debug('Failed to generate AI description for MercadoLibre, using original', { error });
+        }
+      }
+
       const mlProduct: MLProduct = {
-        title: customData?.title || product.title,
-        description: customData?.description || product.description || '',
+        title: finalTitle,
+        description: finalDescription,
         categoryId,
         price,
         quantity: this.resolveListingQuantity(product, customData?.quantity),
@@ -607,9 +659,8 @@ export class MarketplaceService {
 
       const result = await mlService.createListing(mlProduct);
 
-      // ✅ CORREGIDO: Mover updateProductMarketplaceInfo DESPUÉS de verificar result.success
-      // Solo crear listing en BD si la publicación fue exitosa
-      if (result.success) {
+      // ✅ P1: Solo actualizar BD y estado si la publicación fue exitosa
+      if (result.success && result.itemId) {
         // Update product with marketplace info (solo si fue exitoso)
         await this.updateProductMarketplaceInfo(product.id, 'mercadolibre', {
           listingId: result.itemId,
@@ -617,7 +668,8 @@ export class MarketplaceService {
           publishedAt: new Date(),
         });
 
-        // ✅ CORREGIDO: Usar función helper para sincronizar estado e isPublished
+        // ✅ NOTA: El estado del producto se actualizará desde publisher.routes.ts
+        // después de evaluar todos los resultados de múltiples marketplaces.
         const { productService } = await import('./product.service');
         await productService.updateProductStatusSafely(
           product.id,
@@ -627,12 +679,21 @@ export class MarketplaceService {
         );
       }
 
-      return {
-        success: true,
-        marketplace: 'mercadolibre',
-        listingId: result.itemId,
-        listingUrl: result.permalink,
-      };
+      // ✅ P1: Retornar resultado correcto según éxito o fallo
+      if (result.success && result.itemId) {
+        return {
+          success: true,
+          marketplace: 'mercadolibre',
+          listingId: result.itemId,
+          listingUrl: result.permalink,
+        };
+      } else {
+        return {
+          success: false,
+          marketplace: 'mercadolibre',
+          error: result.error || 'Failed to create listing on MercadoLibre',
+        };
+      }
     } catch (error) {
       return {
         success: false,
@@ -689,7 +750,7 @@ export class MarketplaceService {
         currency = metadata.currency.toUpperCase();
       } else {
         try {
-          const { userSettingsService } = await import('./user-settings.service');
+          const userSettingsService = (await import('./user-settings.service')).default;
           const baseCurrency = await userSettingsService.getUserBaseCurrency(userId);
           currency = baseCurrency;
         } catch (error) {
@@ -701,10 +762,30 @@ export class MarketplaceService {
         }
       }
 
+      // ✅ Q6: Generar título y descripción con IA si está disponible
+      let finalTitle = customData?.title || product.title;
+      let finalDescription = customData?.description || product.description || '';
+      
+      if (!customData?.title && userId) {
+        try {
+          finalTitle = await this.generateAITitle(product, 'Amazon', userId);
+        } catch (error) {
+          logger.debug('Failed to generate AI title for Amazon, using original', { error });
+        }
+      }
+      
+      if (!customData?.description && userId) {
+        try {
+          finalDescription = await this.generateAIDescription(product, 'Amazon', userId);
+        } catch (error) {
+          logger.debug('Failed to generate AI description for Amazon, using original', { error });
+        }
+      }
+
       const amazonProduct: AmazonProduct = {
         sku: `IVAN-${product.id}`,
-        title: customData?.title || product.title,
-        description: customData?.description || product.description || '',
+        title: finalTitle,
+        description: finalDescription,
         price,
         currency: currency.toUpperCase(),
         quantity: this.resolveListingQuantity(product, customData?.quantity),
@@ -729,17 +810,17 @@ export class MarketplaceService {
 
       const result = await amazonService.createListing(amazonProduct);
 
-      // ✅ CORREGIDO: Ya estaba correcto, pero mejorado para consistencia
-      // Solo crear listing en BD si la publicación fue exitosa
-      if (result.success) {
+      // ✅ P1: Solo actualizar BD y estado si la publicación fue exitosa
+      if (result.success && result.asin) {
         // Update product with Amazon information (solo si fue exitoso)
         await this.updateProductMarketplaceInfo(product.id, 'amazon', {
-          listingId: result.asin || '',
+          listingId: result.asin,
           listingUrl: result.asin ? `https://amazon.com/dp/${result.asin}` : '',
           publishedAt: new Date(),
         });
 
-        // ✅ CORREGIDO: Usar función helper para sincronizar estado e isPublished
+        // ✅ NOTA: El estado del producto se actualizará desde publisher.routes.ts
+        // después de evaluar todos los resultados de múltiples marketplaces.
         const { productService } = await import('./product.service');
         await productService.updateProductStatusSafely(
           product.id,
@@ -749,12 +830,21 @@ export class MarketplaceService {
         );
       }
 
-      return {
-        success: result.success,
-        marketplace: 'amazon',
-        listingId: result.asin,
-        listingUrl: result.asin ? `https://amazon.com/dp/${result.asin}` : undefined,
-      };
+      // ✅ P1: Retornar resultado correcto según éxito o fallo
+      if (result.success && result.asin) {
+        return {
+          success: true,
+          marketplace: 'amazon',
+          listingId: result.asin,
+          listingUrl: result.asin ? `https://amazon.com/dp/${result.asin}` : undefined,
+        };
+      } else {
+        return {
+          success: false,
+          marketplace: 'amazon',
+          error: result.message || (result.errors && result.errors.length > 0 ? result.errors.join(', ') : 'Failed to create listing on Amazon'),
+        };
+      }
     } catch (error) {
       return {
         success: false,
@@ -782,7 +872,11 @@ export class MarketplaceService {
         await prisma.marketplaceListing.create({ data: { productId, userId: product.userId, marketplace, listingId: info.listingId, listingUrl: info.listingUrl, publishedAt: info.publishedAt } });
       }
     } catch (error) {
-      console.error(`Failed to update product marketplace info:`, error);
+      logger.error('Failed to update product marketplace info', {
+        productId,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
     }
   }
 
@@ -839,18 +933,130 @@ export class MarketplaceService {
               await ebayService.updateInventoryQuantity(`IVAN-${product.id}`, newQuantity);
               break;
 
-            case 'mercadolibre':
+            case 'mercadolibre': {
               const mlService = new MercadoLibreService(credentials.credentials);
-              // TODO: Get listing ID from database
-              // await mlService.updateListingQuantity(listingId, newQuantity);
+              // Obtener listingId desde la base de datos
+              const mlListing = listings.find(l => l.marketplace === 'mercadolibre' && l.listingId);
+              if (mlListing && mlListing.listingId) {
+                await mlService.updateListingQuantity(mlListing.listingId, newQuantity);
+              } else {
+                logger.warn('MercadoLibre listing ID not found for inventory sync', { productId, userId });
+              }
               break;
+            }
           }
         } catch (error) {
-          console.error(`Failed to sync inventory on ${marketplace}:`, error);
+          logger.error(`Failed to sync inventory on ${marketplace}`, {
+            marketplace,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined
+          });
         }
       }
     } catch (error) {
       throw new AppError(`Failed to sync inventory: ${error.message}`, 500);
+    }
+  }
+
+  /**
+   * ✅ Q6: Generar título optimizado con IA (si está disponible)
+   */
+  private async generateAITitle(product: any, marketplace: string, userId?: number): Promise<string> {
+    try {
+      // Intentar obtener credenciales de GROQ
+      const { CredentialsManager } = await import('./credentials-manager.service');
+      const groqCreds = await CredentialsManager.getCredentials(userId || 0, 'groq', 'production');
+      
+      if (!groqCreds || !groqCreds.apiKey) {
+        return product.title; // Fallback a título original
+      }
+
+      const axios = (await import('axios')).default;
+      const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          model: 'llama-3.1-8b-instant',
+          messages: [
+            {
+              role: 'system',
+              content: `You are a professional e-commerce copywriter. Create SEO-optimized product titles for ${marketplace} marketplace. Titles should be clear, keyword-rich, and under 80 characters.`,
+            },
+            {
+              role: 'user',
+              content: `Create an optimized product title for ${marketplace}:\nOriginal: ${product.title}\nCategory: ${product.category || 'general'}\n\nReturn only the optimized title, no explanations.`,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 100,
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${groqCreds.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000,
+        }
+      );
+
+      const aiTitle = response.data.choices[0]?.message?.content?.trim();
+      return aiTitle && aiTitle.length > 0 ? aiTitle : product.title;
+    } catch (error) {
+      logger.debug('Failed to generate AI title, using original', {
+        error: error instanceof Error ? error.message : String(error),
+        marketplace,
+      });
+      return product.title; // Fallback a título original
+    }
+  }
+
+  /**
+   * ✅ Q6: Generar descripción optimizada con IA (si está disponible)
+   */
+  private async generateAIDescription(product: any, marketplace: string, userId?: number): Promise<string> {
+    try {
+      // Intentar obtener credenciales de GROQ
+      const { CredentialsManager } = await import('./credentials-manager.service');
+      const groqCreds = await CredentialsManager.getCredentials(userId || 0, 'groq', 'production');
+      
+      if (!groqCreds || !groqCreds.apiKey) {
+        return product.description || ''; // Fallback a descripción original
+      }
+
+      const axios = (await import('axios')).default;
+      const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          model: 'llama-3.1-8b-instant',
+          messages: [
+            {
+              role: 'system',
+              content: `You are a professional e-commerce copywriter. Create compelling, SEO-friendly product descriptions for ${marketplace} marketplace. Descriptions should highlight key features, benefits, and be optimized for conversions. Keep it under 500 words.`,
+            },
+            {
+              role: 'user',
+              content: `Create an optimized product description for ${marketplace}:\nTitle: ${product.title}\nOriginal description: ${product.description || 'No description provided'}\nCategory: ${product.category || 'general'}\n\nReturn only the optimized description, no explanations.`,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 1000,
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${groqCreds.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 15000,
+        }
+      );
+
+      const aiDescription = response.data.choices[0]?.message?.content?.trim();
+      return aiDescription && aiDescription.length > 0 ? aiDescription : (product.description || '');
+    } catch (error) {
+      logger.debug('Failed to generate AI description, using original', {
+        error: error instanceof Error ? error.message : String(error),
+        marketplace,
+      });
+      return product.description || ''; // Fallback a descripción original
     }
   }
 
@@ -883,8 +1089,11 @@ export class MarketplaceService {
         throw new AppError(`New price (${newPrice}) must be greater than AliExpress cost (${product.aliexpressPrice})`, 400);
       }
 
-      // Obtener listings activos
-      const listings = product.marketplaceListings.filter(l => l.isActive);
+      // Obtener listings activos (filtrar por isActive si existe, sino todos)
+      const listings = product.marketplaceListings.filter(l => {
+        // MarketplaceListing no tiene isActive en el schema, usar todos los listings
+        return true;
+      });
       if (listings.length === 0) {
         return { success: true, updated: 0, errors: [] };
       }
@@ -912,37 +1121,105 @@ export class MarketplaceService {
             continue;
           }
 
-          // Actualizar precio según marketplace
+          // ✅ Q5: Actualizar precio según marketplace usando APIs reales
           switch (marketplace) {
-            case 'ebay':
-              // TODO: Implementar actualización de precio en eBay
-              // Por ahora, solo actualizar updatedAt en BD
-              await prisma.marketplaceListing.update({
-                where: { id: listing.id },
-                data: { updatedAt: new Date() }
-              });
-              results.updated++;
-              break;
+            case 'ebay': {
+              const ebayCreds = {
+                ...(credentials.credentials as any),
+                sandbox: credentials.environment === 'sandbox',
+              };
+              const { EbayService } = await import('./ebay.service');
+              const ebayService = new EbayService(ebayCreds);
+              
+              // eBay usa offerId para actualizar precios
+              // Si no tenemos offerId, intentamos usar listingId como SKU
+              const offerId = listing.listingId || listing.sku;
+              if (!offerId) {
+                throw new AppError('eBay listing ID (offerId) is required to update price', 400);
+              }
 
-            case 'amazon':
-              // TODO: Implementar actualización de precio en Amazon
-              // Por ahora, solo actualizar updatedAt en BD
+              // Obtener moneda del producto desde productData o usar USD por defecto
+              let currency = 'USD';
+              try {
+                if (product.productData) {
+                  const productData = typeof product.productData === 'string' 
+                    ? JSON.parse(product.productData) 
+                    : product.productData;
+                  currency = productData.currency || 'USD';
+                }
+              } catch {
+                // Si falla parsear, usar USD
+              }
+              
+              await ebayService.updateListingPrice(offerId, newPrice, currency);
+              
+              // Actualizar en BD
               await prisma.marketplaceListing.update({
                 where: { id: listing.id },
                 data: { updatedAt: new Date() }
               });
               results.updated++;
               break;
+            }
 
-            case 'mercadolibre':
-              // TODO: Implementar actualización de precio en MercadoLibre
-              // Por ahora, solo actualizar updatedAt en BD
+            case 'amazon': {
+              const { AmazonService } = await import('./amazon.service');
+              const amazonService = new AmazonService();
+              await amazonService.setCredentials(credentials.credentials as any);
+              
+              // Amazon usa SKU para actualizar precios
+              const sku = listing.sku || listing.listingId;
+              if (!sku) {
+                throw new AppError('Amazon SKU is required to update price', 400);
+              }
+
+              // Obtener moneda del producto desde productData o usar USD por defecto
+              let currency = 'USD';
+              try {
+                if (product.productData) {
+                  const productData = typeof product.productData === 'string' 
+                    ? JSON.parse(product.productData) 
+                    : product.productData;
+                  currency = productData.currency || 'USD';
+                }
+              } catch {
+                // Si falla parsear, usar USD
+              }
+              const success = await amazonService.updatePrice(sku, newPrice, currency);
+              
+              if (!success) {
+                throw new AppError('Failed to update price on Amazon', 500);
+              }
+
+              // Actualizar en BD
               await prisma.marketplaceListing.update({
                 where: { id: listing.id },
                 data: { updatedAt: new Date() }
               });
               results.updated++;
               break;
+            }
+
+            case 'mercadolibre': {
+              const { MercadoLibreService } = await import('./mercadolibre.service');
+              const mlService = new MercadoLibreService(credentials.credentials as any);
+              
+              // MercadoLibre usa itemId para actualizar precios
+              const itemId = listing.listingId;
+              if (!itemId) {
+                throw new AppError('MercadoLibre item ID is required to update price', 400);
+              }
+
+              await mlService.updateListingPrice(itemId, newPrice);
+              
+              // Actualizar en BD
+              await prisma.marketplaceListing.update({
+                where: { id: listing.id },
+                data: { updatedAt: new Date() }
+              });
+              results.updated++;
+              break;
+            }
           }
         } catch (error) {
           results.errors.push({
@@ -972,7 +1249,7 @@ export class MarketplaceService {
    */
   async getMarketplaceStats(userId: number): Promise<any> {
     try {
-      // TODO: Implement marketplace statistics
+      // FUTURE: Implement marketplace statistics (sales, views, conversion rates)
       return {
         totalListings: 0,
         activeListings: 0,

@@ -92,8 +92,149 @@ export default function Autopilot() {
     { value: '0 0 * * *', label: 'Daily at midnight' },
     { value: '0 9 * * *', label: 'Daily at 9 AM' },
     { value: '0 0 * * 0', label: 'Weekly (Sunday)' },
-    { value: '0 0 1 * *', label: 'Monthly (1st day)' }
+    { value: '0 0 1 * *', label: 'Monthly (1st day)' },
+    { value: 'custom', label: 'Custom Cron Expression' }
   ];
+
+  // ✅ P9: Validar formato de cron expression con preview
+  const validateCronExpression = (cron: string): { valid: boolean; error?: string; description?: string } => {
+    if (cron === 'manual' || cron === '') {
+      return { valid: true, description: 'Manual execution only' };
+    }
+
+    // Formato cron: 5 campos separados por espacios
+    // minuto hora día mes día-semana
+    const parts = cron.trim().split(/\s+/);
+    
+    if (parts.length !== 5) {
+      return { valid: false, error: 'Cron expression must have exactly 5 fields (minute hour day month weekday)' };
+    }
+
+    // Validar cada campo básicamente (números, *, /, -, ,)
+    const cronPattern = /^[\d\*\/\-\,\s]+$/;
+    for (let i = 0; i < parts.length; i++) {
+      if (!cronPattern.test(parts[i])) {
+        return { valid: false, error: `Invalid character in field ${i + 1}` };
+      }
+    }
+
+    // Validaciones básicas por campo
+    const [minute, hour, day, month, weekday] = parts;
+    
+    // Minuto: 0-59
+    if (minute !== '*' && !minute.includes('/') && !minute.includes('-') && !minute.includes(',')) {
+      const min = parseInt(minute);
+      if (isNaN(min) || min < 0 || min > 59) {
+        return { valid: false, error: 'Minute must be between 0-59' };
+      }
+    }
+
+    // Hora: 0-23
+    if (hour !== '*' && !hour.includes('/') && !hour.includes('-') && !hour.includes(',')) {
+      const h = parseInt(hour);
+      if (isNaN(h) || h < 0 || h > 23) {
+        return { valid: false, error: 'Hour must be between 0-23' };
+      }
+    }
+
+    // Día: 1-31
+    if (day !== '*' && !day.includes('/') && !day.includes('-') && !day.includes(',')) {
+      const d = parseInt(day);
+      if (isNaN(d) || d < 1 || d > 31) {
+        return { valid: false, error: 'Day must be between 1-31' };
+      }
+    }
+
+    // Mes: 1-12
+    if (month !== '*' && !month.includes('/') && !month.includes('-') && !month.includes(',')) {
+      const m = parseInt(month);
+      if (isNaN(m) || m < 1 || m > 12) {
+        return { valid: false, error: 'Month must be between 1-12' };
+      }
+    }
+
+    // Día de semana: 0-7 (0 y 7 = domingo)
+    if (weekday !== '*' && !weekday.includes('/') && !weekday.includes('-') && !weekday.includes(',')) {
+      const w = parseInt(weekday);
+      if (isNaN(w) || w < 0 || w > 7) {
+        return { valid: false, error: 'Weekday must be between 0-7 (0 and 7 = Sunday)' };
+      }
+    }
+
+    // ✅ P9: Generar descripción humana básica
+    let description = '';
+    if (minute === '*/15' && hour === '*' && day === '*' && month === '*' && weekday === '*') {
+      description = 'Every 15 minutes';
+    } else if (minute === '0' && hour === '*' && day === '*' && month === '*' && weekday === '*') {
+      description = 'Every hour';
+    } else if (minute === '0' && hour === '0' && day === '*' && month === '*' && weekday === '*') {
+      description = 'Daily at midnight';
+    } else if (minute === '0' && hour === '9' && day === '*' && month === '*' && weekday === '*') {
+      description = 'Daily at 9:00 AM';
+    } else if (minute === '0' && hour === '0' && day === '*' && month === '*' && weekday === '0') {
+      description = 'Weekly on Sunday at midnight';
+    } else if (minute === '0' && hour === '0' && day === '1' && month === '*' && weekday === '*') {
+      description = 'Monthly on the 1st at midnight';
+    } else {
+      description = `Custom schedule: ${cron}`;
+    }
+
+    return { valid: true, description };
+  };
+
+  // ✅ P9: Calcular próximas ejecuciones (preview básico)
+  const getNextRunsPreview = (cron: string, count: number = 3): string[] => {
+    if (cron === 'manual' || !cron || cron === '') {
+      return ['Manual execution only'];
+    }
+
+    const validation = validateCronExpression(cron);
+    if (!validation.valid) {
+      return ['Invalid cron expression'];
+    }
+
+    // Preview básico - el backend calculará el nextRun real
+    const now = new Date();
+    const previews: string[] = [];
+    
+    // Para patrones simples, calcular próximas ejecuciones aproximadas
+    const parts = cron.trim().split(/\s+/);
+    const [minute, hour] = parts;
+
+    if (minute === '*/15' && hour === '*') {
+      // Cada 15 minutos
+      for (let i = 1; i <= count; i++) {
+        const next = new Date(now.getTime() + i * 15 * 60 * 1000);
+        previews.push(next.toLocaleString());
+      }
+    } else if (minute === '0' && hour === '*') {
+      // Cada hora
+      for (let i = 1; i <= count; i++) {
+        const next = new Date(now.getTime() + i * 60 * 60 * 1000);
+        previews.push(next.toLocaleString());
+      }
+    } else if (minute !== '*' && hour !== '*') {
+      // Hora específica
+      const h = parseInt(hour) || 0;
+      const m = parseInt(minute) || 0;
+      for (let i = 0; i < count; i++) {
+        const next = new Date(now);
+        next.setHours(h, m, 0, 0);
+        if (next <= now) {
+          next.setDate(next.getDate() + 1);
+        }
+        next.setDate(next.getDate() + i);
+        previews.push(next.toLocaleString());
+      }
+    } else {
+      previews.push('Schedule will be calculated by the system');
+    }
+
+    return previews;
+  };
+
+  const [customCron, setCustomCron] = useState('');
+  const [cronError, setCronError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -188,15 +329,33 @@ export default function Autopilot() {
       return;
     }
 
+    // ✅ P9: Validar cron expression antes de guardar
+    if (workflowForm.schedule !== 'manual' && workflowForm.schedule !== '') {
+      const finalSchedule = workflowForm.schedule === 'custom' ? customCron : workflowForm.schedule;
+      const validation = validateCronExpression(finalSchedule);
+      if (!validation.valid) {
+        toast.error(`Invalid cron expression: ${validation.error}`);
+        setCronError(validation.error || 'Invalid cron expression');
+        return;
+      }
+    }
+
     try {
+      const workflowData = {
+        ...workflowForm,
+        schedule: workflowForm.schedule === 'custom' ? customCron : workflowForm.schedule
+      };
+
       if (selectedWorkflow) {
-        await api.put(`/api/autopilot/workflows/${selectedWorkflow.id}`, workflowForm);
+        await api.put(`/api/autopilot/workflows/${selectedWorkflow.id}`, workflowData);
         toast.success('Workflow updated successfully');
       } else {
-        await api.post('/api/autopilot/workflows', workflowForm);
+        await api.post('/api/autopilot/workflows', workflowData);
         toast.success('Workflow created successfully');
       }
       setShowWorkflowModal(false);
+      setCustomCron('');
+      setCronError(null);
       loadData();
     } catch (error: any) {
       toast.error('Error saving workflow: ' + (error.response?.data?.error || error.message));
@@ -205,11 +364,13 @@ export default function Autopilot() {
 
   const toggleWorkflow = async (workflowId: number, currentStatus: boolean) => {
     try {
-      await api.put(`/api/autopilot/workflows/${workflowId}`, { enabled: !currentStatus });
-      toast.success(`Workflow ${!currentStatus ? 'enabled' : 'disabled'}`);
+      const response = await api.put(`/api/autopilot/workflows/${workflowId}/enabled`, { enabled: !currentStatus });
+      const message = response.data?.message || `Workflow ${!currentStatus ? 'activado' : 'desactivado'} exitosamente`;
+      toast.success(message);
       loadData();
     } catch (error: any) {
-      toast.error('Error updating workflow');
+      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Error actualizando workflow';
+      toast.error(errorMessage);
     }
   };
 
@@ -227,11 +388,19 @@ export default function Autopilot() {
 
   const runWorkflow = async (workflowId: number) => {
     try {
-      await api.post(`/api/autopilot/workflows/${workflowId}/run`);
-      toast.success('Workflow execution started');
+      const response = await api.post(`/api/autopilot/workflows/${workflowId}/run`);
+      const data = response.data;
+      
+      if (data?.success && data?.executed) {
+        toast.success(data?.message || 'Workflow ejecutado exitosamente');
+      } else {
+        toast.warning(data?.message || 'Workflow ejecutado con advertencias');
+      }
+      
       loadData();
     } catch (error: any) {
-      toast.error('Error running workflow: ' + (error.response?.data?.error || error.message));
+      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Error ejecutando workflow';
+      toast.error(errorMessage);
     }
   };
 
@@ -603,8 +772,16 @@ export default function Autopilot() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Schedule</label>
                   <select
-                    value={workflowForm.schedule}
-                    onChange={(e) => setWorkflowForm({ ...workflowForm, schedule: e.target.value })}
+                    value={workflowForm.schedule === 'custom' ? 'custom' : (schedules.find(s => s.value === workflowForm.schedule) ? workflowForm.schedule : 'manual')}
+                    onChange={(e) => {
+                      if (e.target.value === 'custom') {
+                        setWorkflowForm({ ...workflowForm, schedule: customCron || '*/15 * * * *' });
+                      } else {
+                        setWorkflowForm({ ...workflowForm, schedule: e.target.value });
+                        setCustomCron('');
+                        setCronError(null);
+                      }
+                    }}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
                   >
                     {schedules.map(schedule => (
@@ -613,6 +790,39 @@ export default function Autopilot() {
                       </option>
                     ))}
                   </select>
+                  
+                  {/* ✅ P9: Campo para cron personalizado */}
+                  {(workflowForm.schedule === 'custom' || (workflowForm.schedule !== 'manual' && !schedules.find(s => s.value === workflowForm.schedule))) && (
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        value={workflowForm.schedule === 'custom' ? customCron : workflowForm.schedule}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setCustomCron(value);
+                          const validation = validateCronExpression(value);
+                          if (validation.valid) {
+                            setCronError(null);
+                            setWorkflowForm({ ...workflowForm, schedule: value });
+                          } else {
+                            setCronError(validation.error || 'Invalid cron expression');
+                          }
+                        }}
+                        placeholder="*/15 * * * * (minute hour day month weekday)"
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 ${
+                          cronError ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                      />
+                      {cronError && (
+                        <p className="mt-1 text-sm text-red-600">{cronError}</p>
+                      )}
+                      {!cronError && workflowForm.schedule !== 'manual' && workflowForm.schedule !== '' && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          Format: minute hour day month weekday (e.g., "0 9 * * *" = daily at 9 AM)
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 

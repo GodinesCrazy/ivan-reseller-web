@@ -35,11 +35,30 @@ export default function IntelligentPublisher() {
 
   const approve = useCallback(async (productId: string, marketplaces: string[]) => {
     try {
-      await api.post(`/api/publisher/approve/${productId}`, { marketplaces });
+      const response = await api.post(`/api/publisher/approve/${productId}`, { marketplaces });
+      const data = response.data;
       setPending((prev) => prev.filter(p => p.id !== productId));
-      toast.success('Approved and published');
+      
+      // Mostrar mensaje según el resultado real
+      if (data?.publishResults && Array.isArray(data.publishResults)) {
+        const successCount = data.publishResults.filter((r: any) => r.success).length;
+        const totalCount = data.publishResults.length;
+        
+        if (successCount === totalCount && totalCount > 0) {
+          toast.success(`Producto aprobado y publicado en ${successCount} marketplace(s)`);
+        } else if (successCount > 0) {
+          toast.success(`Producto aprobado. Publicado en ${successCount}/${totalCount} marketplace(s)`);
+        } else if (totalCount > 0) {
+          toast.warning('Producto aprobado, pero la publicación falló. Revisa tus credenciales.');
+        } else {
+          toast.success('Producto aprobado');
+        }
+      } else {
+        toast.success('Producto aprobado');
+      }
     } catch (e: any) {
-      toast.error(`Error approving: ${e?.message || e}`);
+      const errorMessage = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Error al aprobar producto';
+      toast.error(errorMessage);
     }
   }, []);
 

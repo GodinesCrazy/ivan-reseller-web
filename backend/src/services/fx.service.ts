@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { logger } from '../config/logger';
+import { redis, isRedisAvailable } from '../config/redis';
 
 type Rates = Record<string, number>;
 
@@ -20,6 +21,10 @@ class FXService {
   
   // ✅ Monedas que no usan decimales (redondear a enteros)
   private readonly zeroDecimalCurrencies = new Set(['CLP', 'JPY', 'KRW', 'VND', 'IDR']);
+  
+  // ✅ P8: Caché en memoria para conversiones (síncrono)
+  private conversionCache: Map<string, { value: number; timestamp: number }> = new Map();
+  private readonly CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
 
   constructor() {
     this.seedRates();
@@ -227,11 +232,49 @@ class FXService {
     }
   }
 
+  /**
+   * ✅ P8: Obtener clave de caché para conversión
+   */
+  private getCacheKey(amount: number, from: string, to: string): string {
+    // Redondear amount a 2 decimales para evitar claves diferentes por diferencias mínimas
+    const roundedAmount = Math.round(amount * 100) / 100;
+    return `fx:convert:${from.toUpperCase()}:${to.toUpperCase()}:${roundedAmount}`;
+  }
+
+  /**
+   * ✅ P8: Convertir con caché de conversiones (síncrono con caché en memoria)
+   */
   convert(amount: number, from: string, to: string): number {
     if (!isFinite(amount)) return 0;
     const f = from.toUpperCase();
     const t = to.toUpperCase();
     if (f === t) return this.roundCurrency(amount, t);
+    
+    // ✅ P8: Intentar obtener del caché en memoria primero (síncrono)
+    const cacheKey = this.getCacheKey(amount, f, t);
+    const cached = this.conversionCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL_MS) {
+      logger.debug('FXService: conversion cache hit (memory)', { from: f, to: t, amount });
+      return cached.value;
+    }
+    
+    // ✅ P8: Intentar obtener del caché Redis (async, no bloquea)
+    if (isRedisAvailable) {
+      redis.get(cacheKey).then((cachedRedis: string | null) => {
+        if (cachedRedis) {
+          try {
+            const parsed = JSON.parse(cachedRedis);
+            // Actualizar caché en memoria
+            this.conversionCache.set(cacheKey, { value: parsed.value, timestamp: parsed.timestamp || Date.now() });
+            logger.debug('FXService: conversion cache hit (Redis)', { from: f, to: t, amount });
+          } catch (error) {
+            // Si falla parsear, ignorar
+          }
+        }
+      }).catch(() => {
+        // Si falla el caché Redis, continuar con cálculo normal
+      });
+    }
     
     // ✅ Verificar que tenemos las tasas necesarias
     if (!this.rates[f] || !this.rates[t]) {
@@ -257,6 +300,41 @@ class FXService {
     
     // ✅ Redondear según tipo de moneda destino
     const rounded = this.roundCurrency(converted, t);
+    
+    // ✅ P8: Guardar en caché en memoria (síncrono)
+    const timestamp = Date.now();
+    this.conversionCache.set(cacheKey, { value: rounded, timestamp });
+    
+    // ✅ P8: Limpiar caché antiguo (mantener solo últimas 1000 entradas)
+    if (this.conversionCache.size > 1000) {
+      const entries = Array.from(this.conversionCache.entries());
+      const now = Date.now();
+      entries.forEach(([key, value]) => {
+        if ((now - value.timestamp) > this.CACHE_TTL_MS) {
+          this.conversionCache.delete(key);
+        }
+      });
+      // Si aún hay demasiadas, eliminar las más antiguas
+      if (this.conversionCache.size > 1000) {
+        const sorted = entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+        sorted.slice(0, sorted.length - 1000).forEach(([key]) => {
+          this.conversionCache.delete(key);
+        });
+      }
+    }
+    
+    // ✅ P8: Guardar en caché Redis (async, no bloquea)
+    if (isRedisAvailable) {
+      try {
+        // Cachear por 1 hora (3600 segundos) - las tasas cambian lentamente
+        redis.setex(cacheKey, 3600, JSON.stringify({ value: rounded, timestamp }))
+          .catch((error) => {
+            logger.debug('FXService: failed to cache conversion in Redis', { error: error.message });
+          });
+      } catch (error) {
+        // Si falla el caché Redis, no es crítico, continuar
+      }
+    }
     
     // ✅ Logging para diagnóstico (solo para conversiones importantes)
     if (f === 'CLP' || t === 'CLP' || amount > 1000 || Math.abs(converted - rounded) > 0.01) {

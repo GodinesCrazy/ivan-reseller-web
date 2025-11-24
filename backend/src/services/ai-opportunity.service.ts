@@ -1,6 +1,7 @@
 import { AdvancedScrapingService, MarketplaceProduct, scrapingService } from './scraping.service';
 import EbayService, { ArbitrageOpportunity, EBaySearchProduct } from './ebay.service';
 import { AppError } from '../middleware/error.middleware';
+import logger from '../config/logger';
 
 export interface AIOpportunity {
   id: string;
@@ -75,7 +76,7 @@ export class AIOpportunityEngine {
     try {
       this.ebayService = new EbayService(credentials);
     } catch (error) {
-      console.warn('eBay credentials not configured:', error);
+      logger.warn('eBay credentials not configured', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -99,26 +100,26 @@ export class AIOpportunityEngine {
     } = options || {};
 
     try {
-      console.log(`🔍 Searching opportunities for: ${searchQuery}`);
+      logger.info('Searching opportunities', { searchQuery });
 
       // 1. Scraping multi-marketplace
       const scrapedProducts = await this.scrapingService.scrapeMultipleMarketplaces(searchQuery);
-      console.log(`📦 Found ${scrapedProducts.length} products from scraping`);
+      logger.info('Found products from scraping', { count: scrapedProducts.length });
 
       // 2. Análisis eBay si disponible
       let ebayOpportunities: ArbitrageOpportunity[] = [];
       if (this.ebayService) {
         try {
           ebayOpportunities = await this.ebayService.analyzeArbitrageOpportunities(searchQuery);
-          console.log(`🏪 Found ${ebayOpportunities.length} eBay opportunities`);
+          logger.info('Found eBay opportunities', { count: ebayOpportunities.length });
         } catch (error) {
-          console.warn('eBay analysis failed:', error);
+          logger.warn('eBay analysis failed', { error: error instanceof Error ? error.message : String(error) });
         }
       }
 
       // 3. Análisis de productos scrapeados
       const scrapingOpportunities = await this.scrapingService.analyzeScrapedOpportunities(scrapedProducts);
-      console.log(`⚡ Analyzed ${scrapingOpportunities.length} scraping opportunities`);
+      logger.info('Analyzed scraping opportunities', { count: scrapingOpportunities.length });
 
       // 4. Fusionar y procesar todas las oportunidades
       const allOpportunities: AIOpportunity[] = [];
@@ -152,7 +153,7 @@ export class AIOpportunityEngine {
         .slice(0, maxResults);
 
     } catch (error) {
-      console.error('Error finding arbitrage opportunities:', error);
+      logger.error('Error finding arbitrage opportunities', { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       throw new AppError('Failed to analyze market opportunities', 500);
     }
   }
@@ -526,7 +527,7 @@ export class AIOpportunityEngine {
       };
 
     } catch (error) {
-      console.error('Error generating market intelligence:', error);
+      logger.error('Error generating market intelligence', { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       throw new AppError('Failed to generate market intelligence', 500);
     }
   }
@@ -591,7 +592,7 @@ export class AIOpportunityEngine {
     targetMarketplace?: string[];
   } = {}): Promise<AIOpportunity[]> {
     try {
-      console.log(`🔍 Buscando oportunidades para: "${query}"`);
+      logger.info('Buscando oportunidades', { query });
       
       // Usar el método existente
       return await this.findArbitrageOpportunities(query, {
@@ -601,7 +602,7 @@ export class AIOpportunityEngine {
       });
 
     } catch (error) {
-      console.error('Error buscando oportunidades:', error);
+      logger.error('Error buscando oportunidades', { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       throw new AppError('Error en búsqueda de oportunidades IA', 500);
     }
   }
@@ -616,7 +617,7 @@ export class AIOpportunityEngine {
     recommendations: string[];
   }> {
     try {
-      console.log(`📊 Analizando competencia para: ${productTitle}`);
+      logger.info('Analizando competencia', { productTitle, marketplace });
 
       let competitors: any[] = [];
 
@@ -692,84 +693,78 @@ export class AIOpportunityEngine {
       };
 
     } catch (error) {
-      console.error('Error analizando competencia:', error);
+      logger.error('Error analizando competencia', { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       throw new AppError('Error en análisis de competencia', 500);
     }
   }
 
-  // 💰 Calcular margen de ganancia optimizado
-  calculateProfitMargin(sourcePrice: number, targetPrice: number, fees: {
+  // ✅ Q13: Calcular margen de ganancia usando servicio centralizado
+  async calculateProfitMargin(sourcePrice: number, targetPrice: number, fees: {
     marketplaceFee?: number;    // % del precio de venta
     paymentFee?: number;        // % del precio de venta  
     shippingCost?: number;      // cantidad fija
     packagingCost?: number;     // cantidad fija
     advertisingCost?: number;   // cantidad fija
-  } = {}): {
+  } = {}): Promise<{
     grossProfit: number;
     netProfit: number;
     profitMargin: number;
     breakdownCosts: Record<string, number>;
     recommendations: string[];
-  } {
+  }> {
     try {
-      // Fees por defecto basados en marketplaces reales
-      const defaultFees = {
-        marketplaceFee: fees.marketplaceFee || 0.13,     // 13% eBay/Amazon promedio
-        paymentFee: fees.paymentFee || 0.029,            // 2.9% PayPal/Stripe
-        shippingCost: fees.shippingCost || 5.99,         // Envío promedio
-        packagingCost: fees.packagingCost || 2.50,       // Packaging
-        advertisingCost: fees.advertisingCost || 3.00     // Marketing básico
-      };
-
-      // Calcular costos detallados
-      const marketplaceFeeAmount = targetPrice * defaultFees.marketplaceFee;
-      const paymentFeeAmount = targetPrice * defaultFees.paymentFee;
-      
-      const totalFees = marketplaceFeeAmount + paymentFeeAmount + 
-                       defaultFees.shippingCost + defaultFees.packagingCost + 
-                       defaultFees.advertisingCost;
+      // ✅ Q13: Usar servicio centralizado de cálculos financieros (cost-calculator)
+      const { CostCalculatorService } = await import('./cost-calculator.service');
+      const costCalculator = new CostCalculatorService();
+      const result = costCalculator.calculate('ebay', targetPrice, sourcePrice, {
+        shippingCost: fees.shippingCost,
+        otherCosts: (fees.packagingCost || 0) + (fees.advertisingCost || 0)
+      });
 
       const grossProfit = targetPrice - sourcePrice;
-      const netProfit = grossProfit - totalFees;
-      const profitMargin = (netProfit / targetPrice) * 100;
-
       const breakdownCosts = {
-        sourcePrice: sourcePrice,
-        marketplaceFee: marketplaceFeeAmount,
-        paymentFee: paymentFeeAmount,
-        shipping: defaultFees.shippingCost,
-        packaging: defaultFees.packagingCost,
-        advertising: defaultFees.advertisingCost,
-        totalCosts: sourcePrice + totalFees,
-        netProfit: netProfit
+        sourcePrice,
+        marketplaceFee: result.breakdown.marketplaceFee,
+        paymentFee: result.breakdown.paymentFee,
+        shipping: result.breakdown.shippingCost || 0,
+        packaging: fees.packagingCost || 0,
+        advertising: fees.advertisingCost || 0,
+        totalCosts: result.breakdown.totalCost,
+        netProfit: result.netProfit
       };
 
-      // Generar recomendaciones basadas en margen
+      // Generar recomendaciones basadas en margen (result.margin es un decimal 0-1)
+      const profitMarginPercent = result.margin * 100;
       const recommendations: string[] = [];
-      if (profitMargin > 40) {
+      if (profitMarginPercent > 40) {
         recommendations.push('Excelente margen - producto muy rentable');
-      } else if (profitMargin > 25) {
+      } else if (profitMarginPercent > 25) {
         recommendations.push('Buen margen - producto rentable');  
-      } else if (profitMargin > 15) {
+      } else if (profitMarginPercent > 15) {
         recommendations.push('Margen aceptable - validar volumen');
       } else {
         recommendations.push('Margen bajo - considerar optimizar costos');
       }
 
-      if (grossProfit > netProfit * 2) {
+      if (grossProfit > result.netProfit * 2) {
         recommendations.push('Altos fees - considerar marketplace alternativo');
       }
 
       return {
         grossProfit,
-        netProfit,
-        profitMargin: Math.round(profitMargin * 100) / 100,
+        netProfit: result.netProfit,
+        profitMargin: result.margin, // margin es decimal 0-1
         breakdownCosts,
         recommendations
       };
 
     } catch (error) {
-      console.error('Error calculando margen:', error);
+      logger.error('Error calculando margen', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        sourcePrice,
+        targetPrice
+      });
       throw new AppError('Error calculando margen de ganancia', 500);
     }
   }
@@ -793,7 +788,7 @@ export class AIOpportunityEngine {
     recommendations: string[];
   }> {
     try {
-      console.log(`📈 Analizando tendencias para categoría: ${category}`);
+      logger.info('Analizando tendencias', { category });
       
       // ✅ USAR DATOS REALES - Analizar desde productos reales en la base de datos
       // Obtener estadísticas reales de productos por categoría
@@ -862,7 +857,7 @@ export class AIOpportunityEngine {
       };
 
     } catch (error) {
-      console.error('Error obteniendo tendencias:', error);
+      logger.error('Error obteniendo tendencias', { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       throw new AppError('Error obteniendo tendencias de mercado', 500);
     }
   }
@@ -872,7 +867,7 @@ export class AIOpportunityEngine {
    */
   async analyzeOpportunity(data: any): Promise<AIOpportunity & { confidence: number }> {
     try {
-      console.log('🧠 Analizando oportunidad con IA...', data.product);
+      logger.info('Analizando oportunidad con IA', { productId: data.id, productTitle: data.product || data.title });
 
       // Enriquecer datos básicos
       const analysis = await this.calculateProfitability({
@@ -945,7 +940,7 @@ export class AIOpportunityEngine {
       return opportunity;
 
     } catch (error) {
-      console.error('❌ Error analizando oportunidad:', error);
+      logger.error('Error analizando oportunidad', { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       throw new AppError('Error en análisis IA de oportunidad', 500);
     }
   }
@@ -1044,7 +1039,7 @@ export class AIOpportunityEngine {
       };
 
     } catch (error) {
-      console.error('❌ Error calculando rentabilidad:', error);
+      logger.error('Error calculando rentabilidad', { error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       throw new AppError('Error calculando rentabilidad', 500);
     }
   }

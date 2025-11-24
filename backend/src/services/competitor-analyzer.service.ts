@@ -3,6 +3,7 @@ import { AmazonService } from './amazon.service';
 import { MercadoLibreService } from './mercadolibre.service';
 import { prisma } from '../config/database';
 import { MarketplaceService } from './marketplace.service';
+import logger from '../config/logger';
 
 export interface MarketplaceListing {
   marketplace: string;
@@ -46,12 +47,12 @@ export class CompetitorAnalyzerService {
           const marketplace = new MarketplaceService();
           const creds = await marketplace.getCredentials(userId, 'ebay');
           if (!creds || !creds.isActive || !creds.credentials) {
-            console.warn('⚠️  Skipping eBay analysis - credentials missing or inactive');
+            logger.warn('Skipping eBay analysis - credentials missing or inactive', { userId, marketplace: mp });
             continue;
           }
 
           if (creds.issues?.length) {
-            console.warn('⚠️  Skipping eBay analysis - credential issues detected', {
+            logger.warn('Skipping eBay analysis - credential issues detected', {
               userId,
               issues: creds.issues,
             });
@@ -114,12 +115,12 @@ export class CompetitorAnalyzerService {
           const marketplace = new MarketplaceService();
           const rec = await marketplace.getCredentials(userId, 'mercadolibre');
           if (!rec || !rec.isActive || !rec.credentials) {
-            console.warn('⚠️  Skipping MercadoLibre analysis - credentials missing or inactive');
+            logger.warn('Skipping MercadoLibre analysis - credentials missing or inactive', { userId });
             continue;
           }
 
           if (rec.issues?.length) {
-            console.warn('⚠️  Skipping MercadoLibre analysis - credential issues detected', {
+            logger.warn('Skipping MercadoLibre analysis - credential issues detected', {
               userId,
               issues: rec.issues,
             });
@@ -163,12 +164,12 @@ export class CompetitorAnalyzerService {
           const marketplace = new MarketplaceService();
           const rec = await marketplace.getCredentials(userId, 'amazon');
           if (!rec || !rec.isActive || !rec.credentials) {
-            console.warn('⚠️  Skipping Amazon analysis - credentials missing or inactive');
+            logger.warn('Skipping Amazon analysis - credentials missing or inactive', { userId });
             continue;
           }
 
           if (rec.issues?.length) {
-            console.warn('⚠️  Skipping Amazon analysis - credential issues detected', {
+            logger.warn('Skipping Amazon analysis - credential issues detected', {
               userId,
               issues: rec.issues,
             });

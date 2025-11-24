@@ -296,10 +296,15 @@ export default function Settings() {
 
   const testNotifications = async () => {
     try {
-      // El endpoint /api/users/notifications/test no existe aún
-      toast.info('Test notification feature coming soon');
+      const response = await api.post('/api/notifications/test');
+      if (response.data?.success) {
+        toast.success('Notificación de prueba enviada. Revisa tu panel de notificaciones.');
+      } else {
+        toast.error('No se pudo enviar la notificación de prueba');
+      }
     } catch (error: any) {
-      toast.error('Error sending test notification');
+      const errorMessage = error.response?.data?.error || error.message || 'Error al enviar notificación de prueba';
+      toast.error(errorMessage);
     }
   };
 
@@ -420,7 +425,12 @@ export default function Settings() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Theme</label>
                 <select
                   value={generalSettings.theme}
-                  onChange={(e) => setGeneralSettings({ ...generalSettings, theme: e.target.value })}
+                  onChange={(e) => {
+                    const newTheme = e.target.value;
+                    setGeneralSettings({ ...generalSettings, theme: newTheme });
+                    // ✅ CORRECCIÓN TEMA: Aplicar tema inmediatamente al cambiar, sin esperar a guardar
+                    updateTheme(newTheme as 'light' | 'dark' | 'auto');
+                  }}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="light">Light</option>

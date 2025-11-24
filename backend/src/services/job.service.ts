@@ -5,6 +5,7 @@ import { MarketplaceService } from '../services/marketplace.service';
 import { ProductService } from '../services/product.service';
 import { notificationService } from './notification.service';
 import { PrismaClient } from '@prisma/client';
+import logger from '../config/logger';
 
 const prisma = new PrismaClient();
 
@@ -68,7 +69,7 @@ class JobService {
    */
   async addScrapingJob(data: ScrapingJobData, options?: any) {
     if (!isRedisAvailable || !scrapingQueue) {
-      console.warn('⚠️  Redis not available - job queues disabled');
+      logger.warn('Redis not available - job queues disabled');
       return null;
     }
     return await scrapingQueue.add('scrape-product', data, {
@@ -88,7 +89,7 @@ class JobService {
    */
   async addPublishingJob(data: PublishingJobData, options?: any) {
     if (!isRedisAvailable || !publishingQueue) {
-      console.warn('⚠️  Redis not available - job queues disabled');
+      logger.warn('Redis not available - job queues disabled');
       return null;
     }
     return await publishingQueue.add('publish-product', data, {
@@ -108,7 +109,7 @@ class JobService {
    */
   async addPayoutJob(data: PayoutJobData, options?: any) {
     if (!isRedisAvailable || !payoutQueue) {
-      console.warn('⚠️  Redis not available - job queues disabled');
+      logger.warn('Redis not available - job queues disabled');
       return null;
     }
     return await payoutQueue.add('process-payout', data, {
@@ -128,7 +129,7 @@ class JobService {
    */
   async addSyncJob(data: SyncJobData, options?: any) {
     if (!isRedisAvailable || !syncQueue) {
-      console.warn('⚠️  Redis not available - job queues disabled');
+      logger.warn('Redis not available - job queues disabled');
       return null;
     }
     return await syncQueue.add('sync-marketplace', data, {
@@ -148,7 +149,7 @@ class JobService {
    */
   async schedulePayoutJob(cronPattern: string = '0 0 * * FRI') {
     if (!isRedisAvailable || !payoutQueue) {
-      console.warn('⚠️  Redis not available - scheduled jobs disabled');
+      logger.warn('Redis not available - scheduled jobs disabled');
       return null;
     }
     return await payoutQueue.add(
@@ -238,7 +239,7 @@ class JobService {
       notificationService.notifyJobCompleted(userId, 'scraping', job.id!, result);
       return result;
     } catch (error) {
-      console.error('Scraping job failed:', error);
+      logger.error('Scraping job failed', { jobId: job.id, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       // Notify job failed
       notificationService.notifyJobFailed(userId, 'scraping', job.id!, error.message);
       throw error;
@@ -301,7 +302,7 @@ class JobService {
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
         } catch (error) {
-          console.error(`Failed to publish to ${marketplace}:`, error);
+          logger.error('Failed to publish to marketplace', { marketplace, jobId: job.id, error: error instanceof Error ? error.message : String(error) });
           results.push({
             success: false,
             marketplace,
@@ -335,7 +336,7 @@ class JobService {
 
       return jobResult;
     } catch (error) {
-      console.error('Publishing job failed:', error);
+      logger.error('Publishing job failed', { jobId: job.id, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       // Notify job failed
       notificationService.notifyJobFailed(userId, 'publishing', job.id!, error.message);
       throw error;
@@ -460,7 +461,7 @@ class JobService {
           const progress = Math.round(((i + 1) / commissions.length) * 60) + 30;
           await job.updateProgress(progress);
         } catch (error: any) {
-          console.error(`Failed to process payout for commission ${commission.id}:`, error);
+          logger.error('Failed to process payout for commission', { commissionId: commission.id, jobId: job.id, error: error instanceof Error ? error.message : String(error) });
           results.push({
             success: false,
             commissionId: commission.id,
@@ -489,7 +490,7 @@ class JobService {
         totalCount: commissions.length,
       };
     } catch (error) {
-      console.error('Payout job failed:', error);
+      logger.error('Payout job failed', { jobId: job.id, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
       throw error;
     }
   }
@@ -521,7 +522,11 @@ class JobService {
         productId,
       };
     } catch (error) {
-      console.error('Sync job failed:', error);
+      logger.error('Sync job failed', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        jobData: job.data
+      });
       throw error;
     }
   }
@@ -585,15 +590,15 @@ if (isRedisAvailable && bullMQRedis) {
 // Worker event listeners
 const setupWorkerEvents = (worker: Worker, name: string) => {
   worker.on('completed', (job) => {
-    console.log(`✅ ${name} job ${job.id} completed`);
+    logger.info('Job completed', { jobType: name, jobId: job.id });
   });
 
   worker.on('failed', (job, err) => {
-    console.error(`❌ ${name} job ${job?.id} failed:`, err.message);
+    logger.error('Job failed', { jobType: name, jobId: job?.id, error: err.message, stack: err.stack });
   });
 
   worker.on('progress', (job, progress) => {
-    console.log(`⏳ ${name} job ${job.id} progress: ${progress}%`);
+    logger.debug('Job progress', { jobType: name, jobId: job.id, progress });
   });
 };
 
@@ -607,7 +612,7 @@ if (isRedisAvailable) {
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('🛑 Shutting down workers...');
+  logger.info('Shutting down workers...');
   
     if (isRedisAvailable && bullMQRedis) {
     const closePromises = [];
@@ -623,7 +628,7 @@ process.on('SIGINT', async () => {
       await (bullMQRedis as any).disconnect();
     }
   }
-  console.log('✅ All workers stopped');
+  logger.info('All workers stopped');
   process.exit(0);
 });
 

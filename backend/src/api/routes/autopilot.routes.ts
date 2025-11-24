@@ -2,7 +2,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
 import { autopilotSystem } from '../../services/autopilot.service';
 import { workflowConfigService } from '../../services/workflow-config.service';
+import { workflowService } from '../../services/workflow.service';
 import logger from '../../config/logger';
+import { z } from 'zod';
 
 const router = Router();
 
@@ -10,9 +12,7 @@ const router = Router();
 router.use(authenticate);
 
 /**
- * ✅ GET /api/autopilot/workflows - Obtener workflows configurados (placeholder)
- * Nota: El sistema de autopilot usa un enfoque diferente, pero mantenemos este endpoint
- * para compatibilidad con el frontend
+ * ✅ FASE 3: GET /api/autopilot/workflows - Obtener workflows del usuario
  */
 router.get('/workflows', async (req: Request, res: Response, next) => {
   try {
@@ -21,11 +21,11 @@ router.get('/workflows', async (req: Request, res: Response, next) => {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
 
-    // Por ahora retornar workflows vacíos ya que el sistema usa configuración diferente
-    // TODO: Implementar sistema de workflows si es necesario
+    const workflows = await workflowService.getUserWorkflows(userId);
+    
     res.json({
       success: true,
-      workflows: []
+      workflows
     });
   } catch (error) {
     next(error);
@@ -138,13 +138,28 @@ router.post('/stop', async (req: Request, res: Response, next) => {
 });
 
 /**
- * ✅ GET /api/autopilot/workflows/:id/logs - Obtener logs de un workflow (placeholder)
+ * ✅ FASE 6: GET /api/autopilot/workflows/:id/logs - Obtener logs de un workflow
  */
 router.get('/workflows/:id/logs', async (req: Request, res: Response, next) => {
   try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const workflowId = parseInt(req.params.id, 10);
+    if (isNaN(workflowId)) {
+      return res.status(400).json({ success: false, error: 'ID de workflow inválido' });
+    }
+
+    // Verificar ownership y obtener workflow
+    const workflow = await workflowService.getWorkflowById(workflowId, userId);
+    const logs = (workflow.logs as any[]) || [];
+
     res.json({
       success: true,
-      logs: []
+      logs,
+      total: logs.length
     });
   } catch (error) {
     next(error);
@@ -173,13 +188,32 @@ router.get('/logs', async (req: Request, res: Response, next) => {
 });
 
 /**
- * ✅ POST /api/autopilot/workflows - Crear workflow (placeholder)
+ * ✅ FASE 3: POST /api/autopilot/workflows - Crear workflow personalizado
  */
+const createWorkflowSchema = z.object({
+  name: z.string().min(1, 'El nombre del workflow es requerido').max(255),
+  description: z.string().max(1000).optional(),
+  type: z.enum(['search', 'analyze', 'publish', 'reprice', 'custom']),
+  enabled: z.boolean().optional().default(true),
+  schedule: z.string().optional().nullable(),
+  conditions: z.record(z.any()).optional().nullable(),
+  actions: z.record(z.any()).optional().nullable()
+});
+
 router.post('/workflows', async (req: Request, res: Response, next) => {
   try {
-    res.status(501).json({
-      success: false,
-      error: 'Workflow system not yet implemented'
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const validatedData = createWorkflowSchema.parse(req.body);
+    const workflow = await workflowService.createWorkflow(userId, validatedData);
+
+    res.status(201).json({
+      success: true,
+      message: 'Workflow creado exitosamente',
+      workflow
     });
   } catch (error) {
     next(error);
@@ -187,13 +221,37 @@ router.post('/workflows', async (req: Request, res: Response, next) => {
 });
 
 /**
- * ✅ PUT /api/autopilot/workflows/:id - Actualizar workflow (placeholder)
+ * ✅ FASE 3: PUT /api/autopilot/workflows/:id - Actualizar workflow
  */
+const updateWorkflowSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  description: z.string().max(1000).optional().nullable(),
+  type: z.enum(['search', 'analyze', 'publish', 'reprice', 'custom']).optional(),
+  enabled: z.boolean().optional(),
+  schedule: z.string().optional().nullable(),
+  conditions: z.record(z.any()).optional().nullable(),
+  actions: z.record(z.any()).optional().nullable()
+});
+
 router.put('/workflows/:id', async (req: Request, res: Response, next) => {
   try {
-    res.status(501).json({
-      success: false,
-      error: 'Workflow system not yet implemented'
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const workflowId = parseInt(req.params.id, 10);
+    if (isNaN(workflowId)) {
+      return res.status(400).json({ success: false, error: 'ID de workflow inválido' });
+    }
+
+    const validatedData = updateWorkflowSchema.parse(req.body);
+    const workflow = await workflowService.updateWorkflow(workflowId, userId, validatedData);
+
+    res.json({
+      success: true,
+      message: 'Workflow actualizado exitosamente',
+      workflow
     });
   } catch (error) {
     next(error);
@@ -201,13 +259,31 @@ router.put('/workflows/:id', async (req: Request, res: Response, next) => {
 });
 
 /**
- * ✅ PUT /api/autopilot/workflows/:id - Toggle workflow enabled (placeholder)
+ * ✅ FASE 3: PUT /api/autopilot/workflows/:id/enabled - Activar/desactivar workflow
  */
+const toggleWorkflowSchema = z.object({
+  enabled: z.boolean()
+});
+
 router.put('/workflows/:id/enabled', async (req: Request, res: Response, next) => {
   try {
-    res.status(501).json({
-      success: false,
-      error: 'Workflow system not yet implemented'
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const workflowId = parseInt(req.params.id, 10);
+    if (isNaN(workflowId)) {
+      return res.status(400).json({ success: false, error: 'ID de workflow inválido' });
+    }
+
+    const { enabled } = toggleWorkflowSchema.parse(req.body);
+    const workflow = await workflowService.toggleWorkflow(workflowId, userId, enabled);
+
+    res.json({
+      success: true,
+      message: `Workflow ${enabled ? 'activado' : 'desactivado'} exitosamente`,
+      workflow
     });
   } catch (error) {
     next(error);
@@ -215,13 +291,26 @@ router.put('/workflows/:id/enabled', async (req: Request, res: Response, next) =
 });
 
 /**
- * ✅ DELETE /api/autopilot/workflows/:id - Eliminar workflow (placeholder)
+ * ✅ FASE 3: DELETE /api/autopilot/workflows/:id - Eliminar workflow
  */
 router.delete('/workflows/:id', async (req: Request, res: Response, next) => {
   try {
-    res.status(501).json({
-      success: false,
-      error: 'Workflow system not yet implemented'
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const workflowId = parseInt(req.params.id, 10);
+    if (isNaN(workflowId)) {
+      return res.status(400).json({ success: false, error: 'ID de workflow inválido' });
+    }
+
+    const result = await workflowService.deleteWorkflow(workflowId, userId);
+
+    res.json({
+      success: true,
+      message: result.message,
+      data: result
     });
   } catch (error) {
     next(error);
@@ -229,13 +318,27 @@ router.delete('/workflows/:id', async (req: Request, res: Response, next) => {
 });
 
 /**
- * ✅ POST /api/autopilot/workflows/:id/run - Ejecutar workflow manualmente (placeholder)
+ * ✅ FASE 3: POST /api/autopilot/workflows/:id/run - Ejecutar workflow manualmente
  */
 router.post('/workflows/:id/run', async (req: Request, res: Response, next) => {
   try {
-    res.status(501).json({
-      success: false,
-      error: 'Workflow system not yet implemented'
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const workflowId = parseInt(req.params.id, 10);
+    if (isNaN(workflowId)) {
+      return res.status(400).json({ success: false, error: 'ID de workflow inválido' });
+    }
+
+    const result = await workflowService.executeWorkflow(workflowId, userId);
+
+    res.json({
+      success: true,
+      message: result.message,
+      workflow: result.workflow,
+      executed: result.executed
     });
   } catch (error) {
     next(error);

@@ -8,6 +8,7 @@ import { prisma } from '../config/database';
 import { workflowConfigService } from './workflow-config.service';
 import { publicationOptimizerService } from './publication-optimizer.service';
 import MarketplaceService from './marketplace.service';
+import { AppError, ErrorCode } from '../middleware/error.middleware';
 
 /**
  * Configuration for autopilot system
@@ -724,6 +725,10 @@ export class AutopilotSystem extends EventEmitter {
   /**
    * Calculate estimated profit
    */
+  /**
+   * @deprecated Use financial-calculations.service.ts calculateProfit instead
+   * Mantenido para compatibilidad
+   */
   private calculateProfit(cost: number): number {
     // Simple markup: 2x the cost
     const suggestedPrice = cost * 2;
@@ -964,6 +969,23 @@ export class AutopilotSystem extends EventEmitter {
         throw validationError;
       }
 
+      // ✅ P7: Validar que suggestedPrice sea mayor que aliexpressPrice antes de crear producto
+      const calculatedSuggestedPrice = opportunity.estimatedCost * 2;
+      if (calculatedSuggestedPrice <= opportunity.estimatedCost) {
+        logger.error('Autopilot: Invalid price calculation, suggestedPrice must be greater than aliexpressPrice', {
+          service: 'autopilot',
+          userId: currentUserId,
+          aliexpressPrice: opportunity.estimatedCost,
+          suggestedPrice: calculatedSuggestedPrice,
+          opportunityTitle: opportunity.title
+        });
+        throw new AppError(
+          `Invalid price: suggested price (${calculatedSuggestedPrice}) must be greater than AliExpress price (${opportunity.estimatedCost}) to generate profit.`,
+          400,
+          ErrorCode.VALIDATION_ERROR
+        );
+      }
+
       // ✅ Usar transacción para crear producto y listing de forma atómica
       const product = await prisma.$transaction(async (tx) => {
         // Create product in database (con userId del usuario)
@@ -974,7 +996,7 @@ export class AutopilotSystem extends EventEmitter {
             description: opportunity.description || '',
             aliexpressUrl: opportunity.url,
             aliexpressPrice: opportunity.estimatedCost,
-            suggestedPrice: opportunity.estimatedCost * 2,
+            suggestedPrice: calculatedSuggestedPrice,
             category: opportunity.category,
             images: JSON.stringify(opportunity.images || []),
             productData: JSON.stringify({
@@ -1012,9 +1034,79 @@ export class AutopilotSystem extends EventEmitter {
         optimization.durationDays
       );
 
+      // ✅ P4: Validar credenciales antes de intentar publicar
+      const marketplace = this.config.targetMarketplace as 'ebay' | 'mercadolibre' | 'amazon';
+      
+      // Validar que las credenciales existan y sean válidas
+      try {
+        const credentials = await this.marketplaceService.getCredentials(
+          currentUserId,
+          marketplace,
+          currentEnvironment
+        );
+        
+        if (!credentials || !credentials.isActive) {
+          logger.warn('Autopilot: Missing or inactive credentials, skipping publication', {
+            service: 'autopilot',
+            userId: currentUserId,
+            productId: product.id,
+            marketplace,
+            environment: currentEnvironment
+          });
+          
+          // Enviar notificación al usuario sobre credenciales faltantes
+          const { notificationService } = await import('./notification.service');
+          notificationService.sendToUser(currentUserId, {
+            type: 'WARNING',
+            title: 'Autopilot: Publicación omitida',
+            message: `No se pudo publicar producto en ${marketplace} porque faltan credenciales válidas. Por favor, configura tus credenciales en Settings → API Settings.`,
+            priority: 'NORMAL',
+            category: 'AUTOPILOT',
+            data: { productId: product.id, marketplace, environment: currentEnvironment }
+          });
+          
+          // Mantener producto en APPROVED sin publicar
+          return { success: false };
+        }
+        
+        // Verificar issues con las credenciales
+        if (credentials.issues && credentials.issues.length > 0) {
+          logger.warn('Autopilot: Credentials have issues, skipping publication', {
+            service: 'autopilot',
+            userId: currentUserId,
+            productId: product.id,
+            marketplace,
+            environment: currentEnvironment,
+            issues: credentials.issues
+          });
+          
+          // Enviar notificación al usuario sobre problemas con credenciales
+          const { notificationService } = await import('./notification.service');
+          notificationService.sendToUser(currentUserId, {
+            type: 'WARNING',
+            title: 'Autopilot: Publicación omitida',
+            message: `No se pudo publicar producto en ${marketplace} debido a problemas con las credenciales: ${credentials.issues.join(', ')}. Por favor, revisa tus credenciales en Settings → API Settings.`,
+            priority: 'NORMAL',
+            category: 'AUTOPILOT',
+            data: { productId: product.id, marketplace, environment: currentEnvironment, issues: credentials.issues }
+          });
+          
+          return { success: false };
+        }
+      } catch (credError: any) {
+        logger.error('Autopilot: Error validating credentials', {
+          service: 'autopilot',
+          userId: currentUserId,
+          productId: product.id,
+          marketplace,
+          environment: currentEnvironment,
+          error: credError.message
+        });
+        return { success: false };
+      }
+      
       // ✅ ALTA PRIORIDAD: Integrar MarketplaceService para publicar automáticamente
       try {
-        const marketplace = this.config.targetMarketplace as 'ebay' | 'mercadolibre' | 'amazon';
         const publishResult = await this.marketplaceService.publishProduct(currentUserId, {
           productId: product.id,
           marketplace,
@@ -1143,6 +1235,23 @@ export class AutopilotSystem extends EventEmitter {
     try {
       const currentUserId = userId;
       
+      // ✅ P7: Validar que suggestedPrice sea mayor que aliexpressPrice antes de crear producto
+      const calculatedSuggestedPrice = opportunity.estimatedCost * 2;
+      if (calculatedSuggestedPrice <= opportunity.estimatedCost) {
+        logger.error('Autopilot: Invalid price calculation in sendToApprovalQueue, suggestedPrice must be greater than aliexpressPrice', {
+          service: 'autopilot',
+          userId: currentUserId,
+          aliexpressPrice: opportunity.estimatedCost,
+          suggestedPrice: calculatedSuggestedPrice,
+          opportunityTitle: opportunity.title
+        });
+        throw new AppError(
+          `Invalid price: suggested price (${calculatedSuggestedPrice}) must be greater than AliExpress price (${opportunity.estimatedCost}) to generate profit.`,
+          400,
+          ErrorCode.VALIDATION_ERROR
+        );
+      }
+      
       // ✅ CORRECCIÓN: Status debe ser 'PENDING' para que aparezca en cola de aprobación
       const product = await prisma.product.create({
         data: {
@@ -1151,7 +1260,7 @@ export class AutopilotSystem extends EventEmitter {
           description: opportunity.description || '',
           aliexpressUrl: opportunity.url,
           aliexpressPrice: opportunity.estimatedCost,
-          suggestedPrice: opportunity.estimatedCost * 2,
+          suggestedPrice: calculatedSuggestedPrice,
           category: opportunity.category,
           images: JSON.stringify(opportunity.images || []),
           productData: JSON.stringify({

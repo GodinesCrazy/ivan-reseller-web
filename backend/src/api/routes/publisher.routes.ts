@@ -281,15 +281,30 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
         userEnvironment
       );
 
-      // ✅ CORREGIDO: Manejo mejorado de fallos parciales
+      // ✅ P1: Manejo mejorado de fallos parciales de publicación
       const successResults = publishResults.filter(r => r.success);
       const failedResults = publishResults.filter(r => !r.success);
-      const anySuccess = successResults.length > 0;
-
-      if (anySuccess) {
-        // ✅ Solo marcar como PUBLISHED si al menos un marketplace fue exitoso
-        // Actualizar productData con información de publicación
-        const currentProductData = product.productData ? JSON.parse(product.productData) : {};
+      const totalMarketplaces = marketplaces.length;
+      const successCount = successResults.length;
+      const allSuccessful = successCount === totalMarketplaces;
+      const partiallySuccessful = successCount > 0 && successCount < totalMarketplaces;
+      
+      const currentProductData = product.productData ? JSON.parse(product.productData) : {};
+      
+      // Construir estructura detallada de publicación por marketplace
+      const publicationStatus: Record<string, any> = {};
+      publishResults.forEach((result) => {
+        publicationStatus[result.marketplace || 'unknown'] = {
+          success: result.success,
+          listingId: result.listingId || null,
+          listingUrl: result.listingUrl || null,
+          error: result.error || null,
+          publishedAt: result.success ? new Date().toISOString() : null
+        };
+      });
+      
+      if (allSuccessful) {
+        // ✅ Todos los marketplaces tuvieron éxito → PUBLICACIÓN COMPLETA
         await productService.updateProductStatusSafely(
           id,
           'PUBLISHED',
@@ -297,7 +312,6 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
           req.user!.userId
         );
         
-        // Actualizar productData con información adicional
         await prisma.product.update({
           where: { id },
           data: {
@@ -306,13 +320,86 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
               approvedAt: new Date().toISOString(),
               approvedBy: req.user!.userId,
               publishedEnvironment: userEnvironment,
+              publishStatus: 'FULLY_PUBLISHED',
+              publicationStatus,
               publishedMarketplaces: successResults.map(r => r.marketplace),
-              failedMarketplaces: failedResults.length > 0 ? failedResults.map(r => ({ marketplace: r.marketplace, error: r.error })) : undefined
+              publishedAt: new Date().toISOString()
             })
           }
         });
+        
+        logger.info('[PUBLISHER] Product fully published to all marketplaces', {
+          productId: id,
+          userId: req.user!.userId,
+          marketplaces: successResults.map(r => r.marketplace)
+        });
+      } else if (partiallySuccessful) {
+        // ✅ Solo algunos marketplaces tuvieron éxito → PUBLICACIÓN PARCIAL
+        // Mantener status como APPROVED pero marcar como parcialmente publicado
+        await productService.updateProductStatusSafely(
+          id,
+          'APPROVED',
+          true, // isPublished = true porque al menos uno fue exitoso
+          req.user!.userId
+        );
+        
+        await prisma.product.update({
+          where: { id },
+          data: {
+            productData: JSON.stringify({
+              ...currentProductData,
+              approvedAt: new Date().toISOString(),
+              approvedBy: req.user!.userId,
+              publishedEnvironment: userEnvironment,
+              publishStatus: 'PARTIALLY_PUBLISHED',
+              publicationStatus,
+              publishedMarketplaces: successResults.map(r => r.marketplace),
+              failedMarketplaces: failedResults.map(r => ({ 
+                marketplace: r.marketplace, 
+                error: r.error 
+              })),
+              partiallyPublishedAt: new Date().toISOString()
+            })
+          }
+        });
+        
+        logger.warn('[PUBLISHER] Product partially published (not all marketplaces succeeded)', {
+          productId: id,
+          userId: req.user!.userId,
+          successCount,
+          totalMarketplaces,
+          successful: successResults.map(r => r.marketplace),
+          failed: failedResults.map(r => ({ marketplace: r.marketplace, error: r.error }))
+        });
       } else {
-        // ✅ Si todos fallan, mantener en APPROVED (no cambiar a PUBLISHED)
+        // ✅ Ningún marketplace tuvo éxito → NO PUBLICADO
+        // Mantener en APPROVED sin marcar como publicado
+        await productService.updateProductStatusSafely(
+          id,
+          'APPROVED',
+          false, // isPublished = false porque ninguno tuvo éxito
+          req.user!.userId
+        );
+        
+        await prisma.product.update({
+          where: { id },
+          data: {
+            productData: JSON.stringify({
+              ...currentProductData,
+              approvedAt: new Date().toISOString(),
+              approvedBy: req.user!.userId,
+              publishedEnvironment: userEnvironment,
+              publishStatus: 'NOT_PUBLISHED',
+              publicationStatus,
+              failedMarketplaces: failedResults.map(r => ({ 
+                marketplace: r.marketplace, 
+                error: r.error 
+              })),
+              publishAttemptedAt: new Date().toISOString()
+            })
+          }
+        });
+        
         logger.warn('[PUBLISHER] All marketplace publications failed', {
           productId: id,
           userId: req.user!.userId,
@@ -321,11 +408,34 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
       }
     }
 
+    // ✅ P1: Determinar mensaje según resultado de publicación
+    let message = 'Product approved';
+    const totalMarketplaces = marketplaces.length || 0;
+    const successCount = publishResults.filter(r => r.success).length;
+    
+    if (totalMarketplaces > 0) {
+      if (successCount === totalMarketplaces) {
+        message = `Product approved and fully published to ${successCount} marketplace(s)`;
+      } else if (successCount > 0) {
+        message = `Product approved and partially published to ${successCount}/${totalMarketplaces} marketplace(s). Some publications failed.`;
+      } else {
+        message = `Product approved but publication failed on all ${totalMarketplaces} marketplace(s). Please check your credentials and try again.`;
+      }
+    }
+    
     return res.json({ 
       success: true, 
-      message: 'Product approved', 
+      message,
       publishResults,
-      environment: userEnvironment
+      environment: userEnvironment,
+      publishSummary: {
+        total: totalMarketplaces,
+        successful: successCount,
+        failed: totalMarketplaces - successCount,
+        publishStatus: totalMarketplaces === 0 ? 'NOT_ATTEMPTED' : 
+                       successCount === 0 ? 'NOT_PUBLISHED' :
+                       successCount < totalMarketplaces ? 'PARTIALLY_PUBLISHED' : 'FULLY_PUBLISHED'
+      }
     });
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Failed to approve';

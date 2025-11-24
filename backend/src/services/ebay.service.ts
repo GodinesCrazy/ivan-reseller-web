@@ -576,6 +576,65 @@ export class EbayService {
   }
 
   /**
+   * Update listing price on eBay
+   * Uses Inventory API to update the offer price
+   */
+  async updateListingPrice(offerId: string, newPrice: number, currency: string = 'USD'): Promise<boolean> {
+    try {
+      return await this.withAuthRetry(async () => {
+        // Get current offer details
+        const offerResponse = await this.apiClient.get(`/sell/inventory/v1/offer/${offerId}`);
+        const currentOffer = offerResponse.data;
+
+        // Update pricing summary
+        const updateData = {
+          pricingSummary: {
+            price: {
+              currency,
+              value: newPrice.toString(),
+            },
+          },
+        };
+
+        // Update the offer
+        await retryMarketplaceOperation(
+          async () => {
+            await this.apiClient.put(`/sell/inventory/v1/offer/${offerId}`, {
+              ...currentOffer,
+              ...updateData,
+            });
+          },
+          'ebay',
+          {
+            maxRetries: 3,
+            onRetry: (attempt, error, delay) => {
+              logger.warn(`Retrying updateListingPrice for eBay (attempt ${attempt})`, {
+                offerId,
+                error: error.message,
+                delay,
+              });
+            },
+          }
+        );
+
+        logger.info('eBay listing price updated successfully', { offerId, newPrice, currency });
+        return true;
+      });
+    } catch (error: any) {
+      logger.error('Failed to update eBay listing price', {
+        offerId,
+        newPrice,
+        error: error.message,
+        stack: error.stack,
+      });
+      throw new AppError(
+        `eBay price update error: ${error.response?.data?.errors?.[0]?.message || error.message}`,
+        400
+      );
+    }
+  }
+
+  /**
    * Update inventory quantity
    */
   async updateInventoryQuantity(sku: string, quantity: number): Promise<void> {
@@ -623,7 +682,7 @@ export class EbayService {
   async testConnection(): Promise<{ success: boolean; message: string }> {
     try {
       // ✅ Si no hay token OAuth, no es un error crítico (aún se pueden guardar credenciales)
-      if (!this.accessToken && !this.credentials.token && !this.credentials.authToken) {
+      if (!this.accessToken && !this.credentials.token) {
         return { 
           success: false, 
           message: 'OAuth token required. Complete OAuth authorization first. This is normal if you just saved credentials.' 
@@ -683,7 +742,10 @@ export class EbayService {
       
       return this.accessToken;
     } catch (error: any) {
-      console.error('Error getting eBay OAuth token:', error);
+      logger.error('Error getting eBay OAuth token', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       throw new AppError('Failed to authenticate with eBay API', 401);
     }
   }
@@ -735,7 +797,10 @@ export class EbayService {
         hasMore: (data.offset + data.limit) < data.total,
       };
     } catch (error: any) {
-      console.error('Error searching eBay products for arbitrage:', error);
+      logger.error('Error searching eBay products for arbitrage', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       throw new AppError('Failed to search products on eBay', 400);
     }
   }
@@ -764,7 +829,10 @@ export class EbayService {
         .slice(0, 20); // Top 20 oportunidades
         
     } catch (error: any) {
-      console.error('Error analyzing arbitrage opportunities:', error);
+      logger.error('Error analyzing arbitrage opportunities', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       throw new AppError('Failed to analyze arbitrage opportunities', 400);
     }
   }
@@ -898,7 +966,10 @@ export class EbayService {
 
       return searchResult.products;
     } catch (error: any) {
-      console.error('Error getting trending products:', error);
+      logger.error('Error getting trending products', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       throw new AppError('Failed to get trending products from eBay', 400);
     }
   }
@@ -993,7 +1064,10 @@ export class EbayService {
       .sort((a, b) => b.similarityScore - a.similarityScore);
 
     } catch (error: any) {
-      console.error('Error finding competitors:', error);
+      logger.error('Error finding competitors', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       throw new AppError('Failed to find competitors on eBay', 400);
     }
   }
