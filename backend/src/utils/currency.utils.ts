@@ -8,7 +8,7 @@ const CURRENCY_SYMBOL_PATTERNS: Array<{ code: string; patterns: RegExp[] }> = [
   { code: 'CAD', patterns: [/\bCAD\b/i, /C\$/] },
   { code: 'AUD', patterns: [/\bAUD\b/i, /A\$/] },
   { code: 'MXN', patterns: [/\bMXN\b/i, /\bMX\$/i, /\bPeso Mexicano\b/i] },
-  { code: 'CLP', patterns: [/\bCLP\b/i, /\bCLP\$/i, /\$\s*CLP\b/i] },
+  { code: 'CLP', patterns: [/\bCLP\b/i, /\bCLP\$/i, /\$\s*CLP\b/i, /\bPeso Chileno\b/i] },
   { code: 'COP', patterns: [/\bCOP\b/i, /\bCOL\$/i, /\bPeso Colombiano\b/i] },
   { code: 'ARS', patterns: [/\bARS\b/i, /\bAR\$/i, /\bPeso Argentino\b/i] },
   { code: 'BRL', patterns: [/\bBRL\b/i, /R\$/] },

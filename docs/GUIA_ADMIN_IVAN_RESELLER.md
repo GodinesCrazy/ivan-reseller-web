@@ -4,6 +4,10 @@
 
 Esta guía explica cómo gestionar usuarios, comisiones, y monitorear el sistema como administrador.
 
+**Última actualización:** 2025-01-27  
+**Versión del Sistema:** 1.0  
+**URL:** www.ivanreseller.com
+
 ---
 
 ## 🔐 Acceso de Administrador
@@ -15,20 +19,36 @@ Si eres el primer administrador y necesitas crear tu cuenta:
 **Opción 1: Desde la base de datos (inicial)**
 ```sql
 -- Ejecutar en PostgreSQL
-INSERT INTO users (email, password, username, role, "isActive", "createdAt", "updatedAt")
+-- Primero, genera el hash bcrypt de tu contraseña (ver abajo)
+INSERT INTO users (email, password, username, role, "isActive", "commissionRate", "fixedMonthlyCost", "createdAt", "updatedAt")
 VALUES (
   'admin@ivanreseller.com',
-  '$2b$10$...', -- Hash bcrypt de tu contraseña
+  '$2b$10$...', -- Hash bcrypt de tu contraseña (ver cómo generarlo abajo)
   'admin',
   'ADMIN',
   true,
+  0.20, -- 20% de comisión por defecto
+  0.0,  -- Costo fijo mensual $0 para admin
   NOW(),
   NOW()
 );
 ```
 
-**Opción 2: Desde el sistema (si ya hay un admin)**
-- Un administrador existente puede crear nuevos usuarios desde la interfaz
+**Generar hash bcrypt:**
+```javascript
+// En Node.js
+const bcrypt = require('bcryptjs');
+const hash = bcrypt.hashSync('tu-contraseña-segura', 10);
+console.log(hash);
+```
+
+**Opción 2: El sistema crea un admin automáticamente (si está configurado)**
+- Al iniciar el sistema por primera vez, puede crear un admin automáticamente si las variables de entorno están configuradas
+- Revisa los logs del backend al iniciar para ver si se creó automáticamente
+
+**Opción 3: Desde el sistema (si ya hay un admin)**
+- Un administrador existente puede crear nuevos usuarios (incluyendo otros admins) desde la interfaz
+- Ve a **"Users"** → **"Create User"** → Selecciona rol **"ADMIN"**
 
 ### Privilegios de Administrador
 
@@ -46,20 +66,36 @@ Como administrador tienes acceso a:
 
 ### Crear Nuevo Usuario
 
-1. **Ve a "Admin" → "Users"** (o la sección de administración)
+1. **Ve a "Users"** en el menú lateral (visible solo para admins)
 2. **Haz clic en "Create User"** o **"Nuevo Usuario"**
-3. **Completa:**
-   - Email (debe ser único)
-   - Username
-   - Contraseña temporal
-   - Rol: **USER** (normal) o **ADMIN** (administrador)
-4. **Configuración inicial:**
-   - El sistema creará automáticamente:
-     - `UserWorkflowConfig` con valores por defecto
-     - Configuración de usuario básica
-5. **Comparte con el usuario:**
-   - Email de acceso
-   - Contraseña temporal (debe cambiarla en el primer login)
+3. **Completa el formulario:**
+   - **Email:** `usuario@ejemplo.com` (debe ser único, se normaliza a minúsculas)
+   - **Username:** `usuario_reseller` (debe ser único, mínimo 3 caracteres, máximo 50)
+   - **Password:** `TempPass123!` (contraseña temporal segura, mínimo 8 caracteres)
+   - **Full Name:** `Nombre Completo` (opcional)
+   - **Role:** 
+     - **USER** (usuario normal) - por defecto
+     - **ADMIN** (administrador) - solo si necesitas crear otro admin
+   - **Commission Rate:** `0.20` (20% de comisión sobre gross profit, por defecto 0.20)
+   - **Fixed Monthly Cost:** `17.00` (costo fijo mensual en USD, por defecto 0.0)
+   - **Is Active:** `true` (usuario activo, puede hacer login)
+4. **Haz clic en "Create User"** o **"Crear Usuario"**
+5. **El sistema:**
+   - Valida que el email y username no existan
+   - Hashea la contraseña con bcrypt
+   - Crea el usuario en la base de datos
+   - Crea automáticamente una `UserWorkflowConfig` con valores por defecto:
+     - Environment: `sandbox`
+     - Workflow Mode: `manual`
+     - Todas las etapas en `manual`
+     - Working Capital: `500` USD
+   - Intenta enviar un email con las credenciales (si SMTP está configurado)
+   - Registra la acción en logs (quién creó el usuario)
+6. **Comparte con el usuario:**
+   - **Email de acceso:** `usuario@ejemplo.com`
+   - **Contraseña temporal:** `TempPass123!`
+   - **URL del sistema:** `www.ivanreseller.com`
+   - **Instrucciones:** "Debes cambiar tu contraseña en el primer login"
 
 ### Gestionar Usuarios Existentes
 
@@ -137,16 +173,25 @@ Las comisiones se calculan automáticamente cuando se crea una venta:
 
 **Fórmula:**
 ```
-Comisión = (Venta Total × 10%) + Costo Fijo
+Gross Profit = Sale Price - AliExpress Cost - Marketplace Fee
+Comisión = Gross Profit × Commission Rate
+Net Profit (Usuario) = Gross Profit - Comisión
 ```
 
-El **Costo Fijo** se configura por usuario en su perfil.
+Donde:
+- **Commission Rate:** Porcentaje configurado por usuario (por defecto: 20% = 0.20)
+- **Fixed Monthly Cost:** Costo fijo mensual (se cobra independientemente de ventas)
 
-**Ejemplo:**
-- Venta Total: $100
-- Porcentaje: 10% = $10
-- Costo Fijo: $2
-- **Comisión Total: $12**
+**Ejemplo Real:**
+- **Venta:** $50.00 USD
+- **Costo AliExpress:** $25.00 USD
+- **Marketplace Fee (12.5%):** $6.25 USD
+- **Gross Profit:** $50.00 - $25.00 - $6.25 = **$18.75 USD**
+- **Commission Rate:** 20% (0.20)
+- **Comisión:** $18.75 × 0.20 = **$3.75 USD**
+- **Net Profit (Usuario):** $18.75 - $3.75 = **$15.00 USD**
+
+**Nota:** El Fixed Monthly Cost ($17.00) se cobra mensualmente independientemente de las ventas. No se incluye en el cálculo de comisiones por venta.
 
 ---
 

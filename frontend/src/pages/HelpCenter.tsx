@@ -152,11 +152,11 @@ function InicioRapido() {
             <div className="space-y-3 text-gray-700">
               <p>
                 <strong>URL:</strong>{' '}
-                <code className="bg-blue-100 px-2 py-1 rounded">https://ivan-reseller-web.vercel.app/login</code>
+                <code className="bg-blue-100 px-2 py-1 rounded">ivanreseller.com/login</code> o{' '}
+                <code className="bg-blue-100 px-2 py-1 rounded">www.ivanreseller.com/login</code>
               </p>
               <p>
-                Las credenciales son provistas por el administrador. Si no recuerdas tu contraseña, usa la opción
-                <strong> “Forgot password”</strong> o contacta al equipo de soporte.
+                Las credenciales son provistas por el administrador. El registro público está deshabilitado. Si no recuerdas tu contraseña, contacta al administrador del sistema.
               </p>
             </div>
           </div>
@@ -261,11 +261,13 @@ function InicioRapido() {
           <div>
             <h4 className="font-semibold text-gray-900 mb-2">💡 Tips Rápidos</h4>
             <ul className="space-y-1 text-gray-700">
-              <li>• El sistema funciona sin APIs configuradas (funcionalidad básica)</li>
-              <li>• Para usar IA: Solo necesitas GROQ API Key (gratis)</li>
-              <li>• Para vender: Configura MercadoLibre, eBay o Amazon</li>
-              <li>• Todas las credenciales se encriptan con AES-256</li>
-              <li>• El dashboard se actualiza en tiempo real</li>
+              <li>• El sistema funciona parcialmente sin APIs configuradas (funcionalidad básica)</li>
+              <li>• Para usar IA: Solo necesitas GROQ API Key (gratis, sin tarjeta de crédito)</li>
+              <li>• Para vender: Configura eBay, Amazon o MercadoLibre (OAuth 2.0)</li>
+              <li>• Para buscar productos: Configura AliExpress (sesión manual) y ScraperAPI/ZenRows (opcional)</li>
+              <li>• Todas las credenciales se encriptan con AES-256-GCM antes de guardarse</li>
+              <li>• El dashboard se actualiza en tiempo real con Socket.IO</li>
+              <li>• Puedes tener credenciales en Sandbox y Production simultáneamente</li>
             </ul>
           </div>
         </div>
@@ -497,10 +499,14 @@ function APIsCredenciales() {
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Ve a <a href="https://console.groq.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">console.groq.com <ExternalLink className="w-3 h-3 inline" /></a></li>
                   <li>Crea una cuenta (gratis, sin tarjeta de crédito requerida)</li>
-                  <li>Ve a <strong>"API Keys"</strong> en el menú lateral</li>
-                  <li>Haz clic en <strong>"Create API Key"</strong></li>
-                  <li>Copia tu <strong>API Key</strong> (formato: <code>gsk_...</code>)</li>
+                  <li>Inicia sesión y ve a <strong>"API Keys"</strong> en el menú lateral o dashboard</li>
+                  <li>Haz clic en <strong>"Create API Key"</strong> o <strong>"Crear API Key"</strong></li>
+                  <li>Ingresa un nombre descriptivo (ej: "Ivan Reseller - Tu Nombre")</li>
+                  <li>Haz clic en <strong>"Create"</strong> o <strong>"Crear"</strong></li>
+                  <li><strong>IMPORTANTE:</strong> Copia tu <strong>API Key</strong> inmediatamente (formato: <code>gsk_...</code>) - solo se muestra una vez</li>
                   <li>Pégala en el sistema en <code>Settings → Configuración de APIs → GROQ AI API</code></li>
+                  <li>Haz clic en <strong>"Guardar Configuración"</strong></li>
+                  <li>El estado cambiará a <strong>"Configurada"</strong> ✅</li>
                 </ol>
               </div>
               <div className="text-sm text-gray-600">
@@ -547,15 +553,93 @@ function APIsCredenciales() {
               </ul>
               <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
                 <div className="font-semibold text-gray-900">Pasos para obtener las credenciales:</div>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Ve a <a href="https://developers.mercadolibre.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">MercadoLibre Developers <ExternalLink className="w-3 h-3 inline" /></a> e inicia sesión</li>
-                  <li>Ve a <strong>"Mis aplicaciones"</strong> → <strong>"Crear nueva aplicación"</strong></li>
-                  <li>Completa: Nombre, Redirect URI (ej: <code>https://www.ivanreseller.com/api/marketplace/oauth/callback/mercadolibre</code>), y selecciona tipo <strong>"Marketplace"</strong> o <strong>"Dropshipping"</strong></li>
-                  <li>Guarda el <strong>App ID (Client ID)</strong> y <strong>Secret Key (Client Secret)</strong></li>
-                  <li>En el sistema, ingresa Client ID y Client Secret, luego haz clic en <strong>"Autorizar con MercadoLibre"</strong> o <strong>"OAuth"</strong></li>
-                  <li>Serás redirigido a MercadoLibre para autorizar la aplicación</li>
-                  <li>Después de autorizar, el sistema obtendrá automáticamente los Access Token y Refresh Token</li>
+                <ol className="list-decimal list-inside space-y-2">
+                  <li><strong>Inicia sesión</strong> en <a href="https://developers.mercadolibre.cl/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">developers.mercadolibre.cl <ExternalLink className="w-3 h-3 inline" /></a> con tu cuenta de MercadoLibre</li>
+                  <li><strong>Crear aplicación:</strong> Ve a <a href="https://developers.mercadolibre.cl/devcenter/create-app" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold">developers.mercadolibre.cl/devcenter/create-app <ExternalLink className="w-3 h-3 inline" /></a></li>
+                  <li><strong>Paso 1 - Información básica:</strong> Completa el primer formulario:
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li><strong>Nombre*:</strong> Ej: "Ivan Reseller - Mi Negocio"</li>
+                      <li><strong>Nombre corto*:</strong> Ej: "ivan-reseller" (sin espacios, solo letras, números y guiones)</li>
+                      <li><strong>Descripción*:</strong> Ej: "Aplicación para gestión de productos y ventas en MercadoLibre"</li>
+                      <li><strong>Logo:</strong> Opcional - Sube un logo en formato PNG (máximo 1MB)</li>
+                    </ul>
+                    Haz clic en <strong>"Continuar"</strong>
+                  </li>
+                  <li><strong>Paso 2 - Configuración y scopes:</strong> En la siguiente pantalla, completa:
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li><strong>Redirect URI*:</strong> Agrega exactamente: <code className="bg-gray-100 px-1 rounded">https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre</code>
+                        <ul className="list-circle list-inside ml-4 mt-1">
+                          <li>Haz clic en el campo "Redirect URI"</li>
+                          <li>Pega la URL completa</li>
+                          <li>Haz clic en "Agregar Redirect URI" si es necesario</li>
+                          <li>⚠️ <strong>IMPORTANTE:</strong> Debe ser exactamente <code>www.ivanreseller.com</code> (NO uses vercel.app ni otros dominios)</li>
+                        </ul>
+                      </li>
+                      <li><strong>Integración*:</strong> Marca al menos una opción:
+                        <ul className="list-circle list-inside ml-4 mt-1">
+                          <li>☑️ <strong>Mercado Libre</strong> (obligatorio para nuestro caso)</li>
+                          <li>☐ Vtex (opcional, solo si lo necesitas)</li>
+                        </ul>
+                      </li>
+                      <li><strong>Permisos*:</strong> Para cada categoría, selecciona el nivel de acceso:
+                        <ul className="list-circle list-inside ml-4 mt-1 space-y-0.5">
+                          <li><strong>Usuarios:</strong> "Lectura y escritura" (para gestionar perfil)</li>
+                          <li><strong>Publicaciones y ofertas/ventas:</strong> "Lectura y escritura" (para publicar productos)</li>
+                          <li><strong>Ventas y envíos:</strong> "Lectura y escritura" (para gestionar pedidos)</li>
+                          <li><strong>Comunicaciones y preguntas:</strong> "De solo lectura" o "Lectura y escritura"</li>
+                          <li><strong>Publicidad de un producto:</strong> "De solo lectura" (opcional)</li>
+                          <li><strong>Facturación:</strong> "De solo lectura" (opcional)</li>
+                          <li><strong>Métricas del negocio:</strong> "De solo lectura" (recomendado)</li>
+                          <li><strong>Promociones, cupones y descuentos:</strong> "Lectura y escritura" (opcional)</li>
+                        </ul>
+                        <span className="text-red-600 text-xs block mt-1">⚠️ Debes seleccionar al menos una opción para cada permiso</span>
+                      </li>
+                      <li><strong>Topics (Notificaciones):</strong> Opcional - Puedes dejar los valores por defecto o configurar según necesites</li>
+                      <li><strong>Notificaciones callback URL:</strong> Opcional - Puedes dejarlo vacío por ahora</li>
+                    </ul>
+                    Haz clic en <strong>"Continuar"</strong> o <strong>"Crear aplicación"</strong>
+                  </li>
+                  <li><strong>Paso 3 - Obtener credenciales:</strong> Después de crear la aplicación, verás:
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li><strong>App ID (Client ID):</strong> Ejemplo: `1234567890123456` - <strong>Cópialo</strong></li>
+                      <li><strong>Secret Key (Client Secret):</strong> Ejemplo: `abcdefghijklmnopqrstuvwxyz123456` - <strong>Cópialo</strong></li>
+                    </ul>
+                    ⚠️ <strong>IMPORTANTE:</strong> Guarda estas credenciales en un lugar seguro. El Secret Key solo se muestra una vez.
+                  </li>
+                  <li><strong>Paso 4 - Configurar en Ivan Reseller:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>Ve a Ivan Reseller → <strong>Settings → Configuración de APIs</strong></li>
+                      <li>Busca la tarjeta <strong>"MercadoLibre API"</strong></li>
+                      <li>Ingresa:
+                        <ul className="list-circle list-inside ml-4 mt-1">
+                          <li><strong>Client ID (App ID):</strong> Pega el App ID copiado</li>
+                          <li><strong>Client Secret:</strong> Pega el Secret Key copiado</li>
+                        </ul>
+                      </li>
+                      <li>Haz clic en <strong>"Guardar Configuración"</strong></li>
+                    </ul>
+                  </li>
+                  <li><strong>Paso 5 - Autorizar con OAuth:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>Haz clic en el botón <strong>"Autorizar con MercadoLibre"</strong> o <strong>"OAuth"</strong></li>
+                      <li>Se abrirá una ventana de MercadoLibre</li>
+                      <li>Revisa los permisos solicitados y haz clic en <strong>"Autorizar"</strong> o <strong>"Aceptar"</strong></li>
+                      <li>El sistema obtendrá automáticamente los Access Token y Refresh Token</li>
+                      <li>El estado cambiará a <strong>"Sesión activa"</strong> ✅</li>
+                    </ul>
+                  </li>
                 </ol>
+                <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded p-2 mt-2 text-xs">
+                  <strong>💡 Enlaces rápidos:</strong> <a href="https://developers.mercadolibre.cl/devcenter/create-app" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-semibold">Crear nueva aplicación</a> | <a href="https://developers.mercadolibre.cl/applications" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Ver mis aplicaciones</a>
+                </div>
+                <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 rounded p-2 mt-2 text-xs">
+                  <strong>⚠️ Errores comunes:</strong>
+                  <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                    <li>Si ves "Selecciona mínimo una unidad de negocio": Marca al menos "Mercado Libre" en Integración</li>
+                    <li>Si ves "Selecciona al menos una opción para cada permiso": Asegúrate de seleccionar un nivel de acceso para cada categoría de permisos</li>
+                    <li>Si el Redirect URI no funciona: Verifica que sea exactamente <code>https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre</code> (sin espacios, con https://)</li>
+                  </ul>
+                </div>
               </div>
               <div className="text-sm text-gray-600">
                 <strong>Documentación:</strong> 
@@ -593,7 +677,8 @@ function APIsCredenciales() {
                   <li>Ingresa a <a href="https://developer.ebay.com/my/keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">developer.ebay.com <ExternalLink className="w-3 h-3 inline" /></a> y selecciona el conjunto de claves (<em>Keyset</em>) <strong>Sandbox</strong>.</li>
                   <li>Copia los valores <strong>App ID</strong>, <strong>Dev ID</strong> y <strong>Cert ID</strong> y pégalos en <code>Settings → Configuración de APIs → eBay (Sandbox)</code>.</li>
                   <li>En la misma página de eBay haz clic en <em>User Tokens</em> y, dentro de <em>Your eBay Sign-in Settings</em>, registra un <strong>Redirect URL name (RuName)</strong> apuntando a:<br />
-                    <code className="block bg-gray-100 rounded px-2 py-1 mt-1">https://ivan-reseller-web.vercel.app/api/marketplace-oauth/oauth/callback/ebay</code>
+                    <code className="block bg-gray-100 rounded px-2 py-1 mt-1">https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/ebay</code>
+                    <span className="text-xs text-gray-600 block mt-1">⚠️ <strong>Importante:</strong> Si tu sistema está en otro dominio, usa ese dominio en lugar de www.ivanreseller.com</span>
                   </li>
                   <li>Copia el nombre generado (ej. <code>Ivan_Marty-...</code>) y pégalo en el campo <strong>Redirect URI (RuName)</strong> del panel. Guarda.</li>
                   <li>Presiona el botón <strong>OAuth</strong>. Se abrirá la ventana oficial de eBay Sandbox. Inicia sesión con tu cuenta Sandbox y acepta los permisos. El sistema guardará automáticamente el <em>Auth Token</em> y el <em>Refresh Token</em>.</li>

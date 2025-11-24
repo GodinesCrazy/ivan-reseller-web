@@ -91,7 +91,7 @@ AMAZON_PRODUCTION_MARKETPLACE_ID=ATVPDKIKX0DER
 # Sandbox
 MERCADOLIBRE_SANDBOX_CLIENT_ID=your-client-id
 MERCADOLIBRE_SANDBOX_CLIENT_SECRET=your-client-secret
-MERCADOLIBRE_SANDBOX_REDIRECT_URI=https://ivanreseller.com/auth/callback
+MERCADOLIBRE_SANDBOX_REDIRECT_URI=https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre
 
 # Production (mismos campos con _PRODUCTION_)
 ```

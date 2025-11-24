@@ -66,6 +66,7 @@ export default function RegionalConfig() {
     { code: 'MXN', symbol: '$', name: 'Mexican Peso' },
     { code: 'BRL', symbol: 'R$', name: 'Brazilian Real' },
     { code: 'ARS', symbol: '$', name: 'Argentine Peso' },
+    { code: 'CLP', symbol: '$', name: 'Chilean Peso' },
     { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
     { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
     { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' }

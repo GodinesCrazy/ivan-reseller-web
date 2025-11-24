@@ -417,6 +417,7 @@ export default function Settings() {
                   <option value="GBP">£ GBP - British Pound</option>
                   <option value="MXN">$ MXN - Mexican Peso</option>
                   <option value="BRL">R$ BRL - Brazilian Real</option>
+                  <option value="CLP">$ CLP - Chilean Peso</option>
                 </select>
               </div>
 
