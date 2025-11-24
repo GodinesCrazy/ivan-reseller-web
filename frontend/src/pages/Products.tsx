@@ -51,10 +51,13 @@ export default function Products() {
     try {
       setLoading(true);
       const response = await api.get('/api/products');
-      setProducts(response.data?.products || response.data || []);
-    } catch (error) {
+      // El backend devuelve: { success: true, data: { products: [...] }, count: ... }
+      const productsData = response.data?.data?.products || response.data?.products || response.data || [];
+      setProducts(Array.isArray(productsData) ? productsData : []);
+    } catch (error: any) {
       console.error('Error fetching products:', error);
-      toast.error('Error al cargar productos');
+      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || 'Error al cargar productos';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
