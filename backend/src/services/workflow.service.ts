@@ -48,7 +48,22 @@ export class WorkflowService {
     }
 
     // Usar node-cron para validar la expresión
-    return cron.validate(schedule);
+    // node-cron.validate puede lanzar error o retornar boolean según la versión
+    try {
+      if (typeof cron.validate === 'function') {
+        const result = cron.validate(schedule);
+        return result === true || result === undefined;
+      }
+      // Si no existe validate, intentar crear un schedule para validar
+      const testTask = cron.schedule(schedule, () => {});
+      if (testTask) {
+        testTask.stop();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
   }
 
   /**

@@ -87,7 +87,9 @@ export class WorkflowSchedulerService {
         if (workflow.schedule && workflow.schedule !== 'manual') {
           try {
             // Validar expresión cron antes de programar
-            if (!cron.validate(workflow.schedule)) {
+            try {
+              cron.validate(workflow.schedule);
+            } catch {
               logger.error('WorkflowScheduler: Expresión cron inválida, omitiendo workflow', {
                 workflowId: workflow.id,
                 userId: workflow.userId,
@@ -140,10 +142,21 @@ export class WorkflowSchedulerService {
   async scheduleWorkflow(workflowId: number, userId: number, cronExpression: string): Promise<void> {
     try {
       // Validar expresión cron
-      if (!cron.validate(cronExpression)) {
+      try {
+        if (typeof cron.validate === 'function') {
+          cron.validate(cronExpression);
+        } else {
+          // Si no existe validate, intentar crear un schedule para validar
+          const testTask = cron.schedule(cronExpression, () => {});
+          if (testTask) {
+            testTask.stop();
+          }
+        }
+      } catch (error: any) {
         logger.error('WorkflowScheduler: Expresión cron inválida', {
           workflowId,
-          cronExpression
+          cronExpression,
+          error: error?.message
         });
         throw new Error(`Expresión cron inválida: ${cronExpression}`);
       }
