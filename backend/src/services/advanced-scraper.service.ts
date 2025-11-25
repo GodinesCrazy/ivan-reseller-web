@@ -794,6 +794,22 @@ export class AdvancedMarketplaceScraper {
       page.on('response', apiResponseHandler);
       await this.setupRealBrowser(page);
 
+      // ✅ ESTRATEGIA MEJORADA: Navegar primero a la página principal para establecer sesión
+      logger.info('[SCRAPER] Estableciendo sesión en AliExpress (navegando a página principal primero)', { query });
+      try {
+        await page.goto('https://www.aliexpress.com', { 
+          waitUntil: 'domcontentloaded', 
+          timeout: 20000 
+        });
+        // Esperar un momento para que se establezca la sesión
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        logger.info('[SCRAPER] Sesión establecida en página principal');
+      } catch (homeError: any) {
+        logger.warn('[SCRAPER] Error navegando a página principal, continuando de todos modos', {
+          error: homeError?.message || String(homeError)
+        });
+      }
+
       // ✅ Probar múltiples formatos de URL de búsqueda (AliExpress puede cambiar el formato)
       const searchUrls = [
         `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(query)}.html`,
@@ -812,6 +828,8 @@ export class AdvancedMarketplaceScraper {
           waitUntil: 'domcontentloaded', 
           timeout: 30000 
         });
+        // ✅ Esperar más tiempo para que la página se cargue completamente
+        await new Promise(resolve => setTimeout(resolve, 3000));
         navigationSuccess = true;
         logger.info('[SCRAPER] Navegación exitosa', { url: searchUrl });
       } catch (navError: any) {
@@ -864,6 +882,7 @@ export class AdvancedMarketplaceScraper {
       }
 
       // ✅ Verificar si AliExpress bloqueó el acceso (página "punish" o TMD)
+      // PERO NO retornar vacío inmediatamente - intentar extraer productos de todos modos
       const currentUrl = page.url();
       const isBlocked = currentUrl.includes('/punish') || 
                         currentUrl.includes('TMD') || 
@@ -871,16 +890,16 @@ export class AdvancedMarketplaceScraper {
                         currentUrl.includes('x5step');
       
       if (isBlocked) {
-        logger.error('[SCRAPER] AliExpress bloqueó el acceso (página de bloqueo detectada)', {
+        logger.warn('[SCRAPER] Posible bloqueo detectado en URL, pero intentando continuar', {
           url: currentUrl,
           query,
           userId,
-          message: 'AliExpress está bloqueando el scraping. Posibles soluciones: usar cookies, esperar más tiempo, o usar un proxy diferente.'
+          message: 'AliExpress puede estar bloqueando, pero intentaremos extraer productos de todos modos.'
         });
         
         await this.captureAliExpressSnapshot(page, `blocked-${Date.now()}`);
         
-        // Intentar usar cookies si están disponibles
+        // ✅ Intentar usar cookies si están disponibles
         try {
           const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', environment || 'production') as AliExpressCredentials | null;
           
@@ -890,6 +909,7 @@ export class AdvancedMarketplaceScraper {
             // Cerrar página actual y crear una nueva con cookies
             await page.close();
             const newPage = await this.browser!.newPage();
+            await this.setupRealBrowser(newPage);
             
             // Establecer cookies antes de navegar
             await newPage.setCookie(...credentials.cookies.map((cookie: any) => ({
@@ -900,41 +920,35 @@ export class AdvancedMarketplaceScraper {
               expires: cookie.expires || cookie.expiry || Date.now() / 1000 + 86400
             })));
             
+            // Navegar primero a la página principal
+            await newPage.goto('https://www.aliexpress.com', { waitUntil: 'domcontentloaded', timeout: 20000 });
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
             // Intentar navegar de nuevo con cookies
             await newPage.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await new Promise(resolve => setTimeout(resolve, 3000));
             const newUrl = newPage.url();
             
             if (!newUrl.includes('/punish') && !newUrl.includes('TMD')) {
               logger.info('[SCRAPER] Navegación exitosa con cookies, bloqueo evitado', { userId });
               page = newPage; // Usar la nueva página
+              page.on('response', apiResponseHandler); // Re-agregar el handler
             } else {
-              logger.warn('[SCRAPER] Bloqueo persiste incluso con cookies', { userId, url: newUrl });
-              await newPage.close();
-              throw new Error('AliExpress bloqueó el acceso incluso con cookies. Se requiere autenticación manual.');
+              logger.warn('[SCRAPER] Bloqueo persiste incluso con cookies, pero continuando de todos modos', { userId, url: newUrl });
+              page = newPage; // Usar la nueva página de todos modos
+              page.on('response', apiResponseHandler); // Re-agregar el handler
             }
           } else {
-            // No hay cookies disponibles - retornar vacío en lugar de lanzar error
-            logger.warn('[SCRAPER] AliExpress bloqueó el acceso y no hay cookies disponibles. Retornando vacío.', { userId, query });
-            return [];
+            // No hay cookies - continuar de todos modos e intentar extraer productos
+            logger.warn('[SCRAPER] AliExpress puede estar bloqueando, pero continuando para intentar extraer productos', { userId, query });
           }
         } catch (cookieError: any) {
-          logger.error('[SCRAPER] Error al intentar usar cookies o bloqueo persistente', {
+          logger.warn('[SCRAPER] Error al intentar usar cookies, pero continuando de todos modos', {
             error: cookieError?.message || String(cookieError),
             userId,
             query
           });
-          
-          // Verificar si hay sesión manual pendiente
-          const { ManualAuthService } = await import('./manual-auth.service');
-          const manualSession = await ManualAuthService.getActiveSession(userId, 'aliexpress');
-          
-          if (manualSession && manualSession.status === 'pending') {
-            throw new ManualAuthRequiredError('aliexpress', manualSession.token, currentUrl, manualSession.expiresAt);
-          }
-          
-          // Si no hay sesión manual, retornar vacío en lugar de lanzar error
-          logger.warn('[SCRAPER] AliExpress bloqueó el acceso. Retornando vacío (modo público sin cookies).', { userId, query });
-          return [];
+          // Continuar sin cookies - intentar extraer productos de todos modos
         }
       }
 
@@ -1061,7 +1075,7 @@ export class AdvancedMarketplaceScraper {
         logger.debug('[SCRAPER] Error al hacer scroll (ignorado)');
       }
       
-      // ✅ Verificar si hay CAPTCHA o bloqueo antes de intentar extraer productos
+      // ✅ Verificar si hay CAPTCHA o bloqueo, pero NO lanzar error - intentar extraer productos de todos modos
       const hasCaptcha = await page.evaluate(() => {
         const captchaSelectors = [
           '.captcha',
@@ -1090,7 +1104,7 @@ export class AdvancedMarketplaceScraper {
       
       if (hasCaptcha || isBlockedInContent) {
         const currentUrl = page.url();
-        logger.warn('[SCRAPER] CAPTCHA o bloqueo detectado en la página de AliExpress', { 
+        logger.warn('[SCRAPER] CAPTCHA o bloqueo detectado en la página, pero intentando extraer productos de todos modos', { 
           query, 
           userId,
           hasCaptcha,
@@ -1099,18 +1113,8 @@ export class AdvancedMarketplaceScraper {
         });
         await this.captureAliExpressSnapshot(page, `captcha-detected-${Date.now()}`);
         
-        // Verificar si hay sesión manual pendiente antes de lanzar error
-        const { ManualAuthService } = await import('./manual-auth.service');
-        const manualSession = await ManualAuthService.getActiveSession(userId, 'aliexpress');
-        
-        if (manualSession && manualSession.status === 'pending') {
-          throw new ManualAuthRequiredError('aliexpress', manualSession.token, currentUrl, manualSession.expiresAt);
-        }
-        
-        // Si no hay sesión manual, lanzar error descriptivo
-        if (isBlockedInContent) {
-          throw new Error('AliExpress bloqueó el acceso. Se requiere autenticación manual o cookies válidas.');
-        }
+        // NO lanzar error aquí - continuar e intentar extraer productos
+        // Solo lanzar error si después de intentar extraer no encontramos nada
       }
 
       // Extraer runParams con los productos renderizados por la propia página
