@@ -95,17 +95,32 @@ export class APIHealthMonitorService extends EventEmitter {
 
       logger.info(`Checking API health for ${users.length} users`);
 
-      // Check APIs for each user with individual timeout protection
-      const results = await Promise.allSettled(
-        users.map(userId => 
-          Promise.race([
+      // ✅ FIX SIGSEGV: Serializar checks de usuarios para evitar operaciones en paralelo
+      // El problema era: operaciones crypto nativas + queries Prisma + HTTP requests ejecutándose simultáneamente
+      // causaban segmentation fault en Railway.
+      // Solución: ejecutar checks en serie con pequeños delays entre usuarios.
+      const results: PromiseSettledResult<void>[] = [];
+      for (const userId of users) {
+        try {
+          const result = await Promise.race([
             this.checkUserAPIs(userId),
             new Promise<void>((_, reject) => 
-              setTimeout(() => reject(new Error(`Timeout checking APIs for user ${userId}`)), 10000)
+              setTimeout(() => reject(new Error(`Timeout checking APIs for user ${userId}`)), 15000)
             )
-          ])
-        )
-      );
+          ]);
+          results.push({ status: 'fulfilled' as const, value: result });
+          // Pequeño delay entre usuarios para no saturar recursos (crypto, Prisma, HTTP)
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (error: any) {
+          results.push({ 
+            status: 'rejected' as const, 
+            reason: error 
+          });
+          logger.warn(`API health check failed for user ${userId}`, { error: error.message });
+          // Continuar con el siguiente usuario incluso si falla
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
 
       // Count results
       const successful = results.filter(r => r.status === 'fulfilled').length;
@@ -176,12 +191,15 @@ export class APIHealthMonitorService extends EventEmitter {
         : statuses;
 
       // Check each API that is configured
+      // ✅ FIX SIGSEGV: NO forzar health checks reales (HTTP requests) en startup
+      // Solo validar credenciales sin hacer llamadas HTTP, para evitar saturar recursos
       for (const status of apisToCheck) {
         if (!status.isConfigured) {
           continue; // Skip unconfigured APIs
         }
 
-        // Force health check for configured APIs
+        // ✅ NO forzar health checks reales durante monitor automático (solo validar credenciales)
+        // Force health check solo se debe usar en tests manuales (/api/system/test-apis)
         try {
           let newStatus;
           
@@ -190,7 +208,7 @@ export class APIHealthMonitorService extends EventEmitter {
               newStatus = await apiAvailability.checkEbayAPI(
                 userId,
                 status.environment || 'production',
-                true // Force health check
+                false // ✅ NO forzar health check real - solo validar credenciales
               );
               break;
             case 'amazon':
