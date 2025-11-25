@@ -2998,8 +2998,8 @@ export class AdvancedMarketplaceScraper {
       }
     }
 
-    // ✅ Extraer URL antes de usarla
-    const url =
+    // ✅ Extraer URL antes de usarla (evitar redeclaración)
+    const productUrlValue =
       item.productUrl ||
       item.url ||
       item.link ||
@@ -3011,6 +3011,9 @@ export class AdvancedMarketplaceScraper {
       item.affiliateUrl ||
       (item.productId ? `https://www.aliexpress.com/item/${item.productId}.html` : null) ||
       null;
+    
+    // Renombrar para evitar conflictos con otras variables 'url' en el scope
+    const url = productUrlValue;
 
     // ✅ Mejorar manejo de precios inválidos con logging detallado
     if (!resolvedPrice || resolvedPrice.amountInBase <= 0) {
