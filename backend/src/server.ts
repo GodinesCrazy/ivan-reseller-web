@@ -373,10 +373,23 @@ async function startServer() {
         console.warn('⚠️  Warning: Could not recover persisted API statuses:', error.message);
       }
       
-      // Start API Health Monitor
-      await apiHealthMonitor.start();
-      console.log('✅ API Health Monitor started');
-      console.log('  - Monitoring API health every 15 minutes');
+      // Start API Health Monitor (with error handling to prevent SIGSEGV)
+      try {
+        // Delay start to avoid conflicts during server initialization
+        setTimeout(async () => {
+          try {
+            await apiHealthMonitor.start();
+            console.log('✅ API Health Monitor started');
+            console.log('  - Monitoring API health every 15 minutes');
+          } catch (healthError: any) {
+            console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
+            console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
+          }
+        }, 5000); // Start after 5 seconds
+      } catch (error: any) {
+        console.warn('⚠️  Warning: Could not initialize API Health Monitor:', error.message);
+        console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
+      }
       console.log('');
       
       aliExpressAuthMonitor.start();

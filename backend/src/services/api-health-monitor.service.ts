@@ -80,8 +80,13 @@ export class APIHealthMonitorService extends EventEmitter {
     try {
       logger.debug('Performing scheduled API health checks');
 
-      // Get users to check
-      const users = await this.getUsersToCheck();
+      // Get users to check with timeout protection
+      const users = await Promise.race([
+        this.getUsersToCheck(),
+        new Promise<number[]>((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout getting users')), 5000)
+        )
+      ]) as number[];
       
       if (users.length === 0) {
         logger.debug('No users to check');
@@ -90,9 +95,16 @@ export class APIHealthMonitorService extends EventEmitter {
 
       logger.info(`Checking API health for ${users.length} users`);
 
-      // Check APIs for each user
+      // Check APIs for each user with individual timeout protection
       const results = await Promise.allSettled(
-        users.map(userId => this.checkUserAPIs(userId))
+        users.map(userId => 
+          Promise.race([
+            this.checkUserAPIs(userId),
+            new Promise<void>((_, reject) => 
+              setTimeout(() => reject(new Error(`Timeout checking APIs for user ${userId}`)), 10000)
+            )
+          ])
+        )
       );
 
       // Count results
@@ -149,8 +161,14 @@ export class APIHealthMonitorService extends EventEmitter {
    */
   private async checkUserAPIs(userId: number): Promise<void> {
     try {
-      // Get all API statuses
-      const statuses = await apiAvailability.getAllAPIStatus(userId);
+      // Get all API statuses with error handling
+      let statuses;
+      try {
+        statuses = await apiAvailability.getAllAPIStatus(userId);
+      } catch (error: any) {
+        logger.warn(`Error getting API statuses for user ${userId}:`, error.message);
+        return; // Skip this user if we can't get statuses
+      }
 
       // Filter APIs to monitor if configured
       const apisToCheck = this.config.apisToMonitor.length > 0
