@@ -242,33 +242,76 @@ class OpportunityFinderService {
           };
         })
         .filter(p => {
-          const isValid = p.price > 0 && p.sourcePrice > 0;
+          // ✅ Validación más permisiva: aceptar productos con título y precio válido
+          const hasTitle = p.title && p.title.trim().length > 0;
+          const hasPrice = (p.price || 0) > 0;
+          const hasSourcePrice = (p.sourcePrice || 0) > 0;
+          const hasUrl = p.productUrl && p.productUrl.trim().length > 10;
+          
+          // ✅ Producto válido si tiene título, precio y URL
+          // Si no tiene sourcePrice, usar price como fallback
+          const isValid = hasTitle && hasPrice && hasUrl && (hasSourcePrice || hasPrice);
+          
           if (!isValid && p.title) {
-            logger.debug('Producto filtrado (precio inválido)', {
+            logger.debug('Producto filtrado (datos inválidos)', {
               service: 'opportunity-finder',
               title: p.title.substring(0, 50),
+              hasTitle,
               price: p.price,
-              sourcePrice: p.sourcePrice
+              sourcePrice: p.sourcePrice,
+              hasPrice,
+              hasSourcePrice,
+              hasUrl: !!p.productUrl,
+              urlLength: p.productUrl?.length || 0
             });
           }
           return isValid;
         });
 
       if (products.length > 0) {
-        logger.info('Scraping nativo exitoso', {
+        logger.info('✅ Scraping nativo exitoso', {
           service: 'opportunity-finder',
+          query,
+          userId,
           productsFound: products.length,
-          firstProducts: products.slice(0, 3).map(p => ({ title: p.title?.substring(0, 50), price: p.price }))
+          environment,
+          firstProducts: products.slice(0, 3).map(p => ({ 
+            title: p.title?.substring(0, 50), 
+            price: p.price, 
+            sourcePrice: p.sourcePrice,
+            hasImage: !!p.imageUrl,
+            hasUrl: !!p.productUrl
+          })),
+          allProductsValid: products.every(p => {
+            const hasTitle = p.title && p.title.trim().length > 0;
+            const hasPrice = (p.price || 0) > 0;
+            const hasUrl = p.productUrl && p.productUrl.trim().length > 10;
+            return hasTitle && hasPrice && hasUrl;
+          })
         });
       } else {
-        logger.warn('Scraping nativo no encontró productos', {
+        logger.warn('⚠️ Scraping nativo no encontró productos', {
           service: 'opportunity-finder',
           query,
           userId,
           maxItems,
           environment,
           itemsRaw: items?.length || 0,
-          filteredItems: items && items.length > 0 ? items.slice(0, 3).map((i: any) => ({ title: i.title?.substring(0, 50), price: i.price, sourcePrice: i.sourcePrice })) : []
+          filteredItems: items && items.length > 0 ? items.slice(0, 3).map((i: any) => ({ 
+            title: i.title?.substring(0, 50), 
+            price: i.price, 
+            sourcePrice: i.sourcePrice,
+            hasTitle: !!i.title,
+            hasPrice: (i.price || 0) > 0,
+            hasSourcePrice: (i.sourcePrice || 0) > 0,
+            hasUrl: !!i.productUrl
+          })) : [],
+          possibleCauses: [
+            'El scraper retornó vacío (posible bloqueo de AliExpress)',
+            'Los productos no tienen precio válido (resolvePrice falló)',
+            'Los productos no pasaron el filtro de validación',
+            'El término de búsqueda no tiene resultados'
+          ]
         });
       }
     } catch (nativeError: any) {
@@ -336,7 +379,30 @@ class OpportunityFinderService {
               productId: p.productId,
             };
           })
-          .filter(p => p.price > 0 && p.sourcePrice > 0);
+          .filter(p => {
+            // ✅ Validación más permisiva: aceptar productos con título y precio válido
+            const hasTitle = p.title && p.title.trim().length > 0;
+            const hasPrice = (p.price || 0) > 0;
+            const hasSourcePrice = (p.sourcePrice || 0) > 0;
+            const hasUrl = p.productUrl && p.productUrl.trim().length > 10;
+            
+            // ✅ Producto válido si tiene título, precio y URL
+            const isValid = hasTitle && hasPrice && hasUrl && (hasSourcePrice || hasPrice);
+            
+            if (!isValid && p.title) {
+              logger.debug('Producto filtrado desde bridge Python (datos inválidos)', {
+                service: 'opportunity-finder',
+                title: p.title.substring(0, 50),
+                hasTitle,
+                price: p.price,
+                sourcePrice: p.sourcePrice,
+                hasPrice,
+                hasSourcePrice,
+                hasUrl: !!p.productUrl
+              });
+            }
+            return isValid;
+          });
 
         if (products.length > 0) {
           logger.info('Bridge Python exitoso', {

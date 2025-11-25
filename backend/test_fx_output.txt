@@ -1,0 +1,13 @@
+FAIL src/services/__tests__/fx.service.test.ts
+  ÔùÅ Test suite failed to run
+
+    src/services/__tests__/fx.service.test.ts:35:23 - error TS2307: Cannot find module '../../fx.service' or its corresponding type declarations.
+
+    35 import fxService from '../../fx.service';
+                             ~~~~~~~~~~~~~~~~~~
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        5.225 s
+Ran all test suites matching /src\\services\\__tests__\\fx.service.test.ts/i.

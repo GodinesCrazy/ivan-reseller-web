@@ -1,0 +1,21 @@
+
+> ivan-reseller-backend@1.0.0 test
+> jest backend/src/services/__tests__/fx.service.test.ts
+
+FAIL src/services/__tests__/fx.service.test.ts
+  ÔùÅ Test suite failed to run
+
+    src/services/fx.service.ts:300:26 - error TS2362: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+
+    300     const amountInBase = amount / this.rates[f];
+                                 ~~~~~~
+    src/services/fx.service.ts:342:39 - error TS2365: Operator '>' cannot be applied to types 'number | Decimal' and 'number'.
+
+    342     if (f === 'CLP' || t === 'CLP' || amount > 1000 || Math.abs(converted - rounded) > 0.01) {
+                                              ~~~~~~~~~~~~~
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        4.426 s
+Ran all test suites matching /backend\\src\\services\\__tests__\\fx.service.test.ts/i.

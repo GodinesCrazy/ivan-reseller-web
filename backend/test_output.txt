@@ -1,0 +1,21 @@
+FAIL src/services/__tests__/fx.service.test.ts
+  ÔùÅ Test suite failed to run
+
+    Cannot find module '../config/redis' from 'src/services/__tests__/fx.service.test.ts'
+
+       5 |     redis: {
+       6 |         get: jest.fn(),
+    >  7 |         setex: jest.fn(),
+         |      ^
+       8 |     },
+       9 |     isRedisAvailable: false,
+      10 | }));
+
+      at Resolver._throwModNotFoundError (node_modules/jest-resolve/build/resolver.js:427:11)
+      at Object.<anonymous> (src/services/__tests__/fx.service.test.ts:7:6)
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        4.702 s
+Ran all test suites matching /src\\services\\__tests__\\fx.service.test.ts/i.

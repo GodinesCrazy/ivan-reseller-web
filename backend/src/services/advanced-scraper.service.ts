@@ -2861,7 +2861,71 @@ export class AdvancedMarketplaceScraper {
       }
     }
 
+    // ✅ FALLBACK: Si no se resolvió el precio, intentar usar el valor numérico directamente
     if (!resolvedPrice || resolvedPrice.amountInBase <= 0) {
+      // Intentar extraer precio directo de los candidatos numéricos
+      for (const candidate of priceCandidates) {
+        if (candidate === undefined || candidate === null || candidate === '') {
+          continue;
+        }
+        
+        // Si es un número, usarlo directamente
+        if (typeof candidate === 'number' && isFinite(candidate) && candidate > 0) {
+          const fallbackCurrency = aliExpressLocalCurrency || userBaseCurrency || 'USD';
+          resolvedPrice = {
+            amount: candidate,
+            sourceCurrency: fallbackCurrency,
+            amountInBase: candidate, // Asumir misma moneda si no se puede convertir
+            baseCurrency: userBaseCurrency || 'USD',
+          };
+          
+          logger.debug('[SCRAPER] Usando precio directo como fallback', {
+            title: title?.substring(0, 50) || 'N/A',
+            candidate,
+            currency: fallbackCurrency
+          });
+          break;
+        }
+        
+        // Si es string, intentar parsearlo
+        if (typeof candidate === 'string') {
+          const numericMatch = candidate.match(/[\d.,]+/);
+          if (numericMatch) {
+            const numericValue = parseFloat(numericMatch[0].replace(/,/g, ''));
+            if (isFinite(numericValue) && numericValue > 0) {
+              const fallbackCurrency = aliExpressLocalCurrency || userBaseCurrency || 'USD';
+              resolvedPrice = {
+                amount: numericValue,
+                sourceCurrency: fallbackCurrency,
+                amountInBase: numericValue, // Asumir misma moneda si no se puede convertir
+                baseCurrency: userBaseCurrency || 'USD',
+              };
+              
+              logger.debug('[SCRAPER] Usando precio parseado como fallback', {
+                title: title?.substring(0, 50) || 'N/A',
+                candidate: candidate.substring(0, 30),
+                parsedValue: numericValue,
+                currency: fallbackCurrency
+              });
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // ✅ Mejorar manejo de precios inválidos con logging detallado
+    if (!resolvedPrice || resolvedPrice.amountInBase <= 0) {
+      logger.debug('[SCRAPER] Producto descartado por precio inválido (después de fallbacks)', {
+        title: title?.substring(0, 50) || 'N/A',
+        hasResolvedPrice: !!resolvedPrice,
+        amountInBase: resolvedPrice?.amountInBase || 0,
+        amount: resolvedPrice?.amount || 0,
+        sourceCurrency: resolvedPrice?.sourceCurrency || 'N/A',
+        baseCurrency: resolvedPrice?.baseCurrency || 'N/A',
+        hasUrl: !!url,
+        priceCandidates: priceCandidates.filter(c => c !== undefined && c !== null && c !== '').slice(0, 3)
+      });
       return null;
     }
 
@@ -2894,7 +2958,27 @@ export class AdvancedMarketplaceScraper {
       item.url ||
       '';
 
-    if (!title || price <= 0 || !url) {
+    // ✅ Validar requisitos mínimos con logging
+    if (!title || title.trim().length === 0) {
+      logger.debug('[SCRAPER] Producto descartado: sin título');
+      return null;
+    }
+    
+    if (price <= 0) {
+      logger.debug('[SCRAPER] Producto descartado: precio inválido', {
+        title: title.substring(0, 50),
+        price,
+        sourcePrice,
+        sourceCurrency,
+        baseCurrency
+      });
+      return null;
+    }
+    
+    if (!url || url.trim().length === 0) {
+      logger.debug('[SCRAPER] Producto descartado: sin URL', {
+        title: title.substring(0, 50)
+      });
       return null;
     }
 

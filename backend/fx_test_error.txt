@@ -1,0 +1,21 @@
+FAIL src/services/__tests__/fx.service.test.ts
+  ÔùÅ Test suite failed to run
+
+    Cannot find module '../config/logger' from 'src/services/__tests__/fx.service.test.ts'
+
+      12 | // Mock de logger
+      13 | jest.mock('../config/logger', () => ({
+    > 14 |     logger: {
+         |      ^
+      15 |         info: jest.fn(),
+      16 |         warn: jest.fn(),
+      17 |         error: jest.fn(),
+
+      at Resolver._throwModNotFoundError (node_modules/jest-resolve/build/resolver.js:427:11)
+      at Object.<anonymous> (src/services/__tests__/fx.service.test.ts:14:6)
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        4.089 s
+Ran all test suites matching /src\\services\\__tests__\\fx.service.test.ts/i.
