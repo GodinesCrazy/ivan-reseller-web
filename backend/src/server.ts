@@ -373,19 +373,29 @@ async function startServer() {
         console.warn('⚠️  Warning: Could not recover persisted API statuses:', error.message);
       }
       
-      // Start API Health Monitor (with error handling to prevent SIGSEGV)
+      // Start API Health Monitor (TEMPORARILY DISABLED to prevent SIGSEGV crashes)
+      // TODO: Investigate root cause of SIGSEGV when API Health Monitor runs
+      // The crash occurs right after "Checking API health for X users"
+      // Possible causes: Prisma query issues, native module conflicts, memory issues
       try {
-        // Delay start to avoid conflicts during server initialization
-        setTimeout(async () => {
-          try {
-            await apiHealthMonitor.start();
-            console.log('✅ API Health Monitor started');
-            console.log('  - Monitoring API health every 15 minutes');
-          } catch (healthError: any) {
-            console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
-            console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
-          }
-        }, 5000); // Start after 5 seconds
+        // Disable API Health Monitor in production until root cause is identified
+        if (env.NODE_ENV === 'production') {
+          console.log('⚠️  API Health Monitor temporarily disabled in production');
+          console.log('  - This prevents SIGSEGV crashes during server startup');
+          console.log('  - API health can still be checked manually via /api/system/test-apis');
+        } else {
+          // In development, start with delay and error handling
+          setTimeout(async () => {
+            try {
+              await apiHealthMonitor.start();
+              console.log('✅ API Health Monitor started');
+              console.log('  - Monitoring API health every 15 minutes');
+            } catch (healthError: any) {
+              console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
+              console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
+            }
+          }, 10000); // Start after 10 seconds in dev
+        }
       } catch (error: any) {
         console.warn('⚠️  Warning: Could not initialize API Health Monitor:', error.message);
         console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
