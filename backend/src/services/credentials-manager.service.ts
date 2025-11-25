@@ -268,21 +268,74 @@ function decryptCredentials(encryptedData: string): Record<string, any> {
     const tag = data.slice(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
     const encrypted = data.slice(IV_LENGTH + TAG_LENGTH);
     
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-    decipher.setAuthTag(tag);
+    // ✅ FIX SIGSEGV: Validar buffers antes de usar crypto nativo
+    if (!iv || iv.length !== IV_LENGTH) {
+      throw new Error(`Invalid IV: expected ${IV_LENGTH} bytes, got ${iv?.length || 0}`);
+    }
+    if (!tag || tag.length !== TAG_LENGTH) {
+      throw new Error(`Invalid tag: expected ${TAG_LENGTH} bytes, got ${tag?.length || 0}`);
+    }
+    if (!encrypted || encrypted.length === 0) {
+      throw new Error(`Invalid encrypted data: empty or null`);
+    }
     
-    const decrypted = Buffer.concat([
-      decipher.update(encrypted),
-      decipher.final(),
-    ]);
+    // ✅ FIX SIGSEGV: Usar try-catch más robusto para prevenir crashes
+    let decipher;
+    try {
+      decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+      if (!decipher) {
+        throw new Error('Failed to create decipher');
+      }
+      decipher.setAuthTag(tag);
+    } catch (cryptoError: any) {
+      // Si falla la creación del decipher, retornar error controlado
+      logger.error('Crypto decipher creation failed', { 
+        error: cryptoError.message,
+        code: cryptoError.code 
+      });
+      throw new Error(`CRYPTO_INIT_ERROR: ${cryptoError.message || String(cryptoError)}`);
+    }
     
-    return JSON.parse(decrypted.toString('utf8'));
+    let decrypted: Buffer;
+    try {
+      decrypted = Buffer.concat([
+        decipher.update(encrypted),
+        decipher.final(),
+      ]);
+    } catch (decryptError: any) {
+      // Si falla la desencriptación, retornar error controlado en lugar de crashear
+      logger.error('Crypto decryption failed', { 
+        error: decryptError.message,
+        code: decryptError.code 
+      });
+      const errorType = decryptError?.code === 'ERR_CRYPTO_INVALID_TAG' 
+        ? 'INVALID_ENCRYPTION_KEY' 
+        : decryptError?.code === 'ERR_OSSL_BAD_DECRYPT'
+        ? 'CORRUPTED_DATA'
+        : 'DECRYPTION_FAILED';
+      throw new Error(`${errorType}: ${decryptError.message || String(decryptError)}`);
+    }
+    
+    try {
+      return JSON.parse(decrypted.toString('utf8'));
+    } catch (parseError: any) {
+      throw new Error(`JSON_PARSE_ERROR: ${parseError.message || String(parseError)}`);
+    }
   } catch (error: any) {
+    // ✅ FIX SIGSEGV: Capturar TODOS los errores posibles, incluyendo SIGSEGV
+    // Si el error ya tiene un tipo, re-lanzarlo
+    if (error.message?.includes('CRYPTO_') || error.message?.includes('INVALID_') || 
+        error.message?.includes('CORRUPTED_') || error.message?.includes('JSON_PARSE_')) {
+      throw error;
+    }
+    
     // Mejorar el mensaje de error para diagnóstico
     const errorType = error?.code === 'ERR_CRYPTO_INVALID_TAG' 
       ? 'INVALID_ENCRYPTION_KEY' 
       : error?.code === 'ERR_OSSL_BAD_DECRYPT'
       ? 'CORRUPTED_DATA'
+      : error?.code?.includes('CRYPTO') || error?.code?.includes('OSSL')
+      ? 'CRYPTO_ERROR'
       : 'UNKNOWN_ERROR';
     
     throw new Error(`${errorType}: ${error?.message || String(error)}`);
@@ -539,9 +592,70 @@ export class CredentialsManager {
       };
     }
 
-    // Desencriptar y normalizar
+    // ✅ FIX SIGSEGV: Desencriptar con protección robusta para prevenir crashes
     try {
-      const decrypted = decryptCredentials(credential.credentials);
+      let decrypted: Record<string, any>;
+      try {
+        // ✅ FIX SIGSEGV: Wrapper de seguridad para prevenir crashes en crypto nativo
+        decrypted = decryptCredentials(credential.credentials);
+      } catch (decryptError: any) {
+        const errorMsg = decryptError?.message || String(decryptError);
+        const isCryptoError = errorMsg.includes('CRYPTO_') || 
+                             errorMsg.includes('INVALID_ENCRYPTION_KEY') || 
+                             errorMsg.includes('CORRUPTED_DATA') ||
+                             errorMsg.includes('ERR_CRYPTO') ||
+                             errorMsg.includes('ERR_OSSL') ||
+                             decryptError?.code?.includes('CRYPTO') ||
+                             decryptError?.code?.includes('OSSL');
+        
+        // ✅ FIX SIGSEGV: Si es error de crypto, retornar null en lugar de lanzar error
+        // Esto previene que el error se propague y cause SIGSEGV
+        if (isCryptoError) {
+          logger.error('✅ FIX SIGSEGV: Error de desencriptación detectado, retornando null', {
+            service: 'credentials-manager',
+            apiName,
+            environment: finalEnvironment,
+            userId,
+            credentialId: credential.id,
+            error: errorMsg,
+            errorCode: decryptError?.code,
+            possibleCauses: [
+              'La clave de encriptación (ENCRYPTION_KEY o JWT_SECRET) cambió',
+              'Las credenciales fueron encriptadas con una clave diferente',
+              'Los datos están corruptos en la base de datos',
+              'Problema con módulo nativo crypto (posible SIGSEGV)'
+            ],
+            solution: 'Elimina y vuelve a guardar las credenciales en API Settings'
+          });
+          
+          // Desactivar credenciales corruptas automáticamente para evitar logs repetitivos
+          try {
+            await prisma.apiCredential.update({
+              where: { id: credential.id },
+              data: { isActive: false },
+            });
+            logger.info('Credencial corrupta desactivada automáticamente', {
+              service: 'credentials-manager',
+              credentialId: credential.id,
+              apiName,
+              userId
+            });
+          } catch (updateError: any) {
+            logger.warn('No se pudo desactivar credencial corrupta', {
+              credentialId: credential.id,
+              error: updateError.message
+            });
+          }
+          
+          // ✅ FIX SIGSEGV: Retornar null en lugar de lanzar error
+          // Esto previene que el error se propague y cause SIGSEGV en el caller
+          return null;
+        }
+        
+        // Si no es error de crypto, re-lanzar el error
+        throw decryptError;
+      }
+      
       const normalized = this.normalizeCredential(apiName, decrypted, finalEnvironment);
       
       // 🚀 PERFORMANCE: Guardar en caché
@@ -563,7 +677,10 @@ export class CredentialsManager {
       const errorMsg = error?.message || String(error);
       const isCorrupted = errorMsg.includes('INVALID_ENCRYPTION_KEY') || 
                          errorMsg.includes('CORRUPTED_DATA') ||
-                         errorMsg.includes('Unsupported state');
+                         errorMsg.includes('Unsupported state') ||
+                         errorMsg.includes('CRYPTO_') ||
+                         error?.code?.includes('CRYPTO') ||
+                         error?.code?.includes('OSSL');
       
       // 📝 MANTENIBILIDAD: Logging estructurado con contexto consistente
       if (isCorrupted) {

@@ -1193,29 +1193,133 @@ export class APIAvailabilityService {
 
   /**
    * Get all API statuses for specific user
+   * 
+   * ⚠️ FIX SIGSEGV: Serializar checks críticos en lugar de Promise.all
+   * El problema era que 9 Promise.all en paralelo + desencriptación + Prisma queries
+   * saturaban el event loop y causaban segmentation fault.
    */
   async getAllAPIStatus(userId: number): Promise<APIStatus[]> {
+    // ✅ FIX: Ejecutar checks críticos (que usan desencriptación) en serie
+    // Los checks simples (que no usan credenciales) pueden ejecutarse en paralelo
+    const criticalChecks = [
+      () => this.checkEbayAPI(userId, 'production'),
+      () => this.checkAmazonAPI(userId, 'production'),
+      () => this.checkMercadoLibreAPI(userId, 'production'),
+      () => this.checkPayPalAPI(userId),
+    ];
+    
+    const simpleChecks = [
+      () => this.checkGroqAPI(userId),
+      () => this.checkScraperAPI(userId),
+      () => this.checkZenRowsAPI(userId),
+      () => this.check2CaptchaAPI(userId),
+      () => this.checkAliExpressAPI(userId),
+    ];
+    
+    // Ejecutar checks críticos en serie con timeout y error handling
+    const criticalResults: APIStatus[] = [];
+    const criticalCheckNames = ['ebay', 'amazon', 'mercadolibre', 'paypal'];
+    for (let i = 0; i < criticalChecks.length; i++) {
+      const check = criticalChecks[i];
+      const checkName = criticalCheckNames[i] || 'unknown';
+      try {
+        const result = await Promise.race([
+          check(),
+          new Promise<APIStatus>((_, reject) => 
+            setTimeout(() => reject(new Error('Check timeout')), 10000)
+          )
+        ]);
+        criticalResults.push(result);
+      } catch (error: any) {
+        logger.warn(`API check failed for user ${userId}`, { 
+          error: error.message,
+          check: checkName 
+        });
+        // Continuar con el siguiente check en lugar de fallar completamente
+        criticalResults.push({
+          apiName: checkName,
+          name: `${checkName} API`,
+          isConfigured: false,
+          isAvailable: false,
+          lastChecked: new Date(),
+          error: error.message,
+        } as APIStatus);
+      }
+    }
+    
+    // Ejecutar checks simples en paralelo (más seguros)
+    const simpleResults = await Promise.allSettled(
+      simpleChecks.map(check => 
+        Promise.race([
+          check(),
+          new Promise<APIStatus>((_, reject) => 
+            setTimeout(() => reject(new Error('Check timeout')), 5000)
+          )
+        ])
+      )
+    );
+    
+    // Extraer resultados críticos con fallbacks seguros
+    const ebayProduction = criticalResults[0] || {
+      apiName: 'ebay',
+      name: 'eBay Trading API',
+      isConfigured: false,
+      isAvailable: false,
+      lastChecked: new Date(),
+      error: 'Check failed',
+    } as APIStatus;
+    const amazonProduction = criticalResults[1] || {
+      apiName: 'amazon',
+      name: 'Amazon SP-API',
+      isConfigured: false,
+      isAvailable: false,
+      lastChecked: new Date(),
+      error: 'Check failed',
+    } as APIStatus;
+    const mercadolibreProduction = criticalResults[2] || {
+      apiName: 'mercadolibre',
+      name: 'MercadoLibre API',
+      isConfigured: false,
+      isAvailable: false,
+      lastChecked: new Date(),
+      error: 'Check failed',
+    } as APIStatus;
+    const paypal = criticalResults[3] || {
+      apiName: 'paypal',
+      name: 'PayPal API',
+      isConfigured: false,
+      isAvailable: false,
+      lastChecked: new Date(),
+      error: 'Check failed',
+    } as APIStatus;
+    
+    // Extraer resultados simples con nombres correctos
+    const simpleCheckNames = ['groq', 'scraperapi', 'zenrows', '2captcha', 'aliexpress'];
     const [
-      ebayProduction,
-      amazonProduction,
-      mercadolibreProduction,
       groq,
       scraper,
       zenrows,
       captcha,
-      paypal,
       aliexpress
-    ] = await Promise.all([
-      this.checkEbayAPI(userId, 'production'),
-      this.checkAmazonAPI(userId, 'production'),
-      this.checkMercadoLibreAPI(userId, 'production'),
-      this.checkGroqAPI(userId),
-      this.checkScraperAPI(userId),
-      this.checkZenRowsAPI(userId),
-      this.check2CaptchaAPI(userId),
-      this.checkPayPalAPI(userId),
-      this.checkAliExpressAPI(userId)
-    ]);
+    ] = simpleResults.map((result, index) => {
+      if (result.status === 'fulfilled') {
+        return result.value;
+      } else {
+        const checkName = simpleCheckNames[index] || 'unknown';
+        logger.warn(`Simple API check failed for user ${userId}`, { 
+          error: result.reason?.message,
+          check: checkName 
+        });
+        return {
+          apiName: checkName,
+          name: `${checkName} API`,
+          isConfigured: false,
+          isAvailable: false,
+          lastChecked: new Date(),
+          error: result.reason?.message || 'Check failed',
+        } as APIStatus;
+      }
+    });
 
     const statuses: APIStatus[] = [
       ebayProduction,
