@@ -1,5 +1,6 @@
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
+import { toNumber } from '../utils/decimal.utils';
 
 /**
  * AI Improvements Service
@@ -81,7 +82,7 @@ export class AIImprovementsService {
 
         const stats = productStats.get(productId)!;
         stats.sales++;
-        stats.totalProfit += operation.totalProfit;
+        stats.totalProfit += toNumber(operation.totalProfit);
         stats.daysToSale.push(operation.daysToComplete);
       }
 
@@ -190,7 +191,7 @@ export class AIImprovementsService {
 
         const stats = categoryStats.get(category)!;
         stats.sales++;
-        stats.totalProfit += sale.netProfit || sale.grossProfit || 0;
+        stats.totalProfit += toNumber(sale.netProfit || sale.grossProfit || 0);
       }
 
       // Generar recomendaciones de categorías
@@ -237,8 +238,8 @@ export class AIImprovementsService {
       for (const product of user.products) {
         if (product.sales.length === 0) continue;
 
-        const avgSalePrice = product.sales.reduce((sum, s) => sum + s.salePrice, 0) / product.sales.length;
-        const avgProfit = product.sales.reduce((sum, s) => sum + (s.netProfit || s.grossProfit || 0), 0) / product.sales.length;
+        const avgSalePrice = product.sales.reduce((sum, s) => sum + toNumber(s.salePrice), 0) / product.sales.length;
+        const avgProfit = product.sales.reduce((sum, s) => sum + toNumber(s.netProfit || s.grossProfit || 0), 0) / product.sales.length;
 
         // Si el margen es bajo, sugerir aumento de precio
         const margin = avgSalePrice > 0 ? (avgProfit / avgSalePrice) * 100 : 0;
@@ -301,7 +302,7 @@ export class AIImprovementsService {
         throw new Error('Producto no encontrado');
       }
 
-      const currentPrice = product.suggestedPrice || product.aliexpressPrice * 2;
+      const currentPrice = toNumber(product.suggestedPrice || product.aliexpressPrice) * 2;
       
       // Simular análisis de competencia (en producción, esto vendría de scraping de marketplaces)
       const competitorRange = {

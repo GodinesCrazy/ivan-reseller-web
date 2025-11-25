@@ -8,6 +8,7 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { AppError } from '../../middleware/error.middleware';
 import { z } from 'zod';
 import { logger } from '../../config/logger';
+import { ApiHealthService } from '../../services/api-health.service';
 
 const router = Router();
 
@@ -173,7 +174,64 @@ router.post('/refresh-api-cache', authenticate, async (req: Request, res: Respon
       stack: error.stack,
       userId: req.user?.userId
     });
-    next(error);
+    // ✅ CORRECCIÓN: next no está definido, usar res.status directamente
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Failed to refresh API cache'
+    });
+  }
+});
+
+/**
+ * POST /api/system/test-apis
+ * Test all configured APIs and return detailed results
+ */
+router.post('/test-apis', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new AppError('User not authenticated', 401);
+    }
+
+    logger.info('[API Health] Starting API tests', { userId });
+    
+    const summary = await ApiHealthService.runAllApiTests(userId);
+    
+    logger.info('[API Health] API tests completed', {
+      userId,
+      ok: summary.ok,
+      error: summary.error,
+      skip: summary.skip,
+    });
+    
+    res.json({
+      success: true,
+      data: summary,
+    });
+  } catch (error: any) {
+    if (error instanceof AppError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
+    logger.error('Error in /api/system/test-apis', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.userId
+    });
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to test APIs'
+    });
   }
 });
 

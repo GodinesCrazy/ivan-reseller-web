@@ -295,10 +295,11 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
       // Construir estructura detallada de publicación por marketplace
       const publicationStatus: Record<string, any> = {};
       publishResults.forEach((result) => {
+        // ✅ CORRECCIÓN: PublishResult ya incluye listingId y listingUrl como opcionales
         publicationStatus[result.marketplace || 'unknown'] = {
           success: result.success,
-          listingId: result.listingId || null,
-          listingUrl: result.listingUrl || null,
+          listingId: (result as any).listingId || null,
+          listingUrl: (result as any).listingUrl || null,
           error: result.error || null,
           publishedAt: result.success ? new Date().toISOString() : null
         };

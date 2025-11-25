@@ -2,6 +2,7 @@ import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import axios from 'axios';
 import { CredentialsManager } from './credentials-manager.service';
+import { toNumber } from '../utils/decimal.utils';
 
 export interface AISuggestion {
   id: string;
@@ -320,15 +321,16 @@ export class AISuggestionsService {
       }
 
     const totalSales = user.sales.length;
-    const totalRevenue = user.sales.reduce((sum, s) => sum + (s.salePrice || 0), 0);
-    const totalProfit = user.sales.reduce((sum, s) => sum + (s.netProfit || s.grossProfit || 0), 0);
+    const totalRevenue = user.sales.reduce((sum, s) => sum + toNumber(s.salePrice || 0), 0);
+    const totalProfit = user.sales.reduce((sum, s) => sum + toNumber(s.netProfit || s.grossProfit || 0), 0);
     const activeProducts = user.products.filter(p => p.status === 'APPROVED').length;
 
     // Calcular margen promedio
-    const profitableSales = user.sales.filter(s => s.salePrice && s.salePrice > 0);
+    const profitableSales = user.sales.filter(s => s.salePrice && toNumber(s.salePrice) > 0);
     const averageProfitMargin = profitableSales.length > 0
       ? profitableSales.reduce((sum, s) => {
-          const margin = s.salePrice ? ((s.netProfit || s.grossProfit || 0) / s.salePrice) * 100 : 0;
+          const salePriceNum = toNumber(s.salePrice);
+          const margin = salePriceNum > 0 ? (toNumber(s.netProfit || s.grossProfit || 0) / salePriceNum) * 100 : 0;
           return sum + margin;
         }, 0) / profitableSales.length
       : 0;
@@ -339,7 +341,7 @@ export class AISuggestionsService {
       const category = sale.product?.category || 'General';
       const stats = categoryStats.get(category) || { sales: 0, profit: 0 };
       stats.sales += 1;
-      stats.profit += sale.netProfit || sale.grossProfit || 0;
+      stats.profit += toNumber(sale.netProfit || sale.grossProfit || 0);
       categoryStats.set(category, stats);
     }
 
@@ -366,7 +368,7 @@ export class AISuggestionsService {
       category: p.category || 'General',
       price: (p as any).price || 0,
       sales: p.sales.length,
-      profit: p.sales.reduce((sum, s) => sum + (s.netProfit || s.grossProfit || 0), 0)
+      profit: p.sales.reduce((sum, s) => sum + toNumber(s.netProfit || s.grossProfit || 0), 0)
     }));
 
     // Oportunidades recientes (últimos 30 días)
@@ -579,7 +581,7 @@ export class AISuggestionsService {
         stat.marginSum += margin;
         stat.roiSum += roi;
         stat.profitSum += profitPerUnit;
-        stat.suggestedSum += opp.suggestedPriceUsd || 0;
+        stat.suggestedSum += toNumber(opp.suggestedPriceUsd || 0);
         for (const marketplace of marketplaces) {
           stat.marketplaces.set(
             marketplace,
@@ -602,8 +604,8 @@ export class AISuggestionsService {
           title: opp.title,
           profitMargin: margin,
           roiPercentage: roi,
-          suggestedPriceUsd: opp.suggestedPriceUsd || 0,
-          costUsd: opp.costUsd || 0,
+          suggestedPriceUsd: toNumber(opp.suggestedPriceUsd || 0),
+          costUsd: toNumber(opp.costUsd || 0),
           marketplaces,
         });
       }
@@ -678,14 +680,15 @@ export class AISuggestionsService {
 
     const winningOperations: WinningOperationSignal[] = operations
       .map((op) => {
-        const totalProfit = op.totalProfit || op.expectedProfit || 0;
-        const investment =
+        const totalProfit = toNumber(op.totalProfit || op.expectedProfit || 0);
+        const investment = toNumber(
           op.product?.aliexpressPrice ||
           op.product?.suggestedPrice ||
           op.product?.finalPrice ||
-          1;
+          1
+        );
         const roi =
-          investment > 0 ? (totalProfit / investment) * 100 : op.profitAccuracy || 0;
+          investment > 0 ? (totalProfit / investment) * 100 : toNumber(op.profitAccuracy || 0);
         return {
           title: op.product?.title || 'Producto sin título',
           marketplace: op.sale?.marketplace || 'marketplace',

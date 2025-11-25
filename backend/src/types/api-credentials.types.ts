@@ -196,6 +196,20 @@ export interface AliExpressCredentials {
   
   /** Secret para generar códigos TOTP (si tiene 2FA) */
   twoFactorSecret?: string;
+  
+  /** Cookies guardadas para mantener sesión */
+  cookies?: Array<{
+    name?: string;
+    key?: string;
+    value: string;
+    domain?: string;
+    path?: string;
+    expires?: number;
+    expiry?: number;
+  }>;
+  
+  /** Secret para generar códigos TOTP (si tiene 2FA) - legacy */
+  twoFactorSecret?: string;
 }
 
 /**

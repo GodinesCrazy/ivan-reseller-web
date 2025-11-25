@@ -881,13 +881,18 @@ export class AdvancedMarketplaceScraper {
         throw new Error('Failed to navigate to AliExpress with any URL format');
       }
 
+      // ✅ Esperar más tiempo ANTES de verificar bloqueo para dar tiempo a que la página cargue
+      // ANTES: Verificaba bloqueo inmediatamente → AHORA: Espera 5s adicionales antes de verificar
+      logger.debug('[SCRAPER] Esperando tiempo adicional antes de verificar bloqueo...', { query });
+      await new Promise(resolve => setTimeout(resolve, 5000)); // ✅ Esperar 5s adicionales
+      
       // ✅ Verificar si AliExpress bloqueó el acceso (página "punish" o TMD)
       // PERO NO retornar vacío inmediatamente - intentar extraer productos de todos modos
       const currentUrl = page.url();
-      const isBlocked = currentUrl.includes('/punish') || 
-                        currentUrl.includes('TMD') || 
-                        currentUrl.includes('x5secdata') ||
-                        currentUrl.includes('x5step');
+      let isBlocked = currentUrl.includes('/punish') || 
+                      currentUrl.includes('TMD') || 
+                      currentUrl.includes('x5secdata') ||
+                      currentUrl.includes('x5step');
       
       if (isBlocked) {
         logger.warn('[SCRAPER] Posible bloqueo detectado en URL, pero intentando continuar', {
@@ -899,56 +904,80 @@ export class AdvancedMarketplaceScraper {
         
         await this.captureAliExpressSnapshot(page, `blocked-${Date.now()}`);
         
-        // ✅ Intentar usar cookies si están disponibles
-        try {
-          const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', environment || 'production') as AliExpressCredentials | null;
-          
-          if (credentials && credentials.cookies && credentials.cookies.length > 0) {
-            logger.info('[SCRAPER] Intentando usar cookies guardadas para evitar bloqueo', { userId });
-            
-            // Cerrar página actual y crear una nueva con cookies
-            await page.close();
-            const newPage = await this.browser!.newPage();
-            await this.setupRealBrowser(newPage);
-            
-            // Establecer cookies antes de navegar
-            await newPage.setCookie(...credentials.cookies.map((cookie: any) => ({
-              name: cookie.name || cookie.key,
-              value: cookie.value,
-              domain: cookie.domain || '.aliexpress.com',
-              path: cookie.path || '/',
-              expires: cookie.expires || cookie.expiry || Date.now() / 1000 + 86400
-            })));
-            
-            // Navegar primero a la página principal
-            await newPage.goto('https://www.aliexpress.com', { waitUntil: 'domcontentloaded', timeout: 20000 });
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            // Intentar navegar de nuevo con cookies
-            await newPage.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            const newUrl = newPage.url();
-            
-            if (!newUrl.includes('/punish') && !newUrl.includes('TMD')) {
-              logger.info('[SCRAPER] Navegación exitosa con cookies, bloqueo evitado', { userId });
-              page = newPage; // Usar la nueva página
-              page.on('response', apiResponseHandler); // Re-agregar el handler
-            } else {
-              logger.warn('[SCRAPER] Bloqueo persiste incluso con cookies, pero continuando de todos modos', { userId, url: newUrl });
-              page = newPage; // Usar la nueva página de todos modos
-              page.on('response', apiResponseHandler); // Re-agregar el handler
-            }
-          } else {
-            // No hay cookies - continuar de todos modos e intentar extraer productos
-            logger.warn('[SCRAPER] AliExpress puede estar bloqueando, pero continuando para intentar extraer productos', { userId, query });
-          }
-        } catch (cookieError: any) {
-          logger.warn('[SCRAPER] Error al intentar usar cookies, pero continuando de todos modos', {
-            error: cookieError?.message || String(cookieError),
-            userId,
-            query
+        // ✅ ANTES DE USAR COOKIES: Intentar esperar más tiempo y ver si la página se carga
+        // A veces AliExpress redirige temporalmente pero luego carga la página correcta
+        logger.debug('[SCRAPER] Esperando tiempo adicional para ver si la página se carga después del bloqueo...', { query });
+        await new Promise(resolve => setTimeout(resolve, 10000)); // ✅ Esperar 10s adicionales
+        
+        // Verificar si la URL cambió (puede haber redirigido a la página correcta)
+        const urlAfterWait = page.url();
+        const stillBlocked = urlAfterWait.includes('/punish') || 
+                            urlAfterWait.includes('TMD') || 
+                            urlAfterWait.includes('x5secdata') ||
+                            urlAfterWait.includes('x5step');
+        
+        if (!stillBlocked) {
+          logger.info('[SCRAPER] Bloqueo temporal resuelto, página cargó correctamente después de esperar', { 
+            originalUrl: currentUrl,
+            newUrl: urlAfterWait 
           });
-          // Continuar sin cookies - intentar extraer productos de todos modos
+          // Continuar normalmente - el bloqueo se resolvió
+        } else {
+          logger.warn('[SCRAPER] Bloqueo persiste después de esperar, intentando usar cookies...', { userId });
+          
+          // ✅ Intentar usar cookies si están disponibles
+          try {
+            const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', environment || 'production') as AliExpressCredentials | null;
+            
+            if (credentials && credentials.cookies && credentials.cookies.length > 0) {
+              logger.info('[SCRAPER] Intentando usar cookies guardadas para evitar bloqueo', { userId });
+              
+              // Cerrar página actual y crear una nueva con cookies
+              await page.close();
+              const newPage = await this.browser!.newPage();
+              await this.setupRealBrowser(newPage);
+              
+              // Establecer cookies antes de navegar
+              await newPage.setCookie(...credentials.cookies.map((cookie: any) => ({
+                name: cookie.name || cookie.key,
+                value: cookie.value,
+                domain: cookie.domain || '.aliexpress.com',
+                path: cookie.path || '/',
+                expires: cookie.expires || cookie.expiry || Date.now() / 1000 + 86400
+              })));
+              
+              // Navegar primero a la página principal
+              await newPage.goto('https://www.aliexpress.com', { waitUntil: 'domcontentloaded', timeout: 20000 });
+              await new Promise(resolve => setTimeout(resolve, 3000)); // ✅ Aumentar de 2s a 3s
+              
+              // Intentar navegar de nuevo con cookies
+              await newPage.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await new Promise(resolve => setTimeout(resolve, 5000)); // ✅ Aumentar de 3s a 5s
+              const newUrl = newPage.url();
+              
+              if (!newUrl.includes('/punish') && !newUrl.includes('TMD')) {
+                logger.info('[SCRAPER] Navegación exitosa con cookies, bloqueo evitado', { userId });
+                page = newPage; // Usar la nueva página
+                page.on('response', apiResponseHandler); // Re-agregar el handler
+                // ✅ Actualizar isBlocked después de usar cookies
+                isBlocked = false;
+              } else {
+                logger.warn('[SCRAPER] Bloqueo persiste incluso con cookies, pero continuando de todos modos', { userId, url: newUrl });
+                page = newPage; // Usar la nueva página de todos modos
+                page.on('response', apiResponseHandler); // Re-agregar el handler
+              }
+            } else {
+              // No hay cookies - continuar de todos modos e intentar extraer productos
+              logger.warn('[SCRAPER] AliExpress puede estar bloqueando, pero continuando para intentar extraer productos', { userId, query });
+            }
+          } catch (cookieError: any) {
+            logger.warn('[SCRAPER] Error al intentar usar cookies, pero continuando de todos modos', {
+              error: cookieError?.message || String(cookieError),
+              userId,
+              query
+            });
+            // Continuar sin cookies - intentar extraer productos de todos modos
+          }
         }
       }
 
@@ -960,7 +989,7 @@ export class AdvancedMarketplaceScraper {
         await page.waitForFunction(() => {
           const w = (globalThis as any).window;
           return w.document && w.document.readyState === 'complete';
-        }, { timeout: 10000 });
+        }, { timeout: 15000 }); // ✅ Aumentar timeout de 10s a 15s
         logger.debug('[SCRAPER] Página lista (readyState complete)');
       } catch (e) {
         logger.warn('[SCRAPER] Timeout esperando readyState, continuando...', {
@@ -968,8 +997,9 @@ export class AdvancedMarketplaceScraper {
         });
       }
       
-      // Esperar tiempo adicional para que JavaScript ejecute
-      await new Promise(resolve => setTimeout(resolve, 3000)); // ✅ Aumentar de 2s a 3s
+      // ✅ Esperar tiempo adicional para que JavaScript ejecute y productos se rendericen
+      // ANTES: 3s → AHORA: 8s para dar más tiempo cuando hay bloqueo potencial
+      await new Promise(resolve => setTimeout(resolve, 8000)); // ✅ Aumentar de 3s a 8s
       logger.debug('[SCRAPER] Tiempo de espera adicional completado');
       
       // ✅ Extraer moneda local de AliExpress desde la página (selector de ubicación/moneda)
@@ -1103,7 +1133,13 @@ export class AdvancedMarketplaceScraper {
       }).catch(() => false);
       
       // ✅ Si detectamos bloqueo, saltar runParams y extraer del DOM directamente
-      const shouldSkipRunParams = isBlocked || hasCaptcha || isBlockedInContent;
+      // Verificar bloqueo de nuevo después de intentar usar cookies (puede haber cambiado)
+      const currentUrlForCheck = page.url();
+      const isStillBlockedForRunParams = currentUrlForCheck.includes('/punish') || 
+                                        currentUrlForCheck.includes('TMD') || 
+                                        currentUrlForCheck.includes('x5secdata') ||
+                                        currentUrlForCheck.includes('x5step');
+      const shouldSkipRunParams = isStillBlockedForRunParams || hasCaptcha || isBlockedInContent;
       
       if (shouldSkipRunParams) {
         const currentUrl = page.url();
@@ -1297,8 +1333,9 @@ export class AdvancedMarketplaceScraper {
       }
 
       // ✅ Si todo lo anterior falló, intentar con scraping DOM clásico
-      // ✅ Si detectamos bloqueo, esperar menos tiempo y ser más agresivo
-      const waitTime = shouldSkipRunParams ? 2000 : 5000; // Esperar menos si hay bloqueo
+      // ✅ Si detectamos bloqueo, esperar MÁS tiempo para que la página cargue
+      // ANTES: waitTime = 2000 (muy poco) → AHORA: waitTime = 8000 (más tiempo)
+      const waitTime = shouldSkipRunParams ? 8000 : 5000; // ✅ Aumentar de 2s a 8s cuando hay bloqueo
       logger.debug(`Esperando que los productos se rendericen en el DOM (${waitTime}ms)...`, { 
         shouldSkipRunParams, 
         isBlocked 
@@ -1327,9 +1364,10 @@ export class AdvancedMarketplaceScraper {
         'a[href*="/product/"]'
       ];
 
-      // ✅ Si detectamos bloqueo, intentar menos veces pero más agresivamente
-      const maxAttempts = shouldSkipRunParams ? 1 : 3;
-      const selectorTimeout = shouldSkipRunParams ? 3000 : 8000; // Timeout más corto si hay bloqueo
+      // ✅ Si detectamos bloqueo, intentar MÁS veces con diferentes estrategias
+      // ANTES: maxAttempts = 1 (muy poco) → AHORA: maxAttempts = 5 (más intentos)
+      const maxAttempts = shouldSkipRunParams ? 5 : 3; // ✅ Aumentar de 1 a 5 cuando hay bloqueo
+      const selectorTimeout = shouldSkipRunParams ? 5000 : 8000; // ✅ Aumentar timeout de 3s a 5s cuando hay bloqueo
       
       // Intentar múltiples veces con diferentes esperas
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -1368,8 +1406,9 @@ export class AdvancedMarketplaceScraper {
         }
         
         if (!productsLoaded && attempt < maxAttempts - 1) {
-          // Si no se encontraron, hacer scroll y esperar menos tiempo si hay bloqueo
-          const scrollWait = shouldSkipRunParams ? 1000 : 3000;
+          // Si no se encontraron, hacer scroll y esperar MÁS tiempo si hay bloqueo
+          // ANTES: scrollWait = 1000 (muy poco) → AHORA: scrollWait = 5000 (más tiempo)
+          const scrollWait = shouldSkipRunParams ? 5000 : 3000; // ✅ Aumentar de 1s a 5s cuando hay bloqueo
           logger.debug(`⏳ Intento ${attempt + 1} falló, haciendo scroll y esperando ${scrollWait}ms...`, { 
             attempt, 
             userId, 
@@ -1394,13 +1433,15 @@ export class AdvancedMarketplaceScraper {
       if (!productsLoaded) {
         logger.warn('No se encontraron productos con ningún selector, intentando extraer de todos modos...');
         // Hacer scroll completo de la página para activar lazy loading
+        // ✅ Si hay bloqueo, hacer scroll más agresivo y esperar más tiempo
+        const scrollTime = shouldSkipRunParams ? 10000 : 5000; // ✅ Esperar 10s si hay bloqueo vs 5s normal
         await page.evaluate(() => {
           const w = (globalThis as any).window;
           const scrollHeight = w.document?.documentElement?.scrollHeight || 0;
           const clientHeight = w.document?.documentElement?.clientHeight || 0;
           const maxScroll = scrollHeight - clientHeight;
           
-          // Scroll progresivo
+          // Scroll progresivo - más rápido si hay bloqueo
           let currentScroll = 0;
           const scrollStep = 500;
           const scrollInterval = setInterval(() => {
@@ -1409,14 +1450,27 @@ export class AdvancedMarketplaceScraper {
             if (currentScroll >= maxScroll) {
               clearInterval(scrollInterval);
             }
-          }, 300);
+          }, 200); // ✅ Scroll más rápido (200ms vs 300ms)
         });
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Esperar 5s para lazy loading
+        await new Promise(resolve => setTimeout(resolve, scrollTime)); // ✅ Usar tiempo dinámico
       }
 
-      await this.autoScroll(page);
+      // ✅ Auto-scroll solo si no hay bloqueo (para evitar esperas innecesarias)
+      if (!shouldSkipRunParams) {
+        await this.autoScroll(page);
+      } else {
+        // Si hay bloqueo, hacer scroll manual más agresivo
+        logger.debug('[SCRAPER] Haciendo scroll agresivo debido a bloqueo detectado');
+        await page.evaluate(() => {
+          const w = (globalThis as any).window;
+          for (let i = 0; i < 10; i++) {
+            w.scrollBy?.(0, 500);
+          }
+        });
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Esperar 3s adicionales
+      }
 
-      const domExtractionResult = await page.evaluate(() => {
+      const domExtractionResult = await page.evaluate((skipRunParams: boolean) => {
         const selectors = [
           '.search-item-card-wrapper-gallery',
           '[data-item-id]',
@@ -1449,13 +1503,43 @@ export class AdvancedMarketplaceScraper {
           }
         }
 
+        // ✅ Si no se encontraron items Y hay bloqueo, intentar selectores más genéricos como fallback
+        if ((!items || items.length === 0) && skipRunParams) {
+          const doc = (globalThis as any).document;
+          if (doc) {
+            const fallbackSelectors = [
+              'a[href*="/item/"]',
+              'a[href*="/product/"]',
+              '[href*="/item/"]',
+              '[href*="/product/"]',
+              'div[class*="item"]',
+              'div[class*="product"]',
+              'div[class*="card"]',
+              'li[class*="item"]',
+              'li[class*="product"]',
+              '[data-product-id]',
+              '[data-item-id]',
+              'div[id*="item"]',
+              'div[id*="product"]'
+            ];
+            for (const fallbackSelector of fallbackSelectors) {
+              const fallbackItems = doc.querySelectorAll(fallbackSelector);
+              if (fallbackItems && fallbackItems.length > 0) {
+                items = fallbackItems;
+                usedSelector = `fallback:${fallbackSelector}`;
+                break;
+              }
+            }
+          }
+        }
+        
         if (!items || items.length === 0) {
           return {
             products: [],
             debug: {
               itemsFound: 0,
               usedSelector: '',
-              extractionLogs: ['No se encontraron productos con ningún selector']
+              extractionLogs: ['No se encontraron productos con ningún selector (incluyendo fallbacks)']
             }
           };
         }
@@ -1765,7 +1849,7 @@ export class AdvancedMarketplaceScraper {
             extractionLogs
           }
         };
-      });
+      }, shouldSkipRunParams);
 
       // Registrar logs de debug fuera de page.evaluate()
       const { products: productsFromDom, debug: domDebug } = domExtractionResult;
@@ -2913,6 +2997,20 @@ export class AdvancedMarketplaceScraper {
         }
       }
     }
+
+    // ✅ Extraer URL antes de usarla
+    const url =
+      item.productUrl ||
+      item.url ||
+      item.link ||
+      item.productLink ||
+      item.href ||
+      item.productHref ||
+      item.detailUrl ||
+      item.productDetailUrl ||
+      item.affiliateUrl ||
+      (item.productId ? `https://www.aliexpress.com/item/${item.productId}.html` : null) ||
+      null;
 
     // ✅ Mejorar manejo de precios inválidos con logging detallado
     if (!resolvedPrice || resolvedPrice.amountInBase <= 0) {

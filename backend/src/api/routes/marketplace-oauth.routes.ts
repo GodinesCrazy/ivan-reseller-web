@@ -252,12 +252,25 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       clearCredentialsCache(userId, 'ebay', environment);
       clearCredentialsCache(userId, 'ebay', environment === 'sandbox' ? 'production' : 'sandbox');
       
+      // ✅ CORRECCIÓN: Limpiar también el cache de API availability para forzar re-verificación del token
+      const { APIAvailabilityService } = await import('../../services/api-availability.service');
+      const apiAvailabilityService = new APIAvailabilityService();
+      // Invalidar cache de status para forzar re-verificación
+      await apiAvailabilityService.checkEbayAPI(userId, environment, true).catch((err) => {
+        logger.warn('[OAuth Callback] Error forcing API status refresh', {
+          error: err?.message || String(err),
+          userId,
+          environment
+        });
+      });
+      
       logger.info('[OAuth Callback] Credentials saved successfully', {
         service: 'marketplace-oauth',
         userId,
         environment,
         duration: Date.now() - startTime,
-        cacheCleared: true
+        cacheCleared: true,
+        apiStatusRefreshed: true
       });
     } else if (marketplace === 'mercadolibre') {
       const cred = await marketplaceService.getCredentials(userId, 'mercadolibre', environment);

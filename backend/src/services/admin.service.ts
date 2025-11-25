@@ -1,6 +1,7 @@
 import { prisma } from '../config/database';
 import bcrypt from 'bcryptjs';
 import { SecureCredentialManager } from './security.service';
+import { toNumber } from '../utils/decimal.utils';
 
 export interface UserCreationData {
   username: string;
@@ -316,11 +317,11 @@ export class AdminService {
     // Calcular estadísticas
     const totalUsers = users.length;
     const activeUsers = users.filter(user => user.isActive).length;
-    const totalRevenue = users.reduce((sum, user) => sum + user.totalEarnings, 0);
+    const totalRevenue = users.reduce((sum, user) => sum + toNumber(user.totalEarnings), 0);
     
     // Calcular comisiones mensuales pendientes
     const monthlyCommissions = users.reduce((sum, user) => {
-      return sum + user.fixedMonthlyCost + (user.totalEarnings * user.commissionRate);
+      return sum + toNumber(user.fixedMonthlyCost) + (toNumber(user.totalEarnings) * toNumber(user.commissionRate));
     }, 0);
 
     return {
@@ -373,16 +374,16 @@ export class AdminService {
         });
 
         const salesCommission = thisMonthSales.reduce((sum, sale) => {
-          return sum + (sale.grossProfit * user.commissionRate);
+          return sum + (toNumber(sale.grossProfit) * toNumber(user.commissionRate));
         }, 0);
 
-        const totalCharge = user.fixedMonthlyCost + salesCommission;
+        const totalCharge = toNumber(user.fixedMonthlyCost) + salesCommission;
 
         // Actualizar balance del usuario
         await prisma.user.update({
           where: { id: user.id },
           data: {
-            balance: user.balance - totalCharge
+            balance: toNumber(user.balance) - totalCharge
           }
         });
 
@@ -392,7 +393,7 @@ export class AdminService {
             data: {
               userId: user.id,
               saleId: sale.id,
-              amount: sale.grossProfit * user.commissionRate,
+              amount: toNumber(sale.grossProfit) * toNumber(user.commissionRate),
               status: 'PAID',
               paidAt: new Date()
             }

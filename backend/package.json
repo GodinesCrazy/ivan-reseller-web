@@ -21,7 +21,9 @@
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
     "provision:credentials": "tsx scripts/provision-credentials.ts",
-    "verify": "tsx scripts/verify-config.ts"
+    "verify": "tsx scripts/verify-config.ts",
+    "configure-apis": "tsx scripts/configure-apis-from-file.ts",
+    "test-apis": "tsx scripts/test-apis.ts"
   },
   "keywords": [
     "dropshipping",

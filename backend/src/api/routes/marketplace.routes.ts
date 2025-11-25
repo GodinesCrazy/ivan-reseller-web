@@ -590,39 +590,43 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
           `⚠️ Advertencia: El Redirect URI contiene espacios. eBay requiere que el Redirect URI coincida EXACTAMENTE con el registrado en eBay Developer Portal. Verifica que no haya espacios adicionales.`;
       }
       
-      // Validar formato del App ID según el ambiente (solo como advertencia, no bloqueante)
+      // ✅ CORRECCIÓN: Validar formato del App ID según el ambiente (solo como advertencia, no bloqueante)
       // Limpiar el App ID de espacios y caracteres especiales
       const cleanedAppId = appId.trim().replace(/[\s\u200B-\u200D\uFEFF]/g, ''); // Remover espacios y caracteres invisibles
       const appIdUpper = cleanedAppId.toUpperCase();
+      
+      // ✅ CORRECCIÓN: Buscar "SBX-" en cualquier parte del App ID, no solo al inicio
+      // Los App IDs de eBay pueden tener formato: "IvanMart-IVANRese-SBX-1eb10af0a-358ddf27"
+      // donde "SBX-" aparece después de otros prefijos
+      const containsSBX = appIdUpper.includes('SBX-');
       
       // Logging para debugging (redactado)
       logger.debug('[eBay OAuth] Validating App ID', {
         originalLength: appId.length,
         cleanedLength: cleanedAppId.length,
-        upperPreview: appIdUpper.substring(0, 8) + '...',
+        upperPreview: appIdUpper.substring(0, 20) + '...',
         sandbox,
         environment: resolvedEnv,
-        startsWithSBX: appIdUpper.startsWith('SBX-'),
+        containsSBX,
         appIdLength: cleanedAppId.length,
-        firstChars: cleanedAppId.substring(0, 8) + '...',
+        firstChars: cleanedAppId.substring(0, 20) + '...',
       });
       
-      // Solo mostrar advertencia, no bloquear
-      // Algunos App IDs de eBay pueden tener formatos diferentes o pueden ser válidos aunque no empiecen con SBX-
-      if (sandbox && !appIdUpper.startsWith('SBX-')) {
-        formatWarning = `⚠️ Advertencia: El App ID no parece ser de Sandbox (típicamente empiezan con "SBX-"). Si el error persiste, verifica en eBay Developer Portal que el App ID sea correcto para Sandbox.`;
+      // ✅ CORRECCIÓN: Solo mostrar advertencia si realmente hay una inconsistencia clara
+      // Si es sandbox pero NO contiene "SBX-" en ninguna parte, advertir
+      // Si es production pero contiene "SBX-", advertir
+      if (sandbox && !containsSBX) {
+        formatWarning = `⚠️ Advertencia: El App ID no parece ser de Sandbox (típicamente contienen "SBX-"). Si el error persiste, verifica en eBay Developer Portal que el App ID sea correcto para Sandbox.`;
         logger.warn('[eBay OAuth] App ID format warning for Sandbox', {
-          appIdPreview: cleanedAppId.substring(0, 8) + '...' + cleanedAppId.substring(cleanedAppId.length - 4),
-          expectedPrefix: 'SBX-',
-          actualPrefix: cleanedAppId.substring(0, 4),
+          appIdPreview: cleanedAppId.substring(0, 20) + '...' + cleanedAppId.substring(cleanedAppId.length - 4),
+          expectedContains: 'SBX-',
+          actualAppId: cleanedAppId.substring(0, 30) + '...',
         });
-      }
-      
-      if (!sandbox && appIdUpper.startsWith('SBX-')) {
-        formatWarning = `⚠️ Advertencia: El App ID parece ser de Sandbox (empieza con "SBX-"), pero estás usando Production. Si el error persiste, verifica que estés usando las credenciales correctas.`;
+      } else if (!sandbox && containsSBX) {
+        formatWarning = `⚠️ Advertencia: El App ID parece ser de Sandbox (contiene "SBX-"), pero estás usando Production. Si el error persiste, verifica que estés usando las credenciales correctas.`;
         logger.warn('[eBay OAuth] App ID format warning for Production', {
-          appIdPreview: cleanedAppId.substring(0, 8) + '...' + cleanedAppId.substring(cleanedAppId.length - 4),
-          detectedPrefix: 'SBX-',
+          appIdPreview: cleanedAppId.substring(0, 20) + '...' + cleanedAppId.substring(cleanedAppId.length - 4),
+          detectedContains: 'SBX-',
         });
       }
       

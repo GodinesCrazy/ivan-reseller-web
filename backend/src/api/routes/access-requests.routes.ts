@@ -26,7 +26,21 @@ const updateAccessRequestSchema = z.object({
  */
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = createAccessRequestSchema.parse(req.body);
+    const parsedData = createAccessRequestSchema.parse(req.body);
+    // ✅ CORRECCIÓN: Asegurar que username esté presente (es requerido en el DTO)
+    if (!parsedData.username) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username is required'
+      });
+    }
+    const data: CreateAccessRequestDto = {
+      username: parsedData.username,
+      email: parsedData.email,
+      fullName: parsedData.fullName,
+      company: parsedData.company,
+      reason: parsedData.reason,
+    };
     
     const request = await accessRequestService.createAccessRequest(data);
     

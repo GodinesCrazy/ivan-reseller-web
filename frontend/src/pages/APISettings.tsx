@@ -293,6 +293,24 @@ export default function APISettings() {
   const manualSessionPollRef = useRef<number | null>(null);
   const lastHandledManualTokenRef = useRef<string | null>(null);
   const [auditSummary, setAuditSummary] = useState<any | null>(null);
+  // ✅ Estados para testear APIs
+  const [apiTestResults, setApiTestResults] = useState<{
+    ok: number;
+    error: number;
+    skip: number;
+    total: number;
+    results: Array<{
+      name: string;
+      provider: string;
+      environment: 'sandbox' | 'production' | 'other';
+      status: 'OK' | 'ERROR' | 'SKIP';
+      latencyMs?: number;
+      message: string;
+      suggestion?: string;
+    }>;
+  } | null>(null);
+  const [apiTesting, setApiTesting] = useState(false);
+  const [showApiTestResults, setShowApiTestResults] = useState(false);
   const apiBaseUrl = useMemo(() => {
     const base = api.defaults.baseURL || window.location.origin;
     return base.replace(/\/+$/, '');
@@ -1365,16 +1383,29 @@ export default function APISettings() {
     }
   };
 
-  // Escuchar mensajes de la ventana de OAuth
+  // ✅ CORRECCIÓN: Escuchar mensajes de la ventana de OAuth
   useEffect(() => {
     const handleOAuthMessage = (event: MessageEvent) => {
       if (event.data?.type === 'oauth_success') {
         toast.success('✅ Autorización OAuth completada exitosamente');
-        // Recargar credenciales y estados
+        // ✅ CORRECCIÓN: Recargar credenciales y estados con delay para asegurar que el backend procese el cambio
         setTimeout(async () => {
-          await fetchAuthStatuses();
-          await loadCredentials();
-        }, 1000);
+          try {
+            await fetchAuthStatuses();
+            await loadCredentials();
+            // ✅ CORRECCIÓN: Forzar recarga adicional después de un momento para asegurar que el token se detecte
+            setTimeout(async () => {
+              try {
+                await loadCredentials();
+                await fetchAuthStatuses();
+              } catch (err) {
+                log.warn('Error en recarga adicional después de OAuth success:', err);
+              }
+            }, 2000);
+          } catch (err) {
+            log.warn('Error al recargar después de OAuth success:', err);
+          }
+        }, 1500); // ✅ Aumentar de 1s a 1.5s
       } else if (event.data?.type === 'oauth_error') {
         const errorMsg = event.data.error || 'Error desconocido en OAuth';
         toast.error(`❌ Error en autorización OAuth: ${errorMsg}`);
@@ -1485,16 +1516,14 @@ export default function APISettings() {
       
       const authUrl = data?.data?.authUrl || data?.authUrl || data?.url;
       
-      // Guardar advertencia para mostrarla en el modal si el popup es bloqueado
+      // ✅ CORRECCIÓN: Guardar advertencia para mostrarla en el modal si el popup es bloqueado
+      // NO mostrar toast aquí para evitar duplicación - solo se mostrará en el modal si es necesario
       const oauthWarning = data.warning;
       
-      // Mostrar advertencia si existe (pero no bloquear)
+      // ✅ CORRECCIÓN: Solo loggear la advertencia, NO mostrar toast aquí
+      // El toast se mostrará solo en el modal si el popup es bloqueado, evitando duplicación
       if (oauthWarning) {
-        log.warn('[APISettings] OAuth warning:', oauthWarning);
-        toast(oauthWarning, { 
-          duration: 8000,
-          icon: '⚠️'
-        });
+        log.warn('[APISettings] OAuth warning (will show in modal if popup blocked):', oauthWarning);
       }
       
       // Logging para debugging
@@ -1629,18 +1658,21 @@ export default function APISettings() {
               // Aumentar delay de 2s a 3s para dar más tiempo al backend
               setTimeout(async () => {
                 try {
+                  // ✅ CORRECCIÓN: Forzar refresh de API availability status primero
                   await fetchAuthStatuses();
                   // ✅ CORRECCIÓN EBAY OAUTH: loadCredentials() ya incluye loadMarketplaceDiagnostics()
                   // que recarga los marketplace diagnostics automáticamente
                   await loadCredentials();
-                  // Forzar recarga después de un momento adicional para asegurar cache limpio
+                  // ✅ CORRECCIÓN: Forzar recarga adicional de diagnostics para asegurar que el token se detecte
+                  // Esperar un poco más para que el backend procese el cambio
                   setTimeout(async () => {
                     try {
                       await loadCredentials();
+                      await fetchAuthStatuses();
                     } catch (err) {
                       log.warn('Error en recarga adicional después de OAuth:', err);
                     }
-                  }, 1000);
+                  }, 2000); // ✅ Aumentar de 1s a 2s para dar más tiempo
                 } catch (err) {
                   log.warn('Error al recargar credenciales después de OAuth:', err);
                 }
@@ -2099,6 +2131,28 @@ export default function APISettings() {
     return <CheckCircle className="w-5 h-5 text-green-500" />;
   };
 
+  // ✅ Función para testear todas las APIs
+  const handleTestAllApis = async () => {
+    setApiTesting(true);
+    setShowApiTestResults(false);
+    try {
+      const response = await api.post('/api/system/test-apis');
+      if (response.data?.success && response.data?.data) {
+        setApiTestResults(response.data.data);
+        setShowApiTestResults(true);
+        toast.success(`Tests completados: ${response.data.data.ok} OK, ${response.data.data.error} ERROR, ${response.data.data.skip} SKIP`);
+      } else {
+        toast.error('Error al ejecutar tests de APIs');
+      }
+    } catch (error: any) {
+      log.error('Error testing APIs:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || 'Error desconocido al testear APIs';
+      toast.error(errorMessage);
+    } finally {
+      setApiTesting(false);
+    }
+  };
+
   const getStatusText = (apiName: string, environment: string) => {
     const credential = getCredentialForAPI(apiName, environment);
     const status = statuses[makeEnvKey(apiName, environment)];
@@ -2198,9 +2252,29 @@ export default function APISettings() {
             <span className="sm:hidden">Asistente</span>
           </button>
         </div>
-        <p className="text-gray-600 dark:text-gray-400">
-          Configura tus credenciales para las APIs de marketplaces y servicios. Las credenciales se guardan encriptadas.
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-gray-600 dark:text-gray-400">
+            Configura tus credenciales para las APIs de marketplaces y servicios. Las credenciales se guardan encriptadas.
+          </p>
+          {/* ✅ Botón para testear todas las APIs */}
+          <button
+            onClick={handleTestAllApis}
+            disabled={apiTesting}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+          >
+            {apiTesting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Probando...</span>
+              </>
+            ) : (
+              <>
+                <TestTube className="w-4 h-4" />
+                <span>Probar Todas las APIs</span>
+              </>
+            )}
+          </button>
+        </div>
         {missingOptional.length > 0 && (
           <div className="mt-4 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
             <div className="font-semibold">
@@ -2216,6 +2290,95 @@ export default function APISettings() {
           </div>
         )}
       </div>
+
+      {/* ✅ Resultados de Tests de APIs */}
+      {showApiTestResults && apiTestResults && (
+        <div className="mb-6 rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <TestTube className="w-5 h-5 text-blue-600" />
+                <h2 className="text-lg font-semibold text-gray-800">Resultados de Pruebas de APIs</h2>
+              </div>
+              <button
+                onClick={() => setShowApiTestResults(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mt-3 flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-green-500" />
+                <span className="text-gray-700">{apiTestResults.ok} OK</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <XCircle className="w-4 h-4 text-red-500" />
+                <span className="text-gray-700">{apiTestResults.error} ERROR</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <span className="text-gray-700">{apiTestResults.skip} SKIP</span>
+              </div>
+              <div className="text-gray-500">
+                Total: {apiTestResults.total}
+              </div>
+            </div>
+          </div>
+          <div className="p-6">
+            <div className="space-y-3">
+              {apiTestResults.results.map((result, index) => (
+                <div
+                  key={index}
+                  className={`rounded-lg border p-4 ${
+                    result.status === 'OK'
+                      ? 'border-green-200 bg-green-50'
+                      : result.status === 'ERROR'
+                      ? 'border-red-200 bg-red-50'
+                      : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        {result.status === 'OK' ? (
+                          <CheckCircle className="w-5 h-5 text-green-600" />
+                        ) : result.status === 'ERROR' ? (
+                          <XCircle className="w-5 h-5 text-red-600" />
+                        ) : (
+                          <AlertTriangle className="w-5 h-5 text-amber-600" />
+                        )}
+                        <h3 className="font-semibold text-gray-800">{result.name}</h3>
+                        {result.environment !== 'other' && (
+                          <span className="px-2 py-0.5 text-xs font-medium rounded bg-gray-200 text-gray-700">
+                            {result.environment === 'sandbox' ? 'Sandbox' : 'Production'}
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-sm ${
+                        result.status === 'OK' ? 'text-green-700' : result.status === 'ERROR' ? 'text-red-700' : 'text-gray-600'
+                      }`}>
+                        {result.message}
+                      </p>
+                      {result.latencyMs !== undefined && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Latencia: {result.latencyMs}ms
+                        </p>
+                      )}
+                      {result.suggestion && (
+                        <div className="mt-2 rounded bg-blue-50 border border-blue-200 p-2">
+                          <p className="text-xs font-medium text-blue-900 mb-1">💡 Recomendación:</p>
+                          <p className="text-xs text-blue-800">{result.suggestion}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ✅ MEJORA UX: Error Global mejorado */}
       {error && (
@@ -2805,27 +2968,27 @@ export default function APISettings() {
                 El navegador bloqueó la ventana emergente de OAuth. Tienes dos opciones:
               </p>
               
-              {/* Mostrar advertencia del backend si existe */}
+              {/* ✅ CORRECCIÓN: Mostrar advertencia del backend si existe - solo UNA vez, no duplicada */}
               {oauthBlockedModal.warning && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                   <div className="flex items-start gap-2">
                     <span className="text-yellow-600 text-lg">⚠️</span>
                     <div className="flex-1">
-                      <h4 className="font-semibold text-yellow-900 mb-1">Advertencia sobre las credenciales</h4>
-                      <p className="text-sm text-yellow-800 whitespace-pre-line">{oauthBlockedModal.warning}</p>
+                      <h4 className="font-semibold text-yellow-900 mb-1 text-sm">Advertencia sobre las credenciales</h4>
+                      <p className="text-xs text-yellow-800 whitespace-pre-line">{oauthBlockedModal.warning}</p>
                     </div>
                   </div>
                 </div>
               )}
               
-              {/* Información adicional para eBay */}
+              {/* ✅ CORRECCIÓN: Información adicional para eBay - más concisa y sin referencias a cookies */}
               {oauthBlockedModal.apiName === 'ebay' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <div className="flex items-start gap-2">
                     <span className="text-blue-600 text-lg">ℹ️</span>
                     <div className="flex-1">
-                      <h4 className="font-semibold text-blue-900 mb-2">Antes de continuar, verifica:</h4>
-                      <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                      <h4 className="font-semibold text-blue-900 mb-1 text-sm">Antes de continuar, verifica:</h4>
+                      <ul className="text-xs text-blue-800 space-y-0.5 list-disc list-inside">
                         <li>El <strong>App ID</strong> existe en eBay Developer Portal</li>
                         <li>El <strong>App ID</strong> corresponde al ambiente correcto (Sandbox o Production)</li>
                         <li>El <strong>Redirect URI (RuName)</strong> coincide exactamente con el registrado</li>
@@ -2877,8 +3040,8 @@ export default function APISettings() {
                 </div>
               </div>
               
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                <p className="text-sm text-yellow-800">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2">
+                <p className="text-xs text-yellow-800">
                   <strong>💡 Tip:</strong> Para evitar este problema en el futuro, permite ventanas emergentes para este sitio en la configuración de tu navegador.
                 </p>
               </div>
