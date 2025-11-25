@@ -5,6 +5,7 @@ import { MarketplaceService } from '../../services/marketplace.service';
 import { AdvancedScrapingService } from '../../services/scraping.service';
 import { prisma } from '../../config/database';
 import { logger } from '../../config/logger';
+import { toNumber } from '../../utils/decimal.utils';
 
 const router = Router();
 router.use(authenticate);
@@ -127,9 +128,9 @@ router.get('/pending', async (req: Request, res: Response) => {
             queuedAt: (productData as any).queuedAt || item.createdAt,
             queuedBy: (productData as any).queuedBy || 'user',
             estimatedCost: (productData as any).estimatedCost || item.aliexpressPrice,
-            estimatedProfit: (productData as any).estimatedProfit || (item.suggestedPrice - item.aliexpressPrice),
+            estimatedProfit: (productData as any).estimatedProfit || (toNumber(item.suggestedPrice) - toNumber(item.aliexpressPrice)),
             estimatedROI: (productData as any).estimatedROI || 
-              ((item.suggestedPrice - item.aliexpressPrice) / item.aliexpressPrice * 100)
+              ((toNumber(item.suggestedPrice) - toNumber(item.aliexpressPrice)) / toNumber(item.aliexpressPrice) * 100)
           };
         } catch (parseError) {
           logger.warn('[PUBLISHER] Failed to parse productData', {

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/error.middleware';
+import { toNumber } from '../../utils/decimal.utils';
 
 const router = Router();
 router.use(authenticate);
@@ -59,11 +60,11 @@ router.get('/summary', async (req: Request, res: Response, next) => {
     ]);
 
     // Calcular métricas
-    const totalSales = sales.reduce((sum, s) => sum + s.salePrice, 0);
-    const totalCosts = sales.reduce((sum, s) => sum + s.aliexpressCost, 0);
+    const totalSales = sales.reduce((sum, s) => sum + toNumber(s.salePrice), 0);
+    const totalCosts = sales.reduce((sum, s) => sum + toNumber(s.aliexpressCost), 0);
     const totalCommissions = commissions
       .filter(c => c.status === 'PAID')
-      .reduce((sum, c) => sum + c.amount, 0);
+      .reduce((sum, c) => sum + toNumber(c.amount), 0);
     const totalProfit = totalSales - totalCosts - totalCommissions;
     const grossMargin = totalSales > 0 ? ((totalProfit / totalSales) * 100) : 0;
 
@@ -136,8 +137,8 @@ router.get('/breakdown', async (req: Request, res: Response, next) => {
       if (!breakdown[category]) {
         breakdown[category] = { sales: 0, profit: 0, count: 0 };
       }
-      breakdown[category].sales += sale.salePrice;
-      breakdown[category].profit += (sale.salePrice - sale.aliexpressCost);
+      breakdown[category].sales += toNumber(sale.salePrice);
+      breakdown[category].profit += (toNumber(sale.salePrice) - toNumber(sale.aliexpressCost));
       breakdown[category].count += 1;
     });
 
@@ -207,8 +208,8 @@ router.get('/cashflow', async (req: Request, res: Response, next) => {
       if (!cashflow[date]) {
         cashflow[date] = { income: 0, expenses: 0, net: 0 };
       }
-      cashflow[date].income += sale.salePrice;
-      cashflow[date].expenses += sale.aliexpressCost;
+      cashflow[date].income += toNumber(sale.salePrice);
+      cashflow[date].expenses += toNumber(sale.aliexpressCost);
       cashflow[date].net = cashflow[date].income - cashflow[date].expenses;
     });
 
@@ -218,7 +219,7 @@ router.get('/cashflow', async (req: Request, res: Response, next) => {
         if (!cashflow[date]) {
           cashflow[date] = { income: 0, expenses: 0, net: 0 };
         }
-        cashflow[date].expenses += comm.amount;
+        cashflow[date].expenses += toNumber(comm.amount);
         cashflow[date].net = cashflow[date].income - cashflow[date].expenses;
       }
     });
@@ -275,9 +276,9 @@ router.get('/tax-summary', async (req: Request, res: Response, next) => {
       })
     ]);
 
-    const totalRevenue = sales.reduce((sum, s) => sum + s.salePrice, 0);
-    const totalCosts = sales.reduce((sum, s) => sum + s.aliexpressCost, 0);
-    const totalCommissions = commissions.reduce((sum, c) => sum + c.amount, 0);
+    const totalRevenue = sales.reduce((sum, s) => sum + toNumber(s.salePrice), 0);
+    const totalCosts = sales.reduce((sum, s) => sum + toNumber(s.aliexpressCost), 0);
+    const totalCommissions = commissions.reduce((sum, c) => sum + toNumber(c.amount), 0);
     const netIncome = totalRevenue - totalCosts - totalCommissions;
 
     const taxSummary = {
@@ -350,11 +351,11 @@ router.get('/export/:format', async (req: Request, res: Response, next) => {
       })
     ]);
 
-    const totalSales = sales.reduce((sum, s) => sum + s.salePrice, 0);
-    const totalCosts = sales.reduce((sum, s) => sum + s.aliexpressCost, 0);
+    const totalSales = sales.reduce((sum, s) => sum + toNumber(s.salePrice), 0);
+    const totalCosts = sales.reduce((sum, s) => sum + toNumber(s.aliexpressCost), 0);
     const totalCommissions = commissions
       .filter(c => c.status === 'PAID')
-      .reduce((sum, c) => sum + c.amount, 0);
+      .reduce((sum, c) => sum + toNumber(c.amount), 0);
     const totalProfit = totalSales - totalCosts - totalCommissions;
     const grossMargin = totalSales > 0 ? ((totalProfit / totalSales) * 100) : 0;
 

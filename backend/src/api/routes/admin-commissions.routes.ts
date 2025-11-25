@@ -77,11 +77,11 @@ router.get('/commissions', async (req: Request, res: Response, next) => {
         totalPages: Math.ceil(total / limit)
       },
       totals: {
-        totalAmount: totals._sum.amount || 0,
+        totalAmount: totals._sum.amount ? Number(totals._sum.amount) : 0,
         byStatus: byStatus.reduce((acc, item) => {
           acc[item.status] = {
             count: item._count,
-            amount: item._sum.amount || 0
+            amount: item._sum.amount ? Number(item._sum.amount) : 0
           };
           return acc;
         }, {} as Record<string, { count: number; amount: number }>)

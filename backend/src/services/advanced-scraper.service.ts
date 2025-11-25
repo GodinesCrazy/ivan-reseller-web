@@ -667,7 +667,42 @@ export class AdvancedMarketplaceScraper {
     // ✅ ELIMINADO: No intentar login automático antes de hacer scraping
     // El login automático solo se intentará si detectamos CAPTCHA/bloqueo durante el scraping
 
-    const page = await this.browser!.newPage();
+    // ✅ Crear página con manejo de errores para "Target closed"
+    let page: Page;
+    try {
+      if (!this.browser || !this.browser.isConnected()) {
+        throw new Error('Browser not connected');
+      }
+      page = await this.browser.newPage();
+    } catch (pageError: any) {
+      const errorMsg = pageError?.message || String(pageError);
+      if (errorMsg.includes('Target closed') || errorMsg.includes('Protocol error')) {
+        logger.warn('[SCRAPER] Error "Target closed" al crear página, reinicializando navegador...', { error: errorMsg });
+        // Cerrar navegador si existe pero está en mal estado
+        if (this.browser) {
+          try {
+            await this.browser.close().catch(() => {});
+          } catch {}
+          this.browser = null;
+        }
+        // Reintentar inicialización
+        try {
+          await this.init();
+          if (!this.browser || !this.browser.isConnected()) {
+            throw new Error('Browser not connected after reinit');
+          }
+          page = await this.browser.newPage();
+          logger.info('[SCRAPER] Navegador reinicializado exitosamente después de "Target closed"');
+        } catch (reinitError: any) {
+          logger.error('[SCRAPER] No se pudo reinicializar navegador después de "Target closed"', {
+            error: reinitError?.message || String(reinitError)
+          });
+          return [];
+        }
+      } else {
+        throw pageError;
+      }
+    }
 
     const apiCapturedItems: any[] = [];
     const seenApiResponses = new Set<string>();
@@ -828,6 +863,79 @@ export class AdvancedMarketplaceScraper {
         throw new Error('Failed to navigate to AliExpress with any URL format');
       }
 
+      // ✅ Verificar si AliExpress bloqueó el acceso (página "punish" o TMD)
+      const currentUrl = page.url();
+      const isBlocked = currentUrl.includes('/punish') || 
+                        currentUrl.includes('TMD') || 
+                        currentUrl.includes('x5secdata') ||
+                        currentUrl.includes('x5step');
+      
+      if (isBlocked) {
+        logger.error('[SCRAPER] AliExpress bloqueó el acceso (página de bloqueo detectada)', {
+          url: currentUrl,
+          query,
+          userId,
+          message: 'AliExpress está bloqueando el scraping. Posibles soluciones: usar cookies, esperar más tiempo, o usar un proxy diferente.'
+        });
+        
+        await this.captureAliExpressSnapshot(page, `blocked-${Date.now()}`);
+        
+        // Intentar usar cookies si están disponibles
+        try {
+          const { CredentialsManager } = await import('./credentials-manager.service');
+          const credentialsManager = new CredentialsManager();
+          const credentials = await credentialsManager.getCredentials(userId, 'aliexpress') as AliExpressCredentials | null;
+          
+          if (credentials && credentials.cookies && credentials.cookies.length > 0) {
+            logger.info('[SCRAPER] Intentando usar cookies guardadas para evitar bloqueo', { userId });
+            
+            // Cerrar página actual y crear una nueva con cookies
+            await page.close();
+            const newPage = await this.browser!.newPage();
+            
+            // Establecer cookies antes de navegar
+            await newPage.setCookie(...credentials.cookies.map((cookie: any) => ({
+              name: cookie.name || cookie.key,
+              value: cookie.value,
+              domain: cookie.domain || '.aliexpress.com',
+              path: cookie.path || '/',
+              expires: cookie.expires || cookie.expiry || Date.now() / 1000 + 86400
+            })));
+            
+            // Intentar navegar de nuevo con cookies
+            await newPage.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            const newUrl = newPage.url();
+            
+            if (!newUrl.includes('/punish') && !newUrl.includes('TMD')) {
+              logger.info('[SCRAPER] Navegación exitosa con cookies, bloqueo evitado', { userId });
+              page = newPage; // Usar la nueva página
+            } else {
+              logger.warn('[SCRAPER] Bloqueo persiste incluso con cookies', { userId, url: newUrl });
+              await newPage.close();
+              throw new Error('AliExpress bloqueó el acceso incluso con cookies. Se requiere autenticación manual.');
+            }
+          } else {
+            throw new Error('AliExpress bloqueó el acceso. Se requieren cookies para continuar.');
+          }
+        } catch (cookieError: any) {
+          logger.error('[SCRAPER] Error al intentar usar cookies o bloqueo persistente', {
+            error: cookieError?.message || String(cookieError),
+            userId,
+            query
+          });
+          
+          // Verificar si hay sesión manual pendiente
+          const { ManualAuthService } = await import('./manual-auth.service');
+          const manualSession = await ManualAuthService.getActiveSession(userId, 'aliexpress');
+          
+          if (manualSession && manualSession.status === 'pending') {
+            throw new ManualAuthRequiredError('aliexpress', manualSession.token, currentUrl, manualSession.expiresAt);
+          }
+          
+          throw new Error('AliExpress bloqueó el acceso. Intenta más tarde o configura cookies manualmente.');
+        }
+      }
+
       // ✅ Esperar más tiempo para que la página cargue completamente y ejecutar JavaScript
       logger.debug('[SCRAPER] Esperando que la página cargue completamente', { query });
       
@@ -965,9 +1073,28 @@ export class AdvancedMarketplaceScraper {
         return captchaSelectors.some(sel => document.querySelector(sel) !== null);
       }).catch(() => false);
       
-      if (hasCaptcha) {
-        logger.warn('[SCRAPER] CAPTCHA detectado en la página de AliExpress', { query, userId });
+      // ✅ Verificar bloqueo en el contenido de la página (no solo URL)
+      const isBlockedInContent = await page.evaluate(() => {
+        const bodyText = document.body?.innerText?.toLowerCase() || '';
+        const htmlContent = document.body?.innerHTML?.toLowerCase() || '';
+        return bodyText.includes('blocked') ||
+               bodyText.includes('access denied') ||
+               bodyText.includes('verification required') ||
+               bodyText.includes('security check') ||
+               htmlContent.includes('punish') ||
+               htmlContent.includes('x5secdata') ||
+               htmlContent.includes('tmd');
+      }).catch(() => false);
+      
+      if (hasCaptcha || isBlockedInContent) {
         const currentUrl = page.url();
+        logger.warn('[SCRAPER] CAPTCHA o bloqueo detectado en la página de AliExpress', { 
+          query, 
+          userId,
+          hasCaptcha,
+          isBlockedInContent,
+          url: currentUrl
+        });
         await this.captureAliExpressSnapshot(page, `captcha-detected-${Date.now()}`);
         
         // Verificar si hay sesión manual pendiente antes de lanzar error
@@ -976,6 +1103,11 @@ export class AdvancedMarketplaceScraper {
         
         if (manualSession && manualSession.status === 'pending') {
           throw new ManualAuthRequiredError('aliexpress', manualSession.token, currentUrl, manualSession.expiresAt);
+        }
+        
+        // Si no hay sesión manual, lanzar error descriptivo
+        if (isBlockedInContent) {
+          throw new Error('AliExpress bloqueó el acceso. Se requiere autenticación manual o cookies válidas.');
         }
       }
 
@@ -1802,10 +1934,14 @@ export class AdvancedMarketplaceScraper {
       }).filter((p: any) => p !== null);
 
       if (productsWithResolvedPrices.length === 0) {
+        const finalUrl = page.url();
+        const isBlockedUrl = finalUrl.includes('/punish') || finalUrl.includes('TMD') || finalUrl.includes('x5secdata');
+        
         logger.warn('[SCRAPER] No se encontraron productos en el DOM después de todos los métodos de extracción', {
           query,
           userId,
-          url: page.url(),
+          url: finalUrl,
+          isBlockedUrl,
           attempts: {
             runParamsScript: 'falló',
             runParamsWindow: 'falló',
@@ -1813,7 +1949,10 @@ export class AdvancedMarketplaceScraper {
             niData: 'falló',
             embeddedScripts: 'falló',
             domScraping: 'falló'
-          }
+          },
+          message: isBlockedUrl 
+            ? 'AliExpress bloqueó el acceso (página de bloqueo detectada en URL). Se requiere autenticación manual o cookies válidas.'
+            : 'No se encontraron productos. Posibles causas: AliExpress cambió su estructura, la página no cargó correctamente, o hay un bloqueo no detectado.'
         });
         
         // ✅ Verificar si hay CAPTCHA o bloqueo antes de retornar vacío

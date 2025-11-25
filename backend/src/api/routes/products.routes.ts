@@ -3,6 +3,7 @@ import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { productService, CreateProductDto } from '../../services/product.service';
 import { z } from 'zod';
 import { logger } from '../../config/logger';
+import { toNumber } from '../../utils/decimal.utils';
 
 const router = Router();
 router.use(authenticate);
@@ -54,7 +55,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     // ✅ Mapear datos del backend al formato esperado por el frontend
     const mappedProducts = products.map((product) => {
       // Calcular profit (precio final - precio AliExpress)
-      const calculatedProfit = (product.finalPrice || product.suggestedPrice || 0) - product.aliexpressPrice;
+      const calculatedProfit = (toNumber(product.finalPrice) || toNumber(product.suggestedPrice) || 0) - toNumber(product.aliexpressPrice);
       
       // ✅ Extraer imageUrl del campo images (JSON)
       const imageUrl = extractImageUrl(product.images);
@@ -125,7 +126,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
       sku: String(product.id), // SKU temporal basado en ID
       stock: 0, // Valor por defecto
       marketplace: 'unknown',
-      profit: ((product.finalPrice || product.suggestedPrice || 0) - product.aliexpressPrice) || 0
+      profit: ((toNumber(product.finalPrice) || toNumber(product.suggestedPrice) || 0) - toNumber(product.aliexpressPrice)) || 0
     };
     
     res.json({ success: true, data: mappedProduct });
