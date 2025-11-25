@@ -882,9 +882,7 @@ export class AdvancedMarketplaceScraper {
         
         // Intentar usar cookies si están disponibles
         try {
-          const { CredentialsManager } = await import('./credentials-manager.service');
-          const credentialsManager = new CredentialsManager();
-          const credentials = await credentialsManager.getCredentials(userId, 'aliexpress') as AliExpressCredentials | null;
+          const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', environment || 'production') as AliExpressCredentials | null;
           
           if (credentials && credentials.cookies && credentials.cookies.length > 0) {
             logger.info('[SCRAPER] Intentando usar cookies guardadas para evitar bloqueo', { userId });
@@ -915,7 +913,9 @@ export class AdvancedMarketplaceScraper {
               throw new Error('AliExpress bloqueó el acceso incluso con cookies. Se requiere autenticación manual.');
             }
           } else {
-            throw new Error('AliExpress bloqueó el acceso. Se requieren cookies para continuar.');
+            // No hay cookies disponibles - retornar vacío en lugar de lanzar error
+            logger.warn('[SCRAPER] AliExpress bloqueó el acceso y no hay cookies disponibles. Retornando vacío.', { userId, query });
+            return [];
           }
         } catch (cookieError: any) {
           logger.error('[SCRAPER] Error al intentar usar cookies o bloqueo persistente', {
@@ -932,7 +932,9 @@ export class AdvancedMarketplaceScraper {
             throw new ManualAuthRequiredError('aliexpress', manualSession.token, currentUrl, manualSession.expiresAt);
           }
           
-          throw new Error('AliExpress bloqueó el acceso. Intenta más tarde o configura cookies manualmente.');
+          // Si no hay sesión manual, retornar vacío en lugar de lanzar error
+          logger.warn('[SCRAPER] AliExpress bloqueó el acceso. Retornando vacío (modo público sin cookies).', { userId, query });
+          return [];
         }
       }
 
