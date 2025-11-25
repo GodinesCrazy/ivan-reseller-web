@@ -126,17 +126,17 @@ function parseAPIsFile(filePath: string): ParsedAPIs {
     }
     
     if (ebaySection === 'production' && parsed.ebayProduction) {
-      // Formato: "App ID (Client ID) IvanMart-IVANRese-PRD-febbdcd65-626be473"
+      // Formato: "App ID (Client ID) <AppID>"
       if (line.toLowerCase().includes('app id')) {
         const parts = line.split(/\s+/);
         const valueIndex = parts.findIndex((p, idx) => 
           idx > 0 && parts[idx - 1].toLowerCase().includes('id') && 
-          (p.includes('IvanMart') || p.includes('PRD-'))
+          (p.includes('PRD-') || p.includes('SBX-') || /^[A-Za-z0-9\-_]+$/.test(p))
         );
         if (valueIndex >= 0) {
           parsed.ebayProduction.appId = parts[valueIndex].trim();
         } else {
-          const match = line.match(/(IvanMart-[A-Za-z0-9\-_]+)/);
+          const match = line.match(/([A-Za-z0-9\-_]+-[A-Za-z0-9\-_]+)/);
           if (match) {
             parsed.ebayProduction.appId = match[1].trim();
           }
