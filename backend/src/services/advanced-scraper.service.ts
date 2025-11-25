@@ -3048,13 +3048,7 @@ export class AdvancedMarketplaceScraper {
       (Array.isArray(item.images) ? item.images[0] : null) ||
       '';
 
-    const url =
-      item.productUrl ||
-      item.detailUrl ||
-      item.itemDetailUrl ||
-      item.targetUrl ||
-      item.url ||
-      '';
+    // ✅ url ya está declarada arriba (línea 3002), no redeclarar
 
     // ✅ Validar requisitos mínimos con logging
     if (!title || title.trim().length === 0) {
