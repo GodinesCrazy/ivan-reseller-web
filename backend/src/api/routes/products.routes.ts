@@ -60,13 +60,19 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       // ✅ Extraer imageUrl del campo images (JSON)
       const imageUrl = extractImageUrl(product.images);
       
+      // ✅ Obtener información del marketplace más reciente (si está publicado)
+      const mostRecentListing = product.marketplaceListings?.[0] || null;
+      const marketplace = mostRecentListing?.marketplace?.toUpperCase() || 'unknown';
+      const marketplaceUrl = mostRecentListing?.listingUrl || null;
+      
       return {
         id: String(product.id),
         title: product.title,
         description: product.description || '',
         status: product.status,
         sku: String(product.id), // SKU temporal basado en ID
-        marketplace: 'unknown', // Productos no tienen marketplace directamente, se obtiene de listings
+        marketplace: marketplace, // ✅ Marketplace del listing más reciente
+        marketplaceUrl: marketplaceUrl, // ✅ URL del listing en el marketplace (para botón "View on Marketplace")
         price: product.finalPrice || product.suggestedPrice || product.aliexpressPrice || 0,
         stock: 0, // Valor por defecto
         profit: calculatedProfit > 0 ? calculatedProfit : 0,

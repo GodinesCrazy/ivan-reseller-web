@@ -19,6 +19,8 @@ import api from '@/services/api';
 import toast from 'react-hot-toast';
 import LoadingSpinner, { TableSkeleton } from '@/components/ui/LoadingSpinner';
 import { useCurrency } from '../hooks/useCurrency';
+import MetricLabelWithTooltip from '@/components/MetricLabelWithTooltip';
+import { metricTooltips } from '@/config/metricTooltips';
 
 interface Product {
   id: string;
@@ -27,6 +29,7 @@ interface Product {
   price: number;
   stock: number;
   marketplace: string;
+  marketplaceUrl?: string | null; // ✅ URL del listing en el marketplace (si está publicado)
   status: 'PENDING' | 'APPROVED' | 'PUBLISHED' | 'REJECTED';
   imageUrl?: string;
   profit?: number;
@@ -461,16 +464,43 @@ export default function Products() {
                   <p className="font-medium">{selectedProduct.stock} units</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Marketplace</p>
+                  <MetricLabelWithTooltip
+                    label="Marketplace"
+                    tooltipBody={metricTooltips.marketplace.body}
+                    className="text-sm text-gray-600"
+                  >
+                    <p className="text-sm text-gray-600">Marketplace</p>
+                  </MetricLabelWithTooltip>
                   <Badge variant="outline">{selectedProduct.marketplace}</Badge>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Status</p>
-                  {getStatusBadge(selectedProduct.status)}
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(selectedProduct.status)}
+                    <MetricLabelWithTooltip
+                      label={selectedProduct.status}
+                      tooltipBody={
+                        selectedProduct.status === 'PENDING' ? metricTooltips.statusPending.body :
+                        selectedProduct.status === 'APPROVED' ? metricTooltips.statusApproved.body :
+                        selectedProduct.status === 'PUBLISHED' ? metricTooltips.statusPublished.body :
+                        selectedProduct.status === 'REJECTED' ? metricTooltips.statusRejected.body :
+                        'Estado del producto en el sistema'
+                      }
+                      className="inline-block"
+                    >
+                      <span className="cursor-help">ℹ️</span>
+                    </MetricLabelWithTooltip>
+                  </div>
                 </div>
                 {selectedProduct.profit && (
                   <div>
-                    <p className="text-sm text-gray-600">Expected Profit</p>
+                    <MetricLabelWithTooltip
+                      label="Expected Profit"
+                      tooltipBody={metricTooltips.potentialProfit.body}
+                      className="text-sm text-gray-600"
+                    >
+                      <p className="text-sm text-gray-600">Expected Profit</p>
+                    </MetricLabelWithTooltip>
                     <p className="font-medium text-green-600 text-lg">+{formatMoney(selectedProduct.profit)}</p>
                   </div>
                 )}
@@ -485,7 +515,18 @@ export default function Products() {
                 Close
               </Button>
               {selectedProduct.status === 'PUBLISHED' && (
-                <Button className="flex items-center gap-2">
+                <Button
+                  className="flex items-center gap-2"
+                  onClick={() => {
+                    if (selectedProduct.marketplaceUrl) {
+                      window.open(selectedProduct.marketplaceUrl, '_blank', 'noopener,noreferrer');
+                    } else {
+                      toast.error('URL del marketplace no disponible. El producto fue publicado pero no se registró la URL. Intenta reprocesar la publicación.');
+                    }
+                  }}
+                  disabled={!selectedProduct.marketplaceUrl}
+                  title={!selectedProduct.marketplaceUrl ? 'Publicación creada sin URL registrada. Intenta reprocesar la publicación o revisa la configuración del marketplace.' : `Abrir en ${selectedProduct.marketplace}`}
+                >
                   <ExternalLink className="w-4 h-4" />
                   View on Marketplace
                 </Button>

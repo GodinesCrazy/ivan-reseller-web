@@ -293,6 +293,18 @@ export class ProductService {
             status: true,
           },
         },
+        marketplaceListings: {
+          select: {
+            id: true,
+            marketplace: true,
+            listingId: true,
+            listingUrl: true,
+            publishedAt: true,
+          },
+          orderBy: {
+            publishedAt: 'desc',
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',

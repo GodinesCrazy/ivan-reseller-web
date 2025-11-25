@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { log } from '@/utils/logger';
 import { formatCurrencySimple } from '@/utils/currency';
+import MetricLabelWithTooltip from './MetricLabelWithTooltip';
+import { metricTooltips } from '@/config/metricTooltips';
 
 interface MarketOpportunity {
   id: string;
@@ -919,55 +921,82 @@ export default function AIOpportunityFinder() {
                       <p className="text-2xl font-bold text-green-600">
                         {opp.profitMargin.toFixed(1)}%
                       </p>
-                      <p className="text-xs text-gray-600 flex items-center justify-center gap-1">
-                        Margen
-                        {opp.estimatedFields.includes('profitMargin') && (
-                          <span className="uppercase text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-semibold">
-                            Estimado
-                          </span>
-                        )}
-                      </p>
+                      <MetricLabelWithTooltip
+                        label="Margen"
+                        tooltipBody={metricTooltips.profitMargin.body}
+                        className="text-xs text-gray-600"
+                      >
+                        <span className="text-xs text-gray-600 flex items-center justify-center gap-1">
+                          Margen
+                          {opp.estimatedFields.includes('profitMargin') && (
+                            <span className="uppercase text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-semibold">
+                              Estimado
+                            </span>
+                          )}
+                        </span>
+                      </MetricLabelWithTooltip>
                     </div>
                     <div className="text-center">
                       <p className="text-2xl font-bold text-blue-600">{opp.confidence}%</p>
-                      <p 
-                        className="text-xs text-gray-600 cursor-help relative group inline-block"
-                        title="Confianza IA: Indica qué tan segura está la inteligencia artificial sobre esta oportunidad. 0–39%: baja confianza (revisa con más detalle). 40–69%: confianza media (requiere análisis manual). 70–100%: alta confianza (condiciones favorables según los datos analizados)."
+                      <MetricLabelWithTooltip
+                        label="Confianza IA"
+                        tooltipTitle={metricTooltips.aiConfidence.title}
+                        tooltipBody={metricTooltips.aiConfidence.body}
+                        className="text-xs text-gray-600"
                       >
-                        Confianza IA
-                        <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-normal w-64 z-50 shadow-lg">
-                          <strong>Confianza IA:</strong><br />
-                          Indica qué tan segura está la inteligencia artificial sobre esta oportunidad.<br />
-                          <strong>0–39%:</strong> baja confianza (revisa con más detalle).<br />
-                          <strong>40–69%:</strong> confianza media (requiere análisis manual).<br />
-                          <strong>70–100%:</strong> alta confianza (condiciones favorables según los datos analizados).
-                        </span>
-                      </p>
+                        <span className="text-xs text-gray-600">Confianza IA</span>
+                      </MetricLabelWithTooltip>
                     </div>
                     <div className="text-center">
                       <p className="text-2xl font-bold text-purple-600">{opp.monthlySales.toLocaleString()}</p>
-                      <p className="text-xs text-gray-600">Ventas/mes</p>
+                      <MetricLabelWithTooltip
+                        label="Ventas/mes"
+                        tooltipBody={metricTooltips.monthlySales.body}
+                        className="text-xs text-gray-600"
+                      >
+                        <span className="text-xs text-gray-600">Ventas/mes</span>
+                      </MetricLabelWithTooltip>
                     </div>
                     <div className="text-center">
                       <p className="text-2xl font-bold text-orange-600">{opp.suppliers}</p>
-                      <p className="text-xs text-gray-600">Proveedores</p>
+                      <MetricLabelWithTooltip
+                        label="Proveedores"
+                        tooltipBody={metricTooltips.suppliers.body}
+                        className="text-xs text-gray-600"
+                      >
+                        <span className="text-xs text-gray-600">Proveedores</span>
+                      </MetricLabelWithTooltip>
                     </div>
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <div className="flex items-center space-x-2 mb-2">
-                    {getTrendIcon(opp.trend)}
-                    <span className="text-sm font-medium capitalize">{opp.trend}</span>
-                  </div>
+                  <MetricLabelWithTooltip
+                    label={opp.trend}
+                    tooltipBody={metricTooltips.trend.body}
+                    className="flex items-center space-x-2 mb-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      {getTrendIcon(opp.trend)}
+                      <span className="text-sm font-medium capitalize">{opp.trend}</span>
+                    </div>
+                  </MetricLabelWithTooltip>
 
                   <div className="space-y-2">
-                    <div className={`px-2 py-1 rounded-full text-xs border ${getCompetitionColor(opp.competition)}`}>
-                      Competencia {opp.competition}
-                    </div>
-                    <div className={`text-xs font-medium ${getDemandColor(opp.demand)}`}>
-                      Demanda {opp.demand}
-                    </div>
+                    <MetricLabelWithTooltip
+                      label={`Competencia ${opp.competition}`}
+                      tooltipBody={metricTooltips.competition.body}
+                      className={`px-2 py-1 rounded-full text-xs border ${getCompetitionColor(opp.competition)}`}
+                    >
+                      <span>Competencia {opp.competition}</span>
+                    </MetricLabelWithTooltip>
+                    <MetricLabelWithTooltip
+                      label={`Demanda ${opp.demand}`}
+                      tooltipBody={metricTooltips.demand.body}
+                      className={`text-xs font-medium ${getDemandColor(opp.demand)}`}
+                    >
+                      <span>Demanda {opp.demand}</span>
+                    </MetricLabelWithTooltip>
                   </div>
                 </div>
               </div>
@@ -975,11 +1004,23 @@ export default function AIOpportunityFinder() {
               {/* Precios */}
               <div className="grid grid-cols-3 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
                 <div className="text-center">
-                  <p className="text-sm text-gray-600">Precio actual</p>
+                  <MetricLabelWithTooltip
+                    label="Precio actual"
+                    tooltipBody={metricTooltips.currentPrice.body}
+                    className="text-sm text-gray-600"
+                  >
+                    <p className="text-sm text-gray-600">Precio actual</p>
+                  </MetricLabelWithTooltip>
                   <p className="text-lg font-semibold text-gray-900">{formatCurrencySimple(opp.currentPrice, 'USD')}</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-sm text-gray-600">Precio sugerido</p>
+                  <MetricLabelWithTooltip
+                    label="Precio sugerido"
+                    tooltipBody={metricTooltips.suggestedPrice.body}
+                    className="text-sm text-gray-600"
+                  >
+                    <p className="text-sm text-gray-600">Precio sugerido</p>
+                  </MetricLabelWithTooltip>
                   <p className="text-lg font-semibold text-green-600 flex items-center justify-center gap-2">
                     {formatCurrencySimple(opp.suggestedPrice, 'USD')}
                     {opp.estimatedFields.includes('suggestedPriceUsd') && (
@@ -990,7 +1031,13 @@ export default function AIOpportunityFinder() {
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-sm text-gray-600">Ganancia potencial</p>
+                  <MetricLabelWithTooltip
+                    label="Ganancia potencial"
+                    tooltipBody={metricTooltips.potentialProfit.body}
+                    className="text-sm text-gray-600"
+                  >
+                    <p className="text-sm text-gray-600">Ganancia potencial</p>
+                  </MetricLabelWithTooltip>
                   <p className="text-lg font-semibold text-blue-600">{formatCurrencySimple(opp.suggestedPrice - opp.currentPrice, 'USD')}</p>
                 </div>
               </div>
