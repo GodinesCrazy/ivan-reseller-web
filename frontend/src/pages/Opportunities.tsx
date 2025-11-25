@@ -323,10 +323,15 @@ export default function Opportunities() {
       // 1. Crear producto desde la oportunidad
       const productResponse = await api.post('/api/products', payload);
 
-      const productId = productResponse.data?.id || productResponse.data?.product?.id;
+      // ✅ El backend devuelve { success: true, data: { id, ...product } }
+      const responseData = productResponse.data;
+      const product = responseData?.data || responseData;
+      
+      // ✅ Obtener el ID del producto - el backend ahora asegura que esté en data.id
+      const productId = product?.id || responseData?.data?.id || responseData?.id;
 
       if (!productId) {
-        throw new Error('No se pudo obtener el ID del producto creado');
+        throw new Error('No se pudo obtener el ID del producto creado. El servidor no devolvió un ID válido.');
       }
 
       // 2. Publicar a marketplace

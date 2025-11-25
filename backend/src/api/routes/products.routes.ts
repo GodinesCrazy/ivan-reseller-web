@@ -190,11 +190,12 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       imagesField: product.images?.substring(0, 100) // Log primeros 100 caracteres del campo images
     });
     
-    // ✅ Retornar producto con imageUrl extraído
+    // ✅ Retornar producto con imageUrl extraído y asegurar que el ID esté presente
     res.status(201).json({
       success: true,
       message: 'Product created successfully',
       data: {
+        id: product.id, // ✅ Asegurar que el ID esté explícitamente presente
         ...product,
         imageUrl: imageUrl || undefined
       }

@@ -24,6 +24,7 @@ import {
   Eye
 } from 'lucide-react';
 import { log } from '@/utils/logger';
+import { formatCurrencySimple } from '@/utils/currency';
 
 interface MarketOpportunity {
   id: string;
@@ -538,11 +539,12 @@ export default function AIOpportunityFinder() {
       
       const productResponse = await api.post('/api/products', payload);
       
-      // ✅ El backend devuelve el producto directamente en response.data
-      const product = productResponse.data;
+      // ✅ El backend devuelve { success: true, data: { id, ...product } }
+      const responseData = productResponse.data;
+      const product = responseData?.data || responseData;
       
-      // ✅ Intentar obtener el ID del producto de diferentes formas posibles
-      let productId = product?.id || product?.product?.id || productResponse.data?.id || productResponse.data?.product?.id;
+      // ✅ Obtener el ID del producto - el backend ahora asegura que esté en data.id
+      let productId = product?.id || responseData?.data?.id || responseData?.id;
       
       // Si el ID viene como número, convertirlo a string si es necesario
       if (typeof productId === 'number') {
@@ -552,7 +554,8 @@ export default function AIOpportunityFinder() {
       if (!productId) {
         log.error('Product response does not contain ID:', {
           response: productResponse,
-          data: productResponse.data,
+          responseData,
+          data: responseData?.data,
           status: productResponse.status,
           productKeys: product ? Object.keys(product) : [],
           productType: typeof product
@@ -927,7 +930,19 @@ export default function AIOpportunityFinder() {
                     </div>
                     <div className="text-center">
                       <p className="text-2xl font-bold text-blue-600">{opp.confidence}%</p>
-                      <p className="text-xs text-gray-600">Confianza IA</p>
+                      <p 
+                        className="text-xs text-gray-600 cursor-help relative group inline-block"
+                        title="Confianza IA: Indica qué tan segura está la inteligencia artificial sobre esta oportunidad. 0–39%: baja confianza (revisa con más detalle). 40–69%: confianza media (requiere análisis manual). 70–100%: alta confianza (condiciones favorables según los datos analizados)."
+                      >
+                        Confianza IA
+                        <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-normal w-64 z-50 shadow-lg">
+                          <strong>Confianza IA:</strong><br />
+                          Indica qué tan segura está la inteligencia artificial sobre esta oportunidad.<br />
+                          <strong>0–39%:</strong> baja confianza (revisa con más detalle).<br />
+                          <strong>40–69%:</strong> confianza media (requiere análisis manual).<br />
+                          <strong>70–100%:</strong> alta confianza (condiciones favorables según los datos analizados).
+                        </span>
+                      </p>
                     </div>
                     <div className="text-center">
                       <p className="text-2xl font-bold text-purple-600">{opp.monthlySales.toLocaleString()}</p>
@@ -961,12 +976,12 @@ export default function AIOpportunityFinder() {
               <div className="grid grid-cols-3 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
                 <div className="text-center">
                   <p className="text-sm text-gray-600">Precio actual</p>
-                  <p className="text-lg font-semibold text-gray-900">${opp.currentPrice}</p>
+                  <p className="text-lg font-semibold text-gray-900">{formatCurrencySimple(opp.currentPrice, 'USD')}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-sm text-gray-600">Precio sugerido</p>
                   <p className="text-lg font-semibold text-green-600 flex items-center justify-center gap-2">
-                    ${opp.suggestedPrice}
+                    {formatCurrencySimple(opp.suggestedPrice, 'USD')}
                     {opp.estimatedFields.includes('suggestedPriceUsd') && (
                       <span className="uppercase text-[9px] bg-amber-100 text-amber-700 px-1 py-0.5 rounded-full font-semibold">
                         Estimado
@@ -976,7 +991,7 @@ export default function AIOpportunityFinder() {
                 </div>
                 <div className="text-center">
                   <p className="text-sm text-gray-600">Ganancia potencial</p>
-                  <p className="text-lg font-semibold text-blue-600">${(opp.suggestedPrice - opp.currentPrice).toFixed(2)}</p>
+                  <p className="text-lg font-semibold text-blue-600">{formatCurrencySimple(opp.suggestedPrice - opp.currentPrice, 'USD')}</p>
                 </div>
               </div>
               
