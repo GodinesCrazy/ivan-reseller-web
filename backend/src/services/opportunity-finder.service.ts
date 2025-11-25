@@ -49,7 +49,7 @@ export interface OpportunityItem {
 }
 
 class OpportunityFinderService {
-  private minMargin = Number(process.env.MIN_OPPORTUNITY_MARGIN || '0.20');
+  private minMargin = Number(process.env.MIN_OPPORTUNITY_MARGIN || '0.10'); // ✅ Reducido de 0.20 a 0.10 para permitir más oportunidades válidas
 
   async findOpportunities(userId: number, filters: OpportunityFilters): Promise<OpportunityItem[]> {
     const query = filters.query?.trim();
@@ -60,7 +60,7 @@ class OpportunityFinderService {
       ? filters.marketplaces
       : DEFAULT_COMPARATOR_MARKETPLACES;
     const region = filters.region || 'us';
-    
+
     // ✅ MEDIA PRIORIDAD: Obtener environment del usuario si no se especificó (con logger estructurado)
     let environment: 'sandbox' | 'production' = filters.environment || 'production';
     if (!filters.environment) {
@@ -76,7 +76,7 @@ class OpportunityFinderService {
         environment = 'production';
       }
     }
-    
+
     logger.info('Búsqueda de oportunidades iniciada', {
       service: 'opportunity-finder',
       userId,
@@ -144,11 +144,11 @@ class OpportunityFinderService {
     let manualAuthPending = false;
     let manualAuthError: ManualAuthRequiredError | null = null;
     let nativeErrorForLogs: any = null;
-    
+
     // PRIORIDAD 1: Scraping nativo local (Puppeteer) - más rápido y sin dependencias externas
     const scraper = new AdvancedMarketplaceScraper();
     let scraperInitialized = false;
-    
+
     // ✅ Obtener moneda base del usuario desde Settings
     const userSettingsService = (await import('./user-settings.service')).default;
     const baseCurrency = await userSettingsService.getUserBaseCurrency(userId);
@@ -157,7 +157,7 @@ class OpportunityFinderService {
     try {
       logger.info('[OPPORTUNITY-FINDER] Starting search', { query, userId, environment });
       logger.debug('[OPPORTUNITY-FINDER] Using native local scraping (Puppeteer)', { query });
-      
+
       // ✅ Inicializar scraper explícitamente antes de usar
       if (!scraper['browser']) {
         logger.debug('[OPPORTUNITY-FINDER] Initializing browser');
@@ -173,18 +173,18 @@ class OpportunityFinderService {
           throw initError;
         }
       }
-      
+
       logger.debug('[OPPORTUNITY-FINDER] Calling scrapeAliExpress', { query, userId, environment, baseCurrency });
       const scrapeStartTime = Date.now();
       const items = await scraper.scrapeAliExpress(userId, query, environment, baseCurrency);
       const scrapeDuration = Date.now() - scrapeStartTime;
-      logger.info('[OPPORTUNITY-FINDER] scrapeAliExpress completed', { 
+      logger.info('[OPPORTUNITY-FINDER] scrapeAliExpress completed', {
         count: items?.length || 0,
         duration: `${scrapeDuration}ms`,
         query,
         userId
       });
-      
+
       products = (items || [])
         .slice(0, maxItems)
         .map((p: any) => {
@@ -253,7 +253,7 @@ class OpportunityFinderService {
           }
           return isValid;
         });
-      
+
       if (products.length > 0) {
         logger.info('Scraping nativo exitoso', {
           service: 'opportunity-finder',
@@ -274,7 +274,7 @@ class OpportunityFinderService {
     } catch (nativeError: any) {
       nativeErrorForLogs = nativeError;
       const errorMsg = nativeError?.message || String(nativeError);
-      
+
       // ✅ MEDIA PRIORIDAD: NO bloquear si es error de autenticación manual - continuar con bridge Python (con logger estructurado)
       if (nativeError instanceof ManualAuthRequiredError) {
         manualAuthPending = true;
@@ -298,7 +298,7 @@ class OpportunityFinderService {
       // El sistema de CAPTCHA manual se activará solo si el bridge Python también falla
     } finally {
       if (scraperInitialized) {
-        await scraper.close().catch(() => {});
+        await scraper.close().catch(() => { });
       }
     }
 
@@ -337,7 +337,7 @@ class OpportunityFinderService {
             };
           })
           .filter(p => p.price > 0 && p.sourcePrice > 0);
-        
+
         if (products.length > 0) {
           logger.info('Bridge Python exitoso', {
             service: 'opportunity-finder',
@@ -353,7 +353,7 @@ class OpportunityFinderService {
       } catch (bridgeError: any) {
         const msg = String(bridgeError?.message || '').toLowerCase();
         const isCaptchaError = bridgeError?.code === 'CAPTCHA_REQUIRED' || msg.includes('captcha');
-        
+
         logger.error('Bridge Python falló', {
           service: 'opportunity-finder',
           userId,
@@ -361,13 +361,13 @@ class OpportunityFinderService {
           error: bridgeError.message,
           isCaptchaError
         });
-        
+
         // Solo intentar resolver CAPTCHA si ambos métodos fallaron Y es un error de CAPTCHA
         if (isCaptchaError && !manualAuthPending) {
           try {
             const ManualCaptchaService = (await import('./manual-captcha.service')).default;
             const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`;
-            
+
             logger.info('CAPTCHA detectado, iniciando sesión de resolución manual', {
               service: 'opportunity-finder',
               userId,
@@ -386,7 +386,7 @@ class OpportunityFinderService {
             });
           }
         }
-        
+
         // ✅ NO lanzar error - retornar array vacío para que el frontend muestre el mensaje apropiado
         logger.warn('Ambos métodos de scraping fallaron, retornando resultados vacíos', {
           service: 'opportunity-finder',
@@ -410,7 +410,7 @@ class OpportunityFinderService {
         nativeError: nativeErrorForLogs?.message || null,
         bridgeAttempted: true,
       });
-      
+
       // ✅ Si hay un error de autenticación manual pendiente, lanzarlo para que el frontend lo maneje
       if (manualAuthPending && manualAuthError) {
         logger.info('Lanzando error de autenticación manual pendiente', {
@@ -420,7 +420,7 @@ class OpportunityFinderService {
         });
         throw manualAuthError;
       }
-      
+
       // ✅ Retornar vacío si no hay productos pero no hay error de autenticación
       return [];
     }
@@ -431,19 +431,19 @@ class OpportunityFinderService {
     let skippedInvalid = 0;
     let skippedLowMargin = 0;
     let processedCount = 0;
-    
+
     for (const product of products) {
       if (!product.title || !product.price || product.price <= 0) {
         skippedInvalid++;
-        logger.debug('[OPPORTUNITY-FINDER] Product discarded (invalid)', { 
-          title: product.title?.substring(0, 50), 
-          price: product.price 
+        logger.debug('[OPPORTUNITY-FINDER] Product discarded (invalid)', {
+          title: product.title?.substring(0, 50),
+          price: product.price
         });
         continue;
       }
 
       processedCount++;
-      logger.debug('[OPPORTUNITY-FINDER] Analyzing product', { 
+      logger.debug('[OPPORTUNITY-FINDER] Analyzing product', {
         progress: `${processedCount}/${products.length}`,
         title: product.title.substring(0, 60),
         price: product.price,
@@ -470,7 +470,7 @@ class OpportunityFinderService {
       // Agregar oportunidades solo si existe algún marketplace con datos reales
       const analyses = Object.values(analysis || {});
       const valid = analyses.find(a => a && a.listingsFound > 0 && a.competitivePrice > 0);
-      
+
       if (valid) {
         logger.debug('Análisis de competencia encontrado', {
           service: 'opportunity-finder',
@@ -540,7 +540,7 @@ class OpportunityFinderService {
             const competitivePriceInBase = (a.currency || 'USD').toUpperCase() === baseCurrency.toUpperCase()
               ? a.competitivePrice // Ya está en moneda base
               : fxService.convert(a.competitivePrice, a.currency || 'USD', baseCurrency); // Convertir solo si es necesario
-            
+
             best = {
               margin,
               price: a.competitivePrice,
@@ -555,15 +555,21 @@ class OpportunityFinderService {
         logger.debug('Margen calculado con datos reales', {
           service: 'opportunity-finder',
           margin: (best.margin * 100).toFixed(1),
-          minRequired: (this.minMargin * 100).toFixed(1)
+          minRequired: (this.minMargin * 100).toFixed(1),
+          marketplace: best.mp,
+          costPrice: product.price.toFixed(2),
+          suggestedPrice: best.priceBase.toFixed(2)
         });
         if (best.margin < this.minMargin) {
           skippedLowMargin++;
-          logger.debug('Producto descartado (margen insuficiente)', {
+          logger.info('Producto descartado por margen bajo', {
             service: 'opportunity-finder',
             title: product.title.substring(0, 50),
-            margin: (best.margin * 100).toFixed(1),
-            minRequired: (this.minMargin * 100).toFixed(1)
+            marginCalculated: (best.margin * 100).toFixed(1) + '%',
+            minRequired: (this.minMargin * 100).toFixed(1) + '%',
+            costPrice: product.price.toFixed(2),
+            suggestedPrice: best.priceBase.toFixed(2),
+            marketplace: best.mp
           });
           continue;
         }
@@ -574,15 +580,20 @@ class OpportunityFinderService {
         logger.debug('Margen estimado (sin datos de competencia)', {
           service: 'opportunity-finder',
           margin: (fallbackMargin * 100).toFixed(1),
-          minRequired: (this.minMargin * 100).toFixed(1)
+          minRequired: (this.minMargin * 100).toFixed(1),
+          costPrice: product.price.toFixed(2),
+          estimatedPrice: fallbackPriceBase.toFixed(2)
         });
         if (fallbackMargin < this.minMargin) {
           skippedLowMargin++;
-          logger.debug('Producto descartado (margen estimado insuficiente)', {
+          logger.info('Producto descartado por margen estimado bajo', {
             service: 'opportunity-finder',
             title: product.title.substring(0, 50),
-            margin: (fallbackMargin * 100).toFixed(1),
-            minRequired: (this.minMargin * 100).toFixed(1)
+            marginEstimated: (fallbackMargin * 100).toFixed(1) + '%',
+            minRequired: (this.minMargin * 100).toFixed(1) + '%',
+            costPrice: product.price.toFixed(2),
+            estimatedPrice: fallbackPriceBase.toFixed(2),
+            note: 'Sin datos de competencia - usando estimación heurística'
           });
           continue;
         }
@@ -675,8 +686,8 @@ class OpportunityFinderService {
           typeof product.priceMaxSource === 'number' && product.priceMaxSource > 0
             ? product.priceMaxSource
             : typeof product.sourcePrice === 'number' && product.sourcePrice > 0
-            ? product.sourcePrice
-            : fxService.convert(product.price, baseCurrency, product.sourceCurrency || baseCurrency),
+              ? product.sourcePrice
+              : fxService.convert(product.price, baseCurrency, product.sourceCurrency || baseCurrency),
         costCurrency: product.priceRangeSourceCurrency || product.sourceCurrency || baseCurrency,
         baseCurrency,
         suggestedPriceUsd: best.priceBase || fxService.convert(best.price, best.currency || baseCurrency, baseCurrency),
@@ -716,7 +727,7 @@ class OpportunityFinderService {
           feesConsidered: opp.feesConsidered,
           targetMarketplaces: opp.targetMarketplaces,
         }, analysis as any);
-      } catch {}
+      } catch { }
     }
 
     logger.info('Resumen de procesamiento', {
@@ -728,7 +739,7 @@ class OpportunityFinderService {
       skippedLowMargin,
       opportunitiesFound: opportunities.length
     });
-    
+
     if (opportunities.length === 0 && products.length > 0) {
       logger.warn('PROBLEMA DETECTADO: Se scrapearon productos pero no se generaron oportunidades', {
         service: 'opportunity-finder',
