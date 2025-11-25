@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { Prisma } from '@prisma/client';
 import { logger } from '../config/logger';
 import { redis, isRedisAvailable } from '../config/redis';
 
@@ -18,10 +19,10 @@ class FXService {
   private providerUrl = process.env.FX_PROVIDER_URL || 'https://open.er-api.com/v6/latest/{base}';
   private providerSymbols = process.env.FX_PROVIDER_SYMBOLS;
   private refreshInFlight: Promise<void> | null = null;
-  
+
   // ✅ Monedas que no usan decimales (redondear a enteros)
   private readonly zeroDecimalCurrencies = new Set(['CLP', 'JPY', 'KRW', 'VND', 'IDR']);
-  
+
   // ✅ P8: Caché en memoria para conversiones (síncrono)
   private conversionCache: Map<string, { value: number; timestamp: number }> = new Map();
   private readonly CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
@@ -222,7 +223,7 @@ class FXService {
   private roundCurrency(amount: number, currency: string): number {
     if (!isFinite(amount)) return 0;
     const currencyCode = currency.toUpperCase();
-    
+
     if (this.zeroDecimalCurrencies.has(currencyCode)) {
       // ✅ Monedas sin decimales: redondear a entero
       return Math.round(amount);
@@ -244,20 +245,21 @@ class FXService {
   /**
    * ✅ P8: Convertir con caché de conversiones (síncrono con caché en memoria)
    */
-  convert(amount: number, from: string, to: string): number {
-    if (!isFinite(amount)) return 0;
+  convert(amount: number | Prisma.Decimal, from: string, to: string): number {
+    const numAmount = typeof amount === 'number' ? amount : amount.toNumber();
+    if (!isFinite(numAmount)) return 0;
     const f = from.toUpperCase();
     const t = to.toUpperCase();
-    if (f === t) return this.roundCurrency(amount, t);
-    
+    if (f === t) return this.roundCurrency(numAmount, t);
+
     // ✅ P8: Intentar obtener del caché en memoria primero (síncrono)
-    const cacheKey = this.getCacheKey(amount, f, t);
+    const cacheKey = this.getCacheKey(numAmount, f, t);
     const cached = this.conversionCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL_MS) {
       logger.debug('FXService: conversion cache hit (memory)', { from: f, to: t, amount });
       return cached.value;
     }
-    
+
     // ✅ P8: Intentar obtener del caché Redis (async, no bloquea)
     if (isRedisAvailable) {
       redis.get(cacheKey).then((cachedRedis: string | null) => {
@@ -275,11 +277,11 @@ class FXService {
         // Si falla el caché Redis, continuar con cálculo normal
       });
     }
-    
+
     // ✅ Verificar que tenemos las tasas necesarias
     if (!this.rates[f] || !this.rates[t]) {
-      logger.warn('FXService: missing rate for conversion', { 
-        from: f, 
+      logger.warn('FXService: missing rate for conversion', {
+        from: f,
         to: t,
         availableRates: Object.keys(this.rates).slice(0, 10),
         hasFromRate: !!this.rates[f],
@@ -294,17 +296,17 @@ class FXService {
       // ✅ CORREGIDO: Lanzar error si falta tasa en lugar de retornar amount sin convertir
       throw new Error(`Missing exchange rate for conversion: ${f} to ${t}. Available rates: ${Object.keys(this.rates).slice(0, 10).join(', ')}`);
     }
-    
-    const amountInBase = amount / this.rates[f];
+
+    const amountInBase = numAmount / this.rates[f];
     const converted = amountInBase * this.rates[t];
-    
+
     // ✅ Redondear según tipo de moneda destino
     const rounded = this.roundCurrency(converted, t);
-    
+
     // ✅ P8: Guardar en caché en memoria (síncrono)
     const timestamp = Date.now();
     this.conversionCache.set(cacheKey, { value: rounded, timestamp });
-    
+
     // ✅ P8: Limpiar caché antiguo (mantener solo últimas 1000 entradas)
     if (this.conversionCache.size > 1000) {
       const entries = Array.from(this.conversionCache.entries());
@@ -322,7 +324,7 @@ class FXService {
         });
       }
     }
-    
+
     // ✅ P8: Guardar en caché Redis (async, no bloquea)
     if (isRedisAvailable) {
       try {
@@ -335,9 +337,9 @@ class FXService {
         // Si falla el caché Redis, no es crítico, continuar
       }
     }
-    
+
     // ✅ Logging para diagnóstico (solo para conversiones importantes)
-    if (f === 'CLP' || t === 'CLP' || amount > 1000 || Math.abs(converted - rounded) > 0.01) {
+    if (f === 'CLP' || t === 'CLP' || numAmount > 1000 || Math.abs(converted - rounded) > 0.01) {
       logger.debug('FXService: conversion', {
         from: f,
         to: t,
@@ -348,7 +350,7 @@ class FXService {
         toRate: this.rates[t]
       });
     }
-    
+
     return rounded;
   }
 }
