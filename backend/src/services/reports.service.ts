@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import ExcelJS from 'exceljs';
 import { notificationService } from './notification.service';
+import { toNumber } from '../utils/decimal.utils';
 
 const prisma = new PrismaClient();
 
@@ -146,15 +147,15 @@ class ReportsService {
         }
       });
 
-      return sales.map(sale => ({
+      return sales.map((sale): SalesReportData => ({
         id: sale.id,
         orderId: sale.orderId,
         productTitle: sale.product?.title || 'Unknown Product',
         marketplace: sale.marketplace,
-        salePrice: sale.salePrice,
-        cost: sale.aliexpressCost,
-        profit: sale.grossProfit,
-        commission: sale.commissionAmount,
+        salePrice: toNumber(sale.salePrice),
+        cost: toNumber(sale.aliexpressCost || 0),
+        profit: toNumber(sale.grossProfit || 0),
+        commission: toNumber(sale.commissionAmount || 0),
         date: sale.createdAt,
         status: sale.status,
         userId: sale.userId,
@@ -197,21 +198,21 @@ class ReportsService {
         }
       });
 
-      return products.map(product => {
+      return products.map((product): ProductReportData => {
         const totalSales = product.sales.length;
-        const totalRevenue = product.sales.reduce((sum, sale) => sum + sale.salePrice, 0);
-        const totalProfit = product.sales.reduce((sum, sale) => sum + sale.grossProfit, 0);
+        const totalRevenue = product.sales.reduce((sum, sale) => sum + toNumber(sale.salePrice), 0);
+        const totalProfit = product.sales.reduce((sum, sale) => sum + toNumber(sale.grossProfit), 0);
 
         return {
           id: product.id,
           title: product.title,
           status: product.status,
           marketplace: 'Multiple', // This would need to be calculated based on listings
-          price: product.suggestedPrice,
+          price: toNumber(product.suggestedPrice || product.finalPrice || 0),
           stock: 100, // This would come from inventory data
           views: 0, // This would need to be tracked separately
           sales: totalSales,
-          profit: totalProfit,
+          profit: totalProfit, // Ya es number después del reduce con toNumber()
           createdAt: product.createdAt,
           lastUpdated: product.updatedAt
         };
@@ -251,9 +252,9 @@ class ReportsService {
         const totalProducts = user.products.length;
         const activeProducts = user.products.filter(p => p.status === 'PUBLISHED').length;
         const totalSales = user.sales.length;
-        const totalRevenue = user.sales.reduce((sum, sale) => sum + sale.salePrice, 0);
-        const totalProfit = user.sales.reduce((sum, sale) => sum + sale.grossProfit, 0);
-        const totalCommissions = user.sales.reduce((sum, sale) => sum + sale.commissionAmount, 0);
+        const totalRevenue = user.sales.reduce((sum, sale) => sum + toNumber(sale.salePrice), 0);
+        const totalProfit = user.sales.reduce((sum, sale) => sum + toNumber(sale.grossProfit), 0);
+        const totalCommissions = user.sales.reduce((sum, sale) => sum + toNumber(sale.commissionAmount), 0);
         const avgOrderValue = totalSales > 0 ? totalRevenue / totalSales : 0;
         const conversionRate = totalProducts > 0 ? (totalSales / totalProducts) * 100 : 0;
 
@@ -317,7 +318,7 @@ class ReportsService {
         });
 
         const totalSales = sales.length;
-        const revenue = sales.reduce((sum, sale) => sum + sale.salePrice, 0);
+        const revenue = sales.reduce((sum, sale) => sum + toNumber(sale.salePrice), 0);
         const averagePrice = totalSales > 0 ? revenue / totalSales : 0;
         const conversionRate = products.length > 0 ? (totalSales / products.length) * 100 : 0;
 
@@ -367,7 +368,7 @@ class ReportsService {
       });
 
       const totalSales = sales.length;
-      const revenue = sales.reduce((sum, sale) => sum + sale.salePrice, 0);
+      const revenue = sales.reduce((sum, sale) => sum + toNumber(sale.salePrice), 0);
 
       trends.push({
         month: date.toLocaleDateString('es-ES', { year: 'numeric', month: 'short' }),
@@ -396,8 +397,13 @@ class ReportsService {
         }
       });
 
-      const totalRevenue = revenueData._sum.salePrice || 0;
-      const totalProfit = revenueData._sum.grossProfit || 0;
+      // ✅ Convertir Decimal a number de forma segura
+      const totalRevenue = revenueData._sum.salePrice != null 
+        ? toNumber(revenueData._sum.salePrice) 
+        : 0;
+      const totalProfit = revenueData._sum.grossProfit != null
+        ? toNumber(revenueData._sum.grossProfit) 
+        : 0;
       const avgOrderValue = totalSales > 0 ? totalRevenue / totalSales : 0;
       const conversionRate = totalProducts > 0 ? (totalSales / totalProducts) * 100 : 0;
 
@@ -451,7 +457,7 @@ class ReportsService {
           users: monthUsers,
           products: monthProducts,
           sales: monthSales.length,
-          revenue: monthSales.reduce((sum, sale) => sum + sale.salePrice, 0)
+          revenue: monthSales.reduce((sum, sale) => sum + toNumber(sale.salePrice), 0)
         });
       }
 
@@ -489,8 +495,8 @@ class ReportsService {
           totalUsers,
           totalProducts,
           totalSales,
-          totalRevenue,
-          totalProfit,
+          totalRevenue: Number(totalRevenue), // ✅ Asegurar que es number
+          totalProfit: Number(totalProfit), // ✅ Asegurar que es number
           avgOrderValue,
           conversionRate
         },
@@ -762,9 +768,9 @@ class ReportsService {
       return '<p>No se encontraron ventas para los filtros seleccionados.</p>';
     }
 
-    const totalRevenue = sales.reduce((sum, sale) => sum + sale.salePrice, 0);
-    const totalProfit = sales.reduce((sum, sale) => sum + sale.profit, 0);
-    const totalCommissions = sales.reduce((sum, sale) => sum + sale.commission, 0);
+    const totalRevenue = sales.reduce((sum, sale) => sum + toNumber(sale.salePrice), 0);
+    const totalProfit = sales.reduce((sum, sale) => sum + toNumber(sale.profit), 0);
+    const totalCommissions = sales.reduce((sum, sale) => sum + toNumber(sale.commission), 0);
 
     return `
       <div class="summary-grid">

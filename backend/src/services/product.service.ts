@@ -168,33 +168,76 @@ export class ProductService {
       status: 'PENDING'
     });
 
-    const product = await prisma.product.create({
-      data: {
-        userId,
-        aliexpressUrl: rest.aliexpressUrl,
-        title: rest.title,
-        description: rest.description || null,
-        aliexpressPrice: rest.aliexpressPrice,
-        suggestedPrice: rest.suggestedPrice,
-        // ✅ CORREGIDO: Asegurar que finalPrice siempre tenga un valor válido
-        // Si no se proporciona finalPrice, usar suggestedPrice o aliexpressPrice * 1.45 como fallback
-        finalPrice: finalPrice ?? rest.suggestedPrice ?? (rest.aliexpressPrice ? Math.round(rest.aliexpressPrice * 1.45 * 100) / 100 : 0),
-        category: rest.category || null,
-        images: imagesPayload,
-        productData: metadataPayload,
-        status: 'PENDING',
-        isPublished: false,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            username: true,
-            email: true,
+    // ✅ RESILIENCIA: Intentar crear producto con currency, si falla (migración no ejecutada), intentar sin currency
+    let product;
+    try {
+      product = await prisma.product.create({
+        data: {
+          userId,
+          aliexpressUrl: rest.aliexpressUrl,
+          title: rest.title,
+          description: rest.description || null,
+          aliexpressPrice: rest.aliexpressPrice,
+          suggestedPrice: rest.suggestedPrice,
+          // ✅ CORREGIDO: Asegurar que finalPrice siempre tenga un valor válido
+          // Si no se proporciona finalPrice, usar suggestedPrice o aliexpressPrice * 1.45 como fallback
+          finalPrice: finalPrice ?? rest.suggestedPrice ?? (rest.aliexpressPrice ? Math.round(rest.aliexpressPrice * 1.45 * 100) / 100 : 0),
+          currency: currency || 'USD', // ✅ Guardar moneda original del precio de AliExpress
+          category: rest.category || null,
+          images: imagesPayload,
+          productData: metadataPayload,
+          status: 'PENDING',
+          isPublished: false,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              email: true,
+            },
           },
         },
-      },
-    });
+      });
+    } catch (error: any) {
+      // ✅ Si falla por campo currency (migración no ejecutada), intentar sin currency
+      if (error?.code === 'P2009' || error?.message?.includes('currency') || error?.message?.includes('Unknown column')) {
+        logger.warn('[PRODUCT-SERVICE] Currency field not found in database, creating product without currency field (migration may not be executed)', {
+          error: error?.message?.substring(0, 200),
+          userId
+        });
+        // Intentar sin el campo currency
+        product = await prisma.product.create({
+          data: {
+            userId,
+            aliexpressUrl: rest.aliexpressUrl,
+            title: rest.title,
+            description: rest.description || null,
+            aliexpressPrice: rest.aliexpressPrice,
+            suggestedPrice: rest.suggestedPrice,
+            finalPrice: finalPrice ?? rest.suggestedPrice ?? (rest.aliexpressPrice ? Math.round(rest.aliexpressPrice * 1.45 * 100) / 100 : 0),
+            // currency: omitido temporalmente hasta que se ejecute la migración
+            category: rest.category || null,
+            images: imagesPayload,
+            productData: metadataPayload,
+            status: 'PENDING',
+            isPublished: false,
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                email: true,
+              },
+            },
+          },
+        });
+      } else {
+        // Re-lanzar el error si no es por currency
+        throw error;
+      }
+    }
 
     // ✅ Logging después de crear el producto
     logger.info('[PRODUCT-SERVICE] Product created successfully', {

@@ -7,6 +7,7 @@ import { PayPalPayoutService } from './paypal-payout.service';
 import { notificationService } from './notification.service';
 import { aliExpressAuthMonitor } from './ali-auth-monitor.service';
 import fxService from './fx.service';
+import { toNumber } from '../utils/decimal.utils';
 
 /**
  * Scheduled Tasks Service
@@ -425,7 +426,8 @@ export class ScheduledTasksService {
 
       for (const commission of pendingCommissions) {
         try {
-          const commissionAmount = commission.amount;
+          // ✅ Convertir Decimal a number para operaciones aritméticas
+          const commissionAmount = toNumber(commission.amount);
           
           // Si PayPal está disponible y el monto es mayor a $1, procesar con PayPal
           if (paypalService && commissionAmount >= 1.0) {
@@ -488,7 +490,8 @@ export class ScheduledTasksService {
               });
 
               // Continuar con procesamiento normal
-              if (commission.user.balance >= commissionAmount) {
+              const userBalance = toNumber(commission.user.balance);
+              if (userBalance >= commissionAmount) {
                 await prisma.user.update({
                   where: { id: commission.userId },
                   data: {
@@ -517,7 +520,8 @@ export class ScheduledTasksService {
             }
           } else {
             // Procesamiento normal sin PayPal (descontar del balance)
-            if (commission.user.balance >= commissionAmount) {
+            const userBalance = toNumber(commission.user.balance);
+            if (userBalance >= commissionAmount) {
               await prisma.user.update({
                 where: { id: commission.userId },
                 data: {

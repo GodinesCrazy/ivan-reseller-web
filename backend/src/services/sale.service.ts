@@ -2,6 +2,11 @@ import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 import logger from '../config/logger';
 import fxService from './fx.service';
+import { notificationService } from './notification.service';
+import { UserSettingsService } from './user-settings.service';
+import { toNumber } from '../utils/decimal.utils';
+import type { AutomatedOrder } from './automation.service';
+import { AutomatedOrder } from './automation.service';
 
 const prisma = new PrismaClient();
 
@@ -52,8 +57,8 @@ export class SaleService {
     // Obtener moneda base del usuario
     let baseCurrency = 'USD'; // Fallback por defecto
     try {
-      const { userSettingsService } = await import('./user-settings.service');
-      baseCurrency = await userSettingsService.getUserBaseCurrency(userId);
+      const userSettingsService = new UserSettingsService();
+      baseCurrency = await userSettingsService.getUserBaseCurrency(userId) || 'USD';
     } catch (error) {
       logger.warn('[SALE] Failed to get user base currency, using USD fallback', {
         userId,
@@ -115,64 +120,155 @@ export class SaleService {
 
     // ✅ COMISIÓN DEL ADMIN: 20% de la utilidad bruta (gross profit)
     // El commissionRate del usuario ES la comisión que el admin cobra
-    const adminCommission = grossProfit * user.commissionRate; // Ej: 0.20 = 20%
+    const { roundMoney } = require('../utils/money.utils');
+    const adminCommission = roundMoney(grossProfit * user.commissionRate, saleCurrency); // Ej: 0.20 = 20%
     const adminId = user.createdBy || null; // Admin que creó el usuario (si aplica)
     
     // Ganancia neta del USUARIO después de comisiones y fees
     // El usuario se queda con: grossProfit - adminCommission - platformFees
-    const netProfit = grossProfit - adminCommission - platformFees;
+    const netProfit = roundMoney(grossProfit - adminCommission - platformFees, saleCurrency);
 
     // ✅ Usar transacción para crear venta, comisiones y actualizar balances de forma atómica
     const sale = await prisma.$transaction(async (tx) => {
-      // Crear la venta
-      const newSale = await tx.sale.create({
-        data: {
-          orderId: data.orderId,
-          productId: data.productId,
-          userId: userId,
-          marketplace: data.marketplace,
-          salePrice: data.salePrice,
-          aliexpressCost: data.costPrice,
-          marketplaceFee: platformFees,
-          grossProfit,
-          commissionAmount: adminCommission, // Comisión del admin (20% por defecto)
-          netProfit,
-          status: 'PENDING',
-        },
-        include: {
-          product: true,
-          user: {
-            select: {
-              id: true,
-              username: true,
-              email: true,
+      // ✅ RESILIENCIA: Intentar crear venta con currency, si falla (migración no ejecutada), intentar sin currency
+      let newSale;
+      try {
+        newSale = await tx.sale.create({
+          data: {
+            orderId: data.orderId,
+            productId: data.productId,
+            userId: userId,
+            marketplace: data.marketplace,
+            salePrice: data.salePrice,
+            aliexpressCost: data.costPrice,
+            marketplaceFee: platformFees,
+            grossProfit,
+            commissionAmount: adminCommission, // Comisión del admin (20% por defecto)
+            netProfit,
+            currency: saleCurrency, // ✅ Guardar moneda de la venta
+            status: 'PENDING',
+          },
+          include: {
+            product: true,
+            user: {
+              select: {
+                id: true,
+                username: true,
+                email: true,
+              },
             },
           },
-        },
-      });
+        });
+      } catch (error: any) {
+        // ✅ Si falla por campo currency (migración no ejecutada), intentar sin currency
+        if (error?.code === 'P2009' || error?.message?.includes('currency') || error?.message?.includes('Unknown column')) {
+          logger.warn('[SALE-SERVICE] Currency field not found in database, creating sale without currency field (migration may not be executed)', {
+            error: error?.message?.substring(0, 200),
+            userId
+          });
+          // Intentar sin el campo currency
+          newSale = await tx.sale.create({
+            data: {
+              orderId: data.orderId,
+              productId: data.productId,
+              userId: userId,
+              marketplace: data.marketplace,
+              salePrice: data.salePrice,
+              aliexpressCost: data.costPrice,
+              marketplaceFee: platformFees,
+              grossProfit,
+              commissionAmount: adminCommission,
+              netProfit,
+              // currency: omitido temporalmente hasta que se ejecute la migración
+              status: 'PENDING',
+            },
+            include: {
+              product: true,
+              user: {
+                select: {
+                  id: true,
+                  username: true,
+                  email: true,
+                },
+              },
+            },
+          });
+        } else {
+          // Re-lanzar el error si no es por currency
+          throw error;
+        }
+      }
 
-      // ✅ Crear registro de comisión del ADMIN (20% de gross profit)
-      await tx.commission.create({
-        data: {
-          saleId: newSale.id,
-          userId, // Usuario que generó la venta
-          amount: adminCommission, // Comisión del admin (20% de gross profit)
-          status: 'PENDING',
-        },
-      });
+      // ✅ RESILIENCIA: Intentar crear comisión con currency, si falla, intentar sin currency
+      try {
+        await tx.commission.create({
+          data: {
+            saleId: newSale.id,
+            userId, // Usuario que generó la venta
+            amount: adminCommission, // Comisión del admin (20% de gross profit)
+            currency: saleCurrency, // ✅ Guardar moneda de la comisión (debe coincidir con Sale.currency)
+            status: 'PENDING',
+          },
+        });
+      } catch (error: any) {
+        // ✅ Si falla por campo currency (migración no ejecutada), intentar sin currency
+        if (error?.code === 'P2009' || error?.message?.includes('currency') || error?.message?.includes('Unknown column')) {
+          logger.warn('[SALE-SERVICE] Currency field not found in Commission table, creating without currency field', {
+            error: error?.message?.substring(0, 200),
+            saleId: newSale.id
+          });
+          await tx.commission.create({
+            data: {
+              saleId: newSale.id,
+              userId,
+              amount: adminCommission,
+              // currency: omitido temporalmente hasta que se ejecute la migración
+              status: 'PENDING',
+            },
+          });
+        } else {
+          // Re-lanzar el error si no es por currency
+          throw error;
+        }
+      }
 
       // ✅ Crear comisión adicional del admin si el usuario fue creado por otro admin
       if (adminId && user.createdBy && adminId !== userId) {
-        await tx.adminCommission.create({
-          data: {
-            adminId,
-            userId: userId,
-            saleId: newSale.id,
-            amount: adminCommission,
-            commissionType: 'user_sale',
-            status: 'PENDING'
+        try {
+          await tx.adminCommission.create({
+            data: {
+              adminId,
+              userId: userId,
+              saleId: newSale.id,
+              amount: adminCommission,
+              currency: saleCurrency, // ✅ Guardar moneda de la comisión del admin
+              commissionType: 'user_sale',
+              status: 'PENDING'
+            }
+          });
+        } catch (error: any) {
+          // ✅ Si falla por campo currency (migración no ejecutada), intentar sin currency
+          if (error?.code === 'P2009' || error?.message?.includes('currency') || error?.message?.includes('Unknown column')) {
+            logger.warn('[SALE-SERVICE] Currency field not found in AdminCommission table, creating without currency field', {
+              error: error?.message?.substring(0, 200),
+              saleId: newSale.id
+            });
+            await tx.adminCommission.create({
+              data: {
+                adminId,
+                userId: userId,
+                saleId: newSale.id,
+                amount: adminCommission,
+                // currency: omitido temporalmente hasta que se ejecute la migración
+                commissionType: 'user_sale',
+                status: 'PENDING'
+              }
+            });
+          } else {
+            // Re-lanzar el error si no es por currency
+            throw error;
           }
-        });
+        }
 
         // Actualizar balance del admin
         await tx.user.update({
@@ -219,55 +315,80 @@ export class SaleService {
 
     // ✅ NOTIFICAR AL USUARIO DE LA VENTA
     try {
-      const { notificationService } = await import('./notifications.service');
-      await notificationService.sendSaleNotification({
-        orderId: sale.orderId,
-        product: sale.product.title,
-        customer: data.buyerEmail || 'Cliente',
-        amount: sale.salePrice,
-        timestamp: new Date()
-      });
+      await notificationService.sendToUser(sale.userId, {
+        type: 'SALE_CREATED' as const,
+        title: 'Nueva Venta Registrada',
+        message: `Venta ${sale.orderId} por $${toNumber(sale.salePrice).toFixed(2)} - ${sale.product.title}`,
+        priority: 'HIGH',
+        category: 'SALE',
+        data: {
+          saleId: sale.id,
+          orderId: sale.orderId,
+          amount: toNumber(sale.salePrice)
+        }
+      } as any);
     } catch (error) {
       logger.error('Error sending sale notification', { error, saleId: sale.id });
     }
 
     // ✅ VERIFICAR MODO DE COMPRA (AUTO o MANUAL) y EJECUTAR FLUJO
     try {
-      const purchaseMode = await import('./workflow-config.service').then(m => 
-        m.workflowConfigService.getStageMode(userId, 'purchase')
-      );
+      const { workflowConfigService } = await import('./workflow-config.service');
+      const purchaseMode = await workflowConfigService.getStageMode(userId, 'purchase').catch(() => 'manual');
 
       if (purchaseMode === 'automatic') {
         // ✅ COMPRA AUTOMÁTICA - Ejecutar flujo automatizado
         const { AutomationService } = await import('./automation.service');
-        const automationService = new AutomationService();
+        const { workflowConfigService } = await import('./workflow-config.service');
+        const userEnvironment = await workflowConfigService.getUserEnvironment(userId);
+        const automationService = new AutomationService({
+          mode: 'automatic',
+          environment: userEnvironment || 'sandbox',
+          maxConcurrentJobs: 5,
+          retryAttempts: 3,
+          delayBetweenOperations: 1000,
+          enableRealTimeNotifications: true
+        });
         
-        await automationService.executeAutomatedFlow({
+        // Crear objeto AutomatedOrder compatible
+        const automatedOrder: AutomatedOrder = {
           id: sale.orderId,
           opportunityId: sale.product.id.toString(),
           customerId: sale.userId.toString(),
           customerInfo: {
             name: data.buyerEmail || 'Cliente',
-            email: data.buyerEmail,
+            email: data.buyerEmail || '',
             address: data.shippingAddress ? {
               street: typeof data.shippingAddress === 'string' ? data.shippingAddress : (data.shippingAddress as any).street || '',
               city: typeof data.shippingAddress === 'string' ? '' : (data.shippingAddress as any).city || '',
               state: typeof data.shippingAddress === 'string' ? '' : (data.shippingAddress as any).state || '',
               zipCode: typeof data.shippingAddress === 'string' ? '' : (data.shippingAddress as any).zipCode || '',
               country: typeof data.shippingAddress === 'string' ? '' : (data.shippingAddress as any).country || ''
-            } : undefined
+            } : {
+              street: '',
+              city: '',
+              state: '',
+              zipCode: '',
+              country: ''
+            }
           },
           orderDetails: {
             quantity: 1,
-            totalAmount: sale.salePrice,
-            productId: sale.productId.toString()
+            unitPrice: toNumber(sale.salePrice),
+            totalAmount: toNumber(sale.salePrice),
+            paymentMethod: 'pending'
+          } as any, // ✅ Compatibilidad con AutomatedOrder
+          status: 'pending',
+          timestamps: {
+            created: new Date()
           }
-        });
+        };
+        
+        await automationService.executeAutomatedFlow(automatedOrder);
 
         logger.info('Automatic purchase flow executed', { saleId: sale.id, orderId: sale.orderId });
       } else {
         // ✅ MODO MANUAL - Notificar y esperar confirmación
-        const { notificationService } = await import('./notifications.service');
         await notificationService.sendAlert({
           type: 'action_required',
           title: 'Venta requiere compra manual',
@@ -386,8 +507,8 @@ export class SaleService {
             saleId: id,
             startDate: sale.createdAt,
             completionDate: new Date(),
-            totalProfit: sale.netProfit,
-            expectedProfit: sale.grossProfit,
+            totalProfit: toNumber(sale.netProfit),
+            expectedProfit: toNumber(sale.grossProfit),
             hadReturns: false,
             hadIssues: false
           });
@@ -398,8 +519,8 @@ export class SaleService {
             if (aiLearningSystem) {
               await aiLearningSystem.learnFromSale({
                 sku: sale.productId.toString(),
-                price: sale.salePrice,
-                profit: sale.netProfit,
+                price: toNumber(sale.salePrice),
+                profit: toNumber(sale.netProfit),
                 aiScore: 0.8, // TODO: Obtener score real de la predicción original
                 sold: true,
                 category: sale.product.category || undefined,

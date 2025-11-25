@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { formatCurrencySimple } from '../utils/currency';
 import {
   LineChart,
   Line,
@@ -202,7 +203,7 @@ export default function Sales() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Revenue</p>
-                <p className="text-2xl font-bold">${stats.totalRevenue.toFixed(2)}</p>
+                <p className="text-2xl font-bold">{formatCurrencySimple(stats.totalRevenue, 'USD')}</p>
                 <p className={`text-xs flex items-center gap-1 mt-1 ${stats.revenueChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   <TrendingUp className="w-3 h-3" />
                   {stats.revenueChange >= 0 ? '+' : ''}{stats.revenueChange.toFixed(1)}% vs last period
@@ -217,7 +218,7 @@ export default function Sales() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Profit</p>
-                <p className="text-2xl font-bold text-green-600">${stats.totalProfit.toFixed(2)}</p>
+                <p className="text-2xl font-bold text-green-600">{formatCurrencySimple(stats.totalProfit, 'USD')}</p>
                 <p className={`text-xs flex items-center gap-1 mt-1 ${stats.profitChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   <TrendingUp className="w-3 h-3" />
                   {stats.profitChange >= 0 ? '+' : ''}{stats.profitChange.toFixed(1)}% vs last period
@@ -244,7 +245,7 @@ export default function Sales() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Avg Order Value</p>
-                <p className="text-2xl font-bold">${stats.avgOrderValue.toFixed(2)}</p>
+                <p className="text-2xl font-bold">{formatCurrencySimple(stats.avgOrderValue, 'USD')}</p>
                 <p className="text-xs text-gray-500 mt-1">per transaction</p>
               </div>
               <Package className="w-8 h-8 text-orange-600" />
@@ -473,8 +474,8 @@ export default function Sales() {
                             <td className="px-4 py-3">
                               <Badge variant="outline">{sale.marketplace}</Badge>
                             </td>
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">${sale.salePrice.toFixed(2)}</td>
-                            <td className="px-4 py-3 text-sm font-medium text-green-600">+${sale.profit.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatCurrencySimple(sale.salePrice, 'USD')}</td>
+                            <td className="px-4 py-3 text-sm font-medium text-green-600">+{formatCurrencySimple(sale.profit, 'USD')}</td>
                             <td className="px-4 py-3">{getStatusBadge(sale.status)}</td>
                             <td className="px-4 py-3 text-sm text-gray-600">
                               {new Date(sale.createdAt).toLocaleDateString()}
@@ -565,19 +566,19 @@ export default function Sales() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Sale Price</p>
-                  <p className="font-medium text-lg">${selectedSale.salePrice.toFixed(2)}</p>
+                  <p className="font-medium text-lg">{formatCurrencySimple(selectedSale.salePrice, 'USD')}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Cost</p>
-                  <p className="font-medium">${selectedSale.cost.toFixed(2)}</p>
+                  <p className="font-medium">{formatCurrencySimple(selectedSale.cost, 'USD')}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Profit</p>
-                  <p className="font-medium text-green-600 text-lg">+${selectedSale.profit.toFixed(2)}</p>
+                  <p className="font-medium text-green-600 text-lg">+{formatCurrencySimple(selectedSale.profit, 'USD')}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Commission</p>
-                  <p className="font-medium text-orange-600">${selectedSale.commission.toFixed(2)}</p>
+                  <p className="font-medium text-orange-600">{formatCurrencySimple(selectedSale.commission, 'USD')}</p>
                 </div>
                 {selectedSale.trackingNumber && (
                   <div className="col-span-2">

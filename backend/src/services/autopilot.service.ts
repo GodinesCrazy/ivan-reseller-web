@@ -989,25 +989,62 @@ export class AutopilotSystem extends EventEmitter {
       // ✅ Usar transacción para crear producto y listing de forma atómica
       const product = await prisma.$transaction(async (tx) => {
         // Create product in database (con userId del usuario)
-        const newProduct = await tx.product.create({
-          data: {
-            userId: currentUserId, // ✅ Usar userId del usuario
-            title: opportunity.title,
-            description: opportunity.description || '',
-            aliexpressUrl: opportunity.url,
-            aliexpressPrice: opportunity.estimatedCost,
-            suggestedPrice: calculatedSuggestedPrice,
-            category: opportunity.category,
-            images: JSON.stringify(opportunity.images || []),
-            productData: JSON.stringify({
-              ...opportunity,
-              optimalPublicationDuration: optimization.durationDays,
-              optimizationReasoning: optimization.reasoning
-            }),
-            status: 'PENDING', // ✅ Cambiar a PENDING inicialmente
-            isPublished: false, // ✅ Cambiar a false hasta que se publique exitosamente
+        // ✅ RESILIENCIA: Intentar crear producto con currency, si falla (migración no ejecutada), intentar sin currency
+        let newProduct;
+        try {
+          newProduct = await tx.product.create({
+            data: {
+              userId: currentUserId, // ✅ Usar userId del usuario
+              title: opportunity.title,
+              description: opportunity.description || '',
+              aliexpressUrl: opportunity.url,
+              aliexpressPrice: opportunity.estimatedCost,
+              suggestedPrice: calculatedSuggestedPrice,
+              currency: (opportunity as any).currency || 'USD', // ✅ Guardar moneda original (si está disponible)
+              category: opportunity.category,
+              images: JSON.stringify(opportunity.images || []),
+              productData: JSON.stringify({
+                ...opportunity,
+                optimalPublicationDuration: optimization.durationDays,
+                optimizationReasoning: optimization.reasoning
+              }),
+              status: 'PENDING', // ✅ Cambiar a PENDING inicialmente
+              isPublished: false, // ✅ Cambiar a false hasta que se publique exitosamente
+            }
+          });
+        } catch (error: any) {
+          // ✅ Si falla por campo currency (migración no ejecutada), intentar sin currency
+          if (error?.code === 'P2009' || error?.message?.includes('currency') || error?.message?.includes('Unknown column')) {
+            logger.warn('[AUTOPILOT] Currency field not found in database, creating product without currency field (migration may not be executed)', {
+              error: error?.message?.substring(0, 200),
+              userId: currentUserId
+            });
+            // Intentar sin el campo currency
+            newProduct = await tx.product.create({
+              data: {
+                userId: currentUserId,
+                title: opportunity.title,
+                description: opportunity.description || '',
+                aliexpressUrl: opportunity.url,
+                aliexpressPrice: opportunity.estimatedCost,
+                suggestedPrice: calculatedSuggestedPrice,
+                // currency: omitido temporalmente hasta que se ejecute la migración
+                category: opportunity.category,
+                images: JSON.stringify(opportunity.images || []),
+                productData: JSON.stringify({
+                  ...opportunity,
+                  optimalPublicationDuration: optimization.durationDays,
+                  optimizationReasoning: optimization.reasoning
+                }),
+                status: 'PENDING',
+                isPublished: false,
+              }
+            });
+          } else {
+            // Re-lanzar el error si no es por currency
+            throw error;
           }
-        });
+        }
 
         // ✅ Crear registro de oportunidad para tracking
         await tx.opportunity.create({
@@ -1253,26 +1290,64 @@ export class AutopilotSystem extends EventEmitter {
       }
       
       // ✅ CORRECCIÓN: Status debe ser 'PENDING' para que aparezca en cola de aprobación
-      const product = await prisma.product.create({
-        data: {
-          userId: currentUserId, // ✅ Usar userId del usuario
-          title: opportunity.title,
-          description: opportunity.description || '',
-          aliexpressUrl: opportunity.url,
-          aliexpressPrice: opportunity.estimatedCost,
-          suggestedPrice: calculatedSuggestedPrice,
-          category: opportunity.category,
-          images: JSON.stringify(opportunity.images || []),
-          productData: JSON.stringify({
-            ...opportunity,
-            source: 'autopilot',
-            queuedAt: new Date().toISOString(),
-            queuedBy: 'autopilot-system'
-          }),
-          status: 'PENDING', // ✅ Cambiado de 'APPROVED' a 'PENDING'
-          isPublished: false
+      // ✅ RESILIENCIA: Intentar crear producto con currency, si falla (migración no ejecutada), intentar sin currency
+      let product;
+      try {
+        product = await prisma.product.create({
+          data: {
+            userId: currentUserId, // ✅ Usar userId del usuario
+            title: opportunity.title,
+            description: opportunity.description || '',
+            aliexpressUrl: opportunity.url,
+            aliexpressPrice: opportunity.estimatedCost,
+            suggestedPrice: calculatedSuggestedPrice,
+            currency: (opportunity as any).currency || 'USD', // ✅ Guardar moneda original (si está disponible)
+            category: opportunity.category,
+            images: JSON.stringify(opportunity.images || []),
+            productData: JSON.stringify({
+              ...opportunity,
+              source: 'autopilot',
+              queuedAt: new Date().toISOString(),
+              queuedBy: 'autopilot-system'
+            }),
+            status: 'PENDING', // ✅ Cambiado de 'APPROVED' a 'PENDING'
+            isPublished: false
+          }
+        });
+      } catch (error: any) {
+        // ✅ Si falla por campo currency (migración no ejecutada), intentar sin currency
+        if (error?.code === 'P2009' || error?.message?.includes('currency') || error?.message?.includes('Unknown column')) {
+          logger.warn('[AUTOPILOT] Currency field not found in database, creating product without currency field (migration may not be executed)', {
+            error: error?.message?.substring(0, 200),
+            userId: currentUserId
+          });
+          // Intentar sin el campo currency
+          product = await prisma.product.create({
+            data: {
+              userId: currentUserId,
+              title: opportunity.title,
+              description: opportunity.description || '',
+              aliexpressUrl: opportunity.url,
+              aliexpressPrice: opportunity.estimatedCost,
+              suggestedPrice: calculatedSuggestedPrice,
+              // currency: omitido temporalmente hasta que se ejecute la migración
+              category: opportunity.category,
+              images: JSON.stringify(opportunity.images || []),
+              productData: JSON.stringify({
+                ...opportunity,
+                source: 'autopilot',
+                queuedAt: new Date().toISOString(),
+                queuedBy: 'autopilot-system'
+              }),
+              status: 'PENDING',
+              isPublished: false
+            }
+          });
+        } else {
+          // Re-lanzar el error si no es por currency
+          throw error;
         }
-      });
+      }
 
       logger.info('Autopilot: Product sent to approval queue', {
         productId: product.id,

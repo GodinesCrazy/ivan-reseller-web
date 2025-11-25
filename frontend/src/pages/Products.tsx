@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { 
-  Package, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  Upload, 
+import {
+  Package,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Upload,
   Filter,
   Search,
   Eye,
@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import LoadingSpinner, { TableSkeleton } from '@/components/ui/LoadingSpinner';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface Product {
   id: string;
@@ -42,6 +43,7 @@ export default function Products() {
   const [showModal, setShowModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const { formatMoney } = useCurrency();
 
   useEffect(() => {
     fetchProducts();
@@ -104,7 +106,7 @@ export default function Products() {
 
   const handleDelete = async (productId: string) => {
     if (!confirm('¿Estás seguro de eliminar este producto?')) return;
-    
+
     try {
       const response = await api.delete(`/api/products/${productId}`);
       const message = response.data?.message || 'Producto eliminado';
@@ -130,7 +132,7 @@ export default function Products() {
   // Filtrado
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.sku.toLowerCase().includes(searchTerm.toLowerCase());
+      product.sku.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || product.status === statusFilter;
     const matchesMarketplace = marketplaceFilter === 'ALL' || product.marketplace === marketplaceFilter;
     return matchesSearch && matchesStatus && matchesMarketplace;
@@ -304,12 +306,12 @@ export default function Products() {
                         <td className="px-4 py-3">
                           <Badge variant="outline">{product.marketplace}</Badge>
                         </td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">${product.price.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatMoney(product.price)}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{product.stock}</td>
                         <td className="px-4 py-3">{getStatusBadge(product.status)}</td>
                         <td className="px-4 py-3">
                           {product.profit && (
-                            <span className="text-sm font-medium text-green-600">+${product.profit.toFixed(2)}</span>
+                            <span className="text-sm font-medium text-green-600">+{formatMoney(product.profit)}</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -412,8 +414,8 @@ export default function Products() {
               {/* ✅ Imagen del producto en el modal de detalles */}
               {selectedProduct.imageUrl ? (
                 <div className="flex justify-center">
-                  <img 
-                    src={selectedProduct.imageUrl} 
+                  <img
+                    src={selectedProduct.imageUrl}
                     alt={selectedProduct.title}
                     className="w-full max-w-md h-64 object-cover rounded-lg shadow-md"
                     onError={(e) => {
@@ -452,7 +454,7 @@ export default function Products() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Price</p>
-                  <p className="font-medium text-lg">${selectedProduct.price.toFixed(2)}</p>
+                  <p className="font-medium text-lg">{formatMoney(selectedProduct.price)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Stock</p>
@@ -469,7 +471,7 @@ export default function Products() {
                 {selectedProduct.profit && (
                   <div>
                     <p className="text-sm text-gray-600">Expected Profit</p>
-                    <p className="font-medium text-green-600 text-lg">+${selectedProduct.profit.toFixed(2)}</p>
+                    <p className="font-medium text-green-600 text-lg">+{formatMoney(selectedProduct.profit)}</p>
                   </div>
                 )}
                 <div>

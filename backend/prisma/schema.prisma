@@ -19,10 +19,10 @@ model User {
   password         String
   fullName         String?
   role             String    @default("USER") // "ADMIN" or "USER"
-  commissionRate   Float     @default(0.20) // Porcentaje de comisión sobre utilidad de operación exitosa (ej: 0.20 = 20%)
-  fixedMonthlyCost Float     @default(0.00) // Costo fijo mensual en USD (ej: 0.00 = sin costo fijo)
-  balance          Float     @default(0)
-  totalEarnings    Float     @default(0)
+  commissionRate   Decimal   @default(0.20) @db.Decimal(6, 4) // Porcentaje de comisión sobre utilidad de operación exitosa (ej: 0.20 = 20%)
+  fixedMonthlyCost Decimal   @default(0.00) @db.Decimal(18, 2) // Costo fijo mensual en USD (ej: 0.00 = sin costo fijo)
+  balance          Decimal   @default(0) @db.Decimal(18, 2) // Balance del usuario en moneda base
+  totalEarnings    Decimal   @default(0) @db.Decimal(18, 2) // Ganancias totales acumuladas en moneda base
   totalSales       Int       @default(0)
   isActive         Boolean   @default(true)
   lastLoginAt      DateTime?
@@ -98,9 +98,10 @@ model Product {
   aliexpressUrl   String
   title           String
   description     String?
-  aliexpressPrice Float
-  suggestedPrice  Float
-  finalPrice      Float?
+  aliexpressPrice Decimal   @db.Decimal(18, 2) // Precio en AliExpress en moneda original
+  suggestedPrice  Decimal   @db.Decimal(18, 2) // Precio sugerido de venta en moneda base
+  finalPrice      Decimal?  @db.Decimal(18, 2) // Precio final (opcional) en moneda base
+  currency        String    @default("USD") // Moneda original del precio de AliExpress (CLP, USD, EUR, etc.)
   category        String?
   images          String // JSON string with array of image URLs
   productData     String? // JSON string with full scraped data
@@ -129,12 +130,13 @@ model Sale {
   productId        Int
   orderId          String    @unique
   marketplace      String // ebay, mercadolibre, amazon
-  salePrice        Float
-  aliexpressCost   Float
-  marketplaceFee   Float
-  grossProfit      Float
-  commissionAmount Float
-  netProfit        Float
+  salePrice        Decimal   @db.Decimal(18, 2) // Precio de venta en moneda de venta
+  aliexpressCost   Decimal   @db.Decimal(18, 2) // Costo en AliExpress en moneda base
+  marketplaceFee   Decimal   @db.Decimal(18, 2) // Fee del marketplace en moneda de venta
+  grossProfit      Decimal   @db.Decimal(18, 2) // Ganancia bruta en moneda de venta
+  commissionAmount Decimal   @db.Decimal(18, 2) // Comisión del admin en moneda de venta
+  netProfit        Decimal   @db.Decimal(18, 2) // Ganancia neta del usuario en moneda de venta
+  currency         String    @default("USD") // Moneda de la venta (CLP, USD, EUR, etc.)
   status           String    @default("PENDING") // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED, RETURNED
   trackingNumber   String?
   isCompleteCycle  Boolean   @default(false) // Si completó ciclo completo sin devoluciones
@@ -160,7 +162,8 @@ model Commission {
   id            Int       @id @default(autoincrement())
   userId        Int
   saleId        Int       @unique
-  amount        Float
+  amount        Decimal   @db.Decimal(18, 2) // Monto de la comisión en moneda de venta
+  currency      String    @default("USD") // Moneda de la comisión (debe coincidir con Sale.currency)
   status        String    @default("PENDING") // PENDING, SCHEDULED, PAID, FAILED
   scheduledAt   DateTime?
   paidAt        DateTime?
@@ -211,8 +214,8 @@ model UserWorkflowConfig {
   // Configuraciones de automatización
   autoApproveThreshold Float? // Confianza mínima para auto-aprobar
   autoPublishThreshold Float? // Confianza mínima para auto-publicar
-  maxAutoInvestment    Float? // Inversión máxima para auto-operaciones
-  workingCapital       Float  @default(500) // Capital de trabajo disponible en PayPal (USD)
+  maxAutoInvestment    Decimal? @db.Decimal(18, 2) // Inversión máxima para auto-operaciones en moneda base
+  workingCapital       Decimal  @default(500) @db.Decimal(18, 2) // Capital de trabajo disponible en PayPal (USD)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -248,7 +251,8 @@ model AdminCommission {
   adminId        Int // ID del admin que recibe la comisión
   userId         Int // ID del usuario que generó la venta
   saleId         Int // ID de la venta que generó la comisión
-  amount         Float // Monto de la comisión del admin
+  amount         Decimal   @db.Decimal(18, 2) // Monto de la comisión del admin en moneda de venta
+  currency       String    @default("USD") // Moneda de la comisión (debe coincidir con Sale.currency)
   commissionType String    @default("user_sale") // user_sale, monthly_fee, etc.
   status         String    @default("PENDING") // PENDING, PAID, FAILED
   paidAt         DateTime?
@@ -274,8 +278,8 @@ model SuccessfulOperation {
   startDate      DateTime
   completionDate DateTime
   daysToComplete Int
-  totalProfit    Float
-  expectedProfit Float
+  totalProfit    Decimal   @db.Decimal(18, 2) // Ganancia total en moneda base
+  expectedProfit Decimal   @db.Decimal(18, 2) // Ganancia esperada en moneda base
   profitAccuracy Float // % de diferencia entre esperado y real
 
   // Estado de la operación
@@ -339,13 +343,13 @@ model Opportunity {
   sourceMarketplace  String? // aliexpress, ebay, etc.
   sourceProductId    Int?
   title              String
-  costUsd            Float
-  suggestedPriceUsd  Float
-  profitMargin       Float
-  roiPercentage      Float
+  costUsd            Decimal  @db.Decimal(18, 2)
+  suggestedPriceUsd  Decimal  @db.Decimal(18, 2)
+  profitMargin       Decimal  @db.Decimal(18, 2)
+  roiPercentage      Decimal  @db.Decimal(18, 2)
   competitionLevel   String? // low, medium, high
   marketDemand       String? // low, medium, high
-  confidenceScore    Float
+  confidenceScore    Decimal  @db.Decimal(5, 2)
   feesConsidered     String? // JSON
   targetMarketplaces String? // JSON array
   status             String   @default("PENDING") // PENDING, APPROVED, REJECTED, PUBLISHED
@@ -370,11 +374,11 @@ model CompetitionSnapshot {
   region           String?
   currency         String?
   listingsFound    Int?
-  averagePrice     Float?
-  minPrice         Float?
-  maxPrice         Float?
-  medianPrice      Float?
-  competitivePrice Float?
+  averagePrice     Decimal? @db.Decimal(18, 2)
+  minPrice         Decimal? @db.Decimal(18, 2)
+  maxPrice         Decimal? @db.Decimal(18, 2)
+  medianPrice      Decimal? @db.Decimal(18, 2)
+  competitivePrice Decimal? @db.Decimal(18, 2)
   topListings      String? // JSON
   createdAt        DateTime @default(now())
 
@@ -392,7 +396,7 @@ model AISuggestion {
   priority        String // high, medium, low
   title           String
   description     String
-  impactRevenue   Float     @default(0)
+  impactRevenue   Decimal   @default(0) @db.Decimal(18, 2) // Impacto en ingresos en moneda base
   impactTime      Float     @default(0) // horas ahorradas
   difficulty      String // easy, medium, hard
   confidence      Float // 0-100

@@ -105,21 +105,24 @@ export class FinancialCalculationsService {
     const profitMargin = targetPrice > 0 ? (netProfit / targetPrice) * 100 : 0;
     const roi = sourcePriceInTargetCurrency > 0 ? (netProfit / sourcePriceInTargetCurrency) * 100 : 0;
 
+    // ✅ Usar utilidad centralizada de redondeo
+    const { roundMoney } = require('../utils/money.utils');
+    
     return {
-      grossProfit: Math.round(grossProfit * 100) / 100,
-      netProfit: Math.round(netProfit * 100) / 100,
-      profitMargin: Math.round(profitMargin * 100) / 100,
-      roi: Math.round(roi * 100) / 100,
-      totalCost: Math.round(totalCost * 100) / 100,
+      grossProfit: roundMoney(grossProfit, targetCurrency),
+      netProfit: roundMoney(netProfit, targetCurrency),
+      profitMargin: Math.round(profitMargin * 100) / 100, // Porcentaje: 2 decimales siempre
+      roi: Math.round(roi * 100) / 100, // Porcentaje: 2 decimales siempre
+      totalCost: roundMoney(totalCost, targetCurrency),
       breakdown: {
-        sourcePrice: Math.round(sourcePriceInTargetCurrency * 100) / 100,
-        marketplaceFee: Math.round(marketplaceFeeAmount * 100) / 100,
-        paymentFee: Math.round(paymentFeeAmount * 100) / 100,
-        shippingCost: Math.round(shippingCost * 100) / 100,
-        packagingCost: Math.round(packagingCost * 100) / 100,
-        advertisingCost: Math.round(advertisingCost * 100) / 100,
-        taxes: Math.round(taxes * 100) / 100,
-        otherCosts: Math.round(otherCosts * 100) / 100,
+        sourcePrice: roundMoney(sourcePriceInTargetCurrency, targetCurrency),
+        marketplaceFee: roundMoney(marketplaceFeeAmount, targetCurrency),
+        paymentFee: roundMoney(paymentFeeAmount, targetCurrency),
+        shippingCost: roundMoney(shippingCost, targetCurrency),
+        packagingCost: roundMoney(packagingCost, targetCurrency),
+        advertisingCost: roundMoney(advertisingCost, targetCurrency),
+        taxes: roundMoney(taxes, targetCurrency),
+        otherCosts: roundMoney(otherCosts, targetCurrency),
       },
     };
   }

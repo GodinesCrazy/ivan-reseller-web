@@ -1,5 +1,6 @@
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
+import { toNumber } from '../utils/decimal.utils';
 
 /**
  * Revenue Change Service
@@ -55,13 +56,14 @@ export class RevenueChangeService {
         }
       });
 
+      // ✅ Convertir Decimal a number para operaciones aritméticas
       const current = {
-        revenue: currentSales.reduce((sum, s) => sum + s.salePrice, 0),
-        profit: currentSales.reduce((sum, s) => sum + (s.netProfit || s.grossProfit || 0), 0),
+        revenue: currentSales.reduce((sum, s) => sum + toNumber(s.salePrice), 0),
+        profit: currentSales.reduce((sum, s) => sum + toNumber(s.netProfit || s.grossProfit || 0), 0),
         sales: currentSales.length,
-        commissions: currentSales.reduce((sum, s) => sum + (s.commissionAmount || 0), 0),
+        commissions: currentSales.reduce((sum, s) => sum + toNumber(s.commissionAmount || 0), 0),
         averageOrderValue: currentSales.length > 0
-          ? currentSales.reduce((sum, s) => sum + s.salePrice, 0) / currentSales.length
+          ? currentSales.reduce((sum, s) => sum + toNumber(s.salePrice), 0) / currentSales.length
           : 0
       };
 
@@ -77,12 +79,12 @@ export class RevenueChangeService {
       });
 
       const previous = {
-        revenue: previousSales.reduce((sum, s) => sum + s.salePrice, 0),
-        profit: previousSales.reduce((sum, s) => sum + (s.netProfit || s.grossProfit || 0), 0),
+        revenue: previousSales.reduce((sum, s) => sum + toNumber(s.salePrice), 0),
+        profit: previousSales.reduce((sum, s) => sum + toNumber(s.netProfit || s.grossProfit || 0), 0),
         sales: previousSales.length,
-        commissions: previousSales.reduce((sum, s) => sum + (s.commissionAmount || 0), 0),
+        commissions: previousSales.reduce((sum, s) => sum + toNumber(s.commissionAmount || 0), 0),
         averageOrderValue: previousSales.length > 0
-          ? previousSales.reduce((sum, s) => sum + s.salePrice, 0) / previousSales.length
+          ? previousSales.reduce((sum, s) => sum + toNumber(s.salePrice), 0) / previousSales.length
           : 0
       };
 
@@ -325,8 +327,8 @@ export class RevenueChangeService {
           }
         });
 
-        const revenue = sales.reduce((sum, s) => sum + s.salePrice, 0);
-        const profit = sales.reduce((sum, s) => sum + (s.netProfit || s.grossProfit || 0), 0);
+        const revenue = sales.reduce((sum, s) => sum + toNumber(s.salePrice), 0);
+        const profit = sales.reduce((sum, s) => sum + toNumber(s.netProfit || s.grossProfit || 0), 0);
 
         const previousPeriodStart = new Date(now.getFullYear(), now.getMonth() - i - 1, 1);
         previousPeriodStart.setHours(0, 0, 0, 0);
@@ -343,8 +345,8 @@ export class RevenueChangeService {
           }
         });
 
-        const previousRevenue = previousSales.reduce((sum, s) => sum + s.salePrice, 0);
-        const previousProfit = previousSales.reduce((sum, s) => sum + (s.netProfit || s.grossProfit || 0), 0);
+        const previousRevenue = previousSales.reduce((sum, s) => sum + toNumber(s.salePrice), 0);
+        const previousProfit = previousSales.reduce((sum, s) => sum + toNumber(s.netProfit || s.grossProfit || 0), 0);
 
         results.push({
           period: `${periodStart.getFullYear()}-${String(periodStart.getMonth() + 1).padStart(2, '0')}`,

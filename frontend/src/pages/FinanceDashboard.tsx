@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
+import { formatCurrencySimple } from '../utils/currency';
 
 interface FinancialData {
   revenue: number;
@@ -128,11 +129,10 @@ export default function FinanceDashboard() {
     }
   };
 
+  // ✅ Usar utilidad centralizada de formateo de moneda
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
+    // TODO: Obtener moneda del usuario desde settings
+    return formatCurrencySimple(amount, 'USD');
   };
 
   const formatPercentage = (value: number) => {

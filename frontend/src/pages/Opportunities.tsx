@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStatusStore } from '@stores/authStatusStore';
+import { formatCurrencySimple } from '../utils/currency';
 
 type Marketplace = 'ebay' | 'amazon' | 'mercadolibre';
 
@@ -49,17 +50,10 @@ interface OpportunityItem {
   estimationNotes?: string[];
 }
 
+// ✅ Usar utilidad centralizada de formateo de moneda
 const formatMoney = (value: number, currency: string) => {
   if (!Number.isFinite(value)) return '—';
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 2,
-    }).format(value);
-  } catch {
-    return `${currency} ${value.toFixed(2)}`;
-  }
+  return formatCurrencySimple(value, currency);
 };
 
 // Componente de skeleton para tabla

@@ -15,6 +15,7 @@ export interface CreateScheduledReportDto {
   scheduleValue: string; // "08:00", "monday", "1" (day of month)
   filters?: ReportFilters;
   recipients?: string[]; // Email addresses
+  isActive?: boolean; // ✅ Agregado para soportar activación/desactivación
 }
 
 interface ScheduledReportJobData {

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
+import { toNumber } from '../utils/decimal.utils';
 
 const prisma = new PrismaClient();
 
@@ -129,7 +130,8 @@ export class WorkflowConfigService {
    */
   async getWorkingCapital(userId: number): Promise<number> {
     const config = await this.getUserConfig(userId);
-    return config.workingCapital || 500; // Default 500 USD
+    // ✅ Convertir Decimal a number
+    return config.workingCapital ? toNumber(config.workingCapital) : 500; // Default 500 USD
   }
 
   /**

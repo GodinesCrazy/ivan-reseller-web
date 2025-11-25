@@ -1,5 +1,6 @@
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
+import { toNumber } from '../utils/decimal.utils';
 
 /**
  * Advanced Reports Service
@@ -80,7 +81,7 @@ export class AdvancedReportsService {
                 salePrice: true
               }
             });
-            value = revenueSales.reduce((sum, s) => sum + s.salePrice, 0);
+            value = revenueSales.reduce((sum, s) => sum + toNumber(s.salePrice), 0);
             break;
           case 'profit':
             const profitSales = await prisma.sale.findMany({
@@ -96,7 +97,7 @@ export class AdvancedReportsService {
                 grossProfit: true
               }
             });
-            value = profitSales.reduce((sum, s) => sum + (s.netProfit || s.grossProfit || 0), 0);
+            value = profitSales.reduce((sum, s) => sum + toNumber(s.netProfit || s.grossProfit || 0), 0);
             break;
           case 'users':
             value = await prisma.user.count({
@@ -217,11 +218,11 @@ export class AdvancedReportsService {
 
       const current = {
         sales: currentSales.length,
-        revenue: currentSales.reduce((sum, s) => sum + s.salePrice, 0),
-        profit: currentSales.reduce((sum, s) => sum + (s.netProfit || s.grossProfit || 0), 0),
-        commissions: currentSales.reduce((sum, s) => sum + (s.commissionAmount || 0), 0),
+        revenue: currentSales.reduce((sum, s) => sum + toNumber(s.salePrice), 0),
+        profit: currentSales.reduce((sum, s) => sum + toNumber(s.netProfit || s.grossProfit || 0), 0),
+        commissions: currentSales.reduce((sum, s) => sum + toNumber(s.commissionAmount || 0), 0),
         averageOrderValue: currentSales.length > 0
-          ? currentSales.reduce((sum, s) => sum + s.salePrice, 0) / currentSales.length
+          ? currentSales.reduce((sum, s) => sum + toNumber(s.salePrice), 0) / currentSales.length
           : 0,
         activeUsers: new Set(currentSales.map(s => s.userId)).size
       };
@@ -246,11 +247,11 @@ export class AdvancedReportsService {
 
       const previous = {
         sales: previousSales.length,
-        revenue: previousSales.reduce((sum, s) => sum + s.salePrice, 0),
-        profit: previousSales.reduce((sum, s) => sum + (s.netProfit || s.grossProfit || 0), 0),
-        commissions: previousSales.reduce((sum, s) => sum + (s.commissionAmount || 0), 0),
+        revenue: previousSales.reduce((sum, s) => sum + toNumber(s.salePrice), 0),
+        profit: previousSales.reduce((sum, s) => sum + toNumber(s.netProfit || s.grossProfit || 0), 0),
+        commissions: previousSales.reduce((sum, s) => sum + toNumber(s.commissionAmount || 0), 0),
         averageOrderValue: previousSales.length > 0
-          ? previousSales.reduce((sum, s) => sum + s.salePrice, 0) / previousSales.length
+          ? previousSales.reduce((sum, s) => sum + toNumber(s.salePrice), 0) / previousSales.length
           : 0,
         activeUsers: new Set(previousSales.map(s => s.userId)).size
       };
@@ -366,7 +367,7 @@ export class AdvancedReportsService {
       for (const sale of historicalSales) {
         const date = sale.createdAt.toISOString().split('T')[0];
         dailySales.set(date, (dailySales.get(date) || 0) + 1);
-        dailyRevenue.set(date, (dailyRevenue.get(date) || 0) + sale.salePrice);
+        dailyRevenue.set(date, (dailyRevenue.get(date) || 0) + toNumber(sale.salePrice));
       }
 
       const salesArray = Array.from(dailySales.values());

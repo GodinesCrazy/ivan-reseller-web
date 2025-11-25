@@ -7,6 +7,7 @@ import { autopilotSystem } from './autopilot.service';
 import opportunityFinder from './opportunity-finder.service';
 import MarketplaceService from './marketplace.service';
 import { productService } from './product.service';
+import { toNumber } from '../utils/decimal.utils';
 
 const prisma = new PrismaClient();
 
@@ -158,7 +159,7 @@ export class WorkflowExecutorService {
         }
       });
       const pendingCost = pendingOrders.reduce((sum, order) => 
-        sum + (order.aliexpressCost || 0), 0
+        sum + toNumber(order.aliexpressCost || 0), 0
       );
       
       const approvedProducts = await prisma.product.findMany({
@@ -169,7 +170,7 @@ export class WorkflowExecutorService {
         }
       });
       const approvedCost = approvedProducts.reduce((sum, product) => 
-        sum + (product.aliexpressPrice || 0), 0
+        sum + toNumber(product.aliexpressPrice || 0), 0
       );
       
       const availableCapital = Math.max(0, workingCapital - pendingCost - approvedCost);
@@ -515,7 +516,7 @@ export class WorkflowExecutorService {
       for (const product of products) {
         try {
           // Calcular nuevo precio
-          const currentPrice = product.suggestedPrice;
+          const currentPrice = toNumber(product.suggestedPrice);
           const newPrice = currentPrice * (1 + priceAdjustment / 100);
 
           // Sincronizar precio (esto actualiza en BD, la sincronización real con APIs se implementará después)
