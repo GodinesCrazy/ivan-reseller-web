@@ -21,12 +21,14 @@ import LoadingSpinner, { TableSkeleton } from '@/components/ui/LoadingSpinner';
 import { useCurrency } from '../hooks/useCurrency';
 import MetricLabelWithTooltip from '@/components/MetricLabelWithTooltip';
 import { metricTooltips } from '@/config/metricTooltips';
+import { formatCurrencySimple } from '@/utils/currency';
 
 interface Product {
   id: string;
   title: string;
   sku: string;
   price: number;
+  currency?: string; // ✅ Moneda del producto
   stock: number;
   marketplace: string;
   marketplaceUrl?: string | null; // ✅ URL del listing en el marketplace (si está publicado)
@@ -309,12 +311,16 @@ export default function Products() {
                         <td className="px-4 py-3">
                           <Badge variant="outline">{product.marketplace}</Badge>
                         </td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatMoney(product.price)}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                          {formatCurrencySimple(product.price, product.currency || 'USD')}
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-600">{product.stock}</td>
                         <td className="px-4 py-3">{getStatusBadge(product.status)}</td>
                         <td className="px-4 py-3">
                           {product.profit && (
-                            <span className="text-sm font-medium text-green-600">+{formatMoney(product.profit)}</span>
+                            <span className="text-sm font-medium text-green-600">
+                              +{formatCurrencySimple(product.profit, product.currency || 'USD')}
+                            </span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -457,7 +463,9 @@ export default function Products() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Price</p>
-                  <p className="font-medium text-lg">{formatMoney(selectedProduct.price)}</p>
+                  <p className="font-medium text-lg">
+                    {formatCurrencySimple(selectedProduct.price, selectedProduct.currency || 'USD')}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Stock</p>
@@ -501,7 +509,9 @@ export default function Products() {
                     >
                       <p className="text-sm text-gray-600">Expected Profit</p>
                     </MetricLabelWithTooltip>
-                    <p className="font-medium text-green-600 text-lg">+{formatMoney(selectedProduct.profit)}</p>
+                    <p className="font-medium text-green-600 text-lg">
+                      +{formatCurrencySimple(selectedProduct.profit, selectedProduct.currency || 'USD')}
+                    </p>
                   </div>
                 )}
                 <div>

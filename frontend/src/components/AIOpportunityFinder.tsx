@@ -571,28 +571,15 @@ export default function AIOpportunityFinder() {
         status: product.status
       });
 
-      // ✅ Producto importado exitosamente - queda en estado PENDING
-      // El usuario o el sistema (según configuración) lo publicará desde "Pendientes de publicación"
-      toast.success(
-        (t) => (
-          <div className="flex flex-col gap-1">
-            <span className="font-semibold">✅ Producto importado exitosamente</span>
-            <span className="text-sm text-gray-600">
-              El producto está en "Pendientes de publicación". Puedes aprobarlo y publicarlo desde allí.
-            </span>
-            <button
-              onClick={() => {
-                navigate('/products');
-                toast.dismiss(t.id);
-              }}
-              className="mt-2 text-left text-sm text-blue-600 hover:text-blue-700 underline"
-            >
-              Ir a Pendientes de publicación →
-            </button>
-          </div>
-        ),
-        { duration: 6000 }
-      );
+      // ✅ Producto importado exitosamente - Redirigir a vista previa del listing
+      toast.success('✅ Producto importado exitosamente. Redirigiendo a vista previa...', {
+        duration: 2000
+      });
+
+      // Redirigir a la vista previa después de un breve delay para que el usuario vea el mensaje
+      setTimeout(() => {
+        navigate(`/products/${productId}/preview?marketplace=ebay`);
+      }, 1000);
     } catch (error: any) {
       log.error('Error importing product from AI finder:', {
         error,

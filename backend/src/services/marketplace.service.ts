@@ -7,6 +7,7 @@ import { retryMarketplaceOperation } from '../utils/retry.util';
 import logger from '../config/logger';
 import crypto from 'crypto';
 import type { CredentialScope } from '@prisma/client';
+import { toNumber } from '../utils/decimal.utils';
 
 // ✅ BAJA PRIORIDAD: Tipo union estricto para marketplace
 export type MarketplaceName = 'ebay' | 'mercadolibre' | 'amazon';
@@ -1007,6 +1008,171 @@ export class MarketplaceService {
       });
       return product.title; // Fallback a título original
     }
+  }
+
+  /**
+   * Generate listing preview for a product
+   * Returns preview data without publishing
+   */
+  async generateListingPreview(
+    userId: number,
+    productId: number,
+    marketplace: MarketplaceName,
+    environment?: 'sandbox' | 'production'
+  ): Promise<{
+    success: boolean;
+    preview?: {
+      product: any;
+      marketplace: string;
+      title: string;
+      description: string;
+      price: number;
+      currency: string;
+      language: string;
+      images: string[];
+      category?: string;
+      tags?: string[];
+      profitMargin: number;
+      potentialProfit: number;
+      fees: any;
+      seoKeywords?: string[];
+    };
+    error?: string;
+  }> {
+    try {
+      // Get product from database
+      const product = await prisma.product.findFirst({
+        where: {
+          id: productId,
+          userId: userId,
+        },
+      });
+
+      if (!product) {
+        return { success: false, error: 'Product not found' };
+      }
+
+      // Get marketplace credentials to determine currency/language
+      const credentials = await this.getCredentials(userId, marketplace, environment);
+      if (!credentials) {
+        return { success: false, error: `No credentials found for ${marketplace}` };
+      }
+
+      // Determine marketplace currency and language
+      const marketplaceConfig = this.getMarketplaceConfig(marketplace);
+      const metadata = this.parseProductMetadata(product);
+      const productCurrency = (metadata?.currency || product.currency || 'USD').toUpperCase();
+      
+      // Convert price to marketplace currency
+      const fxService = (await import('./fx.service')).default;
+      const suggestedPriceBase = toNumber(product.finalPrice || product.suggestedPrice);
+      const priceInMarketplaceCurrency = fxService.convert(
+        suggestedPriceBase,
+        productCurrency,
+        marketplaceConfig.currency
+      );
+
+      // Generate AI title and description (reuse existing methods)
+      let finalTitle = product.title;
+      let finalDescription = product.description || '';
+      
+      try {
+        finalTitle = await this.generateAITitle(product, marketplaceConfig.displayName, userId);
+      } catch (error) {
+        logger.debug('Failed to generate AI title for preview, using original', { error });
+      }
+      
+      try {
+        finalDescription = await this.generateAIDescription(product, marketplaceConfig.displayName, userId);
+      } catch (error) {
+        logger.debug('Failed to generate AI description for preview, using original', { error });
+      }
+
+      // Parse images
+      const images = this.parseImageUrls(product.images);
+      
+      // Calculate profit
+      const costBase = toNumber(product.aliexpressPrice);
+      const costInMarketplaceCurrency = fxService.convert(
+        costBase,
+        productCurrency,
+        marketplaceConfig.currency
+      );
+      const potentialProfit = priceInMarketplaceCurrency - costInMarketplaceCurrency;
+      const profitMargin = priceInMarketplaceCurrency > 0 
+        ? (potentialProfit / priceInMarketplaceCurrency) * 100 
+        : 0;
+
+      // Calculate fees (reuse cost calculator)
+      const { CostCalculatorService } = await import('./cost-calculator.service');
+      const costCalculator = new CostCalculatorService();
+      const fees = costCalculator.calculateAdvanced(
+        marketplace,
+        marketplaceConfig.region || 'us',
+        priceInMarketplaceCurrency,
+        costInMarketplaceCurrency,
+        marketplaceConfig.currency,
+        marketplaceConfig.currency
+      );
+
+      // Extract tags/keywords from product data
+      const tags = metadata?.tags || [];
+      const seoKeywords = tags.length > 0 ? tags : [product.category || 'general'];
+
+      return {
+        success: true,
+        preview: {
+          product: {
+            id: product.id,
+            title: product.title,
+            category: product.category,
+            aliexpressPrice: costBase,
+            aliexpressCurrency: productCurrency,
+          },
+          marketplace: marketplace,
+          title: finalTitle,
+          description: finalDescription,
+          price: priceInMarketplaceCurrency,
+          currency: marketplaceConfig.currency,
+          language: marketplaceConfig.language,
+          images: images,
+          category: product.category || undefined,
+          tags: tags,
+          profitMargin: profitMargin,
+          potentialProfit: potentialProfit,
+          fees: fees,
+          seoKeywords: seoKeywords,
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to generate listing preview', {
+        error: error instanceof Error ? error.message : String(error),
+        userId,
+        productId,
+        marketplace,
+      });
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to generate preview',
+      };
+    }
+  }
+
+  /**
+   * Get marketplace configuration (currency, language, region)
+   */
+  private getMarketplaceConfig(marketplace: MarketplaceName): {
+    currency: string;
+    language: string;
+    displayName: string;
+    region?: string;
+  } {
+    const configs: Record<MarketplaceName, { currency: string; language: string; displayName: string; region?: string }> = {
+      ebay: { currency: 'USD', language: 'en', displayName: 'eBay', region: 'us' },
+      mercadolibre: { currency: 'CLP', language: 'es', displayName: 'MercadoLibre', region: 'cl' },
+      amazon: { currency: 'USD', language: 'en', displayName: 'Amazon', region: 'us' },
+    };
+    return configs[marketplace] || configs.ebay;
   }
 
   /**

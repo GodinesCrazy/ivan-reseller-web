@@ -4,6 +4,7 @@ import { productService, CreateProductDto } from '../../services/product.service
 import { z } from 'zod';
 import { logger } from '../../config/logger';
 import { toNumber } from '../../utils/decimal.utils';
+import { MarketplaceService } from '../../services/marketplace.service';
 
 const router = Router();
 router.use(authenticate);
@@ -74,6 +75,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         marketplace: marketplace, // ✅ Marketplace del listing más reciente
         marketplaceUrl: marketplaceUrl, // ✅ URL del listing en el marketplace (para botón "View on Marketplace")
         price: product.finalPrice || product.suggestedPrice || product.aliexpressPrice || 0,
+        currency: product.currency || 'USD', // ✅ Incluir moneda del producto
         stock: 0, // Valor por defecto
         profit: calculatedProfit > 0 ? calculatedProfit : 0,
         imageUrl: imageUrl || undefined, // ✅ Incluir imageUrl extraído
@@ -96,6 +98,37 @@ router.get('/stats', async (req: Request, res: Response, next: NextFunction) => 
     const userId = isAdmin ? undefined : req.user?.userId;
     const stats = await productService.getProductStats(userId);
     res.json({ success: true, data: stats });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/products/:id/preview - Generate listing preview
+router.get('/:id/preview', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const productId = Number(req.params.id);
+    const marketplace = (req.query.marketplace as string) || 'ebay';
+    const environment = req.query.environment as 'sandbox' | 'production' | undefined;
+
+    if (!productId || isNaN(productId)) {
+      return res.status(400).json({ success: false, error: 'Invalid product ID' });
+    }
+
+    const userId = req.user!.userId;
+    const marketplaceService = new MarketplaceService();
+    
+    const preview = await marketplaceService.generateListingPreview(
+      userId,
+      productId,
+      marketplace as any,
+      environment
+    );
+
+    if (!preview.success) {
+      return res.status(400).json(preview);
+    }
+
+    res.json({ success: true, data: preview.preview });
   } catch (error) {
     next(error);
   }

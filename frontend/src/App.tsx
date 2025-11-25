@@ -11,6 +11,7 @@ const OpportunitiesHistory = lazy(() => import('@pages/OpportunitiesHistory'));
 const OpportunityDetail = lazy(() => import('@pages/OpportunityDetail'));
 const Autopilot = lazy(() => import('@pages/Autopilot'));
 const Products = lazy(() => import('@pages/Products'));
+const ProductPreview = lazy(() => import('@pages/ProductPreview'));
 const Sales = lazy(() => import('@pages/Sales'));
 const Commissions = lazy(() => import('@pages/Commissions'));
 const FinanceDashboard = lazy(() => import('@pages/FinanceDashboard'));
@@ -168,6 +169,7 @@ function AppContent() {
         
         {/* Core Business */}
         <Route path="products" element={<Products />} />
+        <Route path="products/:id/preview" element={<ProductPreview />} />
         <Route path="sales" element={<Sales />} />
         <Route path="commissions" element={<Commissions />} />
         
