@@ -1075,7 +1075,7 @@ export class AdvancedMarketplaceScraper {
         logger.debug('[SCRAPER] Error al hacer scroll (ignorado)');
       }
       
-      // ✅ Verificar si hay CAPTCHA o bloqueo, pero NO lanzar error - intentar extraer productos de todos modos
+      // ✅ Si detectamos bloqueo, intentar extraer del DOM inmediatamente sin esperar runParams
       const hasCaptcha = await page.evaluate(() => {
         const captchaSelectors = [
           '.captcha',
@@ -1102,34 +1102,42 @@ export class AdvancedMarketplaceScraper {
                htmlContent.includes('tmd');
       }).catch(() => false);
       
-      if (hasCaptcha || isBlockedInContent) {
+      // ✅ Si detectamos bloqueo, saltar runParams y extraer del DOM directamente
+      const shouldSkipRunParams = isBlocked || hasCaptcha || isBlockedInContent;
+      
+      if (shouldSkipRunParams) {
         const currentUrl = page.url();
-        logger.warn('[SCRAPER] CAPTCHA o bloqueo detectado en la página, pero intentando extraer productos de todos modos', { 
+        logger.warn('[SCRAPER] Bloqueo detectado, saltando runParams y extrayendo directamente del DOM', { 
           query, 
           userId,
           hasCaptcha,
           isBlockedInContent,
+          isBlocked,
           url: currentUrl
         });
-        await this.captureAliExpressSnapshot(page, `captcha-detected-${Date.now()}`);
+        await this.captureAliExpressSnapshot(page, `blocked-detected-${Date.now()}`);
         
-        // NO lanzar error aquí - continuar e intentar extraer productos
-        // Solo lanzar error si después de intentar extraer no encontramos nada
+        // ✅ Saltar directamente a extracción DOM sin esperar runParams
+        // Esto es más rápido y puede funcionar incluso con bloqueo parcial
       }
 
       // Extraer runParams con los productos renderizados por la propia página
+      // ✅ Si detectamos bloqueo, saltar runParams y extraer directamente del DOM
       let products: any[] = [];
-      try {
-        // ✅ Intentar extraer runParams inmediatamente después de cargar
-        const runParamsFromScript = await this.extractRunParamsFromPage(page);
-        if (runParamsFromScript) {
-          const list =
-            runParamsFromScript?.mods?.itemList?.content ||
-            runParamsFromScript?.resultList ||
-            runParamsFromScript?.items ||
-            [];
+      
+      if (!shouldSkipRunParams) {
+        // ✅ Solo intentar runParams si NO detectamos bloqueo
+        try {
+          // ✅ Intentar extraer runParams inmediatamente después de cargar
+          const runParamsFromScript = await this.extractRunParamsFromPage(page);
+          if (runParamsFromScript) {
+            const list =
+              runParamsFromScript?.mods?.itemList?.content ||
+              runParamsFromScript?.resultList ||
+              runParamsFromScript?.items ||
+              [];
 
-          if (Array.isArray(list) && list.length > 0) {
+            if (Array.isArray(list) && list.length > 0) {
             products = list.map((item: any) => {
               // ✅ TAREA 1: Extraer y normalizar URL de imagen con múltiples fallbacks
               let imageUrl = item.image?.imgUrl || item.imageUrl || item.image?.url || item.imgUrl || '';
@@ -1250,14 +1258,17 @@ export class AdvancedMarketplaceScraper {
             return products;
           }
         }
-        logger.warn('runParams no retornó productos o estructura no reconocida');
-      } catch (runParamsError: any) {
-        logger.warn('No se pudo analizar runParams', { error: runParamsError?.message || String(runParamsError) });
-      }
+          logger.warn('runParams no retornó productos o estructura no reconocida');
+        } catch (runParamsError: any) {
+          logger.warn('No se pudo analizar runParams', { error: runParamsError?.message || String(runParamsError) });
+        }
 
-      if (products.length > 0) {
-        logger.info('Productos encontrados desde runParams/API', { count: products.length });
-        return products;
+        if (products.length > 0) {
+          logger.info('Productos encontrados desde runParams/API', { count: products.length });
+          return products;
+        }
+      } else {
+        logger.info('[SCRAPER] Bloqueo detectado, saltando runParams e intentando extracción DOM directa', { query, userId });
       }
       
       logger.debug('No se encontraron productos desde runParams/API, intentando DOM scraping...');
@@ -1286,11 +1297,16 @@ export class AdvancedMarketplaceScraper {
       }
 
       // ✅ Si todo lo anterior falló, intentar con scraping DOM clásico
-      // Esperar más tiempo para que los productos se rendericen completamente
-      logger.debug('Esperando que los productos se rendericen en el DOM...');
-      await new Promise(resolve => setTimeout(resolve, 5000)); // ✅ Aumentar de 4s a 5s
+      // ✅ Si detectamos bloqueo, esperar menos tiempo y ser más agresivo
+      const waitTime = shouldSkipRunParams ? 2000 : 5000; // Esperar menos si hay bloqueo
+      logger.debug(`Esperando que los productos se rendericen en el DOM (${waitTime}ms)...`, { 
+        shouldSkipRunParams, 
+        isBlocked 
+      });
+      await new Promise(resolve => setTimeout(resolve, waitTime));
 
       // ✅ Esperar a que carguen los productos con múltiples selectores alternativos
+      // ✅ Si detectamos bloqueo, ser más agresivo y no esperar tanto tiempo
       let productsLoaded = false;
       const selectors = [
         '.search-item-card-wrapper-gallery',
@@ -1311,36 +1327,67 @@ export class AdvancedMarketplaceScraper {
         'a[href*="/product/"]'
       ];
 
+      // ✅ Si detectamos bloqueo, intentar menos veces pero más agresivamente
+      const maxAttempts = shouldSkipRunParams ? 1 : 3;
+      const selectorTimeout = shouldSkipRunParams ? 3000 : 8000; // Timeout más corto si hay bloqueo
+      
       // Intentar múltiples veces con diferentes esperas
-      for (let attempt = 0; attempt < 3; attempt++) {
-        for (const selector of selectors) {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        // ✅ Intentar TODOS los selectores en paralelo para mayor velocidad
+        const selectorPromises = selectors.map(async (selector) => {
           try {
-            await page.waitForSelector(selector, { timeout: 8000 });
             const count = await page.evaluate((sel) => {
               const doc = (globalThis as any).document;
-              return doc ? doc.querySelectorAll(sel).length : 0;
+              if (!doc) return 0;
+              const elements = doc.querySelectorAll(sel);
+              return elements ? elements.length : 0;
             }, selector);
             
             if (count > 0) {
-              productsLoaded = true;
-              logger.info('Productos encontrados con selector', { selector, count });
-              break;
+              return { selector, count };
             }
+            return null;
           } catch {
-            // continuar con el siguiente selector
+            return null;
           }
+        });
+        
+        const results = await Promise.all(selectorPromises);
+        const found = results.find(r => r !== null);
+        
+        if (found) {
+          productsLoaded = true;
+          logger.info('Productos encontrados con selector (búsqueda paralela)', { 
+            selector: found.selector, 
+            count: found.count,
+            attempt: attempt + 1,
+            maxAttempts,
+            shouldSkipRunParams
+          });
+          break;
         }
         
-        if (productsLoaded) break;
-        
-        // Si no se encontraron, hacer scroll y esperar más
-        if (attempt < 2) {
-          logger.debug(`⏳ Intento ${attempt + 1} falló, haciendo scroll y esperando más...`, { attempt, userId, query });
+        if (!productsLoaded && attempt < maxAttempts - 1) {
+          // Si no se encontraron, hacer scroll y esperar menos tiempo si hay bloqueo
+          const scrollWait = shouldSkipRunParams ? 1000 : 3000;
+          logger.debug(`⏳ Intento ${attempt + 1} falló, haciendo scroll y esperando ${scrollWait}ms...`, { 
+            attempt, 
+            userId, 
+            query,
+            shouldSkipRunParams
+          });
           await page.evaluate(() => {
             const w = (globalThis as any).window;
             w.scrollBy?.(0, 1000);
           });
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          await new Promise(resolve => setTimeout(resolve, scrollWait));
+          
+          // ✅ Intentar esperar selector con timeout más corto si hay bloqueo
+          try {
+            await page.waitForSelector(selectors[0], { timeout: selectorTimeout });
+          } catch {
+            // Continuar de todos modos
+          }
         }
       }
 
