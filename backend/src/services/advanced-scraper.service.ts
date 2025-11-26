@@ -37,6 +37,7 @@ interface ScrapedProduct {
   priceRangeSourceCurrency?: string;
   priceSource?: string;
   imageUrl: string;
+  images?: string[]; // ✅ MEJORADO: Array de todas las imágenes disponibles
   productUrl: string;
   rating: number;
   reviewCount: number;
@@ -3042,14 +3043,71 @@ export class AdvancedMarketplaceScraper {
     const priceRangeSourceCurrency = priceRangeInfo ? priceRangeInfo.currency : sourceCurrency;
     const priceSource = priceRangeInfo ? 'range:max' : 'single';
 
-    const image =
-      item.imageUrl ||
-      item.productImage ||
-      item.image ||
-      item.pic ||
-      (Array.isArray(item.imageUrlList) ? item.imageUrlList[0] : null) ||
-      (Array.isArray(item.images) ? item.images[0] : null) ||
-      '';
+    // ✅ MEJORADO: Extraer TODAS las imágenes disponibles, no solo la primera
+    const allImages: string[] = [];
+    const imageSet = new Set<string>(); // Para evitar duplicados
+
+    // Función helper para normalizar y agregar URL de imagen
+    const addImage = (img: any) => {
+      if (!img || typeof img !== 'string') return;
+      let normalized = img.trim();
+      if (!normalized) return;
+      
+      // Normalizar URL
+      if (normalized.startsWith('//')) {
+        normalized = `https:${normalized}`;
+      } else if (!normalized.startsWith('http')) {
+        normalized = `https://${normalized}`;
+      }
+      
+      // Validar que sea una URL válida de imagen
+      if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(normalized)) {
+        if (!imageSet.has(normalized)) {
+          imageSet.add(normalized);
+          allImages.push(normalized);
+        }
+      }
+    };
+
+    // Extraer de diferentes fuentes posibles
+    // 1. Arrays de imágenes
+    if (Array.isArray(item.images)) {
+      item.images.forEach(addImage);
+    }
+    if (Array.isArray(item.imageUrlList)) {
+      item.imageUrlList.forEach(addImage);
+    }
+    if (Array.isArray(item.productImages)) {
+      item.productImages.forEach(addImage);
+    }
+    if (Array.isArray(item.galleryImages)) {
+      item.galleryImages.forEach(addImage);
+    }
+    if (Array.isArray(item.imageList)) {
+      item.imageList.forEach(addImage);
+    }
+
+    // 2. Campos individuales (imagen principal)
+    addImage(item.imageUrl);
+    addImage(item.productImage);
+    addImage(item.image);
+    addImage(item.pic);
+    addImage(item.mainImage);
+    addImage(item.primaryImage);
+
+    // 3. Objetos anidados
+    if (item.imageModule?.imagePathList && Array.isArray(item.imageModule.imagePathList)) {
+      item.imageModule.imagePathList.forEach(addImage);
+    }
+    if (item.imageModule?.imageUrlList && Array.isArray(item.imageModule.imageUrlList)) {
+      item.imageModule.imageUrlList.forEach(addImage);
+    }
+    if (item.productImageModule?.imagePathList && Array.isArray(item.productImageModule.imagePathList)) {
+      item.productImageModule.imagePathList.forEach(addImage);
+    }
+
+    // Si no hay imágenes, usar la primera disponible como fallback
+    const image = allImages.length > 0 ? allImages[0] : '';
 
     // ✅ url ya está declarada arriba (línea 3002), no redeclarar
 
@@ -3093,6 +3151,10 @@ export class AdvancedMarketplaceScraper {
       item.numberOfOrders ||
       0;
 
+    // ✅ MEJORADO: Incluir todas las imágenes en el resultado
+    // Si no hay imágenes en el array, usar la imagen principal como fallback
+    const finalImages = allImages.length > 0 ? allImages : (image ? [image] : []);
+
     return {
       title: String(title).trim().substring(0, 150),
       price,
@@ -3112,6 +3174,8 @@ export class AdvancedMarketplaceScraper {
           ? image
           : `https:${image}`
         : '',
+      // ✅ MEJORADO: Incluir array de todas las imágenes disponibles
+      images: finalImages,
       productUrl: url.startsWith('http') ? url : `https:${url}`,
       rating: Number(rating) || 0,
       reviewCount: Number(reviewCount) || 0,

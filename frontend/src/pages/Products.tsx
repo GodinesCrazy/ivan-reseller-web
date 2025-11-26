@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Package,
   CheckCircle,
@@ -39,6 +40,7 @@ interface Product {
 }
 
 export default function Products() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -327,8 +329,8 @@ export default function Products() {
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => {
-                                setSelectedProduct(product);
-                                setShowModal(true);
+                                // ✅ Unificar View Detail con vista previa: navegar a la misma página de preview
+                                navigate(`/products/${product.id}/preview`);
                               }}
                               className="p-1 text-blue-600 hover:bg-blue-50 rounded"
                               title="View details"

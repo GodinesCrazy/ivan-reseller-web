@@ -29,6 +29,7 @@ export interface OpportunityItem {
   sourceMarketplace: 'aliexpress';
   aliexpressUrl: string;
   image?: string;
+  images?: string[]; // ✅ MEJORADO: Array de todas las imágenes disponibles
   costUsd: number;
   costAmount: number;
   costCurrency: string;
@@ -376,6 +377,10 @@ class OpportunityFinderService {
               sourceCurrency,
               productUrl: p.url || p.productUrl,
               imageUrl: p.images?.[0] || p.image || p.imageUrl || 'https://via.placeholder.com/300x300?text=No+Image',
+              // ✅ MEJORADO: Incluir todas las imágenes disponibles
+              images: Array.isArray(p.images) && p.images.length > 0 
+                ? p.images.filter((img: any) => img && typeof img === 'string' && img.trim().length > 0)
+                : (p.image || p.imageUrl) ? [p.image || p.imageUrl].filter(Boolean) : [],
               productId: p.productId,
             };
           })
@@ -741,12 +746,40 @@ class OpportunityFinderService {
         }
       }
 
+      // ✅ MEJORADO: Extraer todas las imágenes disponibles del producto
+      const allImages: string[] = [];
+      if (Array.isArray(product.images) && product.images.length > 0) {
+        // Si el producto tiene un array de imágenes, usar todas
+        product.images.forEach((img: any) => {
+          if (img && typeof img === 'string' && img.trim().length > 0) {
+            let normalized = img.trim();
+            if (!normalized.startsWith('http')) {
+              if (normalized.startsWith('//')) {
+                normalized = `https:${normalized}`;
+              } else if (normalized.startsWith('/')) {
+                normalized = `https://www.aliexpress.com${normalized}`;
+              } else {
+                normalized = `https://${normalized}`;
+              }
+            }
+            if (/^https?:\/\//i.test(normalized)) {
+              allImages.push(normalized);
+            }
+          }
+        });
+      }
+      // Si no hay imágenes en el array pero sí imageUrl, agregarla
+      if (allImages.length === 0 && imageUrl && imageUrl !== 'https://via.placeholder.com/300x300?text=No+Image') {
+        allImages.push(imageUrl);
+      }
+
       const opp: OpportunityItem = {
         productId: product.productId,
         title: product.title,
         sourceMarketplace: 'aliexpress',
         aliexpressUrl: product.productUrl || '', // Asegurar que siempre haya una URL
-        image: imageUrl, // ✅ TAREA 1: URL de imagen validada y normalizada
+        image: imageUrl, // ✅ TAREA 1: URL de imagen validada y normalizada (primera imagen)
+        images: allImages.length > 0 ? allImages : [imageUrl], // ✅ MEJORADO: Todas las imágenes disponibles
         costUsd: product.price,
         costAmount:
           typeof product.priceMaxSource === 'number' && product.priceMaxSource > 0

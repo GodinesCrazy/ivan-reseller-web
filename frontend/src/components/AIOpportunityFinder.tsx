@@ -456,21 +456,38 @@ export default function AIOpportunityFinder() {
         throw new Error('El precio sugerido debe ser un número positivo válido');
       }
 
-      // ✅ Incluir imagen si está disponible (validar que sea URL válida)
-      if (opp.image && typeof opp.image === 'string' && opp.image.trim().length > 0) {
-        const imageUrl = String(opp.image).trim();
-        // Validar que sea una URL válida o construir URL absoluta desde relativa
+      // ✅ MEJORADO: Incluir todas las imágenes disponibles
+      const normalizeImageUrl = (img: string): string | null => {
+        if (!img || typeof img !== 'string' || img.trim().length === 0) return null;
+        const imageUrl = String(img).trim();
         if (/^https?:\/\//i.test(imageUrl)) {
-          payload.imageUrl = imageUrl;
+          return imageUrl;
         } else if (imageUrl.startsWith('//')) {
-          payload.imageUrl = `https:${imageUrl}`;
+          return `https:${imageUrl}`;
         } else if (imageUrl.startsWith('/')) {
-          payload.imageUrl = `https://www.aliexpress.com${imageUrl}`;
+          return `https://www.aliexpress.com${imageUrl}`;
         } else if (imageUrl.length > 10 && !imageUrl.includes(' ')) {
-          // Si parece ser una URL relativa sin protocolo, intentar construirla
-          payload.imageUrl = `https://${imageUrl}`;
+          return `https://${imageUrl}`;
         }
-        // Si no pasa ninguna validación, no incluir imageUrl (es opcional)
+        return null;
+      };
+
+      // Priorizar array de imágenes si está disponible
+      if (opp.images && Array.isArray(opp.images) && opp.images.length > 0) {
+        const validImages = opp.images
+          .map(normalizeImageUrl)
+          .filter((img): img is string => img !== null);
+        if (validImages.length > 0) {
+          payload.imageUrl = validImages[0]; // Primera imagen como principal
+          payload.imageUrls = validImages; // Todas las imágenes
+        }
+      } else if (opp.image && typeof opp.image === 'string' && opp.image.trim().length > 0) {
+        // Fallback a imagen única si no hay array
+        const imageUrl = normalizeImageUrl(opp.image);
+        if (imageUrl) {
+          payload.imageUrl = imageUrl;
+          payload.imageUrls = [imageUrl];
+        }
       }
 
       // ✅ Incluir categoría si está disponible
@@ -572,13 +589,16 @@ export default function AIOpportunityFinder() {
       });
 
       // ✅ Producto importado exitosamente - Redirigir a vista previa del listing
+      // Usar el marketplace de la oportunidad si está disponible, sino usar 'ebay' como default
+      const targetMarketplace = opp.marketplace?.toLowerCase() || 'ebay';
+      
       toast.success('✅ Producto importado exitosamente. Redirigiendo a vista previa...', {
         duration: 2000
       });
 
       // Redirigir a la vista previa después de un breve delay para que el usuario vea el mensaje
       setTimeout(() => {
-        navigate(`/products/${productId}/preview?marketplace=ebay`);
+        navigate(`/products/${productId}/preview?marketplace=${targetMarketplace}`);
       }, 1000);
     } catch (error: any) {
       log.error('Error importing product from AI finder:', {

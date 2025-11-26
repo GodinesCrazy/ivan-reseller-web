@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Save } from 'lucide-react';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -142,6 +142,13 @@ export default function ProductPreview() {
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: '',
+    description: '',
+    price: 0,
+  });
 
   useEffect(() => {
     if (!id) {
@@ -206,6 +213,55 @@ export default function ProductPreview() {
 
   const handleCancel = () => {
     navigate('/products');
+  };
+
+  const handleEditClick = () => {
+    if (!preview) return;
+    setEditForm({
+      title: preview.title,
+      description: preview.description,
+      price: preview.price,
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!id || !preview) return;
+
+    try {
+      setEditing(true);
+      
+      // Obtener el producto actual para actualizar con los datos correctos
+      const productResponse = await api.get(`/api/products/${id}`);
+      const currentProduct = productResponse.data?.data || productResponse.data;
+      
+      // Preparar datos de actualización
+      const updateData: any = {
+        title: editForm.title,
+        description: editForm.description,
+      };
+
+      // Si el precio cambió, actualizar suggestedPrice y finalPrice
+      if (editForm.price !== preview.price) {
+        updateData.suggestedPrice = editForm.price;
+        updateData.finalPrice = editForm.price;
+      }
+
+      // Actualizar producto
+      await api.put(`/api/products/${id}`, updateData);
+      
+      toast.success('Producto actualizado exitosamente');
+      setShowEditModal(false);
+      
+      // Recargar la preview para reflejar los cambios
+      await loadPreview();
+    } catch (err: any) {
+      console.error('Error updating product:', err);
+      const errorMsg = err?.response?.data?.error || err?.message || 'Error al actualizar el producto';
+      toast.error(errorMsg);
+    } finally {
+      setEditing(false);
+    }
   };
 
   if (loading) {
@@ -410,7 +466,7 @@ export default function ProductPreview() {
               </button>
               
               <button
-                onClick={() => navigate(`/products/${id}`)}
+                onClick={handleEditClick}
                 className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
               >
                 <Edit className="w-5 h-5" />
@@ -427,6 +483,90 @@ export default function ProductPreview() {
           </div>
         </div>
       </div>
+
+      {/* Edit Product Modal */}
+      {showEditModal && preview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex items-center justify-between">
+              <h2 className="text-2xl font-bold">Editar Producto</h2>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="p-2 hover:bg-gray-100 rounded"
+                disabled={editing}
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Título
+                </label>
+                <input
+                  type="text"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={editing}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Descripción
+                </label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={8}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={editing}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Precio ({preview.currency})
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editForm.price}
+                  onChange={(e) => setEditForm({ ...editForm, price: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={editing}
+                />
+              </div>
+            </div>
+            <div className="p-6 border-t flex gap-3 justify-end">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
+                disabled={editing}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={editing || !editForm.title.trim() || editForm.price <= 0}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {editing ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Guardar Cambios
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
