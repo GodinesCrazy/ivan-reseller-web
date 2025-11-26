@@ -148,6 +148,150 @@ Al entrar por primera vez, Ana verá el **Dashboard Principal** con:
 - Puede haber una notificación de bienvenida
 - Icono de campana en la parte superior para ver notificaciones
 
+**Pestañas del Dashboard:**
+- **Overview:** Resumen general con métricas principales
+- **Sugerencias IA:** Recomendaciones inteligentes basadas en tus datos (ver sección siguiente)
+- **Actividad Reciente:** Últimas acciones realizadas en el sistema
+
+### Paso 3.5: Usar Sugerencias IA (Nuevo)
+
+**¿Qué son las Sugerencias IA?**
+
+Las Sugerencias IA son recomendaciones inteligentes que el sistema genera automáticamente analizando:
+- Tus oportunidades recientes (qué productos has buscado)
+- Tus productos importados y publicados
+- Tus ventas exitosas
+- Tendencias de mercado detectadas
+
+**¿Cómo funciona la IA para generar sugerencias?**
+
+La IA analiza tus datos de las últimas 2-4 semanas y genera 7 tipos diferentes de sugerencias:
+
+1. **🔍 Búsqueda de Oportunidades (SEARCH):**
+   - **Qué hace:** Te sugiere keywords concretas para buscar productos rentables
+   - **Cómo lo obtiene:** Analiza los títulos de productos que has buscado recientemente, extrae palabras clave importantes y detecta tendencias
+   - **Cómo lo evalúa:** Prioriza keywords con alto margen (≥40%), buen ROI (≥50%) y tendencia creciente
+   - **Ejemplo:** "wireless earbuds" - porque detectó que has encontrado 15 oportunidades con esta keyword con margen promedio 42% y ROI 55%
+
+2. **📦 Expansión de Catálogo (INVENTORY):**
+   - **Qué hace:** Te sugiere expandir tu catálogo en segmentos rentables
+   - **Cómo lo obtiene:** Agrupa tus oportunidades por categoría/segmento (ej: "Gaming & Esports", "Home & Kitchen")
+   - **Cómo lo evalúa:** Calcula margen promedio, ROI promedio y cantidad de oportunidades por segmento
+   - **Ejemplo:** "Expandir catálogo en Gaming & Esports" - porque detectó 25 oportunidades en este segmento con margen promedio 45%
+
+3. **💰 Optimización de Precios (PRICING):**
+   - **Qué hace:** Te sugiere ajustar precios de productos existentes
+   - **Cómo lo obtiene:** Identifica productos "calientes" con margen ≥30% en tus oportunidades
+   - **Cómo lo evalúa:** Prioriza productos con mayor margen y ROI
+   - **Ejemplo:** "Optimizar pricing para 'Wireless Earbuds Bluetooth 5.0'" - porque tiene margen 45% y ROI 65%
+
+4. **🤖 Automatización (AUTOMATION):**
+   - **Qué hace:** Te sugiere automatizar relanzamiento de productos exitosos
+   - **Cómo lo obtiene:** Analiza tus operaciones exitosas de los últimos 90 días
+   - **Cómo lo evalúa:** Prioriza productos con ROI ≥60% y mayor ganancia total
+   - **Ejemplo:** "Automatizar relanzamiento de 'Smart Watch'" - porque completó con ROI 75% y ganancia $450
+
+5. **📢 Campañas Promocionales (MARKETING):**
+   - **Qué hace:** Te sugiere impulsar visibilidad en marketplaces con demanda creciente
+   - **Cómo lo obtiene:** Compara demanda actual vs. anterior (últimos 14 días) por marketplace
+   - **Cómo lo evalúa:** Detecta incrementos >15% como tendencia creciente
+   - **Ejemplo:** "Impulsar visibilidad en mercadolibre" - porque incrementó demanda 28.5%
+
+6. **⚙️ Optimización General (OPTIMIZATION):**
+   - **Qué hace:** Te sugiere actualizar tu estrategia con señales recientes
+   - **Cómo lo obtiene:** Resume las señales más importantes detectadas
+   - **Cómo lo evalúa:** Agrega información de segmentos destacados, tendencias y operaciones exitosas
+
+7. **📝 Optimización de Listados (LISTING):**
+   - **Qué hace:** Te sugiere mejorar títulos y descripciones para SEO
+   - **Cómo lo obtiene:** Solo se genera si tienes pocas ventas (<20)
+   - **Cómo lo evalúa:** Basado en tu historial de ventas
+
+**Cómo usar las Sugerencias IA:**
+
+1. **Acceder a Sugerencias IA:**
+   - En el Dashboard, haz clic en la pestaña **"Sugerencias IA"**
+   - Verás tarjetas con diferentes sugerencias
+
+2. **Métricas en la parte superior:**
+   - **Sugerencias activas:** Cantidad de sugerencias no implementadas
+   - **Impacto potencial:** Suma estimada de ganancias si implementas todas (formateado: $X.XXM, $X.XXK, $X,XXX)
+   - **Tiempo ahorrado:** Horas estimadas que ahorrarías
+   - **Automatizaciones:** Cantidad de reglas de automatización activas
+
+3. **Generar nuevas sugerencias:**
+   - Haz clic en el botón **"Nueva sugerencia"**
+   - El sistema analizará tus datos recientes y generará nuevas recomendaciones
+   - Puede tomar unos segundos
+
+4. **Usar sugerencias de búsqueda (SEARCH):**
+   - Cada tarjeta de keyword muestra:
+     - La keyword sugerida (ej: "wireless earbuds")
+     - Razón de la sugerencia (ej: "Tendencia creciente: 35% más oportunidades. Alto margen promedio: 42%")
+     - Métrica de soporte (margen, ROI, demanda, tendencia)
+     - Marketplaces objetivo (ej: eBay, Amazon)
+     - Oportunidades estimadas
+   - Haz clic en **"Buscar oportunidades con esta keyword"**
+   - Se abrirá automáticamente la página de Oportunidades con la keyword precargada
+   - La búsqueda se ejecutará automáticamente
+
+5. **Filtrar sugerencias:**
+   - Usa los filtros en la parte superior:
+     - **Todas:** Muestra todas las sugerencias
+     - **Búsquedas:** Solo sugerencias de keywords
+     - **Pricing, Inventory, Marketing, etc.:** Filtra por tipo específico
+
+6. **Ver detalles de una sugerencia:**
+   - Haz clic en **"Ver detalles"** en cualquier tarjeta
+   - Verás:
+     - Requerimientos necesarios
+     - Pasos a seguir para implementarla
+     - Productos relacionados (si aplica)
+     - Métricas objetivo
+
+7. **Implementar una sugerencia:**
+   - Para sugerencias de tipo SEARCH: Usa el botón "Buscar oportunidades"
+   - Para otras sugerencias: Haz clic en **"Implementar"** cuando hayas completado los pasos
+   - La sugerencia se marcará como "Implementada"
+
+**Ejemplo práctico de uso:**
+
+Ana entra al Dashboard y ve la pestaña "Sugerencias IA". Ve una sugerencia:
+
+```
+🔍 Buscar oportunidades: "wireless earbuds"
+Razón: Tendencia creciente: 35% más oportunidades en las últimas semanas. 
+       Alto margen promedio: 42%. ROI atractivo: 55%.
+Marketplaces: eBay, Amazon
+Oportunidades estimadas: 15
+Confianza: 85%
+```
+
+Ana hace clic en **"Buscar oportunidades con esta keyword"**. El sistema:
+1. Abre automáticamente la página de Oportunidades
+2. Pre-llena el campo de búsqueda con "wireless earbuds"
+3. Pre-selecciona eBay y Amazon como marketplaces
+4. Ejecuta la búsqueda automáticamente
+5. Muestra los resultados de oportunidades encontradas
+
+Ana revisa los resultados, encuentra un producto interesante con margen 45%, y hace clic en "Importar".
+
+**¿Por qué las sugerencias son útiles?**
+
+- **Ahorran tiempo:** No tienes que pensar qué buscar, la IA te lo sugiere
+- **Basadas en datos reales:** No son sugerencias genéricas, se basan en tu historial y tendencias
+- **Priorizadas:** Las más rentables aparecen primero
+- **Accionables:** Cada sugerencia tiene pasos claros para implementarla
+
+**Notas importantes:**
+
+- Las sugerencias mejoran con el tiempo: Cuanto más uses el sistema, más datos tiene la IA para analizar
+- Si no hay suficientes datos, verás sugerencias genéricas basadas en categorías populares
+- El "Impacto potencial" es una estimación conservadora, no una garantía
+- Las sugerencias se actualizan automáticamente cuando generas nuevas
+
+---
+
 ### Paso 4: Cambiar Contraseña (Recomendado)
 
 1. Ana hace clic en su perfil (esquina superior derecha) o va a **Settings → Perfil de Usuario**

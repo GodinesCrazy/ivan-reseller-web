@@ -850,6 +850,191 @@ Ganancia neta usuario: $32  // ✅ $40 - $8 = $32
    - Gráficas de performance
 ```
 
+### Sugerencias IA - Cómo Funciona
+
+**¿Qué son las Sugerencias IA?**
+
+El sistema analiza automáticamente tus datos y genera recomendaciones inteligentes para ayudarte a tomar mejores decisiones de negocio.
+
+**¿Cómo la IA obtiene y evalúa las sugerencias?**
+
+#### 1. Fuentes de Datos
+
+La IA analiza:
+
+- **Oportunidades recientes (últimos 14-30 días):**
+  - Qué productos has buscado
+  - Títulos de productos encontrados
+  - Márgenes, ROI y confianza de cada oportunidad
+  - Marketplaces donde se encontraron
+
+- **Operaciones exitosas (últimos 90 días):**
+  - Productos que vendiste exitosamente
+  - Ganancia real obtenida
+  - ROI real alcanzado
+  - Marketplace donde se vendió
+
+- **Datos de tu negocio:**
+  - Productos importados y publicados
+  - Ventas totales y ganancias
+  - Categorías más rentables
+  - Tendencias de mercado
+
+#### 2. Proceso de Análisis
+
+**Paso 1: Extracción de Keywords**
+- La IA lee los títulos de productos que has buscado
+- Extrae palabras clave importantes (ej: "wireless", "earbuds", "bluetooth")
+- Genera frases de 1-3 palabras (ej: "wireless earbuds", "bluetooth headphones")
+- Filtra palabras comunes sin valor (stop words)
+
+**Paso 2: Agrupación y Análisis**
+- Agrupa oportunidades por keyword o segmento
+- Calcula métricas promedio: margen, ROI, confianza
+- Detecta tendencias temporales (creciente/estable/decreciente)
+- Analiza distribución por marketplace
+
+**Paso 3: Cálculo de Score**
+- **Para keywords:** `score = (cantidad × 0.3) + (margen × 0.3) + (ROI × 0.2) + (tendencia × 0.2)`
+- **Para segmentos:** `score = (margen × 120) + ROI + (confianza × 80) + bonus`
+- Ordena por score descendente (mejores primero)
+
+**Paso 4: Priorización**
+- **High:** Margen ≥40% Y ROI ≥50% (y tendencia creciente para keywords)
+- **Medium:** Margen 30-40% O ROI 40-50%
+- **Low:** Margen <20% O ROI <30%
+
+#### 3. Tipos de Sugerencias Generadas
+
+**🔍 Búsqueda de Oportunidades (SEARCH):**
+- **Qué hace:** Te sugiere keywords concretas para buscar
+- **Ejemplo:** "wireless earbuds" - porque detectó 15 oportunidades con margen 42% y ROI 55%
+- **Cómo usarla:** Click en "Buscar oportunidades" → Se abre Oportunidades con keyword precargada
+
+**📦 Expansión de Catálogo (INVENTORY):**
+- **Qué hace:** Te sugiere expandir en segmentos rentables
+- **Ejemplo:** "Expandir catálogo en Gaming & Esports" - porque detectó 25 oportunidades con margen 45%
+- **Cómo usarla:** Sigue los pasos indicados en la sugerencia
+
+**💰 Optimización de Precios (PRICING):**
+- **Qué hace:** Te sugiere ajustar precios de productos existentes
+- **Ejemplo:** "Optimizar pricing para 'Smart Watch'" - porque tiene margen 45% y ROI 65%
+- **Cómo usarla:** Ve a Products → Editar → Ajusta precio según sugerencia
+
+**🤖 Automatización (AUTOMATION):**
+- **Qué hace:** Te sugiere automatizar relanzamiento de productos exitosos
+- **Ejemplo:** "Automatizar relanzamiento de 'Wireless Earbuds'" - porque completó con ROI 75%
+- **Cómo usarla:** Ve a Autopilot → Crea regla según pasos indicados
+
+**📢 Campañas Promocionales (MARKETING):**
+- **Qué hace:** Te sugiere impulsar visibilidad en marketplaces con demanda creciente
+- **Ejemplo:** "Impulsar visibilidad en mercadolibre" - porque incrementó demanda 28.5%
+- **Cómo usarla:** Crea campaña promocional en el marketplace indicado
+
+**⚙️ Optimización General (OPTIMIZATION):**
+- **Qué hace:** Te sugiere actualizar estrategia con señales recientes
+- **Ejemplo:** Resumen de segmentos destacados y tendencias detectadas
+- **Cómo usarla:** Revisa el resumen y ajusta tu estrategia
+
+**📝 Optimización de Listados (LISTING):**
+- **Qué hace:** Te sugiere mejorar títulos y descripciones para SEO
+- **Ejemplo:** Solo aparece si tienes pocas ventas (<20)
+- **Cómo usarla:** Mejora títulos y descripciones según sugerencia
+
+#### 4. Cómo Usar las Sugerencias IA
+
+**Acceder:**
+```
+1. Menu → Dashboard
+2. Pestaña "Sugerencias IA"
+```
+
+**Generar nuevas:**
+```
+1. Click en "Nueva sugerencia"
+2. Espera unos segundos
+3. Verás nuevas recomendaciones
+```
+
+**Usar sugerencias de keywords:**
+```
+1. Revisa la tarjeta de keyword
+2. Lee la razón y métricas
+3. Click en "Buscar oportunidades con esta keyword"
+4. Se abre Oportunidades con keyword precargada
+5. La búsqueda se ejecuta automáticamente
+6. Revisa resultados e importa productos
+```
+
+**Filtrar sugerencias:**
+```
+- Usa los filtros: Todas, Búsquedas, Pricing, Inventory, etc.
+```
+
+**Ver detalles:**
+```
+1. Click en "Ver detalles" en cualquier tarjeta
+2. Verás requerimientos y pasos a seguir
+```
+
+**Métricas mostradas:**
+- **Sugerencias activas:** Cantidad de sugerencias no implementadas
+- **Impacto potencial:** Suma estimada de ganancias (formateado: $X.XXM, $X.XXK, $X,XXX)
+- **Tiempo ahorrado:** Horas estimadas que ahorrarías
+- **Automatizaciones:** Reglas de automatización activas
+
+#### 5. Ejemplo Completo
+
+**Situación:** Ana ha buscado varios productos relacionados con audio en las últimas 2 semanas.
+
+**Lo que la IA detecta:**
+- 15 oportunidades con keyword "wireless earbuds"
+- Margen promedio: 42%
+- ROI promedio: 55%
+- Tendencia: +35% más oportunidades que período anterior
+- Marketplaces: eBay (10), Amazon (5)
+
+**Cálculo de score:**
+```
+score = (15 × 0.3) + (42 × 0.3) + (55 × 0.2) + (35 × 0.2)
+     = 4.5 + 12.6 + 11 + 7
+     = 35.1 (alto score)
+```
+
+**Priorización:**
+- Margen 42% ≥ 40% ✅
+- ROI 55% ≥ 50% ✅
+- Tendencia creciente ✅
+- **Priority: HIGH**
+
+**Sugerencia generada:**
+```
+🔍 Buscar oportunidades: "wireless earbuds"
+Razón: Tendencia creciente: 35% más oportunidades. Alto margen promedio: 42%. ROI atractivo: 55%.
+Marketplaces: eBay, Amazon
+Oportunidades estimadas: 15
+Confianza: 85%
+Impacto estimado: $180
+```
+
+**Ana usa la sugerencia:**
+1. Click en "Buscar oportunidades con esta keyword"
+2. Se abre Oportunidades con "wireless earbuds" precargado
+3. Búsqueda automática ejecutada
+4. Ve 12 resultados con márgenes 35-50%
+5. Importa 3 productos con mejor margen
+6. Los publica en eBay y Amazon
+
+**Resultado:** Ana encuentra productos rentables más rápido usando la sugerencia de la IA.
+
+#### 6. Notas Importantes
+
+- **Las sugerencias mejoran con el tiempo:** Cuanto más uses el sistema, más datos tiene la IA
+- **Si no hay suficientes datos:** Verás sugerencias genéricas basadas en categorías populares
+- **El "Impacto potencial" es una estimación:** No es una garantía, es una proyección conservadora
+- **Las sugerencias se actualizan automáticamente:** Cada vez que generas nuevas, se recalculan
+- **No todas las sugerencias son iguales:** Prioriza las marcadas como "High" primero
+
 ### Detalle de Comisiones
 
 ```
@@ -1343,7 +1528,7 @@ Si IP pública cambia frecuentemente:
 ---
 
 <a name="faq"></a>
-# 6️⃣ PREGUNTAS FRECUENTES
+# 7️⃣ PREGUNTAS FRECUENTES
 
 ## 💭 General
 
@@ -1421,7 +1606,7 @@ R: Precios aproximados:
 ---
 
 <a name="soporte"></a>
-# 7️⃣ SOPORTE TÉCNICO
+# 8️⃣ SOPORTE TÉCNICO
 
 ## 📞 Canales de Soporte
 

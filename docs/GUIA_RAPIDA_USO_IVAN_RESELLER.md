@@ -322,6 +322,84 @@ Al iniciar sesión, verás el **Dashboard** con:
   - Margen promedio
   - Tasa de éxito de publicaciones
 
+### Sugerencias IA (Nuevo)
+
+**¿Qué son las Sugerencias IA?**
+
+El sistema analiza automáticamente tus datos (oportunidades, productos, ventas) y genera recomendaciones inteligentes para ayudarte a:
+- Encontrar productos rentables más rápido
+- Optimizar precios de productos existentes
+- Expandir tu catálogo en segmentos rentables
+- Automatizar operaciones exitosas
+- Impulsar visibilidad en marketplaces con demanda creciente
+
+**Cómo funciona:**
+
+1. **La IA analiza tus datos:**
+   - Oportunidades que has buscado (últimos 14-30 días)
+   - Productos que has importado y publicado
+   - Ventas exitosas (últimos 90 días)
+   - Tendencias de mercado detectadas
+
+2. **Genera 7 tipos de sugerencias:**
+   - **🔍 Búsqueda:** Keywords concretas para buscar (ej: "wireless earbuds")
+   - **📦 Catálogo:** Segmentos rentables para expandir (ej: "Gaming & Esports")
+   - **💰 Precios:** Productos a optimizar (ej: "Ajustar precio de 'Smart Watch'")
+   - **🤖 Automatización:** Productos exitosos a relanzar automáticamente
+   - **📢 Marketing:** Marketplaces con demanda creciente
+   - **⚙️ Optimización:** Resumen de señales importantes
+   - **📝 Listados:** Mejoras de SEO (si tienes pocas ventas)
+
+3. **Prioriza por rentabilidad:**
+   - **High:** Margen ≥40% Y ROI ≥50% (y tendencia creciente para keywords)
+   - **Medium:** Margen 30-40% O ROI 40-50%
+   - **Low:** Margen <20% O ROI <30%
+
+**Cómo usar las Sugerencias IA:**
+
+1. **Acceder:**
+   - En el Dashboard, pestaña **"Sugerencias IA"**
+
+2. **Generar nuevas:**
+   - Haz clic en **"Nueva sugerencia"**
+   - El sistema analizará tus datos y generará recomendaciones
+
+3. **Usar sugerencias de keywords:**
+   - Cada tarjeta muestra la keyword, razón, métricas y marketplaces
+   - Haz clic en **"Buscar oportunidades con esta keyword"**
+   - Se abre automáticamente Oportunidades con la keyword precargada y búsqueda automática
+
+4. **Filtrar:**
+   - Usa los filtros: Todas, Búsquedas, Pricing, Inventory, etc.
+
+5. **Ver detalles:**
+   - Haz clic en **"Ver detalles"** para ver requerimientos y pasos
+
+**Ejemplo práctico:**
+
+```
+Sugerencia: "wireless earbuds"
+Razón: Tendencia creciente: 35% más oportunidades. Alto margen: 42%. ROI: 55%.
+Marketplaces: eBay, Amazon
+Oportunidades estimadas: 15
+```
+
+Haces clic en "Buscar oportunidades" → Se abre Oportunidades con "wireless earbuds" precargado → Búsqueda automática → Revisas resultados → Importas producto.
+
+**Métricas mostradas:**
+
+- **Sugerencias activas:** Cantidad de sugerencias no implementadas
+- **Impacto potencial:** Suma estimada de ganancias (formateado: $X.XXM, $X.XXK, $X,XXX)
+- **Tiempo ahorrado:** Horas estimadas que ahorrarías
+- **Automatizaciones:** Reglas de automatización activas
+
+**Notas:**
+
+- Las sugerencias mejoran con el tiempo (más datos = mejores sugerencias)
+- Si no hay suficientes datos, verás sugerencias genéricas
+- El "Impacto potencial" es una estimación conservadora
+- Las sugerencias se actualizan automáticamente
+
 ### Dashboard Financiero
 
 Ve a **"Finance"** o **"Finanzas"** para ver:

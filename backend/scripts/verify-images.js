@@ -81,25 +81,20 @@ async function verifyImages() {
     console.log('\n📊 ESTADÍSTICAS GENERALES\n');
     
     const totalProducts = await prisma.product.count();
-    const productsWithImages = await prisma.product.count({
-      where: {
-        images: {
-          not: null
-        }
-      }
-    });
-
-    // Contar productos con múltiples imágenes
-    const allProducts = await prisma.product.findMany({
-      where: {
-        images: {
-          not: null
-        }
-      },
+    // Contar productos donde images no es null ni string vacío
+    const allProductsForCount = await prisma.product.findMany({
       select: {
         images: true
       }
     });
+    const productsWithImages = allProductsForCount.filter(p => p.images && p.images.trim() !== '').length;
+
+    // Contar productos con múltiples imágenes
+    const allProducts = await prisma.product.findMany({
+      select: {
+        images: true
+      }
+    }).then(products => products.filter(p => p.images && p.images.trim() !== ''));
 
     let productsWithMultipleImages = 0;
     let productsWithSingleImage = 0;
