@@ -514,4 +514,104 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * ✅ LÍMITE DE PRODUCTOS PENDIENTES
+ * GET /api/settings/pending-products-limit
+ * Obtener límite configurado y estado actual
+ */
+router.get('/pending-products-limit', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+
+    // Solo admins pueden ver/editar el límite
+    if (!isAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Solo administradores pueden acceder a esta configuración'
+      });
+    }
+
+    const { pendingProductsLimitService } = await import('../services/pending-products-limit.service');
+    const limit = await pendingProductsLimitService.getMaxPendingProducts();
+    const limitInfo = await pendingProductsLimitService.getLimitInfo(undefined, true);
+
+    res.json({
+      success: true,
+      data: {
+        limit,
+        ...limitInfo
+      }
+    });
+  } catch (error: any) {
+    const { logger } = await import('../config/logger');
+    logger.error('Error getting pending products limit', {
+      error: error?.message || String(error),
+      userId: req.user?.userId
+    });
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener límite de productos pendientes',
+      error: error?.message || 'Unknown error'
+    });
+  }
+});
+
+/**
+ * ✅ LÍMITE DE PRODUCTOS PENDIENTES
+ * POST /api/settings/pending-products-limit
+ * Configurar límite máximo de productos pendientes (solo admin)
+ */
+router.post('/pending-products-limit', authenticate, async (req, res) => {
+  try {
+    const userId = req.user!.userId;
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+
+    // Solo admins pueden configurar el límite
+    if (!isAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Solo administradores pueden configurar el límite'
+      });
+    }
+
+    const { limit } = req.body;
+
+    if (typeof limit !== 'number' || limit < 10 || limit > 5000) {
+      return res.status(400).json({
+        success: false,
+        error: 'El límite debe ser un número entre 10 y 5000'
+      });
+    }
+
+    const { pendingProductsLimitService } = await import('../services/pending-products-limit.service');
+    await pendingProductsLimitService.setMaxPendingProducts(limit);
+
+    const limitInfo = await pendingProductsLimitService.getLimitInfo(undefined, true);
+
+    res.json({
+      success: true,
+      message: `Límite de productos pendientes actualizado a ${limit}`,
+      data: {
+        limit,
+        ...limitInfo
+      }
+    });
+  } catch (error: any) {
+    const { logger } = await import('../config/logger');
+    logger.error('Error setting pending products limit', {
+      error: error?.message || String(error),
+      userId: req.user?.userId,
+      limit: req.body?.limit
+    });
+    res.status(500).json({
+      success: false,
+      message: error?.message || 'Error al configurar límite de productos pendientes',
+      error: error?.message || 'Unknown error'
+    });
+  }
+});
+
 export default router;

@@ -198,6 +198,10 @@ class JobService {
       const scrapedData = await this.scrapingService.scrapeAliExpressProduct(aliexpressUrl, userId);
       await job.updateProgress(50);
 
+      // ✅ LÍMITE DE PRODUCTOS PENDIENTES: Validar antes de crear
+      const { pendingProductsLimitService } = await import('./pending-products-limit.service');
+      await pendingProductsLimitService.ensurePendingLimitNotExceeded(userId, false);
+
       // Create product in database
       // ✅ CORREGIDO: Pasar todas las imágenes disponibles, no solo la primera
       const product = await this.productService.createProduct(
@@ -212,7 +216,8 @@ class JobService {
           imageUrl: scrapedData.images?.[0], // Primera imagen como principal
           imageUrls: scrapedData.images || [], // ✅ TODAS las imágenes disponibles
           ...customData
-        }
+        },
+        false // isAdmin = false para jobs
       );
       await job.updateProgress(90);
 

@@ -118,7 +118,7 @@ function extractImageUrl(imagesString: string | null | undefined): string | null
 }
 
 export class ProductService {
-  async createProduct(userId: number, data: CreateProductDto) {
+  async createProduct(userId: number, data: CreateProductDto, isAdmin: boolean = false) {
     const {
       imageUrl,
       imageUrls,
@@ -130,6 +130,10 @@ export class ProductService {
       finalPrice,
       ...rest
     } = data;
+
+    // ✅ LÍMITE DE PRODUCTOS PENDIENTES: Validar antes de crear
+    const { pendingProductsLimitService } = await import('./pending-products-limit.service');
+    await pendingProductsLimitService.ensurePendingLimitNotExceeded(userId, isAdmin);
 
     const imagesPayload = buildImagePayload(imageUrl, imageUrls);
     const metadata = mergeProductMetadata(data) || {};

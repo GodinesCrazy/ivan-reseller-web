@@ -67,6 +67,13 @@ router.post('/add_for_approval', async (req: Request, res: Response) => {
   try {
     const { aliexpressUrl, scrape, ...customData } = req.body || {};
     const userId = req.user!.userId;
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    
+    // ✅ LÍMITE DE PRODUCTOS PENDIENTES: Validar antes de crear
+    const { pendingProductsLimitService } = await import('../../services/pending-products-limit.service');
+    await pendingProductsLimitService.ensurePendingLimitNotExceeded(userId, isAdmin);
+    
     let product;
 
     if (scrape && aliexpressUrl) {
@@ -89,7 +96,7 @@ router.post('/add_for_approval', async (req: Request, res: Response) => {
         ...customData
       };
 
-      product = await productService.createProduct(userId, productData);
+      product = await productService.createProduct(userId, productData, isAdmin);
       logger.info('Product created from AliExpress scraping', { productId: product.id, userId });
     } else {
       // Crear producto manualmente
@@ -114,7 +121,7 @@ router.post('/add_for_approval', async (req: Request, res: Response) => {
         productData: customData.productData
       };
 
-      product = await productService.createProduct(userId, productData);
+      product = await productService.createProduct(userId, productData, isAdmin);
       logger.info('Product created manually', { productId: product.id, userId });
     }
 

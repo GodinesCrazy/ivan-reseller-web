@@ -986,6 +986,10 @@ export class AutopilotSystem extends EventEmitter {
         );
       }
 
+      // ✅ LÍMITE DE PRODUCTOS PENDIENTES: Validar antes de crear
+      const { pendingProductsLimitService } = await import('./pending-products-limit.service');
+      await pendingProductsLimitService.ensurePendingLimitNotExceeded(currentUserId, false);
+
       // ✅ Usar transacción para crear producto y listing de forma atómica
       const product = await prisma.$transaction(async (tx) => {
         // Create product in database (con userId del usuario)

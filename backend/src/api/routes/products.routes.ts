@@ -201,7 +201,10 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       });
     }
     
-    const product = await productService.createProduct(req.user!.userId, validatedData as CreateProductDto);
+    // ✅ LÍMITE DE PRODUCTOS PENDIENTES: Validar antes de crear
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const product = await productService.createProduct(req.user!.userId, validatedData as CreateProductDto, isAdmin);
     
     // ✅ Función helper para extraer imageUrl del campo images (JSON)
     const extractImageUrl = (imagesString: string | null | undefined): string | null => {

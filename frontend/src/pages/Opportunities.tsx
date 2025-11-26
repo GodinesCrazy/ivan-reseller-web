@@ -234,10 +234,11 @@ export default function Opportunities() {
     loadMarketplaceEnvStatus();
     loadWorkflowEnvironment();
     
-    // ✅ OBJETIVO A: Pre-llenar keyword desde query params si viene de sugerencias IA
+    // ✅ CORREGIDO: Pre-llenar keyword desde query params si viene de sugerencias IA y ejecutar búsqueda automática
     const urlParams = new URLSearchParams(window.location.search);
     const keywordParam = urlParams.get('keyword');
     const marketplacesParam = urlParams.get('marketplaces');
+    const autoSearch = urlParams.get('autoSearch') === 'true';
     
     if (keywordParam) {
       setQuery(keywordParam);
@@ -251,9 +252,18 @@ export default function Opportunities() {
       }
       // Limpiar params de la URL después de leerlos
       window.history.replaceState({}, '', window.location.pathname);
+      
+      // ✅ Si viene desde sugerencias IA (autoSearch=true), ejecutar búsqueda automáticamente
+      if (autoSearch && keywordParam.trim()) {
+        // Pequeño delay para asegurar que el estado se actualizó
+        setTimeout(() => {
+          search();
+        }, 100);
+      }
+    } else {
+      // Si no hay keyword en params, ejecutar búsqueda con query por defecto
+      search();
     }
-    
-    search();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
