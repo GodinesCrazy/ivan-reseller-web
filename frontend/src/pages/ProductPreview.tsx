@@ -1,12 +1,101 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
 import MetricLabelWithTooltip from '@/components/MetricLabelWithTooltip';
 import { metricTooltips } from '@/config/metricTooltips';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+
+/**
+ * Image Gallery Component with Navigation
+ * Displays all product images in a carousel with thumbnails
+ */
+function ImageGallery({ images }: { images: string[] }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const goToPrevious = () => {
+    setCurrentIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+  };
+
+  const goToNext = () => {
+    setCurrentIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+  };
+
+  const goToImage = (index: number) => {
+    setCurrentIndex(index);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Main Image Display */}
+      <div className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 group">
+        <img
+          src={images[currentIndex]}
+          alt={`Product image ${currentIndex + 1}`}
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = 'https://via.placeholder.com/400?text=No+Image';
+          }}
+        />
+        
+        {/* Navigation Arrows (only show if more than 1 image) */}
+        {images.length > 1 && (
+          <>
+            <button
+              onClick={goToPrevious}
+              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-label="Previous image"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button
+              onClick={goToNext}
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-label="Next image"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </>
+        )}
+
+        {/* Image Counter */}
+        {images.length > 1 && (
+          <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+            {currentIndex + 1} / {images.length}
+          </div>
+        )}
+      </div>
+
+      {/* Thumbnail Navigation */}
+      {images.length > 1 && (
+        <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
+          {images.map((img, idx) => (
+            <button
+              key={idx}
+              onClick={() => goToImage(idx)}
+              className={`aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                idx === currentIndex
+                  ? 'border-blue-600 ring-2 ring-blue-200'
+                  : 'border-gray-200 hover:border-gray-400'
+              }`}
+            >
+              <img
+                src={img}
+                alt={`Thumbnail ${idx + 1}`}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = 'https://via.placeholder.com/100?text=No+Image';
+                }}
+              />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface ListingPreview {
   product: {
@@ -173,27 +262,14 @@ export default function ProductPreview() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Preview - Left Column (2/3) */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Images Gallery */}
+            {/* Images Gallery with Navigation */}
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <ImageIcon className="w-5 h-5" />
-                Imágenes
+                Imágenes ({preview.images?.length || 0})
               </h2>
               {preview.images && preview.images.length > 0 ? (
-                <div className="grid grid-cols-2 gap-4">
-                  {preview.images.map((img, idx) => (
-                    <div key={idx} className="aspect-square rounded-lg overflow-hidden bg-gray-100">
-                      <img
-                        src={img}
-                        alt={`Producto ${idx + 1}`}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = 'https://via.placeholder.com/400?text=No+Image';
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
+                <ImageGallery images={preview.images} />
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   No hay imágenes disponibles

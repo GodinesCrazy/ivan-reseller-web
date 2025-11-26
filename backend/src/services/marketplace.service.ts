@@ -488,8 +488,8 @@ export class MarketplaceService {
         }
       }
 
-      // ✅ CORREGIDO: Validar imágenes antes de publicar
-      const images = this.parseImageUrls(product.images);
+      // ✅ MULTI-IMAGE: Preparar todas las imágenes disponibles (hasta el límite de eBay)
+      const images = this.prepareImagesForMarketplace(product.images, 'ebay');
       if (!images || images.length === 0) {
         throw new AppError('Product must have at least one image before publishing. Please add images to the product.', 400);
       }
@@ -531,8 +531,15 @@ export class MarketplaceService {
         startPrice: price,
         quantity: this.resolveListingQuantity(product, customData?.quantity),
         condition: 'NEW',
-        images: this.parseImageUrls(product.images),
+        images: images, // ✅ MULTI-IMAGE: Todas las imágenes preparadas para eBay
       };
+
+      logger.info('Publishing product to eBay with multiple images', {
+        productId: product.id,
+        imageCount: images.length,
+        categoryId,
+        price,
+      });
 
       const result = await ebayService.createListing(`IVAN-${product.id}`, ebayProduct);
 
@@ -601,15 +608,13 @@ export class MarketplaceService {
       }
 
       // ✅ CORREGIDO: Validar imágenes antes de publicar
-      const images = this.parseImageUrls(product.images);
+      // ✅ MULTI-IMAGE: Preparar todas las imágenes disponibles (hasta el límite de MercadoLibre)
+      const images = this.prepareImagesForMarketplace(product.images, 'mercadolibre');
       if (!images || images.length === 0) {
         throw new AppError('Product must have at least one image before publishing. Please add images to the product.', 400);
       }
 
       // ✅ CORREGIDO: Validar categoría antes de publicar (ya se obtuvo arriba, no redeclarar)
-      if (!categoryId || categoryId.trim().length === 0) {
-        throw new AppError('Product must have a valid category before publishing. Please specify a category.', 400);
-      }
       if (!categoryId || categoryId.trim().length === 0) {
         throw new AppError('Product must have a valid category before publishing. Please specify a category.', 400);
       }
@@ -651,12 +656,19 @@ export class MarketplaceService {
         price,
         quantity: this.resolveListingQuantity(product, customData?.quantity),
         condition: 'new',
-        images: this.parseImageUrls(product.images),
+        images: images, // ✅ MULTI-IMAGE: Todas las imágenes preparadas para MercadoLibre
         shipping: {
           mode: 'me2',
           freeShipping: false,
         },
       };
+
+      logger.info('Publishing product to MercadoLibre with multiple images', {
+        productId: product.id,
+        imageCount: images.length,
+        categoryId,
+        price,
+      });
 
       const result = await mlService.createListing(mlProduct);
 
@@ -719,7 +731,8 @@ export class MarketplaceService {
 
       const metadata = this.parseProductMetadata(product);
       // ✅ CORREGIDO: Validar imágenes antes de publicar
-      const images = this.parseImageUrls(product.images);
+      // ✅ MULTI-IMAGE: Preparar todas las imágenes disponibles (hasta el límite de Amazon)
+      const images = this.prepareImagesForMarketplace(product.images, 'amazon');
       if (!images || images.length === 0) {
         throw new AppError('Product must have at least one image before publishing. Please add images to the product.', 400);
       }
@@ -790,7 +803,7 @@ export class MarketplaceService {
         price,
         currency: currency.toUpperCase(),
         quantity: this.resolveListingQuantity(product, customData?.quantity),
-        images: this.parseImageUrls(product.images),
+        images: images, // ✅ MULTI-IMAGE: Todas las imágenes preparadas para Amazon
         category,
         brand: product.brand || 'Generic',
         manufacturer: product.manufacturer || product.brand || 'Generic',
@@ -1088,7 +1101,7 @@ export class MarketplaceService {
         logger.debug('Failed to generate AI description for preview, using original', { error });
       }
 
-      // Parse images
+      // ✅ MULTI-IMAGE: Obtener todas las imágenes del producto para la vista previa
       const images = this.parseImageUrls(product.images);
       
       // Calculate profit
@@ -1450,6 +1463,10 @@ export class MarketplaceService {
     return {};
   }
 
+  /**
+   * Parse image URLs from various formats (JSON string, array, single URL)
+   * Returns all valid image URLs without truncation
+   */
   private parseImageUrls(value: any): string[] {
     if (!value) return [];
 
@@ -1476,6 +1493,56 @@ export class MarketplaceService {
     }
 
     return [];
+  }
+
+  /**
+   * Get maximum images allowed per marketplace
+   * eBay: 12 images maximum
+   * MercadoLibre: Up to 10 images (depending on plan)
+   * Amazon: Up to 9 images (main + 8 additional)
+   */
+  private getMarketplaceImageLimit(marketplace: MarketplaceName): number {
+    const limits: Record<MarketplaceName, number> = {
+      ebay: 12,
+      mercadolibre: 10,
+      amazon: 9,
+    };
+    return limits[marketplace] || 12; // Default to eBay limit
+  }
+
+  /**
+   * Prepare images array for marketplace publication
+   * Ensures all images are included up to marketplace limit, maintaining order
+   */
+  private prepareImagesForMarketplace(
+    productImages: any,
+    marketplace: MarketplaceName
+  ): string[] {
+    const allImages = this.parseImageUrls(productImages);
+    
+    if (allImages.length === 0) {
+      logger.warn('No valid images found for product', { marketplace });
+      return [];
+    }
+
+    const maxImages = this.getMarketplaceImageLimit(marketplace);
+    const preparedImages = allImages.slice(0, maxImages);
+
+    if (allImages.length > maxImages) {
+      logger.info(`Product has ${allImages.length} images, limiting to ${maxImages} for ${marketplace}`, {
+        totalImages: allImages.length,
+        marketplace,
+        maxImages,
+        keptImages: preparedImages.length,
+      });
+    } else {
+      logger.info(`Preparing ${preparedImages.length} images for ${marketplace} publication`, {
+        totalImages: preparedImages.length,
+        marketplace,
+      });
+    }
+
+    return preparedImages;
   }
 
   private resolveListingPrice(product: any, override?: number): number {

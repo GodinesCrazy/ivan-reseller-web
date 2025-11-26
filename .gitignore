@@ -53,3 +53,8 @@ prisma/migrations/**/migration.sql
 *.pem
 *.key
 .cache/
+
+# API Keys - NEVER commit these files
+API.txt
+APIS.txt
+*.api.txt
