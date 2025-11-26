@@ -57,6 +57,7 @@ import authStatusRoutes from './api/routes/auth-status.routes';
 import configAuditRoutes from './api/routes/config-audit.routes';
 import manualCaptchaRoutes from './api/routes/manual-captcha.routes';
 import accessRequestsRoutes from './api/routes/access-requests.routes';
+import listingLifetimeRoutes from './api/routes/listing-lifetime.routes';
 
 const app: Application = express();
 app.set('trust proxy', 1);
@@ -264,6 +265,7 @@ app.use('/api/regional', regionalRoutes);
 app.use('/api/manual-auth', manualAuthRoutes);
 app.use('/api/auth-status', authStatusRoutes);
 app.use('/api/config-audit', configAuditRoutes);
+app.use('/api/listing-lifetime', listingLifetimeRoutes);
 
 // Swagger API Documentation
 if (env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'true') {

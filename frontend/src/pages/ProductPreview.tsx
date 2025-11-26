@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Save } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Save, Clock, Info } from 'lucide-react';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -149,6 +149,8 @@ export default function ProductPreview() {
     description: '',
     price: 0,
   });
+  const [lifetimeDecision, setLifetimeDecision] = useState<any>(null);
+  const [loadingLifetime, setLoadingLifetime] = useState(false);
 
   useEffect(() => {
     if (!id) {
@@ -171,6 +173,9 @@ export default function ProductPreview() {
 
       if (response.data?.success && response.data?.data) {
         setPreview(response.data.data);
+        
+        // ✅ Cargar decisión de lifetime si el producto está publicado
+        await loadLifetimeDecision();
       } else {
         throw new Error(response.data?.error || 'No se pudo generar la vista previa');
       }
@@ -181,6 +186,29 @@ export default function ProductPreview() {
       toast.error(errorMsg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadLifetimeDecision = async () => {
+    if (!id) return;
+    
+    try {
+      setLoadingLifetime(true);
+      const response = await api.get(`/api/listing-lifetime/product/${id}`);
+      
+      if (response.data?.success && response.data?.data?.decisions?.length > 0) {
+        // Mostrar la decisión del marketplace actual o la primera disponible
+        const marketplaceDecision = response.data.data.decisions.find(
+          (d: any) => d.marketplace === marketplace
+        ) || response.data.data.decisions[0];
+        
+        setLifetimeDecision(marketplaceDecision);
+      }
+    } catch (err: any) {
+      // No mostrar error si el producto no está publicado aún
+      console.debug('Lifetime decision not available:', err?.message);
+    } finally {
+      setLoadingLifetime(false);
     }
   };
 
@@ -439,6 +467,63 @@ export default function ProductPreview() {
                     <span className="text-green-600">
                       {formatCurrencySimple(preview.fees.netProfit, preview.currency)}
                     </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ✅ Optimización de Tiempo de Publicación */}
+            {lifetimeDecision && !loadingLifetime && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Clock className="w-5 h-5" />
+                  Optimización IA de Tiempo de Publicación
+                </h2>
+                <div className="space-y-3">
+                  <div className={`p-3 rounded-lg border-2 ${
+                    lifetimeDecision.decision.mode === 'KEEP' ? 'bg-green-50 border-green-200' :
+                    lifetimeDecision.decision.mode === 'IMPROVE' ? 'bg-yellow-50 border-yellow-200' :
+                    lifetimeDecision.decision.mode === 'PAUSE' ? 'bg-orange-50 border-orange-200' :
+                    'bg-red-50 border-red-200'
+                  }`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                          lifetimeDecision.decision.mode === 'KEEP' ? 'bg-green-200 text-green-800' :
+                          lifetimeDecision.decision.mode === 'IMPROVE' ? 'bg-yellow-200 text-yellow-800' :
+                          lifetimeDecision.decision.mode === 'PAUSE' ? 'bg-orange-200 text-orange-800' :
+                          'bg-red-200 text-red-800'
+                        }`}>
+                          {lifetimeDecision.decision.mode === 'KEEP' ? 'MANTENER' :
+                           lifetimeDecision.decision.mode === 'IMPROVE' ? 'MEJORAR' :
+                           lifetimeDecision.decision.mode === 'PAUSE' ? 'PAUSAR' :
+                           'DESPUBLICAR'}
+                        </span>
+                        <span className="text-xs text-gray-600">
+                          Confianza: {Math.round(lifetimeDecision.decision.confidence * 100)}%
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-700 mb-2">
+                      {lifetimeDecision.decision.reason}
+                    </p>
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <div>Revisar en: {lifetimeDecision.decision.recommendedDaysToReview} días</div>
+                      <div>Tiempo máximo sugerido: {lifetimeDecision.decision.recommendedMaxLifetime} días</div>
+                      {lifetimeDecision.metrics && (
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <div>Días publicados: {lifetimeDecision.metrics.listingAgeDays}</div>
+                          <div>Ventas: {lifetimeDecision.metrics.totalSalesUnits}</div>
+                          <div>Ganancia neta: {formatCurrencySimple(lifetimeDecision.metrics.totalNetProfit, preview.currency)}</div>
+                          <div>Ganancia diaria promedio: {formatCurrencySimple(lifetimeDecision.metrics.avgDailyProfit, preview.currency)}</div>
+                          <div>ROI: {lifetimeDecision.metrics.roiPercent.toFixed(1)}%</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2 text-xs text-gray-500">
+                    <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>Esta recomendación se basa en datos reales de ventas y rendimiento del listing.</span>
                   </div>
                 </div>
               </div>

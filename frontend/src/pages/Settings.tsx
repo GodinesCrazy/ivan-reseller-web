@@ -21,6 +21,7 @@ import {
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useTheme } from '../hooks/useTheme';
+import { useAuthStore } from '../stores/authStore';
 
 interface UserSettings {
   language: string;
@@ -108,11 +109,39 @@ export default function Settings() {
   // API Status
   const [apiStatus, setApiStatus] = useState<ApiStatus[]>([]);
 
+  // ✅ LÍMITE DE PRODUCTOS PENDIENTES (solo admin)
+  const [pendingProductsLimit, setPendingProductsLimit] = useState<{
+    limit: number;
+    current: number;
+    remaining: number;
+    percentage: number;
+  } | null>(null);
+  const [savingLimit, setSavingLimit] = useState(false);
+  const [newLimitValue, setNewLimitValue] = useState<number>(100);
+
+  // ✅ OPTIMIZADOR DE TIEMPO DE PUBLICACIÓN (solo admin)
+  const [lifetimeConfig, setLifetimeConfig] = useState<{
+    mode: 'automatic' | 'manual';
+    minLearningDays: number;
+    maxLifetimeDaysDefault: number;
+    minRoiPercent: number;
+    minDailyProfitUsd: number;
+  } | null>(null);
+  const [savingLifetimeConfig, setSavingLifetimeConfig] = useState(false);
+
+  // Obtener rol del usuario
+  const { user } = useAuthStore();
+  const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
+
   useEffect(() => {
     loadSettings();
     loadProfile();
     loadNotifications();
     loadApiStatus();
+    if (isAdmin) {
+      loadPendingProductsLimit();
+      loadLifetimeConfig();
+    }
   }, []);
 
   const loadSettings = async () => {
@@ -210,6 +239,74 @@ export default function Settings() {
       })));
     } catch (error: any) {
       console.error('Error loading API status:', error);
+    }
+  };
+
+  // ✅ LÍMITE DE PRODUCTOS PENDIENTES
+  const loadPendingProductsLimit = async () => {
+    try {
+      const { data } = await api.get('/api/settings/pending-products-limit');
+      if (data?.success && data?.data) {
+        setPendingProductsLimit(data.data);
+        setNewLimitValue(data.data.limit);
+      }
+    } catch (error: any) {
+      console.error('Error loading pending products limit:', error);
+    }
+  };
+
+  const savePendingProductsLimit = async () => {
+    if (newLimitValue < 10 || newLimitValue > 5000) {
+      toast.error('El límite debe estar entre 10 y 5000');
+      return;
+    }
+
+    setSavingLimit(true);
+    try {
+      const { data } = await api.post('/api/settings/pending-products-limit', {
+        limit: newLimitValue
+      });
+      if (data?.success) {
+        setPendingProductsLimit(data.data);
+        toast.success(`Límite actualizado a ${newLimitValue} productos pendientes`);
+      } else {
+        throw new Error(data?.message || 'Failed to save limit');
+      }
+    } catch (error: any) {
+      toast.error('Error al guardar límite: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setSavingLimit(false);
+    }
+  };
+
+  // ✅ OPTIMIZADOR DE TIEMPO DE PUBLICACIÓN
+  const loadLifetimeConfig = async () => {
+    try {
+      const { data } = await api.get('/api/listing-lifetime/config');
+      if (data?.success && data?.data) {
+        setLifetimeConfig(data.data);
+      }
+    } catch (error: any) {
+      console.error('Error loading lifetime config:', error);
+    }
+  };
+
+  const saveLifetimeConfig = async () => {
+    if (!lifetimeConfig) return;
+
+    setSavingLifetimeConfig(true);
+    try {
+      const { data } = await api.post('/api/listing-lifetime/config', lifetimeConfig);
+      if (data?.success) {
+        setLifetimeConfig(data.data);
+        toast.success('Configuración del optimizador actualizada correctamente');
+      } else {
+        throw new Error(data?.message || 'Failed to save config');
+      }
+    } catch (error: any) {
+      toast.error('Error al guardar configuración: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setSavingLifetimeConfig(false);
     }
   };
 
@@ -440,6 +537,185 @@ export default function Settings() {
                 </select>
               </div>
             </div>
+
+            {/* ✅ LÍMITE DE PRODUCTOS PENDIENTES (solo admin) */}
+            {isAdmin && (
+              <div className="pt-6 border-t">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Límite de Productos Pendientes</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Límite máximo de productos en estado pendiente de publicación. Este valor ayuda a controlar el uso de recursos del sistema.
+                </p>
+
+                {pendingProductsLimit && (
+                  <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">Productos pendientes actuales:</span>
+                      <span className="text-sm font-semibold text-gray-900">
+                        {pendingProductsLimit.current} / {pendingProductsLimit.limit}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                      <div
+                        className={`h-2 rounded-full transition-all ${
+                          pendingProductsLimit.percentage >= 90
+                            ? 'bg-red-600'
+                            : pendingProductsLimit.percentage >= 70
+                            ? 'bg-yellow-600'
+                            : 'bg-green-600'
+                        }`}
+                        style={{ width: `${Math.min(pendingProductsLimit.percentage, 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-gray-600">
+                      <span>Restantes: {pendingProductsLimit.remaining}</span>
+                      <span>{pendingProductsLimit.percentage}% utilizado</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Máximo de Productos Pendientes
+                    </label>
+                    <input
+                      type="number"
+                      min="10"
+                      max="5000"
+                      value={newLimitValue}
+                      onChange={(e) => setNewLimitValue(parseInt(e.target.value) || 100)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                      placeholder="100"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Valor entre 10 y 5000. Valor por defecto: 100
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={savePendingProductsLimit}
+                      disabled={savingLimit || newLimitValue < 10 || newLimitValue > 5000}
+                      className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <Save className="w-4 h-4" />
+                      {savingLimit ? 'Guardando...' : 'Guardar Límite'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ✅ OPTIMIZACIÓN DE TIEMPO DE PUBLICACIÓN (solo admin) */}
+            {isAdmin && (
+              <div className="pt-6 border-t">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Optimización de Tiempo de Publicación</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Configura el optimizador de tiempo de publicación que analiza el rendimiento de tus listings y sugiere cuándo mantener, mejorar o despublicar productos.
+                </p>
+
+                {lifetimeConfig && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Modo de Operación
+                      </label>
+                      <select
+                        value={lifetimeConfig.mode}
+                        onChange={(e) => setLifetimeConfig({ ...lifetimeConfig, mode: e.target.value as 'automatic' | 'manual' })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="manual">Manual (Solo sugerencias)</option>
+                        <option value="automatic">Automático (El sistema toma decisiones)</option>
+                      </select>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Manual: Solo muestra recomendaciones. Automático: El sistema puede despublicar o pausar listings automáticamente.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Días Mínimos de Aprendizaje
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="30"
+                        value={lifetimeConfig.minLearningDays}
+                        onChange={(e) => setLifetimeConfig({ ...lifetimeConfig, minLearningDays: parseInt(e.target.value) || 7 })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Período mínimo antes de evaluar un listing (1-30 días). Valor por defecto: 7 días.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Tiempo Máximo de Publicación (días)
+                      </label>
+                      <input
+                        type="number"
+                        min="7"
+                        max="365"
+                        value={lifetimeConfig.maxLifetimeDaysDefault}
+                        onChange={(e) => setLifetimeConfig({ ...lifetimeConfig, maxLifetimeDaysDefault: parseInt(e.target.value) || 30 })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Tiempo máximo sugerido de permanencia por defecto (7-365 días). Valor por defecto: 30 días.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        ROI Mínimo Aceptable (%)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="1000"
+                        step="0.1"
+                        value={lifetimeConfig.minRoiPercent}
+                        onChange={(e) => setLifetimeConfig({ ...lifetimeConfig, minRoiPercent: parseFloat(e.target.value) || 10 })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        ROI mínimo para considerar un listing como aceptable (0-1000%). Valor por defecto: 10%.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Ganancia Diaria Mínima (USD)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={lifetimeConfig.minDailyProfitUsd}
+                        onChange={(e) => setLifetimeConfig({ ...lifetimeConfig, minDailyProfitUsd: parseFloat(e.target.value) || 0.5 })}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Ganancia diaria mínima aceptable en USD. Valor por defecto: $0.50.
+                      </p>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                      <button
+                        onClick={saveLifetimeConfig}
+                        disabled={savingLifetimeConfig || !lifetimeConfig}
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                      >
+                        <Save className="w-4 h-4" />
+                        {savingLifetimeConfig ? 'Guardando...' : 'Guardar Configuración'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex justify-end pt-4 border-t">
               <button

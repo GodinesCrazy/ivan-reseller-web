@@ -18,10 +18,12 @@ export class ScheduledTasksService {
   private commissionProcessingQueue: Queue | null = null;
   private authHealthQueue: Queue | null = null;
   private fxRatesQueue: Queue | null = null;
+  private listingLifetimeQueue: Queue | null = null;
   private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
   private fxRatesWorker: Worker | null = null;
+  private listingLifetimeWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
 
@@ -60,6 +62,11 @@ export class ScheduledTasksService {
         connection: this.bullMQRedis as any
       });
     }
+
+    // ✅ Cola para optimizador de tiempo de publicación
+    this.listingLifetimeQueue = new Queue('listing-lifetime-optimizer', {
+      connection: this.bullMQRedis as any
+    });
   }
 
   /**
@@ -123,6 +130,21 @@ export class ScheduledTasksService {
       );
     }
 
+    // ✅ Worker para optimizador de tiempo de publicación
+    if (this.listingLifetimeQueue) {
+      this.listingLifetimeWorker = new Worker(
+        'listing-lifetime-optimization',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running listing lifetime optimization', { jobId: job.id });
+          return await this.processListingLifetimeOptimization();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1
+        }
+      );
+    }
+
     // Event listeners
     this.financialAlertsWorker.on('completed', (job) => {
       logger.info('Scheduled Tasks: Financial alerts check completed', { jobId: job.id });
@@ -164,6 +186,20 @@ export class ScheduledTasksService {
 
       this.fxRatesWorker.on('failed', (job, err) => {
         logger.error('Scheduled Tasks: FX rates refresh failed', {
+          jobId: job?.id,
+          error: err.message,
+        });
+      });
+    }
+
+    // ✅ Event listeners para optimizador de tiempo de publicación
+    if (this.listingLifetimeWorker) {
+      this.listingLifetimeWorker.on('completed', (job) => {
+        logger.info('Scheduled Tasks: Listing lifetime optimization completed', { jobId: job.id });
+      });
+
+      this.listingLifetimeWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Listing lifetime optimization failed', {
           jobId: job?.id,
           error: err.message,
         });
@@ -228,6 +264,21 @@ export class ScheduledTasksService {
           },
           removeOnComplete: 5,
           removeOnFail: 5,
+        }
+      );
+    }
+
+    // ✅ Optimizador de tiempo de publicación: cada día a las 3:00 AM
+    if (this.listingLifetimeQueue) {
+      this.listingLifetimeQueue.add(
+        'daily-listing-lifetime-optimization',
+        {},
+        {
+          repeat: {
+            pattern: '0 3 * * *' // 3:00 AM todos los días
+          },
+          removeOnComplete: 10,
+          removeOnFail: 5
         }
       );
     }
@@ -636,6 +687,271 @@ export class ScheduledTasksService {
   }
 
   /**
+   * ✅ Procesar optimización de tiempo de publicación para todos los usuarios
+   */
+  private async processListingLifetimeOptimization(): Promise<{
+    processed: number;
+    actionsTaken: number;
+    suggestionsCreated: number;
+    errors: Array<{ userId: number; error: string }>;
+  }> {
+    try {
+      const { listingLifetimeService } = await import('./listing-lifetime.service');
+      const { MarketplaceService } = await import('./marketplace.service');
+      const { EbayService } = await import('./ebay.service');
+      const { MercadoLibreService } = await import('./mercadolibre.service');
+      
+      const config = await listingLifetimeService.getConfig();
+      const marketplaceService = new MarketplaceService();
+      
+      // Obtener todos los usuarios activos
+      const users = await prisma.user.findMany({
+        where: { isActive: true },
+        select: { id: true }
+      });
+
+      let processed = 0;
+      let actionsTaken = 0;
+      let suggestionsCreated = 0;
+      const errors: Array<{ userId: number; error: string }> = [];
+
+      for (const user of users) {
+        try {
+          // Evaluar todos los listings del usuario
+          const results = await listingLifetimeService.evaluateAllUserListings(user.id);
+
+          for (const result of results) {
+            processed++;
+            const { decision, listingId, marketplace, productId, metrics } = result;
+
+            // Solo tomar acciones en modo automático
+            if (config.mode === 'automatic') {
+              // Si la decisión es UNPUBLISH o PAUSE y se cumplió el tiempo máximo
+              if ((decision.mode === 'UNPUBLISH' || decision.mode === 'PAUSE') &&
+                  metrics.listingAgeDays >= decision.recommendedMaxLifetime) {
+                try {
+                  // Obtener el listing con credenciales
+                  const listing = await prisma.marketplaceListing.findUnique({
+                    where: { id: listingId },
+                    include: { 
+                      product: true,
+                      user: {
+                        include: {
+                          marketplaceCredentials: {
+                            where: {
+                              marketplace,
+                              isActive: true
+                            }
+                          }
+                        }
+                      }
+                    }
+                  });
+
+                  if (listing && listing.product && listing.listingId) {
+                    // Obtener credenciales del usuario
+                    const credentials = await marketplaceService.getCredentials(
+                      user.id,
+                      marketplace as any,
+                      listing.user.marketplaceCredentials[0]?.environment || 'production'
+                    );
+
+                    if (credentials && !credentials.issues?.length) {
+                      if (decision.mode === 'UNPUBLISH') {
+                        // Despublicar del marketplace
+                        try {
+                          if (marketplace === 'ebay') {
+                            const ebayService = new EbayService({
+                              ...(credentials.credentials as any),
+                              sandbox: credentials.environment === 'sandbox'
+                            });
+                            await ebayService.endListing(listing.listingId, 'NotAvailable');
+                          } else if (marketplace === 'mercadolibre') {
+                            const mlService = new MercadoLibreService(credentials.credentials as any);
+                            await mlService.closeListing(listing.listingId);
+                          }
+                          
+                          // Actualizar estado del producto
+                          await prisma.product.update({
+                            where: { id: productId },
+                            data: { 
+                              status: 'INACTIVE',
+                              isPublished: false
+                            }
+                          });
+
+                          logger.info('Listing lifetime: Unpublished listing', {
+                            userId: user.id,
+                            listingId,
+                            marketplace,
+                            reason: decision.reason
+                          });
+                          actionsTaken++;
+                        } catch (unpublishError: any) {
+                          logger.error('Error unpublishing listing', {
+                            error: unpublishError?.message || String(unpublishError),
+                            userId: user.id,
+                            listingId
+                          });
+                        }
+                      } else if (decision.mode === 'PAUSE') {
+                        // Pausar listing
+                        try {
+                          if (marketplace === 'mercadolibre') {
+                            const mlService = new MercadoLibreService(credentials.credentials as any);
+                            await mlService.pauseListing(listing.listingId);
+                          }
+                          
+                          // Marcar producto como INACTIVE
+                          await prisma.product.update({
+                            where: { id: productId },
+                            data: { status: 'INACTIVE' }
+                          });
+                          
+                          logger.info('Listing lifetime: Paused listing', {
+                            userId: user.id,
+                            listingId,
+                            marketplace,
+                            reason: decision.reason
+                          });
+                          actionsTaken++;
+                        } catch (pauseError: any) {
+                          logger.error('Error pausing listing', {
+                            error: pauseError?.message || String(pauseError),
+                            userId: user.id,
+                            listingId
+                          });
+                        }
+                      }
+                    }
+                  }
+                } catch (actionError: any) {
+                  logger.error('Error taking action on listing', {
+                    error: actionError?.message || String(actionError),
+                    userId: user.id,
+                    listingId
+                  });
+                }
+              }
+              // Si la decisión es IMPROVE, crear sugerencia
+              else if (decision.mode === 'IMPROVE') {
+                try {
+                  await prisma.aISuggestion.create({
+                    data: {
+                      userId: user.id,
+                      type: 'listing',
+                      priority: 'medium',
+                      title: `Optimizar listing: Producto #${productId} en ${marketplace}`,
+                      description: decision.reason,
+                      impactRevenue: metrics.totalNetProfit,
+                      impactTime: 1,
+                      difficulty: 'medium',
+                      confidence: decision.confidence * 100,
+                      actionable: true,
+                      implemented: false,
+                      estimatedTime: '15 minutos',
+                      requirements: JSON.stringify(['Credenciales activas del marketplace']),
+                      steps: JSON.stringify([
+                        'Revisar título y descripción del producto',
+                        'Ajustar precio según recomendación',
+                        'Mejorar imágenes si es necesario',
+                        'Revisar competencia en el marketplace'
+                      ]),
+                      relatedProducts: JSON.stringify([productId]),
+                      metrics: JSON.stringify({
+                        currentValue: metrics.roiPercent,
+                        targetValue: config.minRoiPercent * 1.5,
+                        unit: '%'
+                      })
+                    }
+                  });
+                  suggestionsCreated++;
+                } catch (suggestionError: any) {
+                  logger.error('Error creating suggestion', {
+                    error: suggestionError?.message || String(suggestionError),
+                    userId: user.id,
+                    listingId
+                  });
+                }
+              }
+            }
+            // En modo manual, solo crear sugerencias
+            else {
+              if (decision.mode === 'IMPROVE' || decision.mode === 'UNPUBLISH' || decision.mode === 'PAUSE') {
+                try {
+                  await prisma.aISuggestion.create({
+                    data: {
+                      userId: user.id,
+                      type: 'listing',
+                      priority: decision.mode === 'UNPUBLISH' ? 'high' : 'medium',
+                      title: `Revisar listing: Producto #${productId} en ${marketplace}`,
+                      description: decision.reason,
+                      impactRevenue: metrics.totalNetProfit,
+                      impactTime: 0.5,
+                      difficulty: 'easy',
+                      confidence: decision.confidence * 100,
+                      actionable: true,
+                      implemented: false,
+                      estimatedTime: '5 minutos',
+                      requirements: JSON.stringify(['Acceso al producto']),
+                      steps: JSON.stringify([
+                        'Revisar métricas del listing',
+                        'Tomar acción según recomendación',
+                        'Verificar resultados'
+                      ]),
+                      relatedProducts: JSON.stringify([productId]),
+                      metrics: JSON.stringify({
+                        currentValue: metrics.roiPercent,
+                        targetValue: config.minRoiPercent,
+                        unit: '%'
+                      })
+                    }
+                  });
+                  suggestionsCreated++;
+                } catch (suggestionError: any) {
+                  logger.error('Error creating suggestion', {
+                    error: suggestionError?.message || String(suggestionError),
+                    userId: user.id,
+                    listingId
+                  });
+                }
+              }
+            }
+          }
+        } catch (userError: any) {
+          errors.push({
+            userId: user.id,
+            error: userError?.message || String(userError)
+          });
+          logger.error('Error processing user listings', {
+            error: userError?.message || String(userError),
+            userId: user.id
+          });
+        }
+      }
+
+      logger.info('Listing lifetime optimization completed', {
+        processed,
+        actionsTaken,
+        suggestionsCreated,
+        errors: errors.length
+      });
+
+      return {
+        processed,
+        actionsTaken,
+        suggestionsCreated,
+        errors
+      };
+    } catch (error: any) {
+      logger.error('Error in listing lifetime optimization', {
+        error: error?.message || String(error)
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Cerrar workers y limpiar recursos
    */
   async shutdown(): Promise<void> {
@@ -651,6 +967,9 @@ export class ScheduledTasksService {
     if (this.fxRatesWorker) {
       await this.fxRatesWorker.close();
     }
+    if (this.listingLifetimeWorker) {
+      await this.listingLifetimeWorker.close();
+    }
     if (this.financialAlertsQueue) {
       await this.financialAlertsQueue.close();
     }
@@ -662,6 +981,9 @@ export class ScheduledTasksService {
     }
     if (this.fxRatesQueue) {
       await this.fxRatesQueue.close();
+    }
+    if (this.listingLifetimeQueue) {
+      await this.listingLifetimeQueue.close();
     }
   }
 }
