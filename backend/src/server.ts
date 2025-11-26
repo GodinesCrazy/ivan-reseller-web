@@ -373,26 +373,36 @@ async function startServer() {
         console.warn('⚠️  Warning: Could not recover persisted API statuses:', error.message);
       }
       
-      // Start API Health Monitor (with SIGSEGV fixes applied)
-      // ✅ FIX IMPLEMENTADO: Serialización de checks de usuarios y evitar force health checks
-      // Esto previene ejecución paralela de operaciones crypto nativas + Prisma queries + HTTP requests
-      try {
-        // Delay start to avoid conflicts during server initialization
-        setTimeout(async () => {
-          try {
-            await apiHealthMonitor.start();
-            console.log('✅ API Health Monitor started');
-            console.log('  - Monitoring API health every 15 minutes');
-            console.log('  - Checks are serialized to prevent SIGSEGV crashes');
-            console.log('  - Only credential validation (no HTTP requests) during automated checks');
-          } catch (healthError: any) {
-            console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
-            console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
-          }
-        }, 10000); // Start after 10 seconds to let server fully initialize
-      } catch (error: any) {
-        console.warn('⚠️  Warning: Could not initialize API Health Monitor:', error.message);
-        console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
+      // ⚠️ CRITICAL FIX SIGSEGV: Deshabilitar API Health Monitor automático en producción
+      // Los logs muestran crashes SIGSEGV cada 45-50 minutos debido a la acumulación de
+      // operaciones crypto nativas + Prisma queries + HTTP requests durante los health checks.
+      // Los checks manuales desde la UI (/api/system/test-apis) siguen funcionando correctamente.
+      const isProduction = process.env.NODE_ENV === 'production';
+      if (isProduction) {
+        console.log('⚠️  API Health Monitor automático DESHABILITADO en producción');
+        console.log('  - Esto previene crashes SIGSEGV recurrentes causados por operaciones crypto acumuladas');
+        console.log('  - Los checks manuales desde la UI (Settings → API Settings → Test APIs) siguen funcionando');
+        console.log('  - Para habilitarlo en el futuro, considera aumentar el intervalo a 1 hora o más');
+      } else {
+        // En desarrollo/staging, el monitor puede estar habilitado con intervalos largos
+        try {
+          // Delay start to avoid conflicts during server initialization
+          setTimeout(async () => {
+            try {
+              await apiHealthMonitor.start();
+              console.log('✅ API Health Monitor started (development mode)');
+              console.log('  - Monitoring API health every 15 minutes');
+              console.log('  - Checks are serialized to prevent SIGSEGV crashes');
+              console.log('  - Only credential validation (no HTTP requests) during automated checks');
+            } catch (healthError: any) {
+              console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
+              console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
+            }
+          }, 10000); // Start after 10 seconds to let server fully initialize
+        } catch (error: any) {
+          console.warn('⚠️  Warning: Could not initialize API Health Monitor:', error.message);
+          console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
+        }
       }
       console.log('');
       
