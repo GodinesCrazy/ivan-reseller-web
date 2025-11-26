@@ -86,8 +86,16 @@ class MeetingRoomService {
       return {
         available: true
       };
-    } catch (error) {
-      logger.error('Error checking admin availability', { error });
+    } catch (error: any) {
+      // Detectar si el error es porque la tabla no existe
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('does not exist') || 
+          errorMessage.includes('Unknown table') ||
+          errorMessage.includes('relation') && errorMessage.includes('does not exist')) {
+        logger.error('Meeting rooms table does not exist. Migration may be required.', { error });
+        throw new AppError('La tabla de reuniones no existe. Por favor, ejecuta la migración de base de datos.', 500);
+      }
+      logger.error('Error checking admin availability', { error, errorMessage });
       throw new AppError('Error al verificar disponibilidad del administrador', 500);
     }
   }
@@ -195,11 +203,19 @@ class MeetingRoomService {
         status: 'WAITING',
         userId: newMeeting.userId
       };
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof AppError) {
         throw error;
       }
-      logger.error('Error creating or joining meeting', { error, userId, isAdmin });
+      // Detectar si el error es porque la tabla no existe
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('does not exist') || 
+          errorMessage.includes('Unknown table') ||
+          errorMessage.includes('relation') && errorMessage.includes('does not exist')) {
+        logger.error('Meeting rooms table does not exist. Migration may be required.', { error });
+        throw new AppError('La tabla de reuniones no existe. Por favor, ejecuta la migración de base de datos.', 500);
+      }
+      logger.error('Error creating or joining meeting', { error, errorMessage, userId, isAdmin });
       throw new AppError('Error al crear o unirse a la reunión', 500);
     }
   }
@@ -237,11 +253,18 @@ class MeetingRoomService {
       });
 
       logger.info('Meeting ended', { roomId, userId, duration });
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof AppError) {
         throw error;
       }
-      logger.error('Error ending meeting', { error, roomId, userId });
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('does not exist') || 
+          errorMessage.includes('Unknown table') ||
+          errorMessage.includes('relation') && errorMessage.includes('does not exist')) {
+        logger.error('Meeting rooms table does not exist. Migration may be required.', { error });
+        throw new AppError('La tabla de reuniones no existe. Por favor, ejecuta la migración de base de datos.', 500);
+      }
+      logger.error('Error ending meeting', { error, errorMessage, roomId, userId });
       throw new AppError('Error al finalizar la reunión', 500);
     }
   }
@@ -290,11 +313,18 @@ class MeetingRoomService {
         endedAt: meeting.endedAt || undefined,
         duration: meeting.duration || undefined
       };
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof AppError) {
         throw error;
       }
-      logger.error('Error getting meeting info', { error, roomId, userId });
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('does not exist') || 
+          errorMessage.includes('Unknown table') ||
+          errorMessage.includes('relation') && errorMessage.includes('does not exist')) {
+        logger.error('Meeting rooms table does not exist. Migration may be required.', { error });
+        throw new AppError('La tabla de reuniones no existe. Por favor, ejecuta la migración de base de datos.', 500);
+      }
+      logger.error('Error getting meeting info', { error, errorMessage, roomId, userId });
       throw new AppError('Error al obtener información de la reunión', 500);
     }
   }
@@ -344,8 +374,15 @@ class MeetingRoomService {
         endedAt: meeting.endedAt || undefined,
         duration: meeting.duration || undefined
       }));
-    } catch (error) {
-      logger.error('Error getting user meeting history', { error, userId });
+    } catch (error: any) {
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('does not exist') || 
+          errorMessage.includes('Unknown table') ||
+          errorMessage.includes('relation') && errorMessage.includes('does not exist')) {
+        logger.error('Meeting rooms table does not exist. Migration may be required.', { error });
+        throw new AppError('La tabla de reuniones no existe. Por favor, ejecuta la migración de base de datos.', 500);
+      }
+      logger.error('Error getting user meeting history', { error, errorMessage, userId });
       throw new AppError('Error al obtener historial de reuniones', 500);
     }
   }
