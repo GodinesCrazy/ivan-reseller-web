@@ -828,6 +828,7 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
         'zenrows': ['ZENROWS_API_KEY'],
         '2captcha': ['CAPTCHA_2CAPTCHA_KEY'],
         'paypal': ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET'],
+        'googletrends': [], // ✅ Opcional - no requiere campos
         'aliexpress': ['ALIEXPRESS_EMAIL', 'ALIEXPRESS_PASSWORD'],
       };
 
@@ -843,7 +844,8 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
         'scraperapi': { 'apiKey': 'SCRAPERAPI_KEY' },
         'zenrows': { 'apiKey': 'ZENROWS_API_KEY' },
         '2captcha': { 'apiKey': 'CAPTCHA_2CAPTCHA_KEY' },
-        'paypal': { 'clientId': 'PAYPAL_CLIENT_ID', 'clientSecret': 'PAYPAL_CLIENT_SECRET' },
+        'paypal': { 'clientId': 'PAYPAL_CLIENT_ID', 'clientSecret': 'PAYPAL_CLIENT_SECRET', 'environment': 'PAYPAL_ENVIRONMENT' },
+        'googletrends': { 'apiKey': 'SERP_API_KEY' }, // ✅ Google Trends usa SerpAPI Key
         'aliexpress': { 'email': 'ALIEXPRESS_EMAIL', 'password': 'ALIEXPRESS_PASSWORD' },
       };
 

@@ -52,6 +52,165 @@ export interface OpportunityItem {
 
 class OpportunityFinderService {
   private minMargin = Number(process.env.MIN_OPPORTUNITY_MARGIN || '0.10'); // ✅ Reducido de 0.20 a 0.10 para permitir más oportunidades válidas
+  private duplicateThreshold = Number(process.env.OPPORTUNITY_DUPLICATE_THRESHOLD || '0.85'); // Similarity threshold (85%)
+
+  /**
+   * ✅ NUEVO: Detectar y eliminar oportunidades duplicadas o muy similares
+   */
+  private deduplicateOpportunities(opportunities: OpportunityItem[]): OpportunityItem[] {
+    if (opportunities.length <= 1) return opportunities;
+
+    const unique: OpportunityItem[] = [];
+    const processed: Set<number> = new Set();
+
+    for (let i = 0; i < opportunities.length; i++) {
+      if (processed.has(i)) continue;
+
+      const current = opportunities[i];
+      let isDuplicate = false;
+
+      // Comparar con oportunidades ya procesadas
+      for (const existing of unique) {
+        const similarity = this.calculateSimilarity(current, existing);
+        
+        if (similarity >= this.duplicateThreshold) {
+          isDuplicate = true;
+          
+          // Mantener la oportunidad con mejor ROI o margen
+          if (current.roiPercentage > existing.roiPercentage || 
+              current.profitMargin > existing.profitMargin) {
+            // Reemplazar la existente con la actual
+            const index = unique.indexOf(existing);
+            unique[index] = current;
+          }
+          break;
+        }
+      }
+
+      if (!isDuplicate) {
+        unique.push(current);
+      }
+
+      processed.add(i);
+    }
+
+    const removed = opportunities.length - unique.length;
+    if (removed > 0) {
+      logger.info('Oportunidades duplicadas eliminadas', {
+        service: 'opportunity-finder',
+        original: opportunities.length,
+        unique: unique.length,
+        removed
+      });
+    }
+
+    return unique;
+  }
+
+  /**
+   * ✅ NUEVO: Calcular similitud entre dos oportunidades (0-1)
+   */
+  private calculateSimilarity(a: OpportunityItem, b: OpportunityItem): number {
+    let similarity = 0;
+    let factors = 0;
+
+    // 1. Similitud de título (usando Jaccard similarity de palabras)
+    const titleSimilarity = this.textSimilarity(a.title, b.title);
+    similarity += titleSimilarity * 0.4; // 40% peso
+    factors += 0.4;
+
+    // 2. Similitud de URL (mismo dominio/dominio similar)
+    const urlSimilarity = this.urlSimilarity(a.productUrl, b.productUrl);
+    similarity += urlSimilarity * 0.3; // 30% peso
+    factors += 0.3;
+
+    // 3. Similitud de precio (muy similar = probablemente mismo producto)
+    const priceSimilarity = this.priceSimilarity(a.price, b.price);
+    similarity += priceSimilarity * 0.2; // 20% peso
+    factors += 0.2;
+
+    // 4. Similitud de categoría
+    if (a.category && b.category) {
+      const categorySimilarity = a.category.toLowerCase() === b.category.toLowerCase() ? 1 : 0;
+      similarity += categorySimilarity * 0.1; // 10% peso
+      factors += 0.1;
+    }
+
+    return factors > 0 ? similarity / factors : 0;
+  }
+
+  /**
+   * Calcular similitud de texto usando Jaccard similarity
+   */
+  private textSimilarity(text1: string, text2: string): number {
+    const words1 = new Set(text1.toLowerCase().split(/\W+/).filter(w => w.length > 2));
+    const words2 = new Set(text2.toLowerCase().split(/\W+/).filter(w => w.length > 2));
+
+    if (words1.size === 0 && words2.size === 0) return 1;
+    if (words1.size === 0 || words2.size === 0) return 0;
+
+    const intersection = new Set([...words1].filter(x => words2.has(x)));
+    const union = new Set([...words1, ...words2]);
+
+    return intersection.size / union.size;
+  }
+
+  /**
+   * Calcular similitud de URL
+   */
+  private urlSimilarity(url1: string, url2: string): number {
+    try {
+      const u1 = new URL(url1);
+      const u2 = new URL(url2);
+
+      // Mismo dominio = alta similitud
+      if (u1.hostname === u2.hostname) {
+        // Comparar pathname
+        const path1 = u1.pathname.split('/').filter(p => p.length > 0);
+        const path2 = u2.pathname.split('/').filter(p => p.length > 0);
+        
+        if (path1.length > 0 && path2.length > 0) {
+          // Si comparten partes del path, alta similitud
+          const commonPaths = path1.filter(p => path2.includes(p));
+          return commonPaths.length / Math.max(path1.length, path2.length);
+        }
+        return 0.8; // Mismo dominio pero path diferente
+      }
+
+      // Dominios similares (subdominios del mismo dominio base)
+      const domain1 = u1.hostname.replace(/^www\./, '').split('.').slice(-2).join('.');
+      const domain2 = u2.hostname.replace(/^www\./, '').split('.').slice(-2).join('.');
+      if (domain1 === domain2) {
+        return 0.6;
+      }
+
+      return 0;
+    } catch {
+      // Si no se pueden parsear URLs, comparar strings directamente
+      return url1 === url2 ? 1 : 0;
+    }
+  }
+
+  /**
+   * Calcular similitud de precio
+   */
+  private priceSimilarity(price1: number, price2: number): number {
+    if (price1 === 0 && price2 === 0) return 1;
+    if (price1 === 0 || price2 === 0) return 0;
+
+    const diff = Math.abs(price1 - price2);
+    const avg = (price1 + price2) / 2;
+    const percentDiff = diff / avg;
+
+    // Si la diferencia es menor al 5%, considerar muy similar
+    if (percentDiff < 0.05) return 1;
+    // Si la diferencia es menor al 15%, considerar similar
+    if (percentDiff < 0.15) return 0.8;
+    // Si la diferencia es menor al 30%, considerar algo similar
+    if (percentDiff < 0.30) return 0.5;
+
+    return 0;
+  }
 
   async findOpportunities(userId: number, filters: OpportunityFilters): Promise<OpportunityItem[]> {
     const query = filters.query?.trim();
@@ -930,7 +1089,19 @@ class OpportunityFinderService {
       });
     }
 
-    return opportunities;
+    // ✅ NUEVO: Aplicar deduplicación antes de retornar
+    const uniqueOpportunities = this.deduplicateOpportunities(opportunities);
+
+    logger.info('Búsqueda de oportunidades completada', {
+      service: 'opportunity-finder',
+      userId,
+      query,
+      totalFound: opportunities.length,
+      uniqueOpportunities: uniqueOpportunities.length,
+      duplicatesRemoved: opportunities.length - uniqueOpportunities.length
+    });
+
+    return uniqueOpportunities;
   }
 }
 

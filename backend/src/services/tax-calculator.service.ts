@@ -92,6 +92,54 @@ class TaxCalculatorService {
       vatRate: 0.22, // VAT 22%
       importDuty: 0.0, // Sin arancel dentro de UE
       currency: 'EUR'
+    },
+    // ✅ NUEVO: Australia
+    AU: {
+      vatRate: 0.10, // GST (Goods and Services Tax) 10%
+      importDuty: 0.0, // Generalmente sin arancel para productos < AUD 1,000
+      currency: 'AUD'
+    },
+    // ✅ NUEVO: Canadá
+    CA: {
+      vatRate: 0.13, // HST (Harmonized Sales Tax) promedio 13% (varía por provincia: 5-15%)
+      importDuty: 0.0, // Generalmente sin arancel para productos < CAD 150
+      currency: 'CAD'
+    },
+    // ✅ NUEVO: Nueva Zelanda
+    NZ: {
+      vatRate: 0.15, // GST 15%
+      importDuty: 0.0, // Generalmente sin arancel para productos < NZD 1,000
+      currency: 'NZD'
+    },
+    // ✅ NUEVO: Japón
+    JP: {
+      vatRate: 0.10, // Consumption Tax 10%
+      importDuty: 0.0, // Varía por producto
+      currency: 'JPY'
+    },
+    // ✅ NUEVO: Corea del Sur
+    KR: {
+      vatRate: 0.10, // VAT 10%
+      importDuty: 0.0, // Varía por producto
+      currency: 'KRW'
+    },
+    // ✅ NUEVO: Singapur
+    SG: {
+      vatRate: 0.07, // GST 7%
+      importDuty: 0.0, // Generalmente sin arancel
+      currency: 'SGD'
+    },
+    // ✅ NUEVO: India
+    IN: {
+      vatRate: 0.18, // GST 18% (promedio, varía por producto)
+      importDuty: 0.0, // Varía significativamente por producto
+      currency: 'INR'
+    },
+    // ✅ NUEVO: Sudáfrica
+    ZA: {
+      vatRate: 0.15, // VAT 15%
+      importDuty: 0.0, // Varía por producto
+      currency: 'ZAR'
     }
   };
 

@@ -1507,6 +1507,29 @@ REGLAS ESTRICTAS:
   /**
    * Parsear respuesta de IA a formato AISuggestion
    */
+  /**
+   * ✅ CORRECCIÓN CRÍTICA: Sanitizar valores numéricos para prevenir valores extremos
+   */
+  private sanitizeNumericValue(value: any, min: number, max: number, defaultValue: number = 0): number {
+    if (value === null || value === undefined) return defaultValue;
+    
+    const numValue = typeof value === 'number' ? value : parseFloat(String(value));
+    
+    if (!isFinite(numValue) || isNaN(numValue)) {
+      return defaultValue;
+    }
+    
+    // Detectar valores extremos o en notación científica
+    if (Math.abs(numValue) > 1e10 || (Math.abs(numValue) > 0 && Math.abs(numValue) < 1e-10)) {
+      logger.warn('AISuggestions: Valor fuera de rango razonable detectado', { value: numValue, min, max });
+      if (Math.abs(numValue) > max) return max;
+      if (Math.abs(numValue) < min && numValue > 0) return min;
+      return defaultValue;
+    }
+    
+    return Math.max(min, Math.min(max, numValue));
+  }
+
   private parseAISuggestions(aiResponse: any, businessData: UserBusinessData): AISuggestion[] {
     const suggestions: AISuggestion[] = [];
     const aiSuggestions = aiResponse.suggestions || [];
@@ -1514,6 +1537,11 @@ REGLAS ESTRICTAS:
     for (let i = 0; i < aiSuggestions.length; i++) {
       const sug = aiSuggestions[i];
       try {
+        // ✅ CORRECCIÓN CRÍTICA: Sanitizar todos los valores numéricos antes de usar
+        const sanitizedRevenue = this.sanitizeNumericValue(sug.impactRevenue, 0, 1000000, 0);
+        const sanitizedTime = this.sanitizeNumericValue(sug.impactTime, 0, 1000, 0);
+        const sanitizedConfidence = this.sanitizeNumericValue(sug.confidence, 0, 100, 75);
+        
         suggestions.push({
           id: `ai_${Date.now()}_${i}`,
           type: sug.type || 'optimization',
@@ -1521,11 +1549,11 @@ REGLAS ESTRICTAS:
           title: sug.title || 'Sugerencia sin título',
           description: sug.description || '',
           impact: {
-            revenue: sug.impactRevenue || 0,
-            time: sug.impactTime || 0,
+            revenue: sanitizedRevenue,
+            time: sanitizedTime,
             difficulty: sug.difficulty || 'medium'
           },
-          confidence: Math.min(100, Math.max(0, sug.confidence || 75)),
+          confidence: sanitizedConfidence,
           actionable: true,
           implemented: false,
           estimatedTime: sug.estimatedTime || '30 minutos',
@@ -1533,8 +1561,8 @@ REGLAS ESTRICTAS:
           steps: Array.isArray(sug.steps) ? sug.steps : [],
           relatedProducts: Array.isArray(sug.relatedProducts) ? sug.relatedProducts : undefined,
           metrics: sug.metrics ? {
-            currentValue: sug.metrics.currentValue || 0,
-            targetValue: sug.metrics.targetValue || 0,
+            currentValue: this.sanitizeNumericValue(sug.metrics.currentValue, 0, 1e6, 0),
+            targetValue: this.sanitizeNumericValue(sug.metrics.targetValue, 0, 1e6, 0),
             unit: sug.metrics.unit || 'USD'
           } : undefined,
           createdAt: new Date().toISOString()

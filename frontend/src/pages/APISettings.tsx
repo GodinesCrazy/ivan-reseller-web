@@ -232,6 +232,16 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
       { key: 'CAPTCHA_API_KEY', label: 'API Key', required: true, type: 'password', placeholder: 'abc123def456...' },
     ],
   },
+  googletrends: {
+    name: 'googletrends',
+    displayName: 'Google Trends API (SerpAPI)',
+    description: 'Validar viabilidad de productos usando Google Trends. Opcional: si no se configura, el sistema usa análisis de datos internos.',
+    icon: '📈',
+    docsUrl: 'https://serpapi.com/google-trends-api',
+    fields: [
+      { key: 'SERP_API_KEY', label: 'SerpAPI Key', required: false, type: 'password', placeholder: 'abc123def456...', helpText: 'Opcional. Obtén tu API key en: https://serpapi.com/dashboard. Si no se configura, el sistema usará análisis de datos internos.' },
+    ],
+  },
   paypal: {
     name: 'paypal',
     displayName: 'PayPal Payouts',
@@ -962,6 +972,7 @@ export default function APISettings() {
         'SCRAPERAPI_KEY': 'apiKey',
         'ZENROWS_API_KEY': 'apiKey',
         'CAPTCHA_API_KEY': 'apiKey',
+        'SERP_API_KEY': 'apiKey', // ✅ Google Trends
         'PAYPAL_CLIENT_ID': 'clientId',
         'PAYPAL_CLIENT_SECRET': 'clientSecret',
         'PAYPAL_MODE': 'environment',

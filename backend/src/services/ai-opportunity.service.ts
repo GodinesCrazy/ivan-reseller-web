@@ -2,6 +2,7 @@ import { AdvancedScrapingService, MarketplaceProduct, scrapingService } from './
 import EbayService, { ArbitrageOpportunity, EBaySearchProduct } from './ebay.service';
 import { AppError } from '../middleware/error.middleware';
 import logger from '../config/logger';
+import { getGoogleTrendsService, GoogleTrendsService } from './google-trends.service';
 
 export interface AIOpportunity {
   id: string;
@@ -55,6 +56,7 @@ export interface MarketIntelligence {
 export class AIOpportunityEngine {
   private scrapingService: AdvancedScrapingService;
   private ebayService: EbayService | null = null;
+  private googleTrendsService: GoogleTrendsService;
 
   constructor() {
     this.scrapingService = new AdvancedScrapingService({
@@ -67,6 +69,7 @@ export class AIOpportunityEngine {
       ],
       proxyList: [], // Configurar proxies reales en producción
     });
+    this.googleTrendsService = getGoogleTrendsService();
   }
 
   /**
@@ -869,6 +872,31 @@ export class AIOpportunityEngine {
     try {
       logger.info('Analizando oportunidad con IA', { productId: data.id, productTitle: data.product || data.title });
 
+      // ✅ VALIDAR VIABILIDAD CON GOOGLE TRENDS ANTES DE ANALIZAR
+      let trendsValidation = null;
+      try {
+        trendsValidation = await this.googleTrendsService.validateProductViability(
+          data.product || data.title || 'Product',
+          data.category || 'general',
+          undefined // Keywords se extraen automáticamente del título
+        );
+        
+        // Si Google Trends indica que el producto NO es viable, reducir confianza significativamente
+        if (!trendsValidation.validation.viable && trendsValidation.validation.confidence < 30) {
+          logger.warn('Producto marcado como no viable por Google Trends', {
+            productTitle: data.product || data.title,
+            reason: trendsValidation.validation.reason,
+            confidence: trendsValidation.validation.confidence
+          });
+        }
+      } catch (trendsError: any) {
+        logger.warn('Error validando con Google Trends, continuando sin validación', {
+          error: trendsError.message,
+          productTitle: data.product || data.title
+        });
+        // Continuar sin validación de Google Trends si falla
+      }
+
       // Enriquecer datos básicos
       const analysis = await this.calculateProfitability({
         product: data.product || data.title,
@@ -898,16 +926,25 @@ export class AIOpportunityEngine {
         estimatedProfit: analysis.estimatedProfit,
         profitMargin: analysis.profitMargin,
         aiConfidence: analysis.confidence,
-        confidence: analysis.confidence,
+        // ✅ AJUSTAR CONFIANZA BASADO EN VALIDACIÓN DE GOOGLE TRENDS
+        confidence: trendsValidation 
+          ? Math.max(0, Math.min(100, analysis.confidence * (trendsValidation.validation.confidence / 100)))
+          : analysis.confidence,
         competitionLevel: this.assessCompetitionLevel(analysis.profitMargin),
         demandLevel: this.assessDemandLevel(data.category || 'general'),
-        trend: this.assessTrend(data.category || 'general'),
+        // ✅ USAR TENDENCIA REAL DE GOOGLE TRENDS SI ESTÁ DISPONIBLE
+        trend: trendsValidation?.trend || this.assessTrend(data.category || 'general'),
         reasoning: [
           `Margen de ganancia calculado: ${analysis.profitMargin.toFixed(1)}%`,
           `Precio sugerido: $${analysis.suggestedPrice}`,
           `Competencia estimada: ${this.assessCompetitionLevel(analysis.profitMargin)}`,
-          `Tendencia de mercado: ${this.assessTrend(data.category || 'general')}`
-        ],
+          trendsValidation 
+            ? `Tendencia de mercado (Google Trends): ${trendsValidation.trend} - ${trendsValidation.validation.reason}`
+            : `Tendencia de mercado: ${this.assessTrend(data.category || 'general')}`,
+          trendsValidation && trendsValidation.searchVolume > 0
+            ? `Volumen de búsqueda: ${trendsValidation.searchVolume.toLocaleString()}`
+            : null
+        ].filter(Boolean) as string[],
         risks: this.generateRisks(analysis.profitMargin, data.category),
         recommendations: this.generateRecommendations(analysis),
         marketAnalysis: {

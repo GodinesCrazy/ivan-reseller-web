@@ -90,6 +90,318 @@ async function recordSaleFromWebhook(params: {
     },
   });
 
+  // ✅ MEJORADO: FLUJO POST-VENTA AUTOMÁTICO
+  try {
+    const { workflowConfigService } = await import('../../services/workflow-config.service');
+    const { PayPalPayoutService } = await import('../../services/paypal-payout.service');
+    const { prisma } = await import('../../config/database');
+    const { logger } = await import('../../config/logger');
+    const { toNumber } = await import('../../utils/decimal.utils');
+    const aliexpressAutoPurchaseService = (await import('../../services/aliexpress-auto-purchase.service')).default;
+
+    // Verificar si el flujo está en modo automático
+    const purchaseMode = await workflowConfigService.getStageMode(listing.userId, 'purchase');
+    
+    if (purchaseMode === 'automatic') {
+      logger.info('Flujo post-venta en modo automático - iniciando compra automática', {
+        saleId: sale.id,
+        userId: listing.userId,
+        orderId
+      });
+
+      // 1. Validar capital de trabajo
+      const totalCapital = await workflowConfigService.getWorkingCapital(listing.userId);
+      
+      const pendingOrders = await prisma.sale.findMany({
+        where: {
+          userId: listing.userId,
+          status: { in: ['PENDING', 'PROCESSING'] }
+        }
+      });
+      const pendingCost = pendingOrders.reduce((sum, order) => 
+        sum + toNumber(order.aliexpressCost || 0), 0
+      );
+
+      const approvedProducts = await prisma.product.findMany({
+        where: {
+          userId: listing.userId,
+          status: 'APPROVED',
+          isPublished: false
+        }
+      });
+      const approvedCost = approvedProducts.reduce((sum, p) => 
+        sum + toNumber(p.aliexpressPrice || 0), 0
+      );
+
+      const availableCapital = totalCapital - pendingCost - approvedCost;
+      const purchaseCost = toNumber(product.aliexpressPrice || 0);
+
+      // 2. Validar saldo PayPal (si está disponible)
+      // ✅ MEJORADO: Intentar usar credenciales del usuario primero, luego variables de entorno
+      let paypalBalance: { available: number; currency: string } | null = null;
+      try {
+        let paypalService = await PayPalPayoutService.fromUserCredentials(listing.userId);
+        if (!paypalService) {
+          // Fallback a variables de entorno si no hay credenciales de usuario
+          paypalService = PayPalPayoutService.fromEnv();
+        }
+        
+        if (paypalService) {
+          paypalBalance = await paypalService.checkPayPalBalance();
+        }
+      } catch (paypalError: any) {
+        logger.warn('No se pudo validar saldo PayPal, continuando con validación de capital de trabajo', {
+          error: paypalError.message,
+          userId: listing.userId
+        });
+      }
+
+      // 3. Verificar si hay suficiente capital/disponibilidad
+      const capitalBuffer = Number(process.env.WORKING_CAPITAL_BUFFER || '0.20'); // 20% buffer por defecto
+      const requiredCapital = purchaseCost * (1 + capitalBuffer);
+
+      if (availableCapital < requiredCapital) {
+        logger.warn('Capital insuficiente para compra automática', {
+          userId: listing.userId,
+          availableCapital,
+          requiredCapital,
+          purchaseCost,
+          buffer: capitalBuffer
+        });
+
+        // Enviar notificación con link para compra manual
+        await notificationService.sendToUser(listing.userId, {
+          type: 'ACTION_REQUIRED',
+          title: 'Compra manual requerida',
+          message: `Capital insuficiente. Disponible: $${availableCapital.toFixed(2)}, Requerido: $${requiredCapital.toFixed(2)}`,
+          category: 'SALE',
+          priority: 'HIGH',
+          data: {
+            saleId: sale.id,
+            orderId,
+            productUrl: product.aliexpressUrl || product.sourceUrl || '',
+            manualPurchaseRequired: true,
+            availableCapital,
+            requiredCapital
+          }
+        });
+
+        // Registrar en PurchaseLog como pendiente
+        try {
+          await prisma.purchaseLog.create({
+            data: {
+              userId: listing.userId,
+              saleId: sale.id,
+              orderId,
+              productId: product.id,
+              supplierUrl: product.aliexpressUrl || product.sourceUrl || '',
+              purchaseAmount: purchaseCost,
+              quantity: 1,
+              status: 'PENDING',
+              success: false,
+              capitalValidated: false,
+              capitalAvailable: availableCapital,
+              paypalValidated: !!paypalBalance,
+              errorMessage: `Capital insuficiente: disponible $${availableCapital.toFixed(2)}, requerido $${requiredCapital.toFixed(2)}`,
+              retryAttempt: 0,
+              maxRetries: 0
+            }
+          });
+        } catch (logError) {
+          logger.error('Error creando PurchaseLog', { error: logError });
+        }
+      } else if (paypalBalance && paypalBalance.available < requiredCapital) {
+        logger.warn('Saldo PayPal insuficiente para compra automática', {
+          userId: listing.userId,
+          paypalBalance: paypalBalance.available,
+          requiredCapital
+        });
+
+        // Similar a capital insuficiente
+        await notificationService.sendToUser(listing.userId, {
+          type: 'ACTION_REQUIRED',
+          title: 'Saldo PayPal insuficiente',
+          message: `Saldo PayPal: $${paypalBalance.available.toFixed(2)}, Requerido: $${requiredCapital.toFixed(2)}`,
+          category: 'SALE',
+          priority: 'HIGH',
+          data: {
+            saleId: sale.id,
+            orderId,
+            productUrl: product.aliexpressUrl || product.sourceUrl || '',
+            manualPurchaseRequired: true
+          }
+        });
+      } else {
+        // 4. Ejecutar compra automática
+        logger.info('Ejecutando compra automática', {
+          saleId: sale.id,
+          userId: listing.userId,
+          productUrl: product.aliexpressUrl || product.sourceUrl,
+          purchaseCost
+        });
+
+        // Parsear dirección de envío
+        let shippingAddressObj: any = null;
+        try {
+          if (shippingAddressStr) {
+            shippingAddressObj = typeof shippingAddressStr === 'string' 
+              ? JSON.parse(shippingAddressStr) 
+              : shippingAddressStr;
+          }
+        } catch (parseError) {
+          logger.warn('Error parseando dirección de envío', { error: parseError });
+        }
+
+        // Preparar datos de compra
+        const purchaseRequest = {
+          productUrl: product.aliexpressUrl || product.sourceUrl || '',
+          quantity: 1,
+          maxPrice: purchaseCost * 1.1, // 10% de margen para variaciones de precio
+          shippingAddress: shippingAddressObj || {
+            fullName: buyerName || 'Buyer',
+            addressLine1: 'Address not provided',
+            city: 'City not provided',
+            state: 'State not provided',
+            zipCode: '00000',
+            country: 'US',
+            phoneNumber: '0000000000'
+          },
+          notes: `Order ${orderId} - Buyer: ${buyerEmail || buyerName || 'N/A'}`
+        };
+
+        // Registrar intento en PurchaseLog
+        let purchaseLogId: number | null = null;
+        try {
+          const purchaseLog = await prisma.purchaseLog.create({
+            data: {
+              userId: listing.userId,
+              saleId: sale.id,
+              orderId,
+              productId: product.id,
+              supplierUrl: purchaseRequest.productUrl,
+              purchaseAmount: purchaseCost,
+              quantity: 1,
+              status: 'PROCESSING',
+              success: false,
+              capitalValidated: true,
+              capitalAvailable: availableCapital,
+              paypalValidated: !!paypalBalance,
+              retryAttempt: 0,
+              maxRetries: 3
+            }
+          });
+          purchaseLogId = purchaseLog.id;
+        } catch (logError) {
+          logger.error('Error creando PurchaseLog', { error: logError });
+        }
+
+        // Ejecutar compra
+        try {
+          const purchaseResult = await aliexpressAutoPurchaseService.executePurchase(purchaseRequest);
+
+          if (purchaseResult.success && purchaseLogId) {
+            await prisma.purchaseLog.update({
+              where: { id: purchaseLogId },
+              data: {
+                status: 'SUCCESS',
+                success: true,
+                supplierOrderId: purchaseResult.orderNumber || purchaseResult.orderId,
+                trackingNumber: purchaseResult.trackingNumber,
+                completedAt: new Date()
+              }
+            });
+
+            // Actualizar estado de la venta
+            await prisma.sale.update({
+              where: { id: sale.id },
+              data: { status: 'PROCESSING' }
+            });
+
+            // Notificar éxito
+            await notificationService.sendToUser(listing.userId, {
+              type: 'PURCHASE_COMPLETED',
+              title: 'Compra automática completada',
+              message: `Orden ${orderId} procesada. Tracking: ${purchaseResult.trackingNumber || 'Pendiente'}`,
+              category: 'SALE',
+              priority: 'MEDIUM',
+              data: {
+                saleId: sale.id,
+                orderId,
+                supplierOrderId: purchaseResult.orderNumber || purchaseResult.orderId,
+                trackingNumber: purchaseResult.trackingNumber
+              }
+            });
+          } else {
+            throw new Error(purchaseResult.error || 'Compra falló sin razón específica');
+          }
+        } catch (purchaseError: any) {
+          logger.error('Error ejecutando compra automática', {
+            error: purchaseError.message,
+            saleId: sale.id,
+            userId: listing.userId
+          });
+
+          if (purchaseLogId) {
+            await prisma.purchaseLog.update({
+              where: { id: purchaseLogId },
+              data: {
+                status: 'FAILED',
+                success: false,
+                errorMessage: purchaseError.message,
+                completedAt: new Date()
+              }
+            });
+          }
+
+          // Notificar error y enviar link para compra manual
+          await notificationService.sendToUser(listing.userId, {
+            type: 'PURCHASE_FAILED',
+            title: 'Compra automática falló',
+            message: `Error: ${purchaseError.message}. Requiere acción manual.`,
+            category: 'SALE',
+            priority: 'HIGH',
+            data: {
+              saleId: sale.id,
+              orderId,
+              productUrl: purchaseRequest.productUrl,
+              manualPurchaseRequired: true,
+              error: purchaseError.message
+            }
+          });
+        }
+      }
+    } else {
+      // Modo manual: solo notificar con link para compra manual
+      logger.info('Flujo post-venta en modo manual', {
+        saleId: sale.id,
+        userId: listing.userId
+      });
+
+      await notificationService.sendToUser(listing.userId, {
+        type: 'ACTION_REQUIRED',
+        title: 'Compra manual requerida',
+        message: `Nueva venta recibida. Orden ${orderId} requiere procesamiento manual.`,
+        category: 'SALE',
+        priority: 'HIGH',
+        data: {
+          saleId: sale.id,
+          orderId,
+          productUrl: product.aliexpressUrl || product.sourceUrl || '',
+          manualPurchaseRequired: true,
+          buyerEmail,
+          shippingAddress: shippingAddressStr
+        }
+      });
+    }
+  } catch (postSaleError: any) {
+    // No fallar la creación de la venta si hay error en el flujo post-venta
+    logger.error('Error en flujo post-venta', {
+      error: postSaleError.message,
+      saleId: sale.id,
+      userId: listing.userId
+    });
+  }
+
   return sale;
 }
 

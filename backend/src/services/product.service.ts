@@ -146,6 +146,70 @@ export class ProductService {
     const { pendingProductsLimitService } = await import('./pending-products-limit.service');
     await pendingProductsLimitService.ensurePendingLimitNotExceeded(userId, isAdmin);
 
+    // ✅ VALIDACIÓN DE IMÁGENES: Validar calidad antes de crear producto
+    const allImageUrls: string[] = [];
+    if (imageUrl) allImageUrls.push(imageUrl);
+    if (imageUrls && Array.isArray(imageUrls)) allImageUrls.push(...imageUrls);
+
+    if (allImageUrls.length > 0) {
+      try {
+        const { getImageValidationService } = await import('./image-validation.service');
+        const imageValidator = getImageValidationService();
+        const validationResults = await imageValidator.validateAndFilterImages(allImageUrls);
+
+        // Si hay imágenes inválidas, registrar warning pero continuar (compatibilidad retroactiva)
+        if (validationResults.invalid.length > 0) {
+          logger.warn('[PRODUCT-SERVICE] Algunas imágenes no pasaron validación', {
+            userId,
+            invalidImages: validationResults.invalid.map(i => ({
+              url: i.url.substring(0, 80),
+              errors: i.errors
+            }))
+          });
+
+          // Si TODAS las imágenes son inválidas, lanzar error
+          if (validationResults.valid.length === 0) {
+            throw new AppError(
+              `Todas las imágenes proporcionadas fallaron la validación. Errores: ${validationResults.invalid.map(i => i.errors.join('; ')).join(' | ')}`,
+              400
+            );
+          }
+        }
+
+        // Si hay advertencias, registrar
+        if (validationResults.warnings.length > 0) {
+          logger.info('[PRODUCT-SERVICE] Advertencias en validación de imágenes', {
+            userId,
+            warnings: validationResults.warnings.map(w => ({
+              url: w.url.substring(0, 80),
+              warnings: w.warnings
+            }))
+          });
+        }
+
+        // Usar solo imágenes válidas
+        const validImages = validationResults.valid;
+        if (validImages.length > 0) {
+          // Actualizar imageUrl e imageUrls con solo las válidas
+          if (validImages.length > 0) {
+            const primaryUrl = validImages[0];
+            const additionalUrls = validImages.slice(1);
+            // Reasignar para usar en buildImagePayload
+            Object.assign(data, { imageUrl: primaryUrl, imageUrls: additionalUrls });
+          }
+        }
+      } catch (validationError: any) {
+        // Si la validación falla por error técnico (no por imágenes inválidas), registrar y continuar
+        if (validationError instanceof AppError) {
+          throw validationError;
+        }
+        logger.warn('[PRODUCT-SERVICE] Error técnico en validación de imágenes, continuando sin validación', {
+          userId,
+          error: validationError.message
+        });
+      }
+    }
+
     const imagesPayload = buildImagePayload(imageUrl, imageUrls);
     const metadata = mergeProductMetadata(data) || {};
     if (!metadata.currency) {

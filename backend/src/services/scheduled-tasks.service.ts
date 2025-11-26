@@ -19,11 +19,13 @@ export class ScheduledTasksService {
   private authHealthQueue: Queue | null = null;
   private fxRatesQueue: Queue | null = null;
   private listingLifetimeQueue: Queue | null = null;
+  private productUnpublishQueue: Queue | null = null;
   private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
   private fxRatesWorker: Worker | null = null;
   private listingLifetimeWorker: Worker | null = null;
+  private productUnpublishWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
 
@@ -65,6 +67,11 @@ export class ScheduledTasksService {
 
     // ✅ Cola para optimizador de tiempo de publicación
     this.listingLifetimeQueue = new Queue('listing-lifetime-optimizer', {
+      connection: this.bullMQRedis as any
+    });
+
+    // ✅ NUEVO: Cola para despublicar artículos automáticamente
+    this.productUnpublishQueue = new Queue('product-unpublish', {
       connection: this.bullMQRedis as any
     });
   }
@@ -279,6 +286,22 @@ export class ScheduledTasksService {
           },
           removeOnComplete: 10,
           removeOnFail: 5
+        }
+      );
+    }
+
+    // ✅ NUEVO: Programar job para despublicar artículos automáticamente
+    if (this.productUnpublishQueue) {
+      this.productUnpublishQueue.add(
+        'unpublish-products',
+        {},
+        {
+          repeat: {
+            pattern: '0 */6 * * *' // Cada 6 horas
+          },
+          removeOnComplete: 10,
+          removeOnFail: 5,
+          attempts: 2
         }
       );
     }
@@ -984,6 +1007,161 @@ export class ScheduledTasksService {
     }
     if (this.listingLifetimeQueue) {
       await this.listingLifetimeQueue.close();
+    }
+    if (this.productUnpublishQueue) {
+      await this.productUnpublishQueue.close();
+    }
+    if (this.productUnpublishWorker) {
+      await this.productUnpublishWorker.close();
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Procesar despublicación automática de artículos
+   * Despublica artículos basado en:
+   * - Capital insuficiente
+   * - Baja tasa de conversión
+   * - Tiempo sin ventas
+   */
+  private async processProductUnpublish(job: any): Promise<void> {
+    try {
+      logger.info('Processing automatic product unpublishing');
+      const users = await prisma.user.findMany({
+        where: { isActive: true },
+        select: { id: true }
+      });
+
+      let totalProcessed = 0;
+      let totalUnpublished = 0;
+
+      for (const user of users) {
+        try {
+          const { workflowConfigService } = await import('./workflow-config.service');
+          const totalCapital = await workflowConfigService.getWorkingCapital(user.id);
+          const publishedProducts = await prisma.product.findMany({
+            where: {
+              userId: user.id,
+              isPublished: true,
+              status: { in: ['PUBLISHED', 'APPROVED'] }
+            },
+            include: {
+              marketplaceListings: {
+                include: {
+                  sales: {
+                    where: {
+                      createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+                    }
+                  }
+                }
+              }
+            }
+          });
+
+          const pendingSales = await prisma.sale.findMany({
+            where: {
+              userId: user.id,
+              status: { in: ['PENDING', 'PROCESSING'] }
+            }
+          });
+          const committedCapital = pendingSales.reduce((sum, sale) => 
+            sum + toNumber(sale.aliexpressCost || 0), 0
+          );
+          const capitalBuffer = Number(process.env.WORKING_CAPITAL_BUFFER || '0.20');
+          const availableCapital = Math.max(0, totalCapital - committedCapital);
+
+          for (const product of publishedProducts) {
+            totalProcessed++;
+            let shouldUnpublish = false;
+            const reasons: string[] = [];
+            const productCost = toNumber(product.aliexpressPrice || 0);
+            const capitalThreshold = availableCapital * 0.8;
+            
+            if (productCost > capitalThreshold && availableCapital < totalCapital * (1 - capitalBuffer)) {
+              shouldUnpublish = true;
+              reasons.push(`Capital insuficiente`);
+            }
+
+            const totalViews = product.marketplaceListings.reduce((sum, listing) => 
+              sum + (listing.viewCount || 0), 0
+            );
+            const totalSales = product.marketplaceListings.reduce((sum, listing) => 
+              sum + listing.sales.length, 0
+            );
+            const conversionRate = totalViews > 0 ? (totalSales / totalViews) * 100 : 0;
+            const minConversionRate = Number(process.env.MIN_CONVERSION_RATE || '0.5');
+
+            if (totalViews >= 100 && conversionRate < minConversionRate) {
+              shouldUnpublish = true;
+              reasons.push(`Baja conversión (${conversionRate.toFixed(2)}%)`);
+            }
+
+            const lastSale = product.marketplaceListings
+              .flatMap(l => l.sales)
+              .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+            const daysSinceLastSale = lastSale 
+              ? Math.floor((Date.now() - lastSale.createdAt.getTime()) / (1000 * 60 * 60 * 24))
+              : Infinity;
+            const maxDaysWithoutSales = Number(process.env.MAX_DAYS_WITHOUT_SALES || '60');
+
+            if (daysSinceLastSale > maxDaysWithoutSales && totalViews > 0) {
+              shouldUnpublish = true;
+              reasons.push(`Sin ventas por ${daysSinceLastSale} días`);
+            }
+
+            if (shouldUnpublish) {
+              try {
+                const { MarketplaceService } = await import('./marketplace.service');
+                const marketplaceSvc = new MarketplaceService();
+                for (const listing of product.marketplaceListings) {
+                  try {
+                    await marketplaceSvc.unpublishProduct(user.id, {
+                      productId: product.id,
+                      marketplace: listing.marketplace as any
+                    });
+                  } catch (unpublishError: any) {
+                    logger.warn('Error despublicando producto', {
+                      userId: user.id,
+                      productId: product.id,
+                      error: unpublishError.message
+                    });
+                  }
+                }
+
+                await prisma.product.update({
+                  where: { id: product.id },
+                  data: { isPublished: false, status: 'INACTIVE' }
+                });
+
+                totalUnpublished++;
+                await notificationService.sendToUser(user.id, {
+                  type: 'PRODUCT_UNPUBLISHED',
+                  title: 'Producto despublicado automáticamente',
+                  message: `El producto "${product.title.substring(0, 50)}" ha sido despublicado. Razones: ${reasons.join('; ')}`,
+                  category: 'PRODUCT',
+                  priority: 'MEDIUM',
+                  data: { productId: product.id, productTitle: product.title, reasons }
+                });
+              } catch (error: any) {
+                logger.error('Error despublicando producto', {
+                  userId: user.id,
+                  productId: product.id,
+                  error: error.message
+                });
+              }
+            }
+          }
+        } catch (userError: any) {
+          logger.error('Error procesando usuario', {
+            userId: user.id,
+            error: userError.message
+          });
+        }
+      }
+
+      logger.info('Product unpublish job completed', { totalProcessed, totalUnpublished });
+    } catch (error: any) {
+      logger.error('Error en job de despublicación', { error: error.message });
+      throw error;
     }
   }
 }

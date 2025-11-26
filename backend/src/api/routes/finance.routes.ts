@@ -90,6 +90,58 @@ router.get('/summary', async (req: Request, res: Response, next) => {
       }
     });
 
+    // ✅ NUEVO: Calcular métricas financieras avanzadas
+    // 1. Capital comprometido vs disponible
+    const { workflowConfigService } = await import('../../services/workflow-config.service');
+    const totalWorkingCapital = await workflowConfigService.getWorkingCapital(userId);
+    
+    const committedCapital = pendingSales.reduce((sum, sale) => 
+      sum + toNumber(sale.aliexpressCost || 0), 0
+    );
+    const availableCapital = Math.max(0, totalWorkingCapital - committedCapital);
+
+    // 2. Rotación de capital (revenue / averageWorkingCapital)
+    // Capital promedio = (capital inicial + capital final) / 2
+    // Para simplificar, usamos capital actual como aproximación
+    const averageWorkingCapital = totalWorkingCapital;
+    const capitalTurnover = averageWorkingCapital > 0 
+      ? totalSales / averageWorkingCapital 
+      : 0;
+
+    // 3. Tiempo promedio de recuperación de capital
+    // Calcular días promedio desde compra hasta venta cobrada
+    const paidSales = sales.filter(s => s.status === 'SHIPPED' || s.status === 'DELIVERED');
+    let avgRecoveryDays = 0;
+    if (paidSales.length > 0) {
+      const recoveryDays: number[] = [];
+      
+      for (const sale of paidSales.slice(0, 50)) { // Limitar a 50 para performance
+        try {
+          const purchaseLog = await prisma.purchaseLog.findFirst({
+            where: { saleId: sale.id, success: true }
+          });
+          
+          if (purchaseLog && purchaseLog.completedAt && sale.updatedAt) {
+            const days = Math.floor(
+              (sale.updatedAt.getTime() - purchaseLog.completedAt.getTime()) / (1000 * 60 * 60 * 24)
+            );
+            if (days > 0) recoveryDays.push(days);
+          }
+        } catch (error) {
+          // Ignorar errores en búsqueda individual
+        }
+      }
+      
+      if (recoveryDays.length > 0) {
+        avgRecoveryDays = recoveryDays.reduce((a, b) => a + b, 0) / recoveryDays.length;
+      }
+    }
+
+    // 4. Ventas pendientes vs cobradas
+    const pendingSalesValue = pendingSales.reduce((sum, s) => sum + toNumber(s.salePrice), 0);
+    const paidSalesValue = paidSales.reduce((sum, s) => sum + toNumber(s.salePrice), 0);
+    const cashFlow = paidSalesValue - totalCosts; // Flujo real de caja (solo ventas cobradas)
+
     const summary = {
       revenue: totalSales, // Alias para compatibilidad con frontend
       totalSales,
@@ -113,6 +165,29 @@ router.get('/summary', async (req: Request, res: Response, next) => {
       pendingSalesCount: pendingSales.length,
       productsCount: products.length,
       commissionsCount: commissions.length,
+      
+      // ✅ NUEVO: Métricas financieras avanzadas
+      workingCapital: {
+        total: totalWorkingCapital,
+        committed: committedCapital,
+        available: availableCapital,
+        utilizationRate: totalWorkingCapital > 0 
+          ? Number(((committedCapital / totalWorkingCapital) * 100).toFixed(2))
+          : 0
+      },
+      capitalMetrics: {
+        capitalTurnover: Number(capitalTurnover.toFixed(2)), // Rotación de capital
+        averageRecoveryDays: Number(avgRecoveryDays.toFixed(1)), // Tiempo promedio de recuperación
+        averageWorkingCapital: averageWorkingCapital
+      },
+      cashFlowMetrics: {
+        pendingSalesValue, // Valor de ventas pendientes
+        paidSalesValue, // Valor de ventas cobradas
+        realCashFlow: cashFlow, // Flujo real de caja (ingresos cobrados - gastos)
+        pendingSalesCount: pendingSales.length,
+        paidSalesCount: paidSales.length
+      },
+      
       period: {
         start: startDate.toISOString(),
         end: now.toISOString(),

@@ -458,7 +458,15 @@ export default function AISuggestionsPanel() {
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Confianza IA</p>
-                      <p className="font-semibold text-blue-600">{suggestion.confidence}%</p>
+                      <p className="font-semibold text-blue-600">
+                        {/* ✅ CORRECCIÓN CRÍTICA: Formatear confianza de forma segura */}
+                        {(() => {
+                          const conf = suggestion.confidence;
+                          if (typeof conf !== 'number' || !isFinite(conf) || isNaN(conf)) return '—';
+                          const safeConf = Math.max(0, Math.min(100, Math.round(conf)));
+                          return `${safeConf}%`;
+                        })()}
+                      </p>
                     </div>
                   </div>
                   
@@ -467,9 +475,32 @@ export default function AISuggestionsPanel() {
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-600">Métrica objetivo:</span>
                         <span className="text-sm">
-                          <span className="text-gray-500">{suggestion.metrics.currentValue} {suggestion.metrics.unit}</span>
+                          {/* ✅ CORRECCIÓN CRÍTICA: Formatear métricas de forma segura */}
+                          <span className="text-gray-500">
+                            {(() => {
+                              const val = suggestion.metrics?.currentValue;
+                              if (typeof val !== 'number' || !isFinite(val) || isNaN(val)) return '—';
+                              const safeVal = Math.abs(val) > 1e6 
+                                ? `${(val / 1e6).toFixed(1)}M` 
+                                : Math.abs(val) > 1e3 
+                                ? `${(val / 1e3).toFixed(1)}K`
+                                : val.toLocaleString('en-US', { maximumFractionDigits: 2 });
+                              return `${safeVal} ${suggestion.metrics?.unit || ''}`;
+                            })()}
+                          </span>
                           <ArrowRight className="h-3 w-3 inline mx-1" />
-                          <span className="text-green-600 font-semibold">{suggestion.metrics.targetValue} {suggestion.metrics.unit}</span>
+                          <span className="text-green-600 font-semibold">
+                            {(() => {
+                              const val = suggestion.metrics?.targetValue;
+                              if (typeof val !== 'number' || !isFinite(val) || isNaN(val)) return '—';
+                              const safeVal = Math.abs(val) > 1e6 
+                                ? `${(val / 1e6).toFixed(1)}M` 
+                                : Math.abs(val) > 1e3 
+                                ? `${(val / 1e3).toFixed(1)}K`
+                                : val.toLocaleString('en-US', { maximumFractionDigits: 2 });
+                              return `${safeVal} ${suggestion.metrics?.unit || ''}`;
+                            })()}
+                          </span>
                         </span>
                       </div>
                     </div>
@@ -486,12 +517,56 @@ export default function AISuggestionsPanel() {
                             <span className="text-lg font-bold text-blue-700">"{suggestion.keyword}"</span>
                           </div>
                           {suggestion.keywordReason && (
-                            <p className="text-sm text-blue-800 mb-2">{suggestion.keywordReason}</p>
+                            <p className="text-sm text-blue-800 mb-2">
+                              {/* ✅ CORRECCIÓN CRÍTICA: Sanitizar texto de razón para prevenir valores mal formateados */}
+                              {(() => {
+                                let reason = suggestion.keywordReason || '';
+                                // Detectar y reemplazar valores en notación científica en el texto
+                                reason = reason.replace(/[\d.]+e[+-]\d+/gi, (match) => {
+                                  const num = parseFloat(match);
+                                  if (!isFinite(num)) return '—';
+                                  // Si es un porcentaje extremo, limitarlo
+                                  if (Math.abs(num) > 1000) {
+                                    return '1000+';
+                                  }
+                                  // Formatear número de forma legible
+                                  return num.toLocaleString('en-US', { 
+                                    maximumFractionDigits: 2,
+                                    notation: 'standard'
+                                  });
+                                });
+                                return reason;
+                              })()}
+                            </p>
                           )}
                           {suggestion.keywordSupportingMetric && (
                             <div className="text-xs text-blue-700">
                               <strong>{suggestion.keywordSupportingMetric.description}</strong>
-                              {' '}({suggestion.keywordSupportingMetric.value} {suggestion.keywordSupportingMetric.unit})
+                              {' '}({(() => {
+                                // ✅ CORRECCIÓN CRÍTICA: Formatear valor de métrica de forma segura
+                                const val = suggestion.keywordSupportingMetric?.value;
+                                if (typeof val !== 'number' || !isFinite(val) || isNaN(val)) return '—';
+                                
+                                // Limitar valores extremos
+                                const safeVal = Math.abs(val) > 1e6 ? Math.min(1e6, val) : val;
+                                
+                                // Formatear según el tipo de unidad
+                                const unit = suggestion.keywordSupportingMetric?.unit || '';
+                                if (unit === '%') {
+                                  // Para porcentajes, redondear a máximo 2 decimales y evitar notación científica
+                                  const rounded = Math.round(safeVal * 100) / 100;
+                                  return `${rounded}${unit}`;
+                                } else if (unit === 'oportunidades' || unit === 'oportunidades estimadas') {
+                                  // Para conteos, mostrar como entero
+                                  return `${Math.round(safeVal)} ${unit}`;
+                                } else {
+                                  // Para otros valores, formatear con toLocaleString
+                                  return `${safeVal.toLocaleString('en-US', { 
+                                    maximumFractionDigits: 2,
+                                    notation: 'standard'
+                                  })} ${unit}`;
+                                }
+                              })()})
                             </div>
                           )}
                           {suggestion.targetMarketplaces && suggestion.targetMarketplaces.length > 0 && (

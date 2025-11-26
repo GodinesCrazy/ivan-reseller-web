@@ -324,6 +324,63 @@ export class AliExpressAutoPurchaseService {
 
     } catch (error: any) {
       logger.error('Auto-purchase error', { error: error.message });
+      
+      // ✅ SISTEMA DE ALERTAS: Notificar si Puppeteer falla
+      try {
+        const { notificationService } = await import('./notification.service');
+        const { prisma } = await import('../config/database');
+        
+        // Intentar obtener userId del contexto (puede estar en request o metadata)
+        let userId: number | null = null;
+        try {
+          // Buscar en PurchaseLog más reciente para obtener userId
+          const recentLog = await prisma.purchaseLog.findFirst({
+            where: {
+              supplierUrl: { contains: request.productUrl.substring(0, 50) }
+            },
+            orderBy: { createdAt: 'desc' }
+          });
+          userId = recentLog?.userId || null;
+        } catch (logError) {
+          logger.warn('No se pudo obtener userId para alerta de Puppeteer', { error: logError });
+        }
+
+        // Determinar tipo de error
+        const isPuppeteerError = error.message?.includes('puppeteer') || 
+                                 error.message?.includes('browser') ||
+                                 error.message?.includes('page') ||
+                                 error.message?.includes('timeout') ||
+                                 error.message?.includes('navigation');
+
+        if (isPuppeteerError && userId) {
+          await notificationService.sendToUser(userId, {
+            type: 'SYSTEM_ERROR',
+            title: '⚠️ Error en compra automática (Puppeteer)',
+            message: `Falló la automatización de compra. Error: ${error.message.substring(0, 200)}`,
+            category: 'AUTOMATION',
+            priority: 'HIGH',
+            data: {
+              errorType: 'PUPPETEER_ERROR',
+              errorMessage: error.message,
+              productUrl: request.productUrl,
+              requiresManualAction: true,
+              suggestedAction: 'Revisar credenciales de AliExpress o ejecutar compra manualmente'
+            }
+          });
+
+          logger.warn('Alerta de error Puppeteer enviada', {
+            userId,
+            error: error.message,
+            productUrl: request.productUrl
+          });
+        }
+      } catch (alertError: any) {
+        logger.error('Error enviando alerta de Puppeteer', { 
+          error: alertError.message,
+          originalError: error.message 
+        });
+      }
+
       return {
         success: false,
         error: error.message,

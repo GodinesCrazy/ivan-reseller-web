@@ -38,6 +38,62 @@ export interface TrendAnalysis {
 
 export class TrendSuggestionsService {
   /**
+   * ✅ CORRECCIÓN CRÍTICA: Sanitizar valores numéricos para prevenir valores extremos o inválidos
+   * Limita valores a rangos razonables y valida que sean finitos
+   */
+  private sanitizeNumericValue(value: number | null | undefined, min: number, max: number, defaultValue: number = 0): number {
+    if (value === null || value === undefined) return defaultValue;
+    
+    const numValue = typeof value === 'number' ? value : parseFloat(String(value));
+    
+    // Validar que sea un número finito válido
+    if (!isFinite(numValue) || isNaN(numValue)) {
+      logger.warn('TrendSuggestions: Valor numérico inválido detectado', { value, defaultValue });
+      return defaultValue;
+    }
+    
+    // Detectar valores en notación científica o extremadamente grandes/pequeños
+    if (Math.abs(numValue) > 1e10 || (Math.abs(numValue) > 0 && Math.abs(numValue) < 1e-10)) {
+      logger.warn('TrendSuggestions: Valor fuera de rango razonable detectado', { value: numValue, min, max });
+      // Si es extremadamente grande, limitar al máximo; si es extremadamente pequeño, usar el mínimo
+      if (Math.abs(numValue) > max) return max;
+      if (Math.abs(numValue) < min && numValue > 0) return min;
+      return defaultValue;
+    }
+    
+    // Limitar al rango especificado
+    return Math.max(min, Math.min(max, numValue));
+  }
+
+  /**
+   * ✅ CORRECCIÓN CRÍTICA: Formatear número de forma segura para evitar notación científica
+   */
+  private formatSafeNumber(value: number, maxDecimals: number = 2): string {
+    // Primero sanitizar el valor antes de formatear
+    const safeValue = this.sanitizeNumericValue(value, 0, 1e6, 0);
+    
+    if (!isFinite(safeValue) || isNaN(safeValue)) return '0';
+    
+    // Si el valor es muy grande, usar formato M (millones)
+    if (Math.abs(safeValue) > 1e6) {
+      const rounded = Math.round(safeValue / 1e6);
+      return `${rounded}M`;
+    }
+    
+    // Usar toLocaleString para evitar notación científica y formatear correctamente
+    try {
+      return safeValue.toLocaleString('en-US', {
+        maximumFractionDigits: maxDecimals,
+        minimumFractionDigits: 0,
+        notation: 'standard' // Forzar notación estándar, no científica
+      });
+    } catch (e) {
+      // Fallback si toLocaleString falla
+      return String(Math.round(safeValue));
+    }
+  }
+
+  /**
    * Analizar tendencias de oportunidades recientes para generar keywords
    */
   async analyzeTrends(userId: number, days: number = 30): Promise<TrendAnalysis[]> {
@@ -99,9 +155,25 @@ export class TrendSuggestionsService {
           
           const entry = keywordMap.get(keyword)!;
           entry.titles.push(opp.title);
-          if (opp.profitMargin) entry.margins.push(opp.profitMargin);
-          if (opp.roiPercentage) entry.rois.push(opp.roiPercentage);
-          if (opp.confidenceScore) entry.confidences.push(opp.confidenceScore);
+          
+          // ✅ CORRECCIÓN CRÍTICA: Sanitizar valores antes de agregarlos
+          const sanitizedMargin = this.sanitizeNumericValue(opp.profitMargin, 0, 1, 0);
+          if (sanitizedMargin > 0) entry.margins.push(sanitizedMargin);
+          
+          // ✅ CORRECCIÓN CRÍTICA: ROI debe estar entre 0 y 1000% (10x) - valores extremos indican datos corruptos
+          const sanitizedROI = this.sanitizeNumericValue(opp.roiPercentage, 0, 1000, 0);
+          if (sanitizedROI > 0 && sanitizedROI <= 1000) {
+            entry.rois.push(sanitizedROI);
+          } else if (opp.roiPercentage && opp.roiPercentage > 1000) {
+            logger.warn('TrendSuggestions: ROI extremo detectado y filtrado', { 
+              roiPercentage: opp.roiPercentage, 
+              keyword,
+              title: opp.title.substring(0, 50)
+            });
+          }
+          
+          const sanitizedConfidence = this.sanitizeNumericValue(opp.confidenceScore, 0, 1, 0);
+          if (sanitizedConfidence > 0) entry.confidences.push(sanitizedConfidence);
           if (Array.isArray(opp.targetMarketplaces)) {
             opp.targetMarketplaces.forEach(mp => entry.marketplaces.push(mp));
           }
@@ -113,15 +185,40 @@ export class TrendSuggestionsService {
       const trends: TrendAnalysis[] = [];
       
       keywordMap.forEach((data, keyword) => {
-        // Calcular métricas promedio
+        // ✅ CORRECCIÓN CRÍTICA: Calcular métricas promedio con validación adicional
         const avgMargin = data.margins.length > 0
-          ? data.margins.reduce((a, b) => a + b, 0) / data.margins.length
+          ? this.sanitizeNumericValue(
+              data.margins.reduce((a, b) => a + b, 0) / data.margins.length,
+              0,
+              1,
+              0
+            )
           : 0;
-        const avgROI = data.rois.length > 0
+        
+        // ✅ CORRECCIÓN CRÍTICA: Validar y limitar ROI promedio a rango razonable
+        const rawAvgROI = data.rois.length > 0
           ? data.rois.reduce((a, b) => a + b, 0) / data.rois.length
           : 0;
+        const avgROI = this.sanitizeNumericValue(rawAvgROI, 0, 1000, 0);
+        
+        // Detectar y reportar anomalías estadísticas
+        if (rawAvgROI > 1000 || !isFinite(rawAvgROI)) {
+          logger.warn('TrendSuggestions: ROI promedio anómalo detectado', {
+            keyword,
+            rawAvgROI,
+            sanitizedROI: avgROI,
+            roiCount: data.rois.length,
+            sampleROIs: data.rois.slice(0, 5)
+          });
+        }
+        
         const avgConfidence = data.confidences.length > 0
-          ? data.confidences.reduce((a, b) => a + b, 0) / data.confidences.length
+          ? this.sanitizeNumericValue(
+              data.confidences.reduce((a, b) => a + b, 0) / data.confidences.length,
+              0,
+              1,
+              0
+            )
           : 0;
 
         // Analizar distribución de marketplaces
@@ -216,11 +313,14 @@ export class TrendSuggestionsService {
       const suggestions: KeywordSuggestion[] = [];
 
       trends.slice(0, maxSuggestions).forEach((trend) => {
+        // ✅ CORRECCIÓN CRÍTICA: Validar ROI antes de usarlo en comparaciones
+        const safeAvgROI = trend.avgROI <= 1000 ? trend.avgROI : 0;
+        
         // Determinar prioridad
         let priority: 'high' | 'medium' | 'low' = 'medium';
-        if (trend.avgMargin >= 0.4 && trend.avgROI >= 50 && trend.trendDirection === 'up') {
+        if (trend.avgMargin >= 0.4 && safeAvgROI >= 50 && trend.trendDirection === 'up') {
           priority = 'high';
-        } else if (trend.avgMargin < 0.2 || trend.avgROI < 30) {
+        } else if (trend.avgMargin < 0.2 || safeAvgROI < 30) {
           priority = 'low';
         }
 
@@ -232,8 +332,10 @@ export class TrendSuggestionsService {
         if (trend.avgMargin >= 0.35) {
           reasons.push(`Alto margen promedio: ${Math.round(trend.avgMargin * 100)}%`);
         }
-        if (trend.avgROI >= 45) {
-          reasons.push(`ROI atractivo: ${Math.round(trend.avgROI)}%`);
+        // ✅ CORRECCIÓN CRÍTICA: Formatear ROI de forma segura para evitar notación científica
+        if (trend.avgROI >= 45 && trend.avgROI <= 1000) {
+          const formattedROI = Math.round(trend.avgROI);
+          reasons.push(`ROI atractivo: ${formattedROI}%`);
         }
         if (trend.opportunityCount >= 10) {
           reasons.push(`${trend.opportunityCount} oportunidades encontradas recientemente`);
@@ -262,12 +364,14 @@ export class TrendSuggestionsService {
             unit: '%',
             description: `Margen promedio de ${Math.round(trend.avgMargin * 100)}%`,
           };
-        } else if (trend.avgROI >= 40) {
+        } else if (trend.avgROI >= 40 && trend.avgROI <= 1000) {
+          // ✅ CORRECCIÓN CRÍTICA: Asegurar que el ROI esté en rango válido antes de usarlo
+          const safeROI = Math.round(trend.avgROI);
           supportingMetric = {
             type: 'roi',
-            value: trend.avgROI,
+            value: safeROI,
             unit: '%',
-            description: `ROI promedio de ${Math.round(trend.avgROI)}%`,
+            description: `ROI promedio de ${safeROI}%`,
           };
         } else {
           supportingMetric = {
