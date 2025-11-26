@@ -1844,27 +1844,50 @@ REGLAS ESTRICTAS:
           title: s.title || '',
           description: s.description || '',
           impact: {
-            revenue: s.impactRevenue || 0,
-            time: s.impactTime || 0,
+            revenue: toNumber(s.impactRevenue || 0), // ✅ Convertir Decimal a number
+            time: toNumber(s.impactTime || 0), // ✅ Convertir Decimal a number si es necesario
             difficulty: (s.difficulty as any) || 'medium'
           },
-          confidence: s.confidence || 0,
+          confidence: toNumber(s.confidence || 0), // ✅ Asegurar que es number
           actionable: s.actionable ?? true,
           implemented: s.implemented ?? false,
           estimatedTime: s.estimatedTime || '30 minutos',
           requirements: parseJsonSafe(s.requirements, []),
           steps: parseJsonSafe(s.steps, []),
           relatedProducts: parseJsonSafe(s.relatedProducts, undefined),
-          metrics: s.metrics ? parseJsonSafe(s.metrics, undefined) : undefined,
+          metrics: s.metrics ? (() => {
+            const parsed = parseJsonSafe(s.metrics, undefined);
+            if (parsed && typeof parsed === 'object') {
+              // ✅ Convertir valores Decimal en metrics a number
+              return {
+                ...parsed,
+                currentValue: parsed.currentValue !== undefined ? toNumber(parsed.currentValue) : parsed.currentValue,
+                targetValue: parsed.targetValue !== undefined ? toNumber(parsed.targetValue) : parsed.targetValue,
+              };
+            }
+            return parsed;
+          })() : undefined,
           createdAt: s.createdAt?.toISOString() || new Date().toISOString(),
           // ✅ OBJETIVO A: Incluir campos de keywords si existen
           keyword: (s as any).keyword,
           keywordCategory: (s as any).keywordCategory,
           keywordSegment: (s as any).keywordSegment,
           keywordReason: (s as any).keywordReason,
-          keywordSupportingMetric: (s as any).keywordSupportingMetric ? parseJsonSafe((s as any).keywordSupportingMetric, undefined) : undefined,
+          keywordSupportingMetric: (s as any).keywordSupportingMetric ? (() => {
+            const parsed = parseJsonSafe((s as any).keywordSupportingMetric, undefined);
+            if (parsed && typeof parsed === 'object' && parsed.value !== undefined) {
+              // ✅ Convertir value de Decimal a number
+              return {
+                ...parsed,
+                value: toNumber(parsed.value),
+              };
+            }
+            return parsed;
+          })() : undefined,
           targetMarketplaces: (s as any).targetMarketplaces ? parseJsonSafe((s as any).targetMarketplaces, []) : undefined,
-          estimatedOpportunities: (s as any).estimatedOpportunities,
+          estimatedOpportunities: (s as any).estimatedOpportunities !== undefined && (s as any).estimatedOpportunities !== null 
+            ? toNumber((s as any).estimatedOpportunities) 
+            : undefined,
         };
       });
       } catch (dbError: any) {
