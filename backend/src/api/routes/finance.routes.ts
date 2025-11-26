@@ -59,22 +59,58 @@ router.get('/summary', async (req: Request, res: Response, next) => {
       })
     ]);
 
-    // Calcular métricas
+    // ✅ MEJORADO: Calcular métricas incluyendo costos adicionales (envío, impuestos)
     const totalSales = sales.reduce((sum, s) => sum + toNumber(s.salePrice), 0);
-    const totalCosts = sales.reduce((sum, s) => sum + toNumber(s.aliexpressCost), 0);
+    const totalBaseCosts = sales.reduce((sum, s) => sum + toNumber(s.aliexpressCost || 0), 0);
+    
+    // ✅ Incluir costos adicionales de productos (si están disponibles)
+    const totalShippingCosts = products.reduce((sum, p) => sum + toNumber(p.shippingCost || 0), 0);
+    const totalImportTaxes = products.reduce((sum, p) => sum + toNumber(p.importTax || 0), 0);
+    const totalMarketplaceFees = sales.reduce((sum, s) => sum + toNumber(s.marketplaceFee || 0), 0);
+    
+    const totalCosts = totalBaseCosts + totalShippingCosts + totalImportTaxes + totalMarketplaceFees;
     const totalCommissions = commissions
       .filter(c => c.status === 'PAID')
       .reduce((sum, c) => sum + toNumber(c.amount), 0);
-    const totalProfit = totalSales - totalCosts - totalCommissions;
-    const grossMargin = totalSales > 0 ? ((totalProfit / totalSales) * 100) : 0;
+    
+    // ✅ Calcular ganancia neta considerando todos los costos
+    const grossProfit = totalSales - totalBaseCosts - totalMarketplaceFees;
+    const totalProfit = grossProfit - totalShippingCosts - totalImportTaxes - totalCommissions;
+    const grossMargin = totalSales > 0 ? ((grossProfit / totalSales) * 100) : 0;
+    const netMargin = totalSales > 0 ? ((totalProfit / totalSales) * 100) : 0;
+
+    // ✅ Obtener ventas pendientes
+    const pendingSales = await prisma.sale.findMany({
+      where: {
+        userId,
+        status: { in: ['PENDING', 'PROCESSING'] }
+      },
+      include: {
+        product: true
+      }
+    });
 
     const summary = {
+      revenue: totalSales, // Alias para compatibilidad con frontend
       totalSales,
+      expenses: totalCosts, // Alias para compatibilidad con frontend
       totalCosts,
-      totalCommissions,
+      totalBaseCosts,
+      totalShippingCosts,
+      totalImportTaxes,
+      totalMarketplaceFees,
+      profit: grossProfit, // Alias para compatibilidad con frontend
+      grossProfit,
+      netProfit: totalProfit,
       totalProfit,
+      commissions: totalCommissions, // Alias para compatibilidad con frontend
+      totalCommissions,
+      margin: netMargin, // Alias para compatibilidad con frontend
       grossMargin: Number(grossMargin.toFixed(2)),
+      netMargin: Number(netMargin.toFixed(2)),
+      taxes: totalImportTaxes, // Alias para compatibilidad con frontend
       salesCount: sales.length,
+      pendingSalesCount: pendingSales.length,
       productsCount: products.length,
       commissionsCount: commissions.length,
       period: {

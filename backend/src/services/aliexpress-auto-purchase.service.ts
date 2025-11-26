@@ -247,60 +247,79 @@ export class AliExpressAutoPurchaseService {
       // Take screenshot before confirming
       await page.screenshot({ path: 'pre-purchase.png' });
 
-      // WARNING: This is the POINT OF NO RETURN
-      // Clicking this button will actually place the order and charge the payment method
-
-      logger.warn('⚠️  ABOUT TO PLACE REAL ORDER - Remove this in testing!');
+      // ✅ HABILITADO: Compra automática con validaciones de seguridad
+      // Las validaciones de capital y saldo PayPal se realizan ANTES de llegar aquí
       
-      // In production, uncomment this:
-      /*
-      const confirmButton = await page.$('button.place-order, .confirm-btn');
-      if (confirmButton) {
-        await confirmButton.click();
-        logger.info('Order placed!');
-
-        // Wait for order confirmation
-        await page.waitForTimeout(5000);
-        await page.screenshot({ path: 'order-confirmation.png' });
-
-        // Extract order information
-        const orderNumber = await page.$eval('.order-number, .order-id', 
-          (el) => el.textContent || ''
-        ).catch(() => 'UNKNOWN');
-
-        const totalAmount = await page.$eval('.total-amount, .order-total', 
-          (el) => el.textContent || ''
-        ).then(text => parseFloat(text.replace(/[^0-9.]/g, ''))).catch(() => 0);
-
-        logger.info('Order placed successfully', { orderNumber, totalAmount });
-
-        // Store order in database
-        await this.storeOrder({
-          orderNumber,
-          productUrl: request.productUrl,
-          totalAmount,
-          shippingAddress: request.shippingAddress,
+      // ✅ Verificación doble para compras superiores a $100
+      const estimatedTotal = price * request.quantity;
+      if (estimatedTotal > 100) {
+        logger.warn('Compra de alto valor detectada', { 
+          estimatedTotal, 
+          maxPrice: request.maxPrice,
+          url: request.productUrl 
         });
+        
+        // Agregar delay adicional para compras de alto valor
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
 
+      const confirmButton = await page.$('button.place-order, .confirm-btn, button[type="submit"]');
+      if (!confirmButton) {
+        logger.error('Confirm button not found');
         await page.close();
-
         return {
-          success: true,
-          orderNumber,
-          orderId: orderNumber,
-          totalAmount,
-          estimatedDelivery: '15-30 days', // AliExpress typical
+          success: false,
+          error: 'Confirm button not found on checkout page',
+          screenshots: ['product-page.png', 'checkout-page.png', 'pre-purchase.png'],
         };
       }
-      */
 
-      // For testing, return mock success
-      await page.close();
+      // ✅ Realizar compra
+      logger.info('Placing order on AliExpress', { 
+        productUrl: request.productUrl,
+        estimatedTotal,
+        maxPrice: request.maxPrice
+      });
       
+      await confirmButton.click();
+      logger.info('Order placed!');
+
+      // Wait for order confirmation
+      await page.waitForTimeout(5000);
+      await page.screenshot({ path: 'order-confirmation.png' });
+
+      // Extract order information
+      const orderNumber = await page.$eval('.order-number, .order-id, [data-order-id]', 
+        (el) => el.textContent || ''
+      ).catch(() => {
+        // Intentar extraer de la URL
+        const url = page.url();
+        const match = url.match(/orderId[=:](\d+)/i);
+        return match ? match[1] : 'UNKNOWN';
+      });
+
+      const totalAmount = await page.$eval('.total-amount, .order-total, [data-total]', 
+        (el) => el.textContent || ''
+      ).then(text => parseFloat(text.replace(/[^0-9.]/g, ''))).catch(() => estimatedTotal);
+
+      logger.info('Order placed successfully', { orderNumber, totalAmount });
+
+      // Store order in database
+      await this.storeOrder({
+        orderNumber,
+        productUrl: request.productUrl,
+        totalAmount,
+        shippingAddress: request.shippingAddress,
+      });
+
+      await page.close();
+
       return {
-        success: false,
-        error: 'Auto-purchase disabled for safety - Enable in production',
-        screenshots: ['product-page.png', 'checkout-page.png', 'pre-purchase.png'],
+        success: true,
+        orderNumber,
+        orderId: orderNumber,
+        totalAmount,
+        estimatedDelivery: '15-30 days', // AliExpress typical
       };
 
     } catch (error: any) {

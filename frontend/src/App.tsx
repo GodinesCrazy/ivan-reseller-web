@@ -34,6 +34,7 @@ const ManualLogin = lazy(() => import('@pages/ManualLogin'));
 const ResolveCaptcha = lazy(() => import('@pages/ResolveCaptcha'));
 const RequestAccess = lazy(() => import('@pages/RequestAccess'));
 const MeetingRoom = lazy(() => import('@pages/MeetingRoom'));
+const PendingPurchases = lazy(() => import('@pages/PendingPurchases'));
 import Layout from '@components/layout/Layout';
 
 function AppContent() {
@@ -172,6 +173,7 @@ function AppContent() {
         <Route path="products" element={<Products />} />
         <Route path="products/:id/preview" element={<ProductPreview />} />
         <Route path="sales" element={<Sales />} />
+        <Route path="pending-purchases" element={<PendingPurchases />} />
         <Route path="commissions" element={<Commissions />} />
         
         {/* Finance & Dropshipping */}

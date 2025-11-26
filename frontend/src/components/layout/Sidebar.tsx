@@ -17,7 +17,8 @@ import {
   Globe,
   Terminal,
   HelpCircle,
-  Video
+  Video,
+  ShoppingCart
 } from 'lucide-react';
 
 interface NavItem {
@@ -33,6 +34,7 @@ const navItems: NavItem[] = [
   { path: '/autopilot', label: 'Autopilot', icon: Bot },
   { path: '/products', label: 'Products', icon: Package },
   { path: '/sales', label: 'Sales', icon: DollarSign },
+  { path: '/pending-purchases', label: 'Compras Pendientes', icon: ShoppingCart },
   { path: '/commissions', label: 'Commissions', icon: Receipt },
   { path: '/finance', label: 'Finance', icon: Wallet },
   { path: '/flexible', label: 'Flexible Dropshipping', icon: TrendingUp },

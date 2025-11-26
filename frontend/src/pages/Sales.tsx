@@ -41,6 +41,8 @@ interface Sale {
   productTitle: string;
   marketplace: string;
   buyerName: string;
+  buyerEmail?: string; // ✅ MEJORADO: Email del comprador
+  shippingAddress?: string; // ✅ MEJORADO: Dirección de envío
   salePrice: number;
   cost: number;
   profit: number;
@@ -563,7 +565,23 @@ export default function Sales() {
                 <div>
                   <p className="text-sm text-gray-600">Buyer</p>
                   <p className="font-medium">{selectedSale.buyerName}</p>
+                  {selectedSale.buyerEmail && (
+                    <p className="text-xs text-gray-500 mt-1">{selectedSale.buyerEmail}</p>
+                  )}
                 </div>
+                {selectedSale.shippingAddress && (
+                  <div className="col-span-2">
+                    <p className="text-sm text-gray-600 flex items-center gap-1">
+                      <MapPin className="w-4 h-4" />
+                      Shipping Address
+                    </p>
+                    <p className="font-medium text-sm break-words">
+                      {typeof selectedSale.shippingAddress === 'string' 
+                        ? selectedSale.shippingAddress 
+                        : JSON.stringify(selectedSale.shippingAddress)}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <p className="text-sm text-gray-600">Sale Price</p>
                   <p className="font-medium text-lg">{formatCurrencySimple(selectedSale.salePrice, 'USD')}</p>

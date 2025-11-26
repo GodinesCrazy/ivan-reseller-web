@@ -29,16 +29,19 @@ router.get('/', async (req: Request, res: Response, next) => {
     const sales = await saleService.getSales(userId, status as any);
     
     // ✅ Mapear datos del backend al formato esperado por el frontend
+    const { toNumber } = await import('../../utils/decimal.utils');
     const mappedSales = sales.map((sale: any) => ({
       id: String(sale.id),
       orderId: sale.orderId,
       productTitle: sale.product?.title || 'Unknown Product',
       marketplace: sale.marketplace,
-      buyerName: sale.user?.username || sale.buyerEmail || 'Unknown Buyer',
-      salePrice: sale.salePrice,
-      cost: sale.aliexpressCost || sale.costPrice || 0,
-      profit: sale.netProfit || sale.grossProfit || 0,
-      commission: sale.commissionAmount || sale.userCommission || 0,
+      buyerName: sale.buyerName || sale.user?.username || sale.buyerEmail || 'Unknown Buyer',
+      buyerEmail: sale.buyerEmail || undefined, // ✅ MEJORADO: Incluir email del comprador
+      shippingAddress: sale.shippingAddress || undefined, // ✅ MEJORADO: Incluir dirección de envío
+      salePrice: toNumber(sale.salePrice),
+      cost: toNumber(sale.aliexpressCost || sale.costPrice || 0),
+      profit: toNumber(sale.netProfit || sale.grossProfit || 0),
+      commission: toNumber(sale.commissionAmount || sale.userCommission || 0),
       status: sale.status,
       trackingNumber: sale.trackingNumber || undefined,
       createdAt: sale.createdAt?.toISOString() || new Date().toISOString()
@@ -116,6 +119,89 @@ router.post('/', async (req: Request, res: Response, next) => {
     const sale = await saleService.createSale(req.user!.userId, data);
     res.status(201).json(sale);
   } catch (error: any) {
+    next(error);
+  }
+});
+
+// ✅ MEJORADO: GET /api/sales/pending-purchases - Obtener ventas pendientes de compra manual
+router.get('/pending-purchases', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { prisma } = await import('../../config/database');
+    const { workflowConfigService } = await import('../../services/workflow-config.service');
+    const { toNumber } = await import('../../utils/decimal.utils');
+
+    // Obtener ventas pendientes o en procesamiento
+    const pendingSales = await prisma.sale.findMany({
+      where: {
+        userId: userId,
+        status: { in: ['PENDING', 'PROCESSING'] }
+      },
+      include: {
+        product: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    // Calcular capital disponible
+    const totalCapital = await workflowConfigService.getWorkingCapital(userId);
+    
+    const pendingOrders = await prisma.sale.findMany({
+      where: {
+        userId: userId,
+        status: { in: ['PENDING', 'PROCESSING'] }
+      }
+    });
+    const pendingCost = pendingOrders.reduce((sum, order) => 
+      sum + toNumber(order.aliexpressCost || 0), 0
+    );
+
+    const approvedProducts = await prisma.product.findMany({
+      where: {
+        userId: userId,
+        status: 'APPROVED',
+        isPublished: false
+      }
+    });
+    const approvedCost = approvedProducts.reduce((sum, product) => 
+      sum + toNumber(product.aliexpressPrice || 0), 0
+    );
+
+    const availableCapital = totalCapital - pendingCost - approvedCost;
+
+    // Mapear ventas con información de capital
+    const mappedSales = pendingSales.map(sale => {
+      const requiredCapital = toNumber(sale.aliexpressCost || 0);
+      const canPurchase = availableCapital >= requiredCapital;
+
+      return {
+        id: sale.id,
+        orderId: sale.orderId,
+        productId: sale.productId,
+        productTitle: sale.product?.title || 'Unknown Product',
+        productUrl: sale.product?.aliexpressUrl || '',
+        aliexpressUrl: sale.product?.aliexpressUrl || '',
+        marketplace: sale.marketplace,
+        salePrice: toNumber(sale.salePrice),
+        aliexpressCost: toNumber(sale.aliexpressCost || 0),
+        buyerName: sale.buyerName || undefined,
+        buyerEmail: sale.buyerEmail || undefined,
+        shippingAddress: sale.shippingAddress || undefined,
+        createdAt: sale.createdAt.toISOString(),
+        availableCapital: availableCapital,
+        requiredCapital: requiredCapital,
+        canPurchase: canPurchase
+      };
+    });
+
+    res.json({ sales: mappedSales });
+  } catch (error) {
     next(error);
   }
 });

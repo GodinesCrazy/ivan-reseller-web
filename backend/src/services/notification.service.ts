@@ -147,10 +147,10 @@ class NotificationService {
   /**
    * Send notification to specific user(s)
    */
-  sendToUser(userId: number | number[], notification: Omit<NotificationPayload, 'id' | 'timestamp'>): void {
+  async sendToUser(userId: number | number[], notification: Omit<NotificationPayload, 'id' | 'timestamp'>): Promise<void> {
     const userIds = Array.isArray(userId) ? userId : [userId];
     
-    userIds.forEach(uid => {
+    for (const uid of userIds) {
       const fullNotification: NotificationPayload = {
         ...notification,
         id: this.generateNotificationId(),
@@ -169,8 +169,108 @@ class NotificationService {
         });
       }
 
+      // ✅ MEJORADO: Enviar notificación por email si está configurado
+      if (notification.category === 'SALE' && notification.priority === 'HIGH') {
+        await this.sendEmailNotification(uid, fullNotification).catch(err => {
+          console.error('Error sending email notification', err);
+        });
+      }
+
       console.log(`📨 Notification sent to user ${uid}: ${notification.title}`);
-    });
+    }
+  }
+
+  /**
+   * ✅ MEJORADO: Enviar notificación por email
+   */
+  private async sendEmailNotification(userId: number, notification: NotificationPayload): Promise<void> {
+    try {
+      const { prisma } = await import('../config/database');
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      
+      if (!user || !user.email) {
+        return; // No email configured
+      }
+
+      // Verificar si email está habilitado
+      const emailEnabled = process.env.EMAIL_ENABLED === 'true';
+      if (!emailEnabled) {
+        return; // Email notifications disabled
+      }
+
+      // Usar servicio de email si está disponible
+      const { default: nodemailer } = await import('nodemailer');
+      
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
+
+      const emailSubject = `[Ivan Reseller] ${notification.title}`;
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #4F46E5; color: white; padding: 20px; text-align: center; }
+            .content { background: #f9fafb; padding: 20px; margin: 20px 0; }
+            .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }
+            .button { display: inline-block; padding: 10px 20px; background: #4F46E5; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Ivan Reseller</h1>
+            </div>
+            <div class="content">
+              <h2>${notification.title}</h2>
+              <p>${notification.message}</p>
+              ${notification.data ? `
+                <div style="background: white; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                  <strong>Detalles:</strong><br>
+                  ${Object.entries(notification.data).map(([key, value]) => 
+                    `<strong>${key}:</strong> ${value}<br>`
+                  ).join('')}
+                </div>
+              ` : ''}
+              ${notification.actions && notification.actions.length > 0 ? `
+                <div style="text-align: center; margin: 20px 0;">
+                  ${notification.actions.map(action => 
+                    action.url ? `<a href="${action.url}" class="button">${action.label}</a>` : ''
+                  ).join(' ')}
+                </div>
+              ` : ''}
+            </div>
+            <div class="footer">
+              <p>Este es un email automático de Ivan Reseller. Por favor, no responda a este mensaje.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || 'noreply@ivanreseller.com',
+        to: user.email,
+        subject: emailSubject,
+        html: emailHtml,
+        text: notification.message,
+      });
+
+      console.log(`📧 Email notification sent to ${user.email}: ${notification.title}`);
+    } catch (error) {
+      // No fallar si el email no se puede enviar
+      console.error('Error sending email notification', error);
+    }
   }
 
   /**

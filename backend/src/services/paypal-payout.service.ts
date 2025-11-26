@@ -148,6 +148,35 @@ export class PayPalPayoutService {
   }
 
   /**
+   * ✅ CRÍTICO: Verificar saldo de PayPal antes de realizar compras
+   * Nota: PayPal Payouts API no tiene endpoint directo para verificar saldo
+   * Este método intenta usar PayPal REST API para obtener el saldo
+   * Si no está disponible, retorna null y se debe validar capital de trabajo
+   */
+  async checkPayPalBalance(): Promise<{ available: number; currency: string } | null> {
+    try {
+      await this.ensureAccessToken();
+      
+      // Intentar obtener saldo usando PayPal REST API
+      // Nota: Esto requiere permisos adicionales en la cuenta PayPal
+      // Por ahora, retornamos null y confiamos en la validación de capital de trabajo
+      
+      // TODO: Implementar cuando se tenga acceso a PayPal REST API con permisos de saldo
+      // const response = await this.apiClient.get('/v1/wallet/balance');
+      // return {
+      //   available: parseFloat(response.data.available_balance.value),
+      //   currency: response.data.available_balance.currency
+      // };
+      
+      logger.warn('PayPal balance check not implemented - using working capital validation instead');
+      return null;
+    } catch (error: any) {
+      logger.error('Failed to check PayPal balance', { error: error.message });
+      return null;
+    }
+  }
+
+  /**
    * Send single payout to a recipient
    */
   async sendPayout(item: PayoutItem): Promise<PayoutResponse> {

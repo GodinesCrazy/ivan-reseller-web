@@ -58,6 +58,7 @@ model User {
   autopilotWorkflows      AutopilotWorkflow[] // Workflows personalizados del usuario
   userMeetings            MeetingRoom[]           @relation("UserMeetings") // Reuniones iniciadas por el usuario
   adminMeetings           MeetingRoom[]           @relation("AdminMeetings") // Reuniones donde el usuario es admin
+  purchaseLogs            PurchaseLog[] // Logs de compras automáticas
 
   @@index([email])
   @@index([username])
@@ -124,6 +125,7 @@ model Product {
   sales                Sale[]
   successfulOperations SuccessfulOperation[]
   marketplaceListings  MarketplaceListing[]
+  purchaseLogs         PurchaseLog[] // Logs de compras relacionadas
 
   @@index([userId, status])
   @@index([status, isPublished])
@@ -148,6 +150,12 @@ model Sale {
   trackingNumber   String?
   isCompleteCycle  Boolean   @default(false) // Si completó ciclo completo sin devoluciones
   completedAt      DateTime? // Fecha de completado del ciclo
+  
+  // ✅ MEJORADO: Información del comprador
+  buyerEmail       String? // Email del comprador (si está disponible)
+  buyerName        String? // Nombre del comprador
+  shippingAddress  String? // Dirección completa de envío (JSON string o texto)
+  
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -157,6 +165,7 @@ model Sale {
   commission          Commission?
   adminCommissions    AdminCommission[]
   successfulOperation SuccessfulOperation? // Relación one-to-one con SuccessfulOperation
+  purchaseLogs        PurchaseLog[] // Logs de compras relacionadas
 
   @@index([userId, status])
   @@index([marketplace, status])
@@ -674,4 +683,53 @@ model MeetingRoom {
   @@index([status])
   @@index([roomId])
   @@map("meeting_rooms")
+}
+
+// ✅ LOGS DE COMPRAS AUTOMÁTICAS (Purchase Log)
+model PurchaseLog {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  saleId          Int? // ID de la venta relacionada (opcional)
+  orderId         String? // ID de la orden en el marketplace
+  productId       Int? // ID del producto
+  
+  // Información de la compra
+  supplierUrl     String // URL del proveedor (AliExpress, etc.)
+  purchaseAmount  Decimal   @db.Decimal(18, 2) // Monto de la compra
+  currency        String    @default("USD")
+  quantity        Int       @default(1)
+  
+  // Resultado de la compra
+  status          String    @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED
+  success         Boolean   @default(false)
+  errorMessage    String? // Mensaje de error si falló
+  
+  // Información del proveedor
+  supplierOrderId String? // ID de la orden en el proveedor
+  trackingNumber  String? // Número de tracking
+  
+  // Validaciones realizadas
+  capitalValidated Boolean  @default(false) // Si se validó capital antes de comprar
+  capitalAvailable Decimal? @db.Decimal(18, 2) // Capital disponible al momento de la compra
+  paypalValidated  Boolean  @default(false) // Si se validó saldo PayPal
+  
+  // Retry information
+  retryAttempt    Int       @default(0) // Número de intento
+  maxRetries      Int       @default(3)
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  completedAt     DateTime? // Cuando se completó (éxito o fallo final)
+  
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sale  Sale? @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  
+  @@index([userId, status])
+  @@index([saleId])
+  @@index([status, createdAt])
+  @@index([createdAt])
+  @@map("purchase_logs")
 }

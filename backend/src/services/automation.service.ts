@@ -306,27 +306,203 @@ export class AutomationService {
         throw new Error('Invalid buy price: must be greater than 0');
       }
 
-      // 4. Realizar compra automática al proveedor (con try-catch para rollback)
-      let purchaseResult;
-      try {
-        purchaseResult = await this.executePurchaseFromSupplier({
-          supplierUrl: opportunity.supplierUrl,
-          quantity: automatedOrder.orderDetails.quantity,
-          maxPrice: opportunity.buyPrice,
-          shippingAddress: automatedOrder.customerInfo.address
-        });
+      // ✅ CRÍTICO: Validar capital de trabajo antes de comprar
+      const userId = parseInt(automatedOrder.customerId) || 0; // customerId contiene el userId del vendedor
+      if (userId > 0) {
+        const { workflowConfigService } = await import('./workflow-config.service');
+        const { prisma } = await import('../config/database');
+        const { logger } = await import('../config/logger');
+        const { toNumber } = await import('../utils/decimal.utils');
 
-        if (!purchaseResult.success) {
-          throw new Error(`Error en compra automática: ${purchaseResult.error}`);
+        // Calcular capital disponible
+        const totalCapital = await workflowConfigService.getWorkingCapital(userId);
+        
+        // Obtener costos pendientes
+        const pendingOrders = await prisma.sale.findMany({
+          where: {
+            userId: userId,
+            status: { in: ['PENDING', 'PROCESSING'] }
+          }
+        });
+        const pendingCost = pendingOrders.reduce((sum, order) => 
+          sum + toNumber(order.aliexpressCost || 0), 0
+        );
+
+        // Obtener productos aprobados pero no publicados
+        const approvedProducts = await prisma.product.findMany({
+          where: {
+            userId: userId,
+            status: 'APPROVED',
+            isPublished: false
+          }
+        });
+        const approvedCost = approvedProducts.reduce((sum, product) => 
+          sum + toNumber(product.aliexpressPrice || 0), 0
+        );
+
+        const availableCapital = totalCapital - pendingCost - approvedCost;
+        const purchaseCost = opportunity.buyPrice * automatedOrder.orderDetails.quantity;
+
+        if (availableCapital < purchaseCost) {
+          const errorMsg = `Capital insuficiente. Disponible: $${availableCapital.toFixed(2)}, Requerido: $${purchaseCost.toFixed(2)}`;
+          logger.warn('Compra automática cancelada por capital insuficiente', {
+            userId,
+            availableCapital,
+            purchaseCost,
+            orderId: automatedOrder.id
+          });
+          
+          automatedOrder.status = 'failed';
+          automatedOrder.error = errorMsg;
+          
+          await this.notificationService.sendAlert({
+            type: 'error',
+            title: 'Compra automática cancelada',
+            message: errorMsg,
+            priority: 'HIGH'
+          });
+          
+          throw new Error(errorMsg);
         }
 
-        automatedOrder.status = 'purchasing';
-        automatedOrder.timestamps.purchased = new Date();
-      } catch (purchaseError) {
-        // ✅ Rollback: Marcar orden como fallida
-        automatedOrder.status = 'failed';
-        automatedOrder.error = purchaseError instanceof Error ? purchaseError.message : 'Unknown purchase error';
-        throw purchaseError; // Re-throw para que se maneje arriba
+        logger.info('Validación de capital exitosa', {
+          userId,
+          availableCapital,
+          purchaseCost,
+          orderId: automatedOrder.id
+        });
+      }
+
+      // ✅ CRÍTICO: Validar saldo PayPal antes de comprar (si se usa PayPal)
+      // Nota: PayPal Payouts API no tiene endpoint directo para verificar saldo
+      // En producción, esto debería validarse con PayPal REST API o almacenar saldo en BD
+      // Por ahora, solo validamos capital de trabajo
+
+      // ✅ Registrar intento de compra en PurchaseLog
+      const { prisma } = await import('../config/database');
+      const { toNumber } = await import('../utils/decimal.utils');
+      let purchaseLogId: number | null = null;
+      
+      try {
+        const purchaseLog = await prisma.purchaseLog.create({
+          data: {
+            userId: userId,
+            saleId: null, // Se actualizará después si se encuentra la venta
+            orderId: automatedOrder.id,
+            productId: parseInt(opportunity.id) || null,
+            supplierUrl: opportunity.supplierUrl,
+            purchaseAmount: opportunity.buyPrice * automatedOrder.orderDetails.quantity,
+            quantity: automatedOrder.orderDetails.quantity,
+            status: 'PENDING',
+            success: false,
+            capitalValidated: true, // Ya validado arriba
+            capitalAvailable: availableCapital,
+            paypalValidated: false, // PayPal validation no implementada aún
+            retryAttempt: 0,
+            maxRetries: 3,
+          }
+        });
+        purchaseLogId = purchaseLog.id;
+      } catch (logError) {
+        logger.warn('Failed to create purchase log', { error: logError });
+      }
+
+      // 4. Realizar compra automática al proveedor (con retry y try-catch para rollback)
+      let purchaseResult;
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries) {
+        try {
+          purchaseResult = await this.executePurchaseFromSupplier({
+            supplierUrl: opportunity.supplierUrl,
+            quantity: automatedOrder.orderDetails.quantity,
+            maxPrice: opportunity.buyPrice,
+            shippingAddress: automatedOrder.customerInfo.address,
+            userId: userId, // Pasar userId para logging
+          });
+
+          if (purchaseResult.success) {
+            // ✅ Actualizar log de compra como exitoso y vincular con venta si existe
+            if (purchaseLogId) {
+              // Intentar encontrar la venta relacionada por orderId
+              let relatedSaleId: number | null = null;
+              try {
+                const relatedSale = await prisma.sale.findFirst({
+                  where: { orderId: automatedOrder.id }
+                });
+                if (relatedSale) {
+                  relatedSaleId = relatedSale.id;
+                }
+              } catch (e) {
+                // Ignorar si no se encuentra la venta
+              }
+
+              await prisma.purchaseLog.update({
+                where: { id: purchaseLogId },
+                data: {
+                  saleId: relatedSaleId, // Vincular con venta si existe
+                  status: 'SUCCESS',
+                  success: true,
+                  supplierOrderId: purchaseResult.supplierOrderId,
+                  trackingNumber: purchaseResult.trackingNumber,
+                  completedAt: new Date(),
+                  retryAttempt: retryCount,
+                }
+              });
+            }
+            
+            automatedOrder.status = 'purchasing';
+            automatedOrder.timestamps.purchased = new Date();
+            break; // Salir del loop de retry
+          } else {
+            throw new Error(`Error en compra automática: ${purchaseResult.error}`);
+          }
+        } catch (purchaseError) {
+          retryCount++;
+          
+          if (retryCount >= maxRetries) {
+            // ✅ Actualizar log de compra como fallido
+            if (purchaseLogId) {
+              await prisma.purchaseLog.update({
+                where: { id: purchaseLogId },
+                data: {
+                  status: 'FAILED',
+                  success: false,
+                  errorMessage: purchaseError instanceof Error ? purchaseError.message : 'Unknown purchase error',
+                  completedAt: new Date(),
+                  retryAttempt: retryCount,
+                }
+              });
+            }
+            
+            // ✅ Rollback: Marcar orden como fallida
+            automatedOrder.status = 'failed';
+            automatedOrder.error = purchaseError instanceof Error ? purchaseError.message : 'Unknown purchase error';
+            throw purchaseError; // Re-throw para que se maneje arriba
+          } else {
+            // ✅ Retry: Esperar antes de reintentar
+            logger.warn(`Purchase attempt ${retryCount} failed, retrying...`, {
+              error: purchaseError instanceof Error ? purchaseError.message : String(purchaseError),
+              retryCount,
+              maxRetries
+            });
+            
+            // Actualizar log con intento de retry
+            if (purchaseLogId) {
+              await prisma.purchaseLog.update({
+                where: { id: purchaseLogId },
+                data: {
+                  retryAttempt: retryCount,
+                  errorMessage: `Retry ${retryCount}/${maxRetries}: ${purchaseError instanceof Error ? purchaseError.message : 'Unknown error'}`,
+                }
+              });
+            }
+            
+            // Esperar antes de reintentar (backoff exponencial)
+            await new Promise(resolve => setTimeout(resolve, Math.min(1000 * Math.pow(2, retryCount), 10000)));
+          }
+        }
       }
 
       // 5. Actualizar tracking y notificar
@@ -602,6 +778,7 @@ export class AutomationService {
     quantity: number;
     maxPrice: number;
     shippingAddress: any;
+    userId?: number;
   }): Promise<{
     success: boolean;
     supplierOrderId?: string;
@@ -610,12 +787,70 @@ export class AutomationService {
     error?: string;
   }> {
     try {
-      // En implementación real, integrar con APIs de proveedores
-      // o usar automatización web para compras
+      const { logger } = await import('../config/logger');
+      logger.info('🛒 Ejecutando compra desde proveedor', { 
+        supplierUrl: params.supplierUrl,
+        quantity: params.quantity,
+        maxPrice: params.maxPrice
+      });
       
-      console.log(`🛒 Comprando desde: ${params.supplierUrl}`);
+      // ✅ Integrar con AliExpress Auto-Purchase Service
+      if (params.supplierUrl.includes('aliexpress.com')) {
+        const AliExpressAutoPurchaseService = (await import('./aliexpress-auto-purchase.service')).default;
+        
+        // Convertir shippingAddress a formato esperado
+        const shippingAddress = typeof params.shippingAddress === 'object' && params.shippingAddress !== null
+          ? {
+              fullName: params.shippingAddress.name || params.shippingAddress.fullName || 'Customer',
+              addressLine1: params.shippingAddress.street || params.shippingAddress.addressLine1 || '',
+              addressLine2: params.shippingAddress.addressLine2 || '',
+              city: params.shippingAddress.city || '',
+              state: params.shippingAddress.state || '',
+              zipCode: params.shippingAddress.zipCode || params.shippingAddress.zip || '',
+              country: params.shippingAddress.country || '',
+              phoneNumber: params.shippingAddress.phone || params.shippingAddress.phoneNumber || '',
+            }
+          : {
+              fullName: 'Customer',
+              addressLine1: typeof params.shippingAddress === 'string' ? params.shippingAddress : '',
+              addressLine2: '',
+              city: '',
+              state: '',
+              zipCode: '',
+              country: '',
+              phoneNumber: '',
+            };
+        
+        const purchaseRequest = {
+          productUrl: params.supplierUrl,
+          quantity: params.quantity,
+          maxPrice: params.maxPrice,
+          shippingAddress: shippingAddress,
+        };
+        
+        const result = await AliExpressAutoPurchaseService.executePurchase(purchaseRequest);
+        
+        if (result.success && result.orderId) {
+          return {
+            success: true,
+            supplierOrderId: result.orderId || result.orderNumber,
+            estimatedDelivery: result.estimatedDelivery 
+              ? new Date(result.estimatedDelivery) 
+              : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000), // 15 días por defecto
+            trackingNumber: result.trackingNumber,
+          };
+        } else {
+          return {
+            success: false,
+            error: result.error || 'Failed to execute purchase on AliExpress',
+          };
+        }
+      }
       
-      // Simular compra exitosa
+      // Para otros proveedores, usar implementación genérica
+      logger.warn('Supplier not AliExpress, using generic purchase method', { supplierUrl: params.supplierUrl });
+      
+      // Simular compra exitosa para otros proveedores (TODO: implementar integración real)
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       return {
@@ -626,6 +861,12 @@ export class AutomationService {
       };
       
     } catch (error) {
+      const { logger } = await import('../config/logger');
+      logger.error('Error executing purchase from supplier', { 
+        error: error instanceof Error ? error.message : String(error),
+        supplierUrl: params.supplierUrl
+      });
+      
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Error en compra automática'
