@@ -33,6 +33,7 @@ const WorkflowConfig = lazy(() => import('@pages/WorkflowConfig'));
 const ManualLogin = lazy(() => import('@pages/ManualLogin'));
 const ResolveCaptcha = lazy(() => import('@pages/ResolveCaptcha'));
 const RequestAccess = lazy(() => import('@pages/RequestAccess'));
+const MeetingRoom = lazy(() => import('@pages/MeetingRoom'));
 import Layout from '@components/layout/Layout';
 
 function AppContent() {
@@ -202,6 +203,9 @@ function AppContent() {
         
         {/* Help */}
         <Route path="help" element={<HelpCenter />} />
+        
+        {/* Meeting Room */}
+        <Route path="meeting-room" element={<MeetingRoom />} />
       </Route>
 
       {/* 404 */}

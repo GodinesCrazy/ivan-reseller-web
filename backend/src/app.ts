@@ -58,6 +58,7 @@ import configAuditRoutes from './api/routes/config-audit.routes';
 import manualCaptchaRoutes from './api/routes/manual-captcha.routes';
 import accessRequestsRoutes from './api/routes/access-requests.routes';
 import listingLifetimeRoutes from './api/routes/listing-lifetime.routes';
+import meetingRoomRoutes from './api/routes/meeting-room.routes';
 
 const app: Application = express();
 app.set('trust proxy', 1);
@@ -79,7 +80,7 @@ app.use(helmet({
       fontSrc: ["'self'", "data:"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
-      frameSrc: ["'none'"],
+      frameSrc: ["'self'", "https://meet.jit.si", "https://*.jit.si"], // Permitir iframes de Jitsi Meet
       upgradeInsecureRequests: env.NODE_ENV === 'production' ? [] : null, // Solo en producción
     },
   },
@@ -266,6 +267,7 @@ app.use('/api/manual-auth', manualAuthRoutes);
 app.use('/api/auth-status', authStatusRoutes);
 app.use('/api/config-audit', configAuditRoutes);
 app.use('/api/listing-lifetime', listingLifetimeRoutes);
+app.use('/api/meeting-room', meetingRoomRoutes);
 
 // Swagger API Documentation
 if (env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'true') {

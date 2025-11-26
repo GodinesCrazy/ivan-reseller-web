@@ -16,7 +16,8 @@ import {
   FileText,
   Globe,
   Terminal,
-  HelpCircle
+  HelpCircle,
+  Video
 } from 'lucide-react';
 
 interface NavItem {
@@ -43,6 +44,7 @@ const navItems: NavItem[] = [
   { path: '/logs', label: 'System Logs', icon: Terminal, roles: ['ADMIN'] }, // Solo ADMIN
   { path: '/workflow-config', label: 'Workflow Config', icon: Settings },
   { path: '/settings', label: 'Settings', icon: Settings },
+  { path: '/meeting-room', label: 'Sala de Reuniones', icon: Video },
   { path: '/help', label: 'Help Center', icon: HelpCircle },
 ];
 

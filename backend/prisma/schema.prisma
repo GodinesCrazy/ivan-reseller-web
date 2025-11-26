@@ -56,6 +56,8 @@ model User {
   userSettings            UserSettings?
   accessRequestsReviewed  AccessRequest[]         @relation("AccessRequestReviewer") // Solicitudes de acceso revisadas por este admin
   autopilotWorkflows      AutopilotWorkflow[] // Workflows personalizados del usuario
+  userMeetings            MeetingRoom[]           @relation("UserMeetings") // Reuniones iniciadas por el usuario
+  adminMeetings           MeetingRoom[]           @relation("AdminMeetings") // Reuniones donde el usuario es admin
 
   @@index([email])
   @@index([username])
@@ -278,8 +280,8 @@ model SuccessfulOperation {
   startDate      DateTime
   completionDate DateTime
   daysToComplete Int
-  totalProfit    Decimal   @db.Decimal(18, 2) // Ganancia total en moneda base
-  expectedProfit Decimal   @db.Decimal(18, 2) // Ganancia esperada en moneda base
+  totalProfit    Decimal  @db.Decimal(18, 2) // Ganancia total en moneda base
+  expectedProfit Decimal  @db.Decimal(18, 2) // Ganancia esperada en moneda base
   profitAccuracy Float // % de diferencia entre esperado y real
 
   // Estado de la operación
@@ -638,4 +640,28 @@ model AutopilotWorkflow {
   @@index([enabled, nextRun])
   @@index([nextRun])
   @@map("autopilot_workflows")
+}
+
+// ✅ SALA DE REUNIONES (Meeting Room)
+model MeetingRoom {
+  id        Int       @id @default(autoincrement())
+  roomId    String    @unique // ID único de la sala (ej: user-123-meeting)
+  userId    Int // Usuario que inició/solicitó la reunión
+  adminId   Int? // Admin que está en la reunión (null si no hay admin)
+  status    String    @default("WAITING") // WAITING, ACTIVE, ENDED
+  startedAt DateTime?
+  endedAt   DateTime?
+  duration  Int? // Duración en segundos
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  user  User  @relation("UserMeetings", fields: [userId], references: [id], onDelete: Cascade)
+  admin User? @relation("AdminMeetings", fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([adminId, status])
+  @@index([status])
+  @@index([roomId])
+  @@map("meeting_rooms")
 }
