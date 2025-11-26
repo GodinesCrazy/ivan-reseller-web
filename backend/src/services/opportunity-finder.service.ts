@@ -10,6 +10,7 @@ import fxService from './fx.service';
 import { formatPriceByCurrency } from '../utils/currency.utils';
 import { workflowConfigService } from './workflow-config.service';
 import { logger } from '../config/logger';
+import taxCalculatorService from './tax-calculator.service'; // ✅ MEJORADO: Servicio de impuestos
 import {
   DEFAULT_COMPARATOR_MARKETPLACES,
   OPTIONAL_MARKETPLACES,
@@ -141,6 +142,8 @@ class OpportunityFinderService {
       productUrl: string;
       imageUrl?: string;
       productId?: string;
+      images?: string[]; // ✅ MEJORADO: Array de imágenes
+      shippingCost?: number; // ✅ MEJORADO: Costo de envío
     }> = [];
     let manualAuthPending = false;
     let manualAuthError: ManualAuthRequiredError | null = null;
@@ -222,6 +225,15 @@ class OpportunityFinderService {
           const priceMaxBase =
             typeof p.priceMax === 'number' && p.priceMax > 0 ? p.priceMax : priceInBase;
 
+          // ✅ MEJORADO: Extraer shipping cost si está disponible
+          let shippingCost = 0;
+          if (p.shipping?.cost !== undefined && typeof p.shipping.cost === 'number' && p.shipping.cost > 0) {
+            // Convertir shipping cost a moneda base si es necesario
+            shippingCost = fxService.convert(p.shipping.cost, detectedCurrency, baseCurrency);
+          } else if (typeof p.shippingCost === 'number' && p.shippingCost > 0) {
+            shippingCost = fxService.convert(p.shippingCost, detectedCurrency, baseCurrency);
+          }
+
           return {
             title: p.title,
             price: priceInBase,
@@ -240,6 +252,8 @@ class OpportunityFinderService {
             productUrl: p.productUrl,
             imageUrl: p.imageUrl || 'https://via.placeholder.com/300x300?text=No+Image',
             productId: p.productId || p.productUrl?.split('/').pop()?.split('.html')[0],
+            images: Array.isArray(p.images) ? p.images : undefined, // ✅ MEJORADO: Array de imágenes
+            shippingCost: shippingCost > 0 ? shippingCost : undefined, // ✅ MEJORADO: Shipping cost
           };
         })
         .filter(p => {
@@ -364,6 +378,12 @@ class OpportunityFinderService {
             const sourceCurrency = String(p.currency || baseCurrency || 'USD').toUpperCase();
             const sourcePrice = Number(p.price) || 0;
             const priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
+            // ✅ MEJORADO: Extraer shipping cost si está disponible
+            let shippingCost = 0;
+            if (typeof p.shippingCost === 'number' && p.shippingCost > 0) {
+              shippingCost = fxService.convert(p.shippingCost, sourceCurrency, baseCurrency);
+            }
+
             return {
               title: p.title,
               price: priceInBase,
@@ -382,6 +402,7 @@ class OpportunityFinderService {
                 ? p.images.filter((img: any) => img && typeof img === 'string' && img.trim().length > 0)
                 : (p.image || p.imageUrl) ? [p.image || p.imageUrl].filter(Boolean) : [],
               productId: p.productId,
+              shippingCost: shippingCost > 0 ? shippingCost : undefined, // ✅ MEJORADO: Shipping cost
             };
           })
           .filter(p => {
@@ -593,6 +614,34 @@ class OpportunityFinderService {
         }
       }
 
+      // ✅ MEJORADO: Obtener país destino para cálculo de impuestos
+      // Mapear región a código de país (ej: 'us' -> 'US', 'cl' -> 'CL')
+      const countryCode = region ? region.toUpperCase() : 'US'; // Por defecto US
+      const targetCountry = countryCode.length === 2 ? countryCode : 
+        (countryCode === 'MEXICO' || countryCode === 'MX' ? 'MX' :
+         countryCode === 'CHILE' || countryCode === 'CL' ? 'CL' :
+         countryCode === 'SPAIN' || countryCode === 'ES' ? 'ES' : 'US');
+
+      // ✅ MEJORADO: Obtener shipping cost del producto
+      const productShippingCost = product.shippingCost || 0;
+      
+      // ✅ MEJORADO: Calcular impuestos de importación
+      let importTax = 0;
+      if (productShippingCost > 0 || product.price > 0) {
+        try {
+          const subtotal = product.price + productShippingCost;
+          const taxResult = taxCalculatorService.calculateTax(subtotal, targetCountry);
+          importTax = taxResult.totalTax;
+        } catch (taxError: any) {
+          logger.warn('Error calculando impuestos, usando 0', {
+            service: 'opportunity-finder',
+            error: taxError?.message,
+            country: targetCountry
+          });
+          importTax = 0;
+        }
+      }
+
       if (valid) {
         // 3) Calcular costos con el marketplace más favorable (max margen)
         for (const a of analyses) {
@@ -604,7 +653,12 @@ class OpportunityFinderService {
             product.price,
             a.currency || 'USD',
             baseCurrency,
-            { shippingCost: 0, taxesPct: 0, otherCosts: 0 }
+            { 
+              shippingCost: productShippingCost, // ✅ MEJORADO: Incluir shipping
+              importTax: importTax, // ✅ MEJORADO: Incluir impuestos
+              taxesPct: 0, 
+              otherCosts: 0 
+            }
           );
           if (margin > best.margin) {
             // ✅ Verificar si competitivePrice ya está en baseCurrency para evitar conversión doble
@@ -773,6 +827,20 @@ class OpportunityFinderService {
         allImages.push(imageUrl);
       }
 
+      // ✅ MEJORADO: Calcular costo total y recalcular margen/ROI con costos completos
+      const totalCost = product.price + productShippingCost + importTax;
+      
+      // Recalcular margen y ROI usando costo total si está disponible
+      let finalMargin = best.margin;
+      let finalROI = Math.round(best.margin * 100);
+      
+      if (totalCost > 0 && best.priceBase > 0) {
+        // Recalcular margen basado en costo total
+        const netProfit = best.priceBase - totalCost;
+        finalMargin = best.priceBase > 0 ? Math.round((netProfit / best.priceBase) * 10000) / 10000 : 0;
+        finalROI = totalCost > 0 ? Math.round((netProfit / totalCost) * 100) : 0;
+      }
+
       const opp: OpportunityItem = {
         productId: product.productId,
         title: product.title,
@@ -780,7 +848,7 @@ class OpportunityFinderService {
         aliexpressUrl: product.productUrl || '', // Asegurar que siempre haya una URL
         image: imageUrl, // ✅ TAREA 1: URL de imagen validada y normalizada (primera imagen)
         images: allImages.length > 0 ? allImages : [imageUrl], // ✅ MEJORADO: Todas las imágenes disponibles
-        costUsd: product.price,
+        costUsd: product.price, // Costo base del producto
         costAmount:
           typeof product.priceMaxSource === 'number' && product.priceMaxSource > 0
             ? product.priceMaxSource
@@ -789,11 +857,16 @@ class OpportunityFinderService {
               : fxService.convert(product.price, baseCurrency, product.sourceCurrency || baseCurrency),
         costCurrency: product.priceRangeSourceCurrency || product.sourceCurrency || baseCurrency,
         baseCurrency,
+        // ✅ MEJORADO: Costos adicionales
+        shippingCost: productShippingCost > 0 ? productShippingCost : undefined,
+        importTax: importTax > 0 ? importTax : undefined,
+        totalCost: totalCost > product.price ? totalCost : undefined, // Solo incluir si hay costos adicionales
+        targetCountry: targetCountry,
         suggestedPriceUsd: best.priceBase || fxService.convert(best.price, best.currency || baseCurrency, baseCurrency),
         suggestedPriceAmount: best.price,
         suggestedPriceCurrency: best.currency || baseCurrency,
-        profitMargin: best.margin,
-        roiPercentage: Math.round(best.margin * 100),
+        profitMargin: finalMargin, // ✅ MEJORADO: Margen basado en costo total
+        roiPercentage: finalROI, // ✅ MEJORADO: ROI basado en costo total
         competitionLevel: 'unknown',
         marketDemand: 'real',
         confidenceScore: valid ? 0.5 : 0.3,
@@ -817,6 +890,11 @@ class OpportunityFinderService {
           title: opp.title,
           sourceMarketplace: opp.sourceMarketplace,
           costUsd: opp.costUsd,
+          // ✅ MEJORADO: Incluir costos adicionales
+          shippingCost: opp.shippingCost,
+          importTax: opp.importTax,
+          totalCost: opp.totalCost,
+          targetCountry: opp.targetCountry,
           suggestedPriceUsd: opp.suggestedPriceUsd,
           profitMargin: opp.profitMargin,
           roiPercentage: opp.roiPercentage,

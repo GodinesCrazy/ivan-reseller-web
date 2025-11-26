@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStatusStore } from '@stores/authStatusStore';
 import { formatCurrencySimple } from '../utils/currency';
-import { Download } from 'lucide-react'; // ✅ FASE 3: Icono para botón de importar
+import { Download, Info, Package, Truck, Receipt } from 'lucide-react'; // ✅ MEJORADO: Iconos para tooltips
 
 type Marketplace = 'ebay' | 'amazon' | 'mercadolibre';
 
@@ -32,16 +32,21 @@ interface OpportunityItem {
   sourceMarketplace: 'aliexpress';
   aliexpressUrl: string;
   image?: string;
-  images?: string[]; // ✅ FASE 2: Array de todas las imágenes disponibles
-  costUsd: number;
+  images?: string[]; // ✅ MEJORADO: Array de todas las imágenes disponibles
+  costUsd: number; // Costo base del producto
   costAmount: number;
   costCurrency: string;
   baseCurrency: string;
+  // ✅ MEJORADO: Costos adicionales para cálculo preciso
+  shippingCost?: number; // Costo de envío internacional
+  importTax?: number; // Impuestos de importación (IVA/aranceles)
+  totalCost?: number; // Costo total (producto + envío + impuestos)
+  targetCountry?: string; // País destino para cálculo de impuestos
   suggestedPriceUsd: number;
   suggestedPriceAmount: number;
   suggestedPriceCurrency: string;
-  profitMargin: number; // 0-1
-  roiPercentage: number; // 0-100
+  profitMargin: number; // 0-1 (basado en totalCost si está disponible)
+  roiPercentage: number; // 0-100 (basado en totalCost si está disponible)
   competitionLevel: 'low' | 'medium' | 'high' | 'unknown';
   marketDemand: string;
   confidenceScore: number;
@@ -364,10 +369,15 @@ export default function Opportunities() {
         aliexpressUrl: item.aliexpressUrl,
         aliexpressPrice: item.costUsd,
         suggestedPrice: item.suggestedPriceUsd,
-        currency: 'USD',
+        currency: item.baseCurrency || 'USD',
+        // ✅ MEJORADO: Incluir costos adicionales si están disponibles
+        shippingCost: item.shippingCost || undefined,
+        importTax: item.importTax || undefined,
+        totalCost: item.totalCost || undefined,
+        targetCountry: item.targetCountry || undefined,
       };
 
-      // ✅ FASE 2: Pasar TODAS las imágenes disponibles, no solo una
+      // ✅ MEJORADO: Pasar TODAS las imágenes disponibles, no solo una
       if (item.images && Array.isArray(item.images) && item.images.length > 0) {
         // Filtrar solo URLs válidas
         const validImages = item.images.filter(img => 
@@ -429,11 +439,17 @@ export default function Opportunities() {
         title: item.title,
         aliexpressUrl: item.aliexpressUrl,
         aliexpressPrice: item.costUsd,
-        suggestedPrice: item.suggestedPriceUsd,
-        currency: 'USD',
+        // ✅ MEJORADO: Usar costo total si está disponible para calcular precio sugerido
+        suggestedPrice: item.suggestedPriceUsd, // Ya viene calculado con costo total desde backend
+        currency: item.baseCurrency || 'USD',
+        // ✅ MEJORADO: Incluir costos adicionales si están disponibles
+        shippingCost: item.shippingCost || undefined,
+        importTax: item.importTax || undefined,
+        totalCost: item.totalCost || undefined,
+        targetCountry: item.targetCountry || undefined,
       };
 
-      // ✅ FASE 2: Pasar TODAS las imágenes disponibles, no solo una
+      // ✅ MEJORADO: Pasar TODAS las imágenes disponibles, no solo una
       if (item.images && Array.isArray(item.images) && item.images.length > 0) {
         // Filtrar solo URLs válidas
         const validImages = item.images.filter(img => 
@@ -641,7 +657,12 @@ export default function Opportunities() {
               <tr>
                 <th className="text-center p-3">Imagen</th>
                 <th className="text-left p-3">Título</th>
-                <th className="text-right p-3">Costo</th>
+                <th className="text-right p-3">
+                  <div className="flex items-center justify-end gap-1">
+                    <span>Costo</span>
+                    <Info className="w-3 h-3 text-gray-400 cursor-help" title="Incluye: producto + envío + impuestos (si disponible)" />
+                  </div>
+                </th>
                 <th className="text-right p-3">Precio sugerido</th>
                 <th className="text-right p-3">Margen %</th>
                 <th className="text-right p-3">ROI %</th>
@@ -704,8 +725,46 @@ export default function Opportunities() {
                   ) : null}
                 </td>
                 <td className="p-3 text-right font-semibold">
-                  <div className="flex flex-col items-end gap-0.5">
-                    <span>{formatMoney(it.costUsd, it.baseCurrency)}</span>
+                  <div className="flex flex-col items-end gap-1">
+                    {/* ✅ MEJORADO: Mostrar costo total si está disponible, sino costo base */}
+                    {it.totalCost && it.totalCost > it.costUsd ? (
+                      <>
+                        <div className="flex items-center gap-1 group relative">
+                          <span className="font-semibold">{formatMoney(it.totalCost, it.baseCurrency)}</span>
+                          <Info className="w-3 h-3 text-gray-400 cursor-help" />
+                          <div className="absolute right-0 top-full mt-1 w-64 p-2 bg-gray-900 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                            <div className="font-semibold mb-1">Desglose de costos:</div>
+                            <div className="space-y-0.5">
+                              <div className="flex justify-between">
+                                <span>Producto:</span>
+                                <span>{formatMoney(it.costUsd, it.baseCurrency)}</span>
+                              </div>
+                              {it.shippingCost && it.shippingCost > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Envío:</span>
+                                  <span>{formatMoney(it.shippingCost, it.baseCurrency)}</span>
+                                </div>
+                              )}
+                              {it.importTax && it.importTax > 0 && (
+                                <div className="flex justify-between">
+                                  <span>Impuestos:</span>
+                                  <span>{formatMoney(it.importTax, it.baseCurrency)}</span>
+                                </div>
+                              )}
+                              <div className="border-t border-gray-700 mt-1 pt-1 flex justify-between font-semibold">
+                                <span>Total:</span>
+                                <span>{formatMoney(it.totalCost, it.baseCurrency)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Base: {formatMoney(it.costUsd, it.baseCurrency)}
+                        </div>
+                      </>
+                    ) : (
+                      <span>{formatMoney(it.costUsd, it.baseCurrency)}</span>
+                    )}
                     {it.costCurrency && it.costCurrency !== it.baseCurrency ? (
                       <span className="text-xs text-gray-500">
                         ({formatMoney(it.costAmount, it.costCurrency)})
@@ -734,17 +793,21 @@ export default function Opportunities() {
                 </td>
                 <td className="p-3">
                   <div className="flex items-center justify-end gap-2">
+                    {/* ✅ MEJORADO: Colores mejorados (verde >30%, rojo <10%) */}
                     <span
                       className={`font-semibold ${
                         it.profitMargin >= 0.3
                           ? 'text-green-600'
-                          : it.profitMargin >= 0.2
+                          : it.profitMargin >= 0.1
                           ? 'text-yellow-600'
                           : 'text-red-600'
                       }`}
                     >
                       {Math.round(it.profitMargin * 100)}%
                     </span>
+                    {it.totalCost && it.totalCost > it.costUsd && (
+                      <Info className="w-3 h-3 text-gray-400 cursor-help group relative" title="Margen calculado con costo total (producto + envío + impuestos)" />
+                    )}
                     {it.estimatedFields?.includes('profitMargin') && (
                       <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 uppercase text-[10px] font-semibold">
                         Estimado

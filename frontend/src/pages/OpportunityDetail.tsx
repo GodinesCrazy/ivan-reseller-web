@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../services/api';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { Info, Package, Truck, Receipt } from 'lucide-react';
+import { formatCurrencySimple } from '../utils/currency';
 
 export default function OpportunityDetail() {
   const { id } = useParams();
@@ -32,12 +34,105 @@ export default function OpportunityDetail() {
       <div className="bg-white border rounded p-4">
         <div className="font-medium text-lg">{item.title}</div>
         <div className="text-sm text-gray-600">Source: {item.sourceMarketplace}</div>
+        
+        {/* ✅ MEJORADO: Desglose de costos */}
+        {(item.shippingCost || item.importTax || item.totalCost) && (
+          <div className="mt-4 p-3 bg-gray-50 rounded border">
+            <div className="font-semibold text-sm mb-2 flex items-center gap-2">
+              <Info className="w-4 h-4 text-gray-500" />
+              Desglose de Costos
+            </div>
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Costo del producto:</span>
+                <span className="font-medium">{formatCurrencySimple(item.costUsd, item.baseCurrency || 'USD')}</span>
+              </div>
+              {item.shippingCost && item.shippingCost > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600 flex items-center gap-1">
+                    <Truck className="w-3 h-3" />
+                    Envío internacional:
+                  </span>
+                  <span className="font-medium">{formatCurrencySimple(item.shippingCost, item.baseCurrency || 'USD')}</span>
+                </div>
+              )}
+              {item.importTax && item.importTax > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600 flex items-center gap-1">
+                    <Receipt className="w-3 h-3" />
+                    Impuestos de importación:
+                  </span>
+                  <span className="font-medium">{formatCurrencySimple(item.importTax, item.baseCurrency || 'USD')}</span>
+                </div>
+              )}
+              {item.totalCost && item.totalCost > item.costUsd && (
+                <div className="flex justify-between pt-2 border-t border-gray-300">
+                  <span className="font-semibold">Costo total:</span>
+                  <span className="font-bold text-lg">{formatCurrencySimple(item.totalCost, item.baseCurrency || 'USD')}</span>
+                </div>
+              )}
+              {item.targetCountry && (
+                <div className="text-xs text-gray-500 mt-2">
+                  País destino: {item.targetCountry}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-          <Stat label="Cost (USD)" value={`$${item.costUsd.toFixed(2)}`} />
-          <Stat label="Suggested (USD)" value={`$${item.suggestedPriceUsd.toFixed(2)}`} />
-          <Stat label="Margin %" value={`${Math.round(item.profitMargin*100)}%`} />
-          <Stat label="ROI %" value={`${Math.round(item.roiPercentage)}%`} />
+          <Stat 
+            label="Costo Base" 
+            value={formatCurrencySimple(item.costUsd, item.baseCurrency || 'USD')}
+            highlight={false}
+          />
+          {item.totalCost && item.totalCost > item.costUsd ? (
+            <Stat 
+              label="Costo Total" 
+              value={formatCurrencySimple(item.totalCost, item.baseCurrency || 'USD')}
+              highlight={true}
+              tooltip="Incluye producto + envío + impuestos"
+            />
+          ) : (
+            <Stat 
+              label="Costo Base" 
+              value={formatCurrencySimple(item.costUsd, item.baseCurrency || 'USD')}
+              highlight={false}
+            />
+          )}
+          <Stat 
+            label="Precio Sugerido" 
+            value={formatCurrencySimple(item.suggestedPriceUsd, item.suggestedPriceCurrency || item.baseCurrency || 'USD')}
+            highlight={false}
+          />
+          <Stat 
+            label="Margen %" 
+            value={`${Math.round(item.profitMargin*100)}%`}
+            highlight={item.profitMargin >= 0.3}
+            color={item.profitMargin >= 0.3 ? 'green' : item.profitMargin >= 0.1 ? 'yellow' : 'red'}
+            tooltip={item.totalCost ? "Calculado con costo total (producto + envío + impuestos)" : "Calculado con costo base"}
+          />
+          <Stat 
+            label="ROI %" 
+            value={`${Math.round(item.roiPercentage)}%`}
+            highlight={item.roiPercentage >= 50}
+            color={item.roiPercentage >= 50 ? 'green' : item.roiPercentage >= 30 ? 'yellow' : 'red'}
+            tooltip={item.totalCost ? "Calculado con costo total (producto + envío + impuestos)" : "Calculado con costo base"}
+          />
         </div>
+
+        {/* ✅ MEJORADO: Cálculo de ganancia real */}
+        {item.totalCost && item.suggestedPriceUsd && (
+          <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
+            <div className="font-semibold text-sm mb-2 text-blue-900">Ganancia Estimada</div>
+            <div className="text-lg font-bold text-blue-700">
+              {formatCurrencySimple(item.suggestedPriceUsd - item.totalCost, item.baseCurrency || 'USD')}
+            </div>
+            <div className="text-xs text-blue-600 mt-1">
+              Precio sugerido - Costo total = Ganancia neta
+            </div>
+          </div>
+        )}
       </div>
       <div className="bg-white border rounded p-4">
         <div className="font-medium mb-2">Competition Snapshots</div>
@@ -77,11 +172,35 @@ export default function OpportunityDetail() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ 
+  label, 
+  value, 
+  highlight = false, 
+  color = 'default',
+  tooltip 
+}: { 
+  label: string; 
+  value: string;
+  highlight?: boolean;
+  color?: 'green' | 'yellow' | 'red' | 'default';
+  tooltip?: string;
+}) {
+  const colorClasses = {
+    green: 'text-green-600',
+    yellow: 'text-yellow-600',
+    red: 'text-red-600',
+    default: 'text-gray-900'
+  };
+
   return (
-    <div className="p-3 border rounded">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-lg font-semibold">{value}</div>
+    <div className={`p-3 border rounded ${highlight ? 'bg-blue-50 border-blue-200' : ''}`}>
+      <div className="text-xs text-gray-500 flex items-center gap-1">
+        {label}
+        {tooltip && (
+          <Info className="w-3 h-3 text-gray-400 cursor-help" title={tooltip} />
+        )}
+      </div>
+      <div className={`text-lg font-semibold ${colorClasses[color]}`}>{value}</div>
     </div>
   );
 }

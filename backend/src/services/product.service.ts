@@ -19,7 +19,11 @@ export interface CreateProductDto {
   category?: string;
   currency?: string;
   tags?: string[];
+  // ✅ MEJORADO: Costos adicionales para cálculo preciso
   shippingCost?: number;
+  importTax?: number;
+  totalCost?: number;
+  targetCountry?: string;
   estimatedDeliveryDays?: number;
   productData?: Record<string, any>;
 }
@@ -35,7 +39,11 @@ export interface UpdateProductDto {
   category?: string;
   currency?: string;
   tags?: string[];
+  // ✅ MEJORADO: Costos adicionales para cálculo preciso
   shippingCost?: number;
+  importTax?: number;
+  totalCost?: number;
+  targetCountry?: string;
   estimatedDeliveryDays?: number;
   productData?: Record<string, any>;
 }
@@ -124,6 +132,9 @@ export class ProductService {
       imageUrls,
       tags,
       shippingCost,
+      importTax,
+      totalCost,
+      targetCountry,
       estimatedDeliveryDays,
       currency,
       productData,
@@ -190,6 +201,11 @@ export class ProductService {
           category: rest.category || null,
           images: imagesPayload,
           productData: metadataPayload,
+          // ✅ MEJORADO: Guardar costos adicionales
+          shippingCost: shippingCost !== undefined ? shippingCost : null,
+          importTax: importTax !== undefined ? importTax : null,
+          totalCost: totalCost !== undefined ? totalCost : null,
+          targetCountry: targetCountry || null,
           status: 'PENDING',
           isPublished: false,
         },
@@ -224,6 +240,11 @@ export class ProductService {
             category: rest.category || null,
             images: imagesPayload,
             productData: metadataPayload,
+            // ✅ MEJORADO: Guardar costos adicionales (si la migración está ejecutada)
+            shippingCost: shippingCost !== undefined ? shippingCost : null,
+            importTax: importTax !== undefined ? importTax : null,
+            totalCost: totalCost !== undefined ? totalCost : null,
+            targetCountry: targetCountry || null,
             status: 'PENDING',
             isPublished: false,
           },
@@ -366,6 +387,9 @@ export class ProductService {
       imageUrls,
       tags,
       shippingCost,
+      importTax,
+      totalCost,
+      targetCountry,
       estimatedDeliveryDays,
       currency,
       productData,
@@ -390,6 +414,12 @@ export class ProductService {
       updateData.finalPrice = updateData.suggestedPrice;
     }
     if (typeof rest.category === 'string') updateData.category = rest.category;
+    
+    // ✅ MEJORADO: Actualizar costos adicionales si se proporcionan
+    if (typeof shippingCost === 'number') updateData.shippingCost = shippingCost;
+    if (typeof importTax === 'number') updateData.importTax = importTax;
+    if (typeof totalCost === 'number') updateData.totalCost = totalCost;
+    if (typeof targetCountry === 'string') updateData.targetCountry = targetCountry;
 
     if (imageUrl || imageUrls?.length) {
       updateData.images = buildImagePayload(imageUrl, imageUrls);

@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { api } from '../services/api';
-import { Check, X } from 'lucide-react';
+import { Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
 
@@ -184,22 +184,11 @@ export default function IntelligentPublisher() {
           <div key={p.id} className="p-4 border-b flex items-center justify-between gap-4">
             <div className="flex items-start gap-3 flex-1">
               <input type="checkbox" className="mt-1" checked={!!selected[p.id]} onChange={(e)=>setSelected(s=>({ ...s, [p.id]: e.target.checked }))} />
-              {/* ✅ Imagen del producto al inicio de cada barra */}
-              {p.imageUrl ? (
-                <img 
-                  src={p.imageUrl} 
-                  alt={p.title} 
-                  className="w-16 h-16 rounded object-cover flex-shrink-0"
-                  onError={(e) => {
-                    // Si la imagen falla, ocultar el elemento
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              ) : (
-                <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
-                  <span className="text-gray-400 text-xs">No img</span>
-                </div>
-              )}
+              {/* ✅ MEJORADO: Carrusel de imágenes múltiples */}
+              <ImageCarousel 
+                images={p.images || (p.imageUrl ? [p.imageUrl] : [])} 
+                title={p.title}
+              />
               <div className="flex-1">
                 <div className="font-medium">{p.title}</div>
                 <div className="text-xs text-gray-500 mt-1 space-y-1">
@@ -262,6 +251,81 @@ export default function IntelligentPublisher() {
           {listings.length===0 && <div className="p-3 text-sm text-gray-600">No listings yet.</div>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ✅ MEJORADO: Componente de carrusel de imágenes
+function ImageCarousel({ images, title }: { images: string[]; title: string }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  if (!images || images.length === 0) {
+    return (
+      <div className="w-20 h-20 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
+        <span className="text-gray-400 text-xs">No img</span>
+      </div>
+    );
+  }
+
+  const nextImage = () => {
+    setCurrentIndex((prev) => (prev + 1) % images.length);
+  };
+
+  const prevImage = () => {
+    setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
+  };
+
+  return (
+    <div className="relative w-20 h-20 rounded overflow-hidden flex-shrink-0 group">
+      <img 
+        src={images[currentIndex]} 
+        alt={`${title} - Imagen ${currentIndex + 1}`}
+        className="w-full h-full object-cover"
+        onError={(e) => {
+          // Si la imagen falla, intentar siguiente o mostrar placeholder
+          if (images.length > 1) {
+            const nextIndex = (currentIndex + 1) % images.length;
+            if (nextIndex !== currentIndex) {
+              setCurrentIndex(nextIndex);
+            } else {
+              (e.target as HTMLImageElement).src = 'https://via.placeholder.com/80x80?text=No+Image';
+            }
+          } else {
+            (e.target as HTMLImageElement).src = 'https://via.placeholder.com/80x80?text=No+Image';
+          }
+        }}
+      />
+      
+      {/* Controles del carrusel (solo si hay múltiples imágenes) */}
+      {images.length > 1 && (
+        <>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              prevImage();
+            }}
+            className="absolute left-0 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white p-1 rounded-r opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label="Imagen anterior"
+          >
+            <ChevronLeft className="w-3 h-3" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              nextImage();
+            }}
+            className="absolute right-0 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white p-1 rounded-l opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label="Siguiente imagen"
+          >
+            <ChevronRight className="w-3 h-3" />
+          </button>
+          
+          {/* Indicador de posición */}
+          <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs text-center py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            {currentIndex + 1} / {images.length}
+          </div>
+        </>
+      )}
     </div>
   );
 }

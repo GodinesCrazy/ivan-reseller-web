@@ -107,6 +107,11 @@ model Product {
   category        String?
   images          String // JSON string with array of image URLs
   productData     String? // JSON string with full scraped data
+  // ✅ MEJORADO: Costos adicionales para cálculo preciso de márgenes
+  shippingCost    Decimal?  @db.Decimal(18, 2) // Costo de envío internacional en moneda base
+  importTax       Decimal?  @db.Decimal(18, 2) // Impuestos de importación (IVA/aranceles) en moneda base
+  totalCost       Decimal?  @db.Decimal(18, 2) // Costo total (producto + envío + impuestos) en moneda base
+  targetCountry   String? // País destino para cálculo de impuestos (CL, ES, US, etc.)
   status          String    @default("PENDING") // PENDING, APPROVED, REJECTED, PUBLISHED, INACTIVE
   isPublished     Boolean   @default(false)
   publishedAt     DateTime?
@@ -345,10 +350,15 @@ model Opportunity {
   sourceMarketplace  String? // aliexpress, ebay, etc.
   sourceProductId    Int?
   title              String
-  costUsd            Decimal  @db.Decimal(18, 2)
+  costUsd            Decimal  @db.Decimal(18, 2) // Costo base del producto
+  // ✅ MEJORADO: Costos adicionales para cálculo preciso de márgenes
+  shippingCost       Decimal? @db.Decimal(18, 2) // Costo de envío internacional en USD
+  importTax          Decimal? @db.Decimal(18, 2) // Impuestos de importación (IVA/aranceles) en USD
+  totalCost          Decimal? @db.Decimal(18, 2) // Costo total (producto + envío + impuestos) en USD
+  targetCountry      String? // País destino para cálculo de impuestos (CL, ES, US, etc.)
   suggestedPriceUsd  Decimal  @db.Decimal(18, 2)
-  profitMargin       Decimal  @db.Decimal(18, 2)
-  roiPercentage      Decimal  @db.Decimal(18, 2)
+  profitMargin       Decimal  @db.Decimal(18, 2) // Margen basado en totalCost si está disponible
+  roiPercentage      Decimal  @db.Decimal(18, 2) // ROI basado en totalCost si está disponible
   competitionLevel   String? // low, medium, high
   marketDemand       String? // low, medium, high
   confidenceScore    Decimal  @db.Decimal(5, 2)

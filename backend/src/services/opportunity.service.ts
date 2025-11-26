@@ -5,6 +5,10 @@ export class OpportunityPersistenceService {
     title: string;
     sourceMarketplace: string;
     costUsd: number;
+    shippingCost?: number; // ✅ MEJORADO: Costo de envío
+    importTax?: number; // ✅ MEJORADO: Impuestos de importación
+    totalCost?: number; // ✅ MEJORADO: Costo total
+    targetCountry?: string; // ✅ MEJORADO: País destino
     suggestedPriceUsd: number;
     profitMargin: number;
     roiPercentage: number;
@@ -32,6 +36,11 @@ export class OpportunityPersistenceService {
         sourceProductId: null,
         title: data.title,
         costUsd: data.costUsd,
+        // ✅ MEJORADO: Guardar costos adicionales
+        shippingCost: data.shippingCost !== undefined ? data.shippingCost : null,
+        importTax: data.importTax !== undefined ? data.importTax : null,
+        totalCost: data.totalCost !== undefined ? data.totalCost : null,
+        targetCountry: data.targetCountry || null,
         suggestedPriceUsd: data.suggestedPriceUsd,
         profitMargin: data.profitMargin,
         roiPercentage: data.roiPercentage,

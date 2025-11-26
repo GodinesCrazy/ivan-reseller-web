@@ -22,7 +22,11 @@ const createProductSchema = z.object({
   imageUrls: z.array(z.string().url()).optional(),
   category: z.string().optional(),
   tags: z.array(z.string()).optional(),
-  shippingCost: z.number().optional(),
+  // ✅ MEJORADO: Costos adicionales para cálculo preciso
+  shippingCost: z.number().nonnegative().optional(),
+  importTax: z.number().nonnegative().optional(),
+  totalCost: z.number().nonnegative().optional(),
+  targetCountry: z.string().optional(),
   estimatedDeliveryDays: z.number().optional(),
   productData: z.record(z.any()).optional(),
 });

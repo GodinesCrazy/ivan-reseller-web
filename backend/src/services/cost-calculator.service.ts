@@ -2,9 +2,11 @@ export interface CostBreakdown {
   marketplaceFee: number;
   paymentFee: number;
   shippingCost: number;
-  taxes: number;
+  importTax: number; // ✅ MEJORADO: Impuestos de importación (IVA/aranceles)
+  taxes: number; // Mantener para compatibilidad (puede incluir otros impuestos)
   otherCosts: number;
-  totalCost: number;
+  productCost: number; // ✅ MEJORADO: Costo base del producto
+  totalCost: number; // ✅ MEJORADO: Costo total (producto + envío + impuestos + fees)
 }
 
 import fx from './fx.service';
@@ -29,23 +31,33 @@ export class CostCalculatorService {
     marketplace: 'ebay' | 'amazon' | 'mercadolibre',
     salePriceUsd: number,
     sourceCostUsd: number,
-    opts?: { shippingCost?: number; taxesPct?: number; otherCosts?: number }
+    opts?: { 
+      shippingCost?: number; 
+      importTax?: number; // ✅ MEJORADO: Impuestos de importación (IVA/aranceles) como cantidad fija
+      taxesPct?: number; // Otros impuestos como porcentaje (mantener para compatibilidad)
+      otherCosts?: number;
+    }
   ) {
     const cfg = this.defaults[marketplace] || this.defaults.ebay;
     const marketplaceFee = salePriceUsd * cfg.fee;
     const paymentFee = salePriceUsd * cfg.paymentFee;
     const shippingCost = opts?.shippingCost ?? 0;
-    const taxes = salePriceUsd * (opts?.taxesPct ?? 0);
+    const importTax = opts?.importTax ?? 0; // ✅ MEJORADO: Impuestos de importación
+    const taxes = salePriceUsd * (opts?.taxesPct ?? 0); // Otros impuestos como porcentaje
     const otherCosts = opts?.otherCosts ?? 0;
-    const totalCost = sourceCostUsd + marketplaceFee + paymentFee + shippingCost + taxes + otherCosts;
+    
+    // ✅ MEJORADO: Costo total incluye producto + envío + impuestos + fees
+    const totalCost = sourceCostUsd + shippingCost + importTax + marketplaceFee + paymentFee + taxes + otherCosts;
     const netProfit = salePriceUsd - totalCost;
     // ✅ Redondear margen a 4 decimales para evitar problemas de precisión (mantener precisión para cálculos)
     const margin = salePriceUsd > 0 ? Math.round((netProfit / salePriceUsd) * 10000) / 10000 : 0;
 
     const breakdown: CostBreakdown = {
+      productCost: sourceCostUsd,
       marketplaceFee,
       paymentFee,
       shippingCost,
+      importTax, // ✅ MEJORADO
       taxes,
       otherCosts,
       totalCost,
@@ -61,7 +73,12 @@ export class CostCalculatorService {
     sourceCost: number,
     saleCurrency: string,
     sourceCurrency: string,
-    opts?: { shippingCost?: number; taxesPct?: number; otherCosts?: number }
+    opts?: { 
+      shippingCost?: number; 
+      importTax?: number; // ✅ MEJORADO: Impuestos de importación (IVA/aranceles) como cantidad fija
+      taxesPct?: number; // Otros impuestos como porcentaje (mantener para compatibilidad)
+      otherCosts?: number;
+    }
   ) {
     const baseCfg = this.defaults[marketplace] || this.defaults.ebay;
     const overrides = this.regionFees[region]?.[marketplace] || {};
@@ -73,18 +90,30 @@ export class CostCalculatorService {
     // Convert source cost to sale currency
     const costInSaleCurrency = fx.convert(sourceCost, sourceCurrency, saleCurrency);
     const shippingCost = opts?.shippingCost ?? 0;
-    const taxes = salePrice * (opts?.taxesPct ?? 0);
+    const importTax = opts?.importTax ?? 0; // ✅ MEJORADO: Impuestos de importación
+    const taxes = salePrice * (opts?.taxesPct ?? 0); // Otros impuestos como porcentaje
     const otherCosts = opts?.otherCosts ?? 0;
 
     const marketplaceFee = salePrice * cfg.fee;
     const paymentFee = salePrice * cfg.paymentFee;
-    const totalCost = costInSaleCurrency + marketplaceFee + paymentFee + shippingCost + taxes + otherCosts;
+    
+    // ✅ MEJORADO: Costo total incluye producto + envío + impuestos + fees
+    const totalCost = costInSaleCurrency + shippingCost + importTax + marketplaceFee + paymentFee + taxes + otherCosts;
     const netProfit = salePrice - totalCost;
     // ✅ Redondear margen a 4 decimales para evitar problemas de precisión (mantener precisión para cálculos)
     const margin = salePrice > 0 ? Math.round((netProfit / salePrice) * 10000) / 10000 : 0;
 
     return {
-      breakdown: { marketplaceFee, paymentFee, shippingCost, taxes, otherCosts, totalCost },
+      breakdown: { 
+        productCost: costInSaleCurrency,
+        marketplaceFee, 
+        paymentFee, 
+        shippingCost, 
+        importTax, // ✅ MEJORADO
+        taxes, 
+        otherCosts, 
+        totalCost 
+      },
       netProfit,
       margin,
     };
