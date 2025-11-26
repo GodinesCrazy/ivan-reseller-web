@@ -216,10 +216,11 @@ async function testSuggestionsService() {
         // Revisar impact.revenue
         if (s.impact?.revenue !== undefined) {
           if (typeof s.impact.revenue !== 'number' || !isFinite(s.impact.revenue) || isNaN(s.impact.revenue)) {
-            issues.push(`impact.revenue inválido: ${s.impact.revenue}`);
+            issues.push(`impact.revenue inválido: ${s.impact.revenue} (tipo: ${typeof s.impact.revenue})`);
           } else if (Math.abs(s.impact.revenue) > 1e10) {
             issues.push(`impact.revenue muy grande: ${s.impact.revenue}`);
           }
+          // ✅ NO es un problema si es un número finito y razonable (0 a 1e10)
         }
         
         // Revisar impact.time
