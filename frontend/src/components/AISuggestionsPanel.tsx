@@ -80,6 +80,8 @@ export default function AISuggestionsPanel() {
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>([]);
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null);
 
   useEffect(() => {
@@ -87,10 +89,14 @@ export default function AISuggestionsPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFilter]);
 
-  const loadSuggestions = async () => {
+  const loadSuggestions = async (showRetry = false) => {
+    setIsLoading(true);
+    setLoadError(null);
+    
     try {
       const response = await api.get('/api/ai-suggestions', {
-        params: selectedFilter !== 'all' ? { filter: selectedFilter } : {}
+        params: selectedFilter !== 'all' ? { filter: selectedFilter } : {},
+        timeout: 10000, // 10 segundos timeout
       });
       
       // ✅ Mejorar manejo de respuesta - verificar estructura
@@ -102,6 +108,7 @@ export default function AISuggestionsPanel() {
       
       setSuggestions(suggestionsData);
       setAutomationRules([]); // TODO: Implementar reglas de automatización
+      setLoadError(null);
       
       // ✅ Si no hay sugerencias, no mostrar error (es normal)
       if (suggestionsData.length === 0 && selectedFilter === 'all') {
@@ -109,19 +116,39 @@ export default function AISuggestionsPanel() {
       }
     } catch (error: any) {
       console.error('Error loading suggestions:', error);
-      // ✅ No mostrar toast de error si el backend retornó respuesta válida con array vacío
-      if (error.response?.status === 200 && Array.isArray(error.response?.data?.suggestions)) {
-        // El backend retornó array vacío, no es un error
+      
+      // ✅ Mejor manejo de errores de red (servidor reiniciándose, no disponible, etc.)
+      if (!error.response) {
+        // Error de red (servidor no disponible, timeout, etc.)
+        if (error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK' || error.message?.includes('timeout')) {
+          const errorMsg = 'El servidor no está disponible temporalmente. Verifica tu conexión.';
+          setLoadError(errorMsg);
+          
+          // Si no es un retry manual, intentar automáticamente una vez
+          if (!showRetry) {
+            console.warn('Servidor no disponible temporalmente, reintentando en 2 segundos...');
+            setTimeout(() => {
+              loadSuggestions(true);
+            }, 2000);
+            return;
+          }
+        } else {
+          setLoadError('Error de conexión. Verifica tu conexión a internet.');
+        }
+      } else if (error.response?.status === 200 && Array.isArray(error.response?.data?.suggestions)) {
+        // ✅ El backend retornó respuesta válida con array vacío, no es un error
         setSuggestions([]);
-        return;
-      }
-      // Solo mostrar error si es un error real (no 404, no 200 con array vacío)
-      if (error.response?.status !== 404 && error.response?.status !== 200) {
-        toast.error('Error al cargar sugerencias');
+        setLoadError(null);
+      } else if (error.response?.status && error.response?.status !== 404 && error.response?.status !== 200) {
+        // Error real del servidor
+        setLoadError('Error al cargar sugerencias. Intenta nuevamente.');
       } else {
         // Si es 404 o respuesta válida vacía, simplemente no hay sugerencias
         setSuggestions([]);
+        setLoadError(null);
       }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -283,6 +310,35 @@ export default function AISuggestionsPanel() {
           </button>
         ))}
       </div>
+
+      {/* Error Banner con Botón de Reintento */}
+      {loadError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-red-800">Error al cargar sugerencias</p>
+              <p className="text-xs text-red-600 mt-1">{loadError}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => loadSuggestions(true)}
+            disabled={isLoading}
+            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 text-sm"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>{isLoading ? 'Cargando...' : 'Forzar reintento'}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {isLoading && !loadError && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-center space-x-3">
+          <RefreshCw className="h-5 w-5 text-blue-600 animate-spin" />
+          <p className="text-sm text-blue-800">Cargando sugerencias...</p>
+        </div>
+      )}
 
       {/* Métricas rápidas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
