@@ -16,21 +16,52 @@ export function toNumber(value: Prisma.Decimal | number | string | null | undefi
   }
 
   if (typeof value === 'number') {
-    return isFinite(value) ? value : 0;
+    // ✅ Validar que el número sea finito y no NaN
+    if (!isFinite(value) || isNaN(value)) {
+      return 0;
+    }
+    // ✅ Limitar valores extremos para prevenir problemas de serialización
+    if (Math.abs(value) > 1e15) {
+      return value > 0 ? 1e15 : -1e15;
+    }
+    return value;
   }
 
   if (typeof value === 'string') {
     const parsed = parseFloat(value);
-    return isFinite(parsed) ? parsed : 0;
+    if (!isFinite(parsed) || isNaN(parsed)) {
+      return 0;
+    }
+    if (Math.abs(parsed) > 1e15) {
+      return parsed > 0 ? 1e15 : -1e15;
+    }
+    return parsed;
   }
 
   // Es Prisma.Decimal
   try {
-    return value.toNumber();
+    const num = value.toNumber();
+    // ✅ Validar resultado de toNumber()
+    if (!isFinite(num) || isNaN(num)) {
+      return 0;
+    }
+    // ✅ Limitar valores extremos
+    if (Math.abs(num) > 1e15) {
+      return num > 0 ? 1e15 : -1e15;
+    }
+    return num;
   } catch (error) {
     // Si falla, intentar como string
     try {
-      return parseFloat(value.toString());
+      const str = value.toString();
+      const parsed = parseFloat(str);
+      if (!isFinite(parsed) || isNaN(parsed)) {
+        return 0;
+      }
+      if (Math.abs(parsed) > 1e15) {
+        return parsed > 0 ? 1e15 : -1e15;
+      }
+      return parsed;
     } catch {
       return 0;
     }

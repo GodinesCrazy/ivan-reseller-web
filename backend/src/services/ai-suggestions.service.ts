@@ -1822,73 +1822,222 @@ REGLAS ESTRICTAS:
           implementedCount: dbSuggestions.filter(s => s.implemented).length
         });
 
+      // ✅ Función helper recursiva para limpiar cualquier Decimal en el objeto
+      // Con límite de profundidad para evitar stack overflow y referencias circulares
+      const sanitizeForJson = (obj: any, depth: number = 0, visited: WeakSet<any> = new WeakSet()): any => {
+        // Límite de profundidad para evitar stack overflow
+        if (depth > 10) {
+          logger.warn('AISuggestions: Profundidad máxima alcanzada en sanitizeForJson', { depth });
+          return null;
+        }
+
+        if (obj === null || obj === undefined) {
+          return obj;
+        }
+        
+        // Detectar referencias circulares (solo para objetos)
+        if (typeof obj === 'object' && obj !== null) {
+          if (visited.has(obj)) {
+            logger.warn('AISuggestions: Referencia circular detectada en sanitizeForJson');
+            return null;
+          }
+          visited.add(obj);
+        }
+        
+        // Si es Prisma.Decimal, convertir a number
+        if (obj && typeof obj === 'object' && 'toNumber' in obj && typeof obj.toNumber === 'function') {
+          try {
+            const num = obj.toNumber();
+            // Validar y limitar valores extremos
+            if (!isFinite(num) || isNaN(num)) {
+              return 0;
+            }
+            // Limitar valores extremos para prevenir problemas de serialización
+            if (Math.abs(num) > 1e15) {
+              return num > 0 ? 1e15 : -1e15;
+            }
+            return num;
+          } catch (error) {
+            logger.warn('AISuggestions: Error convirtiendo Decimal a number', { error });
+            return 0;
+          }
+        }
+        
+        // Si es Date, convertir a ISO string
+        if (obj instanceof Date) {
+          try {
+            return obj.toISOString();
+          } catch {
+            return new Date().toISOString();
+          }
+        }
+        
+        // Si es Array, sanitizar cada elemento
+        if (Array.isArray(obj)) {
+          try {
+            return obj.map(item => sanitizeForJson(item, depth + 1, visited));
+          } catch (error) {
+            logger.warn('AISuggestions: Error sanitizando array', { error });
+            return [];
+          }
+        }
+        
+        // Si es objeto (pero no Decimal ni Date), sanitizar propiedades
+        if (typeof obj === 'object') {
+          const sanitized: any = {};
+          try {
+            for (const [key, value] of Object.entries(obj)) {
+              try {
+                sanitized[key] = sanitizeForJson(value, depth + 1, visited);
+              } catch (error) {
+                // Si falla sanitizar una propiedad, omitirla o usar valor por defecto
+                logger.warn(`AISuggestions: Error sanitizando propiedad ${key}`, { error });
+                sanitized[key] = null;
+              }
+            }
+          } catch (error) {
+            logger.warn('AISuggestions: Error iterando propiedades del objeto', { error });
+          }
+          return sanitized;
+        }
+        
+        // Para primitivos, validar que sean serializables
+        if (typeof obj === 'number') {
+          if (!isFinite(obj) || isNaN(obj)) {
+            return 0;
+          }
+          // Limitar valores extremos
+          if (Math.abs(obj) > 1e15) {
+            return obj > 0 ? 1e15 : -1e15;
+          }
+          return obj;
+        }
+        
+        // Para strings, validar que no sean demasiado largos
+        if (typeof obj === 'string') {
+          if (obj.length > 10000) {
+            logger.warn('AISuggestions: String demasiado largo, truncando', { length: obj.length });
+            return obj.substring(0, 10000);
+          }
+          return obj;
+        }
+        
+        return obj;
+      };
+
       return dbSuggestions.map(s => {
-        // ✅ Mejorar parsing de JSON con manejo de errores
-        const parseJsonSafe = (value: any, defaultValue: any = []) => {
-          if (!value) return defaultValue;
-          if (Array.isArray(value)) return value;
-          if (typeof value === 'string') {
+        try {
+          // ✅ Mejorar parsing de JSON con manejo de errores
+          const parseJsonSafe = (value: any, defaultValue: any = []) => {
+            if (!value) return defaultValue;
+            if (Array.isArray(value)) return sanitizeForJson(value);
+            if (typeof value === 'string') {
+              try {
+                const parsed = JSON.parse(value);
+                return sanitizeForJson(parsed);
+              } catch {
+                return defaultValue;
+              }
+            }
+            return sanitizeForJson(value);
+          };
+
+          // ✅ Convertir todos los Decimal ANTES de crear el objeto para evitar problemas de serialización
+          const impactRevenue = toNumber(s.impactRevenue || 0);
+          const impactTime = toNumber(s.impactTime || 0);
+          const confidence = toNumber(s.confidence || 0);
+          
+          // Parsear JSON de forma segura
+          let metrics: any = undefined;
+          if (s.metrics) {
             try {
-              return JSON.parse(value);
-            } catch {
-              return defaultValue;
+              const parsed = parseJsonSafe(s.metrics, undefined);
+              if (parsed && typeof parsed === 'object') {
+                metrics = {
+                  ...parsed,
+                  currentValue: parsed.currentValue !== undefined ? toNumber(parsed.currentValue) : parsed.currentValue,
+                  targetValue: parsed.targetValue !== undefined ? toNumber(parsed.targetValue) : parsed.targetValue,
+                  unit: parsed.unit || 'USD'
+                };
+              }
+            } catch (error) {
+              logger.warn(`AISuggestions: Error parseando metrics para sugerencia ${s.id}`, { error });
             }
           }
-          return value;
-        };
 
-        return {
-          id: String(s.id),
-          type: s.type as any,
-          priority: s.priority as any,
-          title: s.title || '',
-          description: s.description || '',
-          impact: {
-            revenue: toNumber(s.impactRevenue || 0), // ✅ Convertir Decimal a number
-            time: toNumber(s.impactTime || 0), // ✅ Convertir Decimal a number si es necesario
-            difficulty: (s.difficulty as any) || 'medium'
-          },
-          confidence: toNumber(s.confidence || 0), // ✅ Asegurar que es number
-          actionable: s.actionable ?? true,
-          implemented: s.implemented ?? false,
-          estimatedTime: s.estimatedTime || '30 minutos',
-          requirements: parseJsonSafe(s.requirements, []),
-          steps: parseJsonSafe(s.steps, []),
-          relatedProducts: parseJsonSafe(s.relatedProducts, undefined),
-          metrics: s.metrics ? (() => {
-            const parsed = parseJsonSafe(s.metrics, undefined);
-            if (parsed && typeof parsed === 'object') {
-              // ✅ Convertir valores Decimal en metrics a number
-              return {
-                ...parsed,
-                currentValue: parsed.currentValue !== undefined ? toNumber(parsed.currentValue) : parsed.currentValue,
-                targetValue: parsed.targetValue !== undefined ? toNumber(parsed.targetValue) : parsed.targetValue,
-              };
+          let keywordSupportingMetric: any = undefined;
+          if ((s as any).keywordSupportingMetric) {
+            try {
+              const parsed = parseJsonSafe((s as any).keywordSupportingMetric, undefined);
+              if (parsed && typeof parsed === 'object' && parsed.value !== undefined) {
+                keywordSupportingMetric = {
+                  ...parsed,
+                  value: toNumber(parsed.value),
+                };
+              }
+            } catch (error) {
+              logger.warn(`AISuggestions: Error parseando keywordSupportingMetric para sugerencia ${s.id}`, { error });
             }
-            return parsed;
-          })() : undefined,
-          createdAt: s.createdAt?.toISOString() || new Date().toISOString(),
-          // ✅ OBJETIVO A: Incluir campos de keywords si existen
-          keyword: (s as any).keyword,
-          keywordCategory: (s as any).keywordCategory,
-          keywordSegment: (s as any).keywordSegment,
-          keywordReason: (s as any).keywordReason,
-          keywordSupportingMetric: (s as any).keywordSupportingMetric ? (() => {
-            const parsed = parseJsonSafe((s as any).keywordSupportingMetric, undefined);
-            if (parsed && typeof parsed === 'object' && parsed.value !== undefined) {
-              // ✅ Convertir value de Decimal a number
-              return {
-                ...parsed,
-                value: toNumber(parsed.value),
-              };
-            }
-            return parsed;
-          })() : undefined,
-          targetMarketplaces: (s as any).targetMarketplaces ? parseJsonSafe((s as any).targetMarketplaces, []) : undefined,
-          estimatedOpportunities: (s as any).estimatedOpportunities !== undefined && (s as any).estimatedOpportunities !== null 
+          }
+
+          const estimatedOpportunities = (s as any).estimatedOpportunities !== undefined && (s as any).estimatedOpportunities !== null 
             ? toNumber((s as any).estimatedOpportunities) 
-            : undefined,
-        };
+            : undefined;
+
+          const suggestion: any = {
+            id: String(s.id),
+            type: s.type as any,
+            priority: s.priority as any,
+            title: String(s.title || ''),
+            description: String(s.description || ''),
+            impact: {
+              revenue: impactRevenue,
+              time: impactTime,
+              difficulty: String((s.difficulty as any) || 'medium')
+            },
+            confidence: confidence,
+            actionable: Boolean(s.actionable ?? true),
+            implemented: Boolean(s.implemented ?? false),
+            estimatedTime: String(s.estimatedTime || '30 minutos'),
+            requirements: parseJsonSafe(s.requirements, []),
+            steps: parseJsonSafe(s.steps, []),
+            relatedProducts: parseJsonSafe(s.relatedProducts, undefined),
+            metrics: metrics,
+            createdAt: s.createdAt ? s.createdAt.toISOString() : new Date().toISOString(),
+            keyword: (s as any).keyword ? String((s as any).keyword) : undefined,
+            keywordCategory: (s as any).keywordCategory ? String((s as any).keywordCategory) : undefined,
+            keywordSegment: (s as any).keywordSegment ? String((s as any).keywordSegment) : undefined,
+            keywordReason: (s as any).keywordReason ? String((s as any).keywordReason) : undefined,
+            keywordSupportingMetric: keywordSupportingMetric,
+            targetMarketplaces: (s as any).targetMarketplaces ? parseJsonSafe((s as any).targetMarketplaces, []) : undefined,
+            estimatedOpportunities: estimatedOpportunities,
+          };
+
+          // ✅ Sanitizar el objeto completo antes de retornar (con límite de profundidad)
+          return sanitizeForJson(suggestion, 0, new WeakSet());
+        } catch (error: any) {
+          logger.error(`AISuggestions: Error procesando sugerencia ${s.id}`, { 
+            error: error.message, 
+            suggestionId: s.id,
+            stack: error.stack 
+          });
+          // Retornar objeto mínimo válido si hay error
+          return {
+            id: String(s.id),
+            type: s.type || 'optimization',
+            priority: s.priority || 'medium',
+            title: s.title || 'Sugerencia',
+            description: '',
+            impact: { revenue: 0, time: 0, difficulty: 'medium' },
+            confidence: 0,
+            actionable: false,
+            implemented: false,
+            estimatedTime: '30 minutos',
+            requirements: [],
+            steps: [],
+            createdAt: new Date().toISOString(),
+          };
+        }
       });
       } catch (dbError: any) {
         // Si la tabla no existe (error P2021 o similar), retornar array vacío

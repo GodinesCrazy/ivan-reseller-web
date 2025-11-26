@@ -22,17 +22,101 @@ router.get('/', async (req: Request, res: Response, next) => {
     let suggestions: any[] = [];
     try {
       suggestions = await aiSuggestionsService.getSuggestions(userId, filter);
+      
+      // ✅ Validar que las sugerencias sean serializables antes de enviar
+      // Esto previene SIGSEGV durante JSON.stringify
+      // Usar un replacer seguro para manejar valores problemáticos
+      const safeJsonReplacer = (key: string, value: any): any => {
+        // Si es un Decimal de Prisma, convertir a number
+        if (value && typeof value === 'object' && 'toNumber' in value && typeof value.toNumber === 'function') {
+          try {
+            const num = value.toNumber();
+            return isFinite(num) && !isNaN(num) ? num : 0;
+          } catch {
+            return 0;
+          }
+        }
+        // Si es un número, validar que sea finito
+        if (typeof value === 'number') {
+          if (!isFinite(value) || isNaN(value)) {
+            return 0;
+          }
+          // Limitar valores extremos
+          if (Math.abs(value) > 1e15) {
+            return value > 0 ? 1e15 : -1e15;
+          }
+        }
+        // Si es un string muy largo, truncar
+        if (typeof value === 'string' && value.length > 10000) {
+          return value.substring(0, 10000);
+        }
+        return value;
+      };
+
+      try {
+        // Probar serialización con replacer seguro
+        JSON.stringify(suggestions, safeJsonReplacer);
+      } catch (serializationError: any) {
+        console.error('Error serializando sugerencias, filtrando valores problemáticos:', serializationError);
+        // Intentar limpiar las sugerencias problemáticas
+        suggestions = suggestions.filter((s: any, idx: number) => {
+          try {
+            JSON.stringify(s, safeJsonReplacer);
+            return true;
+          } catch {
+            console.error(`Sugerencia ${idx} no serializable, omitiendo`);
+            return false;
+          }
+        });
+      }
     } catch (error: any) {
       console.error('Error loading suggestions:', error);
       // Retornar array vacío en lugar de fallar completamente
       suggestions = [];
     }
 
-    res.json({
-      success: true,
-      suggestions: suggestions || [],
-      count: suggestions?.length || 0
-    });
+    // ✅ Envolver res.json en try-catch adicional como protección final
+    // Usar replacer seguro para prevenir SIGSEGV
+    try {
+      const safeJsonReplacer = (key: string, value: any): any => {
+        if (value && typeof value === 'object' && 'toNumber' in value && typeof value.toNumber === 'function') {
+          try {
+            const num = value.toNumber();
+            return isFinite(num) && !isNaN(num) ? num : 0;
+          } catch {
+            return 0;
+          }
+        }
+        if (typeof value === 'number') {
+          if (!isFinite(value) || isNaN(value)) return 0;
+          if (Math.abs(value) > 1e15) return value > 0 ? 1e15 : -1e15;
+        }
+        if (typeof value === 'string' && value.length > 10000) {
+          return value.substring(0, 10000);
+        }
+        return value;
+      };
+      
+      // Serializar manualmente con replacer seguro antes de enviar
+      const responseData = {
+        success: true,
+        suggestions: suggestions || [],
+        count: suggestions?.length || 0
+      };
+      
+      const jsonString = JSON.stringify(responseData, safeJsonReplacer);
+      res.setHeader('Content-Type', 'application/json');
+      res.send(jsonString);
+    } catch (jsonError: any) {
+      console.error('Error crítico serializando respuesta JSON:', jsonError);
+      // Si falla la serialización, retornar respuesta mínima
+      res.status(200).json({
+        success: true,
+        suggestions: [],
+        count: 0,
+        message: 'Error al procesar sugerencias. Intenta recargar la página.'
+      });
+    }
   } catch (error: any) {
     // ✅ Si hay un error crítico, retornar respuesta válida en lugar de error 500
     console.error('Critical error in /api/ai-suggestions:', error);
