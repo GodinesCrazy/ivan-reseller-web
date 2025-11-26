@@ -268,6 +268,19 @@ export default function AISuggestionsPanel() {
     ? suggestions 
     : suggestions.filter(s => s.type === selectedFilter);
 
+  // ✅ Logging para debugging
+  useEffect(() => {
+    if (suggestions.length > 0) {
+      console.log('AISuggestionsPanel: Sugerencias cargadas', {
+        total: suggestions.length,
+        filter: selectedFilter,
+        filtered: filteredSuggestions.length,
+        types: [...new Set(suggestions.map(s => s.type))],
+        implemented: suggestions.filter(s => s.implemented).length
+      });
+    }
+  }, [suggestions, selectedFilter, filteredSuggestions.length]);
+
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
@@ -431,7 +444,18 @@ export default function AISuggestionsPanel() {
             <div>
               <p className="text-sm text-gray-600">Tiempo ahorrado</p>
               <p className="text-2xl font-bold text-purple-600">
-                {suggestions.reduce((acc, s) => acc + s.impact.time, 0)}h
+                {(() => {
+                  try {
+                    const totalTime = suggestions.reduce((acc, s) => {
+                      const time = s.impact?.time || 0;
+                      return acc + (isFinite(time) && time >= 0 ? time : 0);
+                    }, 0);
+                    return totalTime > 0 ? `${totalTime}h` : '0h';
+                  } catch (e) {
+                    console.error('Error calculando tiempo ahorrado:', e);
+                    return '0h';
+                  }
+                })()}
               </p>
             </div>
             <Clock className="h-8 w-8 text-purple-600" />
@@ -453,7 +477,20 @@ export default function AISuggestionsPanel() {
 
       {/* Lista de sugerencias */}
       <div className="space-y-4">
-        {filteredSuggestions.map((suggestion) => (
+        {filteredSuggestions.length === 0 && !isLoading && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
+            <Lightbulb className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-600 font-medium">No hay sugerencias {selectedFilter !== 'all' ? `de tipo "${selectedFilter}"` : ''} disponibles</p>
+            <p className="text-sm text-gray-500 mt-2">
+              {selectedFilter !== 'all' 
+                ? 'Intenta cambiar el filtro o generar nuevas sugerencias.'
+                : 'Haz clic en "Nueva sugerencia" para generar recomendaciones inteligentes.'}
+            </p>
+          </div>
+        )}
+        {filteredSuggestions.map((suggestion) => {
+          try {
+            return (
           <div key={suggestion.id} className={`bg-white rounded-xl p-6 border-2 transition-all ${
             suggestion.implemented ? 'border-green-200 bg-green-50' : 'border-gray-200 hover:border-blue-300'
           }`}>
@@ -739,7 +776,19 @@ export default function AISuggestionsPanel() {
               </div>
             )}
           </div>
-        ))}
+          );
+          } catch (error) {
+            console.error('Error renderizando sugerencia:', error, suggestion);
+            // Retornar una sugerencia de error en lugar de crashear
+            return (
+              <div key={suggestion.id} className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <p className="text-red-800 font-medium">Error mostrando sugerencia</p>
+                <p className="text-sm text-red-600 mt-1">ID: {suggestion.id || 'desconocido'}</p>
+                <p className="text-xs text-red-500 mt-1">Título: {suggestion.title || 'Sin título'}</p>
+              </div>
+            );
+          }
+        })}
       </div>
 
       {/* Panel de automatización */}

@@ -1814,6 +1814,14 @@ REGLAS ESTRICTAS:
           take: 20
         });
 
+        // ✅ Logging para debugging
+        logger.info(`AISuggestions: getSuggestions retornando ${dbSuggestions.length} sugerencias`, {
+          userId,
+          filter: filter || 'all',
+          types: dbSuggestions.map(s => s.type),
+          implementedCount: dbSuggestions.filter(s => s.implemented).length
+        });
+
       return dbSuggestions.map(s => {
         // ✅ Mejorar parsing de JSON con manejo de errores
         const parseJsonSafe = (value: any, defaultValue: any = []) => {
