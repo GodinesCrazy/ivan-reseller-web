@@ -10,6 +10,58 @@ import { toNumber } from '../../utils/decimal.utils';
 const router = Router();
 router.use(authenticate);
 
+// POST /api/publisher/send_for_approval/:productId
+// ✅ OBJETIVO: Enviar un producto existente a Intelligent Publisher (asegurar status PENDING)
+router.post('/send_for_approval/:productId', async (req: Request, res: Response) => {
+  try {
+    const productId = Number(req.params.productId);
+    const userId = req.user!.userId;
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+
+    // Verificar que el producto existe y pertenece al usuario (o es admin)
+    const product = await prisma.product.findFirst({
+      where: {
+        id: productId,
+        ...(isAdmin ? {} : { userId })
+      }
+    });
+
+    if (!product) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Producto no encontrado o no tienes permiso para acceder a él' 
+      });
+    }
+
+    // Asegurar que el producto esté en estado PENDING
+    if (product.status !== 'PENDING') {
+      await productService.updateProductStatusSafely(
+        productId,
+        'PENDING',
+        false, // isPublished = false
+        isAdmin ? userId : undefined
+      );
+      logger.info('[PUBLISHER] Product status updated to PENDING', { productId, userId });
+    }
+
+    return res.json({ 
+      success: true, 
+      message: 'Producto enviado a Intelligent Publisher para aprobación',
+      data: { productId, status: 'PENDING' }
+    });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Failed to send product for approval';
+    logger.error('[PUBLISHER] Error sending product for approval', { 
+      error: errorMessage, 
+      stack: e instanceof Error ? e.stack : undefined,
+      productId: req.params.productId,
+      userId: req.user?.userId
+    });
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
 // POST /api/publisher/add_for_approval
 router.post('/add_for_approval', async (req: Request, res: Response) => {
   try {

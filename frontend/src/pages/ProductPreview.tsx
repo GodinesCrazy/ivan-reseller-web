@@ -190,21 +190,20 @@ export default function ProductPreview() {
     try {
       setPublishing(true);
       
-      const response = await api.post('/api/marketplace/publish', {
-        productId: Number(id),
-        marketplace: marketplace,
-        environment: environment || undefined,
-      });
+      // ✅ OBJETIVO: En lugar de publicar directamente, enviar a Intelligent Publisher
+      // Usar endpoint específico que asegura el producto esté en PENDING
+      const response = await api.post(`/api/publisher/send_for_approval/${id}`);
 
       if (response.data?.success) {
-        toast.success(`✅ Producto publicado exitosamente en ${marketplace}`);
-        navigate(`/products`);
+        toast.success('✅ Producto enviado a Intelligent Publisher para aprobación');
+        // Redirigir a Intelligent Publisher
+        navigate('/publisher');
       } else {
-        throw new Error(response.data?.error || 'Error al publicar');
+        throw new Error(response.data?.error || 'Error al enviar producto');
       }
     } catch (err: any) {
-      console.error('Error publishing:', err);
-      const errorMsg = err?.response?.data?.error || err?.message || 'Error al publicar el producto';
+      console.error('Error sending to publisher:', err);
+      const errorMsg = err?.response?.data?.error || err?.message || 'Error al enviar producto a Intelligent Publisher';
       toast.error(errorMsg);
     } finally {
       setPublishing(false);
@@ -455,12 +454,12 @@ export default function ProductPreview() {
                 {publishing ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Publicando...
+                    Enviando...
                   </>
                 ) : (
                   <>
                     <CheckCircle className="w-5 h-5" />
-                    Publicar en {preview.marketplace}
+                    Publicar
                   </>
                 )}
               </button>
