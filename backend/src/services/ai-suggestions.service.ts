@@ -794,9 +794,15 @@ export class AISuggestionsService {
       const mainMarketplace = segment.marketplaces[0]?.name || 'ebay';
       const avgMarginPct = Math.round(segment.avgMargin * 100);
       const roiPct = Math.round(segment.avgRoi);
+      // ✅ CORREGIDO: Cálculo seguro de estimatedRevenue evitando desbordamientos
+      const profitPerUnit = Math.max(0, Math.min(segment.avgProfitPerUnit || 0, 10000)); // Limitar a $10k por unidad
+      const opportunityCount = Math.max(1, Math.min(segment.count || 1, 100)); // Limitar a 100 oportunidades
       const estimatedRevenue = Math.max(
         60,
-        Math.round(segment.avgProfitPerUnit * Math.max(6, segment.count))
+        Math.min(
+          1000000, // Máximo $1M de impacto
+          Math.round(profitPerUnit * Math.min(opportunityCount, 20)) // Máximo 20 oportunidades para cálculo
+        )
       );
       const confidence = Math.min(
         95,
@@ -847,8 +853,15 @@ export class AISuggestionsService {
     signals.hotProducts.slice(0, 2).forEach((product) => {
       const marginPct = Math.round(product.profitMargin * 100);
       const targetPrice = product.suggestedPriceUsd || 0;
-      const profitUnit = Math.max(0, targetPrice - product.costUsd);
-      const expectedRevenue = Math.max(50, Math.round(profitUnit * 8));
+      const profitUnit = Math.max(0, Math.min(targetPrice - product.costUsd, 10000)); // Limitar a $10k de ganancia por unidad
+      // ✅ CORREGIDO: Cálculo seguro de expectedRevenue evitando desbordamientos
+      const expectedRevenue = Math.max(
+        50,
+        Math.min(
+          500000, // Máximo $500k de impacto
+          Math.round(profitUnit * Math.min(8, 50)) // Máximo 50 unidades para cálculo
+        )
+      );
       const confidence = Math.min(
         92,
         Math.max(55, Math.round(marginPct + product.roiPercentage / 2))
@@ -897,7 +910,15 @@ export class AISuggestionsService {
 
     signals.winningOperations.slice(0, 2).forEach((operation) => {
       const confidence = Math.min(90, Math.max(60, Math.round(operation.roi)));
-      const expectedRevenue = Math.max(70, Math.round(operation.totalProfit * 2));
+      // ✅ CORREGIDO: Cálculo seguro de expectedRevenue evitando desbordamientos
+      const totalProfit = Math.max(0, Math.min(operation.totalProfit || 0, 50000)); // Limitar a $50k de ganancia
+      const expectedRevenue = Math.max(
+        70,
+        Math.min(
+          200000, // Máximo $200k de impacto
+          Math.round(totalProfit * Math.min(2, 10)) // Máximo multiplicador de 10
+        )
+      );
       pushSuggestion({
         id: makeId('automation'),
         type: 'automation',
@@ -944,6 +965,8 @@ export class AISuggestionsService {
 
     const trendingMarketplace = signals.marketplaceDemand.find((item) => item.trend === 'up');
     if (trendingMarketplace) {
+      // ✅ CORREGIDO: Cálculo seguro de revenue evitando desbordamientos
+      const avgProfitPerUnit = Math.max(0, Math.min(signals.segments[0]?.avgProfitPerUnit || 10, 10000));
       pushSuggestion({
         id: makeId('marketing'),
         type: 'marketing',
@@ -953,7 +976,13 @@ export class AISuggestionsService {
           1
         )}% comparado con el período anterior. Lanza campaña promocional enfocada en los segmentos con mayor margen detectados.`,
         impact: {
-          revenue: Math.max(80, Math.round((signals.segments[0]?.avgProfitPerUnit || 10) * 10)),
+          revenue: Math.max(
+            80,
+            Math.min(
+              100000, // Máximo $100k de impacto
+              Math.round(avgProfitPerUnit * Math.min(10, 50)) // Máximo 50 unidades
+            )
+          ),
           time: 2,
           difficulty: 'medium',
         },
@@ -1030,7 +1059,14 @@ export class AISuggestionsService {
         title: `Buscar oportunidades: "${kw.keyword}"`,
         description: kw.reason,
         impact: {
-          revenue: kw.estimatedOpportunities * 10, // Estimación basada en oportunidades
+          // ✅ CORREGIDO: Cálculo seguro de revenue evitando desbordamientos
+          revenue: Math.max(
+            50,
+            Math.min(
+              50000, // Máximo $50k de impacto por keyword
+              Math.round((kw.estimatedOpportunities || 5) * Math.min(10, 100)) // Máximo 100 por oportunidad
+            )
+          ),
           time: 1,
           difficulty: 'easy' as const,
         },
@@ -1572,6 +1608,9 @@ REGLAS ESTRICTAS:
 
     // Sugerencia de inventory específica de dropshipping
     if (data.activeProducts < 10) {
+      // ✅ CORREGIDO: Cálculo seguro de revenue evitando desbordamientos
+      const totalRevenue = Math.max(0, Math.min(data.totalRevenue || 0, 1000000)); // Limitar a $1M
+      const estimatedImpact = Math.max(150, Math.min(100000, Math.round(totalRevenue * 0.3))); // Máximo $100k
       suggestions.push({
         id: `fallback_${Date.now()}_2`,
         type: 'inventory',
@@ -1579,7 +1618,7 @@ REGLAS ESTRICTAS:
         title: 'Expandir catálogo desde AliExpress usando búsqueda de oportunidades',
         description: `Tienes ${data.activeProducts} productos activos. Usa la función de búsqueda de oportunidades para encontrar productos rentables en AliExpress en la categoría ${data.bestCategory} y publicarlos automáticamente en tus marketplaces configurados.`,
         impact: {
-          revenue: data.totalRevenue * 0.3,
+          revenue: estimatedImpact,
           time: 3,
           difficulty: 'medium'
         },
@@ -1601,6 +1640,9 @@ REGLAS ESTRICTAS:
 
     // Sugerencia de listing específica de dropshipping
     if (data.totalSales > 0 && data.totalSales < 20) {
+      // ✅ CORREGIDO: Cálculo seguro de revenue evitando desbordamientos
+      const totalRevenue = Math.max(0, Math.min(data.totalRevenue || 0, 1000000)); // Limitar a $1M
+      const estimatedImpact = Math.max(125, Math.min(75000, Math.round(totalRevenue * 0.25))); // Máximo $75k
       suggestions.push({
         id: `fallback_${Date.now()}_3`,
         type: 'listing',
@@ -1608,7 +1650,7 @@ REGLAS ESTRICTAS:
         title: 'Optimizar títulos y descripciones para SEO en marketplaces',
         description: `Tus productos tienen ${data.totalSales} ventas. Mejora los títulos y descripciones de tus listados en eBay, Amazon y MercadoLibre agregando keywords relevantes y detalles específicos del producto para mejorar su ranking en búsquedas y aumentar conversiones.`,
         impact: {
-          revenue: data.totalRevenue * 0.25,
+          revenue: estimatedImpact,
           time: 2,
           difficulty: 'easy'
         },

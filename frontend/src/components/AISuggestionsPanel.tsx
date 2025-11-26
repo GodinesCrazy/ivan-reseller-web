@@ -128,6 +128,17 @@ export default function AISuggestionsPanel() {
   const generateNewSuggestions = async () => {
     setIsGenerating(true);
     try {
+      // ✅ CORREGIDO: Generar sugerencias basadas en tendencias reales
+      // Primero intentar generar keywords basadas en tendencias
+      const keywordResponse = await api.get('/api/ai-suggestions/keywords', {
+        params: { max: 5 }
+      }).catch(() => ({ data: { suggestions: [] } }));
+      
+      const keywordSuggestions: AISuggestion[] = Array.isArray(keywordResponse.data?.suggestions)
+        ? keywordResponse.data.suggestions
+        : [];
+      
+      // Luego generar sugerencias generales
       const response = await api.post('/api/ai-suggestions/generate', {
         category: selectedFilter !== 'all' ? selectedFilter : undefined
       });
@@ -136,27 +147,34 @@ export default function AISuggestionsPanel() {
         ? response.data.suggestions
         : [];
       
-      if (newSuggestions.length > 0) {
+      // Combinar sugerencias de keywords con sugerencias generales
+      const allNewSuggestions = [...keywordSuggestions, ...newSuggestions];
+      
+      if (allNewSuggestions.length > 0) {
         // ✅ Agregar nuevas sugerencias al estado actual
         setSuggestions(prev => {
-          // Evitar duplicados por ID
+          // Evitar duplicados por ID o keyword
           const existingIds = new Set(prev.map(s => s.id));
-          const uniqueNew = newSuggestions.filter(s => !existingIds.has(s.id));
+          const existingKeywords = new Set(prev.filter(s => s.keyword).map(s => s.keyword));
+          const uniqueNew = allNewSuggestions.filter(s => 
+            !existingIds.has(s.id) && 
+            (!s.keyword || !existingKeywords.has(s.keyword))
+          );
           return [...uniqueNew, ...prev];
         });
         
-        toast.success(`✅ Se generaron ${newSuggestions.length} sugerencias inteligentes`);
+        toast.success(`✅ Se generaron ${allNewSuggestions.length} sugerencias inteligentes basadas en tendencias`);
         
         // ✅ Esperar un momento antes de recargar para asegurar que se guardaron
         setTimeout(async () => {
           await loadSuggestions();
         }, 1000);
       } else {
-        toast('No se generaron nuevas sugerencias en este momento', { icon: 'ℹ️' });
+        toast('No se generaron nuevas sugerencias en este momento. Intenta más tarde.', { icon: 'ℹ️' });
       }
     } catch (error: any) {
       console.error('Error generating suggestions:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Error al generar sugerencias';
+      const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al generar sugerencias';
       toast.error(errorMsg);
     } finally {
       setIsGenerating(false);
@@ -283,16 +301,68 @@ export default function AISuggestionsPanel() {
             <div>
               <p className="text-sm text-gray-600">Impacto potencial</p>
               <p className="text-2xl font-bold text-green-600">
-                {/* ✅ OBJETIVO A: Formatear números correctamente */}
-                ${(() => {
-                  const total = suggestions.reduce((acc, s) => acc + s.impact.revenue, 0);
-                  // Si el número es muy grande o tiene formato extraño, formatearlo correctamente
-                  if (total > 1000000) {
-                    return (total / 1000000).toFixed(1) + 'M';
-                  } else if (total > 1000) {
-                    return (total / 1000).toFixed(1) + 'K';
+                {/* ✅ CORREGIDO: Cálculo seguro del impacto potencial sin desbordamiento */}
+                {(() => {
+                  // Calcular total de forma segura, evitando valores infinitos o NaN
+                  let total = 0;
+                  let validCount = 0;
+                  
+                  for (const s of suggestions) {
+                    const revenue = s.impact?.revenue || 0;
+                    // Validar que el valor sea finito y razonable
+                    if (isFinite(revenue) && revenue >= 0 && revenue < 1e15) {
+                      total += revenue;
+                      validCount++;
+                    }
                   }
-                  return total.toLocaleString('en-US', { maximumFractionDigits: 0 });
+                  
+                  // Si no hay valores válidos, mostrar placeholder
+                  if (validCount === 0 || total === 0) {
+                    return '—';
+                  }
+                  
+                  // Limitar a un máximo razonable para evitar outliers absurdos
+                  const maxReasonable = 1e9; // 1 billón máximo
+                  const cappedTotal = Math.min(total, maxReasonable);
+                  
+                  // Formatear usando Intl.NumberFormat para evitar notación exponencial
+                  try {
+                    if (cappedTotal >= 1000000) {
+                      const millions = cappedTotal / 1000000;
+                      return new Intl.NumberFormat('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 1,
+                        notation: 'standard'
+                      }).format(millions).replace('USD', 'M');
+                    } else if (cappedTotal >= 1000) {
+                      const thousands = cappedTotal / 1000;
+                      return new Intl.NumberFormat('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 1,
+                        notation: 'standard'
+                      }).format(thousands).replace('USD', 'K');
+                    } else {
+                      return new Intl.NumberFormat('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
+                        notation: 'standard'
+                      }).format(cappedTotal);
+                    }
+                  } catch (e) {
+                    // Fallback si Intl falla
+                    if (cappedTotal >= 1000000) {
+                      return `$${(cappedTotal / 1000000).toFixed(1)}M`;
+                    } else if (cappedTotal >= 1000) {
+                      return `$${(cappedTotal / 1000).toFixed(1)}K`;
+                    }
+                    return `$${Math.round(cappedTotal).toLocaleString('en-US')}`;
+                  }
                 })()}
               </p>
             </div>
@@ -362,7 +432,19 @@ export default function AISuggestionsPanel() {
                   <div className="grid grid-cols-4 gap-4 mb-3">
                     <div>
                       <p className="text-xs text-gray-500">Impacto económico</p>
-                      <p className="font-semibold text-green-600">+${suggestion.impact.revenue}</p>
+                      <p className="font-semibold text-green-600">
+                        {/* ✅ CORREGIDO: Formatear impacto económico sin desbordamiento */}
+                        {(() => {
+                          const revenue = suggestion.impact?.revenue || 0;
+                          if (!isFinite(revenue) || revenue <= 0) return '—';
+                          if (revenue >= 1000000) {
+                            return `+$${(revenue / 1000000).toFixed(1)}M`;
+                          } else if (revenue >= 1000) {
+                            return `+$${(revenue / 1000).toFixed(1)}K`;
+                          }
+                          return `+$${Math.round(revenue).toLocaleString('en-US')}`;
+                        })()}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Tiempo ahorrado</p>
