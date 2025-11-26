@@ -199,6 +199,7 @@ class JobService {
       await job.updateProgress(50);
 
       // Create product in database
+      // ✅ CORREGIDO: Pasar todas las imágenes disponibles, no solo la primera
       const product = await this.productService.createProduct(
         userId,
         {
@@ -208,7 +209,8 @@ class JobService {
           aliexpressPrice: scrapedData.price || 0,
           suggestedPrice: (scrapedData.price || 0) * 2,
           category: scrapedData.category,
-          imageUrl: scrapedData.images?.[0],
+          imageUrl: scrapedData.images?.[0], // Primera imagen como principal
+          imageUrls: scrapedData.images || [], // ✅ TODAS las imágenes disponibles
           ...customData
         }
       );
