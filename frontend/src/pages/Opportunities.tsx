@@ -162,7 +162,22 @@ export default function Opportunities() {
     });
 
     try {
-      const response = await api.get('/api/credentials/status');
+      // ✅ OBJETIVO B: Mejorar manejo de errores - no bloquear si falla
+      const response = await api.get('/api/credentials/status').catch((err) => {
+        console.warn('Error loading credentials status, using empty state:', err?.message || err);
+        // Retornar respuesta parcial en lugar de fallar
+        return {
+          data: {
+            success: true,
+            data: {
+              apis: [],
+              summary: { total: 0, configured: 0, available: 0, missing: 0 },
+              warnings: ['No se pudieron cargar todos los estados de credenciales. Algunos pueden no estar disponibles.']
+            }
+          }
+        };
+      });
+
       const statuses: any[] = response.data?.data?.apis || [];
       const normalized = createNormalizedState();
 
@@ -184,9 +199,17 @@ export default function Opportunities() {
       });
 
       setMarketplaceEnvStatus(normalized);
+      
+      // ✅ Mostrar advertencia si hay problemas pero no bloquear
+      if (response.data?.data?.warnings && response.data.data.warnings.length > 0) {
+        console.warn('Credential status warnings:', response.data.data.warnings);
+        // No mostrar toast de error, solo loguear
+      }
     } catch (error: any) {
       console.error('Error loading marketplace statuses:', error?.message || error);
-      toast.error('No se pudieron cargar los estados de credenciales. Verifica tu conexión.');
+      // ✅ OBJETIVO B: No mostrar toast de error que bloquee, solo usar estado vacío
+      // toast.error('No se pudieron cargar los estados de credenciales. Verifica tu conexión.');
+      setMarketplaceEnvStatus(createNormalizedState());
     } finally {
       setEnvStatusLoaded(true);
     }
@@ -208,6 +231,26 @@ export default function Opportunities() {
     fetchAuthStatuses();
     loadMarketplaceEnvStatus();
     loadWorkflowEnvironment();
+    
+    // ✅ OBJETIVO A: Pre-llenar keyword desde query params si viene de sugerencias IA
+    const urlParams = new URLSearchParams(window.location.search);
+    const keywordParam = urlParams.get('keyword');
+    const marketplacesParam = urlParams.get('marketplaces');
+    
+    if (keywordParam) {
+      setQuery(keywordParam);
+      if (marketplacesParam) {
+        const mpList = marketplacesParam.split(',').filter(mp => 
+          ['ebay', 'amazon', 'mercadolibre'].includes(mp.toLowerCase())
+        ) as Marketplace[];
+        if (mpList.length > 0) {
+          setMarketplaces(mpList);
+        }
+      }
+      // Limpiar params de la URL después de leerlos
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    
     search();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

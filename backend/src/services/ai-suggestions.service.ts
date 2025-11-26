@@ -3,10 +3,11 @@ import { logger } from '../config/logger';
 import axios from 'axios';
 import { CredentialsManager } from './credentials-manager.service';
 import { toNumber } from '../utils/decimal.utils';
+import { trendSuggestionsService, KeywordSuggestion } from './trend-suggestions.service';
 
 export interface AISuggestion {
   id: string;
-  type: 'pricing' | 'inventory' | 'marketing' | 'listing' | 'optimization' | 'automation';
+  type: 'pricing' | 'inventory' | 'marketing' | 'listing' | 'optimization' | 'automation' | 'search';
   priority: 'high' | 'medium' | 'low';
   title: string;
   description: string;
@@ -28,6 +29,19 @@ export interface AISuggestion {
     unit: string;
   };
   createdAt: string;
+  // ✅ OBJETIVO A: Campos para sugerencias de keywords
+  keyword?: string;
+  keywordCategory?: string;
+  keywordSegment?: string;
+  keywordReason?: string;
+  keywordSupportingMetric?: {
+    type: 'demand' | 'margin' | 'roi' | 'competition' | 'trend';
+    value: number;
+    unit: string;
+    description: string;
+  };
+  targetMarketplaces?: string[];
+  estimatedOpportunities?: number;
 }
 
 interface UserBusinessData {
@@ -1002,6 +1016,63 @@ export class AISuggestionsService {
   }
 
   /**
+   * ✅ OBJETIVO A: Generar sugerencias de keywords basadas en tendencias
+   */
+  async generateKeywordSuggestions(userId: number, maxSuggestions: number = 10): Promise<AISuggestion[]> {
+    try {
+      const keywordSuggestions = await trendSuggestionsService.generateKeywordSuggestions(userId, maxSuggestions);
+      
+      // Convertir KeywordSuggestion a AISuggestion
+      return keywordSuggestions.map((kw, index) => ({
+        id: `keyword_${Date.now()}_${index}`,
+        type: 'search' as const,
+        priority: kw.priority,
+        title: `Buscar oportunidades: "${kw.keyword}"`,
+        description: kw.reason,
+        impact: {
+          revenue: kw.estimatedOpportunities * 10, // Estimación basada en oportunidades
+          time: 1,
+          difficulty: 'easy' as const,
+        },
+        confidence: kw.confidence,
+        actionable: true,
+        implemented: false,
+        estimatedTime: '5 minutos',
+        requirements: [
+          `Credenciales activas de AliExpress`,
+          `Credenciales de ${kw.targetMarketplaces.join(' o ')} configuradas`,
+        ],
+        steps: [
+          `Ir a Oportunidades y buscar "${kw.keyword}"`,
+          `Filtrar por marketplace: ${kw.targetMarketplaces.join(', ')}`,
+          `Revisar oportunidades con margen ≥ ${Math.round((kw.supportingMetric.type === 'margin' ? kw.supportingMetric.value : 30))}%`,
+          `Importar las mejores oportunidades y publicarlas`,
+        ],
+        keyword: kw.keyword,
+        keywordCategory: kw.category,
+        keywordSegment: kw.segment,
+        keywordReason: kw.reason,
+        keywordSupportingMetric: kw.supportingMetric,
+        targetMarketplaces: kw.targetMarketplaces,
+        estimatedOpportunities: kw.estimatedOpportunities,
+        metrics: {
+          currentValue: kw.supportingMetric.value,
+          targetValue: kw.estimatedOpportunities,
+          unit: kw.supportingMetric.unit,
+        },
+        createdAt: new Date().toISOString(),
+      }));
+    } catch (error: any) {
+      logger.error('Error generating keyword suggestions', {
+        error: error?.message || String(error),
+        userId,
+        stack: error?.stack
+      });
+      return [];
+    }
+  }
+
+  /**
    * Generar sugerencias IA usando GROQ
    */
   async generateSuggestions(userId: number, category?: string): Promise<AISuggestion[]> {
@@ -1037,6 +1108,9 @@ export class AISuggestionsService {
           userId,
         });
       }
+
+      // ✅ OBJETIVO A: Incluir sugerencias de keywords en las sugerencias generales
+      const keywordSuggestions = await this.generateKeywordSuggestions(userId, 5);
 
       // Obtener credenciales de GROQ
       let groqCredentials: any = null;
@@ -1187,12 +1261,16 @@ export class AISuggestionsService {
 
       merge(dataDrivenSuggestions);
       merge(aiSuggestions);
+      merge(keywordSuggestions); // ✅ OBJETIVO A: Incluir sugerencias de keywords
 
       if (!mergedSuggestions.length) {
         merge(await this.generateFallbackSuggestions(userId));
       }
 
-      const finalSuggestions = mergedSuggestions.slice(0, 10);
+      // ✅ Priorizar sugerencias de keywords al inicio si hay suficientes
+      const keywordSuggestionsOnly = mergedSuggestions.filter(s => s.type === 'search');
+      const otherSuggestions = mergedSuggestions.filter(s => s.type !== 'search');
+      const finalSuggestions = [...keywordSuggestionsOnly.slice(0, 5), ...otherSuggestions.slice(0, 10 - keywordSuggestionsOnly.length)];
 
       if (finalSuggestions.length > 0) {
         try {

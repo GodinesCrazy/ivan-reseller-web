@@ -80,5 +80,33 @@ router.post('/:id/implement', async (req: Request, res: Response, next) => {
   }
 });
 
+// ✅ OBJETIVO A: GET /api/ai-suggestions/keywords - Obtener sugerencias de keywords específicas
+router.get('/keywords', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const maxSuggestions = parseInt(req.query.max as string) || 10;
+    const suggestions = await aiSuggestionsService.generateKeywordSuggestions(userId, maxSuggestions);
+
+    res.json({
+      success: true,
+      suggestions,
+      count: suggestions.length,
+      message: `Se generaron ${suggestions.length} sugerencias de keywords basadas en tendencias`
+    });
+  } catch (error: any) {
+    console.error('Error in /api/ai-suggestions/keywords:', error);
+    res.status(200).json({
+      success: true,
+      suggestions: [],
+      count: 0,
+      message: 'No se pudieron generar sugerencias de keywords en este momento.'
+    });
+  }
+});
+
 export default router;
 

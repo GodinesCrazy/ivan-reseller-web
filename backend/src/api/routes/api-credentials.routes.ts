@@ -86,16 +86,40 @@ router.get('/', async (req: Request, res: Response, next) => {
   }
 });
 
-// GET /api/api-credentials/status - Estado de todas las APIs con capabilities
+// GET /api/credentials/status - Estado de todas las APIs con capabilities
+// ✅ OBJETIVO B: Mejorar manejo de errores para no bloquear la página
 router.get('/status', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     
-    const [statuses, capabilities] = await Promise.all([
-      apiAvailability.getAllAPIStatus(userId),
-      apiAvailability.getCapabilities(userId),
-    ]);
+    // ✅ Intentar obtener estados con manejo de errores individual
+    let statuses: any[] = [];
+    let capabilities: any = {};
+    
+    try {
+      statuses = await apiAvailability.getAllAPIStatus(userId);
+    } catch (statusError: any) {
+      logger.error('Error getting API statuses', {
+        error: statusError?.message || String(statusError),
+        userId,
+        stack: statusError?.stack
+      });
+      // Continuar con array vacío en lugar de fallar completamente
+      statuses = [];
+    }
+    
+    try {
+      capabilities = await apiAvailability.getCapabilities(userId);
+    } catch (capError: any) {
+      logger.error('Error getting API capabilities', {
+        error: capError?.message || String(capError),
+        userId
+      });
+      // Continuar con objeto vacío
+      capabilities = {};
+    }
 
+    // ✅ Retornar respuesta estructurada incluso si hay errores parciales
     res.json({ 
       success: true,
       data: {
@@ -107,10 +131,34 @@ router.get('/status', async (req: Request, res: Response, next) => {
           available: statuses.filter(s => s.isAvailable).length,
           missing: statuses.filter(s => !s.isConfigured).length,
         },
+        // ✅ Incluir información sobre errores si los hubo
+        warnings: statuses.length === 0 ? ['No se pudieron cargar todos los estados de credenciales. Algunos pueden no estar disponibles.'] : undefined
       }
     });
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    // ✅ Si hay un error crítico, retornar respuesta parcial en lugar de error 500
+    logger.error('Critical error in /api/credentials/status', {
+      error: error?.message || String(error),
+      userId: req.user?.userId,
+      stack: error?.stack
+    });
+    
+    // Retornar respuesta con estructura válida pero vacía
+    res.status(200).json({
+      success: true,
+      data: {
+        apis: [],
+        capabilities: {},
+        summary: {
+          total: 0,
+          configured: 0,
+          available: 0,
+          missing: 0,
+        },
+        error: 'No se pudieron cargar los estados de credenciales. Verifica tu conexión y configuración.',
+        warnings: ['Error al cargar estados. Algunas funcionalidades pueden estar limitadas.']
+      }
+    });
   }
 });
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '@services/api';
 import {
@@ -20,12 +21,13 @@ import {
   Settings,
   Play,
   Pause,
-  X
+  X,
+  Search
 } from 'lucide-react';
 
 interface AISuggestion {
   id: string;
-  type: 'pricing' | 'inventory' | 'marketing' | 'listing' | 'optimization' | 'automation';
+  type: 'pricing' | 'inventory' | 'marketing' | 'listing' | 'optimization' | 'automation' | 'search';
   priority: 'high' | 'medium' | 'low';
   title: string;
   description: string;
@@ -46,6 +48,19 @@ interface AISuggestion {
     targetValue: number;
     unit: string;
   };
+  // ✅ OBJETIVO A: Campos para sugerencias de keywords
+  keyword?: string;
+  keywordCategory?: string;
+  keywordSegment?: string;
+  keywordReason?: string;
+  keywordSupportingMetric?: {
+    type: 'demand' | 'margin' | 'roi' | 'competition' | 'trend';
+    value: number;
+    unit: string;
+    description: string;
+  };
+  targetMarketplaces?: string[];
+  estimatedOpportunities?: number;
 }
 
 interface AutomationRule {
@@ -60,6 +75,7 @@ interface AutomationRule {
 }
 
 export default function AISuggestionsPanel() {
+  const navigate = useNavigate();
   const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>([]);
   const [selectedFilter, setSelectedFilter] = useState('all');
@@ -170,6 +186,7 @@ export default function AISuggestionsPanel() {
       case 'listing': return <Globe className="h-4 w-4" />;
       case 'optimization': return <BarChart3 className="h-4 w-4" />;
       case 'automation': return <Settings className="h-4 w-4" />;
+      case 'search': return <Search className="h-4 w-4" />; // ✅ OBJETIVO A: Icono para sugerencias de búsqueda
       default: return <Lightbulb className="h-4 w-4" />;
     }
   };
@@ -213,7 +230,7 @@ export default function AISuggestionsPanel() {
 
       {/* Filtros */}
       <div className="flex flex-wrap gap-2">
-        {['all', 'pricing', 'inventory', 'marketing', 'listing', 'optimization', 'automation'].map((filter) => (
+        {['all', 'search', 'pricing', 'inventory', 'marketing', 'listing', 'optimization', 'automation'].map((filter) => (
           <button
             key={filter}
             onClick={() => setSelectedFilter(filter)}
@@ -223,7 +240,9 @@ export default function AISuggestionsPanel() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            <span className="capitalize">{filter === 'all' ? 'Todas' : filter}</span>
+            <span className="capitalize">
+              {filter === 'all' ? 'Todas' : filter === 'search' ? 'Búsquedas' : filter}
+            </span>
           </button>
         ))}
       </div>
@@ -245,7 +264,17 @@ export default function AISuggestionsPanel() {
             <div>
               <p className="text-sm text-gray-600">Impacto potencial</p>
               <p className="text-2xl font-bold text-green-600">
-                ${suggestions.reduce((acc, s) => acc + s.impact.revenue, 0).toLocaleString()}
+                {/* ✅ OBJETIVO A: Formatear números correctamente */}
+                ${(() => {
+                  const total = suggestions.reduce((acc, s) => acc + s.impact.revenue, 0);
+                  // Si el número es muy grande o tiene formato extraño, formatearlo correctamente
+                  if (total > 1000000) {
+                    return (total / 1000000).toFixed(1) + 'M';
+                  } else if (total > 1000) {
+                    return (total / 1000).toFixed(1) + 'K';
+                  }
+                  return total.toLocaleString('en-US', { maximumFractionDigits: 0 });
+                })()}
               </p>
             </div>
             <TrendingUp className="h-8 w-8 text-green-600" />
@@ -344,6 +373,64 @@ export default function AISuggestionsPanel() {
                       </div>
                     </div>
                   )}
+
+                  {/* ✅ OBJETIVO A: Mostrar información de keyword si es sugerencia de búsqueda */}
+                  {suggestion.type === 'search' && suggestion.keyword && (
+                    <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-3">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Search className="h-4 w-4 text-blue-600" />
+                            <span className="font-semibold text-blue-900">Keyword sugerida:</span>
+                            <span className="text-lg font-bold text-blue-700">"{suggestion.keyword}"</span>
+                          </div>
+                          {suggestion.keywordReason && (
+                            <p className="text-sm text-blue-800 mb-2">{suggestion.keywordReason}</p>
+                          )}
+                          {suggestion.keywordSupportingMetric && (
+                            <div className="text-xs text-blue-700">
+                              <strong>{suggestion.keywordSupportingMetric.description}</strong>
+                              {' '}({suggestion.keywordSupportingMetric.value} {suggestion.keywordSupportingMetric.unit})
+                            </div>
+                          )}
+                          {suggestion.targetMarketplaces && suggestion.targetMarketplaces.length > 0 && (
+                            <div className="mt-2 flex items-center gap-2">
+                              <span className="text-xs text-blue-700">Marketplaces:</span>
+                              <div className="flex gap-1">
+                                {suggestion.targetMarketplaces.map((mp, idx) => (
+                                  <span key={idx} className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                                    {mp}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {suggestion.estimatedOpportunities && (
+                            <div className="mt-2 text-xs text-blue-700">
+                              <strong>Oportunidades estimadas:</strong> {suggestion.estimatedOpportunities}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {/* ✅ OBJETIVO A: Botón para buscar oportunidades con esta keyword */}
+                      <button
+                        onClick={() => {
+                          // Navegar a /opportunities con la keyword pre-llenada
+                          const params = new URLSearchParams();
+                          params.set('keyword', suggestion.keyword || '');
+                          if (suggestion.targetMarketplaces && suggestion.targetMarketplaces.length > 0) {
+                            params.set('marketplaces', suggestion.targetMarketplaces.join(','));
+                          }
+                          navigate(`/opportunities?${params.toString()}`);
+                          toast.success(`Buscando oportunidades para "${suggestion.keyword}"`);
+                        }}
+                        className="w-full mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
+                      >
+                        <Search className="h-4 w-4" />
+                        Buscar oportunidades con esta keyword
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -360,13 +447,15 @@ export default function AISuggestionsPanel() {
                     >
                       {expandedSuggestion === suggestion.id ? 'Ocultar' : 'Ver detalles'}
                     </button>
-                    <button
-                      onClick={() => implementSuggestion(suggestion.id)}
-                      className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center space-x-1"
-                    >
-                      <Zap className="h-3 w-3" />
-                      <span>Implementar</span>
-                    </button>
+                    {suggestion.type !== 'search' && (
+                      <button
+                        onClick={() => implementSuggestion(suggestion.id)}
+                        className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center space-x-1"
+                      >
+                        <Zap className="h-3 w-3" />
+                        <span>Implementar</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
