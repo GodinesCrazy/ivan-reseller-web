@@ -17,15 +17,31 @@ router.get('/', async (req: Request, res: Response, next) => {
     }
 
     const filter = req.query.filter as string | undefined;
-    const suggestions = await aiSuggestionsService.getSuggestions(userId, filter);
+    
+    // ✅ Mejorar manejo de errores para no bloquear la UI
+    let suggestions: any[] = [];
+    try {
+      suggestions = await aiSuggestionsService.getSuggestions(userId, filter);
+    } catch (error: any) {
+      console.error('Error loading suggestions:', error);
+      // Retornar array vacío en lugar de fallar completamente
+      suggestions = [];
+    }
 
     res.json({
       success: true,
-      suggestions,
-      count: suggestions.length
+      suggestions: suggestions || [],
+      count: suggestions?.length || 0
     });
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    // ✅ Si hay un error crítico, retornar respuesta válida en lugar de error 500
+    console.error('Critical error in /api/ai-suggestions:', error);
+    res.status(200).json({
+      success: true,
+      suggestions: [],
+      count: 0,
+      message: 'No se pudieron cargar las sugerencias en este momento. Intenta más tarde.'
+    });
   }
 });
 

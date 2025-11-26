@@ -1744,27 +1744,51 @@ REGLAS ESTRICTAS:
           take: 20
         });
 
-      return dbSuggestions.map(s => ({
-        id: String(s.id),
-        type: s.type as any,
-        priority: s.priority as any,
-        title: s.title,
-        description: s.description,
-        impact: {
-          revenue: s.impactRevenue,
-          time: s.impactTime,
-          difficulty: s.difficulty as any
-        },
-        confidence: s.confidence,
-        actionable: s.actionable,
-        implemented: s.implemented,
-        estimatedTime: s.estimatedTime,
-        requirements: typeof s.requirements === 'string' ? JSON.parse(s.requirements) : (s.requirements || []),
-        steps: typeof s.steps === 'string' ? JSON.parse(s.steps) : (s.steps || []),
-        relatedProducts: typeof s.relatedProducts === 'string' ? JSON.parse(s.relatedProducts) : (s.relatedProducts || undefined),
-        metrics: s.metrics ? (typeof s.metrics === 'string' ? JSON.parse(s.metrics) : (s.metrics as any)) : undefined,
-        createdAt: s.createdAt.toISOString()
-      }));
+      return dbSuggestions.map(s => {
+        // ✅ Mejorar parsing de JSON con manejo de errores
+        const parseJsonSafe = (value: any, defaultValue: any = []) => {
+          if (!value) return defaultValue;
+          if (Array.isArray(value)) return value;
+          if (typeof value === 'string') {
+            try {
+              return JSON.parse(value);
+            } catch {
+              return defaultValue;
+            }
+          }
+          return value;
+        };
+
+        return {
+          id: String(s.id),
+          type: s.type as any,
+          priority: s.priority as any,
+          title: s.title || '',
+          description: s.description || '',
+          impact: {
+            revenue: s.impactRevenue || 0,
+            time: s.impactTime || 0,
+            difficulty: (s.difficulty as any) || 'medium'
+          },
+          confidence: s.confidence || 0,
+          actionable: s.actionable ?? true,
+          implemented: s.implemented ?? false,
+          estimatedTime: s.estimatedTime || '30 minutos',
+          requirements: parseJsonSafe(s.requirements, []),
+          steps: parseJsonSafe(s.steps, []),
+          relatedProducts: parseJsonSafe(s.relatedProducts, undefined),
+          metrics: s.metrics ? parseJsonSafe(s.metrics, undefined) : undefined,
+          createdAt: s.createdAt?.toISOString() || new Date().toISOString(),
+          // ✅ OBJETIVO A: Incluir campos de keywords si existen
+          keyword: (s as any).keyword,
+          keywordCategory: (s as any).keywordCategory,
+          keywordSegment: (s as any).keywordSegment,
+          keywordReason: (s as any).keywordReason,
+          keywordSupportingMetric: (s as any).keywordSupportingMetric ? parseJsonSafe((s as any).keywordSupportingMetric, undefined) : undefined,
+          targetMarketplaces: (s as any).targetMarketplaces ? parseJsonSafe((s as any).targetMarketplaces, []) : undefined,
+          estimatedOpportunities: (s as any).estimatedOpportunities,
+        };
+      });
       } catch (dbError: any) {
         // Si la tabla no existe (error P2021 o similar), retornar array vacío
         if (dbError.code === 'P2021' || dbError.message?.includes('does not exist') || dbError.message?.includes('ai_suggestions')) {

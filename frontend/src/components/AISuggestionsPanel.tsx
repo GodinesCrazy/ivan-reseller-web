@@ -92,16 +92,35 @@ export default function AISuggestionsPanel() {
       const response = await api.get('/api/ai-suggestions', {
         params: selectedFilter !== 'all' ? { filter: selectedFilter } : {}
       });
+      
+      // ✅ Mejorar manejo de respuesta - verificar estructura
       const suggestionsData: AISuggestion[] = Array.isArray(response.data?.suggestions)
         ? response.data.suggestions
+        : Array.isArray(response.data)
+        ? response.data
         : [];
+      
       setSuggestions(suggestionsData);
       setAutomationRules([]); // TODO: Implementar reglas de automatización
+      
+      // ✅ Si no hay sugerencias, no mostrar error (es normal)
+      if (suggestionsData.length === 0 && selectedFilter === 'all') {
+        // Silencioso - no hay sugerencias aún
+      }
     } catch (error: any) {
       console.error('Error loading suggestions:', error);
-      // No mostrar error si es 404 o no hay sugerencias
-      if (error.response?.status !== 404) {
+      // ✅ No mostrar toast de error si el backend retornó respuesta válida con array vacío
+      if (error.response?.status === 200 && Array.isArray(error.response?.data?.suggestions)) {
+        // El backend retornó array vacío, no es un error
+        setSuggestions([]);
+        return;
+      }
+      // Solo mostrar error si es un error real (no 404, no 200 con array vacío)
+      if (error.response?.status !== 404 && error.response?.status !== 200) {
         toast.error('Error al cargar sugerencias');
+      } else {
+        // Si es 404 o respuesta válida vacía, simplemente no hay sugerencias
+        setSuggestions([]);
       }
     }
   };
