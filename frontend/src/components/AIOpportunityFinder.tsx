@@ -588,18 +588,16 @@ export default function AIOpportunityFinder() {
         status: product.status
       });
 
-      // ✅ Producto importado exitosamente - Redirigir a vista previa del listing
-      // Usar el marketplace de la oportunidad si está disponible, sino usar 'ebay' como default
-      const targetMarketplace = opp.marketplace?.toLowerCase() || 'ebay';
-      
-      toast.success('✅ Producto importado exitosamente. Redirigiendo a vista previa...', {
-        duration: 2000
+      // ✅ FASE 3: Producto importado exitosamente - Redirigir a Products (NO a preview)
+      // El usuario debe ir manualmente a Products y hacer clic en el ojo para ver preview
+      toast.success('✅ Producto importado correctamente. Ve a Products para revisarlo y publicarlo.', {
+        duration: 3000
       });
 
-      // Redirigir a la vista previa después de un breve delay para que el usuario vea el mensaje
+      // Redirigir a Products después de un breve delay para que el usuario vea el mensaje
       setTimeout(() => {
-        navigate(`/products/${productId}/preview?marketplace=${targetMarketplace}`);
-      }, 1000);
+        navigate('/products');
+      }, 1500);
     } catch (error: any) {
       log.error('Error importing product from AI finder:', {
         error,

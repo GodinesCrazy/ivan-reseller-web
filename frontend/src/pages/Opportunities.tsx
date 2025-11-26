@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStatusStore } from '@stores/authStatusStore';
 import { formatCurrencySimple } from '../utils/currency';
+import { Download } from 'lucide-react'; // ✅ FASE 3: Icono para botón de importar
 
 type Marketplace = 'ebay' | 'amazon' | 'mercadolibre';
 
@@ -31,6 +32,7 @@ interface OpportunityItem {
   sourceMarketplace: 'aliexpress';
   aliexpressUrl: string;
   image?: string;
+  images?: string[]; // ✅ FASE 2: Array de todas las imágenes disponibles
   costUsd: number;
   costAmount: number;
   costCurrency: string;
@@ -340,6 +342,68 @@ export default function Opportunities() {
     return normalizedChoice as EnvironmentKey;
   };
 
+  // ✅ FASE 3: Función para solo importar producto (sin publicar)
+  async function importProduct(item: OpportunityItem) {
+    const itemIndex = items.indexOf(item);
+
+    try {
+      setPublishing(prev => ({ ...prev, [itemIndex]: true }));
+
+      const payload: Record<string, any> = {
+        title: item.title,
+        aliexpressUrl: item.aliexpressUrl,
+        aliexpressPrice: item.costUsd,
+        suggestedPrice: item.suggestedPriceUsd,
+        currency: 'USD',
+      };
+
+      // ✅ FASE 2: Pasar TODAS las imágenes disponibles, no solo una
+      if (item.images && Array.isArray(item.images) && item.images.length > 0) {
+        // Filtrar solo URLs válidas
+        const validImages = item.images.filter(img => 
+          img && typeof img === 'string' && /^https?:\/\//i.test(img.trim())
+        );
+        if (validImages.length > 0) {
+          payload.imageUrl = validImages[0]; // Primera imagen como principal
+          payload.imageUrls = validImages; // Todas las imágenes en array
+        }
+      } else if (item.image && /^https?:\/\//i.test(item.image)) {
+        // Fallback: si solo hay una imagen, crear array con ella
+        payload.imageUrl = item.image;
+        payload.imageUrls = [item.image];
+      }
+
+      // Crear producto desde la oportunidad (estado PENDING)
+      const productResponse = await api.post('/api/products', payload);
+
+      // ✅ El backend devuelve { success: true, data: { id, ...product } }
+      const responseData = productResponse.data;
+      const product = responseData?.data || responseData;
+      
+      // ✅ Obtener el ID del producto
+      const productId = product?.id || responseData?.data?.id || responseData?.id;
+
+      if (!productId) {
+        throw new Error('No se pudo obtener el ID del producto creado. El servidor no devolvió un ID válido.');
+      }
+
+      // ✅ FASE 3: Solo importar, NO publicar. Mostrar mensaje y redirigir a /products
+      toast.success('Producto importado correctamente. Ve a Products para revisarlo y publicarlo.');
+      
+      // Redirigir a /products después de un breve delay
+      setTimeout(() => {
+        navigate('/products');
+      }, 1500);
+    } catch (error: any) {
+      console.error('Error importing product:', error);
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al importar producto';
+      toast.error(errorMessage);
+    } finally {
+      setPublishing(prev => ({ ...prev, [itemIndex]: false }));
+    }
+  }
+
+  // ✅ FASE 3: Función para crear y publicar (mantener para casos especiales si se necesita)
   async function createAndPublishProduct(item: OpportunityItem, targetMarketplace: Marketplace) {
     const itemIndex = items.indexOf(item);
 
@@ -359,8 +423,20 @@ export default function Opportunities() {
         currency: 'USD',
       };
 
-      if (item.image && /^https?:\/\//i.test(item.image)) {
+      // ✅ FASE 2: Pasar TODAS las imágenes disponibles, no solo una
+      if (item.images && Array.isArray(item.images) && item.images.length > 0) {
+        // Filtrar solo URLs válidas
+        const validImages = item.images.filter(img => 
+          img && typeof img === 'string' && /^https?:\/\//i.test(img.trim())
+        );
+        if (validImages.length > 0) {
+          payload.imageUrl = validImages[0]; // Primera imagen como principal
+          payload.imageUrls = validImages; // Todas las imágenes en array
+        }
+      } else if (item.image && /^https?:\/\//i.test(item.image)) {
+        // Fallback: si solo hay una imagen, crear array con ella
         payload.imageUrl = item.image;
+        payload.imageUrls = [item.image];
       }
 
       // 1. Crear producto desde la oportunidad
@@ -707,19 +783,29 @@ export default function Opportunities() {
                 </td>
                 <td className="p-3 text-center">
                   <div className="flex flex-col gap-2 items-center">
-                    <div className="flex flex-wrap gap-1 justify-center">
-                      {it.targetMarketplaces?.map((mp) => (
-                        <button
-                          key={mp}
-                          onClick={() => createAndPublishProduct(it, mp as Marketplace)}
-                          disabled={publishing[idx]}
-                          className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium transition-colors"
-                          title={`Crear y publicar en ${mp}`}
-                        >
-                          {publishing[idx] ? '...' : mp === 'ebay' ? 'eBay' : mp === 'mercadolibre' ? 'ML' : 'AMZ'}
-                        </button>
-                      ))}
-                    </div>
+                    {/* ✅ FASE 3: Botón único de Importar (sin publicar automáticamente) */}
+                    <button
+                      onClick={() => importProduct(it)}
+                      disabled={publishing[idx]}
+                      className="px-4 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors flex items-center gap-2"
+                      title="Importar producto (se guardará en Products para revisión y publicación)"
+                    >
+                      {publishing[idx] ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Importando...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4" />
+                          Importar
+                        </>
+                      )}
+                    </button>
+                    {/* Nota informativa */}
+                    <p className="text-xs text-gray-500 max-w-[120px] text-center">
+                      El producto se guardará en Products para que puedas revisarlo y publicarlo
+                    </p>
                   </div>
                 </td>
               </tr>
