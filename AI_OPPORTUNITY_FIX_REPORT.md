@@ -6,6 +6,53 @@
 
 ---
 
+## 🔧 Corrección Crítica: SIGSEGV en Serialización JSON (2025-11-26)
+
+### Problema Identificado
+El sistema se crasheaba con `SIGSEGV` después de retornar las sugerencias exitosamente. El log `409.log` mostraba:
+- ✅ Backend retornaba 14 sugerencias correctamente
+- ❌ SIGSEGV inmediatamente después (línea 190-194)
+- 🔄 El servidor se reiniciaba automáticamente
+
+### Causa Raíz
+El problema estaba en la serialización JSON de objetos que contenían:
+1. **Referencias circulares** no detectadas
+2. **Decimal de Prisma** no convertidos completamente
+3. **Valores extremos** causando overflow en serialización
+4. **Falta de límite de profundidad** en recursión
+
+### Soluciones Implementadas
+
+#### 1. Mejora de `sanitizeForJson` (ai-suggestions.service.ts)
+- ✅ **Detección de referencias circulares** usando `WeakSet`
+- ✅ **Límite de profundidad** (máximo 10 niveles) para prevenir stack overflow
+- ✅ **Validación de valores extremos** antes de serializar
+- ✅ **Manejo robusto de errores** en cada nivel de recursión
+
+#### 2. Conversión Proactiva de Decimal
+- ✅ **Convertir todos los Decimal ANTES** de crear el objeto `suggestion`
+- ✅ **Asegurar tipos primitivos** (number, string, boolean) en lugar de objetos complejos
+- ✅ **Validar cada valor** individualmente antes de agregarlo al objeto
+
+#### 3. Serialización Segura en Route Handler
+- ✅ **Replacer seguro** en `JSON.stringify` para manejar Decimal residuales
+- ✅ **Serialización manual** antes de enviar respuesta
+- ✅ **Filtrado de sugerencias problemáticas** antes de serializar
+
+### Resultado Esperado
+- ✅ **Sin SIGSEGV**: La serialización JSON ahora es completamente segura
+- ✅ **Sin crashes**: El servidor no se reinicia al retornar sugerencias
+- ✅ **Datos válidos**: Todas las sugerencias se serializan correctamente
+- ✅ **Rendimiento**: Límite de profundidad previene problemas de memoria
+
+### Archivos Modificados
+- `backend/src/services/ai-suggestions.service.ts` - Mejora de `sanitizeForJson` y conversión proactiva
+- `backend/src/api/routes/ai-suggestions.routes.ts` - Serialización segura con replacer
+
+---
+
+---
+
 ## 📋 Resumen Ejecutivo
 
 El sistema AI Opportunity Finder estaba retornando arrays vacíos debido a múltiples factores:
