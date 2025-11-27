@@ -644,15 +644,50 @@ class OpportunityFinderService {
           }
         }
 
-        // ✅ NO lanzar error - retornar array vacío para que el frontend muestre el mensaje apropiado
-        logger.warn('Ambos métodos de scraping fallaron, retornando resultados vacíos', {
-          service: 'opportunity-finder',
-          userId,
-          query,
-          manualAuthPending,
-          manualAuthError: manualAuthError?.message
-        });
-        return [];
+        // ✅ FALLBACK NIVEL 3: Intentar ScraperAPI o ZenRows si están configurados
+        try {
+          logger.info('Intentando ScraperAPI/ZenRows como último recurso', {
+            service: 'opportunity-finder',
+            userId,
+            query
+          });
+
+          const externalScrapingResult = await this.tryExternalScrapingAPIs(userId, query, maxItems);
+          if (externalScrapingResult && externalScrapingResult.length > 0) {
+            logger.info('ScraperAPI/ZenRows encontró productos', {
+              service: 'opportunity-finder',
+              userId,
+              query,
+              count: externalScrapingResult.length
+            });
+            products = externalScrapingResult;
+          } else {
+            logger.warn('ScraperAPI/ZenRows tampoco encontró productos o no están configurados', {
+              service: 'opportunity-finder',
+              userId,
+              query
+            });
+          }
+        } catch (externalError: any) {
+          logger.warn('Error al intentar ScraperAPI/ZenRows', {
+            service: 'opportunity-finder',
+            userId,
+            query,
+            error: externalError?.message || String(externalError)
+          });
+        }
+
+        // ✅ Si después de todos los intentos (nativo, bridge Python, ScraperAPI/ZenRows) no hay productos
+        if (!products || products.length === 0) {
+          logger.warn('Todos los métodos de scraping fallaron, retornando resultados vacíos', {
+            service: 'opportunity-finder',
+            userId,
+            query,
+            manualAuthPending,
+            manualAuthError: manualAuthError?.message
+          });
+          return [];
+        }
       }
     }
 
@@ -1108,6 +1143,255 @@ class OpportunityFinderService {
     });
 
     return uniqueOpportunities;
+  }
+}
+
+const opportunityFinder = new OpportunityFinderService();
+  /**
+   * ✅ FALLBACK NIVEL 3: Intentar usar ScraperAPI o ZenRows para scraping externo
+   */
+  private async tryExternalScrapingAPIs(
+    userId: number,
+    query: string,
+    maxItems: number
+  ): Promise<Array<{
+    title: string;
+    price: number;
+    currency: string;
+    sourcePrice: number;
+    sourceCurrency: string;
+    productUrl: string;
+    imageUrl?: string;
+    productId?: string;
+    images?: string[];
+    shippingCost?: number;
+  }>> {
+    try {
+      const credentialsManager = (await import('./credentials-manager.service')).default;
+
+      // Intentar ScraperAPI primero
+      try {
+        const scraperApiCreds = await credentialsManager.getCredentials(userId, 'scraperapi');
+        if (scraperApiCreds && scraperApiCreds.SCRAPERAPI_KEY) {
+          logger.info('Intentando ScraperAPI', { userId, query });
+          const scraperApiResult = await this.scrapeWithScraperAPI(
+            scraperApiCreds.SCRAPERAPI_KEY,
+            query,
+            maxItems
+          );
+          if (scraperApiResult && scraperApiResult.length > 0) {
+            return scraperApiResult;
+          }
+        }
+      } catch (scraperApiError: any) {
+        logger.warn('ScraperAPI falló o no está configurado', {
+          error: scraperApiError?.message || String(scraperApiError)
+        });
+      }
+
+      // Intentar ZenRows como alternativa
+      try {
+        const zenRowsCreds = await credentialsManager.getCredentials(userId, 'zenrows');
+        if (zenRowsCreds && zenRowsCreds.ZENROWS_API_KEY) {
+          logger.info('Intentando ZenRows', { userId, query });
+          const zenRowsResult = await this.scrapeWithZenRows(
+            zenRowsCreds.ZENROWS_API_KEY,
+            query,
+            maxItems
+          );
+          if (zenRowsResult && zenRowsResult.length > 0) {
+            return zenRowsResult;
+          }
+        }
+      } catch (zenRowsError: any) {
+        logger.warn('ZenRows falló o no está configurado', {
+          error: zenRowsError?.message || String(zenRowsError)
+        });
+      }
+
+      return [];
+    } catch (error: any) {
+      logger.error('Error en tryExternalScrapingAPIs', {
+        error: error?.message || String(error)
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Scraping usando ScraperAPI
+   */
+  private async scrapeWithScraperAPI(
+    apiKey: string,
+    query: string,
+    maxItems: number
+  ): Promise<Array<{
+    title: string;
+    price: number;
+    currency: string;
+    sourcePrice: number;
+    sourceCurrency: string;
+    productUrl: string;
+    imageUrl?: string;
+    productId?: string;
+    images?: string[];
+    shippingCost?: number;
+  }>> {
+    try {
+      const axios = (await import('axios')).default;
+      const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`;
+      const scraperApiUrl = `http://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(searchUrl)}&render=true`;
+
+      const response = await axios.get(scraperApiUrl, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+
+      // Parsear HTML usando cheerio
+      const cheerio = (await import('cheerio')).default;
+      const $ = cheerio.load(response.data);
+
+      const products: Array<{
+        title: string;
+        price: number;
+        currency: string;
+        sourcePrice: number;
+        sourceCurrency: string;
+        productUrl: string;
+        imageUrl?: string;
+        productId?: string;
+        images?: string[];
+        shippingCost?: number;
+      }> = [];
+
+      // Extraer productos de la página (selectores comunes de AliExpress)
+      $('[data-product-id]').slice(0, maxItems).each((_, element) => {
+        try {
+          const $el = $(element);
+          const title = $el.find('h1, .item-title, a[href*="/item/"]').first().text().trim();
+          const priceText = $el.find('.price-current, .price, [data-price]').first().text().trim();
+          const url = $el.find('a[href*="/item/"]').first().attr('href') || '';
+          const image = $el.find('img').first().attr('src') || '';
+
+          if (title && priceText && url) {
+            const priceMatch = priceText.match(/[\d,]+\.?\d*/);
+            const price = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;
+
+            if (price > 0) {
+              products.push({
+                title,
+                price,
+                currency: 'USD',
+                sourcePrice: price,
+                sourceCurrency: 'USD',
+                productUrl: url.startsWith('http') ? url : `https://www.aliexpress.com${url}`,
+                imageUrl: image,
+                images: image ? [image] : []
+              });
+            }
+          }
+        } catch (parseError) {
+          // Continuar con siguiente producto
+        }
+      });
+
+      return products;
+    } catch (error: any) {
+      logger.error('Error en scrapeWithScraperAPI', {
+        error: error?.message || String(error)
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Scraping usando ZenRows
+   */
+  private async scrapeWithZenRows(
+    apiKey: string,
+    query: string,
+    maxItems: number
+  ): Promise<Array<{
+    title: string;
+    price: number;
+    currency: string;
+    sourcePrice: number;
+    sourceCurrency: string;
+    productUrl: string;
+    imageUrl?: string;
+    productId?: string;
+    images?: string[];
+    shippingCost?: number;
+  }>> {
+    try {
+      const axios = (await import('axios')).default;
+      const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`;
+      const zenRowsUrl = `https://api.zenrows.com/v1/?apikey=${apiKey}&url=${encodeURIComponent(searchUrl)}&js_render=true&premium_proxy=true`;
+
+      const response = await axios.get(zenRowsUrl, {
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+
+      // Parsear HTML usando cheerio
+      const cheerio = (await import('cheerio')).default;
+      const $ = cheerio.load(response.data);
+
+      const products: Array<{
+        title: string;
+        price: number;
+        currency: string;
+        sourcePrice: number;
+        sourceCurrency: string;
+        productUrl: string;
+        imageUrl?: string;
+        productId?: string;
+        images?: string[];
+        shippingCost?: number;
+      }> = [];
+
+      // Extraer productos de la página (selectores comunes de AliExpress)
+      $('[data-product-id]').slice(0, maxItems).each((_, element) => {
+        try {
+          const $el = $(element);
+          const title = $el.find('h1, .item-title, a[href*="/item/"]').first().text().trim();
+          const priceText = $el.find('.price-current, .price, [data-price]').first().text().trim();
+          const url = $el.find('a[href*="/item/"]').first().attr('href') || '';
+          const image = $el.find('img').first().attr('src') || '';
+
+          if (title && priceText && url) {
+            const priceMatch = priceText.match(/[\d,]+\.?\d*/);
+            const price = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;
+
+            if (price > 0) {
+              products.push({
+                title,
+                price,
+                currency: 'USD',
+                sourcePrice: price,
+                sourceCurrency: 'USD',
+                productUrl: url.startsWith('http') ? url : `https://www.aliexpress.com${url}`,
+                imageUrl: image,
+                images: image ? [image] : []
+              });
+            }
+          }
+        } catch (parseError) {
+          // Continuar con siguiente producto
+        }
+      });
+
+      return products;
+    } catch (error: any) {
+      logger.error('Error en scrapeWithZenRows', {
+        error: error?.message || String(error)
+      });
+      return [];
+    }
   }
 }
 
