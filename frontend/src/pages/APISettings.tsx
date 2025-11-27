@@ -853,6 +853,101 @@ export default function APISettings() {
   };
 
   // ✅ MEJORA UX: Función helper para obtener solución según error global
+  // ✅ MEJORA: Función para determinar estado unificado de configuración de API
+  const getUnifiedAPIStatus = (
+    apiName: string,
+    credential: APICredential | undefined,
+    statusInfo: APIStatus | undefined,
+    diag: { issues?: string[]; warnings?: string[] } | null
+  ): {
+    status: 'not_configured' | 'partially_configured' | 'configured' | 'error';
+    message: string;
+    actionMessage?: string;
+    actionButton?: { label: string; onClick: () => void };
+  } => {
+    // Para APIs que requieren OAuth (eBay, MercadoLibre)
+    if (['ebay', 'mercadolibre'].includes(apiName)) {
+      const hasBasicCreds = credential?.credentials && 
+        (apiName === 'ebay' 
+          ? (credential.credentials as any).appId && (credential.credentials as any).devId && (credential.credentials as any).certId
+          : (credential.credentials as any).clientId && (credential.credentials as any).clientSecret);
+      const hasToken = credential?.credentials && 
+        ((credential.credentials as any).token || (credential.credentials as any).refreshToken);
+      
+      if (!hasBasicCreds) {
+        return {
+          status: 'not_configured',
+          message: 'No configurado',
+          actionMessage: 'Ingresa las credenciales básicas y guárdalas.',
+        };
+      }
+      
+      if (hasBasicCreds && !hasToken) {
+        return {
+          status: 'partially_configured',
+          message: 'Paso 1/2 completado',
+          actionMessage: 'Credenciales básicas guardadas. Completa la autorización OAuth.',
+          actionButton: {
+            label: 'Autorizar OAuth',
+            onClick: () => handleOAuth(apiName, selectedEnvironment[apiName] || 'production'),
+          },
+        };
+      }
+      
+      if (hasToken && statusInfo?.status === 'healthy') {
+        return {
+          status: 'configured',
+          message: 'Configurado y funcionando',
+        };
+      }
+      
+      if (hasToken && statusInfo?.status !== 'healthy') {
+        return {
+          status: 'error',
+          message: statusInfo?.message || 'Configurado pero con problemas',
+          actionMessage: statusInfo?.error || 'Revisa la configuración.',
+        };
+      }
+    }
+    
+    // Para otras APIs
+    if (!credential) {
+      return {
+        status: 'not_configured',
+        message: 'No configurado',
+        actionMessage: 'Ingresa las credenciales y guárdalas.',
+      };
+    }
+    
+    if (statusInfo?.status === 'healthy' || statusInfo?.isAvailable) {
+      return {
+        status: 'configured',
+        message: 'Configurado y funcionando',
+      };
+    }
+    
+    if (statusInfo?.status === 'degraded' || diag?.warnings?.length) {
+      return {
+        status: 'partially_configured',
+        message: 'Configurado con advertencias',
+        actionMessage: diag?.warnings?.[0] || statusInfo?.message,
+      };
+    }
+    
+    if (statusInfo?.status === 'unhealthy' || diag?.issues?.length) {
+      return {
+        status: 'error',
+        message: 'Error de configuración',
+        actionMessage: diag?.issues?.[0] || statusInfo?.message || statusInfo?.error,
+      };
+    }
+    
+    return {
+      status: 'not_configured',
+      message: 'Estado desconocido',
+    };
+  };
+
   const getSolutionForError = (error: string): string => {
     const lowerError = error.toLowerCase();
     
@@ -1201,21 +1296,47 @@ export default function APISettings() {
         // Continuar aunque falle la recarga
       }
 
-      // ✅ MEJORA: Mostrar advertencias de validación si existen
+      // ✅ MEJORA: Mensaje de éxito mejorado y más claro según el estado
       const saveData = response.data?.data || {};
       const warnings = saveData.warnings || [];
       
-      // Mostrar advertencias de validación si existen (máximo 2 para no saturar)
+      // ✅ MEJORA: Determinar si requiere OAuth y mostrar mensaje apropiado
+      const isOAuthRequired = ['ebay', 'mercadolibre'].includes(apiName);
+      const hasBasicCreds = apiName === 'ebay' 
+        ? (credentials.appId && credentials.devId && credentials.certId)
+        : apiName === 'mercadolibre'
+        ? (credentials.clientId && credentials.clientSecret)
+        : true;
+      const hasToken = credentials.token || credentials.refreshToken || credentials.authToken;
+      
+      if (isOAuthRequired && hasBasicCreds && !hasToken) {
+        // Credenciales básicas guardadas, falta OAuth - mensaje claro con siguiente paso
+        toast.success(`✅ Paso 1/2 completado: Credenciales básicas guardadas`, {
+          id: `save-${apiName}`,
+          duration: 5000,
+        });
+        toast('📋 Siguiente paso: Haz clic en el botón "OAuth" para completar la autorización', {
+          id: `oauth-hint-${apiName}`,
+          duration: 6000,
+          icon: 'ℹ️'
+        });
+      } else {
+        // Credenciales completas guardadas
+        toast.success(`✅ ${apiDef.displayName} configurado correctamente`, { 
+          id: `save-${apiName}`,
+          duration: 4000,
+        });
+      }
+      
+      // Mostrar advertencias de validación si existen (máximo 1 para no saturar)
       if (Array.isArray(warnings) && warnings.length > 0) {
-        warnings.slice(0, 2).forEach((warning: string, idx: number) => {
+        warnings.slice(0, 1).forEach((warning: string) => {
           toast.warning(`ℹ️ ${warning}`, { 
-            id: `warning-${apiName}-${idx}`, 
+            id: `warning-${apiName}`, 
             duration: 4000
           });
         });
       }
-      
-      toast.success(`✅ Credenciales de ${apiDef.displayName} guardadas exitosamente`, { id: `save-${apiName}` });
       
       // ✅ MEJORA: Test automático opcional y silencioso (solo para APIs que lo soportan)
       // No mostrar error si el test falla, solo si es crítico
@@ -1290,6 +1411,31 @@ export default function APISettings() {
         }
       }
 
+      // ✅ MEJORA: Mensaje de éxito mejorado y más claro
+      const isOAuthRequired = ['ebay', 'mercadolibre'].includes(apiName);
+      const hasBasicCreds = apiName === 'ebay' 
+        ? (credentials.appId && credentials.devId && credentials.certId)
+        : apiName === 'mercadolibre'
+        ? (credentials.clientId && credentials.clientSecret)
+        : true;
+      
+      if (isOAuthRequired && hasBasicCreds && !credentials.token && !credentials.refreshToken) {
+        // Credenciales básicas guardadas, falta OAuth
+        toast.success(`✅ Credenciales básicas guardadas (Paso 1/2). Haz clic en "OAuth" para completar la autorización.`, {
+          duration: 6000,
+          icon: 'ℹ️'
+        });
+      } else {
+        // Credenciales completas guardadas
+        toast.success(`✅ ${API_DEFINITIONS[apiName]?.displayName || apiName} configurado correctamente`, {
+          duration: 4000,
+        });
+      }
+      
+      // ✅ MEJORA: Recargar credenciales y estados inmediatamente después de guardar
+      await loadCredentials();
+      await fetchAuthStatuses();
+      
       // Limpiar formulario
       setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: {} }));
       setExpandedApi(null);
@@ -1691,7 +1837,7 @@ export default function APISettings() {
         urlLength: authUrl.length,
       });
       
-      // ✅ CORRECCIÓN CRÍTICA: Cerrar cualquier modal previo antes de intentar abrir OAuth
+      // ✅ CORRECCIÓN CRÍTICA: Cerrar cualquier modal previo ANTES de intentar abrir OAuth
       // Esto previene que modales de sesiones anteriores se muestren
       setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined });
       
@@ -1711,6 +1857,8 @@ export default function APISettings() {
           error: errorMessage,
           stack: errorStack,
         });
+        // Si hay un error al abrir, tratar como bloqueado
+        oauthWindow = null;
       }
       
       // ✅ CORRECCIÓN CRÍTICA: La única forma confiable de detectar bloqueo es si window.open() retorna null/undefined
@@ -1727,12 +1875,15 @@ export default function APISettings() {
           isUndefined: oauthWindow === undefined,
         });
         
-        setOauthBlockedModal({
-          open: true,
-          authUrl: authUrl,
-          apiName: apiName,
-          warning: oauthWarning,
-        });
+        // ✅ CORRECCIÓN: Usar setTimeout para asegurar que el estado se actualice correctamente
+        setTimeout(() => {
+          setOauthBlockedModal({
+            open: true,
+            authUrl: authUrl,
+            apiName: apiName,
+            warning: oauthWarning,
+          });
+        }, 100);
         setOauthing(null);
         return;
       }
@@ -1746,7 +1897,10 @@ export default function APISettings() {
       });
       
       // ✅ CORRECCIÓN: Asegurar que el modal esté cerrado cuando la ventana se abre correctamente
-      setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined });
+      // Usar setTimeout para asegurar que el estado se actualice después de cualquier renderizado previo
+      setTimeout(() => {
+        setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined });
+      }, 0);
       
       toast('Se abrió la ventana oficial de OAuth. Completa el login y vuelve para refrescar el estado.', {
         icon: 'ℹ️'
@@ -2662,36 +2816,97 @@ export default function APISettings() {
                         </span>
                       ) : null}
                     </div>
-                    {['ebay', 'amazon', 'mercadolibre'].includes(apiDef.name) && diag && (
-                      <div className="mt-2 space-y-1 text-sm">
-                        {diag.issues?.length ? (
-                          <div className="px-3 py-2 bg-red-50 border border-red-200 text-red-700 rounded">
-                            <p className="font-semibold">Acción requerida</p>
-                            {diag.issues.map((issue, idx) => (
-                              <div key={idx}>• {issue}</div>
-                            ))}
+                    {/* ✅ MEJORA: Estado unificado y claro de configuración */}
+                    {(() => {
+                      const unifiedStatus = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag);
+                      
+                      if (unifiedStatus.status === 'not_configured') {
+                        return (
+                          <div className="mt-2 px-3 py-2 bg-gray-50 border border-gray-200 text-gray-700 rounded">
+                            <p className="font-semibold text-sm">📋 {unifiedStatus.message}</p>
+                            {unifiedStatus.actionMessage && (
+                              <p className="text-xs mt-1">{unifiedStatus.actionMessage}</p>
+                            )}
                           </div>
-                        ) : null}
-                        {!diag.issues?.length && diag.warnings?.length ? (
-                          <div className="px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded">
-                            <p className="font-semibold">Aviso</p>
-                            {diag.warnings.map((warning, idx) => (
-                              <div key={idx}>• {warning}</div>
-                            ))}
+                        );
+                      }
+                      
+                      if (unifiedStatus.status === 'partially_configured') {
+                        return (
+                          <div className="mt-2 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="font-semibold text-sm">⚠️ {unifiedStatus.message}</p>
+                                {unifiedStatus.actionMessage && (
+                                  <p className="text-xs mt-1">{unifiedStatus.actionMessage}</p>
+                                )}
+                              </div>
+                              {unifiedStatus.actionButton && (
+                                <button
+                                  onClick={unifiedStatus.actionButton.onClick}
+                                  disabled={oauthing === apiDef.name}
+                                  className="ml-2 px-3 py-1 text-xs font-semibold bg-amber-600 text-white rounded hover:bg-amber-700 transition disabled:opacity-50"
+                                >
+                                  {oauthing === apiDef.name ? 'Autorizando...' : unifiedStatus.actionButton.label}
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        ) : null}
-                      </div>
-                    )}
-                    {statusInfo ? (
-                      <div className="mt-2 space-y-2 text-xs">
-                        <div
-                          className={`inline-flex items-center gap-2 px-3 py-1 border rounded-full font-semibold ${badgeTheme.className}`}
-                        >
-                          {badgeTheme.label}
+                        );
+                      }
+                      
+                      if (unifiedStatus.status === 'error') {
+                        return (
+                          <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 text-red-700 rounded">
+                            <p className="font-semibold text-sm">❌ {unifiedStatus.message}</p>
+                            {unifiedStatus.actionMessage && (
+                              <p className="text-xs mt-1">{unifiedStatus.actionMessage}</p>
+                            )}
+                          </div>
+                        );
+                      }
+                      
+                      // configured
+                      return (
+                        <div className="mt-2 px-3 py-2 bg-green-50 border border-green-200 text-green-700 rounded">
+                          <p className="font-semibold text-sm">✅ {unifiedStatus.message}</p>
                         </div>
-                        {statusInfo.message ? (
-                          <p className="text-gray-500">{statusInfo.message}</p>
-                        ) : null}
+                      );
+                    })()}
+                    {/* ✅ MEJORA: Solo mostrar badge técnico si no hay estado unificado o para información adicional */}
+                    {statusInfo && statusInfo.status === 'healthy' && (() => {
+                      const unifiedStatus = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag);
+                      // Solo mostrar badge técnico si está completamente configurado
+                      if (unifiedStatus.status === 'configured') {
+                        return (
+                          <div className="mt-2 space-y-2 text-xs">
+                            <div
+                              className={`inline-flex items-center gap-2 px-3 py-1 border rounded-full font-semibold ${badgeTheme.className}`}
+                            >
+                              {badgeTheme.label}
+                            </div>
+                            {statusInfo.message && statusInfo.message !== unifiedStatus.message ? (
+                              <p className="text-gray-500">{statusInfo.message}</p>
+                            ) : null}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                    {/* Mostrar información técnica adicional solo si no hay estado unificado */}
+                    {statusInfo && !['ebay', 'mercadolibre'].includes(apiDef.name) && (() => {
+                      const unifiedStatus = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag);
+                      if (unifiedStatus.status !== 'configured') {
+                        return (
+                          <div className="mt-2 space-y-2 text-xs">
+                            {statusInfo.message ? (
+                              <p className="text-gray-500">{statusInfo.message}</p>
+                            ) : null}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                         {apiDef.name === 'aliexpress' ? (
                           <div className="flex flex-wrap items-center gap-2">
                             {/* ✅ SOLO mostrar botones si el estado es realmente 'manual_required' (por CAPTCHA/bloqueo), NO si solo faltan cookies */}
