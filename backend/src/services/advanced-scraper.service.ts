@@ -1734,27 +1734,47 @@ export class AdvancedMarketplaceScraper {
                       '';
             }
 
-            // ✅ Extraer URL del atributo href del elemento link del DOM
+            // ✅ CORRECCIÓN: Extraer URL del atributo href del elemento link del DOM
+            // Intentar múltiples estrategias para encontrar la URL del producto
             let url = '';
+            
+            // Estrategia 1: Atributo href directo del linkElement
             if (linkElement) {
               url = linkElement.getAttribute('href') || '';
+              // También intentar data-href o data-url como fallback
+              if (!url || url.length < 10) {
+                url = linkElement.getAttribute('data-href') || 
+                      linkElement.getAttribute('data-url') || 
+                      (linkElement as any).href || '';
+              }
             }
             
-            // Si no hay linkElement, intentar encontrar un enlace dentro del item (evitando URLs genéricas)
-            if (!url || url.includes('/ssr/') || url.includes('/wholesale') || url.includes('/w/')) {
+            // Estrategia 2: Buscar enlaces dentro del item si no se encontró URL válida
+            if (!url || url.length < 10 || url.includes('/ssr/') || url.includes('/wholesale') || url.includes('/w/')) {
               const allLinks = item.querySelectorAll('a[href]');
               for (const link of Array.from(allLinks)) {
                 const linkEl = link as HTMLAnchorElement;
                 if (!linkEl || typeof linkEl.getAttribute !== 'function') continue;
-                const href = linkEl.getAttribute('href') || '';
+                const href = linkEl.getAttribute('href') || linkEl.getAttribute('data-href') || '';
                 // ✅ Solo aceptar URLs de productos individuales
-                if (href && (href.includes('/item/') || href.includes('/product/')) &&
+                if (href && href.length >= 10 && (href.includes('/item/') || href.includes('/product/')) &&
                     !href.includes('/ssr/') && !href.includes('/wholesale') && 
                     !href.includes('/w/') && !href.includes('/category/')) {
                   url = href;
                   linkElement = linkEl;
                   break;
                 }
+              }
+            }
+            
+            // Estrategia 3: Intentar extraer de data-attributes del item mismo
+            if (!url || url.length < 10) {
+              const itemDataUrl = item.getAttribute('data-item-id') || 
+                                  item.getAttribute('data-product-id') ||
+                                  item.getAttribute('data-sku-id') || '';
+              if (itemDataUrl) {
+                // Construir URL de producto usando el ID
+                url = `https://www.aliexpress.com/item/${itemDataUrl}.html`;
               }
             }
 
