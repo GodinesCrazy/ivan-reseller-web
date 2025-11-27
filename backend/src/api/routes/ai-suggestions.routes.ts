@@ -75,48 +75,102 @@ router.get('/', async (req: Request, res: Response, next) => {
       suggestions = [];
     }
 
-    // ✅ Envolver res.json en try-catch adicional como protección final
-    // Usar replacer seguro para prevenir SIGSEGV
-    try {
-      const safeJsonReplacer = (key: string, value: any): any => {
-        if (value && typeof value === 'object' && 'toNumber' in value && typeof value.toNumber === 'function') {
-          try {
-            const num = value.toNumber();
-            return isFinite(num) && !isNaN(num) ? num : 0;
-          } catch {
-            return 0;
+      // ✅ Envolver res.json en try-catch adicional como protección final
+      // ✅ MEJORADO: Validación más estricta y manejo de errores mejorado
+      try {
+        // ✅ Validar que las sugerencias sean un array
+        if (!Array.isArray(suggestions)) {
+          suggestions = [];
+        }
+        
+        // ✅ Filtrar sugerencias nulas o undefined
+        suggestions = suggestions.filter(s => s != null);
+        
+        // ✅ Limitar número de sugerencias para prevenir respuestas demasiado grandes
+        suggestions = suggestions.slice(0, 50);
+        
+        const safeJsonReplacer = (key: string, value: any): any => {
+          // Detectar Prisma.Decimal
+          if (value && typeof value === 'object' && 'toNumber' in value && typeof value.toNumber === 'function') {
+            try {
+              const num = value.toNumber();
+              return isFinite(num) && !isNaN(num) ? num : 0;
+            } catch {
+              return 0;
+            }
           }
+          // Detectar Date
+          if (value instanceof Date) {
+            try {
+              return value.toISOString();
+            } catch {
+              return new Date().toISOString();
+            }
+          }
+          // Validar números
+          if (typeof value === 'number') {
+            if (!isFinite(value) || isNaN(value)) return 0;
+            // Limitar valores extremos (reducido para mayor seguridad)
+            if (Math.abs(value) > 1e12) {
+              return value > 0 ? 1e12 : -1e12;
+            }
+          }
+          // Truncar strings largos
+          if (typeof value === 'string' && value.length > 5000) {
+            return value.substring(0, 5000);
+          }
+          // Detectar referencias circulares (objetos)
+          if (typeof value === 'object' && value !== null) {
+            // Si es un objeto complejo, validar que sea serializable
+            try {
+              JSON.stringify(value);
+            } catch {
+              return '[Non-serializable object]';
+            }
+          }
+          return value;
+        };
+        
+        // ✅ Validar cada sugerencia individualmente antes de agregarla
+        const validatedSuggestions = suggestions.map((s: any, idx: number) => {
+          try {
+            // Intentar serializar cada sugerencia individualmente
+            JSON.stringify(s, safeJsonReplacer);
+            return s;
+          } catch (error) {
+            console.error(`Sugerencia ${idx} no serializable, omitiendo:`, error);
+            return null;
+          }
+        }).filter((s: any) => s != null);
+        
+        // Serializar manualmente con replacer seguro antes de enviar
+        const responseData = {
+          success: true,
+          suggestions: validatedSuggestions,
+          count: validatedSuggestions.length
+        };
+        
+        // ✅ Validación final antes de enviar
+        const jsonString = JSON.stringify(responseData, safeJsonReplacer, 2);
+        
+        // ✅ Validar que el JSON no sea demasiado grande (límite 10MB)
+        if (jsonString.length > 10 * 1024 * 1024) {
+          throw new Error('Response too large');
         }
-        if (typeof value === 'number') {
-          if (!isFinite(value) || isNaN(value)) return 0;
-          if (Math.abs(value) > 1e15) return value > 0 ? 1e15 : -1e15;
-        }
-        if (typeof value === 'string' && value.length > 10000) {
-          return value.substring(0, 10000);
-        }
-        return value;
-      };
-      
-      // Serializar manualmente con replacer seguro antes de enviar
-      const responseData = {
-        success: true,
-        suggestions: suggestions || [],
-        count: suggestions?.length || 0
-      };
-      
-      const jsonString = JSON.stringify(responseData, safeJsonReplacer);
-      res.setHeader('Content-Type', 'application/json');
-      res.send(jsonString);
-    } catch (jsonError: any) {
-      console.error('Error crítico serializando respuesta JSON:', jsonError);
-      // Si falla la serialización, retornar respuesta mínima
-      res.status(200).json({
-        success: true,
-        suggestions: [],
-        count: 0,
-        message: 'Error al procesar sugerencias. Intenta recargar la página.'
-      });
-    }
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Length', Buffer.byteLength(jsonString, 'utf8').toString());
+        res.send(jsonString);
+      } catch (jsonError: any) {
+        console.error('Error crítico serializando respuesta JSON:', jsonError);
+        // Si falla la serialización, retornar respuesta mínima
+        res.status(200).json({
+          success: true,
+          suggestions: [],
+          count: 0,
+          message: 'Error al procesar sugerencias. Intenta recargar la página.'
+        });
+      }
   } catch (error: any) {
     // ✅ Si hay un error crítico, retornar respuesta válida en lugar de error 500
     console.error('Critical error in /api/ai-suggestions:', error);

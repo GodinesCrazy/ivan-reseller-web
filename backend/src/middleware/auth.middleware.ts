@@ -171,10 +171,13 @@ export const authorize = (...roles: string[]) => {
     }
 
     // Normalizar roles a mayúsculas para comparación case-insensitive
-    const userRoleUpper = req.user.role?.toUpperCase();
-    const allowedRolesUpper = roles.map(r => r.toUpperCase());
+    // ✅ Validar que todos los roles sean strings antes de llamar toUpperCase
+    const userRoleUpper = typeof req.user.role === 'string' ? req.user.role.toUpperCase() : null;
+    const allowedRolesUpper = roles
+      .filter(r => typeof r === 'string' && r.trim().length > 0)
+      .map(r => String(r).toUpperCase());
 
-    if (!userRoleUpper || !allowedRolesUpper.includes(userRoleUpper)) {
+    if (!userRoleUpper || allowedRolesUpper.length === 0 || !allowedRolesUpper.includes(userRoleUpper)) {
       return next(new AppError('Insufficient permissions. Admin access required.', 403));
     }
 

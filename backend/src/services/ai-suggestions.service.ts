@@ -1824,6 +1824,7 @@ REGLAS ESTRICTAS:
 
       // ✅ Función helper recursiva para limpiar cualquier Decimal en el objeto
       // Con límite de profundidad para evitar stack overflow y referencias circulares
+      // ✅ MEJORADO: Manejo más robusto de tipos complejos y validación estricta
       const sanitizeForJson = (obj: any, depth: number = 0, visited: WeakSet<any> = new WeakSet()): any => {
         // Límite de profundidad para evitar stack overflow
         if (depth > 10) {
@@ -1835,94 +1836,117 @@ REGLAS ESTRICTAS:
           return obj;
         }
         
-        // Detectar referencias circulares (solo para objetos)
+        // ✅ Detectar referencias circulares ANTES de procesar
         if (typeof obj === 'object' && obj !== null) {
           if (visited.has(obj)) {
             logger.warn('AISuggestions: Referencia circular detectada en sanitizeForJson');
-            return null;
+            return '[Circular Reference]';
           }
           visited.add(obj);
         }
         
-        // Si es Prisma.Decimal, convertir a number
-        if (obj && typeof obj === 'object' && 'toNumber' in obj && typeof obj.toNumber === 'function') {
-          try {
-            const num = obj.toNumber();
-            // Validar y limitar valores extremos
-            if (!isFinite(num) || isNaN(num)) {
+        // ✅ Detectar Prisma.Decimal ANTES de otros objetos
+        if (obj && typeof obj === 'object') {
+          // Verificar si es Prisma.Decimal (puede tener múltiples propiedades que lo identifiquen)
+          if ('toNumber' in obj && typeof obj.toNumber === 'function') {
+            try {
+              const num = obj.toNumber();
+              if (!isFinite(num) || isNaN(num)) {
+                return 0;
+              }
+              // Limitar valores extremos para prevenir problemas de serialización
+              if (Math.abs(num) > 1e12) {
+                logger.warn('AISuggestions: Valor extremo detectado, limitando', { original: num });
+                return num > 0 ? 1e12 : -1e12;
+              }
+              return num;
+            } catch (error) {
+              logger.warn('AISuggestions: Error convirtiendo Decimal a number', { error });
               return 0;
             }
-            // Limitar valores extremos para prevenir problemas de serialización
-            if (Math.abs(num) > 1e15) {
-              return num > 0 ? 1e15 : -1e15;
+          }
+          
+          // ✅ Si es Date, convertir a ISO string
+          if (obj instanceof Date) {
+            try {
+              return obj.toISOString();
+            } catch {
+              return new Date().toISOString();
             }
-            return num;
-          } catch (error) {
-            logger.warn('AISuggestions: Error convirtiendo Decimal a number', { error });
-            return 0;
           }
-        }
-        
-        // Si es Date, convertir a ISO string
-        if (obj instanceof Date) {
-          try {
-            return obj.toISOString();
-          } catch {
-            return new Date().toISOString();
+          
+          // ✅ Si es Array, sanitizar cada elemento
+          if (Array.isArray(obj)) {
+            try {
+              const sanitized = obj.map(item => sanitizeForJson(item, depth + 1, visited));
+              // Limitar tamaño de arrays para prevenir problemas
+              return sanitized.slice(0, 1000);
+            } catch (error) {
+              logger.warn('AISuggestions: Error sanitizando array', { error });
+              return [];
+            }
           }
-        }
-        
-        // Si es Array, sanitizar cada elemento
-        if (Array.isArray(obj)) {
-          try {
-            return obj.map(item => sanitizeForJson(item, depth + 1, visited));
-          } catch (error) {
-            logger.warn('AISuggestions: Error sanitizando array', { error });
-            return [];
-          }
-        }
-        
-        // Si es objeto (pero no Decimal ni Date), sanitizar propiedades
-        if (typeof obj === 'object') {
+          
+          // ✅ Si es objeto, sanitizar propiedades
           const sanitized: any = {};
           try {
+            let keyCount = 0;
             for (const [key, value] of Object.entries(obj)) {
+              // Limitar número de propiedades para prevenir objetos demasiado grandes
+              if (keyCount++ > 100) {
+                logger.warn('AISuggestions: Objeto con demasiadas propiedades, truncando');
+                break;
+              }
+              
+              // Validar que la key sea un string válido
+              if (typeof key !== 'string' || key.length > 100) {
+                continue;
+              }
+              
               try {
                 sanitized[key] = sanitizeForJson(value, depth + 1, visited);
               } catch (error) {
-                // Si falla sanitizar una propiedad, omitirla o usar valor por defecto
                 logger.warn(`AISuggestions: Error sanitizando propiedad ${key}`, { error });
                 sanitized[key] = null;
               }
             }
           } catch (error) {
             logger.warn('AISuggestions: Error iterando propiedades del objeto', { error });
+            return {};
           }
           return sanitized;
         }
         
-        // Para primitivos, validar que sean serializables
+        // ✅ Para primitivos, validar que sean serializables
         if (typeof obj === 'number') {
           if (!isFinite(obj) || isNaN(obj)) {
             return 0;
           }
-          // Limitar valores extremos
-          if (Math.abs(obj) > 1e15) {
-            return obj > 0 ? 1e15 : -1e15;
+          // Limitar valores extremos (reducido de 1e15 a 1e12)
+          if (Math.abs(obj) > 1e12) {
+            logger.warn('AISuggestions: Número extremo detectado, limitando', { original: obj });
+            return obj > 0 ? 1e12 : -1e12;
           }
           return obj;
         }
         
-        // Para strings, validar que no sean demasiado largos
+        // ✅ Para strings, validar que no sean demasiado largos
         if (typeof obj === 'string') {
-          if (obj.length > 10000) {
+          if (obj.length > 5000) {
             logger.warn('AISuggestions: String demasiado largo, truncando', { length: obj.length });
-            return obj.substring(0, 10000);
+            return obj.substring(0, 5000);
           }
           return obj;
         }
         
-        return obj;
+        // ✅ Para boolean, retornar directamente
+        if (typeof obj === 'boolean') {
+          return obj;
+        }
+        
+        // ✅ Para otros tipos no reconocidos, retornar null
+        logger.warn('AISuggestions: Tipo no reconocido en sanitizeForJson', { type: typeof obj });
+        return null;
       };
 
       return dbSuggestions.map(s => {
@@ -2014,7 +2038,36 @@ REGLAS ESTRICTAS:
           };
 
           // ✅ Sanitizar el objeto completo antes de retornar (con límite de profundidad)
-          return sanitizeForJson(suggestion, 0, new WeakSet());
+          // Usar un WeakSet compartido para mejor detección de referencias circulares
+          const sanitized = sanitizeForJson(suggestion, 0, new WeakSet());
+          
+          // ✅ Validación adicional: intentar serializar inmediatamente para detectar problemas
+          try {
+            JSON.stringify(sanitized);
+          } catch (serializationTestError: any) {
+            logger.error(`AISuggestions: Sugerencia ${s.id} no es serializable después de sanitizar`, {
+              error: serializationTestError.message,
+              suggestionId: s.id
+            });
+            // Retornar objeto mínimo válido
+            return {
+              id: String(s.id),
+              type: s.type || 'optimization',
+              priority: s.priority || 'medium',
+              title: s.title || 'Sugerencia',
+              description: '',
+              impact: { revenue: 0, time: 0, difficulty: 'medium' },
+              confidence: 0,
+              actionable: false,
+              implemented: false,
+              estimatedTime: '30 minutos',
+              requirements: [],
+              steps: [],
+              createdAt: new Date().toISOString(),
+            };
+          }
+          
+          return sanitized;
         } catch (error: any) {
           logger.error(`AISuggestions: Error procesando sugerencia ${s.id}`, { 
             error: error.message, 
@@ -2037,6 +2090,15 @@ REGLAS ESTRICTAS:
             steps: [],
             createdAt: new Date().toISOString(),
           };
+        }
+      }).filter((s: any) => {
+        // ✅ Filtrar sugerencias que no sean serializables
+        try {
+          JSON.stringify(s);
+          return true;
+        } catch {
+          logger.warn('AISuggestions: Filtrando sugerencia no serializable');
+          return false;
         }
       });
       } catch (dbError: any) {

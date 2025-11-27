@@ -58,3 +58,5 @@ prisma/migrations/**/migration.sql
 API.txt
 APIS.txt
 *.api.txt
+REVISION_CREDENCIALES_EBAY.md
+*CREDENCIALES*.md

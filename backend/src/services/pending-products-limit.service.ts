@@ -17,12 +17,18 @@ export class PendingProductsLimitService {
    */
   async getMaxPendingProducts(): Promise<number> {
     try {
+      // ✅ Validar que CONFIG_KEY esté definido
+      if (!this.CONFIG_KEY || typeof this.CONFIG_KEY !== 'string' || this.CONFIG_KEY.trim().length === 0) {
+        logger.warn('PendingProductsLimitService: CONFIG_KEY no válido, usando valor por defecto');
+        return this.DEFAULT_LIMIT;
+      }
+      
       const config = await prisma.systemConfig.findUnique({
         where: { key: this.CONFIG_KEY }
       });
 
       if (config?.value) {
-        const limit = parseInt(config.value, 10);
+        const limit = parseInt(String(config.value), 10);
         if (!isNaN(limit) && limit >= this.MIN_LIMIT && limit <= this.MAX_LIMIT) {
           return limit;
         }
@@ -30,8 +36,12 @@ export class PendingProductsLimitService {
 
       // Si no hay configuración o es inválida, retornar valor por defecto
       return this.DEFAULT_LIMIT;
-    } catch (error) {
-      logger.error('Error getting max pending products limit', { error });
+    } catch (error: any) {
+      logger.error('Error getting max pending products limit', { 
+        error: error?.message || error,
+        errorCode: error?.code,
+        configKey: this.CONFIG_KEY
+      });
       return this.DEFAULT_LIMIT;
     }
   }
