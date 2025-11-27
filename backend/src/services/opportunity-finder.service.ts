@@ -730,22 +730,6 @@ class OpportunityFinderService {
         manualAuthPending,
         manualAuthError: manualAuthError?.message
       });
-      return [];
-    }
-      }
-    }
-
-    // ✅ Si después de todos los intentos no hay productos, retornar vacío
-    if (!products || products.length === 0) {
-      logger.warn('No se encontraron productos después de intentar scraping nativo y bridge Python', {
-        service: 'opportunity-finder',
-        query,
-        userId,
-        maxItems,
-        hasManualAuth: manualAuthPending,
-        nativeError: nativeErrorForLogs?.message || null,
-        bridgeAttempted: true,
-      });
 
       // ✅ Si hay un error de autenticación manual pendiente, lanzarlo para que el frontend lo maneje
       if (manualAuthPending && manualAuthError) {
@@ -1209,8 +1193,9 @@ class OpportunityFinderService {
     shippingCost?: number;
   }>> {
     try {
-      const CredentialsManager = await import('./credentials-manager.service');
-      const credentialsManager = CredentialsManager.default || CredentialsManager;
+      const CredentialsManagerModule = await import('./credentials-manager.service');
+      const CredentialsManager = CredentialsManagerModule.CredentialsManager;
+      const credentialsManager = new CredentialsManager();
 
       // Intentar ScraperAPI primero
       try {
