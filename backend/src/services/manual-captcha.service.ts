@@ -67,7 +67,13 @@ export class ManualCaptchaService {
     // En producción (Railway), no podemos abrir navegador visible
     // En su lugar, creamos una URL única que el usuario puede abrir en su navegador
     const isProduction = process.env.NODE_ENV === 'production';
-    const frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:5173';
+    // ✅ CORREGIDO: Extraer solo la primera URL si CORS_ORIGIN contiene múltiples URLs separadas por comas
+    let frontendUrl = process.env.FRONTEND_URL || 'https://www.ivanreseller.com';
+    if (!process.env.FRONTEND_URL && process.env.CORS_ORIGIN) {
+      const corsOrigins = process.env.CORS_ORIGIN.split(',').map(url => url.trim());
+      // Usar la URL principal de producción (ivanreseller.com) o la primera disponible
+      frontendUrl = corsOrigins.find(url => url.includes('ivanreseller.com')) || corsOrigins[0] || 'https://www.ivanreseller.com';
+    }
     const captchaPageUrl = `${frontendUrl}/resolve-captcha/${token}`;
 
     if (isProduction) {

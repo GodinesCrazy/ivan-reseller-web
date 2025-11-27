@@ -103,6 +103,18 @@ router.get('/', async (req, res) => {
           provider: error.provider
         });
         
+        // ✅ CORREGIDO: Construir URL completa usando el origin del request o FRONTEND_URL
+        const frontendBaseUrl = process.env.FRONTEND_URL || 
+          (req.headers.origin || 'https://www.ivanreseller.com');
+        const resolveCaptchaUrl = `${frontendBaseUrl}/resolve-captcha/${error.token}`;
+        
+        logger.info('[OPPORTUNITIES-API] Retornando respuesta CAPTCHA con URL completa', {
+          userId,
+          token: error.token,
+          resolveCaptchaUrl,
+          frontendBaseUrl
+        });
+        
         return res.status(202).json({
           success: false,
           requiresManualAuth: true,
@@ -110,7 +122,7 @@ router.get('/', async (req, res) => {
           provider: error.provider,
           token: error.token,
           captchaUrl: error.loginUrl,
-          resolveCaptchaUrl: `/resolve-captcha/${error.token}`,
+          resolveCaptchaUrl: resolveCaptchaUrl, // URL completa
           message: 'AliExpress requiere que resuelvas un CAPTCHA para continuar. Se abrirá automáticamente la página de resolución.',
           expiresAt: error.expiresAt
         });
