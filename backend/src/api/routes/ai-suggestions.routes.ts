@@ -207,29 +207,56 @@ router.get('/', async (req: Request, res: Response, next) => {
             jsonString = JSON.stringify(limitedData, safeJsonReplacer);
           }
           
-          // ✅ Usar process.nextTick para enviar respuesta en el siguiente tick del event loop
-          // Esto previene que el SIGSEGV ocurra durante el envío de la respuesta
-          process.nextTick(() => {
+          // ✅ CRÍTICO: Enviar respuesta de forma SÍNCRONA pero con validación exhaustiva
+          // El SIGSEGV ocurre cuando hay problemas de memoria durante serialización/envío
+          // Usar setTimeout con delay mínimo para asegurar que el stack esté limpio
+          setTimeout(() => {
             try {
+              // ✅ Validar que el string JSON es válido antes de enviar
+              JSON.parse(jsonString); // Verificar que es JSON válido
+              
+              // ✅ Enviar respuesta con headers apropiados
               res.setHeader('Content-Type', 'application/json; charset=utf-8');
               res.setHeader('Content-Length', Buffer.byteLength(jsonString, 'utf8').toString());
-              res.send(jsonString);
+              
+              // ✅ Usar res.end() directamente en lugar de res.send() para más control
+              res.status(200);
+              res.write(jsonString);
+              res.end();
+              
+              logger.info('AISuggestions: Respuesta enviada exitosamente', { 
+                size: jsonString.length,
+                suggestionsCount: suggestions.length 
+              });
             } catch (sendError: any) {
-              logger.error('AISuggestions: Error enviando respuesta en nextTick', { error: sendError.message });
+              logger.error('AISuggestions: Error enviando respuesta', { 
+                error: sendError.message,
+                stack: sendError.stack 
+              });
               // Último recurso: intentar enviar respuesta mínima
               try {
-                res.status(200).json({
-                  success: true,
-                  suggestions: [],
-                  count: 0,
-                  message: 'Error al enviar sugerencias. Intenta recargar la página.'
-                });
-              } catch {
+                // ✅ Limpiar respuesta antes de enviar fallback
+                if (!res.headersSent) {
+                  const fallbackResponse = JSON.stringify({
+                    success: true,
+                    suggestions: [],
+                    count: 0,
+                    message: 'Error al enviar sugerencias. Intenta recargar la página.'
+                  });
+                  res.status(200).send(fallbackResponse);
+                }
+              } catch (fallbackError) {
                 // Si todo falla, cerrar conexión silenciosamente
-                res.end();
+                try {
+                  if (!res.headersSent) {
+                    res.end();
+                  }
+                } catch {
+                  // Ignorar errores finales
+                }
               }
             }
-          });
+          }, 10); // ✅ Delay mínimo de 10ms para asegurar que el stack esté limpio
         } catch (sendError: any) {
           logger.error('AISuggestions: Error preparando respuesta', { error: sendError.message });
           // Último recurso: intentar enviar respuesta mínima

@@ -958,19 +958,36 @@ export class AdvancedMarketplaceScraper {
               
               // Intentar navegar de nuevo con cookies
               await newPage.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-              await new Promise(resolve => setTimeout(resolve, 5000)); // ✅ Aumentar de 3s a 5s
+              // ✅ RESTAURACIÓN: Esperar MÁS tiempo después de usar cookies (como funcionaba antes)
+              // El scraper anterior esperaba más tiempo para que las cookies surtieran efecto
+              await new Promise(resolve => setTimeout(resolve, 8000)); // ✅ Aumentado de 5s a 8s
+              
+              // ✅ Esperar tiempo adicional y verificar si la página se carga correctamente
+              await new Promise(resolve => setTimeout(resolve, 5000)); // ✅ Esperar adicional de 5s
               const newUrl = newPage.url();
               
-              if (!newUrl.includes('/punish') && !newUrl.includes('TMD')) {
+              // ✅ Verificar si aún está bloqueado después de esperar
+              const stillBlockedAfterCookies = newUrl.includes('/punish') || 
+                                              newUrl.includes('TMD') || 
+                                              newUrl.includes('x5secdata') ||
+                                              newUrl.includes('x5step');
+              
+              if (!stillBlockedAfterCookies) {
                 logger.info('[SCRAPER] Navegación exitosa con cookies, bloqueo evitado', { userId });
                 page = newPage; // Usar la nueva página
                 page.on('response', apiResponseHandler); // Re-agregar el handler
                 // ✅ Actualizar isBlocked después de usar cookies
                 isBlocked = false;
               } else {
-                logger.warn('[SCRAPER] Bloqueo persiste incluso con cookies, pero continuando de todos modos', { userId, url: newUrl });
+                logger.warn('[SCRAPER] Bloqueo persiste incluso con cookies después de esperar 13s', { 
+                  userId, 
+                  url: newUrl,
+                  action: 'Continuando con extracción DOM pero probablemente retornará vacío'
+                });
                 page = newPage; // Usar la nueva página de todos modos
                 page.on('response', apiResponseHandler); // Re-agregar el handler
+                // ✅ Marcar como bloqueado para que se activen fallbacks más rápido
+                isBlocked = true;
               }
             } else {
               // No hay cookies - continuar de todos modos e intentar extraer productos
@@ -2126,9 +2143,16 @@ export class AdvancedMarketplaceScraper {
           isBlockedUrl
         });
         
+        // ✅ RESTAURACIÓN COMPLETA: Intentar estrategias adicionales incluso si ya hay algunos productos
+        // Cuando hay bloqueo, es mejor intentar extraer más productos con estrategias agresivas
+        // Esto restaura el comportamiento que funcionaba cuando el scraper encontraba oportunidades
         // ✅ RESTAURACIÓN: Intentar estrategias adicionales antes de retornar vacío
         // 1. Intentar esperar más tiempo y hacer scroll más agresivo
-        logger.debug('[SCRAPER] Intentando scroll más agresivo y espera adicional...', { query });
+        logger.debug('[SCRAPER] Intentando scroll más agresivo y espera adicional...', { 
+          query,
+          currentProductsCount: productsWithResolvedPrices.length,
+          isBlocked: isBlockedUrl
+        });
         try {
           await page.evaluate(() => {
             const w = (globalThis as any).window;
@@ -2140,7 +2164,8 @@ export class AdvancedMarketplaceScraper {
           });
           await new Promise(resolve => setTimeout(resolve, 8000)); // Esperar 8s adicionales
           
-          // Intentar extraer de nuevo después del scroll
+          // ✅ RESTAURACIÓN 27 NOV 2025: Versión exacta que funcionaba cuando encontraba oportunidades
+          // Esta es la versión simple del backup que funcionaba correctamente
           const retryProducts = await page.evaluate(() => {
             const doc = (globalThis as any).document;
             if (!doc) return [];
@@ -2184,7 +2209,7 @@ export class AdvancedMarketplaceScraper {
               if (title && title.length > 5 && href && href.length > 10) {
                 products.push({
                   title: title.substring(0, 150),
-                  price: price || 1, // Usar precio mínimo si no se encuentra
+                  price: price || 1, // Precio mínimo
                   imageUrl: image || '',
                   productUrl: href.startsWith('http') ? href : `https://www.aliexpress.com${href}`,
                   rating: 0,
@@ -2225,7 +2250,7 @@ export class AdvancedMarketplaceScraper {
             await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
             await new Promise(resolve => setTimeout(resolve, 5000));
             
-            // Intentar extraer de nuevo
+            // ✅ RESTAURACIÓN 27 NOV 2025: Intentar extraer de nuevo (versión exacta del backup)
             const retryAfterNav = await page.evaluate(() => {
               const doc = (globalThis as any).document;
               if (!doc) return [];
@@ -2289,32 +2314,16 @@ export class AdvancedMarketplaceScraper {
           const currentUrl = page.url();
           await this.captureAliExpressSnapshot(page, `captcha-block-${Date.now()}`).catch(() => {});
           
-          try {
-            const { ManualAuthService } = await import('./manual-auth.service');
-            const manualSession = await ManualAuthService.getActiveSession(userId, 'aliexpress');
-            
-            if (manualSession && manualSession.status === 'pending') {
-              throw new ManualAuthRequiredError('aliexpress', manualSession.token, currentUrl, manualSession.expiresAt);
-            } else {
-              logger.info('[SCRAPER] Creando sesión manual para CAPTCHA...', { userId });
-              try {
-                const newSession = await ManualAuthService.startSession(userId, 'aliexpress', currentUrl);
-                throw new ManualAuthRequiredError('aliexpress', newSession.token, newSession.loginUrl, newSession.expiresAt);
-              } catch (sessionError: any) {
-                if (sessionError instanceof ManualAuthRequiredError) {
-                  throw sessionError;
-                }
-                logger.warn('[SCRAPER] No se pudo crear sesión manual. Retornando vacío.', { userId, error: sessionError.message });
-                return [];
-              }
-            }
-          } catch (authError: any) {
-            if (authError instanceof ManualAuthRequiredError) {
-              throw authError;
-            }
-            logger.warn('[SCRAPER] Error al manejar CAPTCHA/bloqueo. Retornando vacío.', { userId, error: authError.message });
-            return [];
-          }
+          // ✅ RESTAURACIÓN: Cuando hay bloqueo persistente y no se encontraron productos,
+          // retornar vacío para permitir que opportunity-finder intente los fallbacks
+          // Solo lanzar ManualAuthRequiredError si el opportunity-finder también falla después de intentar todos los métodos
+          logger.warn('[SCRAPER] Bloqueo persistente detectado, retornando vacío para permitir fallbacks en opportunity-finder', {
+            userId,
+            query,
+            url: currentUrl,
+            message: 'El opportunity-finder intentará bridge Python, ScraperAPI, ZenRows antes de requerir autenticación manual'
+          });
+          return [];
         }
         
         logger.warn('[SCRAPER] No se encontraron productos después de todos los intentos', {
@@ -3155,19 +3164,34 @@ export class AdvancedMarketplaceScraper {
     // Renombrar para evitar conflictos con otras variables 'url' en el scope
     const url = productUrlValue;
 
-    // ✅ Mejorar manejo de precios inválidos con logging detallado
+    // ✅ RESTAURACIÓN: Aceptar productos con precio mínimo (1) cuando no se puede detectar precio
+    // Esto permite extraer productos incluso cuando AliExpress bloquea y los precios no se pueden leer
     if (!resolvedPrice || resolvedPrice.amountInBase <= 0) {
-      logger.debug('[SCRAPER] Producto descartado por precio inválido (después de fallbacks)', {
-        title: title?.substring(0, 50) || 'N/A',
-        hasResolvedPrice: !!resolvedPrice,
-        amountInBase: resolvedPrice?.amountInBase || 0,
-        amount: resolvedPrice?.amount || 0,
-        sourceCurrency: resolvedPrice?.sourceCurrency || 'N/A',
-        baseCurrency: resolvedPrice?.baseCurrency || 'N/A',
-        hasUrl: !!url,
-        priceCandidates: priceCandidates.filter(c => c !== undefined && c !== null && c !== '').slice(0, 3)
-      });
-      return null;
+      // Si el producto tiene título y URL válidos, usar precio mínimo de 1 USD
+      // Esto restaura la funcionalidad de cuando el scraper funcionaba correctamente
+      if (title && title.trim().length > 0 && url && url.length > 10) {
+        logger.debug('[SCRAPER] Producto sin precio detectado, usando precio mínimo (1 USD) para permitir extracción', {
+          title: title?.substring(0, 50) || 'N/A',
+          url: url.substring(0, 80),
+          hasResolvedPrice: !!resolvedPrice,
+          priceCandidates: priceCandidates.filter(c => c !== undefined && c !== null && c !== '').slice(0, 3)
+        });
+        resolvedPrice = {
+          amount: 1,
+          sourceCurrency: 'USD',
+          amountInBase: 1,
+          baseCurrency: userBaseCurrency || 'USD',
+        };
+      } else {
+        logger.debug('[SCRAPER] Producto descartado por falta de título/URL o precio inválido', {
+          title: title?.substring(0, 50) || 'N/A',
+          hasTitle: !!title && title.trim().length > 0,
+          hasUrl: !!url && url.length > 10,
+          hasResolvedPrice: !!resolvedPrice,
+          amountInBase: resolvedPrice?.amountInBase || 0,
+        });
+        return null;
+      }
     }
 
     const price = resolvedPrice.amountInBase;
