@@ -159,7 +159,7 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
     docsUrl: 'https://developer.ebay.com/api-docs/static/gs_trading-api-intro.html',
     supportsOAuth: true,
     fields: [
-      { key: 'EBAY_APP_ID', label: 'App ID (Client ID)', required: true, type: 'text', placeholder: 'YourAppI-YourApp-PRD-...' },
+      { key: 'EBAY_APP_ID', label: 'App ID (Client ID)', required: true, type: 'text', placeholder: 'IvanMart-IVANRese-PRD-...', helpText: 'Formato: Nombre-Nombre-[SBX|PRD]-hash. Ejemplo: IvanMart-IVANRese-PRD-febbdcd65-626be473' },
       { key: 'EBAY_DEV_ID', label: 'Dev ID', required: true, type: 'text', placeholder: 'Your-DevI-PRD-...' },
       { key: 'EBAY_CERT_ID', label: 'Cert ID (Client Secret)', required: true, type: 'password', placeholder: 'PRD-...' },
       { key: 'EBAY_REDIRECT_URI', label: 'Redirect URI (RuName)', required: true, type: 'text', placeholder: 'IvMart_IvanRese-IvanMart... (RuName)' },
@@ -802,9 +802,13 @@ export default function APISettings() {
 
       if (value.trim()) {
         if (apiName === 'ebay' && (fieldKey.includes('appId') || fieldKey.includes('APP_ID'))) {
-          if (!value.startsWith('YourAppI-')) {
+          // ✅ CORRECCIÓN: Validación correcta para App ID de eBay
+          // Los IDs oficiales de eBay tienen formato: [Nombre]-[Nombre]-[SBX|PRD]-[hash]
+          // Ejemplos válidos: IvanMart-IVANRese-SBX-..., IvanMart-IVANRese-PRD-...
+          const ebayAppIdPattern = /^[A-Za-z0-9]+(-[A-Za-z0-9]+)+(-(SBX|PRD)-[A-Za-z0-9]+)+/;
+          if (!ebayAppIdPattern.test(value)) {
             isValid = false;
-            errorMessage = 'App ID debe comenzar con "YourAppI-"';
+            errorMessage = 'App ID de eBay debe tener formato válido: Nombre-Nombre-[SBX|PRD]-hash (ej: IvanMart-IVANRese-PRD-...)';
           }
         }
 
@@ -1195,11 +1199,90 @@ export default function APISettings() {
         // Continuar aunque falle la recarga
       }
 
+      // ✅ MEJORA: Test automático de conexión después de guardar
+      const saveData = response.data?.data || {};
+      const intelligentValidation = saveData.intelligentValidation;
+      const warnings = saveData.warnings || [];
+      
+      // Mostrar advertencias de validación inteligente si existen
+      if (intelligentValidation && !intelligentValidation.valid) {
+        const recommendations = intelligentValidation.recommendations || [];
+        const warningMsg = intelligentValidation.message || 'Validación detectó problemas potenciales';
+        toast(`⚠️ ${warningMsg}${recommendations.length > 0 ? '\n\n💡 Recomendaciones:\n' + recommendations.slice(0, 2).join('\n') : ''}`, { 
+          id: `validation-${apiName}`, 
+          duration: 6000,
+          icon: '⚠️'
+        });
+      }
+      if (warnings.length > 0) {
+        warnings.slice(0, 2).forEach((warning: string, idx: number) => {
+          toast(`ℹ️ ${warning}`, { 
+            id: `warning-${apiName}-${idx}`, 
+            duration: 4000,
+            icon: 'ℹ️'
+          });
+        });
+      }
+      
+      toast.success(`✅ Credenciales de ${apiDef.displayName} guardadas exitosamente`, { id: `save-${apiName}` });
+      toast.loading('🔄 Validando conexión con la API...', { id: `test-${apiName}` });
+      
+      try {
+        // Ejecutar test de conexión automático
+        const testResponse = await api.post(`/api/credentials/${apiName}/test`, {
+          environment: currentEnvironment,
+        }, { timeout: 15000 });
+        
+        const testResult = testResponse.data?.data;
+        if (testResult?.isAvailable || testResult?.status === 'healthy') {
+          const latencyText = testResult.latency ? ` (${testResult.latency}ms)` : '';
+          toast.success(`✅ Conexión exitosa con ${apiDef.displayName}${latencyText}`, { id: `test-${apiName}`, duration: 4000 });
+          // Actualizar estado
+          setStatuses((prev: Record<string, APIStatus>) => ({
+            ...prev,
+            [`${apiName}_${currentEnvironment}`]: {
+              ...testResult,
+              environment: currentEnvironment,
+              isAvailable: true,
+              status: 'healthy'
+            }
+          }));
+        } else {
+          const errorMsg = testResult?.error || testResult?.message || 'Error desconocido';
+          const recommendations = intelligentValidation?.recommendations || [];
+          const fullMessage = recommendations.length > 0
+            ? `${errorMsg}\n\n💡 Recomendaciones:\n${recommendations.slice(0, 3).map((r: string, i: number) => `${i + 1}. ${r}`).join('\n')}`
+            : errorMsg;
+          
+          toast.error(`⚠️ Conexión fallida: ${fullMessage}`, { id: `test-${apiName}`, duration: 8000 });
+          setStatuses((prev: Record<string, APIStatus>) => ({
+            ...prev,
+            [`${apiName}_${currentEnvironment}`]: {
+              ...testResult,
+              environment: currentEnvironment,
+              isAvailable: false,
+              status: 'unhealthy'
+            }
+          }));
+        }
+      } catch (testError: any) {
+        const errorMsg = testError.response?.data?.message || testError.message || 'Error al validar conexión';
+        toast.error(`⚠️ No se pudo validar la conexión: ${errorMsg}`, { id: `test-${apiName}`, duration: 5000 });
+        // Actualizar estado como desconocido
+        setStatuses((prev: Record<string, APIStatus>) => ({
+          ...prev,
+          [`${apiName}_${currentEnvironment}`]: {
+            environment: currentEnvironment,
+            isAvailable: false,
+            status: 'unknown',
+            error: errorMsg
+          }
+        }));
+      }
+
       // Limpiar formulario
       setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: {} }));
       setExpandedApi(null);
-
-      toast.success(`✅ Credenciales de ${apiDef.displayName} guardadas exitosamente`);
     } catch (err: unknown) {
       log.error('Error saving credentials:', err);
       // ✅ MEJORA UX: Usar mensajes de error mejorados
@@ -2580,21 +2663,48 @@ export default function APISettings() {
                         ) : null}
                       </div>
                     ) : null}
+                    {/* ✅ MEJORA: Selector de entorno mejorado con indicadores visuales */}
                     {supportsEnv && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {envOptions.map(env => (
-                          <button
-                            key={env}
-                            onClick={() => handleEnvironmentSelect(apiDef.name, env)}
-                            className={`px-2 py-1 rounded text-xs font-medium border ${
-                              currentEnvironment === env
-                                ? 'bg-blue-100 border-blue-400 text-blue-700'
-                                : 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200'
-                            }`}
-                          >
-                            {env.toUpperCase()}
-                          </button>
-                        ))}
+                      <div className="mt-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-medium text-gray-600">Entorno:</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
+                            currentEnvironment === 'sandbox'
+                              ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                              : 'bg-green-100 text-green-800 border border-green-300'
+                          }`}>
+                            {currentEnvironment === 'sandbox' ? '🧪 SANDBOX' : '🚀 PRODUCCIÓN'}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {envOptions.map(env => (
+                            <button
+                              key={env}
+                              onClick={() => handleEnvironmentSelect(apiDef.name, env)}
+                              className={`px-3 py-1.5 rounded-md text-xs font-medium border-2 transition-all ${
+                                currentEnvironment === env
+                                  ? env === 'sandbox'
+                                    ? 'bg-yellow-50 border-yellow-400 text-yellow-800 shadow-sm'
+                                    : 'bg-green-50 border-green-400 text-green-800 shadow-sm'
+                                  : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50'
+                              }`}
+                            >
+                              {env === 'sandbox' ? '🧪' : '🚀'} {env === 'sandbox' ? 'Sandbox' : 'Producción'}
+                            </button>
+                          ))}
+                        </div>
+                        {currentEnvironment === 'sandbox' && (
+                          <p className="text-xs text-yellow-700 mt-1 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            Ambiente de pruebas - No usa datos reales
+                          </p>
+                        )}
+                        {currentEnvironment === 'production' && (
+                          <p className="text-xs text-green-700 mt-1 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            Ambiente real - Usa datos y transacciones reales
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2723,24 +2833,50 @@ export default function APISettings() {
               {isExpanded && (
                 <div className="border-t border-gray-200 p-4 bg-gray-50">
                   <div className="space-y-4">
+                    {/* ✅ MEJORA: Selector de entorno mejorado en formulario expandido */}
                     {supportsEnv && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-600">Entorno:</span>
-                        {envOptions.map(env => (
-                          <button
-                            key={env}
-                            onClick={() => handleEnvironmentSelect(apiDef.name, env)}
-                            className={`px-2 py-1 rounded text-xs font-medium border ${
-                              currentEnvironment === env
-                                ? 'bg-blue-100 border-blue-400 text-blue-700'
-                                : 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200'
-                            }`}
-                          >
-                            {env.toUpperCase()}
-                          </button>
-                        ))}
-                        {loadingEnvironment[formKey] && (
-                          <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Globe className="w-4 h-4 text-blue-600" />
+                            <span className="text-sm font-semibold text-gray-700">Entorno de Configuración</span>
+                          </div>
+                          {loadingEnvironment[formKey] && (
+                            <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {envOptions.map(env => (
+                            <button
+                              key={env}
+                              onClick={() => handleEnvironmentSelect(apiDef.name, env)}
+                              className={`px-3 py-2 rounded-md text-sm font-medium border-2 transition-all flex items-center gap-2 ${
+                                currentEnvironment === env
+                                  ? env === 'sandbox'
+                                    ? 'bg-yellow-50 border-yellow-400 text-yellow-800 shadow-md'
+                                    : 'bg-green-50 border-green-400 text-green-800 shadow-md'
+                                  : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50'
+                              }`}
+                            >
+                              {env === 'sandbox' ? '🧪' : '🚀'}
+                              <span>{env === 'sandbox' ? 'Sandbox' : 'Producción'}</span>
+                              {currentEnvironment === env && (
+                                <CheckCircle className="w-4 h-4" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                        {currentEnvironment === 'sandbox' && (
+                          <div className="mt-2 px-3 py-2 bg-yellow-100 border border-yellow-300 rounded text-xs text-yellow-800">
+                            <p className="font-semibold mb-1">⚠️ Ambiente de Pruebas</p>
+                            <p>Este entorno es seguro para pruebas. No se realizarán transacciones reales ni se usarán datos de producción.</p>
+                          </div>
+                        )}
+                        {currentEnvironment === 'production' && (
+                          <div className="mt-2 px-3 py-2 bg-green-100 border border-green-300 rounded text-xs text-green-800">
+                            <p className="font-semibold mb-1">✅ Ambiente de Producción</p>
+                            <p>Este entorno usará credenciales y transacciones reales. Asegúrate de que las credenciales sean correctas.</p>
+                          </div>
                         )}
                       </div>
                     )}

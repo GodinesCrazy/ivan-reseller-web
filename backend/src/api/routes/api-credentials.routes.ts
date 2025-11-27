@@ -363,6 +363,10 @@ router.post('/', async (req: Request, res: Response, next) => {
       credentialsPreview: redactSensitiveData(credentials || {})
     });
 
+    // ✅ AUDITORÍA: Registrar intento de guardado
+    const { APICredentialsAuditService } = await import('../../services/api-credentials-audit.service');
+    const startTime = Date.now();
+
     // Validar credenciales usando CredentialsManager
     const validation = CredentialsManager.validateCredentials(
       apiName as ApiName,
@@ -375,6 +379,22 @@ router.post('/', async (req: Request, res: Response, next) => {
         apiName,
         userId: ownerUserId
       });
+
+      // ✅ AUDITORÍA: Registrar error de validación
+      await APICredentialsAuditService.logSaveAttempt({
+        userId: ownerUserId,
+        apiName,
+        environment: env,
+        success: false,
+        error: 'Invalid credentials format',
+        errorCode: ErrorCode.VALIDATION_ERROR,
+        fieldErrors: validation.errors,
+        metadata: {
+          credentialKeys: Object.keys(credentials || {}),
+          validationErrors: validation.errors
+        }
+      });
+
       return res.status(400).json({
         success: false,
         error: 'Invalid credentials format',
@@ -530,6 +550,24 @@ router.post('/', async (req: Request, res: Response, next) => {
       },
     });
 
+    // ✅ AUDITORÍA: Registrar guardado exitoso
+    await APICredentialsAuditService.logSaveAttempt({
+      userId: ownerUserId,
+      apiName,
+      environment: env,
+      success: true,
+      metadata: {
+        scope,
+        isActive,
+        validationResult: validationResult?.success ? 'passed' : (validationResult ? 'failed' : 'skipped'),
+        validationMessage: validationResult?.message,
+        duration: Date.now() - startTime
+      }
+    }).catch(err => {
+      logger.warn('[API Credentials Audit] Failed to log successful save', { error: err });
+      // No fallar la request si la auditoría falla
+    });
+
     // Build response message
     let message = `${apiName} credentials saved successfully for ${env} environment`;
     if (validationResult !== null) {
@@ -547,6 +585,13 @@ router.post('/', async (req: Request, res: Response, next) => {
         apiName,
         environment: env,
         isActive,
+        // ✅ MEJORA: Incluir advertencias y recomendaciones de validación inteligente
+        intelligentValidation: intelligentValidation.valid ? undefined : {
+          valid: false,
+          message: intelligentValidation.message,
+          recommendations: intelligentValidation.recommendations
+        },
+        warnings: intelligentValidation.warnings,
         supportsEnvironments: supportsEnvironments(apiName),
         scope,
         validated: validationResult !== null,
@@ -922,6 +967,24 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
       default:
         throw new AppError('Invalid API name', 400);
     }
+
+    // ✅ AUDITORÍA: Registrar test de conexión
+    const { APICredentialsAuditService } = await import('../../services/api-credentials-audit.service');
+    await APICredentialsAuditService.logTestAttempt({
+      userId,
+      apiName,
+      environment,
+      success: status.isAvailable || false,
+      message: status.message,
+      error: status.error,
+      latency: status.latency,
+      metadata: {
+        isConfigured: status.isConfigured,
+        status: status.status
+      }
+    }).catch(err => {
+      logger.warn('[API Credentials Audit] Failed to log test attempt', { error: err });
+    });
 
     res.json({ 
       success: true,

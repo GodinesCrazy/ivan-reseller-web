@@ -2,10 +2,27 @@ import { z } from 'zod';
 
 // Esquema base para credenciales de eBay
 export const ebayCredentialsSchema = z.object({
-  appId: z.string().min(1, 'App ID es requerido').regex(/^(SBX-|PROD-)?[A-Z0-9]+$/i, 'App ID debe tener formato válido (SBX-xxx para Sandbox o PROD-xxx para Production)'),
-  devId: z.string().min(1, 'Dev ID es requerido'),
-  certId: z.string().min(1, 'Cert ID es requerido'),
-  redirectUri: z.string().url('Redirect URI debe ser una URL válida').optional().or(z.literal('')),
+  // ✅ CORREGIDO: eBay emite App IDs en varios formatos válidos
+  // Ejemplos: IvanMart-IVANRese-SBX-xxx, IvanMart-IVANRese-PRD-xxx, YourAppI-YourApp-PRD-xxx
+  // El formato puede variar según cuándo se creó la app y el tipo de cuenta
+  appId: z.string()
+    .min(10, 'App ID debe tener al menos 10 caracteres')
+    .max(255, 'App ID no puede exceder 255 caracteres')
+    .regex(/^[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9]$/, 'App ID debe contener solo letras, números y guiones, y comenzar/terminar con alfanumérico'),
+  devId: z.string()
+    .min(1, 'Dev ID es requerido')
+    .max(255, 'Dev ID no puede exceder 255 caracteres'),
+  certId: z.string()
+    .min(1, 'Cert ID es requerido')
+    .max(255, 'Cert ID no puede exceder 255 caracteres'),
+  // ✅ CORREGIDO: Redirect URI (RuName) no es necesariamente una URL, puede ser solo un string
+  redirectUri: z.string()
+    .min(1, 'Redirect URI (RuName) es requerido para OAuth')
+    .max(255, 'Redirect URI no puede exceder 255 caracteres')
+    .refine(
+      (uri) => !/[<>"{}|\\^`\[\]]/.test(uri),
+      { message: 'Redirect URI contiene caracteres inválidos' }
+    ),
   token: z.string().optional(),
   refreshToken: z.string().optional(),
   sandbox: z.boolean().optional().default(false),

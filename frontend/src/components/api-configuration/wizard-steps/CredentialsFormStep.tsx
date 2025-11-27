@@ -30,14 +30,23 @@ const FIELD_DEFINITIONS: Record<string, Array<{
       label: 'App ID (Client ID)',
       type: 'text',
       required: true,
-      placeholder: 'YourAppI-YourApp-PRD-...',
-      helpText: 'Tu App ID de eBay Developer Portal. Debe comenzar con "YourAppI-"',
-      example: 'YourAppI-YourApp-PRD-abc123def456',
+      placeholder: 'IvanMart-IVANRese-PRD-... o YourAppI-YourApp-PRD-...',
+      helpText: 'Tu App ID de eBay Developer Portal. Puede tener diferentes formatos emitidos oficialmente por eBay.',
+      example: 'IvanMart-IVANRese-PRD-abc123def456 o YourAppI-YourApp-PRD-abc123def456',
       docsUrl: 'https://developer.ebay.com/api-docs/static/oauth-credentials.html',
       validation: (value) => {
         if (!value) return { valid: false, message: 'App ID es requerido' };
-        if (!value.startsWith('YourAppI-')) {
-          return { valid: false, message: 'App ID debe comenzar con "YourAppI-"' };
+        // ✅ CORREGIDO: eBay emite App IDs en varios formatos válidos
+        // Ejemplos válidos: IvanMart-IVANRese-SBX-xxx, IvanMart-IVANRese-PRD-xxx, etc.
+        // No todos los App IDs comienzan con "YourAppI-"
+        const trimmed = value.trim();
+        if (trimmed.length < 10) {
+          return { valid: false, message: 'App ID parece ser muy corto. Verifica que sea correcto.' };
+        }
+        // Validar formato básico: debe contener al menos un guion y caracteres alfanuméricos
+        const validFormat = /^[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9]$/.test(trimmed);
+        if (!validFormat) {
+          return { valid: false, message: 'App ID tiene formato inválido. Debe contener solo letras, números y guiones.' };
         }
         return { valid: true };
       }
