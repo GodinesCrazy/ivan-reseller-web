@@ -123,9 +123,31 @@ export default function Opportunities() {
       const { data } = await api.get('/api/opportunities', {
         params: { query, maxItems, marketplaces: marketplacesParam, region }
       });
+      
+      // ✅ Manejar respuesta de CAPTCHA requerido (código 202)
+      if (data?.captchaRequired && data?.resolveCaptchaUrl) {
+        toast.info('AliExpress requiere que resuelvas un CAPTCHA para continuar. Redirigiendo...');
+        // Redirigir a la página de resolución de CAPTCHA
+        window.location.href = data.resolveCaptchaUrl;
+        setLoading(false);
+        return;
+      }
+      
       setItems(data?.items || []);
       await fetchAuthStatuses();
     } catch (e: any) {
+      // ✅ Manejar respuesta 202 (Accepted) cuando se requiere CAPTCHA
+      if (e?.response?.status === 202) {
+        const captchaData = e.response?.data || {};
+        if (captchaData.captchaRequired && captchaData.resolveCaptchaUrl) {
+          toast.info('AliExpress requiere que resuelvas un CAPTCHA para continuar. Redirigiendo...');
+          // Redirigir a la página de resolución de CAPTCHA
+          window.location.href = captchaData.resolveCaptchaUrl;
+          setLoading(false);
+          return;
+        }
+      }
+      
       if (e?.response?.status === 428) {
         // ✅ P0.3: Mostrar modal explicativo antes de abrir ventana
         const data = e.response?.data || {};
