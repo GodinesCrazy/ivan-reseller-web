@@ -135,11 +135,20 @@ export class MarketplaceService {
         const hasValidToken = normalizedCreds.token && String(normalizedCreds.token).trim().length > 0;
         const hasValidRefreshToken = normalizedCreds.refreshToken && String(normalizedCreds.refreshToken).trim().length > 0;
         
-        // ✅ CORRECCIÓN: Solo marcar como error si NO hay token NI refreshToken
-        // Si las credenciales básicas están correctas pero falta OAuth, es un warning, no un issue
-        // Si hay refreshToken pero no token, el sistema puede refrescar automáticamente
+        // ✅ CORRECCIÓN: Verificar si las credenciales básicas están presentes
+        const hasBasicCredentials = normalizedCreds.appId && normalizedCreds.devId && normalizedCreds.certId;
+        
+        // ✅ CORRECCIÓN: Si las credenciales básicas están correctas pero falta OAuth,
+        // mostrar como WARNING (amarillo) en lugar de ISSUE (rojo)
+        // Solo mostrar como ISSUE si faltan las credenciales básicas
         if (!hasValidToken && !hasValidRefreshToken) {
-          issues.push('Falta token OAuth de eBay. Completa la autorización en Settings → API Settings.');
+          if (hasBasicCredentials) {
+            // Credenciales básicas guardadas, solo falta OAuth - es un warning, no un issue
+            warnings.push('Credenciales básicas guardadas. Completa la autorización OAuth para activar.');
+          } else {
+            // Faltan credenciales básicas - es un issue crítico
+            issues.push('Faltan credenciales básicas (App ID, Dev ID, Cert ID). Guárdalas primero.');
+          }
         } else {
           // ✅ Si hay tokens, asegurar que el sandbox flag esté sincronizado con environment
           if (typeof normalizedCreds.sandbox === 'undefined' || normalizedCreds.sandbox !== (resolvedEnv === 'sandbox')) {
