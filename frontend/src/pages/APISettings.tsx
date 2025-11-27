@@ -1691,12 +1691,18 @@ export default function APISettings() {
         urlLength: authUrl.length,
       });
       
+      // ✅ CORRECCIÓN CRÍTICA: Cerrar cualquier modal previo antes de intentar abrir OAuth
+      // Esto previene que modales de sesiones anteriores se muestren
+      setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined });
+      
       let oauthWindow: Window | null = null;
       try {
         oauthWindow = window.open(authUrl, '_blank', 'noopener,noreferrer,width=800,height=600');
         log.debug('[APISettings] window.open() result:', {
           oauthWindow: !!oauthWindow,
           oauthWindowType: typeof oauthWindow,
+          isNull: oauthWindow === null,
+          isUndefined: oauthWindow === undefined,
         });
       } catch (openError: unknown) {
         const errorMessage = openError instanceof Error ? openError.message : String(openError);
@@ -1712,10 +1718,13 @@ export default function APISettings() {
       // que inmediatamente tiene .closed = true, pero esto NO significa que esté bloqueada.
       // NO verificar .closed porque puede ser true inmediatamente para cross-origin y causar falsos positivos.
       
-      if (!oauthWindow) {
+      // ✅ CORRECCIÓN: Verificar explícitamente null Y undefined (algunos navegadores pueden retornar undefined)
+      if (oauthWindow === null || oauthWindow === undefined) {
         // ✅ SOLO mostrar modal si window.open() retornó null/undefined (realmente bloqueada)
         log.error('[APISettings] OAuth window blocked - window.open() returned null/undefined', {
           oauthWindow: oauthWindow,
+          isNull: oauthWindow === null,
+          isUndefined: oauthWindow === undefined,
         });
         
         setOauthBlockedModal({
@@ -1728,12 +1737,16 @@ export default function APISettings() {
         return;
       }
       
-      // ✅ Si oauthWindow existe, se abrió correctamente (incluso si es cross-origin)
+      // ✅ Si oauthWindow existe (no es null ni undefined), se abrió correctamente (incluso si es cross-origin)
       // NO verificar .closed porque puede ser true inmediatamente para cross-origin
       log.info('[APISettings] OAuth window opened successfully', {
         oauthWindow: !!oauthWindow,
+        oauthWindowType: typeof oauthWindow,
         // No verificar .closed aquí porque puede ser true para cross-origin
       });
+      
+      // ✅ CORRECCIÓN: Asegurar que el modal esté cerrado cuando la ventana se abre correctamente
+      setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined });
       
       toast('Se abrió la ventana oficial de OAuth. Completa el login y vuelve para refrescar el estado.', {
         icon: 'ℹ️'
