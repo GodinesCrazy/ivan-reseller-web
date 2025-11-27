@@ -1144,9 +1144,7 @@ class OpportunityFinderService {
 
     return uniqueOpportunities;
   }
-}
 
-const opportunityFinder = new OpportunityFinderService();
   /**
    * ✅ FALLBACK NIVEL 3: Intentar usar ScraperAPI o ZenRows para scraping externo
    */
@@ -1167,7 +1165,8 @@ const opportunityFinder = new OpportunityFinderService();
     shippingCost?: number;
   }>> {
     try {
-      const credentialsManager = (await import('./credentials-manager.service')).default;
+      const CredentialsManager = await import('./credentials-manager.service');
+      const credentialsManager = CredentialsManager.default || CredentialsManager;
 
       // Intentar ScraperAPI primero
       try {
