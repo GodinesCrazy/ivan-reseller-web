@@ -2362,12 +2362,12 @@ export class AdvancedMarketplaceScraper {
         // ✅ RESTAURACIÓN: Solo después de TODOS los intentos, retornar vacío o lanzar error CAPTCHA
         // Verificar si hay productos encontrados por las estrategias adicionales
         // (retryProducts y retryAfterNav pueden haber encontrado productos)
-        const currentUrlAfterAttempts = page.url();
+        // Nota: currentUrlAfterAttempts ya está declarado arriba (línea 2304)
         
         logger.warn('[SCRAPER] No se encontraron productos después de todos los intentos', {
           query,
           userId,
-          url: currentUrlAfterAttempts,
+          url: currentUrlAfterAttempts, // Usar variable ya declarada arriba
           attempts: {
             runParamsScript: 'falló',
             runParamsWindow: 'falló',
