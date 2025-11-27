@@ -153,7 +153,7 @@ export class PayPalRestService {
         const transactions = response.data?.transaction_details || [];
         let estimatedBalance = 0;
 
-        transactions.forEach((tx: any) {
+        transactions.forEach((tx: any) => {
           const amount = parseFloat(tx.transaction_info?.transaction_amount?.value || 0);
           const type = tx.transaction_info?.transaction_event_code || '';
           

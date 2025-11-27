@@ -1949,40 +1949,105 @@ REGLAS ESTRICTAS:
         return null;
       };
 
+      // ✅ CRÍTICO: Construir objetos completamente nuevos sin referencias a Prisma
+      // Esto previene cualquier problema de serialización con objetos de Prisma
       return dbSuggestions.map(s => {
         try {
-          // ✅ Mejorar parsing de JSON con manejo de errores
-          const parseJsonSafe = (value: any, defaultValue: any = []) => {
+          // ✅ Helper para parsear JSON de forma segura sin mantener referencias
+          const parseJsonSafe = (value: any, defaultValue: any = []): any => {
             if (!value) return defaultValue;
-            if (Array.isArray(value)) return sanitizeForJson(value);
-            if (typeof value === 'string') {
+            if (Array.isArray(value)) {
+              // Crear nuevo array con valores primitivos
               try {
-                const parsed = JSON.parse(value);
-                return sanitizeForJson(parsed);
+                return value.slice(0, 100).map(item => {
+                  if (typeof item === 'string') return item.substring(0, 500);
+                  if (typeof item === 'number') return isFinite(item) ? Math.max(-1e9, Math.min(1e9, item)) : 0;
+                  if (typeof item === 'boolean') return item;
+                  return String(item).substring(0, 500);
+                });
               } catch {
                 return defaultValue;
               }
             }
-            return sanitizeForJson(value);
+            if (typeof value === 'string') {
+              try {
+                const parsed = JSON.parse(value);
+                // Si es array, usar el helper anterior
+                if (Array.isArray(parsed)) {
+                  return parsed.slice(0, 100).map(item => {
+                    if (typeof item === 'string') return item.substring(0, 500);
+                    if (typeof item === 'number') return isFinite(item) ? Math.max(-1e9, Math.min(1e9, item)) : 0;
+                    if (typeof item === 'boolean') return item;
+                    return String(item).substring(0, 500);
+                  });
+                }
+                // Si es objeto, crear nuevo objeto plano
+                if (parsed && typeof parsed === 'object') {
+                  const clean: any = {};
+                  for (const [k, v] of Object.entries(parsed)) {
+                    if (typeof k !== 'string' || k.length > 100) continue;
+                    if (typeof v === 'string') clean[k] = v.substring(0, 500);
+                    else if (typeof v === 'number') clean[k] = isFinite(v) ? Math.max(-1e9, Math.min(1e9, v)) : 0;
+                    else if (typeof v === 'boolean') clean[k] = v;
+                    else clean[k] = String(v).substring(0, 500);
+                  }
+                  return clean;
+                }
+                return defaultValue;
+              } catch {
+                return defaultValue;
+              }
+            }
+            return defaultValue;
           };
 
-          // ✅ Convertir todos los Decimal ANTES de crear el objeto para evitar problemas de serialización
-          const impactRevenue = toNumber(s.impactRevenue || 0);
-          const impactTime = toNumber(s.impactTime || 0);
-          const confidence = toNumber(s.confidence || 0);
+          // ✅ Convertir TODOS los Decimal ANTES de crear el objeto
+          // Usar try-catch para cada conversión
+          let impactRevenue = 0;
+          let impactTime = 0;
+          let confidence = 0;
+          
+          try {
+            impactRevenue = toNumber(s.impactRevenue || 0);
+          } catch {
+            impactRevenue = 0;
+          }
+          
+          try {
+            impactTime = toNumber(s.impactTime || 0);
+          } catch {
+            impactTime = 0;
+          }
+          
+          try {
+            confidence = toNumber(s.confidence || 0);
+          } catch {
+            confidence = 0;
+          }
+          
+          // ✅ Validar y limitar valores numéricos antes de crear el objeto
+          const safeImpactRevenue = Math.max(-1e9, Math.min(1e9, isFinite(impactRevenue) ? impactRevenue : 0));
+          const safeImpactTime = Math.max(0, Math.min(10000, isFinite(impactTime) ? impactTime : 0));
+          const safeConfidence = Math.max(0, Math.min(100, isFinite(confidence) ? confidence : 0));
           
           // Parsear JSON de forma segura
           let metrics: any = undefined;
           if (s.metrics) {
             try {
               const parsed = parseJsonSafe(s.metrics, undefined);
-              if (parsed && typeof parsed === 'object') {
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
                 metrics = {
-                  ...parsed,
-                  currentValue: parsed.currentValue !== undefined ? toNumber(parsed.currentValue) : parsed.currentValue,
-                  targetValue: parsed.targetValue !== undefined ? toNumber(parsed.targetValue) : parsed.targetValue,
-                  unit: parsed.unit || 'USD'
+                  currentValue: parsed.currentValue !== undefined ? toNumber(parsed.currentValue) : undefined,
+                  targetValue: parsed.targetValue !== undefined ? toNumber(parsed.targetValue) : undefined,
+                  unit: typeof parsed.unit === 'string' ? parsed.unit.substring(0, 20) : 'USD'
                 };
+                // ✅ Validar valores de metrics
+                if (metrics.currentValue !== undefined) {
+                  metrics.currentValue = Math.max(-1e9, Math.min(1e9, isFinite(metrics.currentValue) ? metrics.currentValue : 0));
+                }
+                if (metrics.targetValue !== undefined) {
+                  metrics.targetValue = Math.max(-1e9, Math.min(1e9, isFinite(metrics.targetValue) ? metrics.targetValue : 0));
+                }
               }
             } catch (error) {
               logger.warn(`AISuggestions: Error parseando metrics para sugerencia ${s.id}`, { error });
@@ -1993,10 +2058,13 @@ REGLAS ESTRICTAS:
           if ((s as any).keywordSupportingMetric) {
             try {
               const parsed = parseJsonSafe((s as any).keywordSupportingMetric, undefined);
-              if (parsed && typeof parsed === 'object' && parsed.value !== undefined) {
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.value !== undefined) {
+                const metricValue = toNumber(parsed.value);
                 keywordSupportingMetric = {
-                  ...parsed,
-                  value: toNumber(parsed.value),
+                  type: typeof parsed.type === 'string' ? parsed.type.substring(0, 20) : 'demand',
+                  value: Math.max(-1e9, Math.min(1e9, isFinite(metricValue) ? metricValue : 0)),
+                  unit: typeof parsed.unit === 'string' ? parsed.unit.substring(0, 20) : '',
+                  description: typeof parsed.description === 'string' ? parsed.description.substring(0, 500) : ''
                 };
               }
             } catch (error) {
@@ -2005,45 +2073,115 @@ REGLAS ESTRICTAS:
           }
 
           const estimatedOpportunities = (s as any).estimatedOpportunities !== undefined && (s as any).estimatedOpportunities !== null 
-            ? toNumber((s as any).estimatedOpportunities) 
+            ? Math.max(0, Math.min(1e6, Math.round(toNumber((s as any).estimatedOpportunities))))
             : undefined;
 
+          // ✅ Parsear requirements y steps (pueden estar como JSON strings)
+          let requirementsArray: string[] = [];
+          try {
+            if (typeof s.requirements === 'string') {
+              const parsed = JSON.parse(s.requirements);
+              requirementsArray = Array.isArray(parsed) ? parsed : [];
+            } else if (Array.isArray(s.requirements)) {
+              requirementsArray = s.requirements;
+            }
+          } catch {
+            requirementsArray = [];
+          }
+          requirementsArray = requirementsArray.slice(0, 50).map((r: any) => String(r || '').substring(0, 500));
+          
+          let stepsArray: string[] = [];
+          try {
+            if (typeof s.steps === 'string') {
+              const parsed = JSON.parse(s.steps);
+              stepsArray = Array.isArray(parsed) ? parsed : [];
+            } else if (Array.isArray(s.steps)) {
+              stepsArray = s.steps;
+            }
+          } catch {
+            stepsArray = [];
+          }
+          stepsArray = stepsArray.slice(0, 50).map((step: any) => String(step || '').substring(0, 500));
+
+          // ✅ Construir objeto de sugerencia completamente nuevo (sin referencias a Prisma)
+          // Todos los valores deben ser primitivos o estructuras simples sin referencias circulares
           const suggestion: any = {
-            id: String(s.id),
-            type: s.type as any,
-            priority: s.priority as any,
-            title: String(s.title || ''),
-            description: String(s.description || ''),
+            id: String(s.id || ''),
+            type: String(s.type || 'optimization'),
+            priority: String(s.priority || 'medium'),
+            title: String(s.title || '').substring(0, 500),
+            description: String(s.description || '').substring(0, 2000),
             impact: {
-              revenue: impactRevenue,
-              time: impactTime,
+              revenue: safeImpactRevenue,
+              time: safeImpactTime,
               difficulty: String((s.difficulty as any) || 'medium')
             },
-            confidence: confidence,
+            confidence: safeConfidence,
             actionable: Boolean(s.actionable ?? true),
             implemented: Boolean(s.implemented ?? false),
-            estimatedTime: String(s.estimatedTime || '30 minutos'),
-            requirements: parseJsonSafe(s.requirements, []),
-            steps: parseJsonSafe(s.steps, []),
+            estimatedTime: String(s.estimatedTime || '30 minutos').substring(0, 100),
+            requirements: requirementsArray,
+            steps: stepsArray,
             relatedProducts: parseJsonSafe(s.relatedProducts, undefined),
             metrics: metrics,
-            createdAt: s.createdAt ? s.createdAt.toISOString() : new Date().toISOString(),
-            keyword: (s as any).keyword ? String((s as any).keyword) : undefined,
-            keywordCategory: (s as any).keywordCategory ? String((s as any).keywordCategory) : undefined,
-            keywordSegment: (s as any).keywordSegment ? String((s as any).keywordSegment) : undefined,
-            keywordReason: (s as any).keywordReason ? String((s as any).keywordReason) : undefined,
-            keywordSupportingMetric: keywordSupportingMetric,
-            targetMarketplaces: (s as any).targetMarketplaces ? parseJsonSafe((s as any).targetMarketplaces, []) : undefined,
-            estimatedOpportunities: estimatedOpportunities,
+            createdAt: (s.createdAt && s.createdAt instanceof Date) ? s.createdAt.toISOString() : new Date().toISOString(),
           };
-
-          // ✅ Sanitizar el objeto completo antes de retornar (con límite de profundidad)
-          // Usar un WeakSet compartido para mejor detección de referencias circulares
-          const sanitized = sanitizeForJson(suggestion, 0, new WeakSet());
           
-          // ✅ Validación adicional: intentar serializar inmediatamente para detectar problemas
+          // ✅ Agregar campos opcionales solo si existen (todos como valores primitivos)
+          if ((s as any).keyword) {
+            suggestion.keyword = String((s as any).keyword).substring(0, 200);
+          }
+          if ((s as any).keywordCategory) {
+            suggestion.keywordCategory = String((s as any).keywordCategory).substring(0, 100);
+          }
+          if ((s as any).keywordSegment) {
+            suggestion.keywordSegment = String((s as any).keywordSegment).substring(0, 100);
+          }
+          if ((s as any).keywordReason) {
+            suggestion.keywordReason = String((s as any).keywordReason).substring(0, 500);
+          }
+          if (keywordSupportingMetric) {
+            // Crear copia del objeto sin referencias
+            suggestion.keywordSupportingMetric = {
+              type: String(keywordSupportingMetric.type || 'demand'),
+              value: Number(keywordSupportingMetric.value || 0),
+              unit: String(keywordSupportingMetric.unit || ''),
+              description: String(keywordSupportingMetric.description || '').substring(0, 500)
+            };
+          }
+          if ((s as any).targetMarketplaces) {
+            suggestion.targetMarketplaces = parseJsonSafe((s as any).targetMarketplaces, []);
+          }
+          if (estimatedOpportunities !== undefined) {
+            suggestion.estimatedOpportunities = Number(estimatedOpportunities);
+          }
+
+          // ✅ CRÍTICO: Intentar serializar inmediatamente para detectar problemas
+          // NO usar sanitizeForJson aquí, confiar en que el objeto está limpio
           try {
-            JSON.stringify(sanitized);
+            const testSerialization = JSON.stringify(suggestion);
+            // ✅ Verificar que el JSON no sea demasiado grande (límite 500KB por sugerencia)
+            if (testSerialization.length > 500 * 1024) {
+              logger.warn(`AISuggestions: Sugerencia ${s.id} demasiado grande, simplificando`, { size: testSerialization.length });
+              // Simplificar manteniendo solo campos esenciales
+              return {
+                id: suggestion.id,
+                type: suggestion.type,
+                priority: suggestion.priority,
+                title: suggestion.title,
+                description: suggestion.description.substring(0, 500),
+                impact: suggestion.impact,
+                confidence: suggestion.confidence,
+                actionable: suggestion.actionable,
+                implemented: suggestion.implemented,
+                estimatedTime: suggestion.estimatedTime,
+                requirements: Array.isArray(suggestion.requirements) ? suggestion.requirements.slice(0, 10) : [],
+                steps: Array.isArray(suggestion.steps) ? suggestion.steps.slice(0, 10) : [],
+                createdAt: suggestion.createdAt,
+              };
+            }
+            // ✅ Retornar el objeto tal cual (ya está limpio)
+            return suggestion;
           } catch (serializationTestError: any) {
             logger.error(`AISuggestions: Sugerencia ${s.id} no es serializable después de sanitizar`, {
               error: serializationTestError.message,
@@ -2052,9 +2190,9 @@ REGLAS ESTRICTAS:
             // Retornar objeto mínimo válido
             return {
               id: String(s.id),
-              type: s.type || 'optimization',
-              priority: s.priority || 'medium',
-              title: s.title || 'Sugerencia',
+              type: String(s.type || 'optimization'),
+              priority: String(s.priority || 'medium'),
+              title: String(s.title || 'Sugerencia').substring(0, 200),
               description: '',
               impact: { revenue: 0, time: 0, difficulty: 'medium' },
               confidence: 0,
@@ -2066,8 +2204,6 @@ REGLAS ESTRICTAS:
               createdAt: new Date().toISOString(),
             };
           }
-          
-          return sanitized;
         } catch (error: any) {
           logger.error(`AISuggestions: Error procesando sugerencia ${s.id}`, { 
             error: error.message, 

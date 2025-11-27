@@ -885,7 +885,9 @@ export default function APISettings() {
     
     if (lowerError.includes('debe comenzar')) {
       if (apiName === 'ebay' && fieldKey.includes('appId')) {
-        return 'El App ID de eBay debe comenzar con "YourAppI-". Verifica que copiaste correctamente desde el eBay Developer Portal.';
+        // ✅ CORREGIDO: eBay emite App IDs en varios formatos válidos
+        // No todos comienzan con "YourAppI-", pueden ser "IvanMart-IVANRese-PRD-..." u otros formatos oficiales
+        return 'El App ID de eBay debe tener un formato válido. Verifica que copiaste correctamente desde el eBay Developer Portal. Ejemplos válidos: "IvanMart-IVANRese-PRD-..." o "YourAppI-YourApp-PRD-...".';
       }
       if (apiName === 'amazon' && fieldKey.includes('clientId')) {
         return 'El Client ID de Amazon debe comenzar con "amzn1.application-oa2-client". Verifica que copiaste correctamente desde Amazon SP-API.';

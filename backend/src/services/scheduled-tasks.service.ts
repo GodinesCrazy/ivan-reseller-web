@@ -346,6 +346,28 @@ export class ScheduledTasksService {
 
     for (const [userId, meta] of uniqueUsers.entries()) {
       try {
+        // ✅ OPTIMIZADO: Verificar si hay cookies antes de forzar refresh
+        // Si no hay cookies, el sistema funciona en modo público y no necesita notificaciones
+        const { CredentialsManager } = await import('./credentials-manager.service');
+        const entry = await CredentialsManager.getCredentialEntry(userId, 'aliexpress', 'production', {
+          includeGlobal: false,
+        });
+        
+        const hasCookies = entry?.credentials && 
+          Array.isArray((entry.credentials as any).cookies) && 
+          (entry.credentials as any).cookies.length > 0;
+        
+        // ✅ Solo forzar refresh si hay cookies configuradas
+        // Si no hay cookies, el sistema funciona en modo público y no necesita intervención
+        if (!hasCookies) {
+          skipped.push({ 
+            userId, 
+            username: meta.username, 
+            reason: 'public_mode_no_cookies' 
+          });
+          continue;
+        }
+
         const result = await aliExpressAuthMonitor.refreshNow(userId, {
           force: true,
           reason: 'daily-health-check',
@@ -358,9 +380,11 @@ export class ScheduledTasksService {
 
         const reason = (result && 'reason' in result && typeof result.reason === 'string') ? result.reason : undefined;
 
-        if (result?.manualRequired || reason === 'manual_required' || reason === 'missing' || reason === 'expired') {
+        // ✅ OPTIMIZADO: Solo marcar como manual_required si realmente requiere intervención
+        // 'missing' y 'public_mode' no requieren intervención manual (sistema funciona en modo público)
+        if (result?.manualRequired || reason === 'manual_required' || reason === 'expired') {
           manualRequired.push({ userId, username: meta.username, reason });
-        } else if (result?.skipped) {
+        } else if (result?.skipped || reason === 'missing' || reason === 'public_mode' || reason === 'public_mode_no_cookies') {
           skipped.push({ userId, username: meta.username, reason });
         } else {
           errors.push({
