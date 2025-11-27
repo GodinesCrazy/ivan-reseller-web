@@ -651,15 +651,16 @@ class OpportunityFinderService {
 
         // ✅ FALLBACK NIVEL 3: Intentar ScraperAPI o ZenRows si están configurados
         try {
-          logger.info('Intentando ScraperAPI/ZenRows como último recurso', {
+          logger.info('🔄 Intentando ScraperAPI/ZenRows como último recurso', {
             service: 'opportunity-finder',
             userId,
-            query
+            query,
+            bridgePythonFailed: true
           });
 
           const externalScrapingResult = await this.tryExternalScrapingAPIs(userId, query, maxItems);
           if (externalScrapingResult && externalScrapingResult.length > 0) {
-            logger.info('ScraperAPI/ZenRows encontró productos', {
+            logger.info('✅ ScraperAPI/ZenRows encontró productos', {
               service: 'opportunity-finder',
               userId,
               query,
@@ -667,7 +668,7 @@ class OpportunityFinderService {
             });
             products = externalScrapingResult;
           } else {
-            logger.warn('ScraperAPI/ZenRows tampoco encontró productos o no están configurados', {
+            logger.warn('⚠️ ScraperAPI/ZenRows tampoco encontró productos o no están configurados', {
               service: 'opportunity-finder',
               userId,
               query
@@ -681,18 +682,56 @@ class OpportunityFinderService {
             error: externalError?.message || String(externalError)
           });
         }
+      }
+    }
+    
+    // ✅ RESTAURACIÓN: Si aún no hay productos después de bridge Python, intentar ScraperAPI/ZenRows de todos modos
+    if (!products || products.length === 0) {
+      try {
+        logger.info('🔄 Intentando ScraperAPI/ZenRows (bridge Python no encontró productos o no está disponible)', {
+          service: 'opportunity-finder',
+          userId,
+          query,
+          reason: 'Bridge Python retornó vacío o no está disponible'
+        });
 
-        // ✅ Si después de todos los intentos (nativo, bridge Python, ScraperAPI/ZenRows) no hay productos
-        if (!products || products.length === 0) {
-          logger.warn('Todos los métodos de scraping fallaron, retornando resultados vacíos', {
+        const externalScrapingResult = await this.tryExternalScrapingAPIs(userId, query, maxItems);
+        if (externalScrapingResult && externalScrapingResult.length > 0) {
+          logger.info('✅ ScraperAPI/ZenRows encontró productos', {
             service: 'opportunity-finder',
             userId,
             query,
-            manualAuthPending,
-            manualAuthError: manualAuthError?.message
+            count: externalScrapingResult.length
           });
-          return [];
+          products = externalScrapingResult;
+        } else {
+          logger.warn('⚠️ ScraperAPI/ZenRows tampoco encontró productos o no están configurados', {
+            service: 'opportunity-finder',
+            userId,
+            query
+          });
         }
+      } catch (externalError: any) {
+        logger.warn('Error al intentar ScraperAPI/ZenRows', {
+          service: 'opportunity-finder',
+          userId,
+          query,
+          error: externalError?.message || String(externalError)
+        });
+      }
+    }
+
+    // ✅ Si después de todos los intentos (nativo, bridge Python, ScraperAPI/ZenRows) no hay productos
+    if (!products || products.length === 0) {
+      logger.warn('Todos los métodos de scraping fallaron, retornando resultados vacíos', {
+        service: 'opportunity-finder',
+        userId,
+        query,
+        manualAuthPending,
+        manualAuthError: manualAuthError?.message
+      });
+      return [];
+    }
       }
     }
 
