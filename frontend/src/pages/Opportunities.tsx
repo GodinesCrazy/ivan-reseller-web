@@ -120,17 +120,25 @@ export default function Opportunities() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.get('/api/opportunities', {
+      const response = await api.get('/api/opportunities', {
         params: { query, maxItems, marketplaces: marketplacesParam, region }
       });
       
-      // ✅ Manejar respuesta de CAPTCHA requerido (código 202)
-      if (data?.captchaRequired && data?.resolveCaptchaUrl) {
-        toast.info('AliExpress requiere que resuelvas un CAPTCHA para continuar. Redirigiendo...');
-        // Redirigir a la página de resolución de CAPTCHA
-        window.location.href = data.resolveCaptchaUrl;
-        setLoading(false);
-        return;
+      const data = response.data;
+      const status = response.status;
+      
+      // ✅ Manejar respuesta de CAPTCHA requerido (código 202 o en data)
+      if (status === 202 || data?.captchaRequired || data?.requiresManualAuth) {
+        const resolveUrl = data?.resolveCaptchaUrl || (data?.token ? `/resolve-captcha/${data.token}` : null);
+        if (resolveUrl) {
+          const absoluteUrl = resolveUrl.startsWith('http') ? resolveUrl : `${window.location.origin}${resolveUrl}`;
+          toast.info('AliExpress requiere que resuelvas un CAPTCHA para continuar. Redirigiendo...');
+          console.log('[OPPORTUNITIES] Redirigiendo a CAPTCHA:', absoluteUrl);
+          // Redirigir a la página de resolución de CAPTCHA
+          window.location.href = absoluteUrl;
+          setLoading(false);
+          return;
+        }
       }
       
       setItems(data?.items || []);
@@ -139,10 +147,13 @@ export default function Opportunities() {
       // ✅ Manejar respuesta 202 (Accepted) cuando se requiere CAPTCHA
       if (e?.response?.status === 202) {
         const captchaData = e.response?.data || {};
-        if (captchaData.captchaRequired && captchaData.resolveCaptchaUrl) {
+        const resolveUrl = captchaData.resolveCaptchaUrl || (captchaData.token ? `/resolve-captcha/${captchaData.token}` : null);
+        if (captchaData.captchaRequired && resolveUrl) {
+          const absoluteUrl = resolveUrl.startsWith('http') ? resolveUrl : `${window.location.origin}${resolveUrl}`;
           toast.info('AliExpress requiere que resuelvas un CAPTCHA para continuar. Redirigiendo...');
+          console.log('[OPPORTUNITIES] Redirigiendo a CAPTCHA desde catch:', absoluteUrl);
           // Redirigir a la página de resolución de CAPTCHA
-          window.location.href = captchaData.resolveCaptchaUrl;
+          window.location.href = absoluteUrl;
           setLoading(false);
           return;
         }
