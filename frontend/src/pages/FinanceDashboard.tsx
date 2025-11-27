@@ -26,6 +26,24 @@ interface FinancialData {
   commissions: number;
   taxes: number;
   netProfit: number;
+  workingCapital?: {
+    total: number;
+    committed: number;
+    available: number;
+    utilizationRate: number;
+  };
+  capitalMetrics?: {
+    capitalTurnover: number;
+    averageRecoveryDays: number;
+    averageWorkingCapital: number;
+  };
+  cashFlowMetrics?: {
+    pendingSalesValue: number;
+    paidSalesValue: number;
+    realCashFlow: number;
+    pendingSalesCount: number;
+    paidSalesCount: number;
+  };
 }
 
 interface CategoryBreakdown {
@@ -309,6 +327,107 @@ export default function FinanceDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Capital Metrics Section */}
+      {financialData.workingCapital && financialData.capitalMetrics && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Working Capital Card */}
+          <div className="bg-white border rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-blue-600" />
+              Working Capital
+            </h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between py-2 border-b">
+                <div className="text-sm text-gray-600">Total Capital</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  {formatCurrency(financialData.workingCapital.total)}
+                </div>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b">
+                <div className="text-sm text-gray-600">Committed</div>
+                <div className="text-lg font-semibold text-orange-600">
+                  {formatCurrency(financialData.workingCapital.committed)}
+                </div>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b">
+                <div className="text-sm text-gray-600">Available</div>
+                <div className={`text-lg font-semibold ${
+                  financialData.workingCapital.available > 0 ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {formatCurrency(financialData.workingCapital.available)}
+                </div>
+              </div>
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-600">Utilization Rate</span>
+                  <span className="text-sm font-semibold text-gray-900">
+                    {financialData.workingCapital.utilizationRate.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div
+                    className={`h-3 rounded-full transition-all ${
+                      financialData.workingCapital.utilizationRate < 70
+                        ? 'bg-green-500'
+                        : financialData.workingCapital.utilizationRate < 90
+                        ? 'bg-yellow-500'
+                        : 'bg-red-500'
+                    }`}
+                    style={{ width: `${Math.min(financialData.workingCapital.utilizationRate, 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Capital Performance Card */}
+          <div className="bg-white border rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <RefreshCw className="w-5 h-5 text-purple-600" />
+              Capital Performance
+            </h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between py-2 border-b">
+                <div className="text-sm text-gray-600">Capital Turnover</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  {financialData.capitalMetrics.capitalTurnover.toFixed(2)}x
+                </div>
+              </div>
+              <div className="text-xs text-gray-500 mb-4">
+                Revenue per dollar of working capital
+              </div>
+              <div className="flex items-center justify-between py-2 border-b">
+                <div className="text-sm text-gray-600">Avg. Recovery Time</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  {financialData.capitalMetrics.averageRecoveryDays.toFixed(1)} days
+                </div>
+              </div>
+              <div className="text-xs text-gray-500 mb-4">
+                Average time from purchase to payment
+              </div>
+              {financialData.cashFlowMetrics && (
+                <>
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <div className="text-sm text-gray-600">Pending Sales Value</div>
+                    <div className="text-lg font-semibold text-orange-600">
+                      {formatCurrency(financialData.cashFlowMetrics.pendingSalesValue)}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <div className="text-sm text-gray-600">Real Cash Flow</div>
+                    <div className={`text-lg font-semibold ${
+                      financialData.cashFlowMetrics.realCashFlow >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {formatCurrency(financialData.cashFlowMetrics.realCashFlow)}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Category Breakdown */}
       <div className="bg-white border rounded-lg p-6">
