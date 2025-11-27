@@ -1707,144 +1707,142 @@ export default function APISettings() {
         });
       }
       
-      // ✅ CORRECCIÓN: Mejorar detección de ventana OAuth bloqueada vs abierta correctamente
-      // Esperar más tiempo para permitir que el navegador procese la apertura (especialmente para redirecciones externas)
-      setTimeout(() => {
-        // Verificar si la ventana fue bloqueada o cerrada inmediatamente
-        const isBlocked = !oauthWindow || oauthWindow.closed;
+      // ✅ CORRECCIÓN CRÍTICA: La única forma confiable de detectar bloqueo es si window.open() retorna null/undefined
+      // Para ventanas cross-origin (como OAuth de eBay), window.open() puede retornar una ventana
+      // que inmediatamente tiene .closed = true, pero esto NO significa que esté bloqueada.
+      // NO verificar .closed porque puede ser true inmediatamente para cross-origin y causar falsos positivos.
+      
+      if (!oauthWindow) {
+        // ✅ SOLO mostrar modal si window.open() retornó null/undefined (realmente bloqueada)
+        log.error('[APISettings] OAuth window blocked - window.open() returned null/undefined', {
+          oauthWindow: oauthWindow,
+        });
         
-        // ✅ Intentar acceder al document para verificar si realmente se abrió
-        // Para ventanas externas (cross-origin), esto causará error pero no significa que esté bloqueada
-        let hasDocument = false;
-        let isCrossOrigin = false;
+        setOauthBlockedModal({
+          open: true,
+          authUrl: authUrl,
+          apiName: apiName,
+          warning: oauthWarning,
+        });
+        setOauthing(null);
+        return;
+      }
+      
+      // ✅ Si oauthWindow existe, se abrió correctamente (incluso si es cross-origin)
+      // NO verificar .closed porque puede ser true inmediatamente para cross-origin
+      log.info('[APISettings] OAuth window opened successfully', {
+        oauthWindow: !!oauthWindow,
+        // No verificar .closed aquí porque puede ser true para cross-origin
+      });
+      
+      toast('Se abrió la ventana oficial de OAuth. Completa el login y vuelve para refrescar el estado.', {
+        icon: 'ℹ️'
+      });
+      
+      // ✅ CORRECCIÓN: Monitorear si la ventana se cierra Y verificar tokens con polling
+      // Para ventanas cross-origin, .closed puede ser true inmediatamente, así que
+      // usamos un enfoque diferente: monitorear cambios en el estado de la ventana
+      let pollAttempts = 0;
+      const maxPollAttempts = 30; // 30 intentos = 30 segundos máximo
+      let windowClosed = false;
+      
+      // ✅ Función para verificar tokens (reutilizable)
+      const pollForTokens = async () => {
         try {
-          hasDocument = oauthWindow?.document ? true : false;
-        } catch (e) {
-          // ✅ Si hay error al acceder al document, puede ser cross-origin (normal para OAuth)
-          // Verificar si la ventana aún existe y no está cerrada
-          if (oauthWindow && !oauthWindow.closed) {
-            isCrossOrigin = true; // Probablemente cross-origin, no bloqueada
-            hasDocument = true; // Considerar como "válida" si existe y no está cerrada
-          } else {
-            hasDocument = false;
+          // Recargar credenciales y verificar si hay tokens
+          await fetchAuthStatuses();
+          await loadCredentials();
+          
+          // Verificar si hay tokens guardados para esta API y environment
+          const creds = getCredentialForAPI(apiName, environment);
+          const hasToken = creds?.credentials?.token || creds?.credentials?.authToken || creds?.credentials?.refreshToken;
+          
+          if (hasToken) {
+            log.info('[APISettings] OAuth tokens detected after window close', {
+              apiName,
+              environment,
+              hasToken: !!creds?.credentials?.token,
+              hasRefreshToken: !!creds?.credentials?.refreshToken,
+            });
+            toast.success('✅ Autorización OAuth completada exitosamente');
+            return true; // Tokens encontrados, detener polling
           }
+          
+          pollAttempts++;
+          if (pollAttempts < maxPollAttempts) {
+            // Continuar polling
+            return false;
+          } else {
+            // Timeout: no se encontraron tokens después de 30 segundos
+            log.warn('[APISettings] OAuth tokens not found after polling timeout', {
+              apiName,
+              environment,
+              pollAttempts,
+            });
+            toast('⚠️ La ventana de OAuth se cerró, pero no se detectaron tokens. Si completaste la autorización, espera unos segundos o recarga la página.', {
+              icon: 'ℹ️',
+              duration: 5000,
+            });
+            return true; // Detener polling por timeout
+          }
+        } catch (err) {
+          log.warn('Error polling for OAuth tokens:', err);
+          pollAttempts++;
+          return pollAttempts >= maxPollAttempts; // Detener si hay muchos errores
         }
-        
-        // ✅ CORRECCIÓN: Solo considerar bloqueado si realmente no existe, está cerrada, Y no es cross-origin
-        // Además, verificar que no sea una redirección rápida (algunos navegadores cierran y reabren)
-        if ((isBlocked || !hasDocument) && !isCrossOrigin) {
-          log.error('[APISettings] Failed to open OAuth window - popup blocked or closed immediately', {
-            oauthWindow: !!oauthWindow,
-            closed: oauthWindow?.closed,
-            hasDocument: hasDocument,
-            isCrossOrigin: isCrossOrigin,
-          });
+      };
+      
+      // ✅ CORRECCIÓN: Monitorear cierre de ventana de forma más robusta
+      // Para cross-origin, .closed puede ser true inmediatamente, así que
+      // verificamos periódicamente si la ventana realmente se cerró
+      const checkInterval = setInterval(() => {
+        try {
+          // Intentar verificar si la ventana está cerrada
+          // Para cross-origin, esto puede lanzar excepción, pero eso significa que la ventana existe
+          let isClosed = false;
+          try {
+            isClosed = !oauthWindow || oauthWindow.closed;
+          } catch (e) {
+            // Si hay excepción, la ventana existe pero es cross-origin
+            // No podemos verificar .closed, así que asumimos que está abierta
+            isClosed = false;
+          }
           
-          // Mostrar modal personalizado en lugar de confirm() (que puede ser bloqueado)
-          setOauthBlockedModal({
-            open: true,
-            authUrl: authUrl,
-            apiName: apiName,
-            warning: oauthWarning,
-          });
-          setOauthing(null);
-          return;
-        }
-        
-        // ✅ Si es cross-origin, asumir que se abrió correctamente (es normal para OAuth)
-        if (isCrossOrigin) {
-          log.info('[APISettings] OAuth window opened (cross-origin detected - normal for OAuth)', {
-            oauthWindow: !!oauthWindow,
-            closed: oauthWindow?.closed,
-          });
-        }
-        
-        // Si llegamos aquí, la ventana se abrió correctamente
-        if (oauthWindow) {
-          log.debug('[APISettings] OAuth window opened successfully', {
-            oauthWindow: !!oauthWindow,
-            closed: oauthWindow.closed,
-          });
-          
-          toast('Se abrió la ventana oficial de OAuth. Completa el login y vuelve para refrescar el estado.', {
-            icon: 'ℹ️'
-          });
-          
-          // ✅ CORRECCIÓN: Monitorear si la ventana se cierra Y verificar tokens con polling
-          let pollAttempts = 0;
-          const maxPollAttempts = 30; // 30 intentos = 30 segundos máximo
-          
-          const checkInterval = setInterval(() => {
-            if (!oauthWindow || oauthWindow.closed) {
-              clearInterval(checkInterval);
-              
-              // ✅ CORRECCIÓN: Iniciar polling para verificar si los tokens se guardaron
-              // Esto maneja el caso donde eBay redirige a su propia página de éxito
-              const pollForTokens = async () => {
-                try {
-                  // Recargar credenciales y verificar si hay tokens
-                  await fetchAuthStatuses();
-                  await loadCredentials();
-                  
-                  // Verificar si hay tokens guardados para esta API y environment
-                  const creds = getCredentialForAPI(apiName, environment);
-                  const hasToken = creds?.credentials?.token || creds?.credentials?.authToken || creds?.credentials?.refreshToken;
-                  
-                  if (hasToken) {
-                    log.info('[APISettings] OAuth tokens detected after window close', {
-                      apiName,
-                      environment,
-                      hasToken: !!creds?.credentials?.token,
-                      hasRefreshToken: !!creds?.credentials?.refreshToken,
-                    });
-                    toast.success('✅ Autorización OAuth completada exitosamente');
-                    return true; // Tokens encontrados, detener polling
-                  }
-                  
-                  pollAttempts++;
-                  if (pollAttempts < maxPollAttempts) {
-                    // Continuar polling
-                    return false;
-                  } else {
-                    // Timeout: no se encontraron tokens después de 30 segundos
-                    log.warn('[APISettings] OAuth tokens not found after polling timeout', {
-                      apiName,
-                      environment,
-                      pollAttempts,
-                    });
-                    toast('⚠️ La ventana de OAuth se cerró, pero no se detectaron tokens. Si completaste la autorización, espera unos segundos o recarga la página.', {
-                      icon: 'ℹ️',
-                      duration: 5000,
-                    });
-                    return true; // Detener polling por timeout
-                  }
-                } catch (err) {
-                  log.warn('Error polling for OAuth tokens:', err);
-                  pollAttempts++;
-                  return pollAttempts >= maxPollAttempts; // Detener si hay muchos errores
+          if (isClosed && !windowClosed) {
+            windowClosed = true;
+            clearInterval(checkInterval);
+            
+            log.info('[APISettings] OAuth window closed, starting token polling', {
+              apiName,
+              environment,
+            });
+            
+            // ✅ CORRECCIÓN: Esperar un momento antes de empezar a hacer polling
+            // Dar tiempo al backend para procesar el callback
+            setTimeout(async () => {
+              const pollInterval = setInterval(async () => {
+                const shouldStop = await pollForTokens();
+                if (shouldStop) {
+                  clearInterval(pollInterval);
                 }
-              };
+              }, 1000); // Poll cada 1 segundo
               
-              // ✅ CORRECCIÓN: Esperar un momento antes de empezar a hacer polling
-              // Dar tiempo al backend para procesar el callback
-              setTimeout(async () => {
-                const pollInterval = setInterval(async () => {
-                  const shouldStop = await pollForTokens();
-                  if (shouldStop) {
-                    clearInterval(pollInterval);
-                  }
-                }, 1000); // Poll cada 1 segundo
-                
-                // Limpiar polling después de 30 segundos
-                setTimeout(() => clearInterval(pollInterval), 30000);
-              }, 2000); // Esperar 2 segundos antes de empezar a hacer polling
-            }
-          }, 1000);
-          
-          // Limpiar intervalo después de 5 minutos
-          setTimeout(() => clearInterval(checkInterval), 300000);
+              // Limpiar polling después de 30 segundos
+              setTimeout(() => clearInterval(pollInterval), 30000);
+            }, 2000); // Esperar 2 segundos antes de empezar a hacer polling
+          }
+        } catch (err) {
+          log.warn('[APISettings] Error checking OAuth window status:', err);
         }
-      }, 500); // ✅ Aumentar tiempo de espera de 100ms a 500ms para redirecciones externas
+      }, 1000); // Verificar cada 1 segundo
+      
+      // Limpiar intervalo después de 5 minutos
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        if (!windowClosed) {
+          log.info('[APISettings] OAuth window monitoring timeout (5 minutes)');
+        }
+      }, 300000);
     } catch (err: unknown) {
       log.error('Error iniciando OAuth:', err);
       const axiosError = err && typeof err === 'object' && 'response' in err ? err as { response?: { data?: { message?: string; error?: string } } } : null;
