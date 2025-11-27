@@ -576,18 +576,20 @@ export class AdvancedMarketplaceScraper {
     
     logger.info('[SCRAPER] scrapeAliExpress iniciado', { query, userId, environment, userBaseCurrency });
     
-    // ✅ Intentar inicializar navegador, pero si falla, retornar array vacío (no lanzar error)
+    // ✅ Intentar inicializar navegador, pero si falla, NO retornar vacío inmediatamente
+    // En su lugar, lanzar un error que permita al opportunity-finder usar el fallback de bridge Python
     if (!this.browser) {
       logger.debug('[SCRAPER] Navegador no disponible, intentando inicializar...');
       try {
         await this.init();
         // Verificar que el navegador se inicializó correctamente
         if (!this.browser || !this.browser.isConnected()) {
-          logger.warn('[SCRAPER] Navegador no disponible después de init, continuando sin scraping nativo', {
+          logger.warn('[SCRAPER] Navegador no disponible después de init', {
             hasBrowser: !!this.browser,
             isConnected: this.browser?.isConnected() || false
           });
-          return [];
+          // ✅ NO retornar vacío - lanzar error para que opportunity-finder use bridge Python
+          throw new Error('Browser not available after initialization');
         }
         logger.info('[SCRAPER] Navegador inicializado correctamente');
       } catch (initError: any) {
@@ -595,8 +597,8 @@ export class AdvancedMarketplaceScraper {
           error: initError?.message || String(initError),
           stack: initError?.stack
         });
-        logger.warn('[SCRAPER] Continuando sin scraping nativo - se usará bridge Python como alternativa');
-        return [];
+        // ✅ NO retornar vacío - lanzar error para que opportunity-finder use bridge Python
+        throw new Error(`Failed to initialize browser: ${initError?.message || String(initError)}`);
       }
     }
     
@@ -606,14 +608,16 @@ export class AdvancedMarketplaceScraper {
       try {
         await this.init();
         if (!this.browser || !this.browser.isConnected()) {
-          logger.warn('[SCRAPER] No se pudo reinicializar navegador, retornando vacío');
-          return [];
+          logger.warn('[SCRAPER] No se pudo reinicializar navegador');
+          // ✅ NO retornar vacío - lanzar error para que opportunity-finder use bridge Python
+          throw new Error('Browser not connected after reinitialization');
         }
       } catch (reinitError: any) {
         logger.error('[SCRAPER] Error al reinicializar navegador', {
           error: reinitError?.message || String(reinitError)
         });
-        return [];
+        // ✅ NO retornar vacío - lanzar error para que opportunity-finder use bridge Python
+        throw new Error(`Failed to reinitialize browser: ${reinitError?.message || String(reinitError)}`);
       }
     }
 

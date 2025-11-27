@@ -503,11 +503,13 @@ class OpportunityFinderService {
           error: errorMsg
         });
       } else {
-        logger.error('Error en scraping nativo, intentando bridge Python', {
+        logger.warn('Error en scraping nativo (esperado si navegador no está disponible), intentando bridge Python', {
           service: 'opportunity-finder',
           userId,
           query,
-          error: errorMsg
+          error: errorMsg,
+          errorType: nativeError?.constructor?.name || 'Unknown',
+          note: 'Este error es normal si Puppeteer no está disponible. El sistema usará bridge Python como alternativa.'
         });
       }
 
@@ -522,15 +524,19 @@ class OpportunityFinderService {
     // ✅ FALLBACK: Intentar bridge Python si scraping nativo falló
     if (!products || products.length === 0) {
       try {
-        logger.info('Intentando bridge Python como alternativa', {
+        logger.info('Intentando bridge Python como alternativa (scraping nativo no encontró productos o falló)', {
           service: 'opportunity-finder',
           userId,
-          query
+          query,
+          nativeError: nativeErrorForLogs?.message || null,
+          nativeProductsFound: 0
         });
         const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
-        logger.debug('Bridge Python completado', {
+        logger.info('Bridge Python completado', {
           service: 'opportunity-finder',
-          itemsCount: items?.length || 0
+          itemsCount: items?.length || 0,
+          query,
+          userId
         });
         products = (items || [])
           .map((p: any) => {
