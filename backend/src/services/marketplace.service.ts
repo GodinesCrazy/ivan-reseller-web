@@ -136,6 +136,7 @@ export class MarketplaceService {
         const hasValidRefreshToken = normalizedCreds.refreshToken && String(normalizedCreds.refreshToken).trim().length > 0;
         
         // ✅ CORRECCIÓN: Solo marcar como error si NO hay token NI refreshToken
+        // Si las credenciales básicas están correctas pero falta OAuth, es un warning, no un issue
         // Si hay refreshToken pero no token, el sistema puede refrescar automáticamente
         if (!hasValidToken && !hasValidRefreshToken) {
           issues.push('Falta token OAuth de eBay. Completa la autorización en Settings → API Settings.');

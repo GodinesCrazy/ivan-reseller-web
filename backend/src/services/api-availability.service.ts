@@ -609,22 +609,27 @@ export class APIAvailabilityService {
         trustScore,
       };
 
+      // ✅ MEJORA: Distinguir entre "falta todo" vs "credenciales básicas guardadas pero falta OAuth"
       if (tokenExpired) {
         status.isAvailable = false;
         status.status = 'unhealthy';
         status.error = 'Token OAuth expirado';
         status.message = 'El token OAuth ha expirado. Reautoriza en Settings → API Settings → eBay.';
-      } else if (!tokenLike && !refreshToken) {
-        status.isAvailable = false;
-        status.status = 'unhealthy';
-        status.error = 'Falta token OAuth de eBay';
-        status.message = 'Completa la autorización OAuth para este entorno.';
       } else if (!validation.valid) {
+        // Primero verificar si faltan credenciales básicas
         status.isAvailable = false;
         status.status = 'unhealthy';
         const missingList = validation.missing.join(', ');
         status.error = `Missing credentials: ${missingList}`;
         status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else if (!tokenLike && !refreshToken) {
+        // ✅ CORRECCIÓN: Si las credenciales básicas están correctas pero falta OAuth,
+        // NO marcar como "unhealthy", sino como "pending_oauth" (degraded)
+        // Esto es normal después de guardar credenciales básicas
+        status.isAvailable = false;
+        status.status = 'degraded'; // Cambiar de 'unhealthy' a 'degraded'
+        status.error = 'Falta token OAuth de eBay';
+        status.message = 'Credenciales básicas guardadas. Completa la autorización OAuth para activar.';
       } else if (healthCheckResult && !healthCheckResult.success) {
         status.isAvailable = false;
         status.status = healthStatus;
