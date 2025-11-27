@@ -216,22 +216,37 @@ export class PayPalPayoutService {
    * Usa PayPal REST API para obtener el saldo disponible real
    * Requiere permisos adicionales en la cuenta PayPal (wallet:read)
    */
-  async checkPayPalBalance(): Promise<{ available: number; currency: string } | null> {
+  /**
+   * ✅ MEJORADO: Check PayPal account balance
+   * 
+   * Intenta múltiples métodos:
+   * 1. Wallet API (/v1/wallet/balance) - Más preciso, requiere permisos wallet:read
+   * 2. Reporting API - Estima desde transacciones recientes (menos preciso)
+   * 3. Retorna null para usar validación de capital interno como fallback
+   */
+  async checkPayPalBalance(): Promise<{ available: number; currency: string; source?: string } | null> {
     try {
       await this.ensureAccessToken();
-      
-      // Intentar obtener saldo usando PayPal Wallet API (REST API)
-      // Este endpoint requiere permisos wallet:read en la aplicación PayPal
+      if (!this.accessToken) {
+        throw new Error('No access token available');
+      }
+
+      // Método 1: Wallet API (más preciso si está disponible)
       try {
-        const response = await this.apiClient.get('/v1/wallet/balance');
+        const response = await this.apiClient.get('/v1/wallet/balance', {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+          },
+        });
         
         if (response.data && response.data.available_balance) {
           const balance = {
             available: parseFloat(response.data.available_balance.value || '0'),
-            currency: response.data.available_balance.currency || 'USD'
+            currency: response.data.available_balance.currency || 'USD',
+            source: 'wallet_api'
           };
           
-          logger.info('PayPal balance retrieved successfully', {
+          logger.info('PayPal balance retrieved successfully from Wallet API', {
             available: balance.available,
             currency: balance.currency,
             environment: this.credentials.environment
@@ -240,51 +255,83 @@ export class PayPalPayoutService {
           return balance;
         }
       } catch (walletError: any) {
-        // Si el endpoint de wallet no está disponible, intentar obtener saldo de cuenta
-        if (walletError.response?.status === 403 || walletError.response?.status === 404) {
-          logger.warn('PayPal Wallet API not available - trying account balance', {
-            status: walletError.response?.status,
-            error: walletError.message
+        // Wallet API no disponible o sin permisos (normal en muchos casos)
+        if (walletError.response?.status !== 404 && walletError.response?.status !== 403) {
+          logger.debug('PayPal Wallet API error (continuando con alternativas)', {
+            error: walletError.message,
+            status: walletError.response?.status
           });
-          
-          // Alternativa: Obtener saldo usando Transactions API (últimas transacciones)
-          // Esto solo da una aproximación, no el saldo exacto
-          try {
-            const transactionsResponse = await this.apiClient.get('/v1/reporting/transactions', {
-              params: {
-                start_date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-                end_date: new Date().toISOString(),
-                page_size: 1
-              }
-            });
-            
-            // Esta aproximación es menos precisa, pero puede ser útil
-            logger.warn('PayPal balance check limited - wallet API unavailable', {
-              message: 'Using transaction history as fallback. Configure wallet:read permissions for accurate balance.'
-            });
-          } catch (transactionError: any) {
-            logger.warn('PayPal balance check completely unavailable', {
-              walletError: walletError.message,
-              transactionError: transactionError.message
-            });
-          }
-        } else {
-          throw walletError;
         }
       }
       
-      // Si no se pudo obtener el saldo, retornar null
-      logger.warn('PayPal balance check not available - using working capital validation instead', {
+      // Método 2: Reporting API - Estimar desde transacciones (menos preciso pero útil)
+      try {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const now = new Date().toISOString();
+        
+        const response = await this.apiClient.get('/v1/reporting/transactions', {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+          },
+          params: {
+            start_date: thirtyDaysAgo,
+            end_date: now,
+            page_size: 100,
+          },
+          timeout: 10000,
+        });
+
+        // Calcular balance estimado desde transacciones
+        const transactions = response.data?.transaction_details || [];
+        let estimatedBalance = 0;
+
+        transactions.forEach((tx: any) => {
+          const amount = parseFloat(tx.transaction_info?.transaction_amount?.value || 0);
+          const eventCode = tx.transaction_info?.transaction_event_code || '';
+          
+          // Sumar ingresos (payments received: T00, T01, T1107)
+          if (eventCode.includes('T00') || eventCode.includes('T01') || eventCode.includes('T1107')) {
+            estimatedBalance += amount;
+          }
+          // Restar gastos (payouts sent: T11, T03, T1106)
+          else if (eventCode.includes('T11') || eventCode.includes('T03') || eventCode.includes('T1106')) {
+            estimatedBalance -= amount;
+          }
+        });
+
+        logger.info('PayPal balance estimado desde Reporting API', {
+          estimatedBalance: Math.max(0, estimatedBalance),
+          transactionCount: transactions.length,
+          environment: this.credentials.environment
+        });
+
+        return {
+          available: Math.max(0, estimatedBalance), // No permitir negativo
+          currency: 'USD',
+          source: 'reporting_api_estimated'
+        };
+
+      } catch (reportingError: any) {
+        logger.debug('PayPal Reporting API no disponible', {
+          error: reportingError.message,
+          status: reportingError.response?.status
+        });
+      }
+
+      // Método 3: Fallback - usar validación de capital interno
+      logger.info('PayPal balance check no disponible - usando validación de capital interno', {
         environment: this.credentials.environment,
-        message: 'Configure PayPal Wallet API permissions (wallet:read) for accurate balance checks'
+        message: 'Para balance preciso, configurar permisos wallet:read en PayPal app'
       });
+      
       return null;
     } catch (error: any) {
-      logger.error('Failed to check PayPal balance', { 
+      logger.warn('PayPal balance check falló - usando validación de capital interno', {
         error: error.message,
         status: error.response?.status,
-        data: error.response?.data
+        message: 'El sistema usará validación de capital de trabajo como fallback'
       });
+      
       return null;
     }
   }
