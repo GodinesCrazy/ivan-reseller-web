@@ -2134,7 +2134,60 @@ export class AdvancedMarketplaceScraper {
 
       if (productsWithResolvedPrices.length === 0) {
         const finalUrl = page.url();
-        const isBlockedUrl = finalUrl.includes('/punish') || finalUrl.includes('TMD') || finalUrl.includes('x5secdata');
+        const isBlockedUrl = finalUrl.includes('/punish') || finalUrl.includes('TMD') || finalUrl.includes('x5secdata') || finalUrl.includes('x5step');
+        
+        // ✅ CORREGIDO: Verificar CAPTCHA ANTES de intentar estrategias adicionales (evitar timeouts)
+        const hasCaptchaOrBlockEarly = await page.evaluate(() => {
+          const captchaSelectors = [
+            '.captcha', '#captcha', '[class*="captcha"]', '[id*="captcha"]',
+            'iframe[src*="captcha"]', '.security-check', '.verification',
+            '.block-message', '[class*="block"]', '.access-denied'
+          ];
+          const hasCaptchaElement = captchaSelectors.some(sel => document.querySelector(sel) !== null);
+          const bodyText = document.body.innerText.toLowerCase();
+          const hasCaptchaText = bodyText.includes('captcha') || 
+                                 bodyText.includes('blocked') || 
+                                 bodyText.includes('access denied') ||
+                                 bodyText.includes('unusual traffic');
+          return hasCaptchaElement || hasCaptchaText;
+        }).catch(() => false);
+        
+        // ✅ Si hay bloqueo/CAPTCHA y no hay productos, lanzar error inmediatamente (sin estrategias adicionales)
+        if ((hasCaptchaOrBlockEarly || isBlockedUrl) && productsWithResolvedPrices.length === 0) {
+          logger.warn('[SCRAPER] CAPTCHA/bloqueo detectado temprano - activando resolución manual (evitando estrategias adicionales)', { 
+            userId, 
+            query, 
+            url: finalUrl,
+            hasCaptchaOrBlock: hasCaptchaOrBlockEarly,
+            isBlockedUrl
+          });
+          await this.captureAliExpressSnapshot(page, `captcha-block-early-${Date.now()}`).catch(() => {});
+          
+          try {
+            const { ManualAuthService } = await import('./manual-auth.service');
+            const manualSession = await ManualAuthService.startSession(
+              userId,
+              'aliexpress',
+              finalUrl // URL de la página con CAPTCHA
+            );
+            logger.info('[SCRAPER] Sesión manual creada para resolver CAPTCHA', {
+              userId,
+              token: manualSession.token,
+              loginUrl: manualSession.loginUrl
+            });
+            throw new ManualAuthRequiredError('aliexpress', manualSession.token, manualSession.loginUrl, manualSession.expiresAt);
+          } catch (error: any) {
+            if (error instanceof ManualAuthRequiredError) {
+              throw error;
+            }
+            logger.error('[SCRAPER] Error creando sesión manual, retornando vacío', {
+              error: error?.message || String(error),
+              userId,
+              query
+            });
+            return [];
+          }
+        }
         
         logger.warn('[SCRAPER] No se encontraron productos después de métodos iniciales, intentando estrategias adicionales...', {
           query,
