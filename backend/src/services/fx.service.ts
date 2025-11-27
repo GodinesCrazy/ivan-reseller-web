@@ -293,6 +293,21 @@ class FXService {
           // Si falla el refresh, se lanzará error en siguiente intento
         });
       }
+      // ✅ CORRECCIÓN: Si falta la tasa y la moneda origen es inválida (ej: "IOS"), usar USD como fallback
+      // Esto previene errores cuando se detecta incorrectamente una moneda no válida
+      const invalidCurrencyCodes = new Set(['IOS', 'AND', 'OR', 'NOT', 'API', 'URL', 'HTML', 'CSS', 'JS']);
+      if (invalidCurrencyCodes.has(f)) {
+        logger.warn('FXService: Invalid currency code detected, using USD as fallback', {
+          invalidCode: f,
+          to: t,
+          amount: numAmount
+        });
+        // Intentar convertir desde USD en lugar de la moneda inválida
+        if (this.rates['USD'] && this.rates[t]) {
+          return this.roundCurrency(numAmount * (this.rates[t] / this.rates['USD']), t);
+        }
+      }
+      
       // ✅ CORREGIDO: Lanzar error si falta tasa en lugar de retornar amount sin convertir
       throw new Error(`Missing exchange rate for conversion: ${f} to ${t}. Available rates: ${Object.keys(this.rates).slice(0, 10).join(', ')}`);
     }

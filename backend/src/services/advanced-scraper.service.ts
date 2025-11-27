@@ -1071,7 +1071,17 @@ export class AdvancedMarketplaceScraper {
           return null;
         });
         
-        if (aliExpressLocalCurrency) {
+        // ✅ CORRECCIÓN: Validar que la moneda detectada sea un código ISO 4217 válido
+        // Lista de códigos de moneda válidos comunes
+        const validCurrencyCodes = new Set([
+          'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'AUD', 'CAD', 'CHF', 'HKD', 'SGD',
+          'MXN', 'BRL', 'ARS', 'CLP', 'COP', 'PEN', 'UYU', 'VES', 'DOP', 'CRC',
+          'AED', 'SAR', 'INR', 'KRW', 'THB', 'VND', 'IDR', 'PHP', 'MYR', 'NZD',
+          'ZAR', 'TRY', 'RUB', 'PLN', 'CZK', 'HUF', 'RON', 'BGN', 'HRK', 'SEK',
+          'NOK', 'DKK', 'ISK', 'ILS', 'EGP', 'NGN', 'KES', 'GHS', 'UGX', 'TZS'
+        ]);
+        
+        if (aliExpressLocalCurrency && validCurrencyCodes.has(aliExpressLocalCurrency)) {
           logger.info('[SCRAPER] Moneda local de AliExpress detectada', { 
             localCurrency: aliExpressLocalCurrency,
             userBaseCurrency: userBaseCurrency || 'USD',
@@ -1079,7 +1089,15 @@ export class AdvancedMarketplaceScraper {
             userId
           });
         } else {
-          logger.warn('[SCRAPER] No se pudo detectar moneda local de AliExpress, usando USD como fallback', { query, userId });
+          if (aliExpressLocalCurrency) {
+            logger.warn('[SCRAPER] Moneda detectada no es válida (ISO 4217), usando USD como fallback', { 
+              detectedCurrency: aliExpressLocalCurrency,
+              query, 
+              userId 
+            });
+          } else {
+            logger.warn('[SCRAPER] No se pudo detectar moneda local de AliExpress, usando USD como fallback', { query, userId });
+          }
           aliExpressLocalCurrency = 'USD'; // Fallback
         }
       } catch (currencyError: any) {
