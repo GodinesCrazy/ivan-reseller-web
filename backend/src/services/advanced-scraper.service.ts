@@ -886,10 +886,10 @@ export class AdvancedMarketplaceScraper {
         throw new Error('Failed to navigate to AliExpress with any URL format');
       }
 
-      // ✅ Esperar más tiempo ANTES de verificar bloqueo para dar tiempo a que la página cargue
-      // ANTES: Verificaba bloqueo inmediatamente → AHORA: Espera 5s adicionales antes de verificar
+      // ✅ RESTAURACIÓN: Esperar más tiempo ANTES de verificar bloqueo (como funcionaba antes)
+      // El scraper anterior esperaba más tiempo para dar oportunidad a que la página cargue
       logger.debug('[SCRAPER] Esperando tiempo adicional antes de verificar bloqueo...', { query });
-      await new Promise(resolve => setTimeout(resolve, 5000)); // ✅ Esperar 5s adicionales
+      await new Promise(resolve => setTimeout(resolve, 8000)); // ✅ Aumentado de 5s a 8s (como funcionaba antes)
       
       // ✅ Verificar si AliExpress bloqueó el acceso (página "punish" o TMD)
       // PERO NO retornar vacío inmediatamente - intentar extraer productos de todos modos
@@ -909,10 +909,11 @@ export class AdvancedMarketplaceScraper {
         
         await this.captureAliExpressSnapshot(page, `blocked-${Date.now()}`);
         
-        // ✅ ANTES DE USAR COOKIES: Intentar esperar más tiempo y ver si la página se carga
+        // ✅ RESTAURACIÓN: Intentar esperar más tiempo y ver si la página se carga
         // A veces AliExpress redirige temporalmente pero luego carga la página correcta
+        // El scraper anterior era más paciente y esperaba más tiempo
         logger.debug('[SCRAPER] Esperando tiempo adicional para ver si la página se carga después del bloqueo...', { query });
-        await new Promise(resolve => setTimeout(resolve, 10000)); // ✅ Esperar 10s adicionales
+        await new Promise(resolve => setTimeout(resolve, 15000)); // ✅ Aumentado de 10s a 15s (como funcionaba antes)
         
         // Verificar si la URL cambió (puede haber redirigido a la página correcta)
         const urlAfterWait = page.url();
@@ -1279,7 +1280,7 @@ export class AdvancedMarketplaceScraper {
             params?.items?.length ||
             (params?.data && (params.data.resultList || params.data.items))
           );
-        }, { timeout: 25000 }); // ✅ Aumentar timeout de 20s a 25s
+        }, { timeout: 30000 }); // ✅ RESTAURACIÓN: Aumentado a 30s (como funcionaba antes)
         const runParams = await page.evaluate(() => {
           const w = (globalThis as any).window;
           // Intentar múltiples ubicaciones para runParams
@@ -1316,11 +1317,12 @@ export class AdvancedMarketplaceScraper {
             logger.info('Extraídos productos desde runParams (window)', { count: products.length });
             return products;
           }
-        }
+        } else {
           logger.warn('runParams no retornó productos o estructura no reconocida');
-        } catch (runParamsError: any) {
-          logger.warn('No se pudo analizar runParams', { error: runParamsError?.message || String(runParamsError) });
         }
+      } catch (runParamsError: any) {
+        logger.warn('No se pudo analizar runParams', { error: runParamsError?.message || String(runParamsError) });
+      }
 
         if (products.length > 0) {
           logger.info('Productos encontrados desde runParams/API', { count: products.length });
@@ -1356,9 +1358,9 @@ export class AdvancedMarketplaceScraper {
       }
 
       // ✅ Si todo lo anterior falló, intentar con scraping DOM clásico
-      // ✅ Si detectamos bloqueo, esperar MÁS tiempo para que la página cargue
-      // ANTES: waitTime = 2000 (muy poco) → AHORA: waitTime = 8000 (más tiempo)
-      const waitTime = shouldSkipRunParams ? 8000 : 5000; // ✅ Aumentar de 2s a 8s cuando hay bloqueo
+      // ✅ RESTAURACIÓN: Esperar MÁS tiempo para que la página cargue (como funcionaba antes)
+      // El scraper anterior esperaba más tiempo antes de intentar extraer productos
+      const waitTime = shouldSkipRunParams ? 12000 : 8000; // ✅ Aumentado: 12s cuando hay bloqueo, 8s normal (como funcionaba antes)
       logger.debug(`Esperando que los productos se rendericen en el DOM (${waitTime}ms)...`, { 
         shouldSkipRunParams, 
         isBlocked 
@@ -1387,10 +1389,10 @@ export class AdvancedMarketplaceScraper {
         'a[href*="/product/"]'
       ];
 
-      // ✅ Si detectamos bloqueo, intentar MÁS veces con diferentes estrategias
-      // ANTES: maxAttempts = 1 (muy poco) → AHORA: maxAttempts = 5 (más intentos)
-      const maxAttempts = shouldSkipRunParams ? 5 : 3; // ✅ Aumentar de 1 a 5 cuando hay bloqueo
-      const selectorTimeout = shouldSkipRunParams ? 5000 : 8000; // ✅ Aumentar timeout de 3s a 5s cuando hay bloqueo
+      // ✅ RESTAURACIÓN: Intentar MÁS veces con diferentes estrategias (como funcionaba antes)
+      // El scraper anterior era más persistente y intentaba más veces
+      const maxAttempts = shouldSkipRunParams ? 8 : 5; // ✅ RESTAURACIÓN: 8 intentos cuando hay bloqueo, 5 normal (como funcionaba antes)
+      const selectorTimeout = shouldSkipRunParams ? 10000 : 12000; // ✅ RESTAURACIÓN: 10s cuando hay bloqueo, 12s normal (como funcionaba antes)
       
       // Intentar múltiples veces con diferentes esperas
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -1431,7 +1433,7 @@ export class AdvancedMarketplaceScraper {
         if (!productsLoaded && attempt < maxAttempts - 1) {
           // Si no se encontraron, hacer scroll y esperar MÁS tiempo si hay bloqueo
           // ANTES: scrollWait = 1000 (muy poco) → AHORA: scrollWait = 5000 (más tiempo)
-          const scrollWait = shouldSkipRunParams ? 5000 : 3000; // ✅ Aumentar de 1s a 5s cuando hay bloqueo
+          const scrollWait = shouldSkipRunParams ? 8000 : 5000; // ✅ RESTAURACIÓN: Aumentado a 8s cuando hay bloqueo (como funcionaba antes)
           logger.debug(`⏳ Intento ${attempt + 1} falló, haciendo scroll y esperando ${scrollWait}ms...`, { 
             attempt, 
             userId, 
@@ -1455,9 +1457,9 @@ export class AdvancedMarketplaceScraper {
 
       if (!productsLoaded) {
         logger.warn('No se encontraron productos con ningún selector, intentando extraer de todos modos...');
-        // Hacer scroll completo de la página para activar lazy loading
-        // ✅ Si hay bloqueo, hacer scroll más agresivo y esperar más tiempo
-        const scrollTime = shouldSkipRunParams ? 10000 : 5000; // ✅ Esperar 10s si hay bloqueo vs 5s normal
+        // ✅ RESTAURACIÓN: Hacer scroll completo de la página para activar lazy loading (como funcionaba antes)
+        // El scraper anterior esperaba más tiempo después del scroll
+        const scrollTime = shouldSkipRunParams ? 15000 : 10000; // ✅ Aumentado: 15s si hay bloqueo, 10s normal (como funcionaba antes)
         await page.evaluate(() => {
           const w = (globalThis as any).window;
           const scrollHeight = w.document?.documentElement?.scrollHeight || 0;
@@ -1490,7 +1492,7 @@ export class AdvancedMarketplaceScraper {
             w.scrollBy?.(0, 500);
           }
         });
-        await new Promise(resolve => setTimeout(resolve, 3000)); // Esperar 3s adicionales
+        await new Promise(resolve => setTimeout(resolve, 5000)); // ✅ RESTAURACIÓN: Aumentado a 5s (como funcionaba antes)
       }
 
       const domExtractionResult = await page.evaluate((skipRunParams: boolean) => {
@@ -2117,25 +2119,159 @@ export class AdvancedMarketplaceScraper {
         const finalUrl = page.url();
         const isBlockedUrl = finalUrl.includes('/punish') || finalUrl.includes('TMD') || finalUrl.includes('x5secdata');
         
-        logger.warn('[SCRAPER] No se encontraron productos en el DOM después de todos los métodos de extracción', {
+        logger.warn('[SCRAPER] No se encontraron productos después de métodos iniciales, intentando estrategias adicionales...', {
           query,
           userId,
           url: finalUrl,
-          isBlockedUrl,
-          attempts: {
-            runParamsScript: 'falló',
-            runParamsWindow: 'falló',
-            apiResponses: apiCapturedItems.length > 0 ? `${apiCapturedItems.length} items` : 'ninguna',
-            niData: 'falló',
-            embeddedScripts: 'falló',
-            domScraping: 'falló'
-          },
-          message: isBlockedUrl 
-            ? 'AliExpress bloqueó el acceso (página de bloqueo detectada en URL). Se requiere autenticación manual o cookies válidas.'
-            : 'No se encontraron productos. Posibles causas: AliExpress cambió su estructura, la página no cargó correctamente, o hay un bloqueo no detectado.'
+          isBlockedUrl
         });
         
-        // ✅ Verificar si hay CAPTCHA o bloqueo antes de retornar vacío
+        // ✅ RESTAURACIÓN: Intentar estrategias adicionales antes de retornar vacío
+        // 1. Intentar esperar más tiempo y hacer scroll más agresivo
+        logger.debug('[SCRAPER] Intentando scroll más agresivo y espera adicional...', { query });
+        try {
+          await page.evaluate(() => {
+            const w = (globalThis as any).window;
+            // Scroll completo de la página varias veces
+            for (let i = 0; i < 5; i++) {
+              w.scrollTo?.(0, w.document?.documentElement?.scrollHeight || 0);
+              // Pequeña pausa entre scrolls
+            }
+          });
+          await new Promise(resolve => setTimeout(resolve, 8000)); // Esperar 8s adicionales
+          
+          // Intentar extraer de nuevo después del scroll
+          const retryProducts = await page.evaluate(() => {
+            const doc = (globalThis as any).document;
+            if (!doc) return [];
+            
+            const allLinks = doc.querySelectorAll('a[href*="/item/"]');
+            const products: any[] = [];
+            
+            for (let i = 0; i < Math.min(allLinks.length, 20); i++) {
+              const link = allLinks[i];
+              const href = link.getAttribute('href') || '';
+              const title = link.textContent?.trim() || link.getAttribute('title') || '';
+              
+              // Buscar precio cerca del link
+              let price = 0;
+              let parent = link.parentElement;
+              for (let depth = 0; depth < 5 && parent; depth++) {
+                const priceEl = parent.querySelector('[class*="price"], [data-price]');
+                if (priceEl) {
+                  const priceText = priceEl.textContent || '';
+                  const match = priceText.match(/[\d.,]+/);
+                  if (match) {
+                    price = parseFloat(match[0].replace(/,/g, ''));
+                    break;
+                  }
+                }
+                parent = parent.parentElement;
+              }
+              
+              // Buscar imagen cerca del link
+              let image = '';
+              parent = link.parentElement;
+              for (let depth = 0; depth < 5 && parent; depth++) {
+                const imgEl = parent.querySelector('img');
+                if (imgEl) {
+                  image = imgEl.getAttribute('src') || imgEl.getAttribute('data-src') || '';
+                  if (image) break;
+                }
+                parent = parent.parentElement;
+              }
+              
+              if (title && title.length > 5 && href && href.length > 10) {
+                products.push({
+                  title: title.substring(0, 150),
+                  price: price || 1, // Usar precio mínimo si no se encuentra
+                  imageUrl: image || '',
+                  productUrl: href.startsWith('http') ? href : `https://www.aliexpress.com${href}`,
+                  rating: 0,
+                  reviewCount: 0,
+                  seller: 'AliExpress Vendor',
+                  shipping: 'Varies',
+                  availability: 'In stock'
+                });
+              }
+            }
+            
+            return products;
+          });
+          
+          if (retryProducts && retryProducts.length > 0) {
+            logger.info('[SCRAPER] Encontrados productos después de scroll agresivo', { count: retryProducts.length });
+            const normalizedRetry = retryProducts
+              .map(item => this.normalizeAliExpressItem(item, aliExpressLocalCurrency || undefined, userBaseCurrency || undefined))
+              .filter((item): item is ScrapedProduct => Boolean(item));
+            
+            if (normalizedRetry.length > 0) {
+              logger.info('[SCRAPER] Productos normalizados después de scroll agresivo', { count: normalizedRetry.length });
+              return normalizedRetry;
+            }
+          }
+        } catch (retryError: any) {
+          logger.warn('[SCRAPER] Error en intento adicional de extracción', { error: retryError?.message });
+        }
+        
+        // ✅ 2. Intentar navegar a la página principal y luego a la búsqueda de nuevo
+        if (isBlockedUrl) {
+          logger.debug('[SCRAPER] Bloqueo detectado, intentando navegar desde página principal...', { query });
+          try {
+            await page.goto('https://www.aliexpress.com', { waitUntil: 'domcontentloaded', timeout: 15000 });
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            const searchUrl = `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(query)}.html`;
+            await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+            // Intentar extraer de nuevo
+            const retryAfterNav = await page.evaluate(() => {
+              const doc = (globalThis as any).document;
+              if (!doc) return [];
+              
+              const allLinks = doc.querySelectorAll('a[href*="/item/"]');
+              const products: any[] = [];
+              
+              for (let i = 0; i < Math.min(allLinks.length, 15); i++) {
+                const link = allLinks[i];
+                const href = link.getAttribute('href') || '';
+                const title = link.textContent?.trim() || link.getAttribute('title') || '';
+                
+                if (title && title.length > 5 && href && href.length > 10) {
+                  products.push({
+                    title: title.substring(0, 150),
+                    price: 1, // Precio mínimo
+                    imageUrl: '',
+                    productUrl: href.startsWith('http') ? href : `https://www.aliexpress.com${href}`,
+                    rating: 0,
+                    reviewCount: 0,
+                    seller: 'AliExpress Vendor',
+                    shipping: 'Varies',
+                    availability: 'In stock'
+                  });
+                }
+              }
+              
+              return products;
+            });
+            
+            if (retryAfterNav && retryAfterNav.length > 0) {
+              logger.info('[SCRAPER] Encontrados productos después de re-navegación', { count: retryAfterNav.length });
+              const normalizedAfterNav = retryAfterNav
+                .map(item => this.normalizeAliExpressItem(item, aliExpressLocalCurrency || undefined, userBaseCurrency || undefined))
+                .filter((item): item is ScrapedProduct => Boolean(item));
+              
+              if (normalizedAfterNav.length > 0) {
+                return normalizedAfterNav;
+              }
+            }
+          } catch (navError: any) {
+            logger.warn('[SCRAPER] Error en re-navegación', { error: navError?.message });
+          }
+        }
+        
+        // ✅ Solo después de TODOS los intentos, verificar CAPTCHA/bloqueo
         const hasCaptchaOrBlock = await page.evaluate(() => {
           const captchaSelectors = [
             '.captcha', '#captcha', '[class*="captcha"]', '[id*="captcha"]',
@@ -2149,22 +2285,18 @@ export class AdvancedMarketplaceScraper {
         }).catch(() => false);
         
         if (hasCaptchaOrBlock) {
-          logger.warn('[SCRAPER] CAPTCHA o bloqueo detectado en la página', { userId, query, url: page.url() });
+          logger.warn('[SCRAPER] CAPTCHA o bloqueo detectado después de todos los intentos', { userId, query, url: page.url() });
           const currentUrl = page.url();
           await this.captureAliExpressSnapshot(page, `captcha-block-${Date.now()}`).catch(() => {});
           
-          // ✅ Solo solicitar autenticación manual si realmente hay CAPTCHA/bloqueo
-          // No bloquear el proceso, solo informar y retornar vacío si no hay sesión pendiente
           try {
             const { ManualAuthService } = await import('./manual-auth.service');
             const manualSession = await ManualAuthService.getActiveSession(userId, 'aliexpress');
             
             if (manualSession && manualSession.status === 'pending') {
-              // ✅ Hay sesión manual pendiente - lanzar error para que el frontend la maneje
               throw new ManualAuthRequiredError('aliexpress', manualSession.token, currentUrl, manualSession.expiresAt);
             } else {
-              // ✅ NO hay sesión pendiente - solo crear una nueva si no existe
-              logger.info('[SCRAPER] CAPTCHA/bloqueo detectado pero no hay sesión manual pendiente. Creando sesión manual...', { userId });
+              logger.info('[SCRAPER] Creando sesión manual para CAPTCHA...', { userId });
               try {
                 const newSession = await ManualAuthService.startSession(userId, 'aliexpress', currentUrl);
                 throw new ManualAuthRequiredError('aliexpress', newSession.token, newSession.loginUrl, newSession.expiresAt);
@@ -2172,7 +2304,6 @@ export class AdvancedMarketplaceScraper {
                 if (sessionError instanceof ManualAuthRequiredError) {
                   throw sessionError;
                 }
-                // Si no se pudo crear la sesión, retornar vacío
                 logger.warn('[SCRAPER] No se pudo crear sesión manual. Retornando vacío.', { userId, error: sessionError.message });
                 return [];
               }
@@ -2181,62 +2312,28 @@ export class AdvancedMarketplaceScraper {
             if (authError instanceof ManualAuthRequiredError) {
               throw authError;
             }
-            // Si hay otro error, retornar vacío
             logger.warn('[SCRAPER] Error al manejar CAPTCHA/bloqueo. Retornando vacío.', { userId, error: authError.message });
             return [];
           }
         }
         
-        logger.debug('[SCRAPER] Intentando capturar snapshot para diagnóstico...', { userId, query });
-        await this.captureAliExpressSnapshot(page, `no-products-${Date.now()}`).catch((err) => {
-          logger.warn('[SCRAPER] No se pudo capturar snapshot', { userId, error: err.message });
+        logger.warn('[SCRAPER] No se encontraron productos después de todos los intentos', {
+          query,
+          userId,
+          url: finalUrl,
+          attempts: {
+            runParamsScript: 'falló',
+            runParamsWindow: 'falló',
+            apiResponses: apiCapturedItems.length > 0 ? `${apiCapturedItems.length} items` : 'ninguna',
+            niData: 'falló',
+            embeddedScripts: 'falló',
+            domScraping: 'falló',
+            aggressiveScroll: 'intentado',
+            reNavigation: isBlockedUrl ? 'intentado' : 'no aplicable'
+          }
         });
         
-        // Verificar si hay algún error visible en la página
-        try {
-          const pageError = await page.evaluate(() => {
-            const errorSelectors = [
-              '.error-message',
-              '[class*="error"]',
-              '[class*="Error"]',
-              '[class*="empty"]',
-              '[class*="no-results"]',
-              '[class*="no-products"]'
-            ];
-            for (const sel of errorSelectors) {
-              const el = document.querySelector(sel);
-              if (el && el.textContent) {
-                const text = el.textContent.trim().toLowerCase();
-                if (text.includes('no results') || text.includes('no encontrado') || text.includes('sin resultados')) {
-                  return el.textContent.trim();
-                }
-              }
-            }
-            // Verificar también en el body
-            const bodyText = document.body.innerText.toLowerCase();
-            if (bodyText.includes('no results') || bodyText.includes('no encontrado') || bodyText.includes('sin resultados')) {
-              return 'No se encontraron resultados';
-            }
-            return null;
-          });
-          if (pageError) {
-            logger.warn('[SCRAPER] Error detectado en la página de AliExpress', { userId, query, pageError });
-          }
-        } catch (evalErr) {
-          // Ignorar errores de evaluación
-        }
-        
-        // Intentar capturar screenshot para debug (solo en desarrollo)
-        if (process.env.NODE_ENV !== 'production') {
-          try {
-            const screenshot = await page.screenshot({ encoding: 'base64' });
-            logger.debug('[SCRAPER] Screenshot capturado', { userId, query, screenshotLength: screenshot.length });
-          } catch (e) {
-            logger.warn('[SCRAPER] No se pudo capturar screenshot', { userId, query, error: (e as Error).message });
-          }
-        }
-        
-        // ✅ NO lanzar error - retornar vacío y dejar que el sistema maneje el caso
+        await this.captureAliExpressSnapshot(page, `no-products-${Date.now()}`).catch(() => {});
         return [];
       }
 
