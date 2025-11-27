@@ -745,40 +745,54 @@ class OpportunityFinderService {
         manualAuthError: manualAuthError?.message
       });
 
-      // ✅ RESTAURACIÓN 27 NOV 2025: Si todos los métodos fallaron, usar productos de ejemplo
-      // El 27 de noviembre el sistema retornaba oportunidades incluso cuando AliExpress bloqueaba
-      // Usar productos de ejemplo cuando todos los métodos fallan para restaurar funcionalidad
-      
-      // ✅ Si hay un error de autenticación manual pendiente, lanzarlo para que el frontend lo maneje
+      // ✅ SOLUCIÓN CORRECTA: Si hay un error de autenticación manual (CAPTCHA), activar sistema de resolución manual
+      // El usuario debe resolver el CAPTCHA para que el sistema continúe con productos reales
       if (manualAuthPending && manualAuthError) {
-        logger.info('Lanzando error de autenticación manual pendiente', {
-          service: 'opportunity-finder',
-          userId,
-          error: manualAuthError.message
-        });
-        throw manualAuthError;
-      }
-
-      // ✅ RESTAURACIÓN: Si no hay productos después de todos los intentos, usar productos de ejemplo
-      // Esto restaura el comportamiento del 27 nov cuando encontraba oportunidades
-      if (products.length === 0) {
-        logger.info('[OPPORTUNITY-FINDER] No se encontraron productos después de todos los métodos, usando productos de ejemplo para restaurar funcionalidad', {
+        logger.info('[OPPORTUNITY-FINDER] CAPTCHA detectado - Activando sistema de resolución manual', {
           service: 'opportunity-finder',
           userId,
           query,
-          note: 'Esto permite que el sistema continúe funcionando mientras AliExpress está bloqueando. Los productos de ejemplo son válidos para testing.'
+          provider: manualAuthError.provider,
+          token: manualAuthError.token,
+          loginUrl: manualAuthError.loginUrl
         });
         
-        // ✅ Generar productos de ejemplo basados en la query para restaurar funcionalidad
-        const exampleProducts = this.generateExampleProducts(query, maxItems, baseCurrency);
-        if (exampleProducts.length > 0) {
-          products = exampleProducts;
-          logger.info('[OPPORTUNITY-FINDER] Productos de ejemplo generados para restaurar funcionalidad', {
+        // ✅ Crear sesión de CAPTCHA manual si no existe
+        try {
+          const { ManualCaptchaService } = await import('./manual-captcha.service');
+          await ManualCaptchaService.startSession(
+            userId,
+            manualAuthError.loginUrl,
+            manualAuthError.loginUrl // pageUrl = loginUrl para AliExpress
+          );
+          logger.info('[OPPORTUNITY-FINDER] Sesión de CAPTCHA manual creada, usuario debe resolver', {
             service: 'opportunity-finder',
-            count: exampleProducts.length,
-            query
+            userId,
+            token: manualAuthError.token
+          });
+        } catch (captchaError: any) {
+          logger.error('[OPPORTUNITY-FINDER] Error creando sesión de CAPTCHA manual', {
+            service: 'opportunity-finder',
+            userId,
+            error: captchaError?.message || String(captchaError)
           });
         }
+        
+        // ✅ Lanzar error para que el frontend muestre la página de resolución de CAPTCHA
+        throw manualAuthError;
+      }
+
+      // ✅ Si no hay productos después de todos los intentos (sin CAPTCHA), retornar vacío
+      // NO usar productos de ejemplo - el sistema debe retornar vacío cuando no hay datos reales
+      if (products.length === 0) {
+        logger.info('[OPPORTUNITY-FINDER] No se encontraron productos después de todos los métodos', {
+          service: 'opportunity-finder',
+          userId,
+          query,
+          note: 'Sistema intentó todos los métodos disponibles. Si hay bloqueo de AliExpress, se requiere resolver CAPTCHA manualmente.'
+        });
+        // Retornar vacío - el frontend mostrará mensaje apropiado al usuario
+        return [];
       }
     }
 
@@ -1460,97 +1474,6 @@ class OpportunityFinderService {
     }
   }
 
-  /**
-   * ✅ RESTAURACIÓN 27 NOV: Generar productos de ejemplo cuando todos los métodos fallan
-   * Esto restaura la funcionalidad del sistema cuando AliExpress bloquea completamente
-   */
-  private generateExampleProducts(query: string, maxItems: number, baseCurrency: string): any[] {
-    const exampleProducts = [
-      {
-        title: `${query} - Wireless Gaming Mouse with RGB Lighting`,
-        price: 15.99,
-        priceMin: 14.99,
-        priceMax: 16.99,
-        priceMinSource: 15.99,
-        priceMaxSource: 15.99,
-        priceRangeSourceCurrency: 'USD',
-        currency: baseCurrency,
-        sourcePrice: 15.99,
-        sourceCurrency: 'USD',
-        productUrl: `https://www.aliexpress.com/item/example-${query}-1.html`,
-        imageUrl: 'https://via.placeholder.com/300x300?text=Gaming+Product',
-        productId: `example-${Date.now()}-1`,
-        shippingCost: 2.50
-      },
-      {
-        title: `${query} - Mechanical Gaming Keyboard`,
-        price: 45.99,
-        priceMin: 44.99,
-        priceMax: 46.99,
-        priceMinSource: 45.99,
-        priceMaxSource: 45.99,
-        priceRangeSourceCurrency: 'USD',
-        currency: baseCurrency,
-        sourcePrice: 45.99,
-        sourceCurrency: 'USD',
-        productUrl: `https://www.aliexpress.com/item/example-${query}-2.html`,
-        imageUrl: 'https://via.placeholder.com/300x300?text=Gaming+Keyboard',
-        productId: `example-${Date.now()}-2`,
-        shippingCost: 5.00
-      },
-      {
-        title: `${query} - Gaming Headset with Microphone`,
-        price: 29.99,
-        priceMin: 28.99,
-        priceMax: 30.99,
-        priceMinSource: 29.99,
-        priceMaxSource: 29.99,
-        priceRangeSourceCurrency: 'USD',
-        currency: baseCurrency,
-        sourcePrice: 29.99,
-        sourceCurrency: 'USD',
-        productUrl: `https://www.aliexpress.com/item/example-${query}-3.html`,
-        imageUrl: 'https://via.placeholder.com/300x300?text=Gaming+Headset',
-        productId: `example-${Date.now()}-3`,
-        shippingCost: 3.50
-      },
-      {
-        title: `${query} - RGB Gaming Mouse Pad`,
-        price: 12.99,
-        priceMin: 11.99,
-        priceMax: 13.99,
-        priceMinSource: 12.99,
-        priceMaxSource: 12.99,
-        priceRangeSourceCurrency: 'USD',
-        currency: baseCurrency,
-        sourcePrice: 12.99,
-        sourceCurrency: 'USD',
-        productUrl: `https://www.aliexpress.com/item/example-${query}-4.html`,
-        imageUrl: 'https://via.placeholder.com/300x300?text=Gaming+Pad',
-        productId: `example-${Date.now()}-4`,
-        shippingCost: 1.99
-      },
-      {
-        title: `${query} - USB Gaming Controller`,
-        price: 18.99,
-        priceMin: 17.99,
-        priceMax: 19.99,
-        priceMinSource: 18.99,
-        priceMaxSource: 18.99,
-        priceRangeSourceCurrency: 'USD',
-        currency: baseCurrency,
-        sourcePrice: 18.99,
-        sourceCurrency: 'USD',
-        productUrl: `https://www.aliexpress.com/item/example-${query}-5.html`,
-        imageUrl: 'https://via.placeholder.com/300x300?text=Gaming+Controller',
-        productId: `example-${Date.now()}-5`,
-        shippingCost: 2.99
-      }
-    ];
-
-    // Retornar productos de ejemplo limitados por maxItems
-    return exampleProducts.slice(0, Math.min(maxItems, exampleProducts.length));
-  }
 }
 
 const opportunityFinder = new OpportunityFinderService();

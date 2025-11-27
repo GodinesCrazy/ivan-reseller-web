@@ -2296,34 +2296,63 @@ export class AdvancedMarketplaceScraper {
           }
         }
         
-        // ✅ Solo después de TODOS los intentos, verificar CAPTCHA/bloqueo
+        // ✅ SOLUCIÓN CORRECTA: Verificar CAPTCHA/bloqueo después de todos los intentos
+        // Si hay CAPTCHA y no se encontraron productos, lanzar error para activar resolución manual
+        const currentUrlAfterAttempts = page.url();
+        const isBlockedUrlFinal = currentUrlAfterAttempts.includes('/punish') || currentUrlAfterAttempts.includes('TMD') || currentUrlAfterAttempts.includes('x5secdata') || currentUrlAfterAttempts.includes('x5step');
+        
         const hasCaptchaOrBlock = await page.evaluate(() => {
           const captchaSelectors = [
             '.captcha', '#captcha', '[class*="captcha"]', '[id*="captcha"]',
             'iframe[src*="captcha"]', '.security-check', '.verification',
             '.block-message', '[class*="block"]', '.access-denied'
           ];
-          return captchaSelectors.some(sel => document.querySelector(sel) !== null) ||
-                 document.body.innerText.toLowerCase().includes('captcha') ||
-                 document.body.innerText.toLowerCase().includes('blocked') ||
-                 document.body.innerText.toLowerCase().includes('access denied');
+          const hasCaptchaElement = captchaSelectors.some(sel => document.querySelector(sel) !== null);
+          const bodyText = document.body.innerText.toLowerCase();
+          const hasCaptchaText = bodyText.includes('captcha') || 
+                                 bodyText.includes('blocked') || 
+                                 bodyText.includes('access denied') ||
+                                 bodyText.includes('unusual traffic');
+          return hasCaptchaElement || hasCaptchaText;
         }).catch(() => false);
         
-        if (hasCaptchaOrBlock) {
-          logger.warn('[SCRAPER] CAPTCHA o bloqueo detectado después de todos los intentos', { userId, query, url: page.url() });
-          const currentUrl = page.url();
+        if ((hasCaptchaOrBlock || isBlockedUrlFinal) && productsWithResolvedPrices.length === 0) {
+          logger.warn('[SCRAPER] CAPTCHA o bloqueo detectado después de todos los intentos - activando resolución manual', { 
+            userId, 
+            query, 
+            url: currentUrlAfterAttempts,
+            hasCaptchaOrBlock,
+            isBlockedUrl: isBlockedUrlFinal
+          });
           await this.captureAliExpressSnapshot(page, `captcha-block-${Date.now()}`).catch(() => {});
           
-          // ✅ RESTAURACIÓN: Cuando hay bloqueo persistente y no se encontraron productos,
-          // retornar vacío para permitir que opportunity-finder intente los fallbacks
-          // Solo lanzar ManualAuthRequiredError si el opportunity-finder también falla después de intentar todos los métodos
-          logger.warn('[SCRAPER] Bloqueo persistente detectado, retornando vacío para permitir fallbacks en opportunity-finder', {
-            userId,
-            query,
-            url: currentUrl,
-            message: 'El opportunity-finder intentará bridge Python, ScraperAPI, ZenRows antes de requerir autenticación manual'
-          });
-          return [];
+          // ✅ SOLUCIÓN CORRECTA: Crear sesión manual y lanzar error para que el usuario resuelva CAPTCHA
+          try {
+            const { ManualAuthService } = await import('./manual-auth.service');
+            const manualSession = await ManualAuthService.startSession(
+              userId,
+              'aliexpress',
+              currentUrlAfterAttempts // URL de la página con CAPTCHA
+            );
+            logger.info('[SCRAPER] Sesión manual creada para resolver CAPTCHA', {
+              userId,
+              token: manualSession.token,
+              loginUrl: manualSession.loginUrl
+            });
+            throw new ManualAuthRequiredError('aliexpress', manualSession.token, manualSession.loginUrl, manualSession.expiresAt);
+          } catch (error: any) {
+            // Si ya es ManualAuthRequiredError, relanzarlo
+            if (error instanceof ManualAuthRequiredError) {
+              throw error;
+            }
+            // Si hay error creando sesión, loguear y retornar vacío
+            logger.error('[SCRAPER] Error creando sesión manual, retornando vacío', {
+              error: error?.message || String(error),
+              userId,
+              query
+            });
+            return [];
+          }
         }
         
         logger.warn('[SCRAPER] No se encontraron productos después de todos los intentos', {

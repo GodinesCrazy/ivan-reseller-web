@@ -90,7 +90,35 @@ router.get('/', async (req, res) => {
       } catch {}
     }, Math.max(60000, warnMs));
     // Find real opportunities (may return empty until marketplace analyzers are fully wired)
-    const items = await opportunityFinder.findOpportunities(userId, { query, maxItems, marketplaces, region, environment });
+    let items: any[] = [];
+    try {
+      items = await opportunityFinder.findOpportunities(userId, { query, maxItems, marketplaces, region, environment });
+    } catch (error: any) {
+      // ✅ Si es error de CAPTCHA manual, retornar respuesta especial para que el frontend maneje
+      if (error instanceof ManualAuthRequiredError) {
+        logger.info('[OPPORTUNITIES-API] CAPTCHA manual requerido - retornando información al frontend', {
+          userId,
+          query,
+          token: error.token,
+          provider: error.provider
+        });
+        
+        return res.status(202).json({
+          success: false,
+          requiresManualAuth: true,
+          captchaRequired: true,
+          provider: error.provider,
+          token: error.token,
+          captchaUrl: error.loginUrl,
+          resolveCaptchaUrl: `/resolve-captcha/${error.token}`,
+          message: 'AliExpress requiere que resuelvas un CAPTCHA para continuar. Se abrirá automáticamente la página de resolución.',
+          expiresAt: error.expiresAt
+        });
+      }
+      
+      // Si es otro error, lanzarlo normalmente
+      throw error;
+    }
 
     const durationMs = Date.now() - startTs;
 
