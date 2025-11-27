@@ -510,16 +510,41 @@ class OpportunityFinderService {
       nativeErrorForLogs = nativeError;
       const errorMsg = nativeError?.message || String(nativeError);
 
-      // ✅ MEDIA PRIORIDAD: NO bloquear si es error de autenticación manual - continuar con bridge Python (con logger estructurado)
+      // ✅ SOLUCIÓN CORRECTA: Si es error de autenticación manual (CAPTCHA), NO intentar fallbacks
+      // Lanzar el error inmediatamente para que el frontend active el sistema de resolución de CAPTCHA
       if (nativeError instanceof ManualAuthRequiredError) {
-        manualAuthPending = true;
-        manualAuthError = nativeError;
-        logger.warn('AliExpress requiere autenticación manual, intentando bridge Python', {
+        logger.info('[OPPORTUNITY-FINDER] CAPTCHA detectado - Activando sistema de resolución manual (NO intentando fallbacks)', {
           service: 'opportunity-finder',
           userId,
           query,
+          token: nativeError.token,
+          provider: nativeError.provider,
           error: errorMsg
         });
+        
+        // ✅ Crear sesión de CAPTCHA manual si no existe
+        try {
+          const { ManualCaptchaService } = await import('./manual-captcha.service');
+          await ManualCaptchaService.startSession(
+            userId,
+            nativeError.loginUrl,
+            nativeError.loginUrl // pageUrl = loginUrl para AliExpress
+          );
+          logger.info('[OPPORTUNITY-FINDER] Sesión de CAPTCHA manual creada, lanzando error al frontend', {
+            service: 'opportunity-finder',
+            userId,
+            token: nativeError.token
+          });
+        } catch (captchaError: any) {
+          logger.error('[OPPORTUNITY-FINDER] Error creando sesión de CAPTCHA manual', {
+            service: 'opportunity-finder',
+            userId,
+            error: captchaError?.message || String(captchaError)
+          });
+        }
+        
+        // ✅ Lanzar error inmediatamente para que el frontend muestre la página de resolución
+        throw nativeError;
       } else {
         logger.warn('Error en scraping nativo (esperado si navegador no está disponible), intentando bridge Python', {
           service: 'opportunity-finder',
@@ -745,55 +770,16 @@ class OpportunityFinderService {
         manualAuthError: manualAuthError?.message
       });
 
-      // ✅ SOLUCIÓN CORRECTA: Si hay un error de autenticación manual (CAPTCHA), activar sistema de resolución manual
-      // El usuario debe resolver el CAPTCHA para que el sistema continúe con productos reales
-      if (manualAuthPending && manualAuthError) {
-        logger.info('[OPPORTUNITY-FINDER] CAPTCHA detectado - Activando sistema de resolución manual', {
-          service: 'opportunity-finder',
-          userId,
-          query,
-          provider: manualAuthError.provider,
-          token: manualAuthError.token,
-          loginUrl: manualAuthError.loginUrl
-        });
-        
-        // ✅ Crear sesión de CAPTCHA manual si no existe
-        try {
-          const { ManualCaptchaService } = await import('./manual-captcha.service');
-          await ManualCaptchaService.startSession(
-            userId,
-            manualAuthError.loginUrl,
-            manualAuthError.loginUrl // pageUrl = loginUrl para AliExpress
-          );
-          logger.info('[OPPORTUNITY-FINDER] Sesión de CAPTCHA manual creada, usuario debe resolver', {
-            service: 'opportunity-finder',
-            userId,
-            token: manualAuthError.token
-          });
-        } catch (captchaError: any) {
-          logger.error('[OPPORTUNITY-FINDER] Error creando sesión de CAPTCHA manual', {
-            service: 'opportunity-finder',
-            userId,
-            error: captchaError?.message || String(captchaError)
-          });
-        }
-        
-        // ✅ Lanzar error para que el frontend muestre la página de resolución de CAPTCHA
-        throw manualAuthError;
-      }
-
       // ✅ Si no hay productos después de todos los intentos (sin CAPTCHA), retornar vacío
       // NO usar productos de ejemplo - el sistema debe retornar vacío cuando no hay datos reales
-      if (products.length === 0) {
-        logger.info('[OPPORTUNITY-FINDER] No se encontraron productos después de todos los métodos', {
-          service: 'opportunity-finder',
-          userId,
-          query,
-          note: 'Sistema intentó todos los métodos disponibles. Si hay bloqueo de AliExpress, se requiere resolver CAPTCHA manualmente.'
-        });
-        // Retornar vacío - el frontend mostrará mensaje apropiado al usuario
-        return [];
-      }
+      logger.info('[OPPORTUNITY-FINDER] No se encontraron productos después de todos los métodos', {
+        service: 'opportunity-finder',
+        userId,
+        query,
+        note: 'Sistema intentó todos los métodos disponibles. Si hay bloqueo de AliExpress, se requiere resolver CAPTCHA manualmente.'
+      });
+      // Retornar vacío - el frontend mostrará mensaje apropiado al usuario
+      return [];
     }
 
     // 2) Analizar competencia real (placeholder hasta integrar servicios específicos)
