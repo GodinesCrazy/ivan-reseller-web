@@ -1201,85 +1201,93 @@ export default function APISettings() {
         // Continuar aunque falle la recarga
       }
 
-      // ✅ MEJORA: Test automático de conexión después de guardar
+      // ✅ MEJORA: Mostrar advertencias de validación si existen
       const saveData = response.data?.data || {};
-      const intelligentValidation = saveData.intelligentValidation;
       const warnings = saveData.warnings || [];
       
-      // Mostrar advertencias de validación inteligente si existen
-      if (intelligentValidation && !intelligentValidation.valid) {
-        const recommendations = intelligentValidation.recommendations || [];
-        const warningMsg = intelligentValidation.message || 'Validación detectó problemas potenciales';
-        toast(`⚠️ ${warningMsg}${recommendations.length > 0 ? '\n\n💡 Recomendaciones:\n' + recommendations.slice(0, 2).join('\n') : ''}`, { 
-          id: `validation-${apiName}`, 
-          duration: 6000,
-          icon: '⚠️'
-        });
-      }
-      if (warnings.length > 0) {
+      // Mostrar advertencias de validación si existen (máximo 2 para no saturar)
+      if (Array.isArray(warnings) && warnings.length > 0) {
         warnings.slice(0, 2).forEach((warning: string, idx: number) => {
-          toast(`ℹ️ ${warning}`, { 
+          toast.warning(`ℹ️ ${warning}`, { 
             id: `warning-${apiName}-${idx}`, 
-            duration: 4000,
-            icon: 'ℹ️'
+            duration: 4000
           });
         });
       }
       
       toast.success(`✅ Credenciales de ${apiDef.displayName} guardadas exitosamente`, { id: `save-${apiName}` });
-      toast.loading('🔄 Validando conexión con la API...', { id: `test-${apiName}` });
       
-      try {
-        // Ejecutar test de conexión automático
-        const testResponse = await api.post(`/api/credentials/${apiName}/test`, {
-          environment: currentEnvironment,
-        }, { timeout: 15000 });
+      // ✅ MEJORA: Test automático opcional y silencioso (solo para APIs que lo soportan)
+      // No mostrar error si el test falla, solo si es crítico
+      const shouldTestAutomatically = ['ebay', 'amazon', 'mercadolibre', 'paypal'].includes(apiName);
+      
+      if (shouldTestAutomatically) {
+        // Esperar un momento para que las credenciales se propaguen
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        const testResult = testResponse.data?.data;
-        if (testResult?.isAvailable || testResult?.status === 'healthy') {
-          const latencyText = testResult.latency ? ` (${testResult.latency}ms)` : '';
-          toast.success(`✅ Conexión exitosa con ${apiDef.displayName}${latencyText}`, { id: `test-${apiName}`, duration: 4000 });
-          // Actualizar estado
-          setStatuses((prev: Record<string, APIStatus>) => ({
-            ...prev,
-            [`${apiName}_${currentEnvironment}`]: {
-              ...testResult,
-              environment: currentEnvironment,
-              isAvailable: true,
-              status: 'healthy'
-            }
-          }));
-        } else {
-          const errorMsg = testResult?.error || testResult?.message || 'Error desconocido';
-          const recommendations = intelligentValidation?.recommendations || [];
-          const fullMessage = recommendations.length > 0
-            ? `${errorMsg}\n\n💡 Recomendaciones:\n${recommendations.slice(0, 3).map((r: string, i: number) => `${i + 1}. ${r}`).join('\n')}`
-            : errorMsg;
+        try {
+          // Ejecutar test de conexión automático (silencioso)
+          const testResponse = await api.post(`/api/credentials/${apiName}/test`, {
+            environment: currentEnvironment,
+          }, { timeout: 15000 });
           
-          toast.error(`⚠️ Conexión fallida: ${fullMessage}`, { id: `test-${apiName}`, duration: 8000 });
+          const testResult = testResponse.data?.data;
+          if (testResult?.isAvailable || testResult?.status === 'healthy') {
+            const latencyText = testResult.latency ? ` (${testResult.latency}ms)` : '';
+            toast.success(`✅ Conexión verificada con ${apiDef.displayName}${latencyText}`, { id: `test-${apiName}`, duration: 3000 });
+            // Actualizar estado
+            setStatuses((prev: Record<string, APIStatus>) => ({
+              ...prev,
+              [`${apiName}_${currentEnvironment}`]: {
+                ...testResult,
+                environment: currentEnvironment,
+                isAvailable: true,
+                status: 'healthy'
+              }
+            }));
+        } else {
+          // Solo mostrar warning si el error NO es "Missing credentials" (porque acabamos de guardarlas)
+          const errorMsg = testResult?.error || testResult?.message || 'Error desconocido';
+          const isMissingCredentials = errorMsg.toLowerCase().includes('missing credentials') || 
+                                      errorMsg.toLowerCase().includes('credenciales') ||
+                                      errorMsg.toLowerCase().includes('no credentials');
+          
+          if (!isMissingCredentials) {
+            toast.warning(`ℹ️ La conexión no pudo verificarse. Puedes probarla manualmente más tarde.`, { id: `test-${apiName}`, duration: 4000 });
+          }
+          // Actualizar estado sin mostrar error alarmante
           setStatuses((prev: Record<string, APIStatus>) => ({
             ...prev,
             [`${apiName}_${currentEnvironment}`]: {
               ...testResult,
               environment: currentEnvironment,
               isAvailable: false,
-              status: 'unhealthy'
+              status: 'unknown'
             }
           }));
         }
       } catch (testError: any) {
+        // Solo mostrar error si NO es un error de "missing credentials" (porque acabamos de guardarlas)
         const errorMsg = testError.response?.data?.message || testError.message || 'Error al validar conexión';
-        toast.error(`⚠️ No se pudo validar la conexión: ${errorMsg}`, { id: `test-${apiName}`, duration: 5000 });
-        // Actualizar estado como desconocido
-        setStatuses((prev: Record<string, APIStatus>) => ({
-          ...prev,
-          [`${apiName}_${currentEnvironment}`]: {
-            environment: currentEnvironment,
-            isAvailable: false,
-            status: 'unknown',
-            error: errorMsg
-          }
-        }));
+        const isMissingCredentials = errorMsg.toLowerCase().includes('missing credentials') || 
+                                    errorMsg.toLowerCase().includes('credenciales') ||
+                                    errorMsg.toLowerCase().includes('no credentials');
+        
+        if (!isMissingCredentials) {
+          // Error real, pero no crítico - solo warning
+          toast.warning(`ℹ️ No se pudo verificar la conexión automáticamente. Las credenciales se guardaron correctamente.`, { id: `test-${apiName}`, duration: 4000 });
+        }
+          // Actualizar estado como desconocido (no es un error crítico)
+          setStatuses((prev: Record<string, APIStatus>) => ({
+            ...prev,
+            [`${apiName}_${currentEnvironment}`]: {
+              environment: currentEnvironment,
+              isAvailable: false,
+              status: 'unknown',
+              error: errorMsg
+            }
+          }));
+        }
       }
 
       // Limpiar formulario
