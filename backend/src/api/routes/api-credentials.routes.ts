@@ -585,18 +585,13 @@ router.post('/', async (req: Request, res: Response, next) => {
         apiName,
         environment: env,
         isActive,
-        // ✅ MEJORA: Incluir advertencias y recomendaciones de validación inteligente
-        intelligentValidation: intelligentValidation.valid ? undefined : {
-          valid: false,
-          message: intelligentValidation.message,
-          recommendations: intelligentValidation.recommendations
-        },
-        warnings: intelligentValidation.warnings,
         supportsEnvironments: supportsEnvironments(apiName),
         scope,
         validated: validationResult !== null,
         validationSuccess: validationResult?.success ?? null,
         validationMessage: validationResult?.message,
+        // ✅ Incluir advertencias de validación si hay errores
+        warnings: validation.errors && validation.errors.length > 0 ? validation.errors : undefined,
       }
     });
   } catch (error: any) {

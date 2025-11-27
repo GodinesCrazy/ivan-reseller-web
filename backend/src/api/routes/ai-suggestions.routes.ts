@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
 import { aiSuggestionsService } from '../../services/ai-suggestions.service';
 import { AppError } from '../../middleware/error.middleware';
+import { logger } from '../../config/logger';
 
 const router = Router();
 
@@ -182,22 +183,39 @@ router.get('/', async (req: Request, res: Response, next) => {
         }
         
         // ✅ CRÍTICO: Enviar respuesta de forma segura para prevenir SIGSEGV
-        // Usar setImmediate para evitar bloqueo del event loop durante serialización
+        // Usar process.nextTick para evitar bloqueo del event loop durante serialización
         try {
           // ✅ Validar que jsonString es válido antes de enviar
           if (!jsonString || typeof jsonString !== 'string' || jsonString.length === 0) {
             throw new Error('JSON string inválido');
           }
           
-          // ✅ Usar setImmediate para enviar respuesta en el siguiente tick del event loop
+          // ✅ Limitar tamaño de respuesta para prevenir SIGSEGV (máximo 5MB)
+          const maxSize = 5 * 1024 * 1024; // 5MB
+          if (jsonString.length > maxSize) {
+            logger.warn('AISuggestions: Respuesta demasiado grande, truncando', { 
+              originalSize: jsonString.length,
+              maxSize 
+            });
+            // Simplificar respuesta si es demasiado grande
+            const limitedData = {
+              success: true,
+              suggestions: suggestions.slice(0, 10), // Solo primeras 10
+              count: suggestions.length,
+              message: 'Respuesta truncada por tamaño. Algunas sugerencias fueron omitidas.'
+            };
+            jsonString = JSON.stringify(limitedData, safeJsonReplacer);
+          }
+          
+          // ✅ Usar process.nextTick para enviar respuesta en el siguiente tick del event loop
           // Esto previene que el SIGSEGV ocurra durante el envío de la respuesta
-          setImmediate(() => {
+          process.nextTick(() => {
             try {
               res.setHeader('Content-Type', 'application/json; charset=utf-8');
               res.setHeader('Content-Length', Buffer.byteLength(jsonString, 'utf8').toString());
               res.send(jsonString);
             } catch (sendError: any) {
-              logger.error('AISuggestions: Error enviando respuesta en setImmediate', { error: sendError.message });
+              logger.error('AISuggestions: Error enviando respuesta en nextTick', { error: sendError.message });
               // Último recurso: intentar enviar respuesta mínima
               try {
                 res.status(200).json({
