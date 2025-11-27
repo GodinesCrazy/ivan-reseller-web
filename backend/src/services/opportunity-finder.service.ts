@@ -464,7 +464,8 @@ class OpportunityFinderService {
           })
         });
       } else {
-        logger.warn('⚠️ Scraping nativo no encontró productos', {
+        // ✅ RESTAURACIÓN: Si el scraper retorna vacío, marcar como fallo para activar fallbacks
+        logger.warn('⚠️ Scraping nativo no encontró productos - activando fallbacks', {
           service: 'opportunity-finder',
           query,
           userId,
@@ -485,8 +486,11 @@ class OpportunityFinderService {
             'Los productos no tienen precio válido (resolvePrice falló)',
             'Los productos no pasaron el filtro de validación',
             'El término de búsqueda no tiene resultados'
-          ]
+          ],
+          action: 'Intentando bridge Python y ScraperAPI/ZenRows como fallback'
         });
+        // ✅ Forzar que se intente el bridge Python estableciendo products como vacío explícitamente
+        products = [];
       }
     } catch (nativeError: any) {
       nativeErrorForLogs = nativeError;
@@ -521,15 +525,16 @@ class OpportunityFinderService {
       }
     }
 
-    // ✅ FALLBACK: Intentar bridge Python si scraping nativo falló
+    // ✅ FALLBACK: Intentar bridge Python si scraping nativo falló o retornó vacío
     if (!products || products.length === 0) {
       try {
-        logger.info('Intentando bridge Python como alternativa (scraping nativo no encontró productos o falló)', {
+        logger.info('🔄 Intentando bridge Python como alternativa (scraping nativo no encontró productos o falló)', {
           service: 'opportunity-finder',
           userId,
           query,
-          nativeError: nativeErrorForLogs?.message || null,
-          nativeProductsFound: 0
+          nativeError: nativeErrorForLogs?.message || 'No error (retornó vacío)',
+          nativeProductsFound: 0,
+          reason: nativeErrorForLogs ? 'Error en scraping nativo' : 'Scraping nativo retornó vacío (posible bloqueo)'
         });
         const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
         logger.info('Bridge Python completado', {
