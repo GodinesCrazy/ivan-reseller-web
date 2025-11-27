@@ -305,11 +305,32 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
           <div class="success">✅ Autorización completada exitosamente</div>
           <div class="info">Puedes cerrar esta ventana y regresar a la aplicación.</div>
           <script>
-            setTimeout(() => {
-              if (window.opener) {
-                window.opener.postMessage({ type: 'oauth_success', marketplace: '${req.params.marketplace}' }, '*');
+            // ✅ CORRECCIÓN: Enviar mensaje inmediatamente y también después de un delay
+            // Esto asegura que el mensaje se envíe incluso si hay problemas de timing
+            const sendMessage = () => {
+              if (window.opener && !window.opener.closed) {
+                try {
+                  window.opener.postMessage({ 
+                    type: 'oauth_success', 
+                    marketplace: '${req.params.marketplace}',
+                    timestamp: Date.now()
+                  }, '*');
+                  console.log('[OAuth Callback] Success message sent to opener');
+                } catch (e) {
+                  console.error('[OAuth Callback] Error sending message to opener:', e);
+                }
+              } else {
+                console.warn('[OAuth Callback] No opener window found or opener is closed');
               }
-            }, 1000);
+            };
+            
+            // Intentar enviar inmediatamente
+            sendMessage();
+            
+            // También intentar después de un delay (por si el opener aún no está listo)
+            setTimeout(sendMessage, 500);
+            setTimeout(sendMessage, 1000);
+            setTimeout(sendMessage, 2000);
           </script>
         </body>
       </html>

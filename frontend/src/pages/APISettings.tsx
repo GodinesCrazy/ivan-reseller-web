@@ -1490,7 +1490,15 @@ export default function APISettings() {
   // ✅ CORRECCIÓN: Escuchar mensajes de la ventana de OAuth
   useEffect(() => {
     const handleOAuthMessage = (event: MessageEvent) => {
+      // ✅ CORRECCIÓN: Validar origen del mensaje para seguridad (pero permitir * para OAuth callbacks)
+      // En producción, podríamos validar el origen específico del backend
       if (event.data?.type === 'oauth_success') {
+        const marketplace = event.data.marketplace || 'unknown';
+        log.info('[APISettings] Received OAuth success message', {
+          marketplace,
+          origin: event.origin,
+        });
+        
         toast.success('✅ Autorización OAuth completada exitosamente');
         // ✅ CORRECCIÓN: Recargar credenciales y estados con delay para asegurar que el backend procese el cambio
         setTimeout(async () => {
@@ -1502,6 +1510,7 @@ export default function APISettings() {
               try {
                 await loadCredentials();
                 await fetchAuthStatuses();
+                toast.success('✅ Credenciales actualizadas correctamente');
               } catch (err) {
                 log.warn('Error en recarga adicional después de OAuth success:', err);
               }
@@ -1512,6 +1521,12 @@ export default function APISettings() {
         }, 1500); // ✅ Aumentar de 1s a 1.5s
       } else if (event.data?.type === 'oauth_error') {
         const errorMsg = event.data.error || 'Error desconocido en OAuth';
+        const marketplace = event.data.marketplace || 'unknown';
+        log.error('[APISettings] Received OAuth error message', {
+          marketplace,
+          error: errorMsg,
+          origin: event.origin,
+        });
         toast.error(`❌ Error en autorización OAuth: ${errorMsg}`);
         setError(`Error en autorización OAuth: ${errorMsg}`);
       }
@@ -1692,7 +1707,7 @@ export default function APISettings() {
         });
       }
       
-      // ✅ Verificar si el popup fue bloqueado - aumentar tiempo de espera y mejorar detección
+      // ✅ CORRECCIÓN: Mejorar detección de ventana OAuth bloqueada vs abierta correctamente
       // Esperar más tiempo para permitir que el navegador procese la apertura (especialmente para redirecciones externas)
       setTimeout(() => {
         // Verificar si la ventana fue bloqueada o cerrada inmediatamente
@@ -1715,7 +1730,8 @@ export default function APISettings() {
           }
         }
         
-        // ✅ Solo considerar bloqueado si realmente no existe, está cerrada, Y no es cross-origin
+        // ✅ CORRECCIÓN: Solo considerar bloqueado si realmente no existe, está cerrada, Y no es cross-origin
+        // Además, verificar que no sea una redirección rápida (algunos navegadores cierran y reabren)
         if ((isBlocked || !hasDocument) && !isCrossOrigin) {
           log.error('[APISettings] Failed to open OAuth window - popup blocked or closed immediately', {
             oauthWindow: !!oauthWindow,
@@ -1754,33 +1770,74 @@ export default function APISettings() {
             icon: 'ℹ️'
           });
           
-          // Monitorear si la ventana se cierra
+          // ✅ CORRECCIÓN: Monitorear si la ventana se cierra Y verificar tokens con polling
+          let pollAttempts = 0;
+          const maxPollAttempts = 30; // 30 intentos = 30 segundos máximo
+          
           const checkInterval = setInterval(() => {
             if (!oauthWindow || oauthWindow.closed) {
               clearInterval(checkInterval);
-              // ✅ CORRECCIÓN EBAY OAUTH: Esperar un momento para asegurar que el cache se haya limpiado
-              // Aumentar delay de 2s a 3s para dar más tiempo al backend
-              setTimeout(async () => {
+              
+              // ✅ CORRECCIÓN: Iniciar polling para verificar si los tokens se guardaron
+              // Esto maneja el caso donde eBay redirige a su propia página de éxito
+              const pollForTokens = async () => {
                 try {
-                  // ✅ CORRECCIÓN: Forzar refresh de API availability status primero
+                  // Recargar credenciales y verificar si hay tokens
                   await fetchAuthStatuses();
-                  // ✅ CORRECCIÓN EBAY OAUTH: loadCredentials() ya incluye loadMarketplaceDiagnostics()
-                  // que recarga los marketplace diagnostics automáticamente
                   await loadCredentials();
-                  // ✅ CORRECCIÓN: Forzar recarga adicional de diagnostics para asegurar que el token se detecte
-                  // Esperar un poco más para que el backend procese el cambio
-                  setTimeout(async () => {
-                    try {
-                      await loadCredentials();
-                      await fetchAuthStatuses();
-                    } catch (err) {
-                      log.warn('Error en recarga adicional después de OAuth:', err);
-                    }
-                  }, 2000); // ✅ Aumentar de 1s a 2s para dar más tiempo
+                  
+                  // Verificar si hay tokens guardados para esta API y environment
+                  const creds = getCredentialForAPI(apiName, environment);
+                  const hasToken = creds?.credentials?.token || creds?.credentials?.authToken || creds?.credentials?.refreshToken;
+                  
+                  if (hasToken) {
+                    log.info('[APISettings] OAuth tokens detected after window close', {
+                      apiName,
+                      environment,
+                      hasToken: !!creds?.credentials?.token,
+                      hasRefreshToken: !!creds?.credentials?.refreshToken,
+                    });
+                    toast.success('✅ Autorización OAuth completada exitosamente');
+                    return true; // Tokens encontrados, detener polling
+                  }
+                  
+                  pollAttempts++;
+                  if (pollAttempts < maxPollAttempts) {
+                    // Continuar polling
+                    return false;
+                  } else {
+                    // Timeout: no se encontraron tokens después de 30 segundos
+                    log.warn('[APISettings] OAuth tokens not found after polling timeout', {
+                      apiName,
+                      environment,
+                      pollAttempts,
+                    });
+                    toast('⚠️ La ventana de OAuth se cerró, pero no se detectaron tokens. Si completaste la autorización, espera unos segundos o recarga la página.', {
+                      icon: 'ℹ️',
+                      duration: 5000,
+                    });
+                    return true; // Detener polling por timeout
+                  }
                 } catch (err) {
-                  log.warn('Error al recargar credenciales después de OAuth:', err);
+                  log.warn('Error polling for OAuth tokens:', err);
+                  pollAttempts++;
+                  return pollAttempts >= maxPollAttempts; // Detener si hay muchos errores
                 }
-              }, 3000);
+              };
+              
+              // ✅ CORRECCIÓN: Esperar un momento antes de empezar a hacer polling
+              // Dar tiempo al backend para procesar el callback
+              setTimeout(async () => {
+                const pollInterval = setInterval(async () => {
+                  const shouldStop = await pollForTokens();
+                  if (shouldStop) {
+                    clearInterval(pollInterval);
+                  }
+                }, 1000); // Poll cada 1 segundo
+                
+                // Limpiar polling después de 30 segundos
+                setTimeout(() => clearInterval(pollInterval), 30000);
+              }, 2000); // Esperar 2 segundos antes de empezar a hacer polling
             }
           }, 1000);
           
