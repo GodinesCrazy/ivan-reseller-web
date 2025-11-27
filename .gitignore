@@ -60,3 +60,7 @@ APIS.txt
 *.api.txt
 REVISION_CREDENCIALES_EBAY.md
 *CREDENCIALES*.md
+
+# Secrets folder - Contains sensitive credential information
+.secrets/
+secrets/
