@@ -1432,11 +1432,7 @@ export default function APISettings() {
         }));
       }
     }
-        toast.success(`✅ ${API_DEFINITIONS[apiName]?.displayName || apiName} configurado correctamente`, {
-          duration: 4000,
-        });
-      }
-      
+    
       // ✅ MEJORA: Recargar credenciales y estados inmediatamente después de guardar
       await loadCredentials();
       await fetchAuthStatuses();
