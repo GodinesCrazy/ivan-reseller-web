@@ -170,6 +170,20 @@ router.get('/', async (req, res) => {
     if (progressTimer) clearInterval(progressTimer);
     if (warnTimer) clearTimeout(warnTimer);
 
+    // ✅ LOGGING: Verificar qué imágenes se están enviando al frontend
+    if (items.length > 0) {
+      logger.info('[OPPORTUNITIES-API] Enviando oportunidades al frontend', {
+        userId: req.user?.userId,
+        itemsCount: items.length,
+        firstItem: {
+          title: items[0]?.title?.substring(0, 50),
+          hasImages: Array.isArray(items[0]?.images),
+          imagesCount: Array.isArray(items[0]?.images) ? items[0].images.length : 0,
+          imagesPreview: Array.isArray(items[0]?.images) ? items[0].images.slice(0, 3).map((img: string) => img?.substring(0, 60)) : []
+        }
+      });
+    }
+
     return res.json({
       success: true,
       items,

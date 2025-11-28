@@ -422,7 +422,9 @@ class OpportunityFinderService {
             productUrl: p.productUrl,
             imageUrl: p.imageUrl || 'https://via.placeholder.com/300x300?text=No+Image',
             productId: p.productId || p.productUrl?.split('/').pop()?.split('.html')[0],
-            images: Array.isArray(p.images) ? p.images : undefined, // ✅ MEJORADO: Array de imágenes
+            images: Array.isArray(p.images) && p.images.length > 0 
+              ? p.images.filter((img: any) => img && typeof img === 'string' && img.trim().length > 0)
+              : undefined, // ✅ MEJORADO: Array de imágenes filtrado y validado
             shippingCost: shippingCost > 0 ? shippingCost : undefined, // ✅ MEJORADO: Shipping cost
           };
         })
