@@ -3404,47 +3404,61 @@ export class AdvancedMarketplaceScraper {
         });
         await new Promise(resolve => setTimeout(resolve, 2000)); // Espera final
         
-        // ✅ MEJORA: Intentar hacer clic en las primeras miniaturas para cargar URLs ampliadas
+        // ✅ MEJORA: Intentar hacer hover/clic en las primeras miniaturas para cargar URLs ampliadas
         // Esto ayuda a que las URLs de alta resolución se carguen en el DOM
+        // Nota: Esto es opcional y no crítico, ya que priorizamos runParams que ya tiene las URLs
         try {
-          const thumbnailClickable = await productPage.evaluate(() => {
+          const thumbnailInfo = await productPage.evaluate(() => {
             // Buscar miniaturas clickeables en la galería
             const thumbnails = document.querySelectorAll('#j-image-thumb-wrap li, .images-view-item, [class*="thumb"]');
-            const clickableThumbs: Array<{ selector: string; index: number }> = [];
+            const clickableThumbs: Array<{ x: number; y: number; index: number }> = [];
             
             thumbnails.forEach((thumb: any, index: number) => {
-              // Verificar si es clickeable (no está deshabilitado)
+              // Verificar si es clickeable (no está deshabilitado y es visible)
               if (thumb && !thumb.classList.contains('disabled') && thumb.offsetParent !== null) {
-                clickableThumbs.push({ selector: `#j-image-thumb-wrap li:nth-child(${index + 1}), .images-view-item:nth-child(${index + 1})`, index });
+                const rect = thumb.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                  clickableThumbs.push({ 
+                    x: rect.left + rect.width / 2, 
+                    y: rect.top + rect.height / 2, 
+                    index 
+                  });
+                }
               }
             });
             
             return clickableThumbs.slice(0, 5); // Solo las primeras 5 para no demorar mucho
           });
           
-          // Hacer clic en las primeras 2-3 miniaturas para cargar sus URLs ampliadas
-          for (let i = 0; i < Math.min(thumbnailClickable.length, 3); i++) {
-            try {
-              const thumb = thumbnailClickable[i];
-              await productPage.click(thumb.selector).catch(() => {});
-              await new Promise(resolve => setTimeout(resolve, 500)); // Esperar a que cargue la imagen ampliada
-            } catch (clickError) {
-              // Continuar con la siguiente si falla el clic
+          // Hacer hover/clic en las primeras 2-3 miniaturas para cargar sus URLs ampliadas
+          // Esto es opcional y se hace de forma no bloqueante
+          if (thumbnailInfo && thumbnailInfo.length > 0) {
+            for (let i = 0; i < Math.min(thumbnailInfo.length, 3); i++) {
+              try {
+                const thumb = thumbnailInfo[i];
+                // Hacer hover sobre la miniatura (más rápido que clic y a menudo suficiente)
+                await productPage.mouse.move(thumb.x, thumb.y).catch(() => {});
+                await new Promise(resolve => setTimeout(resolve, 300)); // Esperar a que cargue la imagen ampliada
+              } catch (hoverError) {
+                // Continuar con la siguiente si falla
+              }
+            }
+            
+            // Volver a la primera miniatura (imagen principal)
+            if (thumbnailInfo.length > 0) {
+              try {
+                const firstThumb = thumbnailInfo[0];
+                await productPage.mouse.move(firstThumb.x, firstThumb.y).catch(() => {});
+                await new Promise(resolve => setTimeout(resolve, 300));
+              } catch (hoverError) {
+                // Ignorar si no se puede hacer hover
+              }
             }
           }
-          
-          // Volver a la primera miniatura (imagen principal)
-          if (thumbnailClickable.length > 0) {
-            try {
-              await productPage.click(thumbnailClickable[0].selector).catch(() => {});
-              await new Promise(resolve => setTimeout(resolve, 500));
-            } catch (clickError) {
-              // Ignorar si no se puede hacer clic
-            }
-          }
-        } catch (clickError) {
-          // Si falla el proceso de clics, continuar con la extracción normal
-          logger.debug('[SCRAPER] No se pudieron hacer clics en miniaturas, continuando con extracción normal', {
+        } catch (hoverError) {
+          // Si falla el proceso de hover, continuar con la extracción normal
+          // Esto no es crítico ya que priorizamos runParams
+          logger.debug('[SCRAPER] No se pudieron hacer hover en miniaturas, continuando con extracción normal', {
             productUrl: productUrl.substring(0, 80)
           });
         }
