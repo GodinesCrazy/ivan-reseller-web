@@ -1410,15 +1410,15 @@ export default function APISettings() {
           }));
         }
       }
-    }
+      }
 
-    // ✅ MEJORA: Recargar credenciales y estados inmediatamente después de guardar
-    await loadCredentials();
-    await fetchAuthStatuses();
-    
-    // Limpiar formulario
-    setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: {} }));
-    setExpandedApi(null);
+      // ✅ MEJORA: Recargar credenciales y estados inmediatamente después de guardar
+      await loadCredentials();
+      await fetchAuthStatuses();
+      
+      // Limpiar formulario
+      setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: {} }));
+      setExpandedApi(null);
     } catch (err: unknown) {
       log.error('Error saving credentials:', err);
       // ✅ MEJORA UX: Usar mensajes de error mejorados
