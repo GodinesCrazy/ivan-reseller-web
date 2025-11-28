@@ -1409,24 +1409,29 @@ export default function APISettings() {
             }
           }));
         }
+      } catch (testError: any) {
+        // Solo mostrar error si NO es un error de "missing credentials" (porque acabamos de guardarlas)
+        const errorMsg = testError.response?.data?.message || testError.message || 'Error al validar conexión';
+        const isMissingCredentials = errorMsg.toLowerCase().includes('missing credentials') || 
+                                    errorMsg.toLowerCase().includes('credenciales') ||
+                                    errorMsg.toLowerCase().includes('no credentials');
+        
+        if (!isMissingCredentials) {
+          // Error real, pero no crítico - solo warning
+          toast.error(`ℹ️ No se pudo verificar la conexión automáticamente. Las credenciales se guardaron correctamente.`, { id: `test-${apiName}`, duration: 4000 });
+        }
+        // Actualizar estado como desconocido (no es un error crítico)
+        setStatuses((prev: Record<string, APIStatus>) => ({
+          ...prev,
+          [`${apiName}_${currentEnvironment}`]: {
+            environment: currentEnvironment,
+            isAvailable: false,
+            status: 'unknown',
+            error: errorMsg
+          }
+        }));
       }
-
-      // ✅ MEJORA: Mensaje de éxito mejorado y más claro
-      const isOAuthRequired = ['ebay', 'mercadolibre'].includes(apiName);
-      const hasBasicCreds = apiName === 'ebay' 
-        ? (credentials.appId && credentials.devId && credentials.certId)
-        : apiName === 'mercadolibre'
-        ? (credentials.clientId && credentials.clientSecret)
-        : true;
-      
-      if (isOAuthRequired && hasBasicCreds && !credentials.token && !credentials.refreshToken) {
-        // Credenciales básicas guardadas, falta OAuth
-        toast.success(`✅ Credenciales básicas guardadas (Paso 1/2). Haz clic en "OAuth" para completar la autorización.`, {
-          duration: 6000,
-          icon: 'ℹ️'
-        });
-      } else {
-        // Credenciales completas guardadas
+    }
         toast.success(`✅ ${API_DEFINITIONS[apiName]?.displayName || apiName} configurado correctamente`, {
           duration: 4000,
         });
@@ -2907,53 +2912,51 @@ export default function APISettings() {
                       }
                       return null;
                     })()}
-                        {apiDef.name === 'aliexpress' ? (
-                          <div className="flex flex-wrap items-center gap-2">
-                            {/* ✅ SOLO mostrar botones si el estado es realmente 'manual_required' (por CAPTCHA/bloqueo), NO si solo faltan cookies */}
-                            {statusInfo.status === 'manual_required' && statusInfo.manualSession?.token ? (
-                              <>
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      await requestAuthRefresh('aliexpress');
-                                    } catch {
-                                      /* handled in store */
-                                    }
-                                  }}
-                                  className="inline-flex items-center gap-1 px-3 py-1 rounded border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition text-xs"
-                                >
-                                  <RefreshCw className="w-3 h-3" />
-                                  Reintentar automático
-                                </button>
-                                <a
-                                  href={
-                                    statusInfo.manualSession.loginUrl?.startsWith('http')
-                                      ? statusInfo.manualSession.loginUrl
-                                      : `${window.location.origin}${
-                                          statusInfo.manualSession.loginUrl ||
-                                          `/manual-login/${statusInfo.manualSession.token}`
-                                        }`
-                                  }
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 px-3 py-1 rounded border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition text-xs"
-                                >
-                                  Abrir login manual
-                                </a>
-                              </>
-                            ) : (
-                              // ✅ Si NO hay manual_required real, solo mostrar botón opcional para guardar cookies
-                              <button
-                                onClick={openManualCookieModal}
-                                className="inline-flex items-center gap-1 px-3 py-1 rounded border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition text-xs"
-                                title="Las cookies son opcionales. El sistema funciona en modo público, pero las cookies mejoran la experiencia."
-                              >
-                                <ClipboardPaste className="w-3 h-3" />
-                                Guardar cookies (opcional)
-                              </button>
-                            )}
-                          </div>
-                        ) : null}
+                    {apiDef.name === 'aliexpress' ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* ✅ SOLO mostrar botones si el estado es realmente 'manual_required' (por CAPTCHA/bloqueo), NO si solo faltan cookies */}
+                        {statusInfo.status === 'manual_required' && statusInfo.manualSession?.token ? (
+                          <>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await requestAuthRefresh('aliexpress');
+                                } catch {
+                                  /* handled in store */
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 px-3 py-1 rounded border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition text-xs"
+                            >
+                              <RefreshCw className="w-3 h-3" />
+                              Reintentar automático
+                            </button>
+                            <a
+                              href={
+                                statusInfo.manualSession.loginUrl?.startsWith('http')
+                                  ? statusInfo.manualSession.loginUrl
+                                  : `${window.location.origin}${
+                                      statusInfo.manualSession.loginUrl ||
+                                      `/manual-login/${statusInfo.manualSession.token}`
+                                    }`
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-3 py-1 rounded border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition text-xs"
+                            >
+                              Abrir login manual
+                            </a>
+                          </>
+                        ) : (
+                          // ✅ Si NO hay manual_required real, solo mostrar botón opcional para guardar cookies
+                          <button
+                            onClick={openManualCookieModal}
+                            className="inline-flex items-center gap-1 px-3 py-1 rounded border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition text-xs"
+                            title="Las cookies son opcionales. El sistema funciona en modo público, pero las cookies mejoran la experiencia."
+                          >
+                            <ClipboardPaste className="w-3 h-3" />
+                            Guardar cookies (opcional)
+                          </button>
+                        )}
                       </div>
                     ) : null}
                     {/* ✅ MEJORA: Selector de entorno mejorado con indicadores visuales */}
