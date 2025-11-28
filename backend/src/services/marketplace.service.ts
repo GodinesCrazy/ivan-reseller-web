@@ -1075,16 +1075,20 @@ export class MarketplaceService {
         return { success: false, error: 'Product not found' };
       }
 
-      // Get marketplace credentials to determine currency/language
+      // ✅ CORREGIDO: No requerir credenciales para generar preview
+      // El preview puede generarse sin credenciales (solo para mostrar cómo se verá el producto)
+      // Si no hay credenciales, usar configuración por defecto del marketplace
       const credentials = await this.getCredentials(userId, marketplace, environment);
-      if (!credentials) {
-        return { success: false, error: `No credentials found for ${marketplace}` };
-      }
+      // No retornar error si no hay credenciales, usar valores por defecto
 
       // Determine marketplace currency and language
+      // ✅ CORREGIDO: Si no hay credenciales, usar configuración por defecto
       const marketplaceConfig = this.getMarketplaceConfig(marketplace);
       const metadata = this.parseProductMetadata(product);
       const productCurrency = (metadata?.currency || product.currency || 'USD').toUpperCase();
+      
+      // Si hay credenciales, usar currency/language del marketplace desde las credenciales
+      // Si no, usar los valores por defecto del marketplace config
       
       // Convert price to marketplace currency
       const fxService = (await import('./fx.service')).default;
@@ -1274,8 +1278,9 @@ export class MarketplaceService {
         throw new AppError('Product must be published before syncing price', 400);
       }
 
-      if (newPrice <= 0 || newPrice <= product.aliexpressPrice) {
-        throw new AppError(`New price (${newPrice}) must be greater than AliExpress cost (${product.aliexpressPrice})`, 400);
+      const aliexpressPriceNum = toNumber(product.aliexpressPrice);
+      if (newPrice <= 0 || newPrice <= aliexpressPriceNum) {
+        throw new AppError(`New price (${newPrice}) must be greater than AliExpress cost (${aliexpressPriceNum})`, 400);
       }
 
       // Obtener listings activos (filtrar por isActive si existe, sino todos)

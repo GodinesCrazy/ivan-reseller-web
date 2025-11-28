@@ -142,14 +142,18 @@ export class ProductService {
       ...rest
     } = data;
 
+    // ✅ CORREGIDO: Declarar variables mutables para poder actualizarlas después de la validación
+    let finalImageUrl = imageUrl;
+    let finalImageUrls = imageUrls;
+
     // ✅ LÍMITE DE PRODUCTOS PENDIENTES: Validar antes de crear
     const { pendingProductsLimitService } = await import('./pending-products-limit.service');
     await pendingProductsLimitService.ensurePendingLimitNotExceeded(userId, isAdmin);
 
     // ✅ VALIDACIÓN DE IMÁGENES: Validar calidad antes de crear producto
     const allImageUrls: string[] = [];
-    if (imageUrl) allImageUrls.push(imageUrl);
-    if (imageUrls && Array.isArray(imageUrls)) allImageUrls.push(...imageUrls);
+    if (finalImageUrl) allImageUrls.push(finalImageUrl);
+    if (finalImageUrls && Array.isArray(finalImageUrls)) allImageUrls.push(...finalImageUrls);
 
     if (allImageUrls.length > 0) {
       try {
@@ -188,15 +192,18 @@ export class ProductService {
         }
 
         // Usar solo imágenes válidas
-        const validImages = validationResults.valid;
-        if (validImages.length > 0) {
+        // ✅ CORREGIDO: validationResults.valid ya es un array de strings (URLs válidas)
+        const validImageUrls = validationResults.valid;
+        if (validImageUrls.length > 0) {
           // Actualizar imageUrl e imageUrls con solo las válidas
-          if (validImages.length > 0) {
-            const primaryUrl = validImages[0];
-            const additionalUrls = validImages.slice(1);
-            // Reasignar para usar en buildImagePayload
-            Object.assign(data, { imageUrl: primaryUrl, imageUrls: additionalUrls });
-          }
+          const primaryUrl = validImageUrls[0];
+          const additionalUrls = validImageUrls.slice(1);
+          // ✅ CORREGIDO: Actualizar variables locales mutables para usarlas en buildImagePayload
+          finalImageUrl = primaryUrl;
+          finalImageUrls = additionalUrls;
+          // También actualizar data para mantener consistencia
+          data.imageUrl = primaryUrl;
+          data.imageUrls = additionalUrls;
         }
       } catch (validationError: any) {
         // Si la validación falla por error técnico (no por imágenes inválidas), registrar y continuar
@@ -210,7 +217,8 @@ export class ProductService {
       }
     }
 
-    const imagesPayload = buildImagePayload(imageUrl, imageUrls);
+    // ✅ CORREGIDO: Usar variables locales mutables que pueden haber sido actualizadas después de la validación
+    const imagesPayload = buildImagePayload(finalImageUrl, finalImageUrls);
     const metadata = mergeProductMetadata(data) || {};
     if (!metadata.currency) {
       metadata.currency = currency || 'USD';
@@ -241,7 +249,8 @@ export class ProductService {
       aliexpressUrl: rest.aliexpressUrl?.substring(0, 80),
       aliexpressPrice: rest.aliexpressPrice,
       suggestedPrice: rest.suggestedPrice,
-      hasImage: !!imageUrl || (imageUrls && imageUrls.length > 0),
+      hasImage: !!finalImageUrl || (finalImageUrls && finalImageUrls.length > 0),
+      imageCount: (finalImageUrl ? 1 : 0) + (finalImageUrls?.length || 0), // ✅ MEJORADO: Incluir conteo de imágenes
       hasProductData: !!productData && Object.keys(productData).length > 0,
       status: 'PENDING'
     });
@@ -328,13 +337,28 @@ export class ProductService {
     }
 
     // ✅ Logging después de crear el producto
+    // ✅ MEJORADO: Parsear imágenes guardadas para verificar que se guardaron múltiples
+    let savedImagesCount = 0;
+    try {
+      if (product.images) {
+        const parsedImages = JSON.parse(product.images);
+        if (Array.isArray(parsedImages)) {
+          savedImagesCount = parsedImages.length;
+        }
+      }
+    } catch {
+      // Ignorar errores de parsing
+    }
+
     logger.info('[PRODUCT-SERVICE] Product created successfully', {
       productId: product.id,
       userId,
       title: product.title?.substring(0, 50),
       status: product.status,
       aliexpressPrice: product.aliexpressPrice,
-      suggestedPrice: product.suggestedPrice
+      suggestedPrice: product.suggestedPrice,
+      imagesCount: savedImagesCount, // ✅ MEJORADO: Incluir conteo de imágenes guardadas
+      imagesSaved: savedImagesCount > 1 ? 'multiple' : savedImagesCount === 1 ? 'single' : 'none'
     });
 
     // Registrar actividad
@@ -668,7 +692,7 @@ export class ProductService {
       where: {
         OR: [
           { status: 'PUBLISHED', isPublished: false }, // PUBLISHED pero isPublished = false
-          { status: { not: 'PUBLISHED' }, isPublished: true, status: { not: 'APPROVED' } }, // No PUBLISHED pero isPublished = true (excepto APPROVED que puede tener listings)
+          { status: { notIn: ['PUBLISHED', 'APPROVED'] }, isPublished: true }, // No PUBLISHED/APPROVED pero isPublished = true (excepto APPROVED que puede tener listings)
         ]
       },
       select: {

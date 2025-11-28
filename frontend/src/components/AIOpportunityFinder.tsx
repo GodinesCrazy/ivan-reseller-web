@@ -36,6 +36,7 @@ interface MarketOpportunity {
   targetMarketplaces: string[];
   aliexpressUrl?: string;
   image?: string;
+  images?: string[]; // ✅ MEJORADO: Array de todas las imágenes disponibles
   currentPrice: number;
   suggestedPrice: number;
   profitMargin: number;
@@ -185,7 +186,8 @@ export default function AIOpportunityFinder() {
           ? item.targetMarketplaces
           : ['ebay', 'amazon', 'mercadolibre'],
         aliexpressUrl: item.aliexpressUrl || item.productUrl || '',
-        image: item.image,
+        image: Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : item.image, // ✅ MEJORADO: Usar primera imagen del array si está disponible
+        images: Array.isArray(item.images) && item.images.length > 0 ? item.images : (item.image ? [item.image] : []), // ✅ MEJORADO: Mantener array completo de imágenes
         currentPrice: item.costUsd || 0,
         suggestedPrice: item.suggestedPriceUsd || 0,
         profitMargin: (item.profitMargin || 0) * 100,
@@ -472,8 +474,18 @@ export default function AIOpportunityFinder() {
         return null;
       };
 
-      // ✅ Usar imagen única (la interfaz MarketOpportunity solo tiene image, no images)
-      if (opp.image && typeof opp.image === 'string' && opp.image.trim().length > 0) {
+      // ✅ MEJORADO: Usar todas las imágenes disponibles si están en el array
+      // Priorizar array de imágenes (images) sobre imagen única (image)
+      if (Array.isArray((opp as any).images) && (opp as any).images.length > 0) {
+        const normalizedImages = (opp as any).images
+          .map((img: any) => normalizeImageUrl(img))
+          .filter((img: string | null): img is string => img !== null);
+        if (normalizedImages.length > 0) {
+          payload.imageUrl = normalizedImages[0]; // Primera imagen como principal
+          payload.imageUrls = normalizedImages; // Todas las imágenes
+        }
+      } else if (opp.image && typeof opp.image === 'string' && opp.image.trim().length > 0) {
+        // Fallback: usar imagen única si no hay array
         const imageUrl = normalizeImageUrl(opp.image);
         if (imageUrl) {
           payload.imageUrl = imageUrl;
