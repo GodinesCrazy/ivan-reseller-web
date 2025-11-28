@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Save, Clock, Info } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Save, Clock, Info, Calculator } from 'lucide-react';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -143,6 +143,7 @@ export default function ProductPreview() {
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showFinancialModal, setShowFinancialModal] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     title: '',
@@ -412,65 +413,10 @@ export default function ProductPreview() {
               <div className="text-4xl font-bold text-green-600 mb-4">
                 {formatCurrencySimple(preview.price, preview.currency)}
               </div>
-              <div className="text-sm text-gray-600 mb-4">
+              <div className="text-sm text-gray-600">
                 Moneda: <span className="font-medium">{preview.currency}</span>
               </div>
-
-              {/* Profit Info */}
-              <div className="space-y-3 pt-4 border-t">
-                <div className="flex justify-between items-center">
-                  <MetricLabelWithTooltip
-                    label="Ganancia Potencial"
-                    tooltipBody={metricTooltips.potentialProfit.body}
-                    className="text-sm text-gray-600"
-                  >
-                    <span className="text-sm text-gray-600">Ganancia Potencial</span>
-                  </MetricLabelWithTooltip>
-                  <span className="font-semibold text-green-600">
-                    {formatCurrencySimple(preview.potentialProfit, preview.currency)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <MetricLabelWithTooltip
-                    label="Margen"
-                    tooltipBody={metricTooltips.profitMargin.body}
-                    className="text-sm text-gray-600"
-                  >
-                    <span className="text-sm text-gray-600">Margen</span>
-                  </MetricLabelWithTooltip>
-                  <span className="font-semibold text-green-600">
-                    {preview.profitMargin.toFixed(1)}%
-                  </span>
-                </div>
-              </div>
             </div>
-
-            {/* Fees Breakdown */}
-            {preview.fees && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold mb-4">Desglose de Costos</h2>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Costo AliExpress</span>
-                    <span>{formatCurrencySimple(preview.product.aliexpressPrice, preview.product.aliexpressCurrency)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Comisión Marketplace</span>
-                    <span>{formatCurrencySimple(preview.fees.breakdown.marketplaceFee, preview.currency)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Comisión Pago</span>
-                    <span>{formatCurrencySimple(preview.fees.breakdown.paymentFee, preview.currency)}</span>
-                  </div>
-                  <div className="flex justify-between font-semibold pt-2 border-t">
-                    <span>Ganancia Neta</span>
-                    <span className="text-green-600">
-                      {formatCurrencySimple(preview.fees.netProfit, preview.currency)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* ✅ Optimización de Tiempo de Publicación */}
             {lifetimeDecision && !loadingLifetime && (
@@ -549,13 +495,23 @@ export default function ProductPreview() {
                 )}
               </button>
               
-              <button
-                onClick={handleEditClick}
-                className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
-              >
-                <Edit className="w-5 h-5" />
-                Editar Producto
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowFinancialModal(true)}
+                  className="flex-1 bg-purple-100 text-purple-700 py-3 px-4 rounded-lg hover:bg-purple-200 transition-colors flex items-center justify-center gap-2"
+                  title="Ver información financiera"
+                >
+                  <Calculator className="w-5 h-5" />
+                  Financiero
+                </button>
+                <button
+                  onClick={handleEditClick}
+                  className="flex-1 bg-gray-100 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Edit className="w-5 h-5" />
+                  Editar
+                </button>
+              </div>
 
               <button
                 onClick={handleCancel}
@@ -567,6 +523,163 @@ export default function ProductPreview() {
           </div>
         </div>
       </div>
+
+      {/* Financial Information Modal */}
+      {showFinancialModal && preview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b flex items-center justify-between">
+              <h2 className="text-2xl font-bold flex items-center gap-2">
+                <Calculator className="w-6 h-6 text-purple-600" />
+                Información Financiera
+              </h2>
+              <button
+                onClick={() => setShowFinancialModal(false)}
+                className="p-2 hover:bg-gray-100 rounded"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Product Title */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">{preview.title}</h3>
+                <p className="text-sm text-gray-600">
+                  Marketplace: <span className="font-medium">{preview.marketplace}</span>
+                </p>
+              </div>
+
+              {/* Ganancia Potencial y Margen */}
+              <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6 border border-green-200">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-green-600" />
+                  Rentabilidad
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <MetricLabelWithTooltip
+                      label="Ganancia Potencial"
+                      tooltipBody={metricTooltips.potentialProfit.body}
+                      className="text-sm text-gray-600"
+                    >
+                      <span className="text-sm text-gray-600">Ganancia Potencial</span>
+                    </MetricLabelWithTooltip>
+                    <p className="text-2xl font-bold text-green-600 mt-1">
+                      {formatCurrencySimple(preview.potentialProfit, preview.currency)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Monto estimado de utilidad por unidad vendida, considerando costos, comisiones de marketplace y tipo de cambio actual. Este valor puede variar según las condiciones reales de venta.
+                    </p>
+                  </div>
+                  <div>
+                    <MetricLabelWithTooltip
+                      label="Margen"
+                      tooltipBody={metricTooltips.profitMargin.body}
+                      className="text-sm text-gray-600"
+                    >
+                      <span className="text-sm text-gray-600">Margen</span>
+                    </MetricLabelWithTooltip>
+                    <p className="text-2xl font-bold text-green-600 mt-1">
+                      {preview.profitMargin.toFixed(1)}%
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Porcentaje estimado de utilidad bruta sobre el precio de venta después de costos y comisiones. Un margen alto indica mayor rentabilidad potencial por unidad vendida.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Desglose de Costos */}
+              {preview.fees && (
+                <div className="bg-white rounded-lg border-2 border-gray-200 p-6">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <DollarSign className="w-5 h-5 text-gray-600" />
+                    Desglose de Costos
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                      <span className="text-gray-700 font-medium">Precio de Venta</span>
+                      <span className="text-lg font-semibold text-blue-600">
+                        {formatCurrencySimple(preview.price, preview.currency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                      <span className="text-gray-600">Costo AliExpress</span>
+                      <span className="font-medium">
+                        {formatCurrencySimple(preview.product.aliexpressPrice, preview.product.aliexpressCurrency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                      <span className="text-gray-600">Comisión Marketplace</span>
+                      <span className="font-medium text-orange-600">
+                        {formatCurrencySimple(preview.fees.breakdown.marketplaceFee, preview.currency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                      <span className="text-gray-600">Comisión Pago</span>
+                      <span className="font-medium text-orange-600">
+                        {formatCurrencySimple(preview.fees.breakdown.paymentFee, preview.currency)}
+                      </span>
+                    </div>
+                    {(preview.fees.breakdown.shippingCost && preview.fees.breakdown.shippingCost > 0) && (
+                      <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                        <span className="text-gray-600">Gastos de Envío</span>
+                        <span className="font-medium text-orange-600">
+                          {formatCurrencySimple(preview.fees.breakdown.shippingCost, preview.currency)}
+                        </span>
+                      </div>
+                    )}
+                    {(preview.fees.breakdown.taxes && preview.fees.breakdown.taxes > 0) && (
+                      <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                        <span className="text-gray-600">Impuestos Locales</span>
+                        <span className="font-medium text-orange-600">
+                          {formatCurrencySimple(preview.fees.breakdown.taxes, preview.currency)}
+                        </span>
+                      </div>
+                    )}
+                    {(preview.fees.breakdown.otherCosts && preview.fees.breakdown.otherCosts > 0) && (
+                      <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                        <span className="text-gray-600">Otros Costos</span>
+                        <span className="font-medium text-orange-600">
+                          {formatCurrencySimple(preview.fees.breakdown.otherCosts, preview.currency)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center py-3 pt-4 border-t-2 border-gray-300 mt-2">
+                      <span className="text-lg font-semibold text-gray-900">Ganancia Neta</span>
+                      <span className="text-2xl font-bold text-green-600">
+                        {formatCurrencySimple(preview.fees.netProfit, preview.currency)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Información Adicional */}
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <div className="flex items-start gap-2">
+                  <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-medium mb-1">Nota:</p>
+                    <p>
+                      Los valores mostrados son estimaciones basadas en los costos actuales y las comisiones estándar del marketplace. 
+                      Los valores reales pueden variar según las condiciones de venta, tipo de cambio, y políticas del marketplace al momento de la transacción.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t flex justify-end">
+              <button
+                onClick={() => setShowFinancialModal(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Product Modal */}
       {showEditModal && preview && (
