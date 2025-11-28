@@ -483,6 +483,14 @@ export default function AIOpportunityFinder() {
         if (normalizedImages.length > 0) {
           payload.imageUrl = normalizedImages[0]; // Primera imagen como principal
           payload.imageUrls = normalizedImages; // Todas las imágenes
+          
+          // ✅ LOGGING: Verificar qué imágenes se están enviando
+          console.log('[AIOpportunityFinder] Enviando imágenes al backend', {
+            productTitle: opp.product?.substring(0, 50),
+            totalImages: normalizedImages.length,
+            firstImage: normalizedImages[0]?.substring(0, 80),
+            allImagesPreview: normalizedImages.slice(0, 5).map((img: string) => img?.substring(0, 60))
+          });
         }
       } else if (opp.image && typeof opp.image === 'string' && opp.image.trim().length > 0) {
         // Fallback: usar imagen única si no hay array
@@ -490,7 +498,20 @@ export default function AIOpportunityFinder() {
         if (imageUrl) {
           payload.imageUrl = imageUrl;
           payload.imageUrls = [imageUrl]; // Crear array con la única imagen
+          console.warn('[AIOpportunityFinder] Solo hay 1 imagen disponible (fallback)', {
+            productTitle: opp.product?.substring(0, 50),
+            hasImagesArray: Array.isArray((opp as any).images),
+            imagesArrayLength: Array.isArray((opp as any).images) ? (opp as any).images.length : 0
+          });
         }
+      } else {
+        console.error('[AIOpportunityFinder] No hay imágenes disponibles', {
+          productTitle: opp.product?.substring(0, 50),
+          hasImagesArray: Array.isArray((opp as any).images),
+          imagesArrayLength: Array.isArray((opp as any).images) ? (opp as any).images.length : 0,
+          hasImage: !!opp.image,
+          oppKeys: Object.keys(opp)
+        });
       }
 
       // ✅ Incluir categoría si está disponible
