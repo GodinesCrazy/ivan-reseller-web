@@ -1902,6 +1902,69 @@ export class AdvancedMarketplaceScraper {
               // Si solo tenemos imagen principal y no hay más, agregarla
               allImageUrls.push(image);
             }
+            
+            // ✅ NUEVO: Intentar extraer más imágenes desde data attributes del item (AliExpress usa data-attributes para múltiples imágenes)
+            try {
+              // Buscar elementos con data-images o data-image-list
+              const imageDataAttr = item.getAttribute('data-images') || 
+                                    item.getAttribute('data-image-list') ||
+                                    item.getAttribute('data-product-images');
+              
+              if (imageDataAttr) {
+                try {
+                  const parsedImages = JSON.parse(imageDataAttr);
+                  if (Array.isArray(parsedImages)) {
+                    parsedImages.forEach((imgUrl: any) => {
+                      if (imgUrl && typeof imgUrl === 'string') {
+                        let normalized = imgUrl.trim();
+                        if (normalized && !allImageUrls.includes(normalized)) {
+                          if (normalized.startsWith('//')) {
+                            normalized = `https:${normalized}`;
+                          } else if (!normalized.startsWith('http')) {
+                            normalized = `https://${normalized}`;
+                          }
+                          if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(normalized)) {
+                            allImageUrls.push(normalized);
+                          }
+                        }
+                      }
+                    });
+                  }
+                } catch (parseError) {
+                  // Ignorar errores de parsing
+                }
+              }
+              
+              // ✅ MEJORADO: Buscar múltiples imágenes en elementos hijos (galería)
+              const galleryImages = item.querySelectorAll('[data-spm*="image"], [class*="gallery"] img, [class*="image"] img, img[data-src]');
+              if (galleryImages && galleryImages.length > 0) {
+                Array.from(galleryImages).slice(0, 5).forEach((galleryImg: any) => {
+                  const gallerySrc = galleryImg.getAttribute('src') ||
+                                   galleryImg.getAttribute('data-src') ||
+                                   galleryImg.getAttribute('data-lazy-src') ||
+                                   galleryImg.getAttribute('data-original') ||
+                                   (galleryImg as any).src ||
+                                   '';
+                  
+                  if (gallerySrc && typeof gallerySrc === 'string') {
+                    let normalized = gallerySrc.trim();
+                    if (normalized && normalized.length > 10) {
+                      if (normalized.startsWith('//')) {
+                        normalized = `https:${normalized}`;
+                      } else if (!normalized.startsWith('http')) {
+                        normalized = `https://${normalized}`;
+                      }
+                      // Solo agregar si es una URL válida de imagen y no está duplicada
+                      if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(normalized) && !allImageUrls.includes(normalized)) {
+                        allImageUrls.push(normalized);
+                      }
+                    }
+                  }
+                });
+              }
+            } catch (galleryError) {
+              // Ignorar errores al buscar imágenes adicionales
+            }
 
             // ✅ CORRECCIÓN: Extraer URL del atributo href del elemento link del DOM
             // Intentar múltiples estrategias para encontrar la URL del producto
@@ -2055,11 +2118,15 @@ export class AdvancedMarketplaceScraper {
             }
 
             extractedCount++;
+            
+            // ✅ LOGGING: Verificar cuántas imágenes se extrajeron
+            const finalImages = normalizedImageUrls.length > 0 ? normalizedImageUrls : (imageUrl ? [imageUrl] : []);
+            
             return {
               title: String(title).trim().substring(0, 150),
               rawPriceData, // ✅ Incluir datos brutos para resolver fuera
               imageUrl,
-              images: normalizedImageUrls.length > 0 ? normalizedImageUrls : (imageUrl ? [imageUrl] : []), // ✅ NUEVO: Array de todas las imágenes
+              images: finalImages, // ✅ Array de todas las imágenes extraídas
               productUrl,
               rating: Number(rating) || 0,
               reviewCount: Number(reviewCount) || 0,

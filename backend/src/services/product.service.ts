@@ -62,6 +62,7 @@ function buildImagePayload(primary?: string, additional?: string[]): string {
       if (normalizedUrl.startsWith('//')) {
         normalizedUrl = `https:${normalizedUrl}`;
       } else if (normalizedUrl.startsWith('/')) {
+        normalizedUrl = `https://www.aliexpress.com${normalizedUrl}`; else if (normalizedUrl.startsWith('/')) {
         normalizedUrl = `https://www.aliexpress.com${normalizedUrl}`;
       } else if (!normalizedUrl.includes(' ') && normalizedUrl.length > 3) {
         normalizedUrl = `https://${normalizedUrl}`;
@@ -219,6 +220,16 @@ export class ProductService {
 
     // ✅ CORREGIDO: Usar variables locales mutables que pueden haber sido actualizadas después de la validación
     const imagesPayload = buildImagePayload(finalImageUrl, finalImageUrls);
+    
+    // ✅ LOGGING: Verificar qué se está enviando a buildImagePayload
+    logger.debug('[PRODUCT-SERVICE] Building image payload', {
+      userId,
+      finalImageUrl: finalImageUrl?.substring(0, 80) || 'none',
+      finalImageUrls: finalImageUrls?.length || 0,
+      finalImageUrlsPreview: finalImageUrls?.slice(0, 3).map(img => img?.substring(0, 60)) || [],
+      imagesPayloadLength: imagesPayload.length,
+      imagesPayloadPreview: imagesPayload.substring(0, 200)
+    });
     const metadata = mergeProductMetadata(data) || {};
     if (!metadata.currency) {
       metadata.currency = currency || 'USD';
