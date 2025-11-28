@@ -2665,14 +2665,14 @@ export class AdvancedMarketplaceScraper {
         });
       }
 
-      // ✅ NUEVO: Mejorar imágenes visitando páginas individuales de productos con solo una imagen
+      // ✅ MEJORADO: Mejorar imágenes visitando páginas individuales de TODOS los productos
+      // Siempre visitar las páginas individuales para obtener TODAS las imágenes disponibles
       // Solo para los primeros 3 productos para no ralentizar demasiado
       const productsToEnhance = productsWithResolvedPrices
         .filter((p: any) => {
-          // Solo productos con URL válida y con solo una imagen única (sin duplicados)
+          // Solo productos con URL válida
           if (!p.productUrl || p.productUrl.length < 10) return false;
-          const uniqueImages = new Set(p.images || (p.imageUrl ? [p.imageUrl] : []));
-          return uniqueImages.size === 1; // Solo una imagen única
+          return true; // Mejorar TODOS los productos, no solo los que tienen 1 imagen
         })
         .slice(0, 3); // Solo los primeros 3
 
@@ -2680,26 +2680,53 @@ export class AdvancedMarketplaceScraper {
         logger.info('[SCRAPER] Mejorando imágenes visitando páginas individuales', {
           count: productsToEnhance.length,
           query,
-          userId
+          userId,
+          currentImagesCounts: productsToEnhance.map((p: any) => ({
+            title: p.title?.substring(0, 40),
+            currentImages: (p.images || (p.imageUrl ? [p.imageUrl] : [])).length
+          }))
         });
 
         for (let i = 0; i < productsToEnhance.length; i++) {
           const product = productsToEnhance[i];
+          const currentImagesCount = (product.images || (product.imageUrl ? [product.imageUrl] : [])).length;
+          
           try {
             const enhancedImages = await this.extractImagesFromProductPage(product.productUrl);
-            if (enhancedImages.length > 1) {
-              // Actualizar imágenes del producto
-              product.images = enhancedImages;
-              product.imageUrl = enhancedImages[0]; // Mantener la primera como imagen principal
-              logger.info('[SCRAPER] Imágenes mejoradas desde página individual', {
+            
+            // ✅ MEJORADO: Siempre actualizar si encontramos imágenes, incluso si ya había algunas
+            // Si encontramos más imágenes de las que ya teníamos, actualizar
+            if (enhancedImages.length > 0) {
+              // Si encontramos más imágenes o si no teníamos imágenes, actualizar
+              if (enhancedImages.length > currentImagesCount || currentImagesCount === 0) {
+                product.images = enhancedImages;
+                product.imageUrl = enhancedImages[0]; // Mantener la primera como imagen principal
+                logger.info('[SCRAPER] Imágenes mejoradas desde página individual', {
+                  productUrl: product.productUrl.substring(0, 80),
+                  previousImagesCount: currentImagesCount,
+                  newImagesCount: enhancedImages.length,
+                  query,
+                  userId
+                });
+              } else {
+                logger.debug('[SCRAPER] No se mejoraron imágenes (ya tenía suficientes)', {
+                  productUrl: product.productUrl.substring(0, 80),
+                  currentImagesCount,
+                  foundImagesCount: enhancedImages.length,
+                  query,
+                  userId
+                });
+              }
+            } else {
+              logger.warn('[SCRAPER] No se encontraron imágenes en página individual', {
                 productUrl: product.productUrl.substring(0, 80),
-                imagesCount: enhancedImages.length,
                 query,
                 userId
               });
             }
+            
             // Pequeña pausa entre requests para no sobrecargar
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 1500));
           } catch (error) {
             logger.warn('[SCRAPER] Error extrayendo imágenes de página individual', {
               productUrl: product.productUrl?.substring(0, 80),
@@ -3344,12 +3371,23 @@ export class AdvancedMarketplaceScraper {
       try {
         // Navegar a la página del producto
         await productPage.goto(productUrl, { 
-          waitUntil: 'domcontentloaded', 
-          timeout: 15000 
+          waitUntil: 'networkidle2', // Esperar a que la red esté inactiva para asegurar que las imágenes carguen
+          timeout: 20000 
         });
         
-        // Esperar un poco para que cargue el contenido dinámico
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Esperar más tiempo para que cargue el contenido dinámico y las imágenes
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // Hacer scroll para cargar imágenes lazy-load
+        await productPage.evaluate(() => {
+          window.scrollTo(0, document.body.scrollHeight / 3);
+        });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        await productPage.evaluate(() => {
+          window.scrollTo(0, document.body.scrollHeight / 2);
+        });
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         // Extraer imágenes desde múltiples fuentes
         const images = await productPage.evaluate(() => {
@@ -3453,11 +3491,53 @@ export class AdvancedMarketplaceScraper {
             const src = img.getAttribute('src') || 
                        img.getAttribute('data-src') || 
                        img.getAttribute('data-lazy-src') ||
+                       img.getAttribute('data-ks-lazyload') ||
+                       img.getAttribute('data-original') ||
                        (img as any).src;
-            if (src && (src.includes('alicdn.com') || src.includes('aliexpress-media.com'))) {
+            if (src && (src.includes('alicdn.com') || src.includes('aliexpress-media.com') || src.includes('aliimg.com'))) {
               addImage(src);
             }
           });
+
+          // 4. ✅ NUEVO: Buscar en scripts embebidos que contengan URLs de imágenes
+          try {
+            const scripts = document.querySelectorAll('script');
+            scripts.forEach((script: any) => {
+              const content = script.textContent || script.innerHTML || '';
+              // Buscar patrones como "imagePath":"...", "imageUrl":"...", "url":"..."
+              const imagePatterns = [
+                /["'](?:imagePath|imageUrl|url)["']:\s*["']([^"']+\.(?:jpg|jpeg|png|webp|gif))["']/gi,
+                /https?:\/\/[^"'\s]+\.(?:alicdn|aliexpress-media|aliimg)\.com[^"'\s]+\.(?:jpg|jpeg|png|webp|gif)/gi
+              ];
+              
+              imagePatterns.forEach(pattern => {
+                let match;
+                while ((match = pattern.exec(content)) !== null) {
+                  const imgUrl = match[1] || match[0];
+                  if (imgUrl && imgUrl.length > 10) {
+                    addImage(imgUrl);
+                  }
+                }
+              });
+            });
+          } catch (e) {
+            // Ignorar errores al buscar en scripts
+          }
+
+          // 5. ✅ NUEVO: Buscar en atributos data-* que puedan contener URLs de imágenes
+          try {
+            const elementsWithData = document.querySelectorAll('[data-image], [data-img], [data-url]');
+            elementsWithData.forEach((el: any) => {
+              const dataImage = el.getAttribute('data-image') || 
+                               el.getAttribute('data-img') || 
+                               el.getAttribute('data-url');
+              if (dataImage && dataImage.includes('alicdn') || dataImage.includes('aliexpress-media')) {
+                addImage(dataImage);
+              }
+            });
+          } catch (e) {
+            // Ignorar errores
+          }
 
           return allImages;
         });
