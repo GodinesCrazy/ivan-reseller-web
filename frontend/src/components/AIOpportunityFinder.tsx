@@ -476,10 +476,30 @@ export default function AIOpportunityFinder() {
 
       // ✅ MEJORADO: Usar todas las imágenes disponibles si están en el array
       // Priorizar array de imágenes (images) sobre imagen única (image)
+      console.log('[AIOpportunityFinder] Verificando imágenes antes de normalizar', {
+        productTitle: opp.product?.substring(0, 50),
+        hasImagesArray: Array.isArray((opp as any).images),
+        imagesArrayLength: Array.isArray((opp as any).images) ? (opp as any).images.length : 0,
+        imagesPreview: Array.isArray((opp as any).images) ? (opp as any).images.slice(0, 3).map((img: any) => typeof img === 'string' ? img.substring(0, 60) : String(img).substring(0, 60)) : [],
+        hasImage: !!opp.image,
+        imageValue: opp.image?.substring(0, 60)
+      });
+
       if (Array.isArray((opp as any).images) && (opp as any).images.length > 0) {
         const normalizedImages = (opp as any).images
-          .map((img: any) => normalizeImageUrl(img))
-          .filter((img: string | null): img is string => img !== null);
+          .map((img: any) => {
+            if (!img || typeof img !== 'string') return null;
+            return normalizeImageUrl(img);
+          })
+          .filter((img: string | null): img is string => img !== null && img.trim().length > 0);
+        
+        console.log('[AIOpportunityFinder] Imágenes después de normalizar', {
+          productTitle: opp.product?.substring(0, 50),
+          originalCount: (opp as any).images.length,
+          normalizedCount: normalizedImages.length,
+          normalizedPreview: normalizedImages.slice(0, 5).map((img: string) => img?.substring(0, 60))
+        });
+
         if (normalizedImages.length > 0) {
           payload.imageUrl = normalizedImages[0]; // Primera imagen como principal
           payload.imageUrls = normalizedImages; // Todas las imágenes
@@ -489,7 +509,15 @@ export default function AIOpportunityFinder() {
             productTitle: opp.product?.substring(0, 50),
             totalImages: normalizedImages.length,
             firstImage: normalizedImages[0]?.substring(0, 80),
-            allImagesPreview: normalizedImages.slice(0, 5).map((img: string) => img?.substring(0, 60))
+            allImagesPreview: normalizedImages.slice(0, 5).map((img: string) => img?.substring(0, 60)),
+            payloadImageUrl: payload.imageUrl?.substring(0, 80),
+            payloadImageUrlsCount: Array.isArray(payload.imageUrls) ? payload.imageUrls.length : 0
+          });
+        } else {
+          console.error('[AIOpportunityFinder] Todas las imágenes fueron filtradas durante la normalización', {
+            productTitle: opp.product?.substring(0, 50),
+            originalCount: (opp as any).images.length,
+            originalImages: (opp as any).images.slice(0, 3)
           });
         }
       } else if (opp.image && typeof opp.image === 'string' && opp.image.trim().length > 0) {
@@ -571,12 +599,23 @@ export default function AIOpportunityFinder() {
       // ✅ Crear producto - El backend lo guardará con estado PENDING automáticamente
       // El producto quedará disponible en "Pendientes de publicación" para que
       // el sistema (modo automático) o el usuario (modo manual) lo publique
+      // ✅ LOGGING: Verificar exactamente qué se envía en el payload
+      console.log('[AIOpportunityFinder] Payload completo antes de enviar', {
+        productTitle: payload.title?.substring(0, 50),
+        imageUrl: payload.imageUrl?.substring(0, 80),
+        imageUrlsType: typeof payload.imageUrls,
+        imageUrlsIsArray: Array.isArray(payload.imageUrls),
+        imageUrlsCount: Array.isArray(payload.imageUrls) ? payload.imageUrls.length : 0,
+        imageUrlsPreview: Array.isArray(payload.imageUrls) ? payload.imageUrls.slice(0, 5).map((img: string) => img?.substring(0, 60)) : []
+      });
+
       log.debug('Sending product creation request to backend', {
         title: payload.title?.substring(0, 50),
         aliexpressUrl: payload.aliexpressUrl?.substring(0, 80),
         aliexpressPrice: payload.aliexpressPrice,
         suggestedPrice: payload.suggestedPrice,
         hasImageUrl: !!payload.imageUrl,
+        imageUrlsCount: Array.isArray(payload.imageUrls) ? payload.imageUrls.length : 0,
         hasProductData: !!payload.productData
       });
       
