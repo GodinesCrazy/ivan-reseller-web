@@ -815,12 +815,13 @@ export class AdvancedMarketplaceScraper {
         });
       }
 
-      // ✅ Probar múltiples formatos de URL de búsqueda (AliExpress puede cambiar el formato)
+      // ✅ CORREGIDO: Usar formato estándar de AliExpress primero (SearchText)
+      // El formato /w/wholesale-{query}.html puede causar redirecciones incorrectas y bloques
       const searchUrls = [
-        `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(query)}.html`,
         `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`,
         `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}&SortType=total_tranpro_desc`,
         `https://www.aliexpress.com/w/wholesale?SearchText=${encodeURIComponent(query)}&g=y`,
+        `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(query)}.html`, // Formato alternativo (menos preferido)
       ];
       
       let searchUrl = searchUrls[0];
@@ -2253,7 +2254,8 @@ export class AdvancedMarketplaceScraper {
             await page.goto('https://www.aliexpress.com', { waitUntil: 'domcontentloaded', timeout: 15000 });
             await new Promise(resolve => setTimeout(resolve, 3000));
             
-            const searchUrl = `https://www.aliexpress.com/w/wholesale-${encodeURIComponent(query)}.html`;
+            // ✅ CORREGIDO: Usar formato estándar SearchText en lugar de /w/wholesale-{query}.html
+            const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`;
             await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
             await new Promise(resolve => setTimeout(resolve, 5000));
             
