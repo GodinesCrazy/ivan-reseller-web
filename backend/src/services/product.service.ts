@@ -62,7 +62,6 @@ function buildImagePayload(primary?: string, additional?: string[]): string {
       if (normalizedUrl.startsWith('//')) {
         normalizedUrl = `https:${normalizedUrl}`;
       } else if (normalizedUrl.startsWith('/')) {
-        normalizedUrl = `https://www.aliexpress.com${normalizedUrl}`; else if (normalizedUrl.startsWith('/')) {
         normalizedUrl = `https://www.aliexpress.com${normalizedUrl}`;
       } else if (!normalizedUrl.includes(' ') && normalizedUrl.length > 3) {
         normalizedUrl = `https://${normalizedUrl}`;
