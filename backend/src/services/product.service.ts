@@ -162,7 +162,13 @@ export class ProductService {
       finalImageUrlsCount: finalImageUrls?.length || 0,
       finalImageUrls: finalImageUrls?.slice(0, 5).map(img => img?.substring(0, 80)) || [],
       allImageUrlsCount: allImageUrls.length,
-      allImageUrls: allImageUrls.slice(0, 5).map(img => img?.substring(0, 80))
+      allImageUrls: allImageUrls.slice(0, 5).map(img => img?.substring(0, 80)),
+      // ✅ NUEVO: Verificar qué viene desde el DTO directamente
+      dtoImageUrl: imageUrl?.substring(0, 80) || 'none',
+      dtoImageUrlsCount: Array.isArray(imageUrls) ? imageUrls.length : 0,
+      dtoImageUrlsPreview: Array.isArray(imageUrls) ? imageUrls.slice(0, 5).map((img: string) => img?.substring(0, 60)) : [],
+      dtoImageUrlsType: typeof imageUrls,
+      dtoImageUrlsIsArray: Array.isArray(imageUrls)
     });
 
     if (allImageUrls.length > 0) {
