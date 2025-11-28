@@ -32,6 +32,11 @@ function detectCurrencyFromText(texts: Array<string | undefined | null>): string
   if (!joined) return null;
   
   // ✅ Prioridad 1: Buscar códigos de moneda explícitos (CLP, USD, EUR, etc.)
+  // ✅ MEJORADO: Buscar símbolo € primero (más específico que patrones generales)
+  if (/€/.test(joined)) {
+    return 'EUR';
+  }
+  
   for (const entry of CURRENCY_SYMBOL_PATTERNS) {
     if (entry.patterns.some(regex => regex.test(joined))) {
       return entry.code;
