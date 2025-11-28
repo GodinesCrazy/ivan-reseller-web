@@ -346,6 +346,7 @@ export default function Products() {
                               }}
                               className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
                               title="Ver información financiera (ganancia, margen, costos)"
+                              aria-label="Ver información financiera"
                             >
                               <Calculator className="w-4 h-4" />
                             </button>
