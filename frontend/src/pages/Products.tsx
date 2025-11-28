@@ -338,13 +338,14 @@ export default function Products() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
+                            {/* ✅ Botón para ver información financiera - Icono Calculator */}
                             <button
                               onClick={() => {
                                 // ✅ Navegar al preview con parámetro para abrir modal financiero directamente
                                 navigate(`/products/${product.id}/preview?showFinancial=true`);
                               }}
-                              className="p-1 text-purple-600 hover:bg-purple-50 rounded"
-                              title="Información financiera"
+                              className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                              title="Ver información financiera (ganancia, margen, costos)"
                             >
                               <Calculator className="w-4 h-4" />
                             </button>
