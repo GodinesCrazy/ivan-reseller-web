@@ -235,7 +235,6 @@ export class ProductService {
     }
 
     // ✅ Logging antes de crear el producto
-    const logger = require('../config/logger').logger;
     logger.info('[PRODUCT-SERVICE] Creating product', {
       userId,
       title: rest.title?.substring(0, 50),
