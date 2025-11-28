@@ -1207,15 +1207,38 @@ export class MarketplaceService {
    */
   private async generateAIDescription(product: any, marketplace: string, userId?: number): Promise<string> {
     try {
+      // ✅ CORREGIDO: Determinar si la descripción es válida o solo contiene análisis
+      // Si la descripción está vacía, solo contiene "Fortalezas:" o "Recomendaciones:", o tiene menos de 50 caracteres, usar el título para generar una mejor descripción
+      const currentDescription = product.description || '';
+      const isDescriptionValid = currentDescription.length >= 50 && 
+        !currentDescription.toLowerCase().startsWith('fortalezas:') && 
+        !currentDescription.toLowerCase().startsWith('recomendaciones:') &&
+        !currentDescription.toLowerCase().includes('fortalezas:') &&
+        !currentDescription.toLowerCase().includes('recomendaciones:');
+      
+      // ✅ Si la descripción no es válida, usar el título del producto para generar una descripción coherente
+      const descriptionToUse = isDescriptionValid ? currentDescription : '';
+      
       // Intentar obtener credenciales de GROQ
       const { CredentialsManager } = await import('./credentials-manager.service');
       const groqCreds = await CredentialsManager.getCredentials(userId || 0, 'groq', 'production');
       
       if (!groqCreds || !groqCreds.apiKey) {
-        return product.description || ''; // Fallback a descripción original
+        // ✅ Si no hay credenciales, retornar descripción válida o generar una básica desde el título
+        if (isDescriptionValid) {
+          return currentDescription;
+        }
+        // Generar descripción básica desde el título si no hay descripción válida
+        return `Product Description:\n\n${product.title}\n\nThis product offers excellent quality and value. Perfect for your needs.`;
       }
 
       const axios = (await import('axios')).default;
+      
+      // ✅ MEJORADO: Mejorar el prompt para generar descripción más coherente cuando no hay descripción válida
+      const userPrompt = isDescriptionValid
+        ? `Create an optimized product description for ${marketplace}:\nTitle: ${product.title}\nOriginal description: ${currentDescription}\nCategory: ${product.category || 'general'}\n\nReturn only the optimized description, no explanations.`
+        : `Create a comprehensive and compelling product description for ${marketplace} based only on the product title:\nTitle: ${product.title}\nCategory: ${product.category || 'general'}\n\nGenerate a detailed product description (200-400 words) that highlights key features, benefits, and specifications. Make it SEO-friendly and optimized for conversions. Return only the description, no explanations.`;
+
       const response = await axios.post(
         'https://api.groq.com/openai/v1/chat/completions',
         {
@@ -1223,11 +1246,11 @@ export class MarketplaceService {
           messages: [
             {
               role: 'system',
-              content: `You are a professional e-commerce copywriter. Create compelling, SEO-friendly product descriptions for ${marketplace} marketplace. Descriptions should highlight key features, benefits, and be optimized for conversions. Keep it under 500 words.`,
+              content: `You are a professional e-commerce copywriter. Create compelling, SEO-friendly product descriptions for ${marketplace} marketplace. Descriptions should highlight key features, benefits, and be optimized for conversions. Keep it between 200-500 words.`,
             },
             {
               role: 'user',
-              content: `Create an optimized product description for ${marketplace}:\nTitle: ${product.title}\nOriginal description: ${product.description || 'No description provided'}\nCategory: ${product.category || 'general'}\n\nReturn only the optimized description, no explanations.`,
+              content: userPrompt,
             },
           ],
           temperature: 0.7,
@@ -1243,13 +1266,21 @@ export class MarketplaceService {
       );
 
       const aiDescription = response.data.choices[0]?.message?.content?.trim();
-      return aiDescription && aiDescription.length > 0 ? aiDescription : (product.description || '');
+      return aiDescription && aiDescription.length > 0 ? aiDescription : (isDescriptionValid ? currentDescription : `Product Description:\n\n${product.title}\n\nThis product offers excellent quality and value. Perfect for your needs.`);
     } catch (error) {
       logger.debug('Failed to generate AI description, using original', {
         error: error instanceof Error ? error.message : String(error),
         marketplace,
       });
-      return product.description || ''; // Fallback a descripción original
+      // ✅ CORREGIDO: Retornar descripción válida o generada desde título
+      const currentDescription = product.description || '';
+      const isDescriptionValid = currentDescription.length >= 50 && 
+        !currentDescription.toLowerCase().startsWith('fortalezas:') && 
+        !currentDescription.toLowerCase().startsWith('recomendaciones:');
+      if (isDescriptionValid) {
+        return currentDescription;
+      }
+      return `Product Description:\n\n${product.title}\n\nThis product offers excellent quality and value. Perfect for your needs.`;
     }
   }
 

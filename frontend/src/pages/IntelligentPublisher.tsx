@@ -1,10 +1,12 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
 
 export default function IntelligentPublisher() {
+  const location = useLocation();
   const [pending, setPending] = useState<any[]>([]);
   const [listings, setListings] = useState<any[]>([]);
   const [url, setUrl] = useState('');
@@ -13,25 +15,28 @@ export default function IntelligentPublisher() {
   const [bulkStatus, setBulkStatus] = useState<{ total: number; queued: number; done: number; errors: number; running: boolean }>({ total: 0, queued: 0, done: 0, errors: 0, running: false });
   const [loading, setLoading] = useState(true);
 
-  // ✅ MEJORADO: Usar nuevo endpoint /api/publisher/pending con información enriquecida
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const [pendingRes, listingsRes] = await Promise.all([
-          api.get('/api/publisher/pending'), // ✅ Nuevo endpoint con información enriquecida
-          api.get('/api/publisher/listings')
-        ]);
-        setPending(pendingRes.data?.items || []);
-        setListings(listingsRes.data?.items || []);
-      } catch (error) {
-        console.error('Error loading publisher data:', error);
-        toast.error('Error al cargar productos pendientes');
-      } finally {
-        setLoading(false);
-      }
-    })();
+  // ✅ CORREGIDO: Recargar productos cuando se navega a esta página (incluye cuando se viene desde preview)
+  const loadPublisherData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [pendingRes, listingsRes] = await Promise.all([
+        api.get('/api/publisher/pending'), // ✅ Nuevo endpoint con información enriquecida
+        api.get('/api/publisher/listings')
+      ]);
+      setPending(pendingRes.data?.items || []);
+      setListings(listingsRes.data?.items || []);
+    } catch (error) {
+      console.error('Error loading publisher data:', error);
+      toast.error('Error al cargar productos pendientes');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // ✅ CORREGIDO: Recargar cuando se monta el componente O cuando cambia la location (navegación)
+  useEffect(() => {
+    loadPublisherData();
+  }, [loadPublisherData, location.pathname]); // ✅ Agregar location.pathname para recargar al navegar
 
   const approve = useCallback(async (productId: string, marketplaces: string[]) => {
     try {
@@ -49,7 +54,7 @@ export default function IntelligentPublisher() {
         } else if (successCount > 0) {
           toast.success(`Producto aprobado. Publicado en ${successCount}/${totalCount} marketplace(s)`);
         } else if (totalCount > 0) {
-          toast.warning('Producto aprobado, pero la publicación falló. Revisa tus credenciales.');
+          toast.error('Producto aprobado, pero la publicación falló. Revisa tus credenciales.');
         } else {
           toast.success('Producto aprobado');
         }

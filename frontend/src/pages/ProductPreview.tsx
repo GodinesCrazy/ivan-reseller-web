@@ -224,7 +224,7 @@ export default function ProductPreview() {
 
       if (response.data?.success) {
         toast.success('✅ Producto enviado a Intelligent Publisher para aprobación');
-        // Redirigir a Intelligent Publisher
+        // ✅ CORREGIDO: Navegar a publisher - la página se recargará automáticamente porque usa location.pathname en useEffect
         navigate('/publisher');
       } else {
         throw new Error(response.data?.error || 'Error al enviar producto');

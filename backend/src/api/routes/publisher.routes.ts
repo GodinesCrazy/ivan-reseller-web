@@ -34,7 +34,7 @@ router.post('/send_for_approval/:productId', async (req: Request, res: Response)
       });
     }
 
-    // Asegurar que el producto esté en estado PENDING
+    // ✅ CORREGIDO: Asegurar que el producto esté en estado PENDING (siempre actualizar para forzar refresco)
     if (product.status !== 'PENDING') {
       await productService.updateProductStatusSafely(
         productId,
@@ -42,13 +42,41 @@ router.post('/send_for_approval/:productId', async (req: Request, res: Response)
         false, // isPublished = false
         isAdmin ? userId : undefined
       );
-      logger.info('[PUBLISHER] Product status updated to PENDING', { productId, userId });
+      logger.info('[PUBLISHER] Product status updated to PENDING', { productId, userId, previousStatus: product.status });
+    } else {
+      logger.info('[PUBLISHER] Product already in PENDING status', { productId, userId });
+      // ✅ Asegurar que isPublished sea false cuando está en PENDING
+      if (product.isPublished) {
+        await prisma.product.update({
+          where: { id: productId },
+          data: { isPublished: false }
+        });
+        logger.info('[PUBLISHER] Product isPublished set to false (was inconsistent)', { productId, userId });
+      }
     }
+
+    // ✅ Verificar que el producto ahora esté en estado PENDING
+    const updatedProduct = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, status: true, title: true, isPublished: true }
+    });
+
+    logger.info('[PUBLISHER] Product sent for approval', { 
+      productId, 
+      userId, 
+      status: updatedProduct?.status,
+      title: updatedProduct?.title?.substring(0, 50),
+      isPublished: updatedProduct?.isPublished
+    });
 
     return res.json({ 
       success: true, 
       message: 'Producto enviado a Intelligent Publisher para aprobación',
-      data: { productId, status: 'PENDING' }
+      data: { 
+        productId, 
+        status: updatedProduct?.status || 'PENDING',
+        title: updatedProduct?.title
+      }
     });
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Failed to send product for approval';
