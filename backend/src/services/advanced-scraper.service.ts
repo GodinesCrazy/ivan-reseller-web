@@ -2237,7 +2237,8 @@ export class AdvancedMarketplaceScraper {
               logger.info('[SCRAPER] Productos normalizados después de scroll agresivo', { count: normalizedRetry.length });
               // ✅ CORREGIDO: Actualizar productsWithResolvedPrices en lugar de retornar inmediatamente
               // Esto permite que el código continúe y pueda encontrar más productos o continuar el flujo normal
-              productsWithResolvedPrices = normalizedRetry;
+              // Convertir ScrapedProduct[] al tipo correcto
+              productsWithResolvedPrices = normalizedRetry as any;
               // Continuar con el flujo en lugar de retornar aquí para permitir más estrategias
             }
           }
@@ -2300,13 +2301,13 @@ export class AdvancedMarketplaceScraper {
                   // Combinar productos evitando duplicados por URL
                   const existingUrls = new Set(productsWithResolvedPrices.map(p => p.productUrl));
                   const newProducts = normalizedAfterNav.filter(p => !existingUrls.has(p.productUrl));
-                  productsWithResolvedPrices = [...productsWithResolvedPrices, ...newProducts];
+                  productsWithResolvedPrices = [...productsWithResolvedPrices, ...newProducts] as any;
                   logger.info('[SCRAPER] Productos combinados de múltiples estrategias', { 
                     total: productsWithResolvedPrices.length,
                     nuevos: newProducts.length
                   });
                 } else {
-                  productsWithResolvedPrices = normalizedAfterNav;
+                  productsWithResolvedPrices = normalizedAfterNav as any;
                 }
               }
             }
