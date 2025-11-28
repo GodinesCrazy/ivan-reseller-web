@@ -3726,9 +3726,10 @@ export class AdvancedMarketplaceScraper {
         if (typeof candidate === 'string') {
           const numericMatch = candidate.match(/[\d.,]+/);
           if (numericMatch) {
-            const numericValue = parseFloat(numericMatch[0].replace(/,/g, ''));
+            // ✅ CORREGIDO: Usar parseLocalizedNumber para manejar formatos europeos (0,99) y americanos (0.99)
+            const fallbackCurrency = aliExpressLocalCurrency || userBaseCurrency || 'USD';
+            const numericValue = parseLocalizedNumber(numericMatch[0], fallbackCurrency);
             if (isFinite(numericValue) && numericValue > 0) {
-              const fallbackCurrency = aliExpressLocalCurrency || userBaseCurrency || 'USD';
               resolvedPrice = {
                 amount: numericValue,
                 sourceCurrency: fallbackCurrency,
