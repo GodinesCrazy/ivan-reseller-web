@@ -10,7 +10,8 @@ import {
   Search,
   Eye,
   Trash2,
-  ExternalLink
+  ExternalLink,
+  Calculator
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -333,9 +334,19 @@ export default function Products() {
                                 navigate(`/products/${product.id}/preview`);
                               }}
                               className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                              title="View details"
+                              title="Preview de publicación"
                             >
                               <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                // ✅ Navegar al preview con parámetro para abrir modal financiero directamente
+                                navigate(`/products/${product.id}/preview?showFinancial=true`);
+                              }}
+                              className="p-1 text-purple-600 hover:bg-purple-50 rounded"
+                              title="Información financiera"
+                            >
+                              <Calculator className="w-4 h-4" />
                             </button>
                             {product.status === 'PENDING' && (
                               <>

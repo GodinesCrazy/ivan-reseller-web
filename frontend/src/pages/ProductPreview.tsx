@@ -137,6 +137,7 @@ export default function ProductPreview() {
   const [searchParams] = useSearchParams();
   const marketplace = searchParams.get('marketplace') || 'ebay';
   const environment = searchParams.get('environment') || undefined;
+  const showFinancialParam = searchParams.get('showFinancial') === 'true';
 
   const [preview, setPreview] = useState<ListingPreview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -161,7 +162,7 @@ export default function ProductPreview() {
     }
 
     loadPreview();
-  }, [id, marketplace, environment]);
+  }, [id, marketplace, environment, showFinancialParam]);
 
   const loadPreview = async () => {
     try {
@@ -174,6 +175,15 @@ export default function ProductPreview() {
 
       if (response.data?.success && response.data?.data) {
         setPreview(response.data.data);
+        
+        // ✅ Si viene con parámetro showFinancial, abrir modal automáticamente
+        if (showFinancialParam) {
+          setShowFinancialModal(true);
+          // Limpiar el parámetro de la URL después de abrir el modal
+          const newSearchParams = new URLSearchParams(searchParams);
+          newSearchParams.delete('showFinancial');
+          window.history.replaceState({}, '', `${window.location.pathname}?${newSearchParams.toString()}`);
+        }
         
         // ✅ Cargar decisión de lifetime si el producto está publicado
         await loadLifetimeDecision();
