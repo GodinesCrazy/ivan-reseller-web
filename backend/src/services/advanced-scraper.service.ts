@@ -3393,16 +3393,61 @@ export class AdvancedMarketplaceScraper {
         // Esperar más tiempo para que cargue el contenido dinámico y las imágenes
         await new Promise(resolve => setTimeout(resolve, 3000));
         
-        // Hacer scroll para cargar imágenes lazy-load
-        await productPage.evaluate(() => {
-          window.scrollTo(0, document.body.scrollHeight / 3);
+        // ✅ MEJORA: Hacer scroll incremental para cargar imágenes lazy-load
+        await productPage.evaluate(async () => {
+          const distance = 100;
+          const delay = 100;
+          while (document.documentElement.scrollTop + window.innerHeight < document.documentElement.scrollHeight) {
+            window.scrollBy(0, distance);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
         });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Espera final
         
-        await productPage.evaluate(() => {
-          window.scrollTo(0, document.body.scrollHeight / 2);
-        });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // ✅ MEJORA: Intentar hacer clic en las primeras miniaturas para cargar URLs ampliadas
+        // Esto ayuda a que las URLs de alta resolución se carguen en el DOM
+        try {
+          const thumbnailClickable = await productPage.evaluate(() => {
+            // Buscar miniaturas clickeables en la galería
+            const thumbnails = document.querySelectorAll('#j-image-thumb-wrap li, .images-view-item, [class*="thumb"]');
+            const clickableThumbs: Array<{ selector: string; index: number }> = [];
+            
+            thumbnails.forEach((thumb: any, index: number) => {
+              // Verificar si es clickeable (no está deshabilitado)
+              if (thumb && !thumb.classList.contains('disabled') && thumb.offsetParent !== null) {
+                clickableThumbs.push({ selector: `#j-image-thumb-wrap li:nth-child(${index + 1}), .images-view-item:nth-child(${index + 1})`, index });
+              }
+            });
+            
+            return clickableThumbs.slice(0, 5); // Solo las primeras 5 para no demorar mucho
+          });
+          
+          // Hacer clic en las primeras 2-3 miniaturas para cargar sus URLs ampliadas
+          for (let i = 0; i < Math.min(thumbnailClickable.length, 3); i++) {
+            try {
+              const thumb = thumbnailClickable[i];
+              await productPage.click(thumb.selector).catch(() => {});
+              await new Promise(resolve => setTimeout(resolve, 500)); // Esperar a que cargue la imagen ampliada
+            } catch (clickError) {
+              // Continuar con la siguiente si falla el clic
+            }
+          }
+          
+          // Volver a la primera miniatura (imagen principal)
+          if (thumbnailClickable.length > 0) {
+            try {
+              await productPage.click(thumbnailClickable[0].selector).catch(() => {});
+              await new Promise(resolve => setTimeout(resolve, 500));
+            } catch (clickError) {
+              // Ignorar si no se puede hacer clic
+            }
+          }
+        } catch (clickError) {
+          // Si falla el proceso de clics, continuar con la extracción normal
+          logger.debug('[SCRAPER] No se pudieron hacer clics en miniaturas, continuando con extracción normal', {
+            productUrl: productUrl.substring(0, 80)
+          });
+        }
 
         // Extraer imágenes desde múltiples fuentes
         const images = await productPage.evaluate(() => {
@@ -3433,111 +3478,262 @@ export class AdvancedMarketplaceScraper {
             }
           };
 
-          // 1. Extraer desde runParams/scripts (datos embebidos)
+          // 1. ✅ MEJORA: Extraer desde runParams/scripts (datos embebidos) - PRIORIZAR imagePath (alta resolución)
           try {
             const w = (globalThis as any).window;
-            if (w?.runParams?.data?.gallery) {
-              const gallery = w.runParams.data.gallery;
-              if (Array.isArray(gallery)) {
-                gallery.forEach((item: any) => {
-                  if (item.imagePath || item.imageUrl || item.url) {
-                    addImage(item.imagePath || item.imageUrl || item.url);
+            const runParams = w?.runParams || w?.__INITIAL_STATE__?.productDetail?.productInfo || w?.__INITIAL_STATE__?.detail;
+            
+            // ✅ PRIORIDAD 1: imageModule contiene las URLs de alta resolución
+            if (runParams?.data?.imageModule) {
+              const imageModule = runParams.data.imageModule;
+              
+              // imagePathList contiene las rutas base (sin dominio) - estas son de alta resolución
+              if (Array.isArray(imageModule.imagePathList)) {
+                imageModule.imagePathList.forEach((path: any) => {
+                  if (path && typeof path === 'string') {
+                    // Construir URL completa si es relativa
+                    let fullUrl = path;
+                    if (!path.startsWith('http')) {
+                      fullUrl = `https://ae01.alicdn.com${path.startsWith('/') ? '' : '/'}${path}`;
+                    }
+                    addImage(fullUrl);
+                  }
+                });
+              }
+              
+              // imageUrlList contiene URLs completas - también alta resolución
+              if (Array.isArray(imageModule.imageUrlList)) {
+                imageModule.imageUrlList.forEach((url: any) => {
+                  if (url && typeof url === 'string') {
+                    addImage(url);
                   }
                 });
               }
             }
             
-            // Buscar en imageModule
-            if (w?.runParams?.data?.imageModule) {
-              const imageModule = w.runParams.data.imageModule;
-              if (Array.isArray(imageModule.imagePathList)) {
-                imageModule.imagePathList.forEach(addImage);
-              }
-              if (Array.isArray(imageModule.imageUrlList)) {
-                imageModule.imageUrlList.forEach(addImage);
+            // ✅ PRIORIDAD 2: gallery también contiene imágenes de alta resolución
+            if (runParams?.data?.gallery) {
+              const gallery = runParams.data.gallery;
+              if (Array.isArray(gallery)) {
+                gallery.forEach((item: any) => {
+                  // Priorizar imagePath (alta resolución) sobre imageUrl (miniatura)
+                  if (item.imagePath) {
+                    let fullUrl = item.imagePath;
+                    if (!fullUrl.startsWith('http')) {
+                      fullUrl = `https://ae01.alicdn.com${fullUrl.startsWith('/') ? '' : '/'}${fullUrl}`;
+                    }
+                    addImage(fullUrl);
+                  } else if (item.imageUrl || item.url) {
+                    addImage(item.imageUrl || item.url);
+                  }
+                });
               }
             }
 
-            // Buscar en productInfo
-            if (w?.runParams?.data?.productInfo?.imageList) {
-              const imageList = w.runParams.data.productInfo.imageList;
+            // ✅ PRIORIDAD 3: productInfo.imageList
+            if (runParams?.data?.productInfo?.imageList) {
+              const imageList = runParams.data.productInfo.imageList;
               if (Array.isArray(imageList)) {
                 imageList.forEach((img: any) => {
                   if (typeof img === 'string') {
                     addImage(img);
-                  } else if (img.imagePath || img.imageUrl || img.url) {
-                    addImage(img.imagePath || img.imageUrl || img.url);
+                  } else if (img.imagePath) {
+                    // Priorizar imagePath (alta resolución)
+                    let fullUrl = img.imagePath;
+                    if (!fullUrl.startsWith('http')) {
+                      fullUrl = `https://ae01.alicdn.com${fullUrl.startsWith('/') ? '' : '/'}${fullUrl}`;
+                    }
+                    addImage(fullUrl);
+                  } else if (img.imageUrl || img.url) {
+                    addImage(img.imageUrl || img.url);
                   }
                 });
               }
+            }
+            
+            // Buscar en otros lugares comunes de runParams
+            if (runParams?.imageUrls && Array.isArray(runParams.imageUrls)) {
+              runParams.imageUrls.forEach((url: any) => {
+                if (url && typeof url === 'string') addImage(url);
+              });
+            }
+            if (runParams?.images && Array.isArray(runParams.images)) {
+              runParams.images.forEach((url: any) => {
+                if (url && typeof url === 'string') addImage(url);
+              });
+            }
+            if (runParams?.productImages && Array.isArray(runParams.productImages)) {
+              runParams.productImages.forEach((url: any) => {
+                if (url && typeof url === 'string') addImage(url);
+              });
             }
           } catch (e) {
             // Ignorar errores al acceder a runParams
           }
 
-          // 2. Extraer desde la galería del DOM
-          const gallerySelectors = [
-            '.images-view-item img',
-            '.gallery-image img',
-            '.product-image img',
-            '[class*="gallery"] img',
-            '[class*="image"] img',
-            '.product-gallery img',
-            '#j-image-thumb-wrap img',
-            '.sku-property-image img'
+          // 2. ✅ MEJORA: Extraer desde la galería del DOM - PRIORIZAR atributos de alta resolución
+          // Primero buscar la imagen principal ampliada
+          const mainImageSelectors = [
+            '.images-view-magnifier-wrap img', // Imagen principal ampliada
+            '.image-view-magnifier img',
+            '.magnifier-image',
+            '.detail-main-image img',
+            '[class*="magnifier"] img',
+            '[class*="main-image"] img'
           ];
 
-          for (const selector of gallerySelectors) {
-            const images = document.querySelectorAll(selector);
-            images.forEach((img: any) => {
-              const src = img.getAttribute('src') || 
-                         img.getAttribute('data-src') || 
+          for (const selector of mainImageSelectors) {
+            const mainImg = document.querySelector(selector) as HTMLImageElement;
+            if (mainImg) {
+              // Priorizar atributos de alta resolución
+              const highResSrc = mainImg.getAttribute('data-src-large') ||
+                                mainImg.getAttribute('data-zoom-src') ||
+                                mainImg.getAttribute('data-original-large') ||
+                                mainImg.getAttribute('data-src') ||
+                                mainImg.src;
+              if (highResSrc) {
+                addImage(highResSrc);
+                break; // Solo necesitamos una imagen principal
+              }
+            }
+          }
+
+          // ✅ MEJORA: Extraer miniaturas de la galería y sus URLs de alta resolución
+          const thumbnailContainers = [
+            '#j-image-thumb-wrap li', // Contenedor de miniaturas de AliExpress
+            '.images-view-item', // Items de la galería
+            '.gallery-item',
+            '[class*="thumb"]',
+            '[class*="thumbnail"]'
+          ];
+
+          for (const containerSelector of thumbnailContainers) {
+            const thumbnails = document.querySelectorAll(containerSelector);
+            thumbnails.forEach((thumb: any) => {
+              // Buscar imagen dentro del contenedor
+              const img = thumb.querySelector('img');
+              if (img) {
+                // ✅ PRIORIDAD: Buscar atributos de alta resolución primero
+                const highResUrl = img.getAttribute('data-src-large') ||
+                                  img.getAttribute('data-zoom-src') ||
+                                  img.getAttribute('data-original-large') ||
+                                  thumb.getAttribute('data-src-large') ||
+                                  thumb.getAttribute('data-zoom-src') ||
+                                  thumb.getAttribute('data-image-url');
+                
+                if (highResUrl) {
+                  addImage(highResUrl);
+                } else {
+                  // Si no hay URL de alta resolución, usar la miniatura
+                  const thumbSrc = img.getAttribute('src') ||
+                                 img.getAttribute('data-src') ||
+                                 img.getAttribute('data-lazy-src') ||
+                                 img.getAttribute('data-ks-lazyload') ||
+                                 img.getAttribute('data-original') ||
+                                 img.src;
+                  if (thumbSrc) {
+                    // Remover parámetros de tamaño de miniatura para obtener URL base
+                    let baseUrl = thumbSrc.split('?')[0];
+                    baseUrl = baseUrl.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
+                    addImage(baseUrl);
+                  }
+                }
+              }
+            });
+          }
+
+          // ✅ MEJORA: Buscar imágenes en selectores de color/modelo (variantes)
+          const variantSelectors = [
+            '.sku-property-item', // Items de variantes (color, modelo, etc.)
+            '[class*="sku-property"]',
+            '[class*="property-item"]'
+          ];
+
+          for (const selector of variantSelectors) {
+            const variants = document.querySelectorAll(selector);
+            variants.forEach((variant: any) => {
+              const img = variant.querySelector('img');
+              if (img) {
+                // Obtener URL de alta resolución de la variante
+                const variantHighRes = img.getAttribute('data-src-large') ||
+                                      img.getAttribute('data-zoom-src') ||
+                                      variant.getAttribute('data-image-url') ||
+                                      variant.getAttribute('data-src-large');
+                
+                if (variantHighRes) {
+                  addImage(variantHighRes);
+                } else {
+                  const variantSrc = img.getAttribute('src') ||
+                                   img.getAttribute('data-src') ||
+                                   img.src;
+                  if (variantSrc) {
+                    // Remover parámetros de tamaño
+                    let baseUrl = variantSrc.split('?')[0];
+                    baseUrl = baseUrl.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
+                    addImage(baseUrl);
+                  }
+                }
+              }
+            });
+          }
+
+          // 3. ✅ FALLBACK: Buscar todas las imágenes de AliExpress CDN (solo si no encontramos suficientes)
+          // Esto es un fallback para asegurar que tenemos imágenes, pero priorizamos las de alta resolución
+          if (allImages.length < 3) {
+            const allImgElements = document.querySelectorAll('img');
+            allImgElements.forEach((img: any) => {
+              const src = img.getAttribute('src') ||
+                         img.getAttribute('data-src') ||
                          img.getAttribute('data-lazy-src') ||
                          img.getAttribute('data-ks-lazyload') ||
                          img.getAttribute('data-original') ||
                          (img as any).src;
-              if (src) addImage(src);
+              if (src && (src.includes('alicdn.com') || src.includes('aliexpress-media.com') || src.includes('aliimg.com'))) {
+                // Solo agregar si no es una miniatura muy pequeña (evitar iconos y logos)
+                if (!src.includes('_50x50') && !src.includes('icon') && !src.includes('logo') && !src.includes('avatar')) {
+                  // Remover parámetros de tamaño para obtener URL base
+                  let baseUrl = src.split('?')[0];
+                  baseUrl = baseUrl.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
+                  addImage(baseUrl);
+                }
+              }
             });
           }
 
-          // 3. Buscar todas las imágenes que contengan "alicdn" o "aliexpress-media" (CDN de AliExpress)
-          const allImgElements = document.querySelectorAll('img');
-          allImgElements.forEach((img: any) => {
-            const src = img.getAttribute('src') || 
-                       img.getAttribute('data-src') || 
-                       img.getAttribute('data-lazy-src') ||
-                       img.getAttribute('data-ks-lazyload') ||
-                       img.getAttribute('data-original') ||
-                       (img as any).src;
-            if (src && (src.includes('alicdn.com') || src.includes('aliexpress-media.com') || src.includes('aliimg.com'))) {
-              addImage(src);
-            }
-          });
+          // 4. ✅ MEJORA: Buscar URLs de imágenes en scripts embebidos (JSON) - priorizar imagePath
+          const scriptContents = Array.from(document.querySelectorAll('script[type="application/ld+json"], script:not([src])'))
+            .map(s => s.textContent)
+            .filter(Boolean);
 
-          // 4. ✅ NUEVO: Buscar en scripts embebidos que contengan URLs de imágenes
-          try {
-            const scripts = document.querySelectorAll('script');
-            scripts.forEach((script: any) => {
-              const content = script.textContent || script.innerHTML || '';
-              // Buscar patrones como "imagePath":"...", "imageUrl":"...", "url":"..."
-              const imagePatterns = [
-                /["'](?:imagePath|imageUrl|url)["']:\s*["']([^"']+\.(?:jpg|jpeg|png|webp|gif))["']/gi,
-                /https?:\/\/[^"'\s]+\.(?:alicdn|aliexpress-media|aliimg)\.com[^"'\s]+\.(?:jpg|jpeg|png|webp|gif)/gi
-              ];
-              
-              imagePatterns.forEach(pattern => {
-                let match;
-                while ((match = pattern.exec(content)) !== null) {
-                  const imgUrl = match[1] || match[0];
-                  if (imgUrl && imgUrl.length > 10) {
-                    addImage(imgUrl);
+          scriptContents.forEach(content => {
+            try {
+              const json = JSON.parse(content!);
+              const findImageUrlsInJson = (obj: any) => {
+                if (typeof obj !== 'object' || obj === null) return;
+                if (Array.isArray(obj)) {
+                  obj.forEach(findImageUrlsInJson);
+                } else {
+                  for (const key in obj) {
+                    // Priorizar imagePath sobre imageUrl
+                    if (key === 'imagePath' && typeof obj[key] === 'string') {
+                      let fullUrl = obj[key];
+                      if (!fullUrl.startsWith('http')) {
+                        fullUrl = `https://ae01.alicdn.com${fullUrl.startsWith('/') ? '' : '/'}${fullUrl}`;
+                      }
+                      addImage(fullUrl);
+                    } else if (typeof obj[key] === 'string' && /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif|avif)/i.test(obj[key])) {
+                      addImage(obj[key]);
+                    } else if (typeof obj[key] === 'object') {
+                      findImageUrlsInJson(obj[key]);
+                    }
                   }
                 }
-              });
-            });
-          } catch (e) {
-            // Ignorar errores al buscar en scripts
-          }
+              };
+              findImageUrlsInJson(json);
+            } catch (e) {
+              // Ignorar errores de parseo JSON
+            }
+          });
 
           // 5. ✅ NUEVO: Buscar en atributos data-* que puedan contener URLs de imágenes
           try {
