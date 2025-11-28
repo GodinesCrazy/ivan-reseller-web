@@ -328,27 +328,26 @@ export default function Products() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            {/* Botón Preview - Ojo */}
                             <button
                               onClick={() => {
-                                // ✅ Unificar View Detail con vista previa: navegar a la misma página de preview
                                 navigate(`/products/${product.id}/preview`);
                               }}
-                              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                              className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                               title="Preview de publicación"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
-                            {/* ✅ Botón para ver información financiera - Icono Calculator */}
+                            {/* Botón Información Financiera - Calculadora */}
                             <button
                               onClick={() => {
-                                // ✅ Navegar al preview con parámetro para abrir modal financiero directamente
                                 navigate(`/products/${product.id}/preview?showFinancial=true`);
                               }}
                               className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
                               title="Ver información financiera (ganancia, margen, costos)"
                               aria-label="Ver información financiera"
                             >
-                              <Calculator className="w-4 h-4" />
+                              <Calculator className="w-4 h-4 text-purple-600" />
                             </button>
                             {product.status === 'PENDING' && (
                               <>
