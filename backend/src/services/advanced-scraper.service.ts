@@ -1217,13 +1217,61 @@ export class AdvancedMarketplaceScraper {
 
             if (Array.isArray(list) && list.length > 0) {
             products = list.map((item: any) => {
-              // ✅ TAREA 1: Extraer y normalizar URL de imagen con múltiples fallbacks
+              // ✅ MEJORADO: Extraer TODAS las imágenes disponibles desde runParams
+              const allImageUrls: string[] = [];
+              const imageSet = new Set<string>();
+              
+              // Función helper para normalizar y agregar URL de imagen
+              const addImageUrl = (imgUrl: any) => {
+                if (!imgUrl || typeof imgUrl !== 'string') return;
+                let normalized = imgUrl.trim();
+                if (!normalized) return;
+                
+                // Normalizar URL
+                if (normalized.startsWith('//')) {
+                  normalized = `https:${normalized}`;
+                } else if (!normalized.startsWith('http')) {
+                  normalized = `https://${normalized}`;
+                }
+                
+                // Validar que sea una URL válida de imagen
+                if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(normalized) && !imageSet.has(normalized)) {
+                  imageSet.add(normalized);
+                  allImageUrls.push(normalized);
+                }
+              };
+              
+              // ✅ NUEVO: Buscar arrays completos de imágenes desde imageModule
+              if (item.imageModule?.imagePathList && Array.isArray(item.imageModule.imagePathList)) {
+                item.imageModule.imagePathList.forEach(addImageUrl);
+              }
+              if (item.imageModule?.imageUrlList && Array.isArray(item.imageModule.imageUrlList)) {
+                item.imageModule.imageUrlList.forEach(addImageUrl);
+              }
+              if (item.productImageModule?.imagePathList && Array.isArray(item.productImageModule.imagePathList)) {
+                item.productImageModule.imagePathList.forEach(addImageUrl);
+              }
+              
+              // ✅ NUEVO: Buscar en arrays de imágenes directos
+              if (Array.isArray(item.images)) {
+                item.images.forEach(addImageUrl);
+              }
+              if (Array.isArray(item.imageUrlList)) {
+                item.imageUrlList.forEach(addImageUrl);
+              }
+              if (Array.isArray(item.productImages)) {
+                item.productImages.forEach(addImageUrl);
+              }
+              if (Array.isArray(item.galleryImages)) {
+                item.galleryImages.forEach(addImageUrl);
+              }
+              
+              // ✅ MANTENER: Imagen principal como fallback (compatibilidad)
               let imageUrl = item.image?.imgUrl || item.imageUrl || item.image?.url || item.imgUrl || '';
               
-              // Limpiar y normalizar URL
+              // Limpiar y normalizar URL principal
               if (imageUrl) {
                 imageUrl = String(imageUrl).replace(/^\//, 'https://').trim();
-                // Si no empieza con http, agregarlo
                 if (imageUrl && !imageUrl.startsWith('http')) {
                   if (imageUrl.startsWith('//')) {
                     imageUrl = 'https:' + imageUrl;
@@ -1231,27 +1279,37 @@ export class AdvancedMarketplaceScraper {
                     imageUrl = 'https://' + imageUrl;
                   }
                 }
+                // Agregar imagen principal al array si no está ya
+                addImageUrl(imageUrl);
               }
               
-              // Si aún no hay imagen válida, intentar construir desde productId o usar placeholder
-              if (!imageUrl || imageUrl.length < 10) {
+              // Si aún no hay imágenes válidas, intentar construir desde productId o usar placeholder
+              if (allImageUrls.length === 0) {
                 const productId = item.productId || item.id;
                 if (productId) {
                   const idStr = String(productId);
                   if (idStr.length >= 8) {
-                    imageUrl = `https://ae01.alicdn.com/kf/${idStr.substring(0, 2)}/${idStr}.jpg`;
+                    const constructedUrl = `https://ae01.alicdn.com/kf/${idStr.substring(0, 2)}/${idStr}.jpg`;
+                    addImageUrl(constructedUrl);
+                    if (!imageUrl) imageUrl = constructedUrl;
                   }
                 }
                 // Último fallback: placeholder
-                if (!imageUrl || imageUrl.length < 10) {
-                  imageUrl = 'https://via.placeholder.com/300x300?text=No+Image';
+                if (allImageUrls.length === 0) {
+                  const placeholderUrl = 'https://via.placeholder.com/300x300?text=No+Image';
+                  allImageUrls.push(placeholderUrl);
+                  if (!imageUrl) imageUrl = placeholderUrl;
                 }
+              } else if (!imageUrl) {
+                // Si tenemos imágenes en el array pero no imagen principal, usar la primera
+                imageUrl = allImageUrls[0];
               }
               
               return {
                 title: String(item.title || item.productTitle || '').trim().substring(0, 150),
                 price: Number(item.actSkuCalPrice || item.skuCalPrice || item.salePrice || 0),
-                imageUrl: imageUrl,
+                imageUrl: imageUrl, // ✅ MANTENER: Imagen principal para compatibilidad
+                images: allImageUrls.length > 0 ? allImageUrls : (imageUrl ? [imageUrl] : []), // ✅ NUEVO: Array de todas las imágenes
                 productUrl: (item.productUrl || item.detailUrl || '').startsWith('http') ? (item.productUrl || item.detailUrl) : `https:${item.productUrl || item.detailUrl || ''}`,
                 rating: Number(item.evaluationRate) || Number(item.evaluationScore) || 0,
                 reviewCount: Number(item.evaluationCount) || Number(item.reviewNum) || 0,
@@ -1628,6 +1686,7 @@ export class AdvancedMarketplaceScraper {
               if (priceElement) break;
             }
 
+            // ✅ MEJORADO: Obtener TODAS las imágenes, no solo la primera
             const imageSelectors = [
               '.search-card-item--gallery--img',
               'img[src]',
@@ -1637,11 +1696,48 @@ export class AdvancedMarketplaceScraper {
               'img[data-pl="product-image"]',
               'div[data-pl="product-image"] img'
             ];
-            let imageElement: any = null;
+            
+            // ✅ NUEVO: Buscar TODAS las imágenes usando querySelectorAll
+            const allImageElements: any[] = [];
+            const imageSet = new Set<string>(); // Para evitar duplicados
+            
             for (const sel of imageSelectors) {
-              imageElement = item.querySelector(sel);
-              if (imageElement) break;
+              const foundImages = item.querySelectorAll(sel);
+              if (foundImages && foundImages.length > 0) {
+                Array.from(foundImages).forEach((imgEl: any) => {
+                  // Extraer URL de múltiples atributos posibles
+                  const imgSrc = imgEl.getAttribute('src') ||
+                                imgEl.getAttribute('data-src') ||
+                                imgEl.getAttribute('data-lazy-src') ||
+                                imgEl.getAttribute('data-ks-lazyload') ||
+                                imgEl.getAttribute('data-original') ||
+                                (imgEl as any).src ||
+                                '';
+                  
+                  // Normalizar URL
+                  if (imgSrc && typeof imgSrc === 'string' && imgSrc.trim().length > 0) {
+                    let normalizedUrl = imgSrc.trim();
+                    if (normalizedUrl.startsWith('//')) {
+                      normalizedUrl = `https:${normalizedUrl}`;
+                    } else if (!normalizedUrl.startsWith('http')) {
+                      normalizedUrl = `https://${normalizedUrl}`;
+                    }
+                    
+                    // Validar que sea una URL válida de imagen
+                    if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(normalizedUrl) && !imageSet.has(normalizedUrl)) {
+                      imageSet.add(normalizedUrl);
+                      allImageElements.push({ element: imgEl, url: normalizedUrl });
+                    }
+                  }
+                });
+                
+                // Si encontramos imágenes con este selector, continuar (ya tenemos suficientes)
+                if (allImageElements.length > 0) break;
+              }
             }
+            
+            // ✅ MANTENER: Imagen principal para compatibilidad (primera encontrada)
+            const imageElement = allImageElements.length > 0 ? allImageElements[0].element : null;
 
             const ratingElement =
               item.querySelector('[data-pl="rating"] span') ||
@@ -1747,8 +1843,10 @@ export class AdvancedMarketplaceScraper {
               fullText: fullText.substring(0, 500), // Limitar tamaño para evitar payloads grandes
             };
 
-            // ✅ Extraer imagen del atributo src o data-src del elemento DOM
+            // ✅ MEJORADO: Extraer TODAS las imágenes encontradas
             let image = '';
+            const allImageUrls: string[] = [];
+            
             if (imageElement) {
               image = imageElement.getAttribute('src') ||
                       imageElement.getAttribute('data-src') ||
@@ -1756,6 +1854,20 @@ export class AdvancedMarketplaceScraper {
                       imageElement.getAttribute('data-ks-lazyload') ||
                       (imageElement as any).src ||
                       '';
+            }
+            
+            // ✅ NUEVO: Agregar todas las URLs de imágenes encontradas
+            if (allImageElements.length > 0) {
+              allImageElements.forEach(({ url }) => {
+                if (url && !allImageUrls.includes(url)) {
+                  allImageUrls.push(url);
+                }
+              });
+            }
+            
+            // ✅ Si solo tenemos la imagen principal, agregarla al array también
+            if (image && !allImageUrls.includes(image)) {
+              allImageUrls.push(image);
             }
 
             // ✅ CORRECCIÓN: Extraer URL del atributo href del elemento link del DOM
@@ -1840,8 +1952,11 @@ export class AdvancedMarketplaceScraper {
               item.numberOfOrders ||
               0;
 
-            // ✅ Construir URLs absolutas
+            // ✅ MEJORADO: Construir URLs absolutas para TODAS las imágenes
             let imageUrl = '';
+            const normalizedImageUrls: string[] = [];
+            
+            // Normalizar imagen principal
             if (image) {
               if (image.startsWith('//')) {
                 imageUrl = `https:${image}`;
@@ -1852,6 +1967,30 @@ export class AdvancedMarketplaceScraper {
               } else {
                 imageUrl = `https://${image}`;
               }
+            }
+            
+            // ✅ NUEVO: Normalizar todas las URLs de imágenes encontradas
+            if (allImageUrls.length > 0) {
+              allImageUrls.forEach((img) => {
+                let normalized = img;
+                if (img.startsWith('//')) {
+                  normalized = `https:${img}`;
+                } else if (img.startsWith('http')) {
+                  normalized = img;
+                } else if (img.startsWith('/')) {
+                  normalized = `https://www.aliexpress.com${img}`;
+                } else {
+                  normalized = `https://${img}`;
+                }
+                if (normalized && !normalizedImageUrls.includes(normalized)) {
+                  normalizedImageUrls.push(normalized);
+                }
+              });
+            }
+            
+            // ✅ Si solo tenemos imagen principal, agregarla al array también
+            if (imageUrl && !normalizedImageUrls.includes(imageUrl)) {
+              normalizedImageUrls.push(imageUrl);
             }
 
             let productUrl = '';
@@ -1887,6 +2026,7 @@ export class AdvancedMarketplaceScraper {
               title: String(title).trim().substring(0, 150),
               rawPriceData, // ✅ Incluir datos brutos para resolver fuera
               imageUrl,
+              images: normalizedImageUrls.length > 0 ? normalizedImageUrls : (imageUrl ? [imageUrl] : []), // ✅ NUEVO: Array de todas las imágenes
               productUrl,
               rating: Number(rating) || 0,
               reviewCount: Number(reviewCount) || 0,
@@ -2116,6 +2256,7 @@ export class AdvancedMarketplaceScraper {
             priceRangeSourceCurrency: finalSourceCurrency,
             priceSource,
             imageUrl: product.imageUrl,
+            images: product.images && Array.isArray(product.images) ? product.images : (product.imageUrl ? [product.imageUrl] : []), // ✅ NUEVO: Incluir array de imágenes
             productUrl: product.productUrl,
             rating: product.rating,
             reviewCount: product.reviewCount,
@@ -3299,11 +3440,19 @@ export class AdvancedMarketplaceScraper {
       }
     };
 
-    // Extraer de diferentes fuentes posibles
-    // 1. Arrays de imágenes
-    if (Array.isArray(item.images)) {
-      item.images.forEach(addImage);
+    // ✅ MEJORADO: Priorizar array de imágenes si viene desde extractProductsFromDom o runParams
+    // Si el item ya tiene un array de imágenes normalizado, usarlo primero
+    if (Array.isArray(item.images) && item.images.length > 0) {
+      // Verificar que sean URLs válidas (no objetos)
+      item.images.forEach((img: any) => {
+        if (typeof img === 'string' && img.trim().length > 0) {
+          addImage(img);
+        }
+      });
     }
+    
+    // Extraer de diferentes fuentes posibles
+    // 1. Arrays de imágenes adicionales
     if (Array.isArray(item.imageUrlList)) {
       item.imageUrlList.forEach(addImage);
     }
