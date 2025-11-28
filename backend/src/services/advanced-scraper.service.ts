@@ -2743,15 +2743,23 @@ export class AdvancedMarketplaceScraper {
         count: productsWithResolvedPrices.length,
         query,
         userId,
-        firstProducts: productsWithResolvedPrices.slice(0, 3).map((p: any) => ({ 
-          title: p.title?.substring(0, 50), 
-          price: p.price, 
-          currency: p.currency,
-          sourcePrice: p.sourcePrice,
-          productUrl: p.productUrl?.substring(0, 80) || 'NO_URL',
-          hasUrl: !!p.productUrl && p.productUrl.length >= 10,
-          imagesCount: p.images?.length || (p.imageUrl ? 1 : 0)
-        }))
+        firstProducts: productsWithResolvedPrices.slice(0, 3).map((p: any) => {
+          const imagesArray = p.images || (p.imageUrl ? [p.imageUrl] : []);
+          const uniqueImages = new Set(imagesArray);
+          return {
+            title: p.title?.substring(0, 50), 
+            price: p.price, 
+            currency: p.currency,
+            sourcePrice: p.sourcePrice,
+            productUrl: p.productUrl?.substring(0, 80) || 'NO_URL',
+            hasUrl: !!p.productUrl && p.productUrl.length >= 10,
+            imagesCount: uniqueImages.size,
+            imagesArrayLength: imagesArray.length,
+            hasImagesArray: Array.isArray(p.images),
+            firstImageUrl: p.imageUrl?.substring(0, 60) || 'none',
+            firstImagesPreview: Array.from(uniqueImages).slice(0, 3).map((img: string) => img?.substring(0, 50))
+          };
+        })
       });
 
       return productsWithResolvedPrices;
