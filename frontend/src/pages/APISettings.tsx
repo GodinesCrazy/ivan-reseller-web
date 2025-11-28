@@ -857,7 +857,7 @@ export default function APISettings() {
   const getUnifiedAPIStatus = (
     apiName: string,
     credential: APICredential | undefined,
-    statusInfo: APIStatus | undefined,
+    statusInfo: APIStatus | { status?: string; message?: string | null; requiresManual?: boolean } | undefined,
     diag: { issues?: string[]; warnings?: string[] } | null
   ): {
     status: 'not_configured' | 'partially_configured' | 'configured' | 'error';
@@ -867,12 +867,16 @@ export default function APISettings() {
   } => {
     // Para APIs que requieren OAuth (eBay, MercadoLibre)
     if (['ebay', 'mercadolibre'].includes(apiName)) {
-      const hasBasicCreds = credential?.credentials && 
-        (apiName === 'ebay' 
-          ? (credential.credentials as any).appId && (credential.credentials as any).devId && (credential.credentials as any).certId
-          : (credential.credentials as any).clientId && (credential.credentials as any).clientSecret);
-      const hasToken = credential?.credentials && 
-        ((credential.credentials as any).token || (credential.credentials as any).refreshToken);
+      // ✅ CORRECCIÓN: Verificar credenciales básicas usando diag/issues (no existe credential.credentials)
+      const hasBasicCredsIssue = diag?.issues?.some(issue => 
+        issue.toLowerCase().includes('faltan credenciales') || 
+        issue.toLowerCase().includes('missing credentials')
+      );
+      const hasBasicCreds = credential && !hasBasicCredsIssue;
+      
+      // ✅ CORRECCIÓN: Verificar tokens usando statusInfo (statusInfo puede ser MarketplaceAuthStatus o APIStatus)
+      const status = statusInfo && 'status' in statusInfo ? statusInfo.status : undefined;
+      const hasToken = credential && (status === 'healthy' || status === 'refreshing');
       
       if (!hasBasicCreds) {
         return {
@@ -894,18 +898,20 @@ export default function APISettings() {
         };
       }
       
-      if (hasToken && statusInfo?.status === 'healthy') {
+      if (hasToken && status === 'healthy') {
         return {
           status: 'configured',
           message: 'Configurado y funcionando',
         };
       }
       
-      if (hasToken && statusInfo?.status !== 'healthy') {
+      if (hasToken && status !== 'healthy') {
+        const message = statusInfo && 'message' in statusInfo ? statusInfo.message : undefined;
+        const error = statusInfo && 'error' in statusInfo ? statusInfo.error : undefined;
         return {
           status: 'error',
-          message: statusInfo?.message || 'Configurado pero con problemas',
-          actionMessage: statusInfo?.error || 'Revisa la configuración.',
+          message: message || 'Configurado pero con problemas',
+          actionMessage: error || 'Revisa la configuración.',
         };
       }
     }
@@ -919,26 +925,32 @@ export default function APISettings() {
       };
     }
     
-    if (statusInfo?.status === 'healthy' || statusInfo?.isAvailable) {
+    const status = statusInfo && 'status' in statusInfo ? statusInfo.status : undefined;
+    const isAvailable = statusInfo && 'isAvailable' in statusInfo ? statusInfo.isAvailable : undefined;
+    
+    if (status === 'healthy' || isAvailable) {
       return {
         status: 'configured',
         message: 'Configurado y funcionando',
       };
     }
     
-    if (statusInfo?.status === 'degraded' || diag?.warnings?.length) {
+    if (status === 'degraded' || diag?.warnings?.length) {
+      const message = statusInfo && 'message' in statusInfo ? (statusInfo.message || undefined) : undefined;
       return {
         status: 'partially_configured',
         message: 'Configurado con advertencias',
-        actionMessage: diag?.warnings?.[0] || statusInfo?.message,
+        actionMessage: diag?.warnings?.[0] || message,
       };
     }
     
-    if (statusInfo?.status === 'unhealthy' || diag?.issues?.length) {
+    if (status === 'unhealthy' || diag?.issues?.length) {
+      const message = statusInfo && 'message' in statusInfo ? (statusInfo.message || undefined) : undefined;
+      const error = statusInfo && 'error' in statusInfo ? statusInfo.error : undefined;
       return {
         status: 'error',
         message: 'Error de configuración',
-        actionMessage: diag?.issues?.[0] || statusInfo?.message || statusInfo?.error,
+        actionMessage: diag?.issues?.[0] || message || error,
       };
     }
     
@@ -1331,9 +1343,10 @@ export default function APISettings() {
       // Mostrar advertencias de validación si existen (máximo 1 para no saturar)
       if (Array.isArray(warnings) && warnings.length > 0) {
         warnings.slice(0, 1).forEach((warning: string) => {
-          toast.warning(`ℹ️ ${warning}`, { 
+          toast(`ℹ️ ${warning}`, { 
             id: `warning-${apiName}`, 
-            duration: 4000
+            duration: 4000,
+            icon: 'ℹ️'
           });
         });
       }
@@ -1374,7 +1387,7 @@ export default function APISettings() {
                                       errorMsg.toLowerCase().includes('no credentials');
           
           if (!isMissingCredentials) {
-            toast.warning(`ℹ️ La conexión no pudo verificarse. Puedes probarla manualmente más tarde.`, { id: `test-${apiName}`, duration: 4000 });
+            toast(`ℹ️ La conexión no pudo verificarse. Puedes probarla manualmente más tarde.`, { id: `test-${apiName}`, duration: 4000, icon: 'ℹ️' });
           }
           // Actualizar estado sin mostrar error alarmante
           setStatuses((prev: Record<string, APIStatus>) => ({
@@ -1396,12 +1409,13 @@ export default function APISettings() {
         
         if (!isMissingCredentials) {
           // Error real, pero no crítico - solo warning
-          toast.warning(`ℹ️ No se pudo verificar la conexión automáticamente. Las credenciales se guardaron correctamente.`, { id: `test-${apiName}`, duration: 4000 });
+          toast(`ℹ️ No se pudo verificar la conexión automáticamente. Las credenciales se guardaron correctamente.`, { id: `test-${apiName}`, duration: 4000, icon: 'ℹ️' });
         }
           // Actualizar estado como desconocido (no es un error crítico)
           setStatuses((prev: Record<string, APIStatus>) => ({
             ...prev,
             [`${apiName}_${currentEnvironment}`]: {
+              apiName,
               environment: currentEnvironment,
               isAvailable: false,
               status: 'unknown',
@@ -1900,15 +1914,16 @@ export default function APISettings() {
           await loadCredentials();
           
           // Verificar si hay tokens guardados para esta API y environment
-          const creds = getCredentialForAPI(apiName, environment);
-          const hasToken = creds?.credentials?.token || creds?.credentials?.authToken || creds?.credentials?.refreshToken;
+          // ✅ CORRECCIÓN: APICredential no tiene propiedad credentials, verificamos usando authStatuses
+          const currentStatuses = authStatuses;
+          const apiStatus = currentStatuses?.[apiName];
+          const hasToken = apiStatus?.status === 'healthy' || apiStatus?.status === 'refreshing';
           
           if (hasToken) {
             log.info('[APISettings] OAuth tokens detected after window close', {
               apiName,
               environment,
-              hasToken: !!creds?.credentials?.token,
-              hasRefreshToken: !!creds?.credentials?.refreshToken,
+              status: apiStatus?.status,
             });
             toast.success('✅ Autorización OAuth completada exitosamente');
             return true; // Tokens encontrados, detener polling
