@@ -1409,27 +1409,6 @@ export default function APISettings() {
             }
           }));
         }
-      } catch (testError: any) {
-        // Solo mostrar error si NO es un error de "missing credentials" (porque acabamos de guardarlas)
-        const errorMsg = testError.response?.data?.message || testError.message || 'Error al validar conexión';
-        const isMissingCredentials = errorMsg.toLowerCase().includes('missing credentials') || 
-                                    errorMsg.toLowerCase().includes('credenciales') ||
-                                    errorMsg.toLowerCase().includes('no credentials');
-        
-        if (!isMissingCredentials) {
-          // Error real, pero no crítico - solo warning
-          toast.error(`ℹ️ No se pudo verificar la conexión automáticamente. Las credenciales se guardaron correctamente.`, { id: `test-${apiName}`, duration: 4000 });
-        }
-        // Actualizar estado como desconocido (no es un error crítico)
-        setStatuses((prev: Record<string, APIStatus>) => ({
-          ...prev,
-          [`${apiName}_${currentEnvironment}`]: {
-            environment: currentEnvironment,
-            isAvailable: false,
-            status: 'unknown',
-            error: errorMsg
-          }
-        }));
       }
     }
     
