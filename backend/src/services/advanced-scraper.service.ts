@@ -11,7 +11,7 @@ import type { AliExpressCredentials } from '../types/api-credentials.types';
 import ManualAuthService from './manual-auth.service';
 import ManualAuthRequiredError from '../errors/manual-auth-required.error';
 import { marketplaceAuthStatusService } from './marketplace-auth-status.service';
-import { resolvePrice, resolvePriceRange } from '../utils/currency.utils';
+import { resolvePrice, resolvePriceRange, parseLocalizedNumber } from '../utils/currency.utils';
 import fxService from './fx.service';
 import logger from '../config/logger';
 
@@ -2237,7 +2237,9 @@ export class AdvancedMarketplaceScraper {
             for (const pattern of pricePatterns) {
               const match = fullText.match(pattern);
               if (match && match[1]) {
-                const priceStr = match[1].replace(/,/g, '');
+                // ✅ CORREGIDO: NO eliminar comas - parseLocalizedNumber maneja formatos europeos (0,99) y americanos (0.99)
+                // Pasar el string directamente para que determineSeparators detecte correctamente el formato
+                const priceStr = match[1];
                 // ✅ Incluir contexto completo del texto para mejor detección de moneda
                 const resolution = resolvePrice({
                   raw: priceStr,
@@ -2432,7 +2434,8 @@ export class AdvancedMarketplaceScraper {
                   const priceText = priceEl.textContent || '';
                   const match = priceText.match(/[\d.,]+/);
                   if (match) {
-                    price = parseFloat(match[0].replace(/,/g, ''));
+                    // ✅ CORREGIDO: Usar parseLocalizedNumber para manejar formatos europeos (0,99) y americanos (0.99)
+                    price = parseLocalizedNumber(match[0], aliExpressLocalCurrency || userBaseCurrency || 'USD');
                     break;
                   }
                 }
