@@ -1697,8 +1697,8 @@ export class AdvancedMarketplaceScraper {
               'div[data-pl="product-image"] img'
             ];
             
-            // ✅ NUEVO: Buscar TODAS las imágenes usando querySelectorAll
-            const allImageElements: any[] = [];
+            // ✅ MEJORADO: Buscar TODAS las imágenes usando querySelectorAll
+            const allImageUrls: string[] = [];
             const imageSet = new Set<string>(); // Para evitar duplicados
             
             for (const sel of imageSelectors) {
@@ -1726,18 +1726,48 @@ export class AdvancedMarketplaceScraper {
                     // Validar que sea una URL válida de imagen
                     if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(normalizedUrl) && !imageSet.has(normalizedUrl)) {
                       imageSet.add(normalizedUrl);
-                      allImageElements.push({ element: imgEl, url: normalizedUrl });
+                      allImageUrls.push(normalizedUrl); // ✅ CORREGIDO: Solo guardar URL, no el elemento DOM
                     }
                   }
                 });
                 
                 // Si encontramos imágenes con este selector, continuar (ya tenemos suficientes)
-                if (allImageElements.length > 0) break;
+                if (allImageUrls.length > 0) break;
               }
             }
             
             // ✅ MANTENER: Imagen principal para compatibilidad (primera encontrada)
-            const imageElement = allImageElements.length > 0 ? allImageElements[0].element : null;
+            // Buscar el primer elemento de imagen que coincida con la primera URL encontrada
+            let imageElement: any = null;
+            if (allImageUrls.length > 0) {
+              for (const sel of imageSelectors) {
+                const found = item.querySelector(sel);
+                if (found) {
+                  const src = found.getAttribute('src') || found.getAttribute('data-src') || (found as any).src || '';
+                  let normalizedSrc = src;
+                  if (src && typeof src === 'string') {
+                    if (normalizedSrc.startsWith('//')) {
+                      normalizedSrc = `https:${normalizedSrc}`;
+                    } else if (!normalizedSrc.startsWith('http')) {
+                      normalizedSrc = `https://${normalizedSrc}`;
+                    }
+                    // Verificar si esta URL está en nuestro array
+                    if (allImageUrls.some(url => url === normalizedSrc || url.includes(src) || src.includes(url.split('/').pop() || ''))) {
+                      imageElement = found;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+            
+            // Si no encontramos elemento pero tenemos URLs, buscar cualquier elemento de imagen
+            if (!imageElement) {
+              for (const sel of imageSelectors) {
+                imageElement = item.querySelector(sel);
+                if (imageElement) break;
+              }
+            }
 
             const ratingElement =
               item.querySelector('[data-pl="rating"] span') ||
@@ -1843,9 +1873,8 @@ export class AdvancedMarketplaceScraper {
               fullText: fullText.substring(0, 500), // Limitar tamaño para evitar payloads grandes
             };
 
-            // ✅ MEJORADO: Extraer TODAS las imágenes encontradas
+            // ✅ MEJORADO: Extraer imagen principal y combinar con todas las encontradas
             let image = '';
-            const allImageUrls: string[] = [];
             
             if (imageElement) {
               image = imageElement.getAttribute('src') ||
@@ -1854,19 +1883,23 @@ export class AdvancedMarketplaceScraper {
                       imageElement.getAttribute('data-ks-lazyload') ||
                       (imageElement as any).src ||
                       '';
-            }
-            
-            // ✅ NUEVO: Agregar todas las URLs de imágenes encontradas
-            if (allImageElements.length > 0) {
-              allImageElements.forEach(({ url }) => {
-                if (url && !allImageUrls.includes(url)) {
-                  allImageUrls.push(url);
+              
+              // Normalizar imagen principal
+              if (image) {
+                if (image.startsWith('//')) {
+                  image = `https:${image}`;
+                } else if (!image.startsWith('http')) {
+                  image = `https://${image}`;
                 }
-              });
+              }
             }
             
-            // ✅ Si solo tenemos la imagen principal, agregarla al array también
+            // ✅ CORREGIDO: Usar las URLs ya extraídas (allImageUrls ya contiene todas las imágenes normalizadas)
+            // Si tenemos imagen principal y no está en el array, agregarla
             if (image && !allImageUrls.includes(image)) {
+              allImageUrls.unshift(image); // Agregar al inicio para que sea la principal
+            } else if (image && allImageUrls.length === 0) {
+              // Si solo tenemos imagen principal y no hay más, agregarla
               allImageUrls.push(image);
             }
 
