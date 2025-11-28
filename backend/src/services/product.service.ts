@@ -155,11 +155,31 @@ export class ProductService {
     if (finalImageUrl) allImageUrls.push(finalImageUrl);
     if (finalImageUrls && Array.isArray(finalImageUrls)) allImageUrls.push(...finalImageUrls);
 
+    // ✅ LOGGING: Verificar qué imágenes se reciben antes de validar
+    logger.info('[PRODUCT-SERVICE] Images received before validation', {
+      userId,
+      finalImageUrl: finalImageUrl?.substring(0, 80) || 'none',
+      finalImageUrlsCount: finalImageUrls?.length || 0,
+      finalImageUrls: finalImageUrls?.slice(0, 5).map(img => img?.substring(0, 80)) || [],
+      allImageUrlsCount: allImageUrls.length,
+      allImageUrls: allImageUrls.slice(0, 5).map(img => img?.substring(0, 80))
+    });
+
     if (allImageUrls.length > 0) {
       try {
         const { getImageValidationService } = await import('./image-validation.service');
         const imageValidator = getImageValidationService();
         const validationResults = await imageValidator.validateAndFilterImages(allImageUrls);
+        
+        // ✅ LOGGING: Verificar resultados de validación
+        logger.info('[PRODUCT-SERVICE] Image validation results', {
+          userId,
+          totalReceived: allImageUrls.length,
+          validCount: validationResults.valid.length,
+          invalidCount: validationResults.invalid.length,
+          warningsCount: validationResults.warnings.length,
+          validImages: validationResults.valid.slice(0, 5).map(img => img?.substring(0, 80))
+        });
 
         // Si hay imágenes inválidas, registrar warning pero continuar (compatibilidad retroactiva)
         if (validationResults.invalid.length > 0) {
@@ -220,14 +240,22 @@ export class ProductService {
     // ✅ CORREGIDO: Usar variables locales mutables que pueden haber sido actualizadas después de la validación
     const imagesPayload = buildImagePayload(finalImageUrl, finalImageUrls);
     
-    // ✅ LOGGING: Verificar qué se está enviando a buildImagePayload
-    logger.debug('[PRODUCT-SERVICE] Building image payload', {
+    // ✅ LOGGING: Verificar qué se está enviando a buildImagePayload (cambiar a info para que aparezca en logs)
+    logger.info('[PRODUCT-SERVICE] Building image payload', {
       userId,
       finalImageUrl: finalImageUrl?.substring(0, 80) || 'none',
-      finalImageUrls: finalImageUrls?.length || 0,
-      finalImageUrlsPreview: finalImageUrls?.slice(0, 3).map(img => img?.substring(0, 60)) || [],
+      finalImageUrlsCount: finalImageUrls?.length || 0,
+      finalImageUrlsPreview: finalImageUrls?.slice(0, 5).map(img => img?.substring(0, 60)) || [],
       imagesPayloadLength: imagesPayload.length,
-      imagesPayloadPreview: imagesPayload.substring(0, 200)
+      imagesPayloadParsed: (() => {
+        try {
+          const parsed = JSON.parse(imagesPayload);
+          return Array.isArray(parsed) ? parsed.length : 0;
+        } catch {
+          return 0;
+        }
+      })(),
+      imagesPayloadPreview: imagesPayload.substring(0, 300)
     });
     const metadata = mergeProductMetadata(data) || {};
     if (!metadata.currency) {
