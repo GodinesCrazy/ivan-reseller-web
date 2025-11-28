@@ -41,13 +41,27 @@ router.get('/:token', async (req, res) => {
     return res.status(404).json({ success: false, error: 'session_not_found' });
   }
 
-  const loginUrl = PROVIDER_LOGIN_URLS[session.provider] || '';
+  // ✅ CORREGIDO: Leer loginUrl desde metadata si existe, sino usar URL por defecto
+  let loginUrl = PROVIDER_LOGIN_URLS[session.provider] || '';
+  try {
+    const sessionAny = session as any;
+    if (sessionAny.metadata) {
+      const metadata = typeof sessionAny.metadata === 'string' 
+        ? JSON.parse(sessionAny.metadata) 
+        : sessionAny.metadata;
+      if (metadata?.loginUrl) {
+        loginUrl = metadata.loginUrl; // Usar la URL específica guardada (página con CAPTCHA)
+      }
+    }
+  } catch (error) {
+    // Si hay error parseando metadata, usar URL por defecto
+  }
 
   return res.json({
     success: true,
     provider: session.provider,
     status: session.status,
-    loginUrl,
+    loginUrl, // URL específica de la página con CAPTCHA
     expiresAt: session.expiresAt,
     completedAt: session.completedAt,
   });

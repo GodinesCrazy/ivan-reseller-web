@@ -36,13 +36,18 @@ export class ManualAuthService {
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + DEFAULT_EXPIRATION_MINUTES * 60 * 1000);
 
+    // ✅ CORREGIDO: Guardar loginUrl en metadata para que el frontend pueda abrir la página correcta
     await prisma.manualAuthSession.create({
       data: {
         userId,
         provider,
         token,
         expiresAt,
-      },
+        metadata: JSON.stringify({
+          loginUrl, // Guardar la URL de la página con CAPTCHA
+          type: 'captcha_resolution'
+        }) as any,
+      } as any,
     });
 
     await marketplaceAuthStatusService.markManualRequired(

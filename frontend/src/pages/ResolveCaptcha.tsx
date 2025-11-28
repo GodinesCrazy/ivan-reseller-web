@@ -32,27 +32,37 @@ export default function ResolveCaptcha() {
       }
 
       try {
-        // Obtener información de la sesión desde el backend
-        const response = await api.get(`/api/manual-captcha/active`);
+        // ✅ CORREGIDO: Usar endpoint correcto /api/manual-auth/:token para obtener sesión por token
+        const response = await api.get(`/api/manual-auth/${token}`);
         const data = response.data;
         
         if (!data?.success) {
-          throw new Error('Error al obtener sesión');
+          throw new Error(data?.error || 'Error al obtener sesión');
         }
 
-        const sessionData = data.data;
-        
-        // Verificar que el token coincida si hay sesión
-        if (sessionData && sessionData.token !== token) {
-          throw new Error('Token de sesión no coincide');
-        }
-
-        if (!sessionData) {
-          throw new Error('Sesión no encontrada o expirada');
-        }
+        // ✅ Convertir formato de ManualAuthService a formato esperado por el componente
+        const sessionData: CaptchaSession = {
+          success: true,
+          token: token,
+          captchaUrl: data.loginUrl || '', // loginUrl contiene la URL de AliExpress con CAPTCHA
+          pageUrl: data.loginUrl || '',
+          status: data.status === 'completed' ? 'solved' : 
+                  data.status === 'expired' ? 'expired' : 
+                  data.status === 'cancelled' ? 'cancelled' : 'pending',
+          solvedAt: data.completedAt
+        };
 
         setSession(sessionData);
         setLoadError(null);
+
+        // ✅ Abrir automáticamente la ventana de AliExpress cuando se carga la sesión
+        if (sessionData.captchaUrl && sessionData.status === 'pending') {
+          // Esperar un momento para que la página se cargue completamente antes de abrir
+          setTimeout(() => {
+            window.open(sessionData.captchaUrl, '_blank', 'noopener,noreferrer');
+            toast.info('Se abrió la página de AliExpress en una nueva ventana. Por favor, resuelve el CAPTCHA allí.');
+          }, 500);
+        }
 
         // Iniciar polling para verificar si el CAPTCHA fue resuelto
         startPolling(token);
@@ -77,28 +87,35 @@ export default function ResolveCaptcha() {
   }, [token]);
 
   const startPolling = (sessionToken: string) => {
-    // Polling cada 3 segundos para verificar si el CAPTCHA fue resuelto
+    // ✅ Polling cada 5 segundos para verificar si el CAPTCHA fue resuelto
+    // Verificamos el estado de la sesión en /api/manual-auth/:token
     const interval = window.setInterval(async () => {
       try {
-        const response = await api.get(`/api/manual-captcha/status/${sessionToken}`);
+        const response = await api.get(`/api/manual-auth/${sessionToken}`);
         const data = response.data;
         
-        if (data?.success && data?.data?.solved) {
+        if (data?.success && data?.status === 'completed') {
           // CAPTCHA resuelto
           clearInterval(interval);
           setPollingInterval(null);
-          setSession((prev) => prev ? { ...prev, status: 'solved' } : prev);
+          setSession((prev) => prev ? { ...prev, status: 'solved', solvedAt: data.completedAt } : prev);
           toast.success('¡CAPTCHA resuelto! El sistema continuará con la búsqueda de oportunidades.');
           
           // Redirigir después de 2 segundos
           setTimeout(() => {
-            navigate('/dashboard');
+            navigate('/opportunities');
           }, 2000);
+        } else if (data?.success && data?.status === 'expired') {
+          // Sesión expirada
+          clearInterval(interval);
+          setPollingInterval(null);
+          setSession((prev) => prev ? { ...prev, status: 'expired' } : prev);
+          toast.error('La sesión de CAPTCHA ha expirado. Por favor, intenta buscar oportunidades nuevamente.');
         }
       } catch (error) {
         // Ignorar errores de polling
       }
-    }, 3000);
+    }, 5000); // Polling cada 5 segundos
 
     setPollingInterval(interval);
   };
@@ -108,17 +125,21 @@ export default function ResolveCaptcha() {
     
     setChecking(true);
     try {
-      const response = await api.get(`/api/manual-captcha/status/${token}`);
+      // ✅ CORREGIDO: Usar endpoint correcto /api/manual-auth/:token
+      const response = await api.get(`/api/manual-auth/${token}`);
       const data = response.data;
       
-      if (data?.success && data?.data?.solved) {
-        setSession((prev) => prev ? { ...prev, status: 'solved' } : prev);
+      if (data?.success && data?.status === 'completed') {
+        setSession((prev) => prev ? { ...prev, status: 'solved', solvedAt: data.completedAt } : prev);
         toast.success('¡CAPTCHA resuelto! El sistema continuará con la búsqueda.');
         setTimeout(() => {
-          navigate('/dashboard');
+          navigate('/opportunities');
         }, 2000);
+      } else if (data?.success && data?.status === 'expired') {
+        setSession((prev) => prev ? { ...prev, status: 'expired' } : prev);
+        toast.error('La sesión de CAPTCHA ha expirado. Por favor, intenta buscar oportunidades nuevamente.');
       } else {
-        toast.info('El CAPTCHA aún no ha sido resuelto. Por favor, resuélvelo en la página de AliExpress.');
+        toast.info('El CAPTCHA aún no ha sido resuelto. Por favor, resuélvelo en la página de AliExpress que se abrió.');
       }
     } catch (error: any) {
       toast.error(error?.response?.data?.error || 'Error al verificar estado');
@@ -136,23 +157,10 @@ export default function ResolveCaptcha() {
   const handleMarkAsSolved = async () => {
     if (!token) return;
     
-    setChecking(true);
-    try {
-      const response = await api.post(`/api/manual-captcha/complete/${token}`);
-      const data = response.data;
-      
-      if (data?.success) {
-        setSession((prev) => prev ? { ...prev, status: 'solved' } : prev);
-        toast.success('CAPTCHA marcado como resuelto. El sistema continuará con la búsqueda.');
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 2000);
-      }
-    } catch (error: any) {
-      toast.error(error?.response?.data?.error || 'Error al marcar como resuelto');
-    } finally {
-      setChecking(false);
-    }
+    // ✅ Para resolver CAPTCHA, necesitamos guardar cookies de AliExpress
+    // Esto requiere que el usuario copie las cookies desde la página de AliExpress
+    toast.info('Para marcar el CAPTCHA como resuelto, necesitas guardar las cookies de AliExpress. Usa la página de configuración de APIs para guardar las cookies.');
+    navigate('/settings/api-credentials');
   };
 
   if (loading) {
