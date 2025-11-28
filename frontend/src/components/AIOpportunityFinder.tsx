@@ -588,16 +588,17 @@ export default function AIOpportunityFinder() {
         status: product.status
       });
 
-      // ✅ FASE 3: Producto importado exitosamente - Redirigir a Products (NO a preview)
-      // El usuario debe ir manualmente a Products y hacer clic en el ojo para ver preview
-      toast.success('✅ Producto importado correctamente. Ve a Products para revisarlo y publicarlo.', {
-        duration: 3000
+      // ✅ WORKFLOW DEFINITIVO: Producto importado exitosamente - Redirigir a vista previa del listing
+      // Esto permite al usuario revisar el producto y publicarlo desde la vista previa
+      toast.success('✅ Producto importado exitosamente. Redirigiendo a vista previa...', {
+        duration: 2000
       });
 
-      // Redirigir a Products después de un breve delay para que el usuario vea el mensaje
+      // ✅ Redirigir a la vista previa después de un breve delay para que el usuario vea el mensaje
+      // La vista previa permite revisar el producto antes de publicarlo
       setTimeout(() => {
-        navigate('/products');
-      }, 1500);
+        navigate(`/products/${productId}/preview?marketplace=ebay`);
+      }, 1000);
     } catch (error: any) {
       log.error('Error importing product from AI finder:', {
         error,
