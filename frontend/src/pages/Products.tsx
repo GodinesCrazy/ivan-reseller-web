@@ -343,11 +343,11 @@ export default function Products() {
                               onClick={() => {
                                 navigate(`/products/${product.id}/preview?showFinancial=true`);
                               }}
-                              className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                              className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors flex items-center justify-center"
                               title="Ver información financiera (ganancia, margen, costos)"
-                              aria-label="Ver información financiera"
+                              aria-label="Ver información financiera detallada del producto"
                             >
-                              <Calculator className="w-4 h-4 text-purple-600" />
+                              <Calculator className="w-5 h-5 text-purple-600" strokeWidth={2} />
                             </button>
                             {product.status === 'PENDING' && (
                               <>
