@@ -340,14 +340,12 @@ export default function Products() {
                             </button>
                             {/* Botón Información Financiera - Calculadora */}
                             <button
-                              onClick={() => {
-                                navigate(`/products/${product.id}/preview?showFinancial=true`);
-                              }}
-                              className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors flex items-center justify-center"
+                              onClick={() => navigate(`/products/${product.id}/preview?showFinancial=true`)}
+                              className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
                               title="Ver información financiera (ganancia, margen, costos)"
-                              aria-label="Ver información financiera detallada del producto"
+                              aria-label="Ver información financiera"
                             >
-                              <Calculator className="w-5 h-5 text-purple-600" strokeWidth={2} />
+                              <Calculator className="w-4 h-4 text-purple-600" />
                             </button>
                             {product.status === 'PENDING' && (
                               <>
