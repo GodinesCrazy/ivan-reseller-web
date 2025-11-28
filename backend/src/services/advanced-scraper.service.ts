@@ -1934,7 +1934,8 @@ export class AdvancedMarketplaceScraper {
       });
 
       // ✅ Resolver precios fuera de page.evaluate() (donde están disponibles resolvePrice y resolvePriceRange)
-      const productsWithResolvedPrices = productsFromDom.map((product: any) => {
+      // ✅ CORREGIDO: Usar 'let' en lugar de 'const' para poder actualizar cuando estrategias adicionales encuentren productos
+      let productsWithResolvedPrices = productsFromDom.map((product: any) => {
         if (!product.rawPriceData) {
           return null;
         }
@@ -2234,7 +2235,10 @@ export class AdvancedMarketplaceScraper {
             
             if (normalizedRetry.length > 0) {
               logger.info('[SCRAPER] Productos normalizados después de scroll agresivo', { count: normalizedRetry.length });
-              return normalizedRetry;
+              // ✅ CORREGIDO: Actualizar productsWithResolvedPrices en lugar de retornar inmediatamente
+              // Esto permite que el código continúe y pueda encontrar más productos o continuar el flujo normal
+              productsWithResolvedPrices = normalizedRetry;
+              // Continuar con el flujo en lugar de retornar aquí para permitir más estrategias
             }
           }
         } catch (retryError: any) {
@@ -2290,7 +2294,20 @@ export class AdvancedMarketplaceScraper {
                 .filter((item): item is ScrapedProduct => Boolean(item));
               
               if (normalizedAfterNav.length > 0) {
-                return normalizedAfterNav;
+                // ✅ CORREGIDO: Actualizar productsWithResolvedPrices en lugar de retornar inmediatamente
+                // Si ya había productos de retryProducts, combinarlos; si no, usar estos
+                if (productsWithResolvedPrices.length > 0) {
+                  // Combinar productos evitando duplicados por URL
+                  const existingUrls = new Set(productsWithResolvedPrices.map(p => p.productUrl));
+                  const newProducts = normalizedAfterNav.filter(p => !existingUrls.has(p.productUrl));
+                  productsWithResolvedPrices = [...productsWithResolvedPrices, ...newProducts];
+                  logger.info('[SCRAPER] Productos combinados de múltiples estrategias', { 
+                    total: productsWithResolvedPrices.length,
+                    nuevos: newProducts.length
+                  });
+                } else {
+                  productsWithResolvedPrices = normalizedAfterNav;
+                }
               }
             }
           } catch (navError: any) {
@@ -2319,8 +2336,17 @@ export class AdvancedMarketplaceScraper {
           return hasCaptchaElement || hasCaptchaText;
         }).catch(() => false);
         
-        // ✅ Solo lanzar error de CAPTCHA si después de TODOS los intentos no hay productos Y hay bloqueo/CAPTCHA
-        if ((hasCaptchaOrBlock || isBlockedUrlFinal) && productsWithResolvedPrices.length === 0) {
+        // ✅ CORREGIDO: Verificar si ahora tenemos productos después de las estrategias adicionales
+        // Si tenemos productos, continuar con el flujo normal en lugar de lanzar error CAPTCHA
+        if (productsWithResolvedPrices.length > 0) {
+          logger.info('[SCRAPER] Productos encontrados después de estrategias adicionales, continuando flujo normal', {
+            count: productsWithResolvedPrices.length,
+            query,
+            userId
+          });
+          // Continuar con el flujo normal más abajo (validación de productos, etc.)
+        } else if ((hasCaptchaOrBlock || isBlockedUrlFinal) && productsWithResolvedPrices.length === 0) {
+          // ✅ Solo lanzar error de CAPTCHA si después de TODOS los intentos no hay productos Y hay bloqueo/CAPTCHA
           logger.warn('[SCRAPER] CAPTCHA o bloqueo detectado después de todos los intentos - activando resolución manual', { 
             userId, 
             query, 
