@@ -472,21 +472,12 @@ export default function AIOpportunityFinder() {
         return null;
       };
 
-      // Priorizar array de imágenes si está disponible
-      if (opp.images && Array.isArray(opp.images) && opp.images.length > 0) {
-        const validImages = opp.images
-          .map(normalizeImageUrl)
-          .filter((img): img is string => img !== null);
-        if (validImages.length > 0) {
-          payload.imageUrl = validImages[0]; // Primera imagen como principal
-          payload.imageUrls = validImages; // Todas las imágenes
-        }
-      } else if (opp.image && typeof opp.image === 'string' && opp.image.trim().length > 0) {
-        // Fallback a imagen única si no hay array
+      // ✅ Usar imagen única (la interfaz MarketOpportunity solo tiene image, no images)
+      if (opp.image && typeof opp.image === 'string' && opp.image.trim().length > 0) {
         const imageUrl = normalizeImageUrl(opp.image);
         if (imageUrl) {
           payload.imageUrl = imageUrl;
-          payload.imageUrls = [imageUrl];
+          payload.imageUrls = [imageUrl]; // Crear array con la única imagen
         }
       }
 
