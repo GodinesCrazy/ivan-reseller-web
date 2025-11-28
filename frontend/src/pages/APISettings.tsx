@@ -1410,7 +1410,6 @@ export default function APISettings() {
           }));
         }
       }
-      }
 
       // ✅ MEJORA: Recargar credenciales y estados inmediatamente después de guardar
       await loadCredentials();
