@@ -2665,6 +2665,53 @@ export class AdvancedMarketplaceScraper {
         });
       }
 
+      // ✅ NUEVO: Mejorar imágenes visitando páginas individuales de productos con solo una imagen
+      // Solo para los primeros 3 productos para no ralentizar demasiado
+      const productsToEnhance = productsWithResolvedPrices
+        .filter((p: any) => {
+          // Solo productos con URL válida y con solo una imagen única (sin duplicados)
+          if (!p.productUrl || p.productUrl.length < 10) return false;
+          const uniqueImages = new Set(p.images || (p.imageUrl ? [p.imageUrl] : []));
+          return uniqueImages.size === 1; // Solo una imagen única
+        })
+        .slice(0, 3); // Solo los primeros 3
+
+      if (productsToEnhance.length > 0 && this.browser) {
+        logger.info('[SCRAPER] Mejorando imágenes visitando páginas individuales', {
+          count: productsToEnhance.length,
+          query,
+          userId
+        });
+
+        for (let i = 0; i < productsToEnhance.length; i++) {
+          const product = productsToEnhance[i];
+          try {
+            const enhancedImages = await this.extractImagesFromProductPage(product.productUrl);
+            if (enhancedImages.length > 1) {
+              // Actualizar imágenes del producto
+              product.images = enhancedImages;
+              product.imageUrl = enhancedImages[0]; // Mantener la primera como imagen principal
+              logger.info('[SCRAPER] Imágenes mejoradas desde página individual', {
+                productUrl: product.productUrl.substring(0, 80),
+                imagesCount: enhancedImages.length,
+                query,
+                userId
+              });
+            }
+            // Pequeña pausa entre requests para no sobrecargar
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          } catch (error) {
+            logger.warn('[SCRAPER] Error extrayendo imágenes de página individual', {
+              productUrl: product.productUrl?.substring(0, 80),
+              error: error instanceof Error ? error.message : String(error),
+              query,
+              userId
+            });
+            // Continuar con el siguiente producto aunque haya error
+          }
+        }
+      }
+
       logger.info('[SCRAPER] Extraídos productos REALES de AliExpress desde DOM', {
         count: productsWithResolvedPrices.length,
         query,
@@ -2675,7 +2722,8 @@ export class AdvancedMarketplaceScraper {
           currency: p.currency,
           sourcePrice: p.sourcePrice,
           productUrl: p.productUrl?.substring(0, 80) || 'NO_URL',
-          hasUrl: !!p.productUrl && p.productUrl.length >= 10
+          hasUrl: !!p.productUrl && p.productUrl.length >= 10,
+          imagesCount: p.images?.length || (p.imageUrl ? 1 : 0)
         }))
       });
 
@@ -3277,6 +3325,161 @@ export class AdvancedMarketplaceScraper {
       }
     }
     return null;
+  }
+
+  /**
+   * ✅ NUEVO: Extraer todas las imágenes disponibles desde una página individual de producto
+   * Visita la URL del producto y extrae todas las imágenes de la galería
+   */
+  private async extractImagesFromProductPage(productUrl: string): Promise<string[]> {
+    if (!this.browser || !productUrl || productUrl.length < 10) {
+      return [];
+    }
+
+    const imageSet = new Set<string>();
+
+    try {
+      const productPage = await this.browser.newPage();
+      
+      try {
+        // Navegar a la página del producto
+        await productPage.goto(productUrl, { 
+          waitUntil: 'domcontentloaded', 
+          timeout: 15000 
+        });
+        
+        // Esperar un poco para que cargue el contenido dinámico
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Extraer imágenes desde múltiples fuentes
+        const images = await productPage.evaluate(() => {
+          const allImages: string[] = [];
+          const seen = new Set<string>();
+
+          // Función helper para agregar imagen
+          const addImage = (url: string) => {
+            if (!url || typeof url !== 'string') return;
+            let normalized = url.trim();
+            if (!normalized || normalized.length < 10) return;
+
+            // Normalizar URL
+            if (normalized.startsWith('//')) {
+              normalized = `https:${normalized}`;
+            } else if (!normalized.startsWith('http')) {
+              normalized = `https://${normalized}`;
+            }
+
+            // Validar que sea una URL válida de imagen
+            if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(normalized)) {
+              // Remover parámetros de tamaño si los hay (ej: _50x50.jpg -> .jpg)
+              const baseUrl = normalized.split('?')[0].split('#')[0];
+              if (!seen.has(baseUrl)) {
+                seen.add(baseUrl);
+                allImages.push(baseUrl);
+              }
+            }
+          };
+
+          // 1. Extraer desde runParams/scripts (datos embebidos)
+          try {
+            const w = (globalThis as any).window;
+            if (w?.runParams?.data?.gallery) {
+              const gallery = w.runParams.data.gallery;
+              if (Array.isArray(gallery)) {
+                gallery.forEach((item: any) => {
+                  if (item.imagePath || item.imageUrl || item.url) {
+                    addImage(item.imagePath || item.imageUrl || item.url);
+                  }
+                });
+              }
+            }
+            
+            // Buscar en imageModule
+            if (w?.runParams?.data?.imageModule) {
+              const imageModule = w.runParams.data.imageModule;
+              if (Array.isArray(imageModule.imagePathList)) {
+                imageModule.imagePathList.forEach(addImage);
+              }
+              if (Array.isArray(imageModule.imageUrlList)) {
+                imageModule.imageUrlList.forEach(addImage);
+              }
+            }
+
+            // Buscar en productInfo
+            if (w?.runParams?.data?.productInfo?.imageList) {
+              const imageList = w.runParams.data.productInfo.imageList;
+              if (Array.isArray(imageList)) {
+                imageList.forEach((img: any) => {
+                  if (typeof img === 'string') {
+                    addImage(img);
+                  } else if (img.imagePath || img.imageUrl || img.url) {
+                    addImage(img.imagePath || img.imageUrl || img.url);
+                  }
+                });
+              }
+            }
+          } catch (e) {
+            // Ignorar errores al acceder a runParams
+          }
+
+          // 2. Extraer desde la galería del DOM
+          const gallerySelectors = [
+            '.images-view-item img',
+            '.gallery-image img',
+            '.product-image img',
+            '[class*="gallery"] img',
+            '[class*="image"] img',
+            '.product-gallery img',
+            '#j-image-thumb-wrap img',
+            '.sku-property-image img'
+          ];
+
+          for (const selector of gallerySelectors) {
+            const images = document.querySelectorAll(selector);
+            images.forEach((img: any) => {
+              const src = img.getAttribute('src') || 
+                         img.getAttribute('data-src') || 
+                         img.getAttribute('data-lazy-src') ||
+                         img.getAttribute('data-ks-lazyload') ||
+                         img.getAttribute('data-original') ||
+                         (img as any).src;
+              if (src) addImage(src);
+            });
+          }
+
+          // 3. Buscar todas las imágenes que contengan "alicdn" o "aliexpress-media" (CDN de AliExpress)
+          const allImgElements = document.querySelectorAll('img');
+          allImgElements.forEach((img: any) => {
+            const src = img.getAttribute('src') || 
+                       img.getAttribute('data-src') || 
+                       img.getAttribute('data-lazy-src') ||
+                       (img as any).src;
+            if (src && (src.includes('alicdn.com') || src.includes('aliexpress-media.com'))) {
+              addImage(src);
+            }
+          });
+
+          return allImages;
+        });
+
+        // Normalizar todas las URLs y eliminar duplicados
+        images.forEach((img: string) => {
+          if (img && img.length > 10) {
+            imageSet.add(img);
+          }
+        });
+
+      } finally {
+        await productPage.close().catch(() => {});
+      }
+    } catch (error) {
+      logger.warn('[SCRAPER] Error extrayendo imágenes de página individual', {
+        productUrl: productUrl.substring(0, 80),
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+
+    return Array.from(imageSet);
   }
 
   private normalizeAliExpressItem(item: any, aliExpressLocalCurrency?: string, userBaseCurrency?: string): ScrapedProduct | null {
