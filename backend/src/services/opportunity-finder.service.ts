@@ -1108,6 +1108,17 @@ class OpportunityFinderService {
         finalROI = totalCost > 0 ? Math.round((netProfit / totalCost) * 100) : 0;
       }
 
+      // ✅ LOGGING: Verificar qué imágenes tenemos antes de construir el objeto
+      logger.info('[OPPORTUNITY-FINDER] Construyendo OpportunityItem con imágenes', {
+        userId,
+        productTitle: product.title?.substring(0, 50),
+        productImagesCount: Array.isArray(product.images) ? product.images.length : 0,
+        allImagesCount: allImages.length,
+        hasImageUrl: !!imageUrl,
+        imagesToInclude: allImages.length > 0 ? allImages.length : 1,
+        firstImagePreview: allImages.length > 0 ? allImages[0]?.substring(0, 60) : imageUrl?.substring(0, 60)
+      });
+
       const opp: OpportunityItem = {
         productId: product.productId,
         title: product.title,
