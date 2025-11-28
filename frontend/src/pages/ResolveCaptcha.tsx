@@ -59,9 +59,20 @@ export default function ResolveCaptcha() {
         if (sessionData.captchaUrl && sessionData.status === 'pending') {
           // Esperar un momento para que la página se cargue completamente antes de abrir
           setTimeout(() => {
-            window.open(sessionData.captchaUrl, '_blank', 'noopener,noreferrer');
-            toast.info('Se abrió la página de AliExpress en una nueva ventana. Por favor, resuelve el CAPTCHA allí.');
-          }, 500);
+            try {
+              const newWindow = window.open(sessionData.captchaUrl, '_blank', 'noopener,noreferrer');
+              if (newWindow) {
+                toast.info('Se abrió la página de AliExpress en una nueva ventana. Por favor, resuelve el CAPTCHA allí.');
+              } else {
+                // Pop-up bloqueado por el navegador
+                toast.warning('El navegador bloqueó la ventana emergente. Por favor, haz clic en "Abrir página de AliExpress" para abrirla manualmente.');
+              }
+            } catch (error) {
+              // Error al abrir ventana
+              console.error('[ResolveCaptcha] Error abriendo ventana:', error);
+              toast.warning('No se pudo abrir la ventana automáticamente. Por favor, haz clic en "Abrir página de AliExpress" para abrirla manualmente.');
+            }
+          }, 800); // Esperar 800ms para asegurar que la página esté cargada
         }
 
         // Iniciar polling para verificar si el CAPTCHA fue resuelto
@@ -250,10 +261,10 @@ export default function ResolveCaptcha() {
               <div className="border border-gray-200 rounded-lg p-4 space-y-3">
                 <h2 className="font-semibold text-gray-900">Instrucciones:</h2>
                 <ol className="list-decimal list-inside space-y-2 text-gray-700">
-                  <li>Haz clic en el botón "Abrir página de AliExpress" para abrir la página con el CAPTCHA en una nueva pestaña.</li>
-                  <li>Resuelve el CAPTCHA en la página de AliExpress.</li>
-                  <li>Una vez resuelto, vuelve a esta página y haz clic en "Marcar como resuelto".</li>
-                  <li>El sistema continuará automáticamente con la búsqueda de oportunidades.</li>
+                  <li>Se abrirá automáticamente una nueva ventana con la página de AliExpress que contiene el CAPTCHA (si el navegador bloqueó el pop-up, haz clic en "Abrir página de AliExpress" abajo).</li>
+                  <li>Resuelve el CAPTCHA en la página de AliExpress que se abrió.</li>
+                  <li>Una vez resuelto el CAPTCHA, el sistema lo detectará automáticamente y continuará con la búsqueda de oportunidades.</li>
+                  <li>Si necesitas verificar manualmente, puedes usar el botón "Verificar estado".</li>
                 </ol>
               </div>
 
