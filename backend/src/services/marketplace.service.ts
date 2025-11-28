@@ -1118,6 +1118,17 @@ export class MarketplaceService {
       // ✅ MULTI-IMAGE: Obtener todas las imágenes del producto para la vista previa
       const images = this.parseImageUrls(product.images);
       
+      // ✅ LOGGING: Verificar cuántas imágenes se parsearon
+      logger.info('[MARKETPLACE-SERVICE] Preview images parsed', {
+        productId,
+        userId,
+        imagesField: typeof product.images,
+        imagesFieldLength: typeof product.images === 'string' ? product.images.length : 'N/A',
+        imagesParsed: images.length,
+        firstImage: images[0]?.substring(0, 80) || 'none',
+        allImages: images.slice(0, 5).map(img => img.substring(0, 60))
+      });
+      
       // Calculate profit
       const costBase = toNumber(product.aliexpressPrice);
       const costInMarketplaceCurrency = fxService.convert(
@@ -1514,30 +1525,78 @@ export class MarketplaceService {
    * Returns all valid image URLs without truncation
    */
   private parseImageUrls(value: any): string[] {
-    if (!value) return [];
-
-    if (Array.isArray(value)) {
-      return value.filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
+    if (!value) {
+      logger.debug('[MARKETPLACE-SERVICE] parseImageUrls: value is null/undefined');
+      return [];
     }
 
+    // Si ya es un array, filtrar y retornar
+    if (Array.isArray(value)) {
+      const validUrls = value.filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
+      logger.debug('[MARKETPLACE-SERVICE] parseImageUrls: Already array', { 
+        originalLength: value.length, 
+        validUrls: validUrls.length 
+      });
+      return validUrls;
+    }
+
+    // Si es string, intentar parsear como JSON
     if (typeof value === 'string') {
       const trimmed = value.trim();
-      if (!trimmed) return [];
+      if (!trimmed) {
+        logger.debug('[MARKETPLACE-SERVICE] parseImageUrls: Empty string');
+        return [];
+      }
+      
+      // ✅ MEJORADO: Intentar parsear como JSON si parece ser un array JSON
       if (trimmed.startsWith('[')) {
         try {
           const parsed = JSON.parse(trimmed);
           if (Array.isArray(parsed)) {
-            return parsed.filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
+            const validUrls = parsed.filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
+            logger.debug('[MARKETPLACE-SERVICE] parseImageUrls: Parsed JSON array', { 
+              originalLength: parsed.length, 
+              validUrls: validUrls.length 
+            });
+            return validUrls;
           }
-        } catch {
-          // fallback handled below
+        } catch (parseError: any) {
+          logger.warn('[MARKETPLACE-SERVICE] parseImageUrls: Failed to parse JSON array', { 
+            error: parseError?.message,
+            valuePreview: trimmed.substring(0, 100)
+          });
+          // Continuar con fallback
         }
       }
+      
+      // ✅ FALLBACK: Si es una sola URL válida, retornarla como array
       if (/^https?:\/\//i.test(trimmed)) {
+        logger.debug('[MARKETPLACE-SERVICE] parseImageUrls: Single URL found');
         return [trimmed];
+      }
+      
+      // ✅ MEJORADO: Intentar parsear aunque no empiece con [
+      // A veces el JSON puede estar con espacios o formateado diferente
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          const validUrls = parsed.filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url));
+          logger.debug('[MARKETPLACE-SERVICE] parseImageUrls: Parsed JSON array (no leading bracket)', { 
+            originalLength: parsed.length, 
+            validUrls: validUrls.length 
+          });
+          return validUrls;
+        }
+      } catch {
+        // No es JSON válido, retornar vacío
+        logger.debug('[MARKETPLACE-SERVICE] parseImageUrls: Not valid JSON or URL');
       }
     }
 
+    logger.debug('[MARKETPLACE-SERVICE] parseImageUrls: No valid images found', { 
+      valueType: typeof value,
+      valuePreview: typeof value === 'string' ? value.substring(0, 100) : String(value).substring(0, 100)
+    });
     return [];
   }
 
