@@ -472,12 +472,21 @@ export default function AIOpportunityFinder() {
         return null;
       };
 
-      // ✅ Usar imagen única (la interfaz MarketOpportunity solo tiene image, no images)
-      if (opp.image && typeof opp.image === 'string' && opp.image.trim().length > 0) {
+      // Priorizar array de imágenes si está disponible
+      if (opp.images && Array.isArray(opp.images) && opp.images.length > 0) {
+        const validImages = opp.images
+          .map(normalizeImageUrl)
+          .filter((img): img is string => img !== null);
+        if (validImages.length > 0) {
+          payload.imageUrl = validImages[0]; // Primera imagen como principal
+          payload.imageUrls = validImages; // Todas las imágenes
+        }
+      } else if (opp.image && typeof opp.image === 'string' && opp.image.trim().length > 0) {
+        // Fallback a imagen única si no hay array
         const imageUrl = normalizeImageUrl(opp.image);
         if (imageUrl) {
           payload.imageUrl = imageUrl;
-          payload.imageUrls = [imageUrl]; // Crear array con la única imagen
+          payload.imageUrls = [imageUrl];
         }
       }
 
@@ -579,17 +588,16 @@ export default function AIOpportunityFinder() {
         status: product.status
       });
 
-      // ✅ WORKFLOW DEFINITIVO: Producto importado exitosamente - Redirigir a vista previa del listing
-      // Esto permite al usuario revisar el producto y publicarlo desde la vista previa
-      toast.success('✅ Producto importado exitosamente. Redirigiendo a vista previa...', {
-        duration: 2000
+      // ✅ FASE 3: Producto importado exitosamente - Redirigir a Products (NO a preview)
+      // El usuario debe ir manualmente a Products y hacer clic en el ojo para ver preview
+      toast.success('✅ Producto importado correctamente. Ve a Products para revisarlo y publicarlo.', {
+        duration: 3000
       });
 
-      // ✅ Redirigir a la vista previa después de un breve delay para que el usuario vea el mensaje
-      // La vista previa permite revisar el producto antes de publicarlo
+      // Redirigir a Products después de un breve delay para que el usuario vea el mensaje
       setTimeout(() => {
-        navigate(`/products/${productId}/preview?marketplace=ebay`);
-      }, 1000);
+        navigate('/products');
+      }, 1500);
     } catch (error: any) {
       log.error('Error importing product from AI finder:', {
         error,

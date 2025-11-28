@@ -440,17 +440,13 @@ export default function Opportunities() {
         throw new Error('No se pudo obtener el ID del producto creado. El servidor no devolvió un ID válido.');
       }
 
-      // ✅ WORKFLOW DEFINITIVO: Importar y redirigir a vista previa del listing
-      // Esto permite al usuario revisar y publicar desde la vista previa
-      toast.success('✅ Producto importado exitosamente. Redirigiendo a vista previa...', {
-        duration: 2000
-      });
-
-      // ✅ Redirigir a la vista previa después de un breve delay para que el usuario vea el mensaje
-      // La vista previa permite revisar el producto antes de publicarlo
+      // ✅ FASE 3: Solo importar, NO publicar. Mostrar mensaje y redirigir a /products
+      toast.success('Producto importado correctamente. Ve a Products para revisarlo y publicarlo.');
+      
+      // Redirigir a /products después de un breve delay
       setTimeout(() => {
-        navigate(`/products/${productId}/preview?marketplace=ebay`);
-      }, 1000);
+        navigate('/products');
+      }, 1500);
     } catch (error: any) {
       console.error('Error importing product:', error);
       const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al importar producto';
