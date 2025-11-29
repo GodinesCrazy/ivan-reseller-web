@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatCurrencySimple } from '../utils/currency';
+import WorkflowStatusIndicator from '@/components/WorkflowStatusIndicator';
 import {
   LineChart,
   Line,
@@ -38,6 +39,7 @@ import toast from 'react-hot-toast';
 interface Sale {
   id: string;
   orderId: string;
+  productId?: number; // ✅ Para mostrar workflow status del producto relacionado
   productTitle: string;
   marketplace: string;
   buyerName: string;
@@ -463,6 +465,7 @@ export default function Sales() {
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Workflow</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                         </tr>
@@ -479,6 +482,16 @@ export default function Sales() {
                             <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatCurrencySimple(sale.salePrice, 'USD')}</td>
                             <td className="px-4 py-3 text-sm font-medium text-green-600">+{formatCurrencySimple(sale.profit, 'USD')}</td>
                             <td className="px-4 py-3">{getStatusBadge(sale.status)}</td>
+                            <td className="px-4 py-3">
+                              {sale.productId ? (
+                                <WorkflowStatusIndicator 
+                                  productId={sale.productId}
+                                  currentStage={undefined}
+                                />
+                              ) : (
+                                <span className="text-xs text-gray-400">N/A</span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-sm text-gray-600">
                               {new Date(sale.createdAt).toLocaleDateString()}
                             </td>
