@@ -3612,18 +3612,28 @@ export class AdvancedMarketplaceScraper {
             }
           }
 
-          // ✅ MEJORA: Extraer miniaturas de la galería y sus URLs de alta resolución
+          // ✅ MEJORA: Extraer miniaturas SOLO de la galería principal del producto
+          // Excluir explícitamente miniaturas de productos relacionados o secciones no relevantes
           const thumbnailContainers = [
-            '#j-image-thumb-wrap li', // Contenedor de miniaturas de AliExpress
-            '.images-view-item', // Items de la galería
-            '.gallery-item',
-            '[class*="thumb"]',
-            '[class*="thumbnail"]'
+            '#j-image-thumb-wrap li', // Contenedor de miniaturas de AliExpress (galería principal)
+            '.images-view-item', // Items de la galería principal
+            '.gallery-item', // Items de galería
+            '[class*="image-view-item"]', // Items específicos de la vista de imágenes
+            '[class*="product-gallery"] [class*="thumb"]', // Miniaturas dentro de la galería del producto
+            '[class*="main-gallery"] [class*="thumb"]' // Miniaturas dentro de la galería principal
           ];
 
           for (const containerSelector of thumbnailContainers) {
             const thumbnails = document.querySelectorAll(containerSelector);
             thumbnails.forEach((thumb: any) => {
+              // ✅ VERIFICAR que la miniatura NO esté en secciones de productos relacionados
+              const isInRelatedSection = thumb.closest('[class*="similar"], [class*="recommend"], [class*="related"], [class*="suggestion"], [class*="recommended"]');
+              if (isInRelatedSection) return; // Excluir miniaturas de productos relacionados
+              
+              // ✅ VERIFICAR que esté dentro de la galería principal del producto
+              const isInMainGallery = thumb.closest('#j-image-thumb-wrap, .images-view-wrap, .image-view-wrap, [class*="product-image"], [class*="main-gallery"]');
+              if (!isInMainGallery && containerSelector.includes('thumb')) return; // Si es selector genérico, debe estar en galería principal
+              
               // Buscar imagen dentro del contenedor
               const img = thumb.querySelector('img');
               if (img) {
@@ -3638,7 +3648,7 @@ export class AdvancedMarketplaceScraper {
                 if (highResUrl) {
                   addImage(highResUrl);
                 } else {
-                  // Si no hay URL de alta resolución, usar la miniatura
+                  // Si no hay URL de alta resolución, usar la miniatura pero remover tamaño
                   const thumbSrc = img.getAttribute('src') ||
                                  img.getAttribute('data-src') ||
                                  img.getAttribute('data-lazy-src') ||
@@ -3646,10 +3656,16 @@ export class AdvancedMarketplaceScraper {
                                  img.getAttribute('data-original') ||
                                  img.src;
                   if (thumbSrc) {
-                    // Remover parámetros de tamaño de miniatura para obtener URL base
-                    let baseUrl = thumbSrc.split('?')[0];
-                    baseUrl = baseUrl.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
-                    addImage(baseUrl);
+                    // ✅ Filtrar miniaturas muy pequeñas (iconos)
+                    if (thumbSrc.includes('_50x50') || thumbSrc.includes('_60x60') || thumbSrc.includes('_40x40')) {
+                      // Remover tamaño de miniatura para obtener URL base (alta resolución)
+                      let baseUrl = thumbSrc.split('?')[0].split('#')[0];
+                      baseUrl = baseUrl.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
+                      addImage(baseUrl);
+                    } else {
+                      // Ya es una URL más grande, agregarla directamente
+                      addImage(thumbSrc);
+                    }
                   }
                 }
               }
@@ -3691,54 +3707,149 @@ export class AdvancedMarketplaceScraper {
             });
           }
 
-          // 3. ✅ FALLBACK: Buscar todas las imágenes de AliExpress CDN (solo si no encontramos suficientes)
-          // Esto es un fallback para asegurar que tenemos imágenes, pero priorizamos las de alta resolución
+          // 3. ✅ FALLBACK MEJORADO: Buscar imágenes SOLO dentro de la galería principal del producto
+          // Excluir explícitamente productos relacionados, banners, logos, etc.
           if (allImages.length < 3) {
-            const allImgElements = document.querySelectorAll('img');
-            allImgElements.forEach((img: any) => {
-              const src = img.getAttribute('src') ||
-                         img.getAttribute('data-src') ||
-                         img.getAttribute('data-lazy-src') ||
-                         img.getAttribute('data-ks-lazyload') ||
-                         img.getAttribute('data-original') ||
-                         (img as any).src;
-              if (src && (src.includes('alicdn.com') || src.includes('aliexpress-media.com') || src.includes('aliimg.com'))) {
-                // Solo agregar si no es una miniatura muy pequeña (evitar iconos y logos)
-                if (!src.includes('_50x50') && !src.includes('icon') && !src.includes('logo') && !src.includes('avatar')) {
-                  // Remover parámetros de tamaño para obtener URL base
-                  let baseUrl = src.split('?')[0];
-                  baseUrl = baseUrl.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
-                  addImage(baseUrl);
-                }
+            // ✅ DEFINIR selectores específicos para la galería principal (excluir secciones de productos relacionados)
+            const mainGallerySelectors = [
+              '#j-image-thumb-wrap', // Contenedor principal de miniaturas
+              '.images-view-wrap', // Wrapper de la galería principal
+              '.image-view-wrap', // Otro wrapper común
+              '[class*="image-view"]', // Cualquier elemento de la galería principal
+              '[class*="product-image"]', // Galería del producto
+              '[class*="main-gallery"]' // Galería principal
+            ];
+            
+            // ✅ Seleccionar SOLO la galería principal, no toda la página
+            let mainGalleryContainer: Element | null = null;
+            for (const selector of mainGallerySelectors) {
+              const container = document.querySelector(selector);
+              if (container) {
+                mainGalleryContainer = container;
+                break;
               }
-            });
+            }
+            
+            // Si encontramos la galería principal, buscar imágenes solo dentro de ella
+            if (mainGalleryContainer) {
+              const galleryImages = mainGalleryContainer.querySelectorAll('img');
+              galleryImages.forEach((img: any) => {
+                const src = img.getAttribute('src') ||
+                           img.getAttribute('data-src') ||
+                           img.getAttribute('data-lazy-src') ||
+                           img.getAttribute('data-src-large') ||
+                           img.getAttribute('data-zoom-src') ||
+                           img.getAttribute('data-original') ||
+                           (img as any).src;
+                if (src && (src.includes('alicdn.com') || src.includes('aliexpress-media.com') || src.includes('aliimg.com'))) {
+                  // Filtrar miniaturas muy pequeñas, iconos, logos y avatares
+                  const isThumbnail = src.includes('_50x50') || src.includes('_60x60') || src.includes('_40x40');
+                  const isIcon = src.includes('icon') || src.includes('logo') || src.includes('avatar') || src.includes('sprite');
+                  const isRelatedProduct = src.includes('/similar/') || src.includes('recommend');
+                  
+                  if (!isThumbnail && !isIcon && !isRelatedProduct) {
+                    // Remover parámetros de tamaño para obtener URL base (alta resolución)
+                    let baseUrl = src.split('?')[0].split('#')[0];
+                    // Reemplazar tamaños de miniatura con extensión base
+                    baseUrl = baseUrl.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
+                    addImage(baseUrl);
+                  }
+                }
+              });
+            } else {
+              // ✅ Si no encontramos la galería principal, hacer búsqueda limitada pero más estricta
+              // Buscar solo en la sección superior de la página (donde normalmente está la galería)
+              const pageTop = document.querySelector('.product-main, .product-info-main, [class*="product-detail"]');
+              if (pageTop) {
+                const topImages = pageTop.querySelectorAll('img');
+                topImages.forEach((img: any) => {
+                  // Verificar que la imagen NO esté en secciones de productos relacionados
+                  const parent = img.closest('[class*="similar"], [class*="recommend"], [class*="related"], [class*="suggestion"]');
+                  if (parent) return; // Excluir imágenes de productos relacionados
+                  
+                  const src = img.getAttribute('src') ||
+                             img.getAttribute('data-src') ||
+                             img.getAttribute('data-lazy-src') ||
+                             img.getAttribute('data-src-large') ||
+                             img.getAttribute('data-zoom-src') ||
+                             (img as any).src;
+                  if (src && (src.includes('alicdn.com') || src.includes('aliexpress-media.com') || src.includes('aliimg.com'))) {
+                    const isThumbnail = src.includes('_50x50') || src.includes('_60x60');
+                    const isIcon = src.includes('icon') || src.includes('logo') || src.includes('avatar');
+                    const isRelatedProduct = src.includes('/similar/') || src.includes('recommend');
+                    
+                    if (!isThumbnail && !isIcon && !isRelatedProduct) {
+                      let baseUrl = src.split('?')[0].split('#')[0];
+                      baseUrl = baseUrl.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
+                      addImage(baseUrl);
+                    }
+                  }
+                });
+              }
+            }
           }
 
           // 4. ✅ MEJORA: Buscar URLs de imágenes en scripts embebidos (JSON) - priorizar imagePath
+          // Solo buscar en scripts que contengan datos del producto principal, no productos relacionados
           const scriptContents = Array.from(document.querySelectorAll('script[type="application/ld+json"], script:not([src])'))
             .map(s => s.textContent)
             .filter(Boolean);
 
           scriptContents.forEach(content => {
             try {
+              // ✅ Filtrar scripts que contengan datos de productos relacionados
+              if (content && (content.includes('"similar"') || content.includes('"recommend"') || content.includes('"related"'))) {
+                // Si el script contiene datos de productos relacionados, evitar procesarlo completamente
+                // O procesarlo con más cuidado
+                const isProductDetailScript = content.includes('productDetail') || 
+                                              content.includes('productInfo') || 
+                                              content.includes('imageModule') ||
+                                              content.includes('runParams');
+                if (!isProductDetailScript) {
+                  return; // Saltar scripts que solo contienen productos relacionados
+                }
+              }
+              
               const json = JSON.parse(content!);
-              const findImageUrlsInJson = (obj: any) => {
-                if (typeof obj !== 'object' || obj === null) return;
+              const findImageUrlsInJson = (obj: any, depth: number = 0, maxDepth: number = 10) => {
+                if (depth > maxDepth || typeof obj !== 'object' || obj === null) return;
+                
+                // ✅ Excluir objetos que parezcan ser productos relacionados
+                if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+                  const keys = Object.keys(obj);
+                  // Si tiene propiedades que indican que es un producto relacionado, saltarlo
+                  if (keys.some(k => k.includes('similar') || k.includes('recommend') || k.includes('related'))) {
+                    // No procesar este objeto, pero continuar con otros
+                    return;
+                  }
+                }
+                
                 if (Array.isArray(obj)) {
-                  obj.forEach(findImageUrlsInJson);
+                  obj.forEach(item => findImageUrlsInJson(item, depth + 1, maxDepth));
                 } else {
                   for (const key in obj) {
-                    // Priorizar imagePath sobre imageUrl
+                    // ✅ Priorizar imagePath sobre imageUrl (imagePath es de alta resolución)
                     if (key === 'imagePath' && typeof obj[key] === 'string') {
                       let fullUrl = obj[key];
                       if (!fullUrl.startsWith('http')) {
                         fullUrl = `https://ae01.alicdn.com${fullUrl.startsWith('/') ? '' : '/'}${fullUrl}`;
                       }
-                      addImage(fullUrl);
+                      // ✅ Filtrar URLs que parezcan ser de productos relacionados
+                      if (!fullUrl.includes('/similar/') && !fullUrl.includes('recommend')) {
+                        addImage(fullUrl);
+                      }
                     } else if (typeof obj[key] === 'string' && /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif|avif)/i.test(obj[key])) {
-                      addImage(obj[key]);
+                      // ✅ Filtrar URLs de productos relacionados o iconos
+                      const url = obj[key];
+                      const isRelatedProduct = url.includes('/similar/') || url.includes('recommend') || url.includes('related');
+                      const isIcon = url.includes('icon') || url.includes('logo') || url.includes('avatar');
+                      const isSmallThumbnail = url.includes('_50x50') || url.includes('_60x60') || url.includes('_40x40');
+                      
+                      if (!isRelatedProduct && !isIcon && !isSmallThumbnail) {
+                        addImage(url);
+                      }
                     } else if (typeof obj[key] === 'object') {
-                      findImageUrlsInJson(obj[key]);
+                      findImageUrlsInJson(obj[key], depth + 1, maxDepth);
                     }
                   }
                 }
@@ -3749,15 +3860,32 @@ export class AdvancedMarketplaceScraper {
             }
           });
 
-          // 5. ✅ NUEVO: Buscar en atributos data-* que puedan contener URLs de imágenes
+          // 5. ✅ MEJORADO: Buscar en atributos data-* SOLO dentro de la galería principal
           try {
-            const elementsWithData = document.querySelectorAll('[data-image], [data-img], [data-url]');
+            // ✅ Limitar búsqueda a elementos dentro de la galería principal del producto
+            const mainGallery = document.querySelector('#j-image-thumb-wrap, .images-view-wrap, .image-view-wrap, [class*="product-image"], [class*="main-gallery"]');
+            const searchScope = mainGallery || document;
+            
+            const elementsWithData = searchScope.querySelectorAll('[data-image], [data-img], [data-url], [data-src-large], [data-zoom-src]');
             elementsWithData.forEach((el: any) => {
+              // ✅ Excluir elementos que estén en secciones de productos relacionados
+              const isInRelatedSection = el.closest('[class*="similar"], [class*="recommend"], [class*="related"], [class*="suggestion"]');
+              if (isInRelatedSection) return;
+              
               const dataImage = el.getAttribute('data-image') || 
                                el.getAttribute('data-img') || 
-                               el.getAttribute('data-url');
-              if (dataImage && dataImage.includes('alicdn') || dataImage.includes('aliexpress-media')) {
-                addImage(dataImage);
+                               el.getAttribute('data-url') ||
+                               el.getAttribute('data-src-large') ||
+                               el.getAttribute('data-zoom-src');
+              if (dataImage && (dataImage.includes('alicdn') || dataImage.includes('aliexpress-media'))) {
+                // ✅ Filtrar imágenes de productos relacionados, iconos y miniaturas muy pequeñas
+                const isRelatedProduct = dataImage.includes('/similar/') || dataImage.includes('recommend');
+                const isIcon = dataImage.includes('icon') || dataImage.includes('logo') || dataImage.includes('avatar');
+                const isSmallThumbnail = dataImage.includes('_50x50') || dataImage.includes('_60x60');
+                
+                if (!isRelatedProduct && !isIcon && !isSmallThumbnail) {
+                  addImage(dataImage);
+                }
               }
             });
           } catch (e) {
