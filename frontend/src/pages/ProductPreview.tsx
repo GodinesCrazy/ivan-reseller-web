@@ -7,6 +7,7 @@ import { formatCurrencySimple } from '@/utils/currency';
 import MetricLabelWithTooltip from '@/components/MetricLabelWithTooltip';
 import { metricTooltips } from '@/config/metricTooltips';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import ProductWorkflowPipeline from '@/components/ProductWorkflowPipeline';
 
 /**
  * Image Gallery Component with Navigation
@@ -600,6 +601,13 @@ export default function ProductPreview() {
             </p>
           </div>
         </div>
+
+        {/* ✅ Workflow Status Pipeline */}
+        {id && (
+          <div className="mb-6">
+            <ProductWorkflowPipeline productId={Number(id)} showTimeline={true} />
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Preview - Left Column (2/3) */}
