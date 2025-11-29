@@ -3404,52 +3404,94 @@ export class AdvancedMarketplaceScraper {
         });
         await new Promise(resolve => setTimeout(resolve, 2000)); // Espera final
         
-        // ✅ MEJORA: Intentar hacer hover/clic en las primeras miniaturas para cargar URLs ampliadas
-        // Esto ayuda a que las URLs de alta resolución se carguen en el DOM
-        // Nota: Esto es opcional y no crítico, ya que priorizamos runParams que ya tiene las URLs
+        // ✅ MEJORA: Hacer hover/clic en TODAS las miniaturas de la columna lateral para cargar URLs ampliadas
+        // Esto es crítico para obtener todas las imágenes de alta resolución de la galería principal
         try {
           const thumbnailInfo = await productPage.evaluate(() => {
-            // Buscar miniaturas clickeables en la galería
-            const thumbnails = document.querySelectorAll('#j-image-thumb-wrap li, .images-view-item, [class*="thumb"]');
-            const clickableThumbs: Array<{ x: number; y: number; index: number }> = [];
+            // ✅ PRIORIDAD: Buscar específicamente en #j-image-thumb-wrap (columna lateral de miniaturas)
+            const mainThumbWrap = document.querySelector('#j-image-thumb-wrap');
+            const clickableThumbs: Array<{ x: number; y: number; index: number; selector: string }> = [];
             
-            thumbnails.forEach((thumb: any, index: number) => {
-              // Verificar si es clickeable (no está deshabilitado y es visible)
-              if (thumb && !thumb.classList.contains('disabled') && thumb.offsetParent !== null) {
-                const rect = thumb.getBoundingClientRect();
-                if (rect.width > 0 && rect.height > 0) {
-                  clickableThumbs.push({ 
-                    x: rect.left + rect.width / 2, 
-                    y: rect.top + rect.height / 2, 
-                    index 
-                  });
+            if (mainThumbWrap) {
+              // Buscar TODAS las miniaturas dentro de la columna lateral
+              const thumbnails = mainThumbWrap.querySelectorAll('li, [class*="thumb-item"], [data-role="thumb-item"]');
+              thumbnails.forEach((thumb: any, index: number) => {
+                // Verificar si es clickeable (no está deshabilitado y es visible)
+                if (thumb && !thumb.classList.contains('disabled') && thumb.offsetParent !== null) {
+                  const rect = thumb.getBoundingClientRect();
+                  if (rect.width > 0 && rect.height > 0) {
+                    // Construir selector específico para esta miniatura
+                    const selector = `#j-image-thumb-wrap li:nth-child(${index + 1})`;
+                    clickableThumbs.push({ 
+                      x: rect.left + rect.width / 2, 
+                      y: rect.top + rect.height / 2, 
+                      index,
+                      selector
+                    });
+                  }
                 }
-              }
-            });
+              });
+            } else {
+              // Fallback: buscar en otros contenedores de galería
+              const thumbnails = document.querySelectorAll('.images-view-item, [class*="thumb-item"], [data-role="thumb-item"]');
+              thumbnails.forEach((thumb: any, index: number) => {
+                if (thumb && !thumb.classList.contains('disabled') && thumb.offsetParent !== null) {
+                  const rect = thumb.getBoundingClientRect();
+                  if (rect.width > 0 && rect.height > 0) {
+                    clickableThumbs.push({ 
+                      x: rect.left + rect.width / 2, 
+                      y: rect.top + rect.height / 2, 
+                      index,
+                      selector: ''
+                    });
+                  }
+                }
+              });
+            }
             
-            return clickableThumbs.slice(0, 5); // Solo las primeras 5 para no demorar mucho
+            return clickableThumbs; // ✅ Retornar TODAS las miniaturas, no solo las primeras 5
           });
           
-          // Hacer hover/clic en las primeras 2-3 miniaturas para cargar sus URLs ampliadas
-          // Esto es opcional y se hace de forma no bloqueante
+          // ✅ Hacer hover en TODAS las miniaturas para cargar sus URLs ampliadas
           if (thumbnailInfo && thumbnailInfo.length > 0) {
-            for (let i = 0; i < Math.min(thumbnailInfo.length, 3); i++) {
+            logger.debug('[SCRAPER] Haciendo hover en miniaturas de la columna lateral', {
+              productUrl: productUrl.substring(0, 80),
+              totalThumbnails: thumbnailInfo.length
+            });
+            
+            // Hacer hover en cada miniatura para activar la carga de la imagen ampliada
+            for (let i = 0; i < thumbnailInfo.length; i++) {
               try {
                 const thumb = thumbnailInfo[i];
-                // Hacer hover sobre la miniatura (más rápido que clic y a menudo suficiente)
-                await productPage.mouse.move(thumb.x, thumb.y).catch(() => {});
-                await new Promise(resolve => setTimeout(resolve, 300)); // Esperar a que cargue la imagen ampliada
+                // Intentar hacer hover usando el selector específico primero
+                if (thumb.selector) {
+                  try {
+                    await productPage.hover(thumb.selector).catch(() => {});
+                  } catch {
+                    // Fallback a coordenadas si el selector falla
+                    await productPage.mouse.move(thumb.x, thumb.y).catch(() => {});
+                  }
+                } else {
+                  // Usar coordenadas directamente
+                  await productPage.mouse.move(thumb.x, thumb.y).catch(() => {});
+                }
+                // Esperar a que cargue la imagen ampliada antes de continuar
+                await new Promise(resolve => setTimeout(resolve, 400)); // Aumentado a 400ms para asegurar carga
               } catch (hoverError) {
                 // Continuar con la siguiente si falla
               }
             }
             
-            // Volver a la primera miniatura (imagen principal)
+            // Volver a la primera miniatura (imagen principal) para asegurar que la imagen principal esté cargada
             if (thumbnailInfo.length > 0) {
               try {
                 const firstThumb = thumbnailInfo[0];
-                await productPage.mouse.move(firstThumb.x, firstThumb.y).catch(() => {});
-                await new Promise(resolve => setTimeout(resolve, 300));
+                if (firstThumb.selector) {
+                  await productPage.hover(firstThumb.selector).catch(() => {});
+                } else {
+                  await productPage.mouse.move(firstThumb.x, firstThumb.y).catch(() => {});
+                }
+                await new Promise(resolve => setTimeout(resolve, 500)); // Espera final más larga
               } catch (hoverError) {
                 // Ignorar si no se puede hacer hover
               }
@@ -3457,9 +3499,9 @@ export class AdvancedMarketplaceScraper {
           }
         } catch (hoverError) {
           // Si falla el proceso de hover, continuar con la extracción normal
-          // Esto no es crítico ya que priorizamos runParams
-          logger.debug('[SCRAPER] No se pudieron hacer hover en miniaturas, continuando con extracción normal', {
-            productUrl: productUrl.substring(0, 80)
+          logger.debug('[SCRAPER] Error haciendo hover en miniaturas, continuando con extracción normal', {
+            productUrl: productUrl.substring(0, 80),
+            error: hoverError instanceof Error ? hoverError.message : String(hoverError)
           });
         }
 
@@ -3585,91 +3627,163 @@ export class AdvancedMarketplaceScraper {
             // Ignorar errores al acceder a runParams
           }
 
-          // 2. ✅ MEJORA: Extraer desde la galería del DOM - PRIORIZAR atributos de alta resolución
-          // Primero buscar la imagen principal ampliada
+          // 2. ✅ PRIORIDAD: Extraer la imagen principal grande (centro de la página)
+          // Esta es la imagen principal que se muestra cuando haces hover/clic en las miniaturas
           const mainImageSelectors = [
-            '.images-view-magnifier-wrap img', // Imagen principal ampliada
-            '.image-view-magnifier img',
-            '.magnifier-image',
-            '.detail-main-image img',
-            '[class*="magnifier"] img',
-            '[class*="main-image"] img'
+            '.images-view-magnifier-wrap img', // Imagen principal ampliada (más común)
+            '.image-view-magnifier img', // Variante del selector
+            '.magnifier-image', // Imagen del magnifier (zoom)
+            '.detail-main-image img', // Imagen principal en detalle
+            '[class*="magnifier"] img', // Cualquier elemento con "magnifier"
+            '[class*="main-image"] img', // Cualquier elemento con "main-image"
+            '.images-view-item img:first-child', // Primera imagen de la vista
+            '[class*="image-view-wrap"] img:first-of-type' // Primera imagen del wrapper
           ];
 
+          let mainImageFound = false;
           for (const selector of mainImageSelectors) {
             const mainImg = document.querySelector(selector) as HTMLImageElement;
             if (mainImg) {
-              // Priorizar atributos de alta resolución
+              // ✅ PRIORIDAD 1: Buscar atributos de alta resolución primero
               const highResSrc = mainImg.getAttribute('data-src-large') ||
                                 mainImg.getAttribute('data-zoom-src') ||
                                 mainImg.getAttribute('data-original-large') ||
                                 mainImg.getAttribute('data-src') ||
                                 mainImg.src;
               if (highResSrc) {
-                addImage(highResSrc);
+                // Limpiar URL de parámetros de tamaño si los hay
+                let cleanUrl = highResSrc.split('?')[0].split('#')[0];
+                cleanUrl = cleanUrl.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
+                addImage(cleanUrl);
+                mainImageFound = true;
                 break; // Solo necesitamos una imagen principal
               }
             }
           }
+          
+          // ✅ Si no encontramos la imagen principal con los selectores, buscar en runParams (ya hecho arriba)
+          // Pero también intentar buscar en el contenedor principal de imágenes
+          if (!mainImageFound) {
+            const imageViewWrap = document.querySelector('.images-view-wrap, .image-view-wrap');
+            if (imageViewWrap) {
+              const firstMainImg = imageViewWrap.querySelector('img:first-of-type') as HTMLImageElement;
+              if (firstMainImg) {
+                const mainSrc = firstMainImg.getAttribute('data-src-large') ||
+                               firstMainImg.getAttribute('data-zoom-src') ||
+                               firstMainImg.getAttribute('src') ||
+                               firstMainImg.src;
+                if (mainSrc) {
+                  let cleanUrl = mainSrc.split('?')[0].split('#')[0];
+                  cleanUrl = cleanUrl.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
+                  addImage(cleanUrl);
+                }
+              }
+            }
+          }
 
-          // ✅ MEJORA: Extraer miniaturas SOLO de la galería principal del producto
-          // Excluir explícitamente miniaturas de productos relacionados o secciones no relevantes
-          const thumbnailContainers = [
-            '#j-image-thumb-wrap li', // Contenedor de miniaturas de AliExpress (galería principal)
-            '.images-view-item', // Items de la galería principal
-            '.gallery-item', // Items de galería
-            '[class*="image-view-item"]', // Items específicos de la vista de imágenes
-            '[class*="product-gallery"] [class*="thumb"]', // Miniaturas dentro de la galería del producto
-            '[class*="main-gallery"] [class*="thumb"]' // Miniaturas dentro de la galería principal
-          ];
-
-          for (const containerSelector of thumbnailContainers) {
-            const thumbnails = document.querySelectorAll(containerSelector);
-            thumbnails.forEach((thumb: any) => {
-              // ✅ VERIFICAR que la miniatura NO esté en secciones de productos relacionados
-              const isInRelatedSection = thumb.closest('[class*="similar"], [class*="recommend"], [class*="related"], [class*="suggestion"], [class*="recommended"]');
-              if (isInRelatedSection) return; // Excluir miniaturas de productos relacionados
+          // ✅ PRIORIDAD: Extraer TODAS las miniaturas de la columna lateral (#j-image-thumb-wrap)
+          // Esta es la columna vertical de miniaturas a la izquierda de la imagen principal
+          const mainThumbWrap = document.querySelector('#j-image-thumb-wrap');
+          if (mainThumbWrap) {
+            // ✅ Extraer TODAS las miniaturas de esta columna específica
+            const lateralThumbnails = mainThumbWrap.querySelectorAll('li, [class*="thumb-item"], [data-role="thumb-item"]');
+            lateralThumbnails.forEach((thumb: any) => {
+              // Buscar imagen dentro de cada miniatura
+              const img = thumb.querySelector('img') || thumb;
               
-              // ✅ VERIFICAR que esté dentro de la galería principal del producto
-              const isInMainGallery = thumb.closest('#j-image-thumb-wrap, .images-view-wrap, .image-view-wrap, [class*="product-image"], [class*="main-gallery"]');
-              if (!isInMainGallery && containerSelector.includes('thumb')) return; // Si es selector genérico, debe estar en galería principal
-              
-              // Buscar imagen dentro del contenedor
-              const img = thumb.querySelector('img');
               if (img) {
-                // ✅ PRIORIDAD: Buscar atributos de alta resolución primero
+                // ✅ PRIORIDAD 1: Buscar atributos de alta resolución en el elemento img
                 const highResUrl = img.getAttribute('data-src-large') ||
                                   img.getAttribute('data-zoom-src') ||
                                   img.getAttribute('data-original-large') ||
+                                  img.getAttribute('data-src') ||
                                   thumb.getAttribute('data-src-large') ||
                                   thumb.getAttribute('data-zoom-src') ||
-                                  thumb.getAttribute('data-image-url');
+                                  thumb.getAttribute('data-image-url') ||
+                                  thumb.getAttribute('data-src');
                 
                 if (highResUrl) {
                   addImage(highResUrl);
                 } else {
-                  // Si no hay URL de alta resolución, usar la miniatura pero remover tamaño
+                  // ✅ PRIORIDAD 2: Obtener src de la imagen y limpiar parámetros de tamaño
                   const thumbSrc = img.getAttribute('src') ||
-                                 img.getAttribute('data-src') ||
                                  img.getAttribute('data-lazy-src') ||
                                  img.getAttribute('data-ks-lazyload') ||
                                  img.getAttribute('data-original') ||
-                                 img.src;
+                                 (img as any).src;
                   if (thumbSrc) {
-                    // ✅ Filtrar miniaturas muy pequeñas (iconos)
-                    if (thumbSrc.includes('_50x50') || thumbSrc.includes('_60x60') || thumbSrc.includes('_40x40')) {
-                      // Remover tamaño de miniatura para obtener URL base (alta resolución)
-                      let baseUrl = thumbSrc.split('?')[0].split('#')[0];
-                      baseUrl = baseUrl.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
+                    // Remover parámetros de tamaño de miniatura para obtener URL base (alta resolución)
+                    let baseUrl = thumbSrc.split('?')[0].split('#')[0];
+                    // Reemplazar tamaños de miniatura (ej: _50x50.jpg, _60x60.jpg) con extensión base
+                    baseUrl = baseUrl.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
+                    // Filtrar solo si es una URL válida y no es un icono
+                    if (!baseUrl.includes('icon') && !baseUrl.includes('logo') && !baseUrl.includes('avatar')) {
                       addImage(baseUrl);
-                    } else {
-                      // Ya es una URL más grande, agregarla directamente
-                      addImage(thumbSrc);
                     }
                   }
                 }
               }
             });
+          }
+          
+          // ✅ FALLBACK: Si no encontramos #j-image-thumb-wrap, buscar en otros contenedores
+          if (allImages.length === 0) {
+            const thumbnailContainers = [
+              '.images-view-item', // Items de la galería principal
+              '.gallery-item', // Items de galería
+              '[class*="image-view-item"]', // Items específicos de la vista de imágenes
+              '[class*="product-gallery"] [class*="thumb"]', // Miniaturas dentro de la galería del producto
+              '[class*="main-gallery"] [class*="thumb"]' // Miniaturas dentro de la galería principal
+            ];
+
+            for (const containerSelector of thumbnailContainers) {
+              const thumbnails = document.querySelectorAll(containerSelector);
+              thumbnails.forEach((thumb: any) => {
+                // ✅ VERIFICAR que la miniatura NO esté en secciones de productos relacionados
+                const isInRelatedSection = thumb.closest('[class*="similar"], [class*="recommend"], [class*="related"], [class*="suggestion"], [class*="recommended"]');
+                if (isInRelatedSection) return; // Excluir miniaturas de productos relacionados
+                
+                // ✅ VERIFICAR que esté dentro de la galería principal del producto
+                const isInMainGallery = thumb.closest('.images-view-wrap, .image-view-wrap, [class*="product-image"], [class*="main-gallery"]');
+                if (!isInMainGallery && containerSelector.includes('thumb')) return; // Si es selector genérico, debe estar en galería principal
+                
+                // Buscar imagen dentro del contenedor
+                const img = thumb.querySelector('img');
+                if (img) {
+                  // ✅ PRIORIDAD: Buscar atributos de alta resolución primero
+                  const highResUrl = img.getAttribute('data-src-large') ||
+                                    img.getAttribute('data-zoom-src') ||
+                                    img.getAttribute('data-original-large') ||
+                                    thumb.getAttribute('data-src-large') ||
+                                    thumb.getAttribute('data-zoom-src') ||
+                                    thumb.getAttribute('data-image-url');
+                  
+                  if (highResUrl) {
+                    addImage(highResUrl);
+                  } else {
+                    // Si no hay URL de alta resolución, usar la miniatura pero remover tamaño
+                    const thumbSrc = img.getAttribute('src') ||
+                                   img.getAttribute('data-src') ||
+                                   img.getAttribute('data-lazy-src') ||
+                                   img.getAttribute('data-ks-lazyload') ||
+                                   img.getAttribute('data-original') ||
+                                   img.src;
+                    if (thumbSrc) {
+                      // ✅ Filtrar miniaturas muy pequeñas (iconos)
+                      if (thumbSrc.includes('_50x50') || thumbSrc.includes('_60x60') || thumbSrc.includes('_40x40')) {
+                        // Remover tamaño de miniatura para obtener URL base (alta resolución)
+                        let baseUrl = thumbSrc.split('?')[0].split('#')[0];
+                        baseUrl = baseUrl.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
+                        addImage(baseUrl);
+                      } else {
+                        // Ya es una URL más grande, agregarla directamente
+                        addImage(thumbSrc);
+                      }
+                    }
+                  }
+                }
+              });
+            }
           }
 
           // ✅ MEJORA: Buscar imágenes en selectores de color/modelo (variantes)
