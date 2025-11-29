@@ -34,6 +34,7 @@ import LoadingSpinner, { CardSkeleton } from '@/components/ui/LoadingSpinner';
 
 import AIOpportunityFinder from '../components/AIOpportunityFinder';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
+import WorkflowSummaryWidget from '@/components/WorkflowSummaryWidget';
 import { log } from '@/utils/logger';
 
 export default function Dashboard() {
@@ -283,6 +284,11 @@ export default function Dashboard() {
         </div>
       </div>
       )}
+
+      {/* Workflow Summary Widget */}
+      <div className="mt-6">
+        <WorkflowSummaryWidget />
+      </div>
 
       {/* Actividad reciente */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -33,6 +33,7 @@ router.get('/', async (req: Request, res: Response, next) => {
     const mappedSales = sales.map((sale: any) => ({
       id: String(sale.id),
       orderId: sale.orderId,
+      productId: sale.productId || sale.product?.id, // ✅ Para workflow status
       productTitle: sale.product?.title || 'Unknown Product',
       marketplace: sale.marketplace,
       buyerName: sale.buyerName || sale.user?.username || sale.buyerEmail || 'Unknown Buyer',
