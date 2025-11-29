@@ -628,18 +628,15 @@ export class AdvancedMarketplaceScraper {
                 title: product.productTitle,
                 price: product.salePrice,
                 originalPrice: product.originalPrice,
-                description: product.productTitle, // Descripción básica
-                images,
                 imageUrl: images[0] || '',
-                rating: product.evaluateScore,
-                reviews: product.volume,
+                images,
                 productUrl: product.productDetailUrl || product.promotionLink || '',
-                category: '',
+                rating: product.evaluateScore || 0,
+                reviewCount: product.volume || 0,
                 seller: product.storeName || '',
+                shipping: 'Calculated at checkout',
+                availability: 'In Stock',
                 currency: product.currency || userBaseCurrency || 'USD',
-                // Datos adicionales de la API
-                discount: product.discount,
-                commissionRate: product.commissionRate,
               };
             });
             

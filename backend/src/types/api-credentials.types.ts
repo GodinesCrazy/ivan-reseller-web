@@ -251,9 +251,6 @@ export interface AliExpressCredentials {
     expires?: number;
     expiry?: number;
   }>;
-  
-  /** Secret para generar códigos TOTP (si tiene 2FA) - legacy */
-  twoFactorSecret?: string;
 }
 
 /**
