@@ -2694,6 +2694,10 @@ export class AdvancedMarketplaceScraper {
           }))
         });
 
+        // ✅ TEMPORALMENTE DESACTIVADO: Este bucle bloqueaba la búsqueda de oportunidades
+        // Al visitar páginas individuales para mejorar imágenes, ralentizaba demasiado el proceso
+        // TODO: Reimplementar como proceso asíncrono en background después de retornar resultados
+        /*
         for (let i = 0; i < productsToEnhance.length; i++) {
           const product = productsToEnhance[i];
           const currentImagesCount = (product.images || (product.imageUrl ? [product.imageUrl] : [])).length;
@@ -2701,13 +2705,10 @@ export class AdvancedMarketplaceScraper {
           try {
             const enhancedImages = await this.extractImagesFromProductPage(product.productUrl);
             
-            // ✅ MEJORADO: Siempre actualizar si encontramos imágenes, incluso si ya había algunas
-            // Si encontramos más imágenes de las que ya teníamos, actualizar
             if (enhancedImages.length > 0) {
-              // Si encontramos más imágenes o si no teníamos imágenes, actualizar
               if (enhancedImages.length > currentImagesCount || currentImagesCount === 0) {
                 product.images = enhancedImages;
-                product.imageUrl = enhancedImages[0]; // Mantener la primera como imagen principal
+                product.imageUrl = enhancedImages[0];
                 logger.info('[SCRAPER] Imágenes mejoradas desde página individual', {
                   productUrl: product.productUrl.substring(0, 80),
                   previousImagesCount: currentImagesCount,
@@ -2715,24 +2716,9 @@ export class AdvancedMarketplaceScraper {
                   query,
                   userId
                 });
-              } else {
-                logger.debug('[SCRAPER] No se mejoraron imágenes (ya tenía suficientes)', {
-                  productUrl: product.productUrl.substring(0, 80),
-                  currentImagesCount,
-                  foundImagesCount: enhancedImages.length,
-                  query,
-                  userId
-                });
               }
-            } else {
-              logger.warn('[SCRAPER] No se encontraron imágenes en página individual', {
-                productUrl: product.productUrl.substring(0, 80),
-                query,
-                userId
-              });
             }
             
-            // Pequeña pausa entre requests para no sobrecargar
             await new Promise(resolve => setTimeout(resolve, 1500));
           } catch (error) {
             logger.warn('[SCRAPER] Error extrayendo imágenes de página individual', {
@@ -2741,9 +2727,9 @@ export class AdvancedMarketplaceScraper {
               query,
               userId
             });
-            // Continuar con el siguiente producto aunque haya error
           }
         }
+        */
       }
 
       logger.info('[SCRAPER] Extraídos productos REALES de AliExpress desde DOM', {
