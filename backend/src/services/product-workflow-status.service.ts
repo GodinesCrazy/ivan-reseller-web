@@ -95,19 +95,36 @@ export class ProductWorkflowStatusService {
 
   /**
    * Determinar la etapa actual del workflow
+   * ✅ MEJORADO: Considera múltiples ventas activas y busca compra exitosa correctamente
    */
   private determineCurrentStage(product: any): WorkflowStage {
     // Si está publicado, puede estar en purchase, fulfillment o customerService
     if (product.isPublished) {
-      const latestSale = product.sales?.[0];
+      // ✅ Buscar ventas activas primero (PENDING, PROCESSING, SHIPPED)
+      const activeSales = product.sales?.filter((sale: any) => 
+        ['PENDING', 'PROCESSING', 'SHIPPED'].includes(sale.status)
+      ) || [];
       
-      if (latestSale) {
-        if (latestSale.status === 'DELIVERED') {
-          return 'customerService';
-        } else if (latestSale.status === 'SHIPPED') {
+      // Si hay ventas activas, considerar la más importante
+      if (activeSales.length > 0) {
+        // Priorizar: SHIPPED > PROCESSING > PENDING
+        const shippedSale = activeSales.find((s: any) => s.status === 'SHIPPED');
+        const processingSale = activeSales.find((s: any) => s.status === 'PROCESSING');
+        const latestActiveSale = shippedSale || processingSale || activeSales[0];
+        
+        if (latestActiveSale.status === 'SHIPPED') {
           return 'fulfillment';
-        } else if (['PENDING', 'PROCESSING'].includes(latestSale.status)) {
-          // Verificar si hay compra
+        } else if (latestActiveSale.status === 'PROCESSING') {
+          // Verificar si hay compra exitosa
+          const successfulPurchase = product.purchaseLogs?.find(
+            (log: any) => log.status === 'SUCCESS'
+          );
+          if (successfulPurchase) {
+            return 'fulfillment';
+          }
+          return 'purchase';
+        } else if (latestActiveSale.status === 'PENDING') {
+          // Verificar si hay compra exitosa
           const successfulPurchase = product.purchaseLogs?.find(
             (log: any) => log.status === 'SUCCESS'
           );
@@ -118,7 +135,25 @@ export class ProductWorkflowStatusService {
         }
       }
       
-      // Publicado pero sin ventas aún
+      // ✅ Verificar si hay ventas entregadas o con problemas (customerService)
+      const deliveredOrReturnedSales = product.sales?.filter((sale: any) => 
+        ['DELIVERED', 'RETURNED', 'CANCELLED'].includes(sale.status)
+      ) || [];
+      
+      if (deliveredOrReturnedSales.length > 0) {
+        // Si la venta más reciente está entregada, está en customerService
+        const latestDelivered = deliveredOrReturnedSales.sort(
+          (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )[0];
+        
+        if (latestDelivered.status === 'DELIVERED') {
+          return 'customerService';
+        } else if (['RETURNED', 'CANCELLED'].includes(latestDelivered.status)) {
+          return 'customerService';
+        }
+      }
+      
+      // Publicado pero sin ventas activas aún
       return 'publish';
     }
 
@@ -133,6 +168,7 @@ export class ProductWorkflowStatusService {
     }
 
     // Si está rechazado o inactivo, la etapa actual sigue siendo analyze
+    // (puede tener status 'failed' en la etapa analyze)
     return 'analyze';
   }
 
@@ -222,13 +258,19 @@ export class ProductWorkflowStatusService {
 
   /**
    * Estado de la etapa PURCHASE
+   * ✅ CORREGIDO: Busca primero purchase logs con status SUCCESS antes de considerar otros
    */
   private getPurchaseStage(product: any, workflowConfig: any): StageInfo {
     const mode = (workflowConfig.stagePurchase as any) || 'manual';
-    const latestSale = product.sales?.[0];
-    const latestPurchase = product.purchaseLogs?.[0];
     
-    // Si no hay ventas, no se necesita compra aún
+    // ✅ Buscar ventas activas (PENDING, PROCESSING, SHIPPED)
+    const activeSales = product.sales?.filter((sale: any) => 
+      ['PENDING', 'PROCESSING', 'SHIPPED'].includes(sale.status)
+    ) || [];
+    
+    const latestSale = activeSales[0] || product.sales?.[0];
+    
+    // Si no hay ventas activas o ninguna venta, no se necesita compra aún
     if (!latestSale) {
       return {
         status: 'not-needed',
@@ -237,36 +279,46 @@ export class ProductWorkflowStatusService {
       };
     }
     
-    // Si hay compra exitosa
-    if (latestPurchase && latestPurchase.status === 'SUCCESS') {
+    // ✅ CRÍTICO: Buscar primero si hay alguna compra exitosa (SUCCESS) antes de considerar otros estados
+    const successfulPurchase = product.purchaseLogs?.find(
+      (log: any) => log.status === 'SUCCESS'
+    );
+    
+    // Si hay compra exitosa, la etapa está completada
+    if (successfulPurchase) {
       return {
         status: 'completed',
         mode,
-        completedAt: latestPurchase.completedAt?.toISOString(),
-        orderId: latestPurchase.supplierOrderId,
-        purchaseLogId: latestPurchase.id,
+        completedAt: successfulPurchase.completedAt?.toISOString(),
+        orderId: successfulPurchase.supplierOrderId,
+        purchaseLogId: successfulPurchase.id,
         nextAction: 'Proceder con envío',
       };
     }
     
-    // Si hay venta pero no compra (o compra fallida)
+    // Si hay venta activa pero no compra exitosa, verificar estado de compras recientes
     if (['PENDING', 'PROCESSING'].includes(latestSale.status)) {
-      if (latestPurchase && latestPurchase.status === 'FAILED') {
-        return {
-          status: 'failed',
-          mode,
-          nextAction: mode === 'automatic' ? 'Revisar error y reintentar' : 'Comprar manualmente',
-        };
-      }
+      // Buscar el purchase log más reciente para esta venta o en general
+      const latestPurchase = product.purchaseLogs?.[0];
       
-      if (latestPurchase && latestPurchase.status === 'PROCESSING') {
-        return {
-          status: 'in-progress',
-          mode,
-          orderId: latestPurchase.supplierOrderId,
-          purchaseLogId: latestPurchase.id,
-          nextAction: 'Compra en progreso...',
-        };
+      if (latestPurchase) {
+        if (latestPurchase.status === 'FAILED') {
+          return {
+            status: 'failed',
+            mode,
+            nextAction: mode === 'automatic' ? 'Revisar error y reintentar' : 'Comprar manualmente',
+          };
+        }
+        
+        if (latestPurchase.status === 'PROCESSING') {
+          return {
+            status: 'in-progress',
+            mode,
+            orderId: latestPurchase.supplierOrderId,
+            purchaseLogId: latestPurchase.id,
+            nextAction: 'Compra en progreso...',
+          };
+        }
       }
       
       // Venta pendiente pero sin compra iniciada
@@ -277,6 +329,7 @@ export class ProductWorkflowStatusService {
       };
     }
     
+    // Si la venta ya está SHIPPED o DELIVERED, no se necesita compra nueva
     return {
       status: 'not-needed',
       mode,
@@ -286,12 +339,64 @@ export class ProductWorkflowStatusService {
 
   /**
    * Estado de la etapa FULFILLMENT
+   * ✅ MEJORADO: Considera ventas activas y busca compra exitosa correctamente
    */
   private getFulfillmentStage(product: any, workflowConfig: any): StageInfo {
     const mode = (workflowConfig.stageFulfillment as any) || 'manual';
-    const latestSale = product.sales?.[0];
     
-    if (!latestSale) {
+    // ✅ Verificar si hay compra exitosa primero
+    const successfulPurchase = product.purchaseLogs?.find((log: any) => log.status === 'SUCCESS');
+    
+    // ✅ Buscar ventas activas (SHIPPED, PROCESSING, PENDING)
+    const activeSales = product.sales?.filter((sale: any) => 
+      ['SHIPPED', 'PROCESSING', 'PENDING'].includes(sale.status)
+    ) || [];
+    
+    // También considerar ventas entregadas
+    const deliveredSales = product.sales?.filter((sale: any) => sale.status === 'DELIVERED') || [];
+    
+    // Priorizar: SHIPPED > PROCESSING > PENDING
+    const shippedSale = activeSales.find((s: any) => s.status === 'SHIPPED');
+    const processingSale = activeSales.find((s: any) => s.status === 'PROCESSING');
+    const latestActiveSale = shippedSale || processingSale || activeSales[0];
+    const latestDeliveredSale = deliveredSales.sort(
+      (a: any, b: any) => new Date(b.completedAt || b.updatedAt).getTime() - new Date(a.completedAt || a.updatedAt).getTime()
+    )[0];
+    
+    // Si hay venta entregada y compra exitosa, fulfillment está completado
+    if (latestDeliveredSale && successfulPurchase) {
+      return {
+        status: 'completed',
+        mode,
+        completedAt: latestDeliveredSale.completedAt?.toISOString(),
+        trackingNumber: latestDeliveredSale.trackingNumber,
+        shippedAt: latestDeliveredSale.updatedAt?.toISOString(),
+        nextAction: undefined,
+      };
+    }
+    
+    // Si hay venta enviada (SHIPPED)
+    if (shippedSale && successfulPurchase) {
+      return {
+        status: 'in-progress',
+        mode,
+        trackingNumber: shippedSale.trackingNumber,
+        shippedAt: shippedSale.updatedAt?.toISOString(),
+        nextAction: 'Seguir tracking de envío',
+      };
+    }
+    
+    // Si no hay compra exitosa, no se puede proceder con fulfillment
+    if (!successfulPurchase) {
+      // Pero si hay venta activa, debería estar en purchase primero
+      if (latestActiveSale) {
+        return {
+          status: 'skipped',
+          mode,
+          nextAction: 'Completar compra primero',
+        };
+      }
+      
       return {
         status: 'not-needed',
         mode,
@@ -299,63 +404,69 @@ export class ProductWorkflowStatusService {
       };
     }
     
-    // Verificar si hay compra exitosa
-    const successfulPurchase = product.purchaseLogs?.find((log: any) => log.status === 'SUCCESS');
-    if (!successfulPurchase) {
+    // Si hay compra exitosa pero venta aún está en proceso
+    if (latestActiveSale && ['PENDING', 'PROCESSING'].includes(latestActiveSale.status)) {
       return {
-        status: 'skipped',
+        status: 'pending',
         mode,
-        nextAction: 'Completar compra primero',
+        nextAction: mode === 'automatic' ? 'Procesando envío...' : 'Configurar envío',
       };
-    }
-    
-    if (latestSale.status === 'DELIVERED') {
-      return {
-        status: 'completed',
-        mode,
-        completedAt: latestSale.completedAt?.toISOString(),
-        trackingNumber: latestSale.trackingNumber,
-        shippedAt: latestSale.updatedAt?.toISOString(), // Aproximación
-        nextAction: undefined,
-      };
-    }
-    
-    if (latestSale.status === 'SHIPPED') {
-      return {
-        status: 'in-progress',
-        mode,
-        trackingNumber: latestSale.trackingNumber,
-        shippedAt: latestSale.updatedAt?.toISOString(),
-        nextAction: 'Seguir tracking de envío',
-      };
-    }
-    
-    if (['PENDING', 'PROCESSING'].includes(latestSale.status)) {
-      // Verificar si la compra está completada
-      if (successfulPurchase) {
-        return {
-          status: 'pending',
-          mode,
-          nextAction: mode === 'automatic' ? 'Procesando envío...' : 'Configurar envío',
-        };
-      }
     }
     
     return {
-      status: 'pending',
+      status: 'not-needed',
       mode,
-      nextAction: 'Completar compra primero',
+      nextAction: 'Esperando venta y compra',
     };
   }
 
   /**
    * Estado de la etapa CUSTOMER SERVICE
+   * ✅ MEJORADO: Considera múltiples ventas y problemas activos
    */
   private getCustomerServiceStage(product: any, workflowConfig: any): StageInfo {
     const mode = (workflowConfig.stageCustomerService as any) || 'manual';
-    const latestSale = product.sales?.[0];
     
-    if (!latestSale) {
+    // ✅ Buscar ventas con problemas o entregadas
+    const problemSales = product.sales?.filter((sale: any) => 
+      ['CANCELLED', 'RETURNED'].includes(sale.status)
+    ) || [];
+    
+    const deliveredSales = product.sales?.filter((sale: any) => 
+      sale.status === 'DELIVERED'
+    ) || [];
+    
+    const latestProblemSale = problemSales.sort(
+      (a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    )[0];
+    
+    const latestDeliveredSale = deliveredSales.sort(
+      (a: any, b: any) => new Date(b.completedAt || b.updatedAt).getTime() - new Date(a.completedAt || a.updatedAt).getTime()
+    )[0];
+    
+    // Si hay problemas activos (RETURNED, CANCELLED), customer service está activo
+    if (latestProblemSale) {
+      return {
+        status: 'active',
+        mode,
+        lastInteraction: latestProblemSale.updatedAt?.toISOString(),
+        nextAction: 'Resolver issue con cliente',
+        openTickets: problemSales.length, // ✅ Indicar cantidad de problemas
+      };
+    }
+    
+    // Si hay ventas entregadas, el servicio está completado
+    if (latestDeliveredSale) {
+      return {
+        status: 'completed',
+        mode,
+        lastInteraction: latestDeliveredSale.completedAt?.toISOString() || latestDeliveredSale.updatedAt?.toISOString(),
+        nextAction: 'Ciclo completado',
+      };
+    }
+    
+    // Si no hay ventas, no se necesita customer service
+    if (!product.sales || product.sales.length === 0) {
       return {
         status: 'not-needed',
         mode,
@@ -363,28 +474,7 @@ export class ProductWorkflowStatusService {
       };
     }
     
-    // Por ahora simplificado - en el futuro podríamos tener tabla de tickets
-    // Si hay ventas con problemas (cancelled, returned), hay trabajo de customer service
-    const hasIssues = latestSale.status === 'CANCELLED' || latestSale.status === 'RETURNED';
-    
-    if (hasIssues) {
-      return {
-        status: 'active',
-        mode,
-        lastInteraction: latestSale.updatedAt?.toISOString(),
-        nextAction: 'Resolver issue con cliente',
-      };
-    }
-    
-    if (latestSale.status === 'DELIVERED') {
-      return {
-        status: 'completed',
-        mode,
-        lastInteraction: latestSale.completedAt?.toISOString() || latestSale.updatedAt?.toISOString(),
-        nextAction: 'Ciclo completado',
-      };
-    }
-    
+    // Hay ventas pero aún no entregadas ni con problemas
     return {
       status: 'not-needed',
       mode,
