@@ -167,17 +167,52 @@ export class AliExpressAutoPurchaseService {
         const { CredentialsManager } = await import('./credentials-manager.service');
         const { aliexpressDropshippingAPIService } = await import('./aliexpress-dropshipping-api.service');
         const { prisma } = await import('../config/database');
+        const { resolveEnvironment } = await import('../utils/environment-resolver');
+        const { logger: envLogger } = await import('../config/logger');
         
-        const dropshippingCreds = await CredentialsManager.getCredentials(
+        // ✅ MEJORADO: Resolver ambiente usando utilidad centralizada
+        // Intentar obtener credenciales del ambiente preferido, luego del alternativo si no se especificó explícitamente
+        const preferredEnvironment = await resolveEnvironment({
           userId,
-          'aliexpress-dropshipping',
-          'production'
-        );
+          default: 'production'
+        });
+        
+        // Intentar ambos ambientes (preferido primero, luego alternativo)
+        const environmentsToTry: Array<'sandbox' | 'production'> = [
+          preferredEnvironment,
+          preferredEnvironment === 'production' ? 'sandbox' : 'production'
+        ];
+        
+        let dropshippingCreds: any = null;
+        let resolvedEnv: 'sandbox' | 'production' | null = null;
+        
+        for (const env of environmentsToTry) {
+          const creds = await CredentialsManager.getCredentials(
+            userId,
+            'aliexpress-dropshipping',
+            env
+          );
+          
+          if (creds && creds.accessToken) {
+            dropshippingCreds = creds;
+            resolvedEnv = env;
+            if (env !== preferredEnvironment) {
+              envLogger.debug('[ALIEXPRESS-AUTO-PURCHASE] Credenciales de Dropshipping API encontradas en ambiente alternativo', {
+                preferred: preferredEnvironment,
+                found: env,
+                userId
+              });
+            }
+            break;
+          }
+        }
         
         if (dropshippingCreds && dropshippingCreds.accessToken) {
           logger.info('[ALIEXPRESS-AUTO-PURCHASE] Credenciales de Dropshipping API encontradas, intentando usar API oficial', {
             userId,
-            productUrl: request.productUrl
+            productUrl: request.productUrl,
+            environment: resolvedEnv || preferredEnvironment,
+            resolvedFrom: resolvedEnv
           });
           
           try {
