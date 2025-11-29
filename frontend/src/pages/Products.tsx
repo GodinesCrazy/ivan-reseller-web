@@ -24,6 +24,7 @@ import { useCurrency } from '../hooks/useCurrency';
 import MetricLabelWithTooltip from '@/components/MetricLabelWithTooltip';
 import { metricTooltips } from '@/config/metricTooltips';
 import { formatCurrencySimple } from '@/utils/currency';
+import WorkflowStatusIndicator from '@/components/WorkflowStatusIndicator';
 
 interface Product {
   id: string;
@@ -291,6 +292,7 @@ export default function Products() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Workflow</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
@@ -319,6 +321,12 @@ export default function Products() {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600">{product.stock}</td>
                         <td className="px-4 py-3">{getStatusBadge(product.status)}</td>
+                        <td className="px-4 py-3">
+                          <WorkflowStatusIndicator 
+                            productId={Number(product.id)} 
+                            currentStage={undefined} // Se obtendrá del endpoint
+                          />
+                        </td>
                         <td className="px-4 py-3">
                           {product.profit && (
                             <span className="text-sm font-medium text-green-600">
