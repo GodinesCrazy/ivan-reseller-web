@@ -180,9 +180,53 @@ export interface PayPalCredentials {
 }
 
 /**
+ * Credenciales de AliExpress Affiliate API (AliExpress Portals API)
+ * 
+ * @see https://developer.alibaba.com/help/en/portal
+ * Permite extraer datos de productos, precios, imágenes sin autenticación OAuth
+ */
+export interface AliExpressAffiliateCredentials {
+  /** App Key - Obtenido de la consola de desarrolladores de AliExpress Open Platform */
+  appKey: string;
+  
+  /** App Secret - Para calcular la firma de las peticiones */
+  appSecret: string;
+  
+  /** Tracking ID - ID de afiliado (opcional, para generar enlaces de afiliado) */
+  trackingId?: string;
+  
+  /** Si está usando ambiente sandbox (true) o producción (false) */
+  sandbox: boolean;
+}
+
+/**
+ * Credenciales de AliExpress Dropshipping API
+ * 
+ * @see https://developer.alibaba.com/help/en/portal
+ * Permite obtener detalles de productos y crear órdenes automatizadas
+ */
+export interface AliExpressDropshippingCredentials {
+  /** App Key - Obtenido de la consola de desarrolladores de AliExpress Open Platform */
+  appKey: string;
+  
+  /** App Secret - Para calcular la firma de las peticiones */
+  appSecret: string;
+  
+  /** Access Token - Token OAuth obtenido después del flujo de autorización */
+  accessToken: string;
+  
+  /** Refresh Token - Para renovar el access token cuando expire */
+  refreshToken?: string;
+  
+  /** Si está usando ambiente sandbox (true) o producción (false) */
+  sandbox: boolean;
+}
+
+/**
  * Credenciales de AliExpress (Puppeteer-based)
  * 
- * No tiene API oficial, usa automatización con Puppeteer
+ * Fallback: No tiene API oficial, usa automatización con Puppeteer
+ * Se mantiene para retrocompatibilidad
  */
 export interface AliExpressCredentials {
   /** Email de la cuenta de AliExpress */
@@ -308,6 +352,8 @@ export type ApiCredentials =
   | TwoCaptchaCredentials
   | PayPalCredentials
   | AliExpressCredentials
+  | AliExpressAffiliateCredentials
+  | AliExpressDropshippingCredentials
   | EmailCredentials
   | TwilioCredentials
   | SlackCredentials
@@ -326,7 +372,9 @@ export type ApiCredentialsMap = {
   zenrows: ZenRowsCredentials;
   '2captcha': TwoCaptchaCredentials;
   paypal: PayPalCredentials;
-  aliexpress: AliExpressCredentials;
+  aliexpress: AliExpressCredentials; // Puppeteer-based (legacy)
+  'aliexpress-affiliate': AliExpressAffiliateCredentials; // Affiliate API oficial
+  'aliexpress-dropshipping': AliExpressDropshippingCredentials; // Dropshipping API oficial
   email: EmailCredentials;
   twilio: TwilioCredentials;
   slack: SlackCredentials;

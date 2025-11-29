@@ -576,6 +576,115 @@ export class AdvancedMarketplaceScraper {
     
     logger.info('[SCRAPER] scrapeAliExpress iniciado', { query, userId, environment, userBaseCurrency });
     
+    // ✅ NUEVO: Intentar usar Affiliate API primero (más rápido y confiable)
+    // Si falla, continuar con scraping nativo (workflow existente)
+    try {
+      const { CredentialsManager } = await import('./credentials-manager.service');
+      const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
+      
+      const affiliateCreds = await CredentialsManager.getCredentials(
+        userId, 
+        'aliexpress-affiliate', 
+        environment || 'production'
+      );
+      
+      if (affiliateCreds) {
+        logger.info('[SCRAPER] Credenciales de Affiliate API encontradas, intentando usar API oficial', {
+          userId,
+          query,
+          environment
+        });
+        
+        try {
+          aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
+          
+          // Mapear país desde currency si es necesario
+            const shipToCountry = this.getCountryFromCurrency(userBaseCurrency) || 'CL';
+          
+          const affiliateProducts = await aliexpressAffiliateAPIService.searchProducts({
+            keywords: query,
+            pageSize: 20,
+            targetCurrency: userBaseCurrency || 'USD',
+            targetLanguage: 'ES',
+            shipToCountry: shipToCountry || 'CL',
+            sort: 'LAST_VOLUME_DESC',
+          });
+          
+          if (affiliateProducts && affiliateProducts.length > 0) {
+            logger.info('[SCRAPER] Productos obtenidos desde Affiliate API', {
+              count: affiliateProducts.length,
+              query,
+              userId
+            });
+            
+            // Convertir productos de Affiliate API a formato ScrapedProduct
+            const scrapedProducts: ScrapedProduct[] = affiliateProducts.map(product => {
+              const images = [
+                product.productMainImageUrl,
+                ...product.productSmallImageUrls
+              ].filter(Boolean) as string[];
+              
+              return {
+                title: product.productTitle,
+                price: product.salePrice,
+                originalPrice: product.originalPrice,
+                description: product.productTitle, // Descripción básica
+                images,
+                imageUrl: images[0] || '',
+                rating: product.evaluateScore,
+                reviews: product.volume,
+                productUrl: product.productDetailUrl || product.promotionLink || '',
+                category: '',
+                seller: product.storeName || '',
+                currency: product.currency || userBaseCurrency || 'USD',
+                // Datos adicionales de la API
+                discount: product.discount,
+                commissionRate: product.commissionRate,
+              };
+            });
+            
+            logger.info('[SCRAPER] Conversión exitosa de productos Affiliate API', {
+              convertedCount: scrapedProducts.length,
+              query,
+              userId
+            });
+            
+            return scrapedProducts;
+          } else {
+            logger.warn('[SCRAPER] Affiliate API retornó 0 productos, continuando con scraping nativo', {
+              query,
+              userId
+            });
+            // Continuar con scraping nativo si no hay resultados
+          }
+        } catch (apiError: any) {
+          logger.warn('[SCRAPER] Error usando Affiliate API, continuando con scraping nativo', {
+            error: apiError?.message || String(apiError),
+            query,
+            userId,
+            willFallback: true
+          });
+          // Continuar con scraping nativo si falla la API
+        }
+      } else {
+        logger.debug('[SCRAPER] No hay credenciales de Affiliate API configuradas, usando scraping nativo', {
+          userId,
+          query
+        });
+        // Continuar con scraping nativo si no hay credenciales
+      }
+    } catch (affiliateCheckError: any) {
+      logger.warn('[SCRAPER] Error verificando Affiliate API, continuando con scraping nativo', {
+        error: affiliateCheckError?.message || String(affiliateCheckError),
+        query,
+        userId
+      });
+      // Continuar con scraping nativo si hay error
+    }
+    
+    // ✅ CONTINUAR CON SCRAPING NATIVO (workflow existente)
+    logger.info('[SCRAPER] Usando scraping nativo (fallback o sin credenciales API)', { query, userId });
+    
     // ✅ Intentar inicializar navegador, pero si falla, NO retornar vacío inmediatamente
     // En su lugar, lanzar un error que permita al opportunity-finder usar el fallback de bridge Python
     if (!this.browser) {
@@ -5178,6 +5287,26 @@ export class AdvancedMarketplaceScraper {
           });
       }).catch(() => {});
     }
+  }
+
+  /**
+   * Helper: Obtener código de país desde currency
+   */
+  private getCountryFromCurrency(currency?: string): string | null {
+    if (!currency) return null;
+    
+    const currencyToCountry: Record<string, string> = {
+      'CLP': 'CL', // Chile
+      'USD': 'US', // Estados Unidos
+      'EUR': 'ES', // España (principal país de habla hispana en Europa)
+      'MXN': 'MX', // México
+      'COP': 'CO', // Colombia
+      'ARS': 'AR', // Argentina
+      'PEN': 'PE', // Perú
+      'BRL': 'BR', // Brasil
+    };
+    
+    return currencyToCountry[currency.toUpperCase()] || null;
   }
 
   private async fetchAliExpressCookies(userId: number, environment: 'sandbox' | 'production' = 'production'): Promise<Protocol.Network.Cookie[]> {

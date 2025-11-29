@@ -828,7 +828,7 @@ export class AutomationService {
           shippingAddress: shippingAddress,
         };
         
-        const result = await AliExpressAutoPurchaseService.executePurchase(purchaseRequest);
+        const result = await AliExpressAutoPurchaseService.executePurchase(purchaseRequest, params.userId);
         
         if (result.success && result.orderId) {
           return {

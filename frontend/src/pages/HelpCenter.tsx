@@ -422,12 +422,16 @@ function APIsCredenciales() {
       {/* APIs Disponibles */}
       <div>
         <h3 className="text-2xl font-bold text-gray-900 mb-4">🌐 APIs Disponibles</h3>
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 text-sm mb-4">
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 text-sm mb-4">
           <p className="font-semibold mb-1">Resumen rápido</p>
           <ul className="space-y-1">
             <li>
               <strong>Críticas:</strong> AliExpress (origen), eBay (comparador), ScraperAPI o ZenRows (anti-bloqueo) y Groq
               (IA). Si faltan, el sistema no podrá evaluar oportunidades con precisión.
+            </li>
+            <li>
+              <strong>Recomendadas (APIs oficiales):</strong> AliExpress Affiliate API (para scraping rápido) y AliExpress Dropshipping API 
+              (para compras automatizadas). Son gratuitas, más rápidas y confiables que el método manual. Ver secciones específicas abajo.
             </li>
             <li>
               <strong>Opcionales:</strong> Amazon y MercadoLibre. Son recomendadas para mejorar la cobertura, pero si no las
@@ -471,7 +475,255 @@ function APIsCredenciales() {
               </ol>
               <div className="bg-red-50 border border-red-200 text-red-700 rounded p-3 text-xs">
                 <strong>Tip:</strong> El snippet sólo funciona si lo ejecutas en la pestaña <em>de AliExpress</em>. Si ves
-                “No se encontraron cookies en esta pestaña”, significa que lo ejecutaste en la pestaña del panel.
+                "No se encontraron cookies en esta pestaña", significa que lo ejecutaste en la pestaña del panel.
+              </div>
+            </div>
+          </div>
+
+          {/* AliExpress Affiliate API */}
+          <div className="border rounded-xl p-6 bg-gradient-to-r from-red-50 via-orange-50 to-yellow-50">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900">AliExpress Affiliate API (Portals API)</h4>
+                <span className="text-sm text-orange-600 font-medium">Recomendada para scraping y extracción de datos</span>
+              </div>
+              <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+                Gratis
+              </span>
+            </div>
+            <p className="text-gray-700 mb-3">
+              API oficial de AliExpress para extraer datos de productos, precios, imágenes y costos de envío de forma oficial y gratuita. 
+              El sistema usa esta API primero antes del scraping nativo para mayor velocidad y confiabilidad.
+            </p>
+            <div className="bg-white border rounded-lg p-4 space-y-3">
+              <div className="text-sm">
+                <strong>Campos requeridos:</strong>
+              </div>
+              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+                <li><strong>App Key:</strong> Clave de aplicación obtenida de AliExpress Open Platform</li>
+                <li><strong>App Secret:</strong> Secret para calcular la firma de las peticiones</li>
+                <li><strong>Tracking ID:</strong> ID de afiliado (opcional, para generar enlaces de afiliado)</li>
+                <li><strong>Sandbox:</strong> Marca si usas ambiente de pruebas (false para producción)</li>
+              </ul>
+              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
+                <div className="font-semibold text-gray-900">Pasos para obtener las credenciales:</div>
+                <ol className="list-decimal list-inside space-y-2">
+                  <li><strong>Crear cuenta en AliExpress Portals:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>Ve a <a href="https://portals.aliexpress.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">portals.aliexpress.com <ExternalLink className="w-3 h-3 inline" /></a></li>
+                      <li>Crea una cuenta de afiliado (si aún no la tienes)</li>
+                    </ul>
+                  </li>
+                  <li><strong>Registrarse como desarrollador:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>Ve a <a href="https://console.aliexpress.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">console.aliexpress.com <ExternalLink className="w-3 h-3 inline" /></a></li>
+                      <li>Regístrate como desarrollador (acepta el Open Platform Agreement)</li>
+                      <li>Completa la información de empresa y objetivos de integración</li>
+                    </ul>
+                  </li>
+                  <li><strong>Crear aplicación:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>En la consola, ve a <strong>"App Management"</strong> → <strong>"Create App"</strong></li>
+                      <li>Selecciona el tipo: <strong>"Affiliate API"</strong></li>
+                      <li>Completa el formulario con información de tu aplicación</li>
+                      <li>Describe tu caso de uso: "Comparador de precios y sistema de dropshipping automatizado"</li>
+                    </ul>
+                  </li>
+                  <li><strong>Esperar aprobación:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>AliExpress revisará tu solicitud (1-2 días hábiles típicamente)</li>
+                      <li>Recibirás una notificación cuando sea aprobada o denegada</li>
+                    </ul>
+                  </li>
+                  <li><strong>Obtener credenciales:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>Una vez aprobada, ve a <strong>"App Management"</strong> → Tu aplicación</li>
+                      <li>Copia el <strong>App Key</strong> y el <strong>App Secret</strong></li>
+                      <li>También verás el límite de flujo aprobado (típicamente ~5000 llamadas)</li>
+                    </ul>
+                  </li>
+                  <li><strong>Obtener Tracking ID (opcional):</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>Desde tu cuenta de AliExpress Portals</li>
+                      <li>En la sección de configuración, encuentra tu <strong>Tracking ID</strong></li>
+                      <li>Úsalo para generar enlaces de afiliado (si deseas monetizar)</li>
+                    </ul>
+                  </li>
+                  <li><strong>Configurar en Ivan Reseller:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>Ve a <strong>Settings → Configuración de APIs</strong></li>
+                      <li>Busca la tarjeta <strong>"AliExpress Affiliate API"</strong></li>
+                      <li>Ingresa:
+                        <ul className="list-circle list-inside ml-4 mt-1">
+                          <li><strong>App Key:</strong> Pega el App Key copiado</li>
+                          <li><strong>App Secret:</strong> Pega el App Secret copiado</li>
+                          <li><strong>Tracking ID:</strong> (Opcional) Tu Tracking ID de afiliado</li>
+                          <li><strong>Sandbox:</strong> Marca solo si estás usando ambiente de pruebas</li>
+                        </ul>
+                      </li>
+                      <li>Haz clic en <strong>"Guardar Configuración"</strong></li>
+                      <li>El estado cambiará a <strong>"Configurada"</strong> ✅</li>
+                    </ul>
+                  </li>
+                </ol>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded p-3 text-xs">
+                <strong>Ventajas de usar Affiliate API:</strong>
+                <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                  <li>✅ Más rápido que scraping (respuestas instantáneas)</li>
+                  <li>✅ Datos oficiales y actualizados directamente de AliExpress</li>
+                  <li>✅ No requiere navegador ni cookies (más confiable)</li>
+                  <li>✅ No hay riesgo de bloqueos o CAPTCHAs</li>
+                  <li>✅ Incluye información de comisiones de afiliado</li>
+                  <li>✅ Gratis para desarrolladores aprobados</li>
+                </ul>
+              </div>
+              <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 rounded p-3 text-xs">
+                <strong>Límites y políticas:</strong>
+                <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                  <li>Límite típico: ~5000 llamadas por período (según aprobación)</li>
+                  <li>Si excedes el límite, las peticiones se bloquean temporalmente (~1 segundo)</li>
+                  <li>No se permite scraping masivo - solo usar APIs autorizadas</li>
+                  <li>Cada usuario del SaaS debería tener su propio Tracking ID para comisiones</li>
+                </ul>
+              </div>
+              <div className="text-sm text-gray-600">
+                <strong>Documentación oficial:</strong> 
+                <a href="https://developer.alibaba.com/help/en/portal" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                  developer.alibaba.com/help/en/portal <ExternalLink className="w-3 h-3 inline" />
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* AliExpress Dropshipping API */}
+          <div className="border rounded-xl p-6 bg-gradient-to-r from-red-50 via-pink-50 to-purple-50">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900">AliExpress Dropshipping API</h4>
+                <span className="text-sm text-purple-600 font-medium">Recomendada para compras automatizadas</span>
+              </div>
+              <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+                Gratis
+              </span>
+            </div>
+            <p className="text-gray-700 mb-3">
+              API oficial de AliExpress para crear órdenes automatizadas y gestionar pedidos. Permite automatizar completamente 
+              el proceso de compra cuando un cliente adquiere un producto en tu marketplace. El sistema usa esta API primero 
+              antes de Puppeteer para mayor confiabilidad.
+            </p>
+            <div className="bg-white border rounded-lg p-4 space-y-3">
+              <div className="text-sm">
+                <strong>Campos requeridos:</strong>
+              </div>
+              <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+                <li><strong>App Key:</strong> Clave de aplicación obtenida de AliExpress Open Platform</li>
+                <li><strong>App Secret:</strong> Secret para calcular la firma de las peticiones</li>
+                <li><strong>Access Token:</strong> Token OAuth obtenido después del flujo de autorización</li>
+                <li><strong>Refresh Token:</strong> (Opcional) Token para renovar el access token cuando expire</li>
+                <li><strong>Sandbox:</strong> Marca si usas ambiente de pruebas (false para producción)</li>
+              </ul>
+              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
+                <div className="font-semibold text-gray-900">Pasos para obtener las credenciales:</div>
+                <ol className="list-decimal list-inside space-y-2">
+                  <li><strong>Requisitos previos:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>Necesitas una cuenta de AliExpress (de comprador o vendedor)</li>
+                      <li>La cuenta debe estar verificada y activa</li>
+                    </ul>
+                  </li>
+                  <li><strong>Registrarse como desarrollador:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>Ve a <a href="https://console.aliexpress.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">console.aliexpress.com <ExternalLink className="w-3 h-3 inline" /></a></li>
+                      <li>Si aún no eres desarrollador, regístrate (acepta el Open Platform Agreement)</li>
+                      <li>Completa la información de empresa y objetivos de integración</li>
+                    </ul>
+                  </li>
+                  <li><strong>Crear aplicación:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>En la consola, ve a <strong>"App Management"</strong> → <strong>"Create App"</strong></li>
+                      <li>Selecciona el tipo: <strong>"Dropshipping"</strong></li>
+                      <li>Completa el formulario con información de tu aplicación</li>
+                      <li>Describe tu caso de uso: "Sistema de dropshipping automatizado para crear órdenes vía API"</li>
+                    </ul>
+                  </li>
+                  <li><strong>Esperar aprobación:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>AliExpress revisará tu solicitud (1-2 días hábiles típicamente)</li>
+                      <li>Recibirás una notificación cuando sea aprobada o denegada</li>
+                      <li>⚠️ <strong>Importante:</strong> Asegúrate de que tu caso de uso esté bien justificado</li>
+                    </ul>
+                  </li>
+                  <li><strong>Obtener credenciales básicas:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>Una vez aprobada, ve a <strong>"App Management"</strong> → Tu aplicación</li>
+                      <li>Copia el <strong>App Key</strong> y el <strong>App Secret</strong></li>
+                      <li>Guarda estas credenciales de forma segura</li>
+                    </ul>
+                  </li>
+                  <li><strong>Obtener Access Token (OAuth):</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>La Dropshipping API requiere autenticación OAuth</li>
+                      <li>Necesitas autorizar la aplicación con tu cuenta de AliExpress</li>
+                      <li>El sistema proporcionará un flujo OAuth (similar a eBay/MercadoLibre)</li>
+                      <li>Después de autorizar, recibirás el <strong>Access Token</strong> y <strong>Refresh Token</strong></li>
+                      <li>⚠️ <strong>Nota:</strong> El Access Token expira periódicamente y debe renovarse usando el Refresh Token</li>
+                    </ul>
+                  </li>
+                  <li><strong>Configurar en Ivan Reseller:</strong>
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                      <li>Ve a <strong>Settings → Configuración de APIs</strong></li>
+                      <li>Busca la tarjeta <strong>"AliExpress Dropshipping API"</strong></li>
+                      <li>Ingresa:
+                        <ul className="list-circle list-inside ml-4 mt-1">
+                          <li><strong>App Key:</strong> Pega el App Key copiado</li>
+                          <li><strong>App Secret:</strong> Pega el App Secret copiado</li>
+                          <li><strong>Access Token:</strong> Token OAuth obtenido después de autorizar</li>
+                          <li><strong>Refresh Token:</strong> (Opcional) Para renovar automáticamente el Access Token</li>
+                          <li><strong>Sandbox:</strong> Marca solo si estás usando ambiente de pruebas</li>
+                        </ul>
+                      </li>
+                      <li>Haz clic en <strong>"Guardar Configuración"</strong></li>
+                      <li>El estado cambiará a <strong>"Configurada"</strong> ✅</li>
+                    </ul>
+                  </li>
+                </ol>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded p-3 text-xs">
+                <strong>Ventajas de usar Dropshipping API:</strong>
+                <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                  <li>✅ Creación automática de órdenes sin intervención manual</li>
+                  <li>✅ Más rápido y confiable que automatización con navegador</li>
+                  <li>✅ No requiere mantener sesión activa ni cookies</li>
+                  <li>✅ Acceso a información de tracking y estado de pedidos</li>
+                  <li>✅ Verificación de stock y precios antes de crear la orden</li>
+                  <li>✅ Gratis para desarrolladores aprobados</li>
+                </ul>
+              </div>
+              <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 rounded p-3 text-xs">
+                <strong>Importante sobre el flujo de pago:</strong>
+                <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                  <li>La API permite crear órdenes, pero el pago se realiza en AliExpress</li>
+                  <li>Las órdenes quedan en estado "WAIT_BUYER_PAY" (pendiente de pago)</li>
+                  <li>Debes pagar manualmente en AliExpress o usar automatización adicional</li>
+                  <li>El sistema te mostrará un panel de "Pedidos pendientes de pago"</li>
+                  <li>Esto es el estándar - incluso herramientas como DSers funcionan así</li>
+                </ul>
+              </div>
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded p-3 text-xs">
+                <strong>⚠️ Restricciones críticas:</strong>
+                <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                  <li>Cada cliente del SaaS debería tener su propia cuenta de AliExpress</li>
+                  <li>No compartas un único Access Token entre múltiples sitios sin permiso</li>
+                  <li>Los datos obtenidos vía API solo pueden usarse en el contexto del programa oficial</li>
+                  <li>Respeta los términos de servicio y límites de uso</li>
+                </ul>
+              </div>
+              <div className="text-sm text-gray-600">
+                <strong>Documentación oficial:</strong> 
+                <a href="https://developer.alibaba.com/help/en/portal" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                  developer.alibaba.com/help/en/portal <ExternalLink className="w-3 h-3 inline" />
+                </a>
               </div>
             </div>
           </div>
