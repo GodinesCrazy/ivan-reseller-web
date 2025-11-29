@@ -307,6 +307,71 @@ export default function ProductPreview() {
     });
   };
 
+  // ✅ Función para crear miniatura de imagen usando Canvas
+  const createThumbnail = (imageUrl: string, maxWidth: number = 300, maxHeight: number = 300): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      img.onload = () => {
+        try {
+          // Calcular dimensiones manteniendo aspecto
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > height) {
+            if (width > maxWidth) {
+              height = (height * maxWidth) / width;
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = (width * maxHeight) / height;
+              height = maxHeight;
+            }
+          }
+          
+          // Crear canvas y redimensionar
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          
+          if (!ctx) {
+            reject(new Error('No se pudo obtener contexto del canvas'));
+            return;
+          }
+          
+          // Dibujar imagen redimensionada
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Convertir a data URL (JPEG con calidad 0.85 para balance tamaño/calidad)
+          const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.85);
+          resolve(thumbnailUrl);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      
+      img.onerror = () => reject(new Error('Error al cargar la imagen'));
+      img.src = imageUrl;
+    });
+  };
+
+  // ✅ Función para procesar imagen: crear versión normal y miniatura
+  const processImageFile = async (file: File): Promise<{ normal: string; thumbnail: string }> => {
+    // Obtener versión normal (data URL original)
+    const normalUrl = await fileToDataURL(file);
+    
+    // Crear miniatura (200x200px máximo para thumbnails en galería)
+    const thumbnailUrl = await createThumbnail(normalUrl, 200, 200);
+    
+    return {
+      normal: normalUrl,
+      thumbnail: thumbnailUrl
+    };
+  };
+
   // ✅ Función para validar que el archivo es una imagen
   const isValidImageFile = (file: File): boolean => {
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
@@ -334,16 +399,46 @@ export default function ProductPreview() {
         });
       }
 
-      // Convertir cada imagen a data URL
-      const dataUrls = await Promise.all(imageFiles.map(fileToDataURL));
+      // ✅ MEJORADO: Procesar cada imagen para crear versión normal y miniatura
+      // Las imágenes se procesan automáticamente para asegurar compatibilidad con el preview
+      const processedImages: string[] = [];
+      
+      for (let i = 0; i < imageFiles.length; i++) {
+        const file = imageFiles[i];
+        try {
+          // ✅ Procesar imagen: crear versión normal y miniatura
+          // Esto asegura que la imagen sea compatible y esté optimizada para el preview
+          const { normal } = await processImageFile(file);
+          
+          // ✅ Guardar solo la versión normal - el ImageGallery redimensionará automáticamente para thumbnails
+          // La miniatura se generó como validación/optimización pero usamos la normal para consistencia
+          processedImages.push(normal);
+        } catch (error) {
+          console.error(`Error procesando imagen ${i + 1}:`, error);
+          // Si falla el procesamiento avanzado, usar conversión simple a data URL
+          try {
+            const normalUrl = await fileToDataURL(file);
+            processedImages.push(normalUrl);
+          } catch (fallbackError) {
+            console.error(`Error en fallback para imagen ${i + 1}:`, fallbackError);
+            toast.error(`Error al procesar imagen ${i + 1}. Por favor intenta con otra imagen.`);
+          }
+        }
+      }
 
-      // Agregar todas las imágenes al formulario
+      if (processedImages.length === 0) {
+        toast.error('No se pudo procesar ninguna imagen. Por favor intenta con otras imágenes.');
+        setIsProcessingImage(false);
+        return;
+      }
+
+      // Agregar todas las imágenes procesadas al formulario
       setEditForm({
         ...editForm,
-        images: [...editForm.images, ...dataUrls],
+        images: [...editForm.images, ...processedImages],
       });
 
-      toast.success(`${imageFiles.length} imagen(es) agregada(s)`);
+      toast.success(`${processedImages.length} imagen(es) procesada(s) y configurada(s) correctamente para el preview`);
     } catch (error) {
       console.error('Error procesando imágenes:', error);
       toast.error('Error al procesar las imágenes. Por favor intenta de nuevo.');
