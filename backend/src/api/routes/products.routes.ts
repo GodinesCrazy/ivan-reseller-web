@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { logger } from '../../config/logger';
 import { toNumber } from '../../utils/decimal.utils';
 import { MarketplaceService } from '../../services/marketplace.service';
+import { productWorkflowStatusService } from '../../services/product-workflow-status.service';
 
 const router = Router();
 router.use(authenticate);
@@ -363,6 +364,34 @@ router.get('/maintenance/inconsistencies', authorize('ADMIN'), async (req: Reque
       count: inconsistencies.length,
       inconsistencies
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/products/:id/workflow-status - Obtener estado del workflow de un producto
+router.get('/:id/workflow-status', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const productId = Number(req.params.id);
+    if (isNaN(productId)) {
+      return res.status(400).json({ success: false, error: 'Invalid product ID' });
+    }
+
+    const workflowStatus = await productWorkflowStatusService.getProductWorkflowStatus(productId, userId);
+    
+    if (!workflowStatus) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Product not found or access denied' 
+      });
+    }
+
+    res.json({ success: true, data: workflowStatus });
   } catch (error) {
     next(error);
   }
