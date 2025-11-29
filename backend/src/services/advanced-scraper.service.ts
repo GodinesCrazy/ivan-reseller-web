@@ -581,18 +581,53 @@ export class AdvancedMarketplaceScraper {
     try {
       const { CredentialsManager } = await import('./credentials-manager.service');
       const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
+      const { resolveEnvironment } = await import('../utils/environment-resolver');
       
-      const affiliateCreds = await CredentialsManager.getCredentials(
-        userId, 
-        'aliexpress-affiliate', 
-        environment || 'production'
-      );
+      // ✅ MEJORADO: Resolver ambiente usando utilidad centralizada
+      // Intentar obtener credenciales del ambiente preferido, luego del alternativo si no se especificó explícitamente
+      const preferredEnvironment = await resolveEnvironment({
+        explicit: environment,
+        userId,
+        default: 'production'
+      });
+      
+      // Intentar ambos ambientes si no se especificó explícitamente
+      const environmentsToTry: Array<'sandbox' | 'production'> = [preferredEnvironment];
+      if (!environment) {
+        // Si no se especificó explícitamente, intentar también el ambiente alternativo
+        environmentsToTry.push(preferredEnvironment === 'production' ? 'sandbox' : 'production');
+      }
+      
+      let affiliateCreds: any = null;
+      let resolvedEnv: 'sandbox' | 'production' | null = null;
+      
+      for (const env of environmentsToTry) {
+        const creds = await CredentialsManager.getCredentials(
+          userId, 
+          'aliexpress-affiliate', 
+          env
+        );
+        
+        if (creds) {
+          affiliateCreds = creds;
+          resolvedEnv = env;
+          if (env !== preferredEnvironment) {
+            logger.debug('[SCRAPER] Credenciales de Affiliate API encontradas en ambiente alternativo', {
+              preferred: preferredEnvironment,
+              found: env,
+              userId
+            });
+          }
+          break;
+        }
+      }
       
       if (affiliateCreds) {
         logger.info('[SCRAPER] Credenciales de Affiliate API encontradas, intentando usar API oficial', {
           userId,
           query,
-          environment
+          environment: resolvedEnv || preferredEnvironment,
+          resolvedFrom: resolvedEnv
         });
         
         try {
