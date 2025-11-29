@@ -153,6 +153,8 @@ export default function ProductPreview() {
     images: [] as string[],
   });
   const [newImageUrl, setNewImageUrl] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [lifetimeDecision, setLifetimeDecision] = useState<any>(null);
   const [loadingLifetime, setLoadingLifetime] = useState(false);
 
@@ -292,6 +294,100 @@ export default function ProductPreview() {
       toast.success('Imagen agregada');
     } catch {
       toast.error('URL no válida. Por favor ingresa una URL completa (ej: https://...)');
+    }
+  };
+
+  // ✅ Función para convertir archivo a data URL (base64)
+  const fileToDataURL = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // ✅ Función para validar que el archivo es una imagen
+  const isValidImageFile = (file: File): boolean => {
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    return validTypes.includes(file.type);
+  };
+
+  // ✅ Manejar archivos arrastrados o seleccionados
+  const handleImageFiles = async (files: FileList | File[]) => {
+    setIsProcessingImage(true);
+    
+    try {
+      const fileArray = Array.from(files);
+      const imageFiles = fileArray.filter(isValidImageFile);
+
+      if (imageFiles.length === 0) {
+        toast.error('Por favor arrastra solo archivos de imagen válidos (JPG, PNG, WEBP, GIF)');
+        setIsProcessingImage(false);
+        return;
+      }
+
+      if (imageFiles.length !== fileArray.length) {
+        toast(`${fileArray.length - imageFiles.length} archivo(s) no son imágenes válidas y fueron ignorados`, {
+          icon: '⚠️',
+          duration: 4000
+        });
+      }
+
+      // Convertir cada imagen a data URL
+      const dataUrls = await Promise.all(imageFiles.map(fileToDataURL));
+
+      // Agregar todas las imágenes al formulario
+      setEditForm({
+        ...editForm,
+        images: [...editForm.images, ...dataUrls],
+      });
+
+      toast.success(`${imageFiles.length} imagen(es) agregada(s)`);
+    } catch (error) {
+      console.error('Error procesando imágenes:', error);
+      toast.error('Error al procesar las imágenes. Por favor intenta de nuevo.');
+    } finally {
+      setIsProcessingImage(false);
+    }
+  };
+
+  // ✅ Handlers para drag and drop
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      await handleImageFiles(files);
+    }
+  };
+
+  // ✅ Handler para selección de archivos mediante input file
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      await handleImageFiles(files);
+      // Limpiar el input para permitir seleccionar el mismo archivo nuevamente
+      e.target.value = '';
     }
   };
 
@@ -875,7 +971,59 @@ export default function ProductPreview() {
                   </div>
                 )}
 
-                {/* Input para agregar nueva imagen */}
+                {/* ✅ Zona de Drag and Drop para imágenes */}
+                <div
+                  onDragEnter={handleDragEnter}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`
+                    relative border-2 border-dashed rounded-lg p-6 text-center transition-colors
+                    ${isDragging
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'
+                    }
+                    ${editing || isProcessingImage ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}
+                  `}
+                >
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                    multiple
+                    onChange={handleFileSelect}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    disabled={editing || isProcessingImage}
+                  />
+                  
+                  {isProcessingImage ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-sm text-gray-600">Procesando imágenes...</p>
+                    </div>
+                  ) : (
+                    <>
+                      <ImageIcon className={`w-12 h-12 mx-auto mb-3 ${isDragging ? 'text-blue-500' : 'text-gray-400'}`} />
+                      <p className={`text-sm font-medium mb-1 ${isDragging ? 'text-blue-600' : 'text-gray-700'}`}>
+                        {isDragging ? 'Suelta las imágenes aquí' : 'Arrastra imágenes aquí o haz clic para seleccionar'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        JPG, PNG, WEBP, GIF (múltiples imágenes permitidas)
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                {/* Separador "O" */}
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500">O</span>
+                  </div>
+                </div>
+
+                {/* Input para agregar nueva imagen por URL */}
                 <div className="flex gap-2">
                   <input
                     type="url"
@@ -898,7 +1046,7 @@ export default function ProductPreview() {
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                   >
                     <Plus className="w-4 h-4" />
-                    Agregar
+                    Agregar URL
                   </button>
                 </div>
 
