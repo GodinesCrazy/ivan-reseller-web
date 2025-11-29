@@ -297,7 +297,7 @@ async function recordSaleFromWebhook(params: {
 
         // Ejecutar compra
         try {
-          const purchaseResult = await aliexpressAutoPurchaseService.executePurchase(purchaseRequest);
+          const purchaseResult = await aliexpressAutoPurchaseService.executePurchase(purchaseRequest, listing.userId);
 
           if (purchaseResult.success && purchaseLogId) {
             await prisma.purchaseLog.update({

@@ -143,11 +143,28 @@ export const API_KEY_NAMES = {
   },
 
   ALIEXPRESS: {
-    // No tiene API oficial, usa Puppeteer
+    // Puppeteer-based (legacy fallback)
     EMAIL: 'ALIEXPRESS_EMAIL',
     PASSWORD: 'ALIEXPRESS_PASSWORD',
     TWO_FA_ENABLED: 'ALIEXPRESS_2FA_ENABLED',
     TWO_FA_SECRET: 'ALIEXPRESS_2FA_SECRET', // Para TOTP
+  },
+
+  ALIEXPRESS_AFFILIATE: {
+    // AliExpress Affiliate API (Portals API) - Para scraping y extracción de datos
+    APP_KEY: 'ALIEXPRESS_AFFILIATE_APP_KEY',
+    APP_SECRET: 'ALIEXPRESS_AFFILIATE_APP_SECRET',
+    TRACKING_ID: 'ALIEXPRESS_AFFILIATE_TRACKING_ID', // Opcional
+    SANDBOX: 'ALIEXPRESS_AFFILIATE_SANDBOX', // boolean
+  },
+
+  ALIEXPRESS_DROPSHIPPING: {
+    // AliExpress Dropshipping API - Para compras automatizadas
+    APP_KEY: 'ALIEXPRESS_DROPSHIPPING_APP_KEY',
+    APP_SECRET: 'ALIEXPRESS_DROPSHIPPING_APP_SECRET',
+    ACCESS_TOKEN: 'ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN',
+    REFRESH_TOKEN: 'ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN', // Opcional
+    SANDBOX: 'ALIEXPRESS_DROPSHIPPING_SANDBOX', // boolean
   },
 
   EMAIL: {
@@ -208,7 +225,9 @@ export const API_NAMES = {
   ZENROWS: 'zenrows',
   CAPTCHA_2CAPTCHA: '2captcha',
   PAYPAL: 'paypal',
-  ALIEXPRESS: 'aliexpress',
+  ALIEXPRESS: 'aliexpress', // Puppeteer-based (legacy)
+  ALIEXPRESS_AFFILIATE: 'aliexpress-affiliate', // Affiliate API oficial
+  ALIEXPRESS_DROPSHIPPING: 'aliexpress-dropshipping', // Dropshipping API oficial
   EMAIL: 'email',
   TWILIO: 'twilio',
   SLACK: 'slack',
@@ -266,7 +285,9 @@ export const API_IDS = {
   ZENROWS: 6,
   CAPTCHA_2CAPTCHA: 7,
   PAYPAL: 8,
-  ALIEXPRESS: 9,
+  ALIEXPRESS: 9, // Puppeteer-based (legacy)
+  ALIEXPRESS_AFFILIATE: 15, // Affiliate API oficial
+  ALIEXPRESS_DROPSHIPPING: 16, // Dropshipping API oficial
   EMAIL: 10,
   TWILIO: 11,
   SLACK: 12,

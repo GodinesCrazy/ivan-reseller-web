@@ -156,8 +156,165 @@ export class AliExpressAutoPurchaseService {
 
   /**
    * Execute automatic purchase on AliExpress
+   * 
+   * ✅ MEJORADO: Intenta usar Dropshipping API primero (más confiable)
+   * Si falla o no hay credenciales, usa Puppeteer como fallback
    */
-  async executePurchase(request: PurchaseRequest): Promise<PurchaseResult> {
+  async executePurchase(request: PurchaseRequest, userId?: number): Promise<PurchaseResult> {
+    // ✅ NUEVO: Intentar usar Dropshipping API primero
+    if (userId) {
+      try {
+        const { CredentialsManager } = await import('./credentials-manager.service');
+        const { aliexpressDropshippingAPIService } = await import('./aliexpress-dropshipping-api.service');
+        const { prisma } = await import('../config/database');
+        
+        const dropshippingCreds = await CredentialsManager.getCredentials(
+          userId,
+          'aliexpress-dropshipping',
+          'production'
+        );
+        
+        if (dropshippingCreds && dropshippingCreds.accessToken) {
+          logger.info('[ALIEXPRESS-AUTO-PURCHASE] Credenciales de Dropshipping API encontradas, intentando usar API oficial', {
+            userId,
+            productUrl: request.productUrl
+          });
+          
+          try {
+            aliexpressDropshippingAPIService.setCredentials(dropshippingCreds);
+            
+            // Extraer productId de la URL
+            const productIdMatch = request.productUrl.match(/[\/_](\d+)\.html/);
+            const productId = productIdMatch ? productIdMatch[1] : null;
+            
+            if (!productId) {
+              logger.warn('[ALIEXPRESS-AUTO-PURCHASE] No se pudo extraer productId de la URL, usando Puppeteer', {
+                url: request.productUrl
+              });
+              // Continuar con Puppeteer
+            } else {
+              // Obtener información del producto desde la API
+              const productInfo = await aliexpressDropshippingAPIService.getProductInfo(productId, {
+                localCountry: request.shippingAddress.country,
+                localLanguage: 'es',
+              });
+              
+              // Validar precio
+              if (productInfo.salePrice > request.maxPrice) {
+                logger.warn('[ALIEXPRESS-AUTO-PURCHASE] Precio excede máximo usando API', {
+                  price: productInfo.salePrice,
+                  maxPrice: request.maxPrice
+                });
+                return {
+                  success: false,
+                  error: `Price $${productInfo.salePrice} exceeds maximum $${request.maxPrice}`,
+                };
+              }
+              
+              // Determinar SKU si hay variantes (simplificado - usar el primero disponible)
+              let selectedSkuId: string | undefined;
+              if (productInfo.skus && productInfo.skus.length > 0) {
+                const availableSku = productInfo.skus.find(sku => sku.stock > 0);
+                if (availableSku) {
+                  selectedSkuId = availableSku.skuId;
+                }
+              }
+              
+              // Seleccionar método de envío
+              let shippingMethodId: string | undefined;
+              if (productInfo.shippingInfo?.availableShippingMethods && productInfo.shippingInfo.availableShippingMethods.length > 0) {
+                // Usar el método de envío más económico disponible
+                const cheapestMethod = productInfo.shippingInfo.availableShippingMethods
+                  .sort((a, b) => a.cost - b.cost)[0];
+                shippingMethodId = cheapestMethod.methodId;
+              }
+              
+              // Crear orden usando la API
+              const placeOrderResult = await aliexpressDropshippingAPIService.placeOrder({
+                productId,
+                skuId: selectedSkuId,
+                quantity: request.quantity,
+                shippingAddress: request.shippingAddress,
+                shippingMethodId,
+                buyerMessage: request.notes,
+              });
+              
+              logger.info('[ALIEXPRESS-AUTO-PURCHASE] Orden creada exitosamente usando Dropshipping API', {
+                orderId: placeOrderResult.orderId,
+                orderNumber: placeOrderResult.orderNumber,
+                totalAmount: placeOrderResult.totalAmount,
+                userId
+              });
+              
+              // Guardar orden en base de datos
+              try {
+                await prisma.purchaseLog.create({
+                  data: {
+                    userId: userId,
+                    productUrl: request.productUrl,
+                    orderId: placeOrderResult.orderId,
+                    orderNumber: placeOrderResult.orderNumber,
+                    totalAmount: placeOrderResult.totalAmount,
+                    currency: placeOrderResult.currency,
+                    status: placeOrderResult.status,
+                    supplierUrl: request.productUrl,
+                    shippingAddress: JSON.stringify(request.shippingAddress),
+                  },
+                });
+              } catch (dbError: any) {
+                logger.warn('[ALIEXPRESS-AUTO-PURCHASE] Error guardando orden en DB', {
+                  error: dbError?.message,
+                  orderId: placeOrderResult.orderId
+                });
+                // No fallar si no se puede guardar en DB
+              }
+              
+              return {
+                success: true,
+                orderId: placeOrderResult.orderId,
+                orderNumber: placeOrderResult.orderNumber,
+                totalAmount: placeOrderResult.totalAmount,
+                estimatedDelivery: placeOrderResult.estimatedDelivery,
+              };
+            }
+          } catch (apiError: any) {
+            logger.warn('[ALIEXPRESS-AUTO-PURCHASE] Error usando Dropshipping API, usando Puppeteer como fallback', {
+              error: apiError?.message || String(apiError),
+              userId,
+              productUrl: request.productUrl,
+              willFallback: true
+            });
+            
+            // Si el error es de token expirado, no continuar con Puppeteer
+            if (apiError.message === 'ACCESS_TOKEN_EXPIRED') {
+              return {
+                success: false,
+                error: 'AliExpress Dropshipping API access token expired. Please refresh credentials.',
+              };
+            }
+            
+            // Continuar con Puppeteer si hay otros errores
+          }
+        } else {
+          logger.debug('[ALIEXPRESS-AUTO-PURCHASE] No hay credenciales de Dropshipping API configuradas, usando Puppeteer', {
+            userId
+          });
+          // Continuar con Puppeteer si no hay credenciales
+        }
+      } catch (apiCheckError: any) {
+        logger.warn('[ALIEXPRESS-AUTO-PURCHASE] Error verificando Dropshipping API, usando Puppeteer', {
+          error: apiCheckError?.message || String(apiCheckError),
+          userId
+        });
+        // Continuar con Puppeteer si hay error
+      }
+    }
+    
+    // ✅ FALLBACK: Usar Puppeteer (método existente)
+    logger.info('[ALIEXPRESS-AUTO-PURCHASE] Usando Puppeteer para compra automática (fallback o sin credenciales API)', {
+      productUrl: request.productUrl
+    });
+    
     if (!this.isLoggedIn) {
       const loginSuccess = await this.login();
       if (!loginSuccess) {
