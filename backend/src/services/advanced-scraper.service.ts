@@ -2672,16 +2672,17 @@ export class AdvancedMarketplaceScraper {
         });
       }
 
-      // ✅ MEJORADO: Mejorar imágenes visitando páginas individuales de TODOS los productos
-      // Siempre visitar las páginas individuales para obtener TODAS las imágenes disponibles
-      // Solo para los primeros 3 productos para no ralentizar demasiado
+      // ✅ TEMPORALMENTE DESACTIVADO: Proceso de mejora de imágenes que bloqueaba la búsqueda de oportunidades
+      // Este proceso visitaba páginas individuales y ralentizaba demasiado la búsqueda principal
+      // TODO: Reimplementar como proceso asíncrono en background después de retornar resultados
+      // La búsqueda de oportunidades ahora retorna más rápido sin este bloqueo
+      /*
       const productsToEnhance = productsWithResolvedPrices
         .filter((p: any) => {
-          // Solo productos con URL válida
           if (!p.productUrl || p.productUrl.length < 10) return false;
-          return true; // Mejorar TODOS los productos, no solo los que tienen 1 imagen
+          return true;
         })
-        .slice(0, 3); // Solo los primeros 3
+        .slice(0, 3);
 
       if (productsToEnhance.length > 0 && this.browser) {
         logger.info('[SCRAPER] Mejorando imágenes visitando páginas individuales', {
@@ -2694,10 +2695,6 @@ export class AdvancedMarketplaceScraper {
           }))
         });
 
-        // ✅ TEMPORALMENTE DESACTIVADO: Este bucle bloqueaba la búsqueda de oportunidades
-        // Al visitar páginas individuales para mejorar imágenes, ralentizaba demasiado el proceso
-        // TODO: Reimplementar como proceso asíncrono en background después de retornar resultados
-        /*
         for (let i = 0; i < productsToEnhance.length; i++) {
           const product = productsToEnhance[i];
           const currentImagesCount = (product.images || (product.imageUrl ? [product.imageUrl] : [])).length;
@@ -2729,8 +2726,8 @@ export class AdvancedMarketplaceScraper {
             });
           }
         }
-        */
       }
+      */
 
       logger.info('[SCRAPER] Extraídos productos REALES de AliExpress desde DOM', {
         count: productsWithResolvedPrices.length,
