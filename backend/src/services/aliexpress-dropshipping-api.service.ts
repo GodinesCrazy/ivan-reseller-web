@@ -161,8 +161,8 @@ export class AliExpressDropshippingAPIService {
       sign_method: 'md5',
     };
 
-    const allParams = { ...commonParams, ...params };
-    const sign = this.calculateSign(allParams, this.credentials.appSecret, commonParams.sign_method);
+    const allParams: Record<string, any> = { ...commonParams, ...params };
+    const sign = this.calculateSign(allParams, this.credentials.appSecret, commonParams.sign_method as 'md5' | 'sha256');
     allParams.sign = sign;
 
     try {

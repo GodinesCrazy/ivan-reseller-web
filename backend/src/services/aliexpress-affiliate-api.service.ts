@@ -150,10 +150,10 @@ export class AliExpressAffiliateAPIService {
     };
 
     // Combinar parámetros comunes con específicos
-    const allParams = { ...commonParams, ...params };
+    const allParams: Record<string, any> = { ...commonParams, ...params };
 
     // Calcular firma
-    const sign = this.calculateSign(allParams, this.credentials.appSecret, commonParams.sign_method);
+    const sign = this.calculateSign(allParams, this.credentials.appSecret, commonParams.sign_method as 'md5' | 'sha256');
     allParams.sign = sign;
 
     // Agregar trackingId si está disponible
