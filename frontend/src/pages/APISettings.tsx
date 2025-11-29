@@ -266,6 +266,34 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
       { key: 'twoFactorSecret', label: '2FA Secret (TOTP)', required: false, type: 'password', placeholder: 'Solo si tienes 2FA', helpText: 'Secret para generar códigos TOTP si tienes 2FA habilitado' },
     ],
   },
+  'aliexpress-affiliate': {
+    name: 'aliexpress-affiliate',
+    displayName: 'AliExpress Affiliate API',
+    description: 'API oficial de AliExpress para extraer datos de productos, precios e imágenes. Más rápida y confiable que scraping. Recomendada para búsqueda de oportunidades.',
+    icon: '📊',
+    docsUrl: 'https://developer.alibaba.com/help/en/portal',
+    fields: [
+      { key: 'appKey', label: 'App Key', required: true, type: 'text', placeholder: '12345678', helpText: 'App Key obtenida de AliExpress Open Platform (console.aliexpress.com)' },
+      { key: 'appSecret', label: 'App Secret', required: true, type: 'password', placeholder: 'Tu App Secret', helpText: 'App Secret para calcular la firma de las peticiones' },
+      { key: 'trackingId', label: 'Tracking ID (Opcional)', required: false, type: 'text', placeholder: 'Tu Tracking ID', helpText: 'ID de afiliado para generar enlaces de afiliado (opcional)' },
+      { key: 'sandbox', label: 'Sandbox', required: true, type: 'text', placeholder: 'false', helpText: 'Marca "true" para ambiente de pruebas, "false" para producción' },
+    ],
+  },
+  'aliexpress-dropshipping': {
+    name: 'aliexpress-dropshipping',
+    displayName: 'AliExpress Dropshipping API',
+    description: 'API oficial de AliExpress para crear órdenes automatizadas. Más rápida y confiable que automatización con navegador. Recomendada para compras automáticas.',
+    icon: '🛒',
+    docsUrl: 'https://developer.alibaba.com/help/en/portal',
+    supportsOAuth: true,
+    fields: [
+      { key: 'appKey', label: 'App Key', required: true, type: 'text', placeholder: '12345678', helpText: 'App Key obtenida de AliExpress Open Platform (console.aliexpress.com)' },
+      { key: 'appSecret', label: 'App Secret', required: true, type: 'password', placeholder: 'Tu App Secret', helpText: 'App Secret para calcular la firma de las peticiones' },
+      { key: 'accessToken', label: 'Access Token', required: true, type: 'password', placeholder: 'Tu Access Token', helpText: 'Token OAuth obtenido después de autorizar la aplicación (requiere flujo OAuth)' },
+      { key: 'refreshToken', label: 'Refresh Token (Opcional)', required: false, type: 'password', placeholder: 'Tu Refresh Token', helpText: 'Token para renovar automáticamente el Access Token cuando expire' },
+      { key: 'sandbox', label: 'Sandbox', required: true, type: 'text', placeholder: 'false', helpText: 'Marca "true" para ambiente de pruebas, "false" para producción' },
+    ],
+  },
 };
 
 export default function APISettings() {
@@ -1094,6 +1122,14 @@ export default function APISettings() {
         'password': 'password',
         'twoFactorEnabled': 'twoFactorEnabled',
         'twoFactorSecret': 'twoFactorSecret',
+        // AliExpress Affiliate API
+        'appKey': 'appKey',
+        'appSecret': 'appSecret',
+        'trackingId': 'trackingId',
+        'sandbox': 'sandbox',
+        // AliExpress Dropshipping API
+        'accessToken': 'accessToken',
+        'refreshToken': 'refreshToken',
       };
 
       // Validar campos requeridos y mapear
@@ -1183,13 +1219,15 @@ export default function APISettings() {
           }
         }
         // Incluir campos incluso si están vacíos para AliExpress (twoFactorEnabled puede ser false)
+        // También para las nuevas APIs (sandbox puede ser false)
         // IMPORTANTE: Para campos requeridos, siempre incluirlos si tienen valor (incluso si está vacío, la validación ya falló antes)
-        if (value.trim() || (apiName === 'aliexpress' && fieldKey === 'twoFactorEnabled')) {
+        if (value.trim() || (apiName === 'aliexpress' && fieldKey === 'twoFactorEnabled') ||
+            ((apiName === 'aliexpress-affiliate' || apiName === 'aliexpress-dropshipping') && fieldKey === 'sandbox')) {
           // Mapear el nombre del campo al formato esperado por el backend
           const backendKey = fieldMapping[fieldKey] || fieldKey;
           
           // Manejar campos booleanos
-          if (fieldKey === 'twoFactorEnabled') {
+          if (fieldKey === 'twoFactorEnabled' || fieldKey === 'sandbox') {
             credentials[backendKey] = value.trim().toLowerCase() === 'true';
           } else if (value.trim()) {
             credentials[backendKey] = value.trim();
@@ -1238,6 +1276,30 @@ export default function APISettings() {
         if (!credentials.twoFactorEnabled && credentials.twoFactorSecret) {
           delete credentials.twoFactorSecret;
         }
+      } else if (apiName === 'aliexpress-affiliate') {
+        // AliExpress Affiliate API: validar campos requeridos
+        if (!credentials.appKey || !credentials.appSecret) {
+          throw new Error('App Key y App Secret son requeridos para AliExpress Affiliate API');
+        }
+        // Asegurar que sandbox sea boolean (false por defecto)
+        if (credentials.sandbox === undefined) {
+          credentials.sandbox = false;
+        } else if (typeof credentials.sandbox === 'string') {
+          credentials.sandbox = credentials.sandbox.toLowerCase() === 'true';
+        }
+        // trackingId es opcional, no validar
+      } else if (apiName === 'aliexpress-dropshipping') {
+        // AliExpress Dropshipping API: validar campos requeridos
+        if (!credentials.appKey || !credentials.appSecret || !credentials.accessToken) {
+          throw new Error('App Key, App Secret y Access Token son requeridos para AliExpress Dropshipping API');
+        }
+        // Asegurar que sandbox sea boolean (false por defecto)
+        if (credentials.sandbox === undefined) {
+          credentials.sandbox = false;
+        } else if (typeof credentials.sandbox === 'string') {
+          credentials.sandbox = credentials.sandbox.toLowerCase() === 'true';
+        }
+        // refreshToken es opcional, no validar
       }
 
       // Log para debugging (sin datos sensibles)
@@ -1522,6 +1584,14 @@ export default function APISettings() {
           'password': 'password',
           'twoFactorEnabled': 'twoFactorEnabled',
           'twoFactorSecret': 'twoFactorSecret',
+          // AliExpress Affiliate API
+          'appKey': 'appKey',
+          'appSecret': 'appSecret',
+          'trackingId': 'trackingId',
+          'sandbox': 'sandbox',
+          // AliExpress Dropshipping API
+          'accessToken': 'accessToken',
+          'refreshToken': 'refreshToken',
           // Los campos del backend ya vienen con nombres correctos
           'appId': 'appId',
           'devId': 'devId',
@@ -1538,9 +1608,10 @@ export default function APISettings() {
           const rawValue = currentFormData[fieldKey] ?? (field.value !== undefined ? String(field.value) : '');
           const value = typeof rawValue === 'string' ? rawValue : String(rawValue ?? '');
           
-          if (value.trim() || (apiName === 'aliexpress' && fieldKey === 'twoFactorEnabled')) {
+          if (value.trim() || (apiName === 'aliexpress' && fieldKey === 'twoFactorEnabled') || 
+              ((apiName === 'aliexpress-affiliate' || apiName === 'aliexpress-dropshipping') && fieldKey === 'sandbox')) {
             const backendKey = fieldMapping[fieldKey] || fieldKey;
-            if (fieldKey === 'twoFactorEnabled') {
+            if (fieldKey === 'twoFactorEnabled' || fieldKey === 'sandbox') {
               testCredentials[backendKey] = value.trim().toLowerCase() === 'true';
             } else if (value.trim()) {
               testCredentials[backendKey] = value.trim();
@@ -1556,6 +1627,13 @@ export default function APISettings() {
         } else if (apiName === 'aliexpress') {
           if (testCredentials.twoFactorEnabled === undefined) {
             testCredentials.twoFactorEnabled = false;
+          }
+        } else if (apiName === 'aliexpress-affiliate' || apiName === 'aliexpress-dropshipping') {
+          // Asegurar que sandbox sea boolean (false por defecto)
+          if (testCredentials.sandbox === undefined) {
+            testCredentials.sandbox = false;
+          } else if (typeof testCredentials.sandbox === 'string') {
+            testCredentials.sandbox = testCredentials.sandbox.toLowerCase() === 'true';
           }
         }
       }

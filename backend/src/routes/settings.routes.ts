@@ -318,6 +318,45 @@ router.get('/apis', authenticate, async (req, res) => {
         documentation: null
       },
 
+      {
+        id: API_IDS.ALIEXPRESS_AFFILIATE,
+        name: 'AliExpress Affiliate API',
+        apiName: API_NAMES.ALIEXPRESS_AFFILIATE,
+        category: API_CATEGORIES.SCRAPING,
+        supportsEnvironments: false,
+        status: configuredMap.has(`aliexpress-affiliate-production`) ? 'configured' : 'not_configured',
+        isActive: configuredMap.get(`aliexpress-affiliate-production`)?.isActive || false,
+        lastUpdated: configuredMap.get(`aliexpress-affiliate-production`)?.updatedAt?.toISOString() || null,
+        fields: [
+          { key: 'appKey', label: 'App Key', required: true, type: 'text', placeholder: '12345678' },
+          { key: 'appSecret', label: 'App Secret', required: true, type: 'password' },
+          { key: 'trackingId', label: 'Tracking ID (Optional)', required: false, type: 'text', placeholder: 'Your Tracking ID' },
+          { key: 'sandbox', label: 'Sandbox', required: true, type: 'boolean', value: false }
+        ],
+        description: 'Official AliExpress API for extracting product data, prices, and images. Faster and more reliable than scraping. Recommended for opportunity search.',
+        documentation: 'https://developer.alibaba.com/help/en/portal'
+      },
+
+      {
+        id: API_IDS.ALIEXPRESS_DROPSHIPPING,
+        name: 'AliExpress Dropshipping API',
+        apiName: API_NAMES.ALIEXPRESS_DROPSHIPPING,
+        category: API_CATEGORIES.AUTOMATION,
+        supportsEnvironments: false,
+        status: configuredMap.has(`aliexpress-dropshipping-production`) ? 'configured' : 'not_configured',
+        isActive: configuredMap.get(`aliexpress-dropshipping-production`)?.isActive || false,
+        lastUpdated: configuredMap.get(`aliexpress-dropshipping-production`)?.updatedAt?.toISOString() || null,
+        fields: [
+          { key: 'appKey', label: 'App Key', required: true, type: 'text', placeholder: '12345678' },
+          { key: 'appSecret', label: 'App Secret', required: true, type: 'password' },
+          { key: 'accessToken', label: 'Access Token', required: true, type: 'password' },
+          { key: 'refreshToken', label: 'Refresh Token (Optional)', required: false, type: 'password' },
+          { key: 'sandbox', label: 'Sandbox', required: true, type: 'boolean', value: false }
+        ],
+        description: 'Official AliExpress API for creating automated orders. Faster and more reliable than browser automation. Recommended for automated purchases.',
+        documentation: 'https://developer.alibaba.com/help/en/portal'
+      },
+
       // NUEVAS APIs de Notificaciones
       {
         id: API_IDS.EMAIL,
