@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Save, Clock, Info, Calculator } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Save, Clock, Info, Calculator, Trash2, Plus, MoveUp, MoveDown } from 'lucide-react';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -150,7 +150,9 @@ export default function ProductPreview() {
     title: '',
     description: '',
     price: 0,
+    images: [] as string[],
   });
+  const [newImageUrl, setNewImageUrl] = useState('');
   const [lifetimeDecision, setLifetimeDecision] = useState<any>(null);
   const [loadingLifetime, setLoadingLifetime] = useState(false);
 
@@ -259,8 +261,52 @@ export default function ProductPreview() {
       title: preview.title,
       description: preview.description,
       price: preview.price,
+      images: preview.images || [], // ✅ Incluir imágenes actuales
     });
+    setNewImageUrl(''); // Limpiar campo de nueva imagen
     setShowEditModal(true);
+  };
+
+  // ✅ Funciones para gestionar imágenes
+  const handleRemoveImage = (index: number) => {
+    setEditForm({
+      ...editForm,
+      images: editForm.images.filter((_, i) => i !== index),
+    });
+  };
+
+  const handleAddImage = () => {
+    if (!newImageUrl.trim()) {
+      toast.error('Por favor ingresa una URL válida');
+      return;
+    }
+
+    // Validar que sea una URL válida
+    try {
+      new URL(newImageUrl.trim());
+      setEditForm({
+        ...editForm,
+        images: [...editForm.images, newImageUrl.trim()],
+      });
+      setNewImageUrl('');
+      toast.success('Imagen agregada');
+    } catch {
+      toast.error('URL no válida. Por favor ingresa una URL completa (ej: https://...)');
+    }
+  };
+
+  const handleMoveImage = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === editForm.images.length - 1) return;
+
+    const newImages = [...editForm.images];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    [newImages[index], newImages[targetIndex]] = [newImages[targetIndex], newImages[index]];
+    
+    setEditForm({
+      ...editForm,
+      images: newImages,
+    });
   };
 
   const handleSaveEdit = async () => {
@@ -283,6 +329,17 @@ export default function ProductPreview() {
       if (editForm.price !== preview.price) {
         updateData.suggestedPrice = editForm.price;
         updateData.finalPrice = editForm.price;
+      }
+
+      // ✅ Si las imágenes cambiaron, actualizarlas
+      if (editForm.images.length > 0) {
+        updateData.imageUrl = editForm.images[0]; // Primera imagen como principal
+        updateData.imageUrls = editForm.images; // Todas las imágenes
+      } else {
+        // Si no hay imágenes, mantener las existentes o limpiar
+        toast.error('El producto debe tener al menos una imagen');
+        setEditing(false);
+        return;
       }
 
       // Actualizar producto
@@ -744,6 +801,113 @@ export default function ProductPreview() {
                   disabled={editing}
                 />
               </div>
+
+              {/* ✅ Gestión de Imágenes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Imágenes del Producto
+                </label>
+                
+                {/* Lista de imágenes actuales */}
+                {editForm.images.length > 0 && (
+                  <div className="space-y-3 mb-4">
+                    {editForm.images.map((imgUrl, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
+                      >
+                        {/* Preview de imagen */}
+                        <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-gray-100">
+                          <img
+                            src={imgUrl}
+                            alt={`Imagen ${index + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://via.placeholder.com/80?text=Error';
+                            }}
+                          />
+                        </div>
+                        
+                        {/* URL de la imagen (truncada) */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-500 truncate" title={imgUrl}>
+                            {imgUrl.length > 60 ? `${imgUrl.substring(0, 60)}...` : imgUrl}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {index === 0 ? 'Imagen principal' : `Imagen ${index + 1}`}
+                          </p>
+                        </div>
+
+                        {/* Controles de reordenar */}
+                        <div className="flex flex-col gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleMoveImage(index, 'up')}
+                            disabled={editing || index === 0}
+                            className="p-1 text-gray-400 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Mover arriba"
+                          >
+                            <MoveUp className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveImage(index, 'down')}
+                            disabled={editing || index === editForm.images.length - 1}
+                            className="p-1 text-gray-400 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Mover abajo"
+                          >
+                            <MoveDown className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* Botón eliminar */}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveImage(index)}
+                          disabled={editing || editForm.images.length === 1}
+                          className="p-2 text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors"
+                          title={editForm.images.length === 1 ? 'Debe haber al menos una imagen' : 'Eliminar imagen'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Input para agregar nueva imagen */}
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={newImageUrl}
+                    onChange={(e) => setNewImageUrl(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddImage();
+                      }
+                    }}
+                    placeholder="https://ejemplo.com/imagen.jpg"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    disabled={editing}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddImage}
+                    disabled={editing || !newImageUrl.trim()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Agregar
+                  </button>
+                </div>
+
+                {editForm.images.length === 0 && (
+                  <p className="mt-2 text-sm text-red-600">
+                    ⚠️ El producto debe tener al menos una imagen
+                  </p>
+                )}
+              </div>
             </div>
             <div className="p-6 border-t flex gap-3 justify-end">
               <button
@@ -755,7 +919,7 @@ export default function ProductPreview() {
               </button>
               <button
                 onClick={handleSaveEdit}
-                disabled={editing || !editForm.title.trim() || editForm.price <= 0}
+                disabled={editing || !editForm.title.trim() || editForm.price <= 0 || editForm.images.length === 0}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {editing ? (
