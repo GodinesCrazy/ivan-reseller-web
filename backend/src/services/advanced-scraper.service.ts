@@ -652,12 +652,82 @@ export class AdvancedMarketplaceScraper {
               userId
             });
             
+            // ✅ MEJORADO: Obtener detalles completos (incluyendo shipping) en batch
+            // Limitar a los primeros 20 productos para optimizar llamadas a la API
+            const productsToEnhance = affiliateProducts.slice(0, 20);
+            const productIds = productsToEnhance
+              .map(p => p.productId)
+              .filter(Boolean)
+              .join(',');
+            
+            let productDetailsMap: Map<string, any> = new Map();
+            
+            if (productIds) {
+              try {
+                logger.debug('[SCRAPER] Obteniendo detalles de envío desde Affiliate API', {
+                  productCount: productsToEnhance.length,
+                  productIds: productIds.substring(0, 100) + '...'
+                });
+                
+                const details = await aliexpressAffiliateAPIService.getProductDetails({
+                  productIds,
+                  targetCurrency: userBaseCurrency || 'USD',
+                  targetLanguage: 'ES',
+                  shipToCountry: shipToCountry || 'CL',
+                });
+                
+                // Crear mapa de detalles por productId para acceso rápido
+                details.forEach(detail => {
+                  if (detail.productId) {
+                    productDetailsMap.set(detail.productId, detail);
+                  }
+                });
+                
+                logger.debug('[SCRAPER] Detalles de envío obtenidos', {
+                  detailsCount: details.length,
+                  withShippingInfo: details.filter(d => d.shippingInfo).length
+                });
+              } catch (detailsError: any) {
+                // ✅ REGLA DE ORO: Si falla obtener detalles, continuar sin ellos
+                logger.warn('[SCRAPER] Error obteniendo detalles de envío, continuando sin ellos', {
+                  error: detailsError?.message || String(detailsError),
+                  willUseFallback: true
+                });
+              }
+            }
+            
             // Convertir productos de Affiliate API a formato ScrapedProduct
             const scrapedProducts: ScrapedProduct[] = affiliateProducts.map(product => {
               const images = [
                 product.productMainImageUrl,
                 ...product.productSmallImageUrls
               ].filter(Boolean) as string[];
+              
+              // ✅ MEJORADO: Formatear shipping con información real si está disponible
+              let shippingString = 'Calculated at checkout';
+              const productDetail = productDetailsMap.get(product.productId);
+              
+              if (productDetail?.shippingInfo) {
+                const shippingInfo = productDetail.shippingInfo;
+                const shippingCost = shippingInfo.shippingCost;
+                const deliveryDays = shippingInfo.deliveryDays;
+                
+                if (shippingCost !== undefined && shippingCost !== null) {
+                  if (shippingCost === 0) {
+                    shippingString = deliveryDays 
+                      ? `Free shipping (${deliveryDays} days)`
+                      : 'Free shipping';
+                  } else {
+                    const currency = product.currency || userBaseCurrency || 'USD';
+                    const costFormatted = shippingCost.toFixed(2);
+                    shippingString = deliveryDays
+                      ? `${currency} ${costFormatted} shipping (${deliveryDays} days)`
+                      : `${currency} ${costFormatted} shipping`;
+                  }
+                } else if (deliveryDays) {
+                  shippingString = `Calculated at checkout (${deliveryDays} days)`;
+                }
+              }
               
               return {
                 title: product.productTitle,
@@ -669,7 +739,7 @@ export class AdvancedMarketplaceScraper {
                 rating: product.evaluateScore || 0,
                 reviewCount: product.volume || 0,
                 seller: product.storeName || '',
-                shipping: 'Calculated at checkout',
+                shipping: shippingString,
                 availability: 'In Stock',
                 currency: product.currency || userBaseCurrency || 'USD',
               };
@@ -677,6 +747,7 @@ export class AdvancedMarketplaceScraper {
             
             logger.info('[SCRAPER] Conversión exitosa de productos Affiliate API', {
               convertedCount: scrapedProducts.length,
+              withShippingInfo: Array.from(productDetailsMap.values()).filter(d => d.shippingInfo).length,
               query,
               userId
             });
