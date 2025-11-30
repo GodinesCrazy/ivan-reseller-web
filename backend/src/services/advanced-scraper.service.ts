@@ -43,6 +43,7 @@ interface ScrapedProduct {
   reviewCount: number;
   seller: string;
   shipping: string;
+  shippingCost?: number; // ✅ CRÍTICO: Costo de envío numérico para opportunity-finder
   availability: string;
 }
 
