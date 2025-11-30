@@ -637,14 +637,21 @@ export class AdvancedMarketplaceScraper {
           // Mapear país desde currency si es necesario
             const shipToCountry = this.getCountryFromCurrency(userBaseCurrency) || 'CL';
           
-          const affiliateProducts = await aliexpressAffiliateAPIService.searchProducts({
-            keywords: query,
-            pageSize: 10, // ✅ MEJORADO: Reducir a 10 para evitar timeouts
-            targetCurrency: userBaseCurrency || 'USD',
-            targetLanguage: 'ES',
-            shipToCountry: shipToCountry || 'CL',
-            sort: 'LAST_VOLUME_DESC',
-          });
+          // ✅ MEJORADO: Intentar con timeout corto y parámetros optimizados
+          const affiliateProducts = await Promise.race([
+            aliexpressAffiliateAPIService.searchProducts({
+              keywords: query,
+              pageSize: 5, // ✅ CRÍTICO: Reducir a 5 productos para respuesta más rápida
+              targetCurrency: userBaseCurrency || 'USD',
+              targetLanguage: 'ES',
+              shipToCountry: shipToCountry || 'CL',
+              sort: 'LAST_VOLUME_DESC',
+            }),
+            // ✅ Timeout de 25s para fallback rápido si la API no responde
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('API timeout - fallback to native scraping')), 25000)
+            )
+          ]) as any;
           
           if (affiliateProducts && affiliateProducts.length > 0) {
             logger.info('[SCRAPER] Productos obtenidos desde Affiliate API', {
@@ -792,11 +799,16 @@ export class AdvancedMarketplaceScraper {
             // Continuar con scraping nativo si no hay resultados
           }
         } catch (apiError: any) {
+          const errorMessage = apiError?.message || String(apiError);
+          const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('API timeout');
+          
           logger.warn('[SCRAPER] Error usando Affiliate API, continuando con scraping nativo', {
-            error: apiError?.message || String(apiError),
+            error: errorMessage,
+            isTimeout,
             query,
             userId,
-            willFallback: true
+            willFallback: true,
+            note: isTimeout ? 'API no respondió a tiempo - usando scraping nativo (más rápido)' : 'Error en API - usando scraping nativo como fallback'
           });
           // Continuar con scraping nativo si falla la API
         }
