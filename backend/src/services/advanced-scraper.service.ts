@@ -638,20 +638,31 @@ export class AdvancedMarketplaceScraper {
             const shipToCountry = this.getCountryFromCurrency(userBaseCurrency) || 'CL';
           
           // ✅ MEJORADO: Intentar con timeout corto y parámetros optimizados
-          const affiliateProducts = await Promise.race([
-            aliexpressAffiliateAPIService.searchProducts({
-              keywords: query,
-              pageSize: 5, // ✅ CRÍTICO: Reducir a 5 productos para respuesta más rápida
-              targetCurrency: userBaseCurrency || 'USD',
-              targetLanguage: 'ES',
-              shipToCountry: shipToCountry || 'CL',
-              sort: 'LAST_VOLUME_DESC',
-            }),
-            // ✅ Timeout de 25s para fallback rápido si la API no responde
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('API timeout - fallback to native scraping')), 25000)
-            )
-          ]) as any;
+          let affiliateProducts: any = null;
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('API timeout - fallback to native scraping')), 25000)
+          );
+          
+          try {
+            affiliateProducts = await Promise.race([
+              aliexpressAffiliateAPIService.searchProducts({
+                keywords: query,
+                pageSize: 5, // ✅ CRÍTICO: Reducir a 5 productos para respuesta más rápida
+                targetCurrency: userBaseCurrency || 'USD',
+                targetLanguage: 'ES',
+                shipToCountry: shipToCountry || 'CL',
+                sort: 'LAST_VOLUME_DESC',
+              }),
+              timeoutPromise
+            ]);
+          } catch (raceError: any) {
+            // Si el error es del timeout, lanzar error específico
+            if (raceError?.message?.includes('timeout')) {
+              throw raceError;
+            }
+            // Si es otro error, también lanzarlo
+            throw raceError;
+          }
           
           if (affiliateProducts && affiliateProducts.length > 0) {
             logger.info('[SCRAPER] Productos obtenidos desde Affiliate API', {
