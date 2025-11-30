@@ -654,8 +654,8 @@ export class AdvancedMarketplaceScraper {
             });
             
             // ✅ MEJORADO: Obtener detalles completos (incluyendo shipping) en batch
-            // Limitar a los primeros 20 productos para optimizar llamadas a la API
-            const productsToEnhance = affiliateProducts.slice(0, 20);
+            // Limitar a los primeros 10 productos para optimizar llamadas a la API y evitar timeouts
+            const productsToEnhance = affiliateProducts.slice(0, 10);
             const productIds = productsToEnhance
               .map(p => p.productId)
               .filter(Boolean)
