@@ -639,7 +639,7 @@ export class AdvancedMarketplaceScraper {
           
           const affiliateProducts = await aliexpressAffiliateAPIService.searchProducts({
             keywords: query,
-            pageSize: 20,
+            pageSize: 10, // ✅ MEJORADO: Reducir a 10 para evitar timeouts
             targetCurrency: userBaseCurrency || 'USD',
             targetLanguage: 'ES',
             shipToCountry: shipToCountry || 'CL',
