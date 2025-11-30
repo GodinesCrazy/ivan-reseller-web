@@ -143,10 +143,14 @@ export class AliExpressAffiliateAPIService {
     }
 
     // Parámetros comunes para todas las peticiones
+    // ✅ MEJORADO: Formato de timestamp correcto para AliExpress TOP API
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    
     const commonParams = {
       method,
       app_key: this.credentials.appKey,
-      timestamp: new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + '00', // Formato: YYYYMMDDHHmmss00
+      timestamp, // Formato: YYYYMMDDHHmmss
       format: 'json',
       v: '2.0',
       sign_method: 'md5',
@@ -165,10 +169,13 @@ export class AliExpressAffiliateAPIService {
     }
 
     try {
-      logger.debug('[ALIEXPRESS-AFFILIATE-API] Making request', {
+      logger.info('[ALIEXPRESS-AFFILIATE-API] Making request', {
         method,
         endpoint: this.endpoint,
-        params: { ...allParams, app_secret: '[REDACTED]' },
+        timestamp: allParams.timestamp,
+        app_key: allParams.app_key,
+        params_count: Object.keys(allParams).length,
+        timeout: '120000ms'
       });
 
       // ✅ MEJORADO: Usar URLSearchParams para enviar datos correctamente
