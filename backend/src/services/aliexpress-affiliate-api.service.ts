@@ -183,7 +183,7 @@ export class AliExpressAffiliateAPIService {
         timestamp: allParams.timestamp,
         app_key: allParams.app_key,
         params_count: Object.keys(allParams).length,
-        timeout: '30000ms (con fallback rápido)'
+        timeout: '20000ms (con fallback rápido a 25s)'
       });
 
       // ✅ MEJORADO: Usar URLSearchParams para enviar datos correctamente
@@ -201,7 +201,7 @@ export class AliExpressAffiliateAPIService {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        timeout: 30000, // ✅ Reducido a 30s - si no responde rápido, hacer fallback a scraping nativo
+        timeout: 20000, // ✅ Reducido a 20s - si no responde rápido, hacer fallback a scraping nativo
       });
 
       // La respuesta de TOP API viene en formato: { response: { result: { ... } } }
