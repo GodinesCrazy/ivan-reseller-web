@@ -483,10 +483,10 @@ export class CredentialsManager {
 
     // ✅ AliExpress Affiliate API normalization
     if (apiName === 'aliexpress-affiliate') {
-      // Normalize sandbox flag based on environment
-      if (typeof creds.sandbox === 'undefined') {
-        creds.sandbox = environment === 'sandbox';
-      }
+      // ✅ CRÍTICO: Siempre normalizar sandbox flag basándose en el environment actual
+      // Esto asegura que si las credenciales se guardaron con sandbox:false pero están en ambiente sandbox,
+      // se corrijan al recuperarlas
+      creds.sandbox = environment === 'sandbox';
     }
 
     return creds;
@@ -687,7 +687,15 @@ export class CredentialsManager {
         throw decryptError;
       }
       
+      // ✅ CRÍTICO: Normalizar credenciales ANTES de guardar en caché
+      // Esto asegura que el flag sandbox siempre coincida con el environment
       const normalized = this.normalizeCredential(apiName, decrypted, finalEnvironment);
+      
+      // ✅ CRÍTICO: Para AliExpress Affiliate API, forzar normalización del flag sandbox
+      // incluso si ya estaba definido, para asegurar consistencia
+      if (apiName === 'aliexpress-affiliate' && normalized) {
+        (normalized as any).sandbox = finalEnvironment === 'sandbox';
+      }
       
       // 🚀 PERFORMANCE: Guardar en caché
       credentialsCache.set(cacheKey, {

@@ -109,16 +109,18 @@ export class AliExpressAffiliateAPIService {
    */
   setCredentials(credentials: AliExpressAffiliateCredentials): void {
     this.credentials = credentials;
-    // ✅ MEJORADO: Usar endpoint nuevo solo si está explícitamente en sandbox
-    // El endpoint legacy es más estable para production
-    // ✅ CRÍTICO: Siempre usar endpoint legacy (más estable y documentado)
-    // El endpoint nuevo (api-sg) puede tener problemas de conectividad
+    
+    // ✅ CRÍTICO: Según la documentación de AliExpress, ambos endpoints funcionan para sandbox y production
+    // El endpoint legacy es más estable y documentado, así que lo usamos siempre
+    // Sin embargo, podríamos intentar el endpoint nuevo si el legacy falla
     this.endpoint = this.ENDPOINT_LEGACY;
     
     const logger = require('../config/logger').default;
-    logger.info('[ALIEXPRESS-AFFILIATE-API] Credentials set, using legacy endpoint', {
+    logger.info('[ALIEXPRESS-AFFILIATE-API] Credentials set', {
       endpoint: this.ENDPOINT_LEGACY,
-      sandbox: credentials.sandbox
+      sandbox: credentials.sandbox,
+      appKey: credentials.appKey ? `${credentials.appKey.substring(0, 6)}...` : 'missing',
+      note: 'Using legacy endpoint (more stable). Both sandbox and production use the same endpoint in AliExpress TOP API.'
     });
   }
 

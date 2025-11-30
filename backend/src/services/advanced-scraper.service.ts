@@ -627,14 +627,22 @@ export class AdvancedMarketplaceScraper {
           );
           
           if (creds) {
+            // ✅ CRÍTICO: Normalizar el flag sandbox basándose en el environment actual
+            // Esto asegura que si las credenciales se guardaron con sandbox:false pero están en ambiente sandbox,
+            // se corrijan al recuperarlas
+            if (apiName === 'aliexpress-affiliate') {
+              creds.sandbox = env === 'sandbox';
+            }
+            
             affiliateCreds = creds;
             resolvedEnv = env;
-            logger.info('[ALIEXPRESS-API] ✅ Credenciales encontradas', {
+            logger.info('[ALIEXPRESS-API] ✅ Credenciales encontradas y normalizadas', {
               environment: env,
               userId,
               preferredEnvironment,
               appKey: creds.appKey ? `${creds.appKey.substring(0, 6)}...` : 'missing',
               sandbox: creds.sandbox,
+              normalized: true,
               willUseAPI: true
             });
             if (env !== preferredEnvironment) {
@@ -700,7 +708,9 @@ export class AdvancedMarketplaceScraper {
               pageSize: 5,
               targetCurrency: userBaseCurrency || 'USD',
               shipToCountry,
-              timeout: '20s (axios) + 25s (race)'
+              timeout: '30s (axios) + 35s (race)',
+              endpoint: 'https://gw.api.taobao.com/router/rest',
+              note: 'Si la API no responde en 35s, se hará fallback a scraping nativo'
             });
             
             affiliateProducts = await Promise.race([
