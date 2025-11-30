@@ -577,8 +577,8 @@ export class AdvancedMarketplaceScraper {
     
     logger.info('[SCRAPER] scrapeAliExpress iniciado', { query, userId, environment, userBaseCurrency });
     
-    // ✅ NUEVO: Intentar usar Affiliate API primero (más rápido y confiable)
-    // Si falla, continuar con scraping nativo (workflow existente)
+    // ✅ PRIORIDAD 1: Intentar usar Affiliate API primero (fuente principal)
+    // Solo usar scraping nativo como fallback explícito si la API falla realmente
     try {
       const { CredentialsManager } = await import('./credentials-manager.service');
       const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
@@ -601,34 +601,48 @@ export class AdvancedMarketplaceScraper {
       
       let affiliateCreds: any = null;
       let resolvedEnv: 'sandbox' | 'production' | null = null;
+      let credentialsCheckError: any = null;
       
+      // ✅ CRÍTICO: Intentar obtener credenciales de ambos ambientes
       for (const env of environmentsToTry) {
-        const creds = await CredentialsManager.getCredentials(
-          userId, 
-          'aliexpress-affiliate', 
-          env
-        );
-        
-        if (creds) {
-          affiliateCreds = creds;
-          resolvedEnv = env;
-          if (env !== preferredEnvironment) {
-            logger.debug('[SCRAPER] Credenciales de Affiliate API encontradas en ambiente alternativo', {
-              preferred: preferredEnvironment,
-              found: env,
-              userId
-            });
+        try {
+          const creds = await CredentialsManager.getCredentials(
+            userId, 
+            'aliexpress-affiliate', 
+            env
+          );
+          
+          if (creds) {
+            affiliateCreds = creds;
+            resolvedEnv = env;
+            if (env !== preferredEnvironment) {
+              logger.debug('[ALIEXPRESS-API] Credenciales encontradas en ambiente alternativo', {
+                preferred: preferredEnvironment,
+                found: env,
+                userId
+              });
+            }
+            break;
           }
-          break;
+        } catch (credError: any) {
+          // ✅ REGLA DE ORO: Capturar error de credenciales pero continuar intentando
+          credentialsCheckError = credError;
+          logger.debug('[ALIEXPRESS-API] Error obteniendo credenciales', {
+            environment: env,
+            error: credError?.message || String(credError),
+            userId
+          });
         }
       }
       
+      // ✅ PRIORIDAD 1: Si hay credenciales, SIEMPRE intentar API primero
       if (affiliateCreds) {
-        logger.info('[SCRAPER] Credenciales de Affiliate API encontradas, intentando usar API oficial', {
+        logger.info('[ALIEXPRESS-API] Using official API for product search', {
           userId,
           query,
           environment: resolvedEnv || preferredEnvironment,
-          resolvedFrom: resolvedEnv
+          resolvedFrom: resolvedEnv,
+          source: 'aliexpress-affiliate-api'
         });
         
         try {
@@ -638,12 +652,22 @@ export class AdvancedMarketplaceScraper {
             const shipToCountry = this.getCountryFromCurrency(userBaseCurrency) || 'CL';
           
           // ✅ MEJORADO: Intentar con timeout corto y parámetros optimizados
+          // El timeout de axios es 20s, Promise.race es 25s para dar margen
           let affiliateProducts: any = null;
           const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('API timeout - fallback to native scraping')), 25000)
+            setTimeout(() => reject(new Error('API timeout after 25s - fallback to native scraping')), 25000)
           );
           
+          const apiCallStartTime = Date.now();
           try {
+            logger.debug('[ALIEXPRESS-API] Iniciando llamada a searchProducts', {
+              query,
+              pageSize: 5,
+              targetCurrency: userBaseCurrency || 'USD',
+              shipToCountry,
+              timeout: '20s (axios) + 25s (race)'
+            });
+            
             affiliateProducts = await Promise.race([
               aliexpressAffiliateAPIService.searchProducts({
                 keywords: query,
@@ -655,20 +679,40 @@ export class AdvancedMarketplaceScraper {
               }),
               timeoutPromise
             ]);
+            
+            const apiCallDuration = Date.now() - apiCallStartTime;
+            logger.info('[ALIEXPRESS-API] Llamada exitosa', {
+              duration: `${apiCallDuration}ms`,
+              productsFound: affiliateProducts?.length || 0
+            });
           } catch (raceError: any) {
+            const apiCallDuration = Date.now() - apiCallStartTime;
+            const errorMessage = raceError?.message || String(raceError);
+            const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('timeout of') || errorMessage.includes('timeout after');
+            
+            logger.warn('[ALIEXPRESS-API] Error en llamada a API', {
+              duration: `${apiCallDuration}ms`,
+              error: errorMessage,
+              isTimeout,
+              query,
+              userId,
+              willFallback: true
+            });
+            
             // Si el error es del timeout, lanzar error específico
-            if (raceError?.message?.includes('timeout')) {
-              throw raceError;
+            if (isTimeout) {
+              throw new Error(`API timeout after ${apiCallDuration}ms - fallback to native scraping`);
             }
             // Si es otro error, también lanzarlo
             throw raceError;
           }
           
           if (affiliateProducts && affiliateProducts.length > 0) {
-            logger.info('[SCRAPER] Productos obtenidos desde Affiliate API', {
+            logger.info('[ALIEXPRESS-API] Product search successful', {
               count: affiliateProducts.length,
               query,
-              userId
+              userId,
+              source: 'official-api'
             });
             
             // ✅ MEJORADO: Obtener detalles completos (incluyendo shipping) en batch
@@ -816,6 +860,10 @@ export class AdvancedMarketplaceScraper {
                 hasShippingInfo: !!productDetail?.shippingInfo
               });
               
+              // ✅ CRÍTICO: Usar moneda directamente de la API (sin inferir desde precio)
+              // La API de AliExpress siempre retorna la moneda correcta
+              const productCurrency = product.currency || userBaseCurrency || 'USD';
+              
               return {
                 title: product.productTitle,
                 price: product.salePrice,
@@ -829,57 +877,92 @@ export class AdvancedMarketplaceScraper {
                 shipping: shippingString,
                 shippingCost: shippingCostNum, // ✅ CRÍTICO: Agregar shippingCost como número para opportunity-finder
                 availability: 'In Stock',
-                currency: product.currency || userBaseCurrency || 'USD',
+                currency: productCurrency, // ✅ Usar moneda de la API directamente
               };
             });
             
-            logger.info('[SCRAPER] Conversión exitosa de productos Affiliate API', {
+            logger.info('[ALIEXPRESS-API] Products mapped successfully', {
               convertedCount: scrapedProducts.length,
               withShippingInfo: Array.from(productDetailsMap.values()).filter(d => d.shippingInfo).length,
               query,
-              userId
+              userId,
+              source: 'official-api'
             });
             
+            // ✅ ÉXITO: Retornar productos desde API oficial (NO usar scraping)
             return scrapedProducts;
           } else {
-            logger.warn('[SCRAPER] Affiliate API retornó 0 productos, continuando con scraping nativo', {
+            // ✅ API retornó 0 productos - usar scraping como fallback
+            logger.warn('[ALIEXPRESS-FALLBACK] API returned 0 products, using native scraper', {
               query,
-              userId
+              userId,
+              reason: 'api_returned_empty',
+              fallbackSource: 'native-scraping'
             });
             // Continuar con scraping nativo si no hay resultados
           }
         } catch (apiError: any) {
           const errorMessage = apiError?.message || String(apiError);
           const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('API timeout');
+          const isAuthError = errorMessage.includes('credentials') || errorMessage.includes('unauthorized') || errorMessage.includes('401');
+          const isRateLimit = errorMessage.includes('rate limit') || errorMessage.includes('429');
+          const isServerError = errorMessage.includes('500') || errorMessage.includes('502') || errorMessage.includes('503');
           
-          logger.warn('[SCRAPER] Error usando Affiliate API, continuando con scraping nativo', {
+          // ✅ Clasificar el error para logging detallado
+          let reasonCode = 'unknown_error';
+          if (isTimeout) reasonCode = 'api_timeout';
+          else if (isAuthError) reasonCode = 'invalid_credentials';
+          else if (isRateLimit) reasonCode = 'rate_limit_exceeded';
+          else if (isServerError) reasonCode = 'server_error';
+          
+          logger.warn('[ALIEXPRESS-FALLBACK] Using native scraper because API is unavailable', {
+            reason: reasonCode,
             error: errorMessage,
             isTimeout,
+            isAuthError,
+            isRateLimit,
+            isServerError,
             query,
             userId,
-            willFallback: true,
-            note: isTimeout ? 'API no respondió a tiempo - usando scraping nativo (más rápido)' : 'Error en API - usando scraping nativo como fallback'
+            fallbackSource: 'native-scraping',
+            note: isTimeout 
+              ? 'API no respondió a tiempo (25s) - usando scraping nativo como fallback' 
+              : isAuthError
+              ? 'Error de autenticación - verificar credenciales en API Settings'
+              : 'Error en API - usando scraping nativo como fallback seguro'
           });
           // Continuar con scraping nativo si falla la API
         }
       } else {
-        logger.debug('[SCRAPER] No hay credenciales de Affiliate API configuradas, usando scraping nativo', {
+        // ✅ No hay credenciales configuradas - usar scraping nativo
+        logger.info('[ALIEXPRESS-FALLBACK] Using native scraper because API credentials not configured', {
           userId,
-          query
+          query,
+          reason: 'no_credentials',
+          fallbackSource: 'native-scraping',
+          note: 'Configura credenciales en Settings → API Settings → AliExpress Affiliate API para usar la API oficial'
         });
         // Continuar con scraping nativo si no hay credenciales
       }
     } catch (affiliateCheckError: any) {
-      logger.warn('[SCRAPER] Error verificando Affiliate API, continuando con scraping nativo', {
+      // ✅ Error al verificar credenciales - usar scraping nativo como fallback seguro
+      logger.warn('[ALIEXPRESS-FALLBACK] Using native scraper because credentials check failed', {
+        reason: 'credentials_check_error',
         error: affiliateCheckError?.message || String(affiliateCheckError),
         query,
-        userId
+        userId,
+        fallbackSource: 'native-scraping'
       });
       // Continuar con scraping nativo si hay error
     }
     
-    // ✅ CONTINUAR CON SCRAPING NATIVO (workflow existente)
-    logger.info('[SCRAPER] Usando scraping nativo (fallback o sin credenciales API)', { query, userId });
+    // ✅ FALLBACK: Continuar con scraping nativo (solo si API falló o no está disponible)
+    logger.info('[ALIEXPRESS-FALLBACK] Proceeding with native scraping', { 
+      query, 
+      userId,
+      source: 'native-scraping',
+      reason: 'api_unavailable_or_failed'
+    });
     
     // ✅ Intentar inicializar navegador, pero si falla, NO retornar vacío inmediatamente
     // En su lugar, lanzar un error que permita al opportunity-finder usar el fallback de bridge Python

@@ -93,7 +93,8 @@ export class AliExpressAffiliateAPIService {
 
   constructor() {
     this.client = axios.create({
-      timeout: 30000, // ✅ MEJORADO: Timeout reducido a 30s para fallback rápido a scraping nativo si la API está lenta
+      timeout: 20000, // ✅ CRÍTICO: Timeout reducido a 20s para fallback rápido a scraping nativo si la API está lenta
+      // Esto permite que Promise.race con 25s timeout funcione correctamente
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
