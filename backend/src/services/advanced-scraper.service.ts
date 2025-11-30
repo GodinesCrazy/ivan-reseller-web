@@ -584,32 +584,32 @@ export class AdvancedMarketplaceScraper {
       const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
       const { resolveEnvironment } = await import('../utils/environment-resolver');
       
-      // ✅ MEJORADO: Resolver ambiente usando utilidad centralizada
-      // Intentar obtener credenciales del ambiente preferido, luego del alternativo si no se especificó explícitamente
+      // ✅ ACLARACIÓN: La AliExpress Affiliate API usa el MISMO endpoint para sandbox y production
+      // La distinción sandbox/production es solo organizacional para las credenciales en la BD
+      // El endpoint siempre es: https://gw.api.taobao.com/router/rest
+      // Sin embargo, buscamos credenciales en ambos ambientes porque pueden estar almacenadas
+      // con diferentes etiquetas (sandbox/production) dependiendo de cómo se configuraron
       const preferredEnvironment = await resolveEnvironment({
         explicit: environment,
         userId,
         default: 'production'
       });
       
-      // ✅ CRÍTICO: Siempre intentar ambos ambientes para maximizar probabilidad de encontrar credenciales
-      // Esto asegura que si las credenciales están en 'production' pero el workflow está en 'sandbox',
-      // o viceversa, las credenciales se encuentren y se usen correctamente
+      // Buscar credenciales en ambos ambientes (solo es distinción organizacional, no funcional)
       const environmentsToTry: Array<'sandbox' | 'production'> = [preferredEnvironment];
-      // Siempre agregar el ambiente alternativo para asegurar que se encuentren las credenciales
       environmentsToTry.push(preferredEnvironment === 'production' ? 'sandbox' : 'production');
       
       let affiliateCreds: any = null;
       let resolvedEnv: 'sandbox' | 'production' | null = null;
       let credentialsCheckError: any = null;
       
-      // ✅ CRÍTICO: Intentar obtener credenciales de ambos ambientes
+      // Buscar credenciales en ambos ambientes (distinción organizacional, no funcional - mismo endpoint)
       logger.info('[ALIEXPRESS-API] Buscando credenciales de AliExpress Affiliate API', {
         userId,
         query,
         preferredEnvironment,
         environmentsToTry,
-        note: 'Intentando obtener credenciales para usar API oficial primero'
+        note: 'Nota: AliExpress Affiliate API usa el mismo endpoint para ambos ambientes. La distinción es solo organizacional.'
       });
       
       for (const env of environmentsToTry) {
@@ -627,9 +627,7 @@ export class AdvancedMarketplaceScraper {
           );
           
           if (creds) {
-            // ✅ CRÍTICO: Normalizar el flag sandbox basándose en el environment actual
-            // Esto asegura que si las credenciales se guardaron con sandbox:false pero están en ambiente sandbox,
-            // se corrijan al recuperarlas
+            // Normalizar el flag sandbox (solo para consistencia, no afecta el endpoint de la API)
             creds.sandbox = env === 'sandbox';
             
             affiliateCreds = creds;
