@@ -228,6 +228,20 @@ const apiSchemas = {
     webhookSecret: z.string().optional(),
     sandbox: z.boolean(),
   }),
+  'aliexpress-affiliate': z.object({
+    appKey: z.string().min(1, 'App Key is required'),
+    appSecret: z.string().min(1, 'App Secret is required'),
+    trackingId: z.string().optional(),
+    sandbox: z.boolean(),
+  }),
+  'aliexpress-dropshipping': z.object({
+    appKey: z.string().min(1, 'App Key is required'),
+    appSecret: z.string().min(1, 'App Secret is required'),
+    accessToken: z.string().optional(), // Opcional inicialmente, se obtiene después de OAuth
+    refreshToken: z.string().optional(),
+    userId: z.string().optional(),
+    sandbox: z.boolean(),
+  }),
 };
 
 /**
@@ -455,6 +469,23 @@ export class CredentialsManager {
             });
           }
         }
+      }
+    }
+
+    // ✅ AliExpress Dropshipping API normalization
+    if (apiName === 'aliexpress-dropshipping') {
+      // Normalize sandbox flag based on environment
+      if (typeof creds.sandbox === 'undefined') {
+        creds.sandbox = environment === 'sandbox';
+      }
+      // accessToken and refreshToken are optional initially (obtained via OAuth)
+    }
+
+    // ✅ AliExpress Affiliate API normalization
+    if (apiName === 'aliexpress-affiliate') {
+      // Normalize sandbox flag based on environment
+      if (typeof creds.sandbox === 'undefined') {
+        creds.sandbox = environment === 'sandbox';
       }
     }
 
