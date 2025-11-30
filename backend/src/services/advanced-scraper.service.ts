@@ -698,10 +698,25 @@ export class AdvancedMarketplaceScraper {
             
             // Convertir productos de Affiliate API a formato ScrapedProduct
             const scrapedProducts: ScrapedProduct[] = affiliateProducts.map(product => {
-              const images = [
+              // ✅ MEJORADO: Filtrar imágenes pequeñas de la API también
+              const allRawImages = [
                 product.productMainImageUrl,
                 ...product.productSmallImageUrls
               ].filter(Boolean) as string[];
+              
+              // Filtrar imágenes pequeñas (menores a 200px)
+              const images = allRawImages.filter(imgUrl => {
+                const smallImagePattern = /[\/_](\d{1,3})x(\d{1,3})[\/_\.]/;
+                const sizeMatch = imgUrl.match(smallImagePattern);
+                if (sizeMatch) {
+                  const width = parseInt(sizeMatch[1], 10);
+                  const height = parseInt(sizeMatch[2], 10);
+                  // Excluir si alguna dimensión es menor a 200px
+                  return width >= 200 && height >= 200;
+                }
+                // Si no hay patrón de tamaño, incluir la imagen (probablemente es válida)
+                return true;
+              });
               
               // ✅ MEJORADO: Formatear shipping con información real si está disponible
               let shippingString = 'Calculated at checkout';
@@ -1939,17 +1954,18 @@ export class AdvancedMarketplaceScraper {
                     // Excluir URLs que contengan dimensiones pequeñas como 48x48, 154x64, etc.
                     const smallImagePattern = /[\/_](\d{1,3})x(\d{1,3})[\/_\.]/;
                     const sizeMatch = normalizedUrl.match(smallImagePattern);
+                    let shouldInclude = true;
                     if (sizeMatch) {
                       const width = parseInt(sizeMatch[1], 10);
                       const height = parseInt(sizeMatch[2], 10);
                       // Excluir si alguna dimensión es menor a 200px
                       if (width < 200 || height < 200) {
-                        continue; // Saltar esta imagen
+                        shouldInclude = false; // Saltar esta imagen
                       }
                     }
                     
-                    // Validar que sea una URL válida de imagen
-                    if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(normalizedUrl) && !imageSet.has(normalizedUrl)) {
+                    // Validar que sea una URL válida de imagen y que no sea pequeña
+                    if (shouldInclude && /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(normalizedUrl) && !imageSet.has(normalizedUrl)) {
                       imageSet.add(normalizedUrl);
                       allImageUrls.push(normalizedUrl); // ✅ CORREGIDO: Solo guardar URL, no el elemento DOM
                     }
