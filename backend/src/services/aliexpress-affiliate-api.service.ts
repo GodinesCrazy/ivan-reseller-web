@@ -247,7 +247,7 @@ export class AliExpressAffiliateAPIService {
       const apiParams: Record<string, any> = {
         keywords: params.keywords,
         page_no: params.pageNo || 1,
-        page_size: Math.min(params.pageSize || 20, 50), // Máximo 50 por página
+        page_size: Math.min(params.pageSize || 10, 20), // ✅ MEJORADO: Reducir pageSize a 10 para evitar timeouts
       };
 
       if (params.categoryIds) apiParams.category_ids = params.categoryIds;
