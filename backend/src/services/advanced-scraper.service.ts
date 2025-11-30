@@ -723,16 +723,46 @@ export class AdvancedMarketplaceScraper {
                 ...product.productSmallImageUrls
               ].filter(Boolean) as string[];
               
-              // Filtrar imágenes pequeñas (menores a 200px)
+              // ✅ MEJORADO: Filtrar imágenes pequeñas o con patrones de thumbnails
               const images = allRawImages.filter(imgUrl => {
-                const smallImagePattern = /[\/_](\d{1,3})x(\d{1,3})[\/_\.]/;
-                const sizeMatch = imgUrl.match(smallImagePattern);
+                if (!imgUrl) return false;
+                
+                // Patrón 1: Detectar dimensiones en URL (ej: _50x50_, _100x100_, _220x220_, etc.)
+                const sizePattern = /[\/_](\d{1,3})x(\d{1,3})[\/_\.]/;
+                const sizeMatch = imgUrl.match(sizePattern);
                 if (sizeMatch) {
                   const width = parseInt(sizeMatch[1], 10);
                   const height = parseInt(sizeMatch[2], 10);
                   // Excluir si alguna dimensión es menor a 200px
-                  return width >= 200 && height >= 200;
+                  if (width < 200 || height < 200) {
+                    logger.debug('[SCRAPER] Imagen filtrada por tamaño pequeño (API)', {
+                      url: imgUrl.substring(0, 80),
+                      width,
+                      height
+                    });
+                    return false;
+                  }
+                  return true;
                 }
+                
+                // Patrón 2: Detectar URLs de thumbnails específicos
+                const thumbnailPatterns = [
+                  /\/50x50/i,
+                  /\/100x100/i,
+                  /\/150x150/i,
+                  /thumbnail/i,
+                  /thumb/i,
+                  /_50x50/i,
+                  /_100x100/i,
+                ];
+                
+                if (thumbnailPatterns.some(pattern => pattern.test(imgUrl))) {
+                  logger.debug('[SCRAPER] Imagen filtrada por patrón de thumbnail (API)', {
+                    url: imgUrl.substring(0, 80)
+                  });
+                  return false;
+                }
+                
                 // Si no hay patrón de tamaño, incluir la imagen (probablemente es válida)
                 return true;
               });
