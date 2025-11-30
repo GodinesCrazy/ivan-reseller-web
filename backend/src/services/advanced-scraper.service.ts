@@ -604,8 +604,22 @@ export class AdvancedMarketplaceScraper {
       let credentialsCheckError: any = null;
       
       // ✅ CRÍTICO: Intentar obtener credenciales de ambos ambientes
+      logger.info('[ALIEXPRESS-API] Buscando credenciales de AliExpress Affiliate API', {
+        userId,
+        query,
+        preferredEnvironment,
+        environmentsToTry,
+        note: 'Intentando obtener credenciales para usar API oficial primero'
+      });
+      
       for (const env of environmentsToTry) {
         try {
+          logger.debug('[ALIEXPRESS-API] Intentando obtener credenciales', {
+            environment: env,
+            userId,
+            apiName: 'aliexpress-affiliate'
+          });
+          
           const creds = await CredentialsManager.getCredentials(
             userId, 
             'aliexpress-affiliate', 
@@ -615,22 +629,39 @@ export class AdvancedMarketplaceScraper {
           if (creds) {
             affiliateCreds = creds;
             resolvedEnv = env;
+            logger.info('[ALIEXPRESS-API] ✅ Credenciales encontradas', {
+              environment: env,
+              userId,
+              preferredEnvironment,
+              appKey: creds.appKey ? `${creds.appKey.substring(0, 6)}...` : 'missing',
+              sandbox: creds.sandbox,
+              willUseAPI: true
+            });
             if (env !== preferredEnvironment) {
-              logger.debug('[ALIEXPRESS-API] Credenciales encontradas en ambiente alternativo', {
+              logger.info('[ALIEXPRESS-API] Credenciales encontradas en ambiente alternativo', {
                 preferred: preferredEnvironment,
                 found: env,
                 userId
               });
             }
             break;
+          } else {
+            logger.debug('[ALIEXPRESS-API] No se encontraron credenciales en este ambiente', {
+              environment: env,
+              userId,
+              willTryNext: environmentsToTry.indexOf(env) < environmentsToTry.length - 1
+            });
           }
         } catch (credError: any) {
           // ✅ REGLA DE ORO: Capturar error de credenciales pero continuar intentando
           credentialsCheckError = credError;
-          logger.debug('[ALIEXPRESS-API] Error obteniendo credenciales', {
+          const errorMsg = credError?.message || String(credError);
+          logger.warn('[ALIEXPRESS-API] Error obteniendo credenciales', {
             environment: env,
-            error: credError?.message || String(credError),
-            userId
+            error: errorMsg,
+            userId,
+            willTryNext: environmentsToTry.indexOf(env) < environmentsToTry.length - 1,
+            note: 'Continuando con siguiente ambiente o scraping nativo'
           });
         }
       }
