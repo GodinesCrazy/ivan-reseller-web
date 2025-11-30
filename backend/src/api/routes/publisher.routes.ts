@@ -153,6 +153,40 @@ router.post('/add_for_approval', async (req: Request, res: Response) => {
       logger.info('Product created manually', { productId: product.id, userId });
     }
 
+    // ✅ CRÍTICO: Si analyze está en modo automatic, aprobar automáticamente el producto
+    // Esto permite que el workflow avance de ANALYZE a PUBLISH
+    if (product && product.status === 'PENDING') {
+      try {
+        const { workflowConfigService } = await import('../../services/workflow-config.service');
+        const analyzeMode = await workflowConfigService.getStageMode(userId, 'analyze');
+        
+        if (analyzeMode === 'automatic') {
+          await productService.updateProductStatusSafely(
+            product.id,
+            'APPROVED',
+            userId,
+            'Publisher: Aprobación automática (analyze en modo automatic)'
+          );
+          
+          logger.info('Publisher: Producto aprobado automáticamente', {
+            productId: product.id,
+            userId,
+            analyzeMode
+          });
+          
+          // Actualizar el objeto product para devolver el estado correcto
+          product = { ...product, status: 'APPROVED' };
+        }
+      } catch (approveError: any) {
+        logger.error('Publisher: Error aprobando producto automáticamente', {
+          productId: product.id,
+          userId,
+          error: approveError?.message || String(approveError)
+        });
+        // No fallar el flujo si la aprobación automática falla
+      }
+    }
+
     return res.status(201).json({ success: true, data: product });
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Failed to add product';

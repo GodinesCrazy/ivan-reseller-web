@@ -431,6 +431,267 @@ export class AliExpressDropshippingAPIService {
       return null;
     }
   }
+
+  /**
+   * 🔥 PASO 2: Generar URL de autorización OAuth
+   * 
+   * Genera la URL a la que el usuario debe ser redirigido para autorizar la aplicación.
+   * 
+   * @param redirectUri - URL de callback donde AliExpress redirigirá después de la autorización
+   * @param state - Estado para validar la respuesta (opcional, se genera automáticamente si no se proporciona)
+   * @param clientId - App Key (Client ID) de AliExpress
+   */
+  getAuthUrl(redirectUri: string, state?: string, clientId?: string): string {
+    const appKey = clientId || this.credentials?.appKey;
+    
+    if (!appKey) {
+      throw new Error('AliExpress Dropshipping API App Key (client_id) is required for OAuth authorization');
+    }
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      force_auth: 'true',
+      client_id: appKey,
+      redirect_uri: redirectUri,
+      state: state || 'ivanreseller',
+    });
+
+    const authUrl = `https://auth.aliexpress.com/oauth/authorize?${params.toString()}`;
+    
+    logger.info('[ALIEXPRESS-DROPSHIPPING-API] Generated OAuth authorization URL', {
+      redirectUri,
+      hasState: !!state,
+      clientId: appKey.substring(0, 10) + '...',
+    });
+
+    return authUrl;
+  }
+
+  /**
+   * 🔥 PASO 4: Intercambiar authorization code por access token y refresh token
+   * 
+   * Intercambia el código de autorización recibido en el callback por los tokens OAuth.
+   * 
+   * @param code - Authorization code recibido en el callback (expira en 10 minutos, solo se usa una vez)
+   * @param redirectUri - Mismo redirect_uri usado en getAuthUrl
+   * @param clientId - App Key (opcional, usa el configurado si no se proporciona)
+   * @param clientSecret - App Secret (opcional, usa el configurado si no se proporciona)
+   */
+  async exchangeCodeForToken(
+    code: string,
+    redirectUri: string,
+    clientId?: string,
+    clientSecret?: string
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    refreshExpiresIn: number;
+  }> {
+    const appKey = clientId || this.credentials?.appKey;
+    const appSecret = clientSecret || this.credentials?.appSecret;
+
+    if (!appKey || !appSecret) {
+      throw new Error('AliExpress Dropshipping API App Key and App Secret are required for token exchange');
+    }
+
+    if (!code || code.trim().length === 0) {
+      throw new Error('Authorization code is required');
+    }
+
+    logger.info('[ALIEXPRESS-DROPSHIPPING-API] Exchanging authorization code for tokens', {
+      codeLength: code.length,
+      redirectUri,
+      hasAppKey: !!appKey,
+      hasAppSecret: !!appSecret,
+    });
+
+    try {
+      const tokenUrl = 'https://auth.aliexpress.com/oauth/token';
+      
+      // ✅ PASO 4: Payload según documentación de AliExpress
+      const payload = {
+        grant_type: 'authorization_code',
+        need_refresh_token: 'true',
+        client_id: appKey,
+        client_secret: appSecret,
+        code: code,
+        redirect_uri: redirectUri,
+      };
+
+      logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
+        tokenUrl,
+        grantType: payload.grant_type,
+        hasCode: !!payload.code,
+        redirectUri: payload.redirect_uri,
+      });
+
+      const response = await axios.post(tokenUrl, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      });
+
+      if (!response.data || !response.data.access_token) {
+        logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token exchange response missing access_token', {
+          responseData: response.data,
+        });
+        throw new Error('Invalid response from AliExpress OAuth token endpoint: missing access_token');
+      }
+
+      logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange successful', {
+        hasAccessToken: !!response.data.access_token,
+        accessTokenLength: response.data.access_token?.length || 0,
+        hasRefreshToken: !!response.data.refresh_token,
+        refreshTokenLength: response.data.refresh_token?.length || 0,
+        expiresIn: response.data.expires_in,
+        refreshExpiresIn: response.data.refresh_expires_in,
+      });
+
+      return {
+        accessToken: response.data.access_token,
+        refreshToken: response.data.refresh_token,
+        expiresIn: response.data.expires_in || 86400, // Default: 24 horas
+        refreshExpiresIn: response.data.refresh_expires_in || 2592000, // Default: 30 días
+      };
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error_description || 
+                          error.response?.data?.error || 
+                          error.message || 
+                          'Unknown error';
+      
+      logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token exchange failed', {
+        error: errorMessage,
+        status: error.response?.status,
+        responseData: error.response?.data,
+      });
+
+      throw new Error(`AliExpress OAuth token exchange failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Refrescar access token usando refresh token
+   * 
+   * Renueva el access_token cuando expire usando el refresh_token.
+   * 
+   * @param refreshToken - Refresh token guardado previamente
+   * @param clientId - App Key (opcional)
+   * @param clientSecret - App Secret (opcional)
+   */
+  async refreshAccessToken(
+    refreshToken: string,
+    clientId?: string,
+    clientSecret?: string
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    refreshExpiresIn: number;
+  }> {
+    const appKey = clientId || this.credentials?.appKey;
+    const appSecret = clientSecret || this.credentials?.appSecret;
+
+    if (!appKey || !appSecret) {
+      throw new Error('AliExpress Dropshipping API App Key and App Secret are required for token refresh');
+    }
+
+    if (!refreshToken || refreshToken.trim().length === 0) {
+      throw new Error('Refresh token is required');
+    }
+
+    logger.info('[ALIEXPRESS-DROPSHIPPING-API] Refreshing access token', {
+      hasRefreshToken: !!refreshToken,
+      refreshTokenLength: refreshToken.length,
+    });
+
+    try {
+      const tokenUrl = 'https://auth.aliexpress.com/oauth/token';
+      
+      const payload = {
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: appKey,
+        client_secret: appSecret,
+      };
+
+      const response = await axios.post(tokenUrl, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      });
+
+      if (!response.data || !response.data.access_token) {
+        logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token refresh response missing access_token', {
+          responseData: response.data,
+        });
+        throw new Error('Invalid response from AliExpress OAuth token endpoint: missing access_token');
+      }
+
+      logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token refresh successful', {
+        hasAccessToken: !!response.data.access_token,
+        hasRefreshToken: !!response.data.refresh_token,
+        expiresIn: response.data.expires_in,
+      });
+
+      return {
+        accessToken: response.data.access_token,
+        refreshToken: response.data.refresh_token || refreshToken, // Usar el nuevo o mantener el anterior
+        expiresIn: response.data.expires_in || 86400,
+        refreshExpiresIn: response.data.refresh_expires_in || 2592000,
+      };
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error_description || 
+                          error.response?.data?.error || 
+                          error.message || 
+                          'Unknown error';
+      
+      logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token refresh failed', {
+        error: errorMessage,
+        status: error.response?.status,
+        responseData: error.response?.data,
+      });
+
+      throw new Error(`AliExpress OAuth token refresh failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * 🔥 PASO 6: Obtener información de cuenta de AliExpress
+   * 
+   * Llamada de prueba para verificar que el access_token funciona correctamente.
+   * 
+   * @param accessToken - Access token a verificar (opcional, usa el configurado si no se proporciona)
+   */
+  async getAccountInfo(accessToken?: string): Promise<any> {
+    const token = accessToken || this.credentials?.accessToken;
+    
+    if (!token) {
+      throw new Error('Access token is required to get account info');
+    }
+
+    logger.info('[ALIEXPRESS-DROPSHIPPING-API] Getting account info', {
+      hasAccessToken: !!token,
+    });
+
+    try {
+      // Usar el método aliexpress.ds.account.get según documentación
+      const result = await this.makeRequest('aliexpress.ds.account.get', {});
+      
+      logger.info('[ALIEXPRESS-DROPSHIPPING-API] Account info retrieved successfully', {
+        hasResult: !!result,
+      });
+
+      return result;
+    } catch (error: any) {
+      logger.error('[ALIEXPRESS-DROPSHIPPING-API] Get account info failed', {
+        error: error.message,
+      });
+      throw error;
+    }
+  }
 }
 
 // Exportar instancia singleton

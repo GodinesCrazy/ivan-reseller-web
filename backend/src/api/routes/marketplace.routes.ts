@@ -775,6 +775,55 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const url = new URL(ml.getAuthUrl(String(callbackUrl)));
       url.searchParams.set('state', state);
       authUrl = url.toString();
+    } else if (marketplace === 'aliexpress-dropshipping' || marketplace === 'aliexpress_dropshipping') {
+      logger.info('[AliExpress Dropshipping OAuth] Generating authorization URL', {
+        userId,
+        environment: resolvedEnv,
+        callbackUrl,
+      });
+
+      const { aliexpressDropshippingAPIService } = await import('../../services/aliexpress-dropshipping-api.service');
+      const { CredentialsManager } = await import('../../services/credentials-manager.service');
+      
+      // Obtener credenciales base (appKey y appSecret)
+      const cred = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', resolvedEnv);
+      
+      if (!cred) {
+        logger.error('[AliExpress Dropshipping OAuth] Credentials not found', {
+          userId,
+          environment: resolvedEnv,
+        });
+        return res.status(400).json({
+          success: false,
+          message: 'Credenciales no encontradas. Por favor configura App Key y App Secret antes de autorizar.',
+        });
+      }
+
+      const { appKey } = cred as any;
+      
+      if (!appKey) {
+        logger.error('[AliExpress Dropshipping OAuth] Missing App Key', {
+          userId,
+          environment: resolvedEnv,
+          hasAppKey: !!appKey,
+        });
+        return res.status(400).json({
+          success: false,
+          message: 'App Key (Client ID) no configurado. Por favor guarda las credenciales primero.',
+        });
+      }
+
+      // Generar URL de autorización con state personalizado
+      // AliExpress permite usar un state simple, pero usamos nuestro formato seguro para consistencia
+      const url = aliexpressDropshippingAPIService.getAuthUrl(String(callbackUrl), state, appKey);
+      authUrl = url;
+
+      logger.info('[AliExpress Dropshipping OAuth] Authorization URL generated', {
+        userId,
+        environment: resolvedEnv,
+        hasAuthUrl: !!authUrl,
+        authUrlLength: authUrl.length,
+      });
     }
 
     // Validar que authUrl se haya generado correctamente

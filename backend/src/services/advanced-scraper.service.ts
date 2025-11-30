@@ -875,7 +875,7 @@ export class AdvancedMarketplaceScraper {
         
         const status = response.status();
         if (status < 200 || status >= 400) {
-          console.debug(`⚠️  API response con status ${status}: ${url.substring(0, 80)}`);
+          logger.debug('[SCRAPER] API response con status no exitoso', { status, url: url.substring(0, 80) });
           return;
         }
         
@@ -3017,7 +3017,7 @@ export class AdvancedMarketplaceScraper {
       // Verificar si Amazon nos bloqueó
       const isBlocked = await page.$('.a-captcha-page, .captcha-page, .page-404');
       if (isBlocked) {
-        console.log('🚫 Amazon detectó bot, usando estrategia alternativa...');
+        logger.warn('[SCRAPER] Amazon detectó bot, usando estrategia alternativa', { query });
         return this.useAmazonAlternative(query);
       }
 
@@ -3174,7 +3174,9 @@ export class AdvancedMarketplaceScraper {
       });
     } catch (error) {
       // Si falla, continuar sin intercepción
-      console.warn('⚠️  No se pudo configurar intercepción de requests:', (error as Error).message);
+      logger.warn('[SCRAPER] No se pudo configurar intercepción de requests', { 
+        error: error instanceof Error ? error.message : String(error) 
+      });
     }
   }
 
@@ -3203,7 +3205,7 @@ export class AdvancedMarketplaceScraper {
    * Intentar resolver CAPTCHA automáticamente
    */
   private async solveCaptcha(page: Page): Promise<boolean> {
-    console.log('🤖 Intentando resolver CAPTCHA...');
+    logger.info('[SCRAPER] Intentando resolver CAPTCHA automáticamente');
 
     try {
       // Estrategia 1: Esperar y recargar
@@ -3213,7 +3215,7 @@ export class AdvancedMarketplaceScraper {
       // Verificar si desapareció el CAPTCHA
       const stillHasCaptcha = await this.checkForCaptcha(page);
       if (!stillHasCaptcha) {
-        console.log('✅ CAPTCHA evadido con recarga');
+        logger.info('[SCRAPER] CAPTCHA evadido con recarga');
         return true;
       }
 
@@ -3222,7 +3224,10 @@ export class AdvancedMarketplaceScraper {
 
       return true;
     } catch (error) {
-      console.error('❌ Error resolviendo CAPTCHA:', error);
+      logger.error('[SCRAPER] Error resolviendo CAPTCHA', { 
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return false;
     }
   }
@@ -3278,7 +3283,7 @@ export class AdvancedMarketplaceScraper {
    * Alternativa para Amazon cuando falla el scraping
    */
   private async useAmazonAlternative(query: string): Promise<ScrapedProduct[]> {
-    console.log('🔄 Usando estrategia alternativa para Amazon...');
+    logger.info('[SCRAPER] Usando estrategia alternativa para Amazon', { query });
 
     // Podrías implementar aquí:
     // 1. Amazon Product Advertising API
@@ -3307,7 +3312,7 @@ export class AdvancedMarketplaceScraper {
             // Usar Function para evaluar el objeto (runParams contiene comillas simples y estructuras no JSON)
             const runParams = Function(`"use strict";return (${runParamsString});`)();
             if (runParams && (runParams.resultList || runParams.mods || runParams.items)) {
-              console.log('✅ runParams encontrado en HTML con pattern:', pattern.toString().substring(0, 50));
+              logger.debug('[SCRAPER] runParams encontrado en HTML', { pattern: pattern.toString().substring(0, 50) });
               return runParams;
             }
           } catch (evalError) {
@@ -3329,16 +3334,16 @@ export class AdvancedMarketplaceScraper {
         });
         
         if (runParams && (runParams.resultList || runParams.mods || runParams.items || runParams.data)) {
-          console.log('✅ runParams encontrado en window object');
+          logger.debug('[SCRAPER] runParams encontrado en window object');
           return runParams;
         }
       } catch (evalError) {
-        console.warn('⚠️  Error evaluando runParams desde window:', (evalError as Error).message);
+        logger.warn('[SCRAPER] Error evaluando runParams desde window', { error: (evalError as Error).message });
       }
       
       return null;
     } catch (error) {
-      console.warn('⚠️  Error extrayendo runParams del HTML:', (error as Error).message);
+      logger.warn('[SCRAPER] Error extrayendo runParams del HTML', { error: (error as Error).message });
       return null;
     }
   }
@@ -3383,7 +3388,7 @@ export class AdvancedMarketplaceScraper {
 
       return normalized.slice(0, 40);
     } catch (error) {
-      console.warn('⚠️  Error extrayendo productos desde __NI_DATA__:', (error as Error).message);
+      logger.warn('[SCRAPER] Error extrayendo productos desde __NI_DATA__', { error: (error as Error).message });
       return [];
     }
   }
@@ -3454,7 +3459,7 @@ export class AdvancedMarketplaceScraper {
         }
       }
     } catch (error) {
-      console.warn('⚠️  Error extrayendo productos desde scripts:', (error as Error).message);
+      logger.warn('[SCRAPER] Error extrayendo productos desde scripts', { error: (error as Error).message });
     }
     return [];
   }
@@ -4560,7 +4565,7 @@ export class AdvancedMarketplaceScraper {
  
      // ✅ VERIFICAR: Si el navegador sigue siendo null después de init(), no podemos continuar
      if (!this.browser) {
-       console.warn('⚠️  No se pudo inicializar el navegador. No se puede realizar login automático.');
+       logger.warn('[SCRAPER] No se pudo inicializar el navegador. No se puede realizar login automático', { userId });
        await marketplaceAuthStatusService.markError(
          userId,
          'aliexpress',
@@ -4576,13 +4581,13 @@ export class AdvancedMarketplaceScraper {
 
      const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', 'production');
      if (!credentials) {
-       console.warn('⚠️  AliExpress credentials not configured for user', userId);
+       logger.warn('[SCRAPER] AliExpress credentials not configured', { userId });
        return;
      }
 
      const { email, password, twoFactorEnabled, twoFactorSecret } = credentials as AliExpressCredentials;
      if (!email || !password) {
-       console.warn('⚠️  AliExpress credentials incomplete for user', userId);
+       logger.warn('[SCRAPER] AliExpress credentials incomplete', { userId });
        return;
      }
 
@@ -4595,7 +4600,7 @@ export class AdvancedMarketplaceScraper {
  
      try {
        await this.setupRealBrowser(loginPage);
-       console.log('🔐 Navigating to AliExpress login page');
+       logger.info('[SCRAPER] Navigating to AliExpress login page', { userId });
        await loginPage.goto(this.loginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
        let context: FrameLike = (await this.waitForAliExpressLoginFrame(loginPage)) || loginPage;
@@ -4609,7 +4614,7 @@ export class AdvancedMarketplaceScraper {
          context = await this.resolveAliExpressActiveContext(loginPage, context);
          const detection = await this.detectAliExpressState(context);
          lastState = detection.state;
-         console.log(`🔐 AliExpress state [${attempts}]: ${detection.state}${detection.details ? ` (${detection.details})` : ''}`);
+         logger.debug('[SCRAPER] AliExpress login state', { attempts, state: detection.state, details: detection.details, userId });
 
          switch (detection.state) {
            case AliExpressLoginState.LOGGED_IN:
@@ -4623,7 +4628,7 @@ export class AdvancedMarketplaceScraper {
            case AliExpressLoginState.LOGIN_FORM: {
              const success = await this.runAliExpressLoginForm(context, email, password);
              if (!success) {
-               console.warn('⚠️  Login form interaction failed, reloading frame context');
+               logger.warn('[SCRAPER] Login form interaction failed, reloading frame context', { userId });
              }
              break;
            }
@@ -4634,13 +4639,13 @@ export class AdvancedMarketplaceScraper {
              context = (await this.waitForAliExpressLoginFrame(loginPage)) || context;
              break;
            case AliExpressLoginState.CAPTCHA:
-             console.warn('⚠️  AliExpress captcha detected. Manual resolution required.');
+             logger.warn('[SCRAPER] AliExpress captcha detected. Manual resolution required', { userId });
              await this.captureAliExpressSnapshot(loginPage, 'captcha-detected');
              return;
            case AliExpressLoginState.UNKNOWN:
              await this.logAliExpressHtml(loginPage, context, `unknown-${attempts}`);
              if (attempts >= 4) {
-               console.warn('⚠️  Persisting UNKNOWN state, forcing direct login navigation');
+               logger.warn('[SCRAPER] Persisting UNKNOWN state, forcing direct login navigation', { userId, attempts });
                await loginPage.goto(this.fallbackLoginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                await new Promise(resolve => setTimeout(resolve, 2000));
                const fallbackSuccess = await this.tryDirectAliExpressLogin(loginPage, email, password, twoFactorEnabled ? twoFactorSecret : undefined);
@@ -4651,7 +4656,7 @@ export class AdvancedMarketplaceScraper {
              } else {
                const clicked = await this.tryClickLoginByText(context);
                if (!clicked && attempts >= 2) {
-                 console.warn('⚠️  Login link not found via text, navigating to fallback login page');
+                 logger.warn('[SCRAPER] Login link not found via text, navigating to fallback login page', { userId });
                  await loginPage.goto(this.fallbackLoginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => {});
                  await new Promise(resolve => setTimeout(resolve, 2000));
                  const fallbackSuccess = await this.tryDirectAliExpressLogin(loginPage, email, password, twoFactorEnabled ? twoFactorSecret : undefined);
@@ -4663,11 +4668,11 @@ export class AdvancedMarketplaceScraper {
              }
              break;
            case AliExpressLoginState.REQUIRES_MANUAL_REVIEW:
-             console.warn('⚠️  AliExpress layout requires manual review. Capturing snapshot and stopping.');
+             logger.warn('[SCRAPER] AliExpress layout requires manual review. Capturing snapshot and stopping', { userId });
              await this.captureAliExpressSnapshot(loginPage, 'manual-review-required');
              return;
            default:
-             console.warn('⚠️  AliExpress state unknown, retrying...');
+             logger.warn('[SCRAPER] AliExpress state unknown, retrying', { userId, attempts });
              break;
          }
 
@@ -4676,7 +4681,7 @@ export class AdvancedMarketplaceScraper {
          context = await this.resolveAliExpressActiveContext(loginPage, context);
        }
 
-      console.warn(`⚠️  Unable to authenticate on AliExpress after ${attempts} steps. Last state: ${lastState}`);
+      logger.warn('[SCRAPER] Unable to authenticate on AliExpress', { userId, attempts, lastState });
       await this.captureAliExpressSnapshot(loginPage, `login-failed-${Date.now()}`);
       const manualSession = await ManualAuthService.startSession(
         userId,
@@ -4694,7 +4699,11 @@ export class AdvancedMarketplaceScraper {
         error?.message || 'Error desconocido intentando iniciar sesión',
         { lastAutomaticAttempt: new Date() }
       );
-      console.error('❌ Error performing AliExpress login:', error?.message || error);
+      logger.error('[SCRAPER] Error performing AliExpress login', { 
+        userId, 
+        error: error?.message || String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
      } finally {
        await loginPage.close().catch(() => {});
      }
@@ -4704,7 +4713,7 @@ export class AdvancedMarketplaceScraper {
     try {
       await page.waitForSelector('iframe', { timeout: 10000 }).catch(() => null);
       const frames = page.frames();
-      console.log('🔐 AliExpress login frames:', frames.map(f => f.url()));
+      logger.debug('[SCRAPER] AliExpress login frames', { frames: frames.map(f => f.url()) });
       return frames.find((frame) => {
         const frameUrl = frame.url();
         return (
@@ -4719,7 +4728,7 @@ export class AdvancedMarketplaceScraper {
         );
       }) || null;
     } catch (error) {
-      console.warn('⚠️  Error locating AliExpress login iframe:', (error as Error).message);
+      logger.warn('[SCRAPER] Error locating AliExpress login iframe', { error: (error as Error).message });
       return null;
     }
   }
@@ -4822,7 +4831,7 @@ export class AdvancedMarketplaceScraper {
 
       return { state: AliExpressLoginState.UNKNOWN, details: info.bodySnippet };
     } catch (error) {
-      console.warn('⚠️  detectAliExpressState error:', (error as Error).message);
+      logger.warn('[SCRAPER] detectAliExpressState error', { error: (error as Error).message });
       return { state: AliExpressLoginState.UNKNOWN, details: 'evaluation-error' };
     }
   }
@@ -4837,14 +4846,14 @@ export class AdvancedMarketplaceScraper {
      const passwordTyped = await this.typeIntoField(context, this.getAliExpressSelectors('login.password'), password, 'password');
  
      if (!emailTyped || !passwordTyped) {
-       console.warn('⚠️  Unable to locate login fields inside AliExpress login form');
+       logger.warn('[SCRAPER] Unable to locate login fields inside AliExpress login form');
        return false;
      }
  
      const loginClicked = await this.clickIfExists(context, this.getAliExpressSelectors('login.submit'), 'login-submit');
  
      if (!loginClicked) {
-       console.warn('⚠️  Login submit button not found on AliExpress login form');
+       logger.warn('[SCRAPER] Login submit button not found on AliExpress login form');
        return false;
      }
  
@@ -4873,9 +4882,9 @@ export class AdvancedMarketplaceScraper {
       await CredentialsManager.saveCredentials(userId, 'aliexpress', payload);
       this.isLoggedIn = true;
       this.loggedInUserId = userId;
-      console.log(`✅ Stored ${storedCookies.length} AliExpress cookies for user ${userId}`);
+      logger.info('[SCRAPER] Stored AliExpress cookies', { userId, cookieCount: storedCookies.length });
       if (payload.twoFactorEnabled) {
-        console.warn('ℹ️  AliExpress account uses 2FA. Ensure TOTP codes are up to date for future sessions.');
+        logger.info('[SCRAPER] AliExpress account uses 2FA', { userId });
       }
       await marketplaceAuthStatusService.markHealthy(
         userId,
@@ -4883,7 +4892,7 @@ export class AdvancedMarketplaceScraper {
         'Sesión autenticada automáticamente'
       );
     } catch (error) {
-      console.warn('⚠️  Unable to persist AliExpress session:', (error as Error).message);
+      logger.warn('[SCRAPER] Unable to persist AliExpress session', { userId, error: (error as Error).message });
     }
   }
 
@@ -4925,7 +4934,7 @@ export class AdvancedMarketplaceScraper {
       const passwordTyped = await this.typeIntoField(context, this.getAliExpressSelectors('login.password'), password, 'password');
 
       if (!emailTyped || !passwordTyped) {
-        console.warn('⚠️  Unable to locate login fields inside new AliExpress login form');
+        logger.warn('[SCRAPER] Unable to locate login fields inside new AliExpress login form');
         return false;
       }
 
@@ -4944,7 +4953,7 @@ export class AdvancedMarketplaceScraper {
       }
 
       if (!submitted) {
-        console.warn('⚠️  Could not submit AliExpress login form');
+        logger.warn('[SCRAPER] Could not submit AliExpress login form');
         return false;
       }
 
@@ -4962,10 +4971,10 @@ export class AdvancedMarketplaceScraper {
         return true;
       }
 
-      console.warn('⚠️  New login flow did not yield expected cookies, trying ajax fallback');
+      logger.warn('[SCRAPER] New login flow did not yield expected cookies, trying ajax fallback');
       return await this.tryAliExpressAjaxLogin(page, email, password);
     } catch (error) {
-      console.warn('⚠️  Direct AliExpress login fallback failed:', (error as Error).message);
+      logger.warn('[SCRAPER] Direct AliExpress login fallback failed', { error: (error as Error).message });
       return await this.tryAliExpressAjaxLogin(page, email, password);
     }
   }
@@ -5005,7 +5014,7 @@ export class AdvancedMarketplaceScraper {
 
       const ajaxData: any = result?.data;
       if (!ajaxData || ajaxData?.content?.status === 'fail') {
-        console.warn('⚠️  Ajax login reported failure', ajaxData?.content || ajaxData);
+        logger.warn('[SCRAPER] Ajax login reported failure', { ajaxData: ajaxData?.content || ajaxData });
         return false;
       }
 
@@ -5015,10 +5024,10 @@ export class AdvancedMarketplaceScraper {
         return true;
       }
 
-      console.warn('⚠️  Ajax login succeeded but expected cookies missing', ajaxData);
+      logger.warn('[SCRAPER] Ajax login succeeded but expected cookies missing', { ajaxData });
       return false;
     } catch (error) {
-      console.warn('⚠️  Ajax login fallback failed:', (error as Error).message);
+      logger.warn('[SCRAPER] Ajax login fallback failed', { error: (error as Error).message });
       return false;
     }
   }
@@ -5054,21 +5063,21 @@ export class AdvancedMarketplaceScraper {
         const doc = (globalThis as any).document;
         return doc?.body?.innerText?.slice(0, 800) || '';
       }).catch(() => '');
-      console.log(`📸 AliExpress snapshot [${label}] url=${url} title="${title}" snippet="${snippet.replace(/\s+/g, ' ').trim()}"`);
+      logger.debug('[SCRAPER] AliExpress snapshot captured', { label, url, title, snippet: snippet.replace(/\s+/g, ' ').trim().substring(0, 200) });
     } catch (error) {
-      console.warn('⚠️  Unable to capture AliExpress snapshot:', (error as Error).message);
+      logger.warn('[SCRAPER] Unable to capture AliExpress snapshot', { label, error: (error as Error).message });
     }
   }
 
   private async typeIntoField(context: FrameLike, selectors: string[], value: string, label = 'field'): Promise<boolean> {
     if (selectors.length === 0) {
-      console.warn(`⚠️  No selectors configured for ${label}`);
+      logger.warn('[SCRAPER] No selectors configured', { label });
       return false;
     }
 
     for (const selector of selectors) {
       try {
-        console.log(`🔎 Trying selector for ${label}: ${selector}`);
+        logger.debug('[SCRAPER] Trying selector', { label, selector });
         const handle = await context.waitForSelector(selector, { timeout: 5000 });
         if (!handle) continue;
         await context.evaluate((sel) => {
@@ -5080,13 +5089,13 @@ export class AdvancedMarketplaceScraper {
         }, selector);
         await handle.click({ clickCount: 3 }).catch(() => {});
         await handle.type(value, { delay: 80 });
-        console.log(`✅ Selector success for ${label}: ${selector}`);
+        logger.debug('[SCRAPER] Selector success', { label, selector });
         return true;
       } catch (error) {
-        console.warn(`⚠️  Selector failed for ${label}: ${selector} -> ${(error as Error).message}`);
+        logger.debug('[SCRAPER] Selector failed', { label, selector, error: (error as Error).message });
       }
     }
-    console.warn(`⚠️  All selectors failed for ${label}. Tried: ${selectors.join(', ')}`);
+    logger.warn('[SCRAPER] All selectors failed', { label, selectors: selectors.join(', ') });
     try {
       const fallbackSuccess = await context.evaluate(
         ({ value, label }) => {
@@ -5152,11 +5161,11 @@ export class AdvancedMarketplaceScraper {
         { value, label }
       );
       if (fallbackSuccess) {
-        console.log(`✅ Heuristic fallback success for ${label}`);
+        logger.debug('[SCRAPER] Heuristic fallback success', { label });
         return true;
       }
     } catch (error) {
-      console.warn(`⚠️  Heuristic fallback failed for ${label}: ${(error as Error).message}`);
+      logger.warn('[SCRAPER] Heuristic fallback failed', { label, error: (error as Error).message });
     }
     return false;
   }
@@ -5167,7 +5176,7 @@ export class AdvancedMarketplaceScraper {
     }
     for (const selector of selectors) {
       try {
-        console.log(`🔎 Trying click selector [${label}]: ${selector}`);
+        logger.debug('[SCRAPER] Trying click selector', { label, selector });
         let success = false;
         if (selector.includes(':contains(')) {
           const raw = selector.replace(/:contains\(("|')(.*?)("|')\)/, '$2');
@@ -5194,14 +5203,14 @@ export class AdvancedMarketplaceScraper {
           }
         }
         if (success) {
-          console.log(`✅ Clicked selector [${label}]: ${selector}`);
+          logger.debug('[SCRAPER] Clicked selector successfully', { label, selector });
           return true;
         }
       } catch (error) {
-        console.warn(`⚠️  Click selector failed [${label}]: ${selector} -> ${(error as Error).message}`);
+        logger.debug('[SCRAPER] Click selector failed', { label, selector, error: (error as Error).message });
       }
     }
-    console.warn(`⚠️  No selectors succeeded for [${label}]. Tried: ${selectors.join(', ')}`);
+    logger.warn('[SCRAPER] No selectors succeeded', { label, selectors: selectors.join(', ') });
     return false;
   }
 
@@ -5355,13 +5364,13 @@ export class AdvancedMarketplaceScraper {
             return parsed as Protocol.Network.Cookie[];
           }
         } catch (error) {
-          console.warn('⚠️  Unable to parse AliExpress cookies JSON for user', userId, error);
+          logger.warn('[SCRAPER] Unable to parse AliExpress cookies JSON', { userId, error });
         }
       } else if (Array.isArray(cookiesRaw)) {
         return cookiesRaw as Protocol.Network.Cookie[];
       }
     } catch (error) {
-      console.warn('⚠️  Error fetching AliExpress cookies for user', userId, error);
+      logger.warn('[SCRAPER] Error fetching AliExpress cookies', { userId, error });
     }
     return [];
   }
@@ -5380,12 +5389,15 @@ export class AdvancedMarketplaceScraper {
           contextHtml = '[unavailable]';
         }
       }
-      console.log(`📄 AliExpress HTML [${label}] page=${page.url()} snippet=${pageHtml.slice(0, 800)} ...`);
-      if (context !== page) {
-        console.log(`📄 AliExpress HTML [${label}] context=${contextUrl} snippet=${contextHtml.slice(0, 800)} ...`);
-      }
+      logger.debug('[SCRAPER] AliExpress HTML captured', { 
+        label, 
+        pageUrl: page.url(), 
+        pageSnippet: pageHtml.slice(0, 200),
+        contextUrl,
+        contextSnippet: context !== page ? contextHtml.slice(0, 200) : undefined
+      });
     } catch (error) {
-      console.warn('⚠️  Unable to log AliExpress HTML:', (error as Error).message);
+      logger.warn('[SCRAPER] Unable to log AliExpress HTML', { label, error: (error as Error).message });
     }
   }
 
@@ -5433,8 +5445,8 @@ export class AdvancedMarketplaceScraper {
           return candidate;
         }
       }
-    } catch (error) {
-      console.warn('⚠️  Error resolving active AliExpress context:', (error as Error).message);
+      } catch (error) {
+      logger.warn('[SCRAPER] Error resolving active AliExpress context', { error: (error as Error).message });
     }
     return current;
   }
