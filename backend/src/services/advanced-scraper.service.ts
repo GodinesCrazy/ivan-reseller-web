@@ -718,10 +718,19 @@ export class AdvancedMarketplaceScraper {
             // Convertir productos de Affiliate API a formato ScrapedProduct
             const scrapedProducts: ScrapedProduct[] = affiliateProducts.map(product => {
               // ✅ MEJORADO: Filtrar imágenes pequeñas de la API también
-              const allRawImages = [
+              // Consolidar todas las URLs de imágenes (main + small) y eliminar duplicados
+              const allRawImages = Array.from(new Set([
                 product.productMainImageUrl,
-                ...product.productSmallImageUrls
-              ].filter(Boolean) as string[];
+                ...(product.productSmallImageUrls || [])
+              ].filter(Boolean))) as string[];
+              
+              logger.debug('[SCRAPER] Imágenes raw desde API Affiliate', {
+                productId: product.productId,
+                mainImage: product.productMainImageUrl?.substring(0, 80),
+                smallImagesCount: product.productSmallImageUrls?.length || 0,
+                totalRawImages: allRawImages.length,
+                firstFewImages: allRawImages.slice(0, 3).map(img => img.substring(0, 60))
+              });
               
               // ✅ MEJORADO: Filtrar imágenes pequeñas o con patrones de thumbnails
               const images = allRawImages.filter(imgUrl => {
