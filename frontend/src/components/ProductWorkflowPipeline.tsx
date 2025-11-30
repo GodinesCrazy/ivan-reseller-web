@@ -123,17 +123,17 @@ export default function ProductWorkflowPipeline({
 
   return (
     <div className={`${className}`}>
-      <Card>
-        <CardHeader>
+      <Card className="bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-xl font-bold">Estado del Workflow</CardTitle>
+            <CardTitle className="text-xl font-bold text-gray-800">Estado del Workflow</CardTitle>
             <div className="flex items-center gap-2">
               {/* Badge de ambiente */}
               <Badge
                 className={
                   workflowStatus.environment === 'production'
-                    ? 'bg-green-700 text-green-50 border-green-800'
-                    : 'bg-yellow-600 text-yellow-50 border-yellow-700'
+                    ? 'bg-green-600 text-white border-2 border-green-700 font-bold shadow-md'
+                    : 'bg-yellow-500 text-white border-2 border-yellow-600 font-bold shadow-md'
                 }
               >
                 <Globe className="w-3 h-3 mr-1" />
@@ -141,7 +141,11 @@ export default function ProductWorkflowPipeline({
               </Badge>
               
               {/* Badge de modo general */}
-              <Badge className="bg-gray-100 text-gray-700 border-gray-200">
+              <Badge className={
+                workflowStatus.stages[workflowStatus.currentStage]?.mode === 'automatic'
+                  ? 'bg-blue-600 text-white border-2 border-blue-700 font-bold shadow-md'
+                  : 'bg-orange-500 text-white border-2 border-orange-600 font-bold shadow-md'
+              }>
                 <Settings className="w-3 h-3 mr-1" />
                 Modo: {workflowStatus.stages[workflowStatus.currentStage]?.mode === 'automatic' ? 'Automático' : 'Manual'}
               </Badge>
@@ -152,7 +156,7 @@ export default function ProductWorkflowPipeline({
           {/* Pipeline de etapas */}
           <div className="relative">
             {/* Línea conectora (horizontal en desktop, vertical en mobile) */}
-            <div className="hidden md:block absolute top-12 left-0 right-0 h-0.5 bg-gray-200 z-0" />
+            <div className="hidden md:block absolute top-12 left-0 right-0 h-1 bg-gradient-to-r from-blue-300 via-indigo-300 to-purple-300 z-0 shadow-sm" />
             
             {/* Etapas */}
             <div className={`relative z-10 ${compact ? 'grid grid-cols-3 gap-4' : 'flex flex-wrap gap-6 md:flex-nowrap md:justify-between'}`}>
@@ -204,9 +208,9 @@ export default function ProductWorkflowPipeline({
 
             {/* Indicador de etapa actual */}
             {!compact && (
-              <div className="mt-4 text-center">
-                <Badge className="bg-blue-100 text-blue-700 border-blue-200 px-3 py-1">
-                  <span className="text-xs font-semibold">
+              <div className="mt-6 text-center">
+                <Badge className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-2 border-blue-700 px-4 py-2 shadow-lg">
+                  <span className="text-sm font-bold uppercase">
                     ETAPA ACTUAL: {stageConfig[workflowStatus.currentStage]?.label}
                   </span>
                 </Badge>
