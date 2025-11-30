@@ -296,7 +296,7 @@ class OpportunityFinderService {
     const marketplaces: Array<'ebay' | 'amazon' | 'mercadolibre'> =
       usableMarketplaces.length > 0 ? usableMarketplaces : requestedMarketplaces;
 
-    // 1) Scrape AliExpress: PRIMERO usar scraping nativo local (Puppeteer) → fallback a bridge Python
+    // 1) Scrape AliExpress: PRIORIDAD 1 - API Oficial de AliExpress → PRIORIDAD 2 - Scraping nativo (Puppeteer) → fallback a bridge Python
     let products: Array<{
       title: string;
       price: number;
@@ -319,7 +319,7 @@ class OpportunityFinderService {
     let manualAuthError: ManualAuthRequiredError | null = null;
     let nativeErrorForLogs: any = null;
 
-    // PRIORIDAD 1: Scraping nativo local (Puppeteer) - más rápido y sin dependencias externas
+    // ✅ PRIORIDAD 1: API Oficial de AliExpress (si está configurada) → PRIORIDAD 2: Scraping nativo (Puppeteer) como fallback
     const scraper = new AdvancedMarketplaceScraper();
     let scraperInitialized = false;
 
@@ -328,9 +328,47 @@ class OpportunityFinderService {
     const baseCurrency = await userSettingsService.getUserBaseCurrency(userId);
     logger.info('[OPPORTUNITY-FINDER] Using user base currency', { userId, baseCurrency });
 
+    // ✅ CRÍTICO: Verificar si hay credenciales de AliExpress Affiliate API antes de empezar
+    try {
+      const { CredentialsManager } = await import('./credentials-manager.service');
+      const affiliateCreds = await CredentialsManager.getCredentials(
+        userId,
+        'aliexpress-affiliate',
+        environment
+      );
+      
+      if (affiliateCreds) {
+        logger.info('[OPPORTUNITY-FINDER] ✅ AliExpress Affiliate API credentials found - API will be attempted first', {
+          userId,
+          environment,
+          query,
+          source: 'aliexpress-affiliate-api'
+        });
+      } else {
+        logger.info('[OPPORTUNITY-FINDER] ⚠️ No AliExpress Affiliate API credentials found - using native scraping only', {
+          userId,
+          environment,
+          query,
+          source: 'native-scraping-only',
+          recommendation: 'Configure AliExpress Affiliate API credentials in Settings → API Settings to use official API'
+        });
+      }
+    } catch (credCheckError: any) {
+      logger.warn('[OPPORTUNITY-FINDER] Error checking AliExpress Affiliate API credentials, will try anyway', {
+        error: credCheckError?.message || String(credCheckError),
+        userId,
+        environment
+      });
+    }
+
     try {
       logger.info('[OPPORTUNITY-FINDER] Starting search', { query, userId, environment });
-      logger.debug('[OPPORTUNITY-FINDER] Using native local scraping (Puppeteer)', { query });
+      logger.info('[OPPORTUNITY-FINDER] scrapeAliExpress will attempt: 1) AliExpress Affiliate API → 2) Native scraping (Puppeteer)', { 
+        query,
+        userId,
+        environment,
+        baseCurrency
+      });
 
       // ✅ Inicializar scraper explícitamente antes de usar
       if (!scraper['browser']) {

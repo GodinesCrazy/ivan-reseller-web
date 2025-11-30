@@ -637,12 +637,16 @@ export class AdvancedMarketplaceScraper {
       
       // ✅ PRIORIDAD 1: Si hay credenciales, SIEMPRE intentar API primero
       if (affiliateCreds) {
-        logger.info('[ALIEXPRESS-API] Using official API for product search', {
+        logger.info('[ALIEXPRESS-API] ✅ PRIORIDAD 1: Attempting official AliExpress Affiliate API first', {
           userId,
           query,
           environment: resolvedEnv || preferredEnvironment,
           resolvedFrom: resolvedEnv,
-          source: 'aliexpress-affiliate-api'
+          source: 'aliexpress-affiliate-api',
+          credentialsFound: true,
+          appKey: affiliateCreds.appKey ? `${affiliateCreds.appKey.substring(0, 6)}...` : 'missing',
+          sandbox: affiliateCreds.sandbox,
+          note: 'If API fails or times out, will fallback to native scraping'
         });
         
         try {
