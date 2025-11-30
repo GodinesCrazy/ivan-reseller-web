@@ -694,11 +694,12 @@ export class AdvancedMarketplaceScraper {
           // Mapear país desde currency si es necesario
             const shipToCountry = this.getCountryFromCurrency(userBaseCurrency) || 'CL';
           
-          // ✅ MEJORADO: Intentar con timeout corto y parámetros optimizados
-          // El timeout de axios es 20s, Promise.race es 25s para dar margen
+          // ✅ MEJORADO: Intentar con timeout optimizado
+          // El timeout de axios es 30s, Promise.race es 35s para dar margen
+          // Esto permite que la API tenga tiempo suficiente para responder
           let affiliateProducts: any = null;
           const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('API timeout after 25s - fallback to native scraping')), 25000)
+            setTimeout(() => reject(new Error('API timeout after 35s - fallback to native scraping')), 35000)
           );
           
           const apiCallStartTime = Date.now();
