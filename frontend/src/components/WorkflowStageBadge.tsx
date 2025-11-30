@@ -37,42 +37,42 @@ export default function WorkflowStageBadge({
     }
   };
 
-  // Colores por estado
+  // Colores por estado - mejorado contraste
   const getStatusColors = () => {
     switch (status) {
       case 'completed':
-        return 'bg-green-100 text-green-700 border-green-200';
+        return 'bg-green-600 text-white border-2 border-green-700 shadow-md font-bold';
       case 'in-progress':
       case 'active':
-        return 'bg-blue-100 text-blue-700 border-blue-200';
+        return 'bg-blue-600 text-white border-2 border-blue-700 shadow-md font-bold';
       case 'pending':
-        return 'bg-gray-100 text-gray-600 border-gray-200';
+        return 'bg-gray-400 text-white border-2 border-gray-500 shadow-md font-semibold';
       case 'failed':
-        return 'bg-red-100 text-red-700 border-red-200';
+        return 'bg-red-600 text-white border-2 border-red-700 shadow-md font-bold';
       case 'skipped':
       case 'not-needed':
-        return 'bg-gray-50 text-gray-400 border-gray-100';
+        return 'bg-gray-300 text-gray-700 border-2 border-gray-400 shadow-sm';
       default:
-        return 'bg-gray-100 text-gray-600 border-gray-200';
+        return 'bg-gray-400 text-white border-2 border-gray-500 shadow-md';
     }
   };
 
-  // Colores por modo
+  // Colores por modo - mejorado contraste
   const getModeColors = () => {
     switch (mode) {
       case 'automatic':
-        return 'bg-blue-50 text-blue-700 border-blue-200';
+        return 'bg-blue-500 text-white border-2 border-blue-600 font-bold shadow-md';
       case 'manual':
-        return 'bg-orange-50 text-orange-700 border-orange-200';
+        return 'bg-orange-500 text-white border-2 border-orange-600 font-bold shadow-md';
       case 'guided':
-        return 'bg-purple-50 text-purple-700 border-purple-200';
+        return 'bg-purple-500 text-white border-2 border-purple-600 font-bold shadow-md';
       default:
-        return 'bg-gray-50 text-gray-700 border-gray-200';
+        return 'bg-gray-400 text-white border-2 border-gray-500 font-semibold';
     }
   };
 
-  // Borde especial si es etapa actual
-  const borderClass = isCurrent ? 'ring-2 ring-blue-500 ring-offset-2' : '';
+  // Borde especial si es etapa actual - mejorado contraste
+  const borderClass = isCurrent ? 'ring-4 ring-blue-500 ring-offset-4 bg-blue-50 shadow-xl transform scale-105' : '';
 
   return (
     <div className={`flex flex-col items-center gap-2 ${className} ${borderClass} p-3 rounded-lg transition-all`}>
