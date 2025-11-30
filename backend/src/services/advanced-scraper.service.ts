@@ -720,6 +720,7 @@ export class AdvancedMarketplaceScraper {
               
               // ✅ MEJORADO: Formatear shipping con información real si está disponible
               let shippingString = 'Calculated at checkout';
+              let shippingCostNum: number | undefined = undefined;
               const productDetail = productDetailsMap.get(product.productId);
               
               if (productDetail?.shippingInfo) {
@@ -727,7 +728,10 @@ export class AdvancedMarketplaceScraper {
                 const shippingCost = shippingInfo.shippingCost;
                 const deliveryDays = shippingInfo.deliveryDays;
                 
-                if (shippingCost !== undefined && shippingCost !== null) {
+                // ✅ CRÍTICO: Guardar shippingCost como número para que opportunity-finder lo procese
+                if (shippingCost !== undefined && shippingCost !== null && typeof shippingCost === 'number') {
+                  shippingCostNum = shippingCost;
+                  
                   if (shippingCost === 0) {
                     shippingString = deliveryDays 
                       ? `Free shipping (${deliveryDays} days)`
@@ -755,6 +759,7 @@ export class AdvancedMarketplaceScraper {
                 reviewCount: product.volume || 0,
                 seller: product.storeName || '',
                 shipping: shippingString,
+                shippingCost: shippingCostNum, // ✅ CRÍTICO: Agregar shippingCost como número para opportunity-finder
                 availability: 'In Stock',
                 currency: product.currency || userBaseCurrency || 'USD',
               };
