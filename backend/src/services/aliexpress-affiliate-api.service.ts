@@ -246,21 +246,51 @@ export class AliExpressAffiliateAPIService {
       if (params.deliveryDays) apiParams.delivery_days = params.deliveryDays;
       if (params.trackingId) apiParams.tracking_id = params.trackingId;
 
-      // Campos a solicitar
-      apiParams.fields = 'product_id,product_title,product_main_image_url,product_small_image_urls,sale_price,original_price,discount,evaluate_score,evaluate_rate,volume,store_name,store_url,product_detail_url,promotion_link,commission_rate';
+      // ✅ MEJORADO: Campos a solicitar - asegurar que se incluyan todas las imágenes disponibles
+      apiParams.fields = 'product_id,product_title,product_main_image_url,product_small_image_urls,sale_price,original_price,discount,evaluate_score,evaluate_rate,volume,store_name,store_url,product_detail_url,promotion_link,commission_rate,currency';
+
+      logger.info('[ALIEXPRESS-AFFILIATE-API] Request parameters prepared', {
+        keywords: params.keywords,
+        pageNo: params.pageNo || 1,
+        pageSize: apiParams.page_size,
+        targetCurrency: params.targetCurrency,
+        shipToCountry: params.shipToCountry,
+        endpoint: this.endpoint
+      });
 
       const result = await this.makeRequest('aliexpress.affiliate.product.query', apiParams);
 
-      // Procesar respuesta
+      // ✅ MEJORADO: Procesar respuesta con mejor manejo de imágenes
       const products = result.products?.product || [];
       
-      return products.map((p: any) => ({
+      logger.debug('[ALIEXPRESS-AFFILIATE-API] Processing API response', {
+        productsCount: products.length,
+        firstProductId: products[0]?.product_id,
+        firstProductTitle: products[0]?.product_title?.substring(0, 50),
+        hasMainImage: !!products[0]?.product_main_image_url,
+        hasSmallImages: !!products[0]?.product_small_image_urls
+      });
+      
+      return products.map((p: any) => {
+        // ✅ MEJORADO: Normalizar productSmallImageUrls - puede venir como array, string o objeto
+        let smallImages: string[] = [];
+        if (p.product_small_image_urls) {
+          if (Array.isArray(p.product_small_image_urls)) {
+            smallImages = p.product_small_image_urls.filter(Boolean);
+          } else if (Array.isArray(p.product_small_image_urls.string)) {
+            smallImages = p.product_small_image_urls.string.filter(Boolean);
+          } else if (typeof p.product_small_image_urls === 'string') {
+            smallImages = [p.product_small_image_urls];
+          } else if (p.product_small_image_urls.string) {
+            smallImages = [p.product_small_image_urls.string].filter(Boolean);
+          }
+        }
+        
+        return {
         productId: String(p.product_id || ''),
         productTitle: p.product_title || '',
         productMainImageUrl: p.product_main_image_url || '',
-        productSmallImageUrls: Array.isArray(p.product_small_image_urls?.string) 
-          ? p.product_small_image_urls.string 
-          : (p.product_small_image_urls ? [p.product_small_image_urls] : []),
+        productSmallImageUrls: smallImages,
         salePrice: parseFloat(p.sale_price || '0'),
         originalPrice: parseFloat(p.original_price || '0'),
         discount: parseFloat(p.discount || '0'),

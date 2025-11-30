@@ -749,12 +749,22 @@ export class AdvancedMarketplaceScraper {
                 }
               }
               
+              // ✅ LOGGING: Verificar imágenes antes de retornar
+              logger.debug('[SCRAPER] Producto Affiliate API procesado', {
+                productId: product.productId,
+                title: product.productTitle?.substring(0, 50),
+                rawImagesCount: allRawImages.length,
+                filteredImagesCount: images.length,
+                firstImage: images[0]?.substring(0, 80),
+                hasShippingInfo: !!productDetail?.shippingInfo
+              });
+              
               return {
                 title: product.productTitle,
                 price: product.salePrice,
                 originalPrice: product.originalPrice,
                 imageUrl: images[0] || '',
-                images,
+                images: images.length > 0 ? images : [], // ✅ Asegurar que siempre sea un array
                 productUrl: product.productDetailUrl || product.promotionLink || '',
                 rating: product.evaluateScore || 0,
                 reviewCount: product.volume || 0,
