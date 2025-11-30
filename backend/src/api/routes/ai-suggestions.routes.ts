@@ -18,7 +18,7 @@ router.get('/', async (req: Request, res: Response, next) => {
 
     const filter = req.query.filter as string | undefined;
     const suggestions = await aiSuggestionsService.getSuggestions(userId, filter);
-
+      
     res.json({
       success: true,
       suggestions,
