@@ -93,7 +93,7 @@ export class AliExpressAffiliateAPIService {
 
   constructor() {
     this.client = axios.create({
-      timeout: 30000,
+      timeout: 60000, // ✅ MEJORADO: Aumentado a 60s para evitar timeouts en llamadas lentas
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },

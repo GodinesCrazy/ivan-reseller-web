@@ -1935,6 +1935,19 @@ export class AdvancedMarketplaceScraper {
                       normalizedUrl = `https://${normalizedUrl}`;
                     }
                     
+                    // ✅ MEJORADO: Filtrar imágenes pequeñas (iconos, thumbnails, etc.)
+                    // Excluir URLs que contengan dimensiones pequeñas como 48x48, 154x64, etc.
+                    const smallImagePattern = /[\/_](\d{1,3})x(\d{1,3})[\/_\.]/;
+                    const sizeMatch = normalizedUrl.match(smallImagePattern);
+                    if (sizeMatch) {
+                      const width = parseInt(sizeMatch[1], 10);
+                      const height = parseInt(sizeMatch[2], 10);
+                      // Excluir si alguna dimensión es menor a 200px
+                      if (width < 200 || height < 200) {
+                        continue; // Saltar esta imagen
+                      }
+                    }
+                    
                     // Validar que sea una URL válida de imagen
                     if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(normalizedUrl) && !imageSet.has(normalizedUrl)) {
                       imageSet.add(normalizedUrl);
@@ -2107,12 +2120,37 @@ export class AdvancedMarketplaceScraper {
             }
             
             // ✅ CORREGIDO: Usar las URLs ya extraídas (allImageUrls ya contiene todas las imágenes normalizadas)
-            // Si tenemos imagen principal y no está en el array, agregarla
+            // Si tenemos imagen principal y no está en el array, validar tamaño antes de agregarla
             if (image && !allImageUrls.includes(image)) {
-              allImageUrls.unshift(image); // Agregar al inicio para que sea la principal
+              // ✅ MEJORADO: Validar que la imagen principal no sea pequeña
+              const smallImagePattern = /[\/_](\d{1,3})x(\d{1,3})[\/_\.]/;
+              const sizeMatch = image.match(smallImagePattern);
+              let shouldAdd = true;
+              if (sizeMatch) {
+                const width = parseInt(sizeMatch[1], 10);
+                const height = parseInt(sizeMatch[2], 10);
+                if (width < 200 || height < 200) {
+                  shouldAdd = false; // No agregar imágenes pequeñas
+                }
+              }
+              if (shouldAdd) {
+                allImageUrls.unshift(image); // Agregar al inicio para que sea la principal
+              }
             } else if (image && allImageUrls.length === 0) {
-              // Si solo tenemos imagen principal y no hay más, agregarla
-              allImageUrls.push(image);
+              // Si solo tenemos imagen principal y no hay más, validar antes de agregar
+              const smallImagePattern = /[\/_](\d{1,3})x(\d{1,3})[\/_\.]/;
+              const sizeMatch = image.match(smallImagePattern);
+              let shouldAdd = true;
+              if (sizeMatch) {
+                const width = parseInt(sizeMatch[1], 10);
+                const height = parseInt(sizeMatch[2], 10);
+                if (width < 200 || height < 200) {
+                  shouldAdd = false; // No agregar imágenes pequeñas
+                }
+              }
+              if (shouldAdd) {
+                allImageUrls.push(image);
+              }
             }
             
             // ✅ NUEVO: Intentar extraer más imágenes desde data attributes del item (AliExpress usa data-attributes para múltiples imágenes)
@@ -2166,6 +2204,19 @@ export class AdvancedMarketplaceScraper {
                       } else if (!normalized.startsWith('http')) {
                         normalized = `https://${normalized}`;
                       }
+                      
+                      // ✅ MEJORADO: Filtrar imágenes pequeñas (iconos, thumbnails, etc.)
+                      const smallImagePattern = /[\/_](\d{1,3})x(\d{1,3})[\/_\.]/;
+                      const sizeMatch = normalized.match(smallImagePattern);
+                      if (sizeMatch) {
+                        const width = parseInt(sizeMatch[1], 10);
+                        const height = parseInt(sizeMatch[2], 10);
+                        // Excluir si alguna dimensión es menor a 200px
+                        if (width < 200 || height < 200) {
+                          return; // Saltar esta imagen
+                        }
+                      }
+                      
                       // Solo agregar si es una URL válida de imagen y no está duplicada
                       if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(normalized) && !allImageUrls.includes(normalized)) {
                         allImageUrls.push(normalized);
@@ -2277,7 +2328,7 @@ export class AdvancedMarketplaceScraper {
               }
             }
             
-            // ✅ NUEVO: Normalizar todas las URLs de imágenes encontradas
+            // ✅ NUEVO: Normalizar todas las URLs de imágenes encontradas y filtrar pequeñas
             if (allImageUrls.length > 0) {
               allImageUrls.forEach((img) => {
                 let normalized = img;
@@ -2290,6 +2341,19 @@ export class AdvancedMarketplaceScraper {
                 } else {
                   normalized = `https://${img}`;
                 }
+                
+                // ✅ MEJORADO: Filtrar imágenes pequeñas después de normalizar
+                const smallImagePattern = /[\/_](\d{1,3})x(\d{1,3})[\/_\.]/;
+                const sizeMatch = normalized.match(smallImagePattern);
+                if (sizeMatch) {
+                  const width = parseInt(sizeMatch[1], 10);
+                  const height = parseInt(sizeMatch[2], 10);
+                  // Excluir si alguna dimensión es menor a 200px
+                  if (width < 200 || height < 200) {
+                    return; // Saltar esta imagen
+                  }
+                }
+                
                 if (normalized && !normalizedImageUrls.includes(normalized)) {
                   normalizedImageUrls.push(normalized);
                 }

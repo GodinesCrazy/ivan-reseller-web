@@ -209,7 +209,42 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     // ✅ LÍMITE DE PRODUCTOS PENDIENTES: Validar antes de crear
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
-    const product = await productService.createProduct(req.user!.userId, validatedData as CreateProductDto, isAdmin);
+    const userId = req.user!.userId;
+    const product = await productService.createProduct(userId, validatedData as CreateProductDto, isAdmin);
+    
+    // ✅ CRÍTICO: Si analyze está en modo automatic, aprobar automáticamente el producto
+    // Esto permite que el workflow avance de ANALYZE a PUBLISH
+    if (product && product.status === 'PENDING') {
+      try {
+        const { workflowConfigService } = await import('../../services/workflow-config.service');
+        const analyzeMode = await workflowConfigService.getStageMode(userId, 'analyze');
+        
+        if (analyzeMode === 'automatic') {
+          await productService.updateProductStatusSafely(
+            product.id,
+            'APPROVED',
+            userId,
+            'Products API: Aprobación automática (analyze en modo automatic)'
+          );
+          
+          logger.info('POST /api/products - Producto aprobado automáticamente', {
+            productId: product.id,
+            userId,
+            analyzeMode
+          });
+          
+          // Actualizar el objeto product para devolver el estado correcto
+          product.status = 'APPROVED';
+        }
+      } catch (approveError: any) {
+        logger.error('POST /api/products - Error aprobando producto automáticamente', {
+          productId: product.id,
+          userId,
+          error: approveError?.message || String(approveError)
+        });
+        // No fallar el flujo si la aprobación automática falla
+      }
+    }
     
     // ✅ Función helper para extraer imageUrl del campo images (JSON)
     const extractImageUrl = (imagesString: string | null | undefined): string | null => {
