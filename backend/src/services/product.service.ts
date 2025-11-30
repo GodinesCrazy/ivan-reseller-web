@@ -616,9 +616,31 @@ export class ProductService {
   async updateProductStatusSafely(
     id: number,
     status: ProductStatus,
-    isPublished?: boolean,
-    adminId?: number
+    isPublishedOrAdminId?: boolean | number,
+    adminIdOrReason?: number | string
   ) {
+    // ✅ FIX: Manejar diferentes firmas de llamada (legacy y nueva)
+    // Si el tercer parámetro es un número, es un adminId (firma legacy)
+    // Si es boolean, es isPublished (firma nueva)
+    let isPublished: boolean | undefined;
+    let adminId: number | undefined;
+    let reason: string | undefined;
+    
+    if (typeof isPublishedOrAdminId === 'boolean') {
+      isPublished = isPublishedOrAdminId;
+      if (typeof adminIdOrReason === 'number') {
+        adminId = adminIdOrReason;
+      } else if (typeof adminIdOrReason === 'string') {
+        reason = adminIdOrReason;
+      }
+    } else if (typeof isPublishedOrAdminId === 'number') {
+      // Firma legacy: tercer parámetro es adminId
+      adminId = isPublishedOrAdminId;
+      if (typeof adminIdOrReason === 'string') {
+        reason = adminIdOrReason;
+      }
+      isPublished = undefined; // Usar lógica por defecto
+    }
     // ✅ Obtener producto actual para verificar estado actual y detectar inconsistencias
     const currentProduct = await prisma.product.findUnique({
       where: { id },
@@ -653,6 +675,16 @@ export class ProductService {
     // ✅ Validar consistencia: si status es PUBLISHED, isPublished debe ser true
     const shouldBePublished = status === 'PUBLISHED';
     const finalIsPublished = isPublished !== undefined ? isPublished : shouldBePublished;
+    
+    // ✅ Log para debugging
+    logger.debug('updateProductStatusSafely called', {
+      productId: id,
+      status,
+      isPublished,
+      adminId,
+      reason,
+      finalIsPublished
+    });
 
     // ✅ P3: Corrección mejorada de isPublished basada en status
     // Si status es PUBLISHED, isPublished DEBE ser true

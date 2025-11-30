@@ -93,10 +93,13 @@ export class AliExpressAffiliateAPIService {
 
   constructor() {
     this.client = axios.create({
-      timeout: 60000, // ✅ MEJORADO: Aumentado a 60s para evitar timeouts en llamadas lentas
+      timeout: 120000, // ✅ MEJORADO: Aumentado a 120s (2 minutos) para evitar timeouts en llamadas lentas
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
+      // ✅ Agregar configuración adicional para conexiones lentas
+      maxRedirects: 5,
+      validateStatus: (status) => status < 500, // Aceptar códigos < 500
     });
   }
 
@@ -168,8 +171,20 @@ export class AliExpressAffiliateAPIService {
         params: { ...allParams, app_secret: '[REDACTED]' },
       });
 
-      const response = await this.client.post(this.endpoint, allParams, {
-        params: allParams, // También enviar como query params por compatibilidad
+      // ✅ MEJORADO: Usar URLSearchParams para enviar datos correctamente
+      const formData = new URLSearchParams();
+      Object.keys(allParams).forEach(key => {
+        const value = allParams[key];
+        if (value !== undefined && value !== null) {
+          formData.append(key, String(value));
+        }
+      });
+
+      const response = await this.client.post(this.endpoint, formData.toString(), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        timeout: 120000, // ✅ Timeout explícito en la petición también
       });
 
       // La respuesta de TOP API viene en formato: { response: { result: { ... } } }
