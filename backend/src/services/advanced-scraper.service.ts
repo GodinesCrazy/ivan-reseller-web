@@ -592,12 +592,12 @@ export class AdvancedMarketplaceScraper {
         default: 'production'
       });
       
-      // Intentar ambos ambientes si no se especificó explícitamente
+      // ✅ CRÍTICO: Siempre intentar ambos ambientes para maximizar probabilidad de encontrar credenciales
+      // Esto asegura que si las credenciales están en 'production' pero el workflow está en 'sandbox',
+      // o viceversa, las credenciales se encuentren y se usen correctamente
       const environmentsToTry: Array<'sandbox' | 'production'> = [preferredEnvironment];
-      if (!environment) {
-        // Si no se especificó explícitamente, intentar también el ambiente alternativo
-        environmentsToTry.push(preferredEnvironment === 'production' ? 'sandbox' : 'production');
-      }
+      // Siempre agregar el ambiente alternativo para asegurar que se encuentren las credenciales
+      environmentsToTry.push(preferredEnvironment === 'production' ? 'sandbox' : 'production');
       
       let affiliateCreds: any = null;
       let resolvedEnv: 'sandbox' | 'production' | null = null;
@@ -630,9 +630,7 @@ export class AdvancedMarketplaceScraper {
             // ✅ CRÍTICO: Normalizar el flag sandbox basándose en el environment actual
             // Esto asegura que si las credenciales se guardaron con sandbox:false pero están en ambiente sandbox,
             // se corrijan al recuperarlas
-            if (apiName === 'aliexpress-affiliate') {
-              creds.sandbox = env === 'sandbox';
-            }
+            creds.sandbox = env === 'sandbox';
             
             affiliateCreds = creds;
             resolvedEnv = env;
