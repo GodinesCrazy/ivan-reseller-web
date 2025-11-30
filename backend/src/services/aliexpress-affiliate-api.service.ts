@@ -93,14 +93,18 @@ export class AliExpressAffiliateAPIService {
 
   constructor() {
     this.client = axios.create({
-      timeout: 20000, // ✅ CRÍTICO: Timeout reducido a 20s para fallback rápido a scraping nativo si la API está lenta
-      // Esto permite que Promise.race con 25s timeout funcione correctamente
+      timeout: 30000, // ✅ CRÍTICO: Timeout aumentado a 30s para dar tiempo a AliExpress TOP API
+      // AliExpress TOP API puede ser lenta, especialmente en la primera llamada
+      // El Promise.race en advanced-scraper tiene 35s, así que este timeout debe ser menor
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       // ✅ Agregar configuración adicional para conexiones lentas
       maxRedirects: 5,
       validateStatus: (status) => status < 500, // Aceptar códigos < 500
+      // ✅ Agregar keepAlive para conexiones más rápidas
+      httpAgent: new (require('http').Agent)({ keepAlive: true }),
+      httpsAgent: new (require('https').Agent)({ keepAlive: true }),
     });
   }
 
@@ -185,7 +189,7 @@ export class AliExpressAffiliateAPIService {
         timestamp: allParams.timestamp,
         app_key: allParams.app_key,
         params_count: Object.keys(allParams).length,
-        timeout: '20000ms (con fallback rápido a 25s)'
+        timeout: '30000ms (axios) con Promise.race de 35s para fallback'
       });
 
       // ✅ MEJORADO: Usar URLSearchParams para enviar datos correctamente
@@ -197,13 +201,15 @@ export class AliExpressAffiliateAPIService {
         }
       });
 
-      // ✅ MEJORADO: Timeout más corto con retry automático para evitar bloqueos prolongados
-      // Si falla por timeout, el sistema hará fallback inmediato a scraping nativo
+      // ✅ CRÍTICO: Timeout aumentado a 30s para dar más tiempo a la API
+      // Si falla por timeout, el sistema hará fallback a scraping nativo
+      // Nota: El Promise.race en advanced-scraper tiene 35s, así que este timeout
+      // debe ser menor para que el race funcione correctamente
       const response = await this.client.post(this.endpoint, formData.toString(), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        timeout: 20000, // ✅ Reducido a 20s - si no responde rápido, hacer fallback a scraping nativo
+        timeout: 30000, // ✅ Aumentado a 30s - AliExpress TOP API puede ser lenta
       });
 
       // La respuesta de TOP API viene en formato: { response: { result: { ... } } }
