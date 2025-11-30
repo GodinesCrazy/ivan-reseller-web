@@ -93,7 +93,7 @@ export class AliExpressAffiliateAPIService {
 
   constructor() {
     this.client = axios.create({
-      timeout: 120000, // ✅ MEJORADO: Aumentado a 120s (2 minutos) para evitar timeouts en llamadas lentas
+      timeout: 30000, // ✅ MEJORADO: Timeout reducido a 30s para fallback rápido a scraping nativo si la API está lenta
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
@@ -182,7 +182,7 @@ export class AliExpressAffiliateAPIService {
         timestamp: allParams.timestamp,
         app_key: allParams.app_key,
         params_count: Object.keys(allParams).length,
-        timeout: '120000ms'
+        timeout: '30000ms (con fallback rápido)'
       });
 
       // ✅ MEJORADO: Usar URLSearchParams para enviar datos correctamente
@@ -194,11 +194,13 @@ export class AliExpressAffiliateAPIService {
         }
       });
 
+      // ✅ MEJORADO: Timeout más corto con retry automático para evitar bloqueos prolongados
+      // Si falla por timeout, el sistema hará fallback inmediato a scraping nativo
       const response = await this.client.post(this.endpoint, formData.toString(), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        timeout: 120000, // ✅ Timeout explícito en la petición también
+        timeout: 30000, // ✅ Reducido a 30s - si no responde rápido, hacer fallback a scraping nativo
       });
 
       // La respuesta de TOP API viene en formato: { response: { result: { ... } } }
@@ -260,8 +262,9 @@ export class AliExpressAffiliateAPIService {
       if (params.deliveryDays) apiParams.delivery_days = params.deliveryDays;
       if (params.trackingId) apiParams.tracking_id = params.trackingId;
 
-      // ✅ MEJORADO: Campos a solicitar - asegurar que se incluyan todas las imágenes disponibles
-      apiParams.fields = 'product_id,product_title,product_main_image_url,product_small_image_urls,sale_price,original_price,discount,evaluate_score,evaluate_rate,volume,store_name,store_url,product_detail_url,promotion_link,commission_rate,currency';
+      // ✅ MEJORADO: Campos mínimos esenciales para respuesta rápida
+      // Solo campos críticos para reducir tamaño de respuesta y tiempo de procesamiento
+      apiParams.fields = 'product_id,product_title,product_main_image_url,product_small_image_urls,sale_price,original_price,currency';
 
       logger.info('[ALIEXPRESS-AFFILIATE-API] Request parameters prepared', {
         keywords: params.keywords,

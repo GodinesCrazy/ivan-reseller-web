@@ -25,6 +25,7 @@ import MetricLabelWithTooltip from '@/components/MetricLabelWithTooltip';
 import { metricTooltips } from '@/config/metricTooltips';
 import { formatCurrencySimple } from '@/utils/currency';
 import WorkflowStatusIndicator from '@/components/WorkflowStatusIndicator';
+import WorkflowProgressBar from '@/components/WorkflowProgressBar';
 
 interface Product {
   id: string;
@@ -299,99 +300,107 @@ export default function Products() {
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {paginatedProducts.map((product) => (
-                      <tr key={product.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            {product.imageUrl ? (
-                              <img src={product.imageUrl} alt={product.title} className="w-10 h-10 rounded object-cover" />
-                            ) : (
-                              <div className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center">
-                                <Package className="w-5 h-5 text-gray-400" />
-                              </div>
+                      <>
+                        <tr key={product.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              {product.imageUrl ? (
+                                <img src={product.imageUrl} alt={product.title} className="w-10 h-10 rounded object-cover" />
+                              ) : (
+                                <div className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center">
+                                  <Package className="w-5 h-5 text-gray-400" />
+                                </div>
+                              )}
+                              <span className="font-medium text-gray-900 max-w-xs truncate">{product.title}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{product.sku}</td>
+                          <td className="px-4 py-3">
+                            <Badge variant="outline">{product.marketplace}</Badge>
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                            {formatCurrencySimple(product.price, product.currency || 'USD')}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{product.stock}</td>
+                          <td className="px-4 py-3">{getStatusBadge(product.status)}</td>
+                          <td className="px-4 py-3">
+                            <WorkflowStatusIndicator 
+                              productId={Number(product.id)} 
+                              currentStage={undefined} // Se obtendrá del endpoint
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            {product.profit && (
+                              <span className="text-sm font-medium text-green-600">
+                                +{formatCurrencySimple(product.profit, product.currency || 'USD')}
+                              </span>
                             )}
-                            <span className="font-medium text-gray-900 max-w-xs truncate">{product.title}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{product.sku}</td>
-                        <td className="px-4 py-3">
-                          <Badge variant="outline">{product.marketplace}</Badge>
-                        </td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                          {formatCurrencySimple(product.price, product.currency || 'USD')}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{product.stock}</td>
-                        <td className="px-4 py-3">{getStatusBadge(product.status)}</td>
-                        <td className="px-4 py-3">
-                          <WorkflowStatusIndicator 
-                            productId={Number(product.id)} 
-                            currentStage={undefined} // Se obtendrá del endpoint
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          {product.profit && (
-                            <span className="text-sm font-medium text-green-600">
-                              +{formatCurrencySimple(product.profit, product.currency || 'USD')}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {/* Botón Preview - Ojo */}
-                            <button
-                              onClick={() => {
-                                navigate(`/products/${product.id}/preview`);
-                              }}
-                              className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                              title="Preview de publicación"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            {/* Botón Información Financiera - Calculadora */}
-                            <button
-                              onClick={() => navigate(`/products/${product.id}/preview?showFinancial=true`)}
-                              className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                              title="Ver información financiera (ganancia, margen, costos)"
-                              aria-label="Ver información financiera"
-                            >
-                              <Calculator className="w-4 h-4 text-purple-600" />
-                            </button>
-                            {product.status === 'PENDING' && (
-                              <>
-                                <button
-                                  onClick={() => handleApprove(product.id)}
-                                  className="p-1 text-green-600 hover:bg-green-50 rounded"
-                                  title="Approve"
-                                >
-                                  <CheckCircle className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleReject(product.id)}
-                                  className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                  title="Reject"
-                                >
-                                  <XCircle className="w-4 h-4" />
-                                </button>
-                              </>
-                            )}
-                            {product.status === 'APPROVED' && (
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {/* Botón Preview - Ojo */}
                               <button
-                                onClick={() => handlePublish(product.id)}
-                                className="p-1 text-purple-600 hover:bg-purple-50 rounded"
-                                title="Publish"
+                                onClick={() => {
+                                  navigate(`/products/${product.id}/preview`);
+                                }}
+                                className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                title="Preview de publicación"
                               >
-                                <Upload className="w-4 h-4" />
+                                <Eye className="w-4 h-4" />
                               </button>
-                            )}
-                            <button
-                              onClick={() => handleDelete(product.id)}
-                              className="p-1 text-red-600 hover:bg-red-50 rounded"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                              {/* Botón Información Financiera - Calculadora */}
+                              <button
+                                onClick={() => navigate(`/products/${product.id}/preview?showFinancial=true`)}
+                                className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                                title="Ver información financiera (ganancia, margen, costos)"
+                                aria-label="Ver información financiera"
+                              >
+                                <Calculator className="w-4 h-4 text-purple-600" />
+                              </button>
+                              {product.status === 'PENDING' && (
+                                <>
+                                  <button
+                                    onClick={() => handleApprove(product.id)}
+                                    className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                    title="Approve"
+                                  >
+                                    <CheckCircle className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleReject(product.id)}
+                                    className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                    title="Reject"
+                                  >
+                                    <XCircle className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                              {product.status === 'APPROVED' && (
+                                <button
+                                  onClick={() => handlePublish(product.id)}
+                                  className="p-1 text-purple-600 hover:bg-purple-50 rounded"
+                                  title="Publish"
+                                >
+                                  <Upload className="w-4 h-4" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDelete(product.id)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {/* Barra de progreso del workflow */}
+                        <tr key={`${product.id}-workflow`} className="bg-gray-50">
+                          <td colSpan={9} className="px-4 py-2">
+                            <WorkflowProgressBar productId={Number(product.id)} />
+                          </td>
+                        </tr>
+                      </>
                     ))}
                   </tbody>
                 </table>
