@@ -294,23 +294,24 @@ export class AliExpressAffiliateAPIService {
         }
         
         return {
-        productId: String(p.product_id || ''),
-        productTitle: p.product_title || '',
-        productMainImageUrl: p.product_main_image_url || '',
-        productSmallImageUrls: smallImages,
-        salePrice: parseFloat(p.sale_price || '0'),
-        originalPrice: parseFloat(p.original_price || '0'),
-        discount: parseFloat(p.discount || '0'),
-        evaluateScore: p.evaluate_score ? parseFloat(p.evaluate_score) : undefined,
-        evaluateRate: p.evaluate_rate ? parseFloat(p.evaluate_rate) : undefined,
-        volume: p.volume ? parseInt(p.volume, 10) : undefined,
-        storeName: p.store_name,
-        storeUrl: p.store_url,
-        productDetailUrl: p.product_detail_url,
-        promotionLink: p.promotion_link,
-        currency: p.currency || 'USD',
-        commissionRate: p.commission_rate ? parseFloat(p.commission_rate) : undefined,
-      }));
+          productId: String(p.product_id || ''),
+          productTitle: p.product_title || '',
+          productMainImageUrl: p.product_main_image_url || '',
+          productSmallImageUrls: smallImages,
+          salePrice: parseFloat(p.sale_price || '0'),
+          originalPrice: parseFloat(p.original_price || '0'),
+          discount: parseFloat(p.discount || '0'),
+          evaluateScore: p.evaluate_score ? parseFloat(p.evaluate_score) : undefined,
+          evaluateRate: p.evaluate_rate ? parseFloat(p.evaluate_rate) : undefined,
+          volume: p.volume ? parseInt(p.volume, 10) : undefined,
+          storeName: p.store_name,
+          storeUrl: p.store_url,
+          productDetailUrl: p.product_detail_url,
+          promotionLink: p.promotion_link,
+          currency: p.currency || 'USD',
+          commissionRate: p.commission_rate ? parseFloat(p.commission_rate) : undefined,
+        };
+      });
     } catch (error: any) {
       logger.error('[ALIEXPRESS-AFFILIATE-API] Search products failed', {
         error: error.message,
