@@ -1,0 +1,891 @@
+¿Podrías aclarar algunos detalles para poder investigar mejor?
+
+¿Tu SaaS es una tienda, comparador de precios, o algo distinto?
+
+¿Necesitas obtener información solo de productos (nombre, imágenes, precios, etc.), o también deseas realizar acciones como hacer pedidos o seguimiento?
+
+¿Tienes preferencia por APIs oficiales de AliExpress o también estarías abierto a opciones no oficiales o servicios intermediarios?
+
+¿Te interesa saber sobre costos de uso de la API, límites de uso (rate limits), y requisitos de aprobación?
+
+Con esta información podré hacer una investigación más precisa para ti.
+
+Tú dijiste:
+1.- comparador y dropshipping automatizado 2.-sería ideal ambos pero acepto  lo disponible 3. APIS DE ALIEXPRESS IDEALMENTE 4.- solo opciones gratis 
+ChatGPT Plus
+
+Gracias. Investigaré a fondo sobre las APIs oficiales de AliExpress para obtener detalles de productos, incluyendo precios e imágenes, que puedas usar en tu SaaS de comparador y dropshipping automatizado. Me enfocaré en opciones gratuitas, cubriendo tipos de APIs, usos permitidos, acceso y cualquier restricción relevante.
+
+Te avisaré cuando tenga los resultados listos.
+
+Research completed in 15m· 27 fuentes· 122 búsquedas
+APIs oficiales de AliExpress: visión general
+
+AliExpress ofrece varias APIs oficiales agrupadas en su Open Platform, dirigidas tanto a vendedores como a afiliados y dropshippers
+zuplo.com
+github.com
+. Entre ellas destacan: la Affiliate API (AliExpress Portals) para afiliados que promocionan productos, la Dropshipping API para dropshippers y APIs de gestión de productos/órdenes para vendedores (publicar productos, actualizar precio/inventario, etc.)
+zuplo.com
+github.com
+. Por ejemplo, la Affiliate API incluye métodos de búsqueda de productos (product.query) y obtención de detalles (productdetail.get), mientras que la Dropshipping API permite recuperar datos de producto por ID y gestionar pedidos/envíos
+github.com
+elfsight.com
+. Las APIs de gestión de inventario (Feed API) permiten actualizar precios y stock de los propios productos
+zuplo.com
+.
+
+Datos extraíbles de cada API
+
+Affiliate API (Afiliados): devuelve información detallada de productos promocionados, tales como el título, descripción breve, imágenes principales y secundarias, precios (precio de venta, precio original, moneda), descuentos y comisión de afiliado. También incluye datos de desempeño como tasa de buenas reseñas (evaluate_rate), ventas recientes, enlace de producto y link de afiliado/promoción
+developer.alibaba.com
+developer.alibaba.com
+. Ejemplo de campos: product_title, product_main_image_url, product_small_image_urls, sale_price, original_price, commission_rate, promotion_link, etc.
+
+Dropshipping API: proporciona datos similares de producto (título, imágenes, precio, descripción) y además soporta la creación de órdenes y consulta de envíos
+github.com
+. Permite obtener información de envío y costes asociados, facilitando la automatización de pedidos.
+
+APIs de gestión de vendedores: incluyen endpoints para obtener la ficha completa de un producto propio (aliexpress.solution.product.info.get), listar productos, y actualizar inventario/precios (Feed API, batch update)
+zuplo.com
+developer.alibaba.com
+. Estas requieren autorización del vendedor. En resumen, combinando estas APIs se puede extraer prácticamente todo lo visible en AliExpress: imágenes, descripciones (título), precios, disponibilidad (stock del vendedor), nivel de reseñas y más.
+
+Acceso y aprobación
+
+Cada categoría de API tiene requisitos de acceso específicos. Para la Affiliate API es necesario ser afiliado de AliExpress Portals. En la práctica, hay que crear una cuenta en AliExpress Portals y luego registrar una aplicación en la consola de desarrolladores de AliExpress (https://console.aliexpress.com), eligiendo el tipo “Affiliate API”
+developer.alibaba.com
+developer.alibaba.com
+. Tras enviar la solicitud de la aplicación, AliExpress aprueba (o deniega) el acceso en 1–2 días hábiles.
+
+ 
+
+Para la Dropshipping API, se requiere una cuenta de AliExpress (de comprador) y registrarse como desarrollador en la misma consola. En la sección Create App se selecciona el tipo “Dropshipping” para la aplicación
+developer.alibaba.com
+developer.alibaba.com
+. De igual forma, un vendedor de AliExpress puede usar su cuenta de vendedor para registrar una app de tipo propio (Seller/API)
+elfsight.com
+. En todos los casos el proceso es gratuito, pero exige introducir información de empresa y objetivos de integración, y esperar la revisión de AliExpress.
+
+Costos
+
+Todas estas APIs oficiales son gratuitas para desarrolladores aprobados. En la documentación aparecen marcadas como “Open Platform Free API”
+developer.alibaba.com
+developer.alibaba.com
+. No hay cobro por uso, aunque se recomienda cumplir los requisitos de volumen aprobados (p. ej. las aplicaciones obtienen un límite de flow rate al ser autorizadas
+elfsight.com
+). En resumen: el acceso a las APIs oficiales no implica tarifas, solo la aprobación previa por parte de AliExpress.
+
+Límites de uso y políticas
+
+AliExpress impone límites en la frecuencia de llamadas. Por ejemplo, las aplicaciones suelen tener un flujo máximo de operaciones (hasta ~5000 llamadas totales según algunas fuentes)
+elfsight.com
+. Si se excede el límite, la plataforma aplica penalizaciones temporales: se bloquean peticiones y se fuerza una pausa breve (~1 segundo) antes de permitir nuevas llamadas
+botize.com
+. Además, deben respetarse los términos de servicio. El Acuerdo de Afiliados define que el «contenido AliExpress» (texto, imágenes y datos de producto) sólo puede usarse mediante el portal de afiliados o las APIs autorizadas
+terms.alicdn.com
+, por lo que está prohibido raspar o redistribuir datos de forma no autorizada. En un modelo SaaS se debe garantizar que cada cliente opere bajo su propio Affiliate ID o credenciales, para evitar violaciones de políticas y asegurar la atribución de comisiones.
+
+Requisitos técnicos
+
+Las APIs de AliExpress utilizan el esquema de la Taobao Open Platform. Cada petición debe incluir parámetros comunes: method (nombre del API), app_key (clave de la aplicación), sign_method (p.ej. HMAC o MD5) y sign (firma calculada)
+developer.alibaba.com
+developer.alibaba.com
+. También se envía timestamp, versión y otros campos de firma. Algunas llamadas requieren un token de sesión OAuth (campo session) si implican datos privados; otras (como las de afiliados) pueden no necesitar autorización de usuario. La documentación oficial se encuentra en el portal de desarrolladores de AliExpress (openservice.aliexpress.com). AliExpress migró recientemente al nuevo Open Platform internacional
+github.com
+; sin embargo, aún no existe un SDK oficial proporcionado por AliExpress (por ejemplo, no hay un SDK oficial de Node.js)
+github.com
+. Algunas librerías de terceros (como ae_sdk en Node.js) implementan el proceso de autenticación y firmados necesarios
+github.com
+github.com
+.
+
+Ejemplos de uso
+
+Comparación de precios: una aplicación SaaS puede usar la Affiliate API para buscar y comparar ofertas. Por ejemplo, aliexpress.affiliate.product.query permite buscar productos por palabra clave o categoría, obteniendo un listado con IDs. Luego se llama a aliexpress.affiliate.productdetail.get para cada ID y extraer precio de venta (sale_price), precio original (original_price), imágenes (product_main_image_url, product_small_image_urls), título (product_title) y link afiliado
+developer.alibaba.com
+developer.alibaba.com
+. Así se construye un catálogo con precios actualizados y enlaces de afiliado para cada producto.
+
+Dropshipping automatizado: la Dropshipping API facilita obtener detalles de producto (precio, stock disponible, etc.) por ID y crear órdenes directamente a través de la API. También permite calcular tarifas de envío y estado de pedidos. Por ejemplo, el SDK unofficial muestra métodos para calcular envío y colocar órdenes a partir del producto seleccionado, automatizando la parte logística del dropshipping
+github.com
+.
+
+Restricciones críticas para SaaS
+
+Un aspecto crítico es el modelo de afiliación. AliExpress no permite compartir un único Affiliate ID entre múltiples sitios sin permiso; cada usuario/cliente del SaaS debería tener su propio seguimiento (p. ej. Tracking ID) para obtener comisiones legítimas. Además, los datos obtenidos vía API están sujetos al acuerdo de afiliados: sólo pueden usarse para promocionar en el contexto del programa oficial
+terms.alicdn.com
+. En la práctica, un SaaS debe asegurar que su uso de la API no viole dichas políticas (p. ej. evitar caches públicas de datos de producto) y que cada cliente se registre apropiadamente como afiliado o vendedor ante AliExpress.
+
+ 
+
+Fuentes: Documentación oficial de AliExpress Open Platform y su programa de afiliados
+developer.alibaba.com
+developer.alibaba.com
+developer.alibaba.com
+elfsight.com
+developer.alibaba.com
+github.com
+github.com
+, así como ejemplos de uso y análisis técnicos
+botize.com
+terms.alicdn.com
+. Estas referencias detallan los tipos de API, datos disponibles, requisitos de acceso y políticas de uso de AliExpress.
+
+Fuentes
+Tú dijiste:
+Yo necesito comprar en aliexpress a través de una api y comparar precios y extraer datos info e imágenes de aliexpress 
+ChatGPT Plus
+Pensado durante 32s
+
+Perfecto, entonces la respuesta corta es: sí, existe exactamente lo que necesitas, pero tienes que combinar 2 APIs oficiales de AliExpress y respetar bien sus reglas.
+
+Voy por partes y en modo “arquitecto de tu SaaS”.
+
+1. ¿Puedo comprar en AliExpress vía API y usar sus datos?
+✔ Sí, para datos de productos / comparación de precios
+
+AliExpress tiene APIs oficiales dentro de su Open Platform que permiten:
+
+Buscar productos
+
+Obtener datos de un producto por ID
+
+Ver precios, variaciones, stock, etc.
+
+Obtener URLs de imágenes
+
+Las dos familias que te interesan son:
+
+Dropshipping API
+
+Endpoint tipo ...product_simplequery (en la documentación antigua: aliexpress.offer.ds.product.simplequery).
+
+Parámetros típicos:
+
+product_id
+
+local_country (por ej. CL, US, etc.)
+
+local_language (por ej. es, en) 
+Elfsight
++1
+
+Devuelve:
+
+Precio (sale price, price original, moneda)
+
+Stock total
+
+SKUs (variaciones con precio, stock por variación, imagen de cada SKU)
+
+URLs de imágenes del producto (principal y variantes). 
+developer.alibaba.com
+
+Affiliate API (AliExpress Portals)
+
+Pensada para afiliados: obtienes catálogo, precios, imágenes y además enlace con tu ID de afiliado. 
+Elfsight
++1
+
+Sirve muy bien para comparadores de precios porque puedes buscar por keyword/categoría y recibir mucha metadata (precio, descuento, rating, etc.).
+
+👉 Con cualquiera de estas dos puedes extraer precios, info e imágenes de productos de AliExpress de forma oficial y gratuita (la API en sí no tiene costo, sólo límites de uso y necesidad de aprobación). 
+Elfsight
++1
+
+✔ Sí, también puedes colocar pedidos vía API (parcialmente automatizado)
+
+La API de AliExpress permite crear/colocar pedidos de forma automática desde tu sistema (muchos plugins tipo Ali2Woo, DSers, etc. hacen exactamente eso usando la API oficial). 
+Ali2Woo Help
++1
+
+Flujo típico:
+
+Tu SaaS manda el pedido vía API (producto, cantidad, dirección del cliente final, método de envío, etc.).
+
+El pedido queda “pendiente de pago” en la cuenta de AliExpress.
+
+El pago se hace en AliExpress, normalmente abriendo la página de pago en el navegador (no te dan un endpoint para cobrar la tarjeta dentro de tu propia app). 
+Ali2Woo Help
++1
+
+Es decir:
+
+Puedes automatizar la creación del pedido y gran parte del flujo de dropshipping, pero no puedes reemplazar completamente la página de pago de AliExpress con tu propio checkout.
+
+Para un SaaS de dropshipping automatizado esto es lo que hacen casi todos:
+
+El sistema genera órdenes en lote vía API
+
+Luego el operador paga en AliExpress (a mano o semi-automatizado) en una sola tanda.
+
+2. ¿Qué tienes que hacer tú, concretamente?
+Paso 1: Crear cuenta adecuada y acceso de desarrollador
+
+Cuenta AliExpress
+
+Para usar de verdad el Open Platform, hoy en día AliExpress empuja a que tengas cuenta de vendedor o desarrollador (Seller + Developer). 
+Zuplo
+
+Cuenta de desarrollador (Open Platform)
+
+Entras a AliExpress Open Platform (openservice.aliexpress.com).
+
+Te registras como developer, aceptas el Open Platform Agreement. 
+Zuplo
+
+Crear una App
+
+En la consola, “App Management” → crear App.
+
+Para tu caso:
+
+Una App tipo Dropshipping (para obtener productos, stock y crear órdenes). 
+Stack Overflow
++1
+
+Opcionalmente una App tipo Affiliate (si también quieres monetizar con comisiones o usar su catálogo de afiliados). 
+Wasabi Theme
+
+Esperas la aprobación (suelen ser 1–2 días hábiles). 
+Zuplo
+
+Una vez aprobada la app, te entregan:
+
+app_key
+
+app_secret
+
+Límite de flujo (p.ej. hasta 5000 llamadas o similar por periodo) 
+Elfsight
++1
+
+Paso 2: Leer/extraer datos (lo de tu comparador)
+
+Con la Dropshipping API o la Affiliate API haces:
+
+Búsqueda de productos por keyword/categoría → obtienes lista de productos con:
+
+ID
+
+Título
+
+Precio actual
+
+Descuento
+
+Rating / número de pedidos (según método)
+
+URL de imagen principal
+
+Detalle de producto por ID → obtienes:
+
+Precio, precio original, moneda
+
+Variantes (SKUs) con sus precios y stock
+
+Imágenes grandes y pequeñas
+
+Info para mostrar el producto (nombre, categoría, etc.). 
+Elfsight
++1
+
+En tu SaaS, el flujo típico sería:
+
+Usuario busca “smartwatch”, “auriculares”, etc.
+
+Tu backend llama al endpoint de búsqueda de AliExpress.
+
+Guardas en tu BD un snapshot de: product_id, precio, imágenes, rating, etc.
+
+Construyes tu comparador de precios con esos datos.
+
+Todo eso entra en el rango de “uso permitido” siempre que respetes sus Términos (no scrapear, no abusar de los límites, no redistribuir masivamente datos fuera del contexto de la integración de AliExpress, etc.) 
+Zuplo
++1
+
+Paso 3: Automatizar el dropshipping (comprar en AliExpress)
+
+Para la parte de comprar/colocar pedidos:
+
+Usas los endpoints de órdenes de la Dropshipping / Seller API, que permiten:
+
+Crear pedidos con los datos de envío de tu cliente. 
+Ali2Woo Help
++1
+
+Consultar estado del pedido, tracking, etc. 
+Ali2Woo Help
++1
+
+Modelo típico para tu SaaS:
+
+Tu cliente vende un producto (que tú has mappeado a un product_id de AliExpress).
+
+Tu SaaS crea el pedido automáticamente en AliExpress vía API a tu cuenta compradora (la tuya).
+
+El sistema te muestra en un panel todos los pedidos pendientes de pago.
+
+Pulsas un botón y se abre AliExpress con los pedidos ya cargados → pagas (con tarjeta, PayPal, etc.). 
+Ali2Woo Help
++1
+
+Esto es exactamente lo que hacen herramientas como DSers o módulos de PrestaShop/WooCommerce basados en API: usan la API para importar productos y para crear pedidos, pero el pago final sigue siendo dentro de AliExpress. 
+Webkul Software
++1
+
+3. ¿Es gratis?
+
+✔ La API oficial de AliExpress no tiene costo directo: no te cobran por usarla.
+
+Hay:
+
+Límites de uso (rate limits) por app/token → si te pasas te devuelven datos vacíos o congelan temporalmente el token. 
+Ali2Woo Help
++1
+
+Revisión inicial de la app (auditoría) para que te permitan usarla en producción. 
+Elfsight
++1
+
+Los costos verdaderos vienen de:
+
+El trabajo de desarrollo/integración.
+
+Comisiones propias de AliExpress / método de pago (normales de cualquier compra).
+
+Y si usas soluciones de terceros (DSers, Ali2Woo, etc.), ahí sí muchos tienen planes de pago, pero tú dijiste que quieres solo opciones gratis, así que te enfocas en Open Platform oficial.
+
+4. ¿Cómo lo aterrizamos para tu SaaS (comparador + dropshipping automatizado)?
+
+Te resumo un diseño sencillo:
+
+Módulo de catálogo
+
+Usa Affiliate API o Dropshipping API para:
+
+Buscar productos
+
+Guardar snapshots de precios, imágenes y rating en tu BD
+
+Sirve a tu frontend para armar el comparador.
+
+Módulo de órdenes
+
+Cuando tu SaaS recibe una venta:
+
+Llama a la Dropshipping API para crear el pedido en la cuenta de AliExpress que tú uses como “proveedor” del SaaS.
+
+Guarda el order_id de AliExpress y el estado.
+
+Ofrece un panel de “Pedidos pendientes de pago” para que tú (o tu sistema) los pagues en bloque desde AliExpress.
+
+Módulo de sincronización
+
+Jobs periódicos que:
+
+Preguntan a la API por precio actual y stock de productos que tienes listados, y actualizan tu BD.
+
+Consultan estados de envío y tracking para actualizar a tu cliente final. 
+Webkul Software
++1
+
+5. Puntos importantes a tener en cuenta
+
+No scraping: AliExpress deja súper claro que el contenido (texto, imágenes, datos) debe obtenerse vía APIs autorizadas / programa de afiliados, no vía scraping masivo de la web. 
+Zuplo
++1
+
+Cumplimiento de Términos: si tu SaaS da servicio a terceros, lo ideal es que cada cliente tenga su propio ID de afiliado / flujo separado, o que al menos esté contemplado claramente en tu acuerdo con AliExpress.
+
+Documentación confusa: parte de la documentación antigua está en chino y en la plataforma Taobao; ahora migraron a un Open Platform internacional, pero mucha info aún está repartida. Artículos actualizados como la guía de Zuplo ayudan bastante para tener una visión clara y moderna. 
+Zuplo
++1
+
+Si quieres, en el siguiente paso puedo ayudarte a:
+
+Diseñar la arquitectura exacta para tu SaaS (multiusuario, tokens, colas de pedidos, etc.), o
+
+Escribirte un plan técnico paso a paso tipo checklist:
+
+crear cuenta, 2) registrar app, 3) primera llamada a la API, 4) modelo de datos en tu BD, 5) flujo de pedido, etc.
+
+Tú dijiste:
+Entonces en resumen cual es el nombre exacto de la o las apis de aliexpress qué soluciona o solucionan mi problemática? 
+ChatGPT Plus
+Pensado durante 6s
+
+Buenísima pregunta, porque acá el nombre exacto sí importa.
+
+Para lo que tú quieres (✅ comparar precios, ✅ extraer datos e imágenes de productos y ✅ automatizar compras/dropshipping), las piezas clave de AliExpress son estas:
+
+1. Para extraer datos de productos, precios e imágenes (comparador)
+🔹 AliExpress Affiliate API
+
+También la vas a ver nombrada como:
+
+“AliExpress Portals API”
+
+“AliExpress Affiliate Program API”
+
+Esta API te permite:
+
+Buscar productos (por keyword, categoría, etc.)
+
+Obtener:
+
+título
+
+precios (sale price, original price, moneda)
+
+imágenes principales y secundarias
+
+rating, número de pedidos, etc.
+
+Generar enlaces de afiliado (si te interesa monetizar así).
+
+👉 Para tu SaaS de comparador de precios, este sería el nombre clave:
+
+AliExpress Affiliate API (AliExpress Portals API)
+
+2. Para dropshipping y creación de pedidos vía API
+🔹 AliExpress Dropshipping API
+
+La verás referida como:
+
+“AliExpress Dropshipping API”
+
+“AliExpress Drop Shipping API”
+
+Dentro del AliExpress Open Platform como un tipo de app específico “Dropshipping”.
+
+Con esta puedes:
+
+Obtener detalles de productos (precio, stock, SKUs, imágenes).
+
+Crear pedidos en AliExpress desde tu sistema (aunque el pago final se hace en la web de AliExpress).
+
+Consultar estado de órdenes y envíos.
+
+👉 Para tu módulo de dropshipping automatizado (crear órdenes y manejar fulfillment), el nombre a usar es:
+
+AliExpress Dropshipping API
+
+3. Opcional / futuro: si llegas a ser vendedor en AliExpress
+
+Si más adelante también vendes dentro de AliExpress, te sirven además:
+
+AliExpress Seller API (a veces llamada simplemente AliExpress Open Platform API para sellers), con:
+
+Product API
+
+Order API
+
+Inventory / Price (Feed) API
+
+Pero para tu problema actual (SaaS externo + compras en AliExpress), con que recuerdes estos dos nombres ya estás cubierto:
+
+🧩 AliExpress Affiliate API (AliExpress Portals API) → catálogo, precios, imágenes, comparador
+🧩 AliExpress Dropshipping API → info de producto + creación de pedidos para tu flujo de dropshipping
+
+Si quieres después, te armo el diagrama de arquitectura de tu SaaS usando exactamente estas dos APIs (qué tablas en la BD, qué microservicios, qué flujos de actualización de precios, etc.).
+
+Tú dijiste:
+dame el detalle tecnico de cada api que usare
+ChatGPT Plus
+Pensó durante 22s
+
+Perfecto, vamos a lo técnico 👨‍💻
+
+Te detallo las 2 APIs concretas que encajan con tu SaaS (comparador + dropshipping automatizado) y cómo se usan a nivel de parámetros, endpoints y flujo.
+
+0. Conceptos comunes (para ambas APIs)
+Endpoint base
+
+Hoy tienes dos “mundos”:
+
+Endpoint nuevo (Open Platform internacional):
+https://api-sg.aliexpress.com/sync 
+Stack Overflow
++1
+
+Endpoint legado (Taobao Open Platform):
+https://gw.api.taobao.com/router/rest 
+Zuplo
+
+En la práctica muchos ejemplos modernos (Node, PHP) siguen usando router/rest con method=... en el body o query.
+
+Parámetros comunes de cada llamada
+
+Sea Affiliate o Dropshipping, el patrón TOP es casi el mismo: 
+open.alitrip.com
++1
+
+method: nombre exacto del servicio, ej:
+
+aliexpress.affiliate.product.query
+
+aliexpress.affiliate.productdetail.get
+
+app_key: tu AppKey.
+
+timestamp: fecha/hora en formato "YYYY-MM-DD HH:MM:SS".
+
+sign_method: "md5" o "sha256" (nuevas integraciones usan mucho sha256). 
+Zuplo
++1
+
+format: "json".
+
+v: versión ("2.0" en muchos ejemplos).
+
+sign: firma calculada con tu app_secret + parámetros ordenados. 
+open.alitrip.com
++1
+
+parámetros específicos del método (ej: keywords, product_ids, local_country, etc.).
+
+Los Affiliate endpoints básicos no requieren token OAuth de usuario (son “￥开放平台免费API; 不需要授权”). 
+doc.alidayu.com
++1
+
+Los endpoints de Dropshipping de pedidos sí suelen requerir access_token.
+
+1. AliExpress Affiliate API (para catálogo, precios, imágenes, comparador)
+1.1. Métodos clave que usarías
+
+La documentación oficial (en chino/inglés) lista estos métodos como parte de Affiliate: 
+developer.alibaba.com
++1
+
+aliexpress.affiliate.product.query – búsqueda de productos
+
+aliexpress.affiliate.productdetail.get – detalle de producto por ID
+
+aliexpress.affiliate.product.sku.detail.get – detalle de SKUs (variantes)
+
+Además existen otros como hotproduct.query, link.generate, etc., pero para tu SaaS con estos tres cubres el 90%:
+
+Buscar por palabra clave / filtros → listado de productos.
+
+Leer detalle completo (precios, imágenes, etc.).
+
+Leer SKUs/variantes para manejar tallas/colores.
+
+1.2. aliexpress.affiliate.product.query (búsqueda para tu comparador)
+
+Uso: buscar productos que luego mostrarás en tu comparador (con precios e imágenes).
+
+Tipo: GET o POST al endpoint TOP con method=aliexpress.affiliate.product.query 
+Scribd
++1
+
+Parámetros principales (además de los comunes): 
+Scribd
++1
+
+keywords (String) – texto de búsqueda (“smartwatch”, “headphones”…).
+
+category_ids (String) – lista de categorías (opcional).
+
+min_sale_price / max_sale_price (Number) – rango de precio.
+
+page_no (Number) – página de resultados.
+
+page_size (Number) – cuántos productos por página (p.ej. 20–50).
+
+sort (String) – orden:
+
+SALE_PRICE_ASC, SALE_PRICE_DESC
+
+LAST_VOLUME_DESC (ventas recientes), etc. 
+Scribd
+
+target_currency (String) – USD, EUR, CLP no siempre, normalmente grandes monedas (USD, EUR, BRL, etc.). 
+Scribd
+
+target_language (String) – EN, ES, FR, etc.
+
+ship_to_country (String) – país destino, ej. CL para Chile.
+
+delivery_days (String/Number) – por ej. 3, 10, etc.
+
+tracking_id (String) – tu ID de afiliado/seguimiento.
+
+fields (String) – lista de campos que quieres en la respuesta (p.ej. sale_price,original_price,product_main_image_url).
+
+Respuesta (simplificada) – dentro de resp_result → result → products → product[]: 
+Scribd
++1
+
+product_id
+
+product_title
+
+product_main_image_url
+
+product_small_image_urls (array)
+
+sale_price
+
+original_price
+
+discount
+
+evaluate_score / evaluate_rate
+
+volume (ventas)
+
+store_name, store_url
+
+product_detail_url / promotion_link (link afiliado)
+
+👉 Con esto armas tu comparador (precio actual, imagen, link, rating, etc.).
+
+1.3. aliexpress.affiliate.productdetail.get (detalle para ficha de producto)
+
+Uso: cuando el usuario de tu SaaS hace clic en un producto concreto y necesitas más info.
+
+Tipo: GET/POST con method=aliexpress.affiliate.productdetail.get. 
+Zuplo
++1
+
+Parámetros clave: 
+Scribd
++1
+
+product_ids (String) – uno o varios IDs separados por coma.
+
+target_currency
+
+target_language
+
+country o ship_to_country – país destino (para precio ajustado).
+
+fields – lista de campos (ej. sale_price,original_price,commission_rate,product_small_image_urls).
+
+tracking_id – tu tracking de afiliado.
+
+app_signature – opcional; a veces se usa para integraciones avanzadas.
+
+Respuesta (lo más útil): 
+Scribd
++1
+
+product_id, product_title
+
+product_main_image_url, product_small_image_urls
+
+sale_price, original_price, discount
+
+commission_rate (para ti como afiliado)
+
+info de envío (según campos solicitados)
+
+Ojo: el HTML completo de la descripción muchas veces no viene en la API; suele tocar tirarlo desde product_detail_url o usar un scraper si realmente quieres ese HTML. 
+Stack Overflow
+
+1.4. aliexpress.affiliate.product.sku.detail.get (variantes)
+
+Si quieres manejar bien tallas/colores en tu comparador o flujo de compra:
+
+Uso: detalle de SKUs/variantes: precio por talla/color, disponibilidad, etc. 
+Scribd
++1
+
+Parámetros principales:
+
+product_id – ID del producto.
+
+ship_to_country
+
+target_currency
+
+target_language
+
+Respuesta:
+
+Lista de SKUs con:
+
+sku_id
+
+atributos (p.ej. Color: Black, Size: M)
+
+precio SKU (sku_sale_price)
+
+stock SKU
+
+imagen asociada a esa variante.
+
+Esto es oro para dropshipping fino (saber si cierta talla/color está realmente disponible antes de crear el pedido).
+
+1.5. Autenticación y límites en Affiliate API
+
+No requiere OAuth de usuario para estos métodos (product.query, productdetail.get, sku.detail.get). Son APIs “free, no authorization required”. 
+doc.alidayu.com
++1
+
+Sí requieren:
+
+app_key
+
+sign calculado con tu app_secret y sign_method.
+
+Límite típico de flujo: ~5000 llamadas (depende de la app), según guías genéricas de Open Platform. 
+Elfsight
++1
+
+2. AliExpress Dropshipping API (para automatizar pedido y info de producto)
+
+Aquí no hay un único método “gigante” sino un subconjunto de APIs dentro de Open Platform:
+
+2.1. Get Product Info (Dropshipping Product Info)
+
+Guías como la de Elfsight lo llaman simplemente “AliExpress Dropshipping API – product info” y dan la estructura: 
+Elfsight
++1
+
+Objetivo: obtener info de producto por product_id específica para dropshipping.
+
+Parámetros típicos:
+
+product_id (Number) – ej. 1307422965
+
+local_country (String) – ISO del país al que vas a enviar, ej. US, CL.
+
+local_language (String) – idioma, ej. en, es.
+
+En el mundo TOP, esto se expone vía request tipo:
+
+// Ejemplo real .NET del Dropshipper SDK
+var client = new DefaultTopClient("http://gw.api.taobao.com/router/rest", appKey, appSecret);
+var req = new AliexpressOfferDsProductSimplequeryRequest();
+req.ProductId = productId;
+req.LocalCountry = "US";
+req.LocalLanguage = "en";
+var rsp = client.Execute(req, accessToken); // accessToken si lo requiere
+Console.WriteLine(rsp.Body);
+``` :contentReference[oaicite:20]{index=20}  
+
+**Respuesta (qué te da):**
+
+- Título de producto
+- Imágenes principales y de variante
+- Precios base de producto/SKUs
+- Info de stock y opciones disponibles
+- (Dependiendo de la versión, también info básica de envío)
+
+En la práctica es parecido a `productdetail.get`, pero enfocado a **dropshipping** y a tu cuenta de comprador/seller.
+
+---
+
+### 2.2. `Place Order` (crear el pedido en AliExpress)
+
+La propia AliExpress documenta una API específica tipo **“Place an Order”** dentro del bloque Dropshipping: :contentReference[oaicite:21]{index=21}  
+
+- URL de doc original (ejemplo):  
+  - *Get Product Info* – docId `35321`  
+  - *Place an Order* – docId `35446`  
+  - *Get Tracking Info* – docId `40656`  
+
+No siempre publican el nombre “bonito” del method en beneficios, pero a nivel TOP son métodos de tipo:
+
+- `aliexpress.trade.buy.placeorder` (nombre ilustrativo, cambia según versión).  
+
+**Parámetros típicos (simplificados):**
+
+- Datos del comprador:
+  - nombre, teléfono, email.
+- Dirección de envío:
+  - país, ciudad, código postal, dirección, etc.
+- Lista de productos:
+  - `product_id`
+  - `sku_id` (opcional si hay variantes)
+  - `quantity`
+- Método de envío:
+  - ID del shipping option elegido para el país destino.
+- Opciones de pago:
+  - Normalmente se crea el pedido y luego se paga en la web, no vía API.
+
+**Respuesta:**
+
+- `order_id` de AliExpress.
+- Estado inicial del pedido (ej. `WAIT_BUYER_PAY`).
+- Info de pago y tiempo restante.
+
+Esto es lo que usarás para que tu SaaS:
+
+1. Reciba pedidos de tus clientes finales.
+2. Arme pedidos en AliExpress para que el proveedor los envíe.
+3. Lleve el tracking cruzado entre tu DB y AliExpress.
+
+---
+
+### 2.3. `Get Tracking Info` (seguimiento)
+
+Otro endpoint de la sección Dropshipping es “Get Tracking info from a previous order”. :contentReference[oaicite:22]{index=22}  
+
+**Parámetros:**
+
+- `order_id` (o lista de IDs)
+- Opcionalmente rango de fechas, etc.
+
+**Respuesta:**
+
+- Estado actual del envío (procesando, enviado, entregado).
+- Código de seguimiento (tracking number).
+- Historial de eventos (según lo que AliExpress entregue).
+
+Lo integrarías en tu SaaS para:
+
+- Mostrar estado de cada pedido.
+- Enviar notificaciones al cliente final cuando cambie el estado.
+
+---
+
+### 2.4. Autenticación y permisos en Dropshipping API
+
+Aquí es un poco más estricto que en Affiliate:
+
+- Necesitas:
+  - **Cuenta de vendedor/comprador** de AliExpress.
+  - **Cuenta de desarrollador** en Open Platform. :contentReference[oaicite:23]{index=23}  
+  - Una App de tipo **Dropshipping** aprobada.
+- Muchas llamadas requieren un `access_token` (OAuth) asociado a:
+  - Tu cuenta (si el SaaS opera siempre con tu cuenta).
+  - O la cuenta de cada cliente (si algún día ofreces “dropshipping con su propia cuenta de AliExpress”).
+
+La autenticación se maneja igual que en Affiliate pero añadiendo `access_token` al ejecutar los métodos. :contentReference[oaicite:24]{index=24}  
+
+---
+
+## 3. Resumen aterrizado para tu SaaS
+
+**Para el comparador (catálogo / precios / imágenes):**
+
+Usa principalmente **AliExpress Affiliate API**:
+
+1. `aliexpress.affiliate.product.query`  
+   - Para buscar productos por keyword/categoría y obtener:
+     - `product_id`, `product_title`, `sale_price`, `original_price`, `product_main_image_url`, ratings, etc.
+2. `aliexpress.affiliate.productdetail.get`  
+   - Para detalle completo, imágenes secundarias y precio por país/moneda.
+3. `aliexpress.affiliate.product.sku.detail.get`  
+   - Para variantes (color, talla) con precio/stock.
+
+**Para el dropshipping automatizado (crear y seguir pedidos):**
+
+Usa **AliExpress Dropshipping API**:
+
+1. **Get Product Info** (vía `AliexpressOfferDsProductSimplequeryRequest` / método equivalente en HTTP)
+   - Para verificar stock, SKUs y precios antes de crear el pedido.
+2. **Place Order** (API “Place an Order” del bloque Dropshipping)
+   - Para crear el pedido en AliExpress con los datos del cliente.
+3. **Get Tracking Info**
+   - Para sincronizar estados de envío y tracking en tu SaaS.
+
+Si quieres, en el siguiente mensaje te puedo:
+
+- Dibujar un **diagrama de arquitectura** (tablas mínimas en la BD, flujos entre tu SaaS y estas APIs).
+- O darte **ejemplos de request/response reales** en JSON para cada método, listos para que tú los pruebes con Node/Java/Python.
+::contentReference[oaicite:25]{index=25}

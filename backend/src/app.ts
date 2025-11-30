@@ -234,6 +234,8 @@ app.use('/api/autopilot', autopilotRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/marketplace-oauth', marketplaceOauthRoutes);
+// ✅ AliExpress callback directo (según documentación: https://ivanreseller.com/aliexpress/callback)
+app.use('/aliexpress', marketplaceOauthRoutes);
 app.use('/api/amazon', amazonRoutes);
 app.use('/api/jobs', jobsRoutes);
 app.use('/api/reports', reportsRoutes);

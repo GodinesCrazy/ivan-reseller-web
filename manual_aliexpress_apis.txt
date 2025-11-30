@@ -1,0 +1,435 @@
+MANUAL COMPLETO PARA OBTENER Y USAR LAS APIS DE ALIEXPRESS
+======================================================
+Basado en la experiencia real del proyecto de Iván Marty (SaaS de comparador de precios
+y dropshipping automatizado) y en la información oficial pública de AliExpress Open Platform.
+
+
+0. OBJETIVO DEL MANUAL
+----------------------
+Este documento explica, paso a paso y en lenguaje práctico, cómo:
+
+1) Registrarse como desarrollador en AliExpress Open Platform.
+2) Configurar correctamente el perfil de desarrollador (cumplimiento de datos).
+3) Obtener dos aplicaciones clave:
+   - Affiliate API (para catálogo, precios, imágenes y datos de productos).
+   - Dropshipping API (para crear pedidos, obtener stock, envíos y tracking).
+4) Entender para qué sirve cada una de estas APIs y en qué parte del SaaS se usan.
+
+
+1. VISIÓN GENERAL DE LAS APIS QUE VAS A USAR
+--------------------------------------------
+AliExpress ofrece muchas APIs, pero para un SaaS como el nuestro (comparador de precios +
+dropshipping automatizado), las dos piezas principales son:
+
+1.1. AliExpress Affiliate API (también llamada Portals / Affiliate Program)
+     - Función principal: obtener información de productos de AliExpress para mostrarla
+       en tu web o app, generalmente con fines de promoción/afiliación.
+     - Qué datos puedes obtener:
+       * Título del producto.
+       * Precio actual (sale_price) y precio original.
+       * Moneda del precio.
+       * Descuento.
+       * Imágenes principal y secundarias.
+       * Rating, número de ventas recientes y otros datos de catálogo.
+       * Enlace al producto y, opcionalmente, enlace de afiliado.
+     - Para qué la usamos en el SaaS:
+       * Construir un COMPARADOR DE PRECIOS.
+       * Mostrar listados de productos, fichas detalladas e imágenes.
+       * Opcionalmente, generar links de afiliado si queremos comisión adicional.
+
+1.2. AliExpress Dropshipping API
+     - Función principal: permitir a un dropshipper o a un SaaS automatizar el flujo
+       de compra y logística:
+       * Consultar información de producto específica para dropshipping
+         (stock, SKUs, precio, etc.).
+       * Crear pedidos en AliExpress mediante API (Place Order).
+       * Consultar el estado del pedido y la información de tracking.
+     - Qué datos puedes obtener o enviar:
+       * Detalle de producto por ID (precio, stock, variaciones).
+       * Opciones de envío y costes aproximados.
+       * Crear un pedido con los datos del cliente final.
+       * Obtener el número de seguimiento y estado logístico.
+     - Para qué la usamos en el SaaS:
+       * Automatizar el DROPSHIPPING (crear pedidos de forma masiva o semi-automática).
+       * Sincronizar estados de envío y mostrar tracking a nuestros usuarios.
+
+
+2. REQUISITOS PREVIOS
+---------------------
+Antes de tocar la API, necesitas:
+
+- Una cuenta normal de AliExpress (la que usas para comprar).
+- Poder recibir SMS o email para verificaciones.
+- Documentos de identidad vigentes (cédula de identidad chilena en el caso de Iván).
+- Un proyecto técnico donde usarás las APIs (por ejemplo, un backend en Node, Python,
+  Java, etc.), aunque esto se puede hacer después de completar el registro.
+
+El registro de desarrollador se hace en:
+- https://open.aliexpress.com
+o a través de
+- https://developers.aliexpress.com
+
+
+3. SELECCIÓN DEL TIPO DE DESARROLLADOR
+--------------------------------------
+Al entrar en la plataforma abierta de AliExpress, verás una pantalla con tres tipos
+grandes de desarrolladores. Para el proyecto de comparador + dropshipping, la opción
+correcta es:
+
+- "Desarrolladores de dropshipping/afiliados" (la tercera columna a la derecha).
+
+Dentro de esa opción, se muestran dos subtipos:
+- Dropshipping (Individual/Empresarial).
+- Alianza (Individual/Empresarial).
+
+Para un SaaS como el de Iván (personas naturales, sin empresa registrada aún), se debe
+elegir:
+
+- Dropshipping (Individual).
+
+Esta elección habilita el acceso tanto a la Dropshipping API como a las APIs necesarias
+para afiliados/catálogo.
+
+
+4. CONFIGURAR EL PERFIL DE DESARROLLADOR (FORMULARIO DE PERFIL)
+---------------------------------------------------------------
+Después de elegir el tipo de desarrollador, la plataforma te lleva a la página de perfil:
+
+URL típica: https://openservice.aliexpress.com/profile
+
+Aquí se completan varias secciones: Base information, Data Compliance DD y
+Data Compliance Assessment.
+
+4.1. Base information
+---------------------
+Campos clave y cómo se rellenaron en nuestro caso (Iván de Chile):
+
+- Collaborator type:
+  => seleccionar "Dropshipping (individual)".
+
+- Country / Region of Registration:
+  => "Chile".
+
+- Name:
+  => Nombre real tal como figura en la cédula de identidad.
+     (Ejemplo: "Iván Marty" o "Iván Andrés Marty Aravena", según el documento).
+
+- Gender:
+  => Male o Female según corresponda.
+
+- Date of Birth:
+  => Fecha de nacimiento tal como figura en la cédula.
+
+- Identification Type:
+  => "Identification Number" (ID card).
+
+- Identification Number (ID Number):
+  => RUT/RUN sin puntos y con guion, por ejemplo: 12345678-9.
+
+- Identification (upload):
+  => Subir dos imágenes:
+     1) Frente de la cédula.
+     2) Reverso de la cédula.
+     En formato JPG/PNG, claras, a color y sin recortes.
+
+- Address:
+  => Dirección real (calle, número, ciudad, región).
+
+- Contact Information:
+  => Email principal.
+  => Número de teléfono en formato internacional (ejemplo: +569XXXXXXXX).
+  => Número de WhatsApp (puede ser el mismo).
+
+- LinkedIn (opcional, pero recomendable):
+  => URL de tu perfil de LinkedIn si tienes.
+
+Al final de esta sección se muestra un mensaje del tipo:
+"It takes about 2–5 working days" y estado "Under Review".
+
+4.2. Data Compliance DD (Debida diligencia de datos)
+----------------------------------------------------
+Esta sección trata del cumplimiento de normas de protección de datos.
+
+Respuestas recomendadas para un dropshipper individual:
+
+- Location of data processing:
+  => "Chile" (tu país real de operación).
+
+- Have you been subject to any regulatory enforcement or scrutiny related to data processing?
+  => No.
+
+- Have you had any data breaches in the past 5 years?
+  => No.
+
+- Confirm that you can delete, anonymise, update or correct any data if requested to do so by AliExpress?
+  => Yes.
+  (Muy importante para cumplir con las leyes como GDPR/PIPL. Significa que tu SaaS
+   puede borrar o modificar datos cuando AliExpress lo solicite.)
+
+4.3. Data Compliance Assessment (Evaluación de cumplimiento)
+------------------------------------------------------------
+Esta sección profundiza en cómo manejas datos y si involucras a terceros.
+
+Para un SaaS individual simple (sin otras empresas que procesen datos), las respuestas
+recomendadas son:
+
+1) Do you engage any third party to process AliExpress data (group companies and/or third parties)?
+   => No.
+
+2) Will you cross-border transfer of AliExpress data to any third party?
+   => No.
+
+3) In addition to the purpose of providing services to AliExpress, will you use any AliExpress data for your own purposes?
+   => No.
+   (No vas a vender los datos ni usarlos para publicidad externa; solo para tu SaaS.)
+
+4) After the termination of the cooperation, does your company need to keep AliExpress's data or other confidential information?
+   => No.
+   (Indicas que, si se termina la cooperación, puedes eliminar los datos de AliExpress.)
+
+Finalmente, marca la casilla:
+- "I have read and agree to the agreement"
+
+y pulsa el botón:
+- "Submit".
+
+
+5. APROBACIÓN DEL PERFIL DE DESARROLLADOR
+-----------------------------------------
+Tras enviar toda la información, AliExpress revisa tu solicitud.
+
+- Tiempo estimado: entre 2 y 5 días hábiles (a menudo 24–48 horas).
+- Durante este tiempo verás el estado "Under Review".
+- Cuando sea aprobado, el estado cambia y se habilita el menú de desarrollador,
+  incluyendo:
+  - "App Management" / "Gestión de aplicaciones".
+  - "Create App".
+  - Herramientas de consola y documentación de API.
+
+
+6. CREAR LA APLICACIÓN PARA AFFILIATE API (CATÁLOGO, PRECIOS, IMÁGENES)
+-----------------------------------------------------------------------
+Una vez aprobado el perfil de desarrollador:
+
+6.1. Entrar a App Management
+----------------------------
+- Entra al Dashboard de AliExpress Open Platform.
+- Haz clic en "App Management".
+- Luego, clic en "Create App".
+
+6.2. Elegir tipo de app para Affiliate
+--------------------------------------
+La interfaz puede variar, pero debes escoger la opción relacionada con afiliados, por ejemplo:
+
+- "Affiliate Program App"
+- "Portals / Affiliate API App"
+- "Marketing / Promotion"
+
+La idea es que esta aplicación sea la que utilizarás para:
+
+- Buscar productos (search).
+- Obtener detalles (detalle de producto).
+- Gestionar enlaces de afiliado (opcional).
+
+6.3. Completar los campos de la app Affiliate
+---------------------------------------------
+Ejemplo de configuración:
+
+- App Name:
+  => "PriceScannerAffiliateApp" (puede ser el nombre que prefieras).
+
+- Description:
+  Se recomienda un texto formal y claro, por ejemplo:
+  "Aplicación SaaS para consultar productos, precios e imágenes mediante AliExpress
+   Affiliate API, con el fin de construir un comparador de precios que promueve
+   productos de AliExpress respetando todas las políticas del programa de afiliados."
+
+- Callback URL:
+  Puedes usar temporalmente una URL de tu dominio, por ejemplo:
+  "https://tuservidor.com/callback"
+  (Más adelante puedes cambiarla si implementas OAuth o tracking avanzado.)
+
+- Industry / Category:
+  - E-commerce.
+  - Tools / SaaS / Data Service.
+
+- Permissions (si aparece listado):
+  Marca todos los métodos de Affiliate básicos, típicamente:
+  - aliexpress.affiliate.product.query
+  - aliexpress.affiliate.productdetail.get
+  - aliexpress.affiliate.product.sku.detail.get
+
+Envía la app y espera la aprobación (normalmente rápida).
+
+6.4. Obtener App Key y App Secret de Affiliate
+----------------------------------------------
+Una vez aprobada la app, en el panel de detalles de la aplicación verás:
+
+- App Key (app_key).
+- App Secret (app_secret).
+
+Estos dos valores se utilizarán para firmar las peticiones a la Affiliate API desde tu backend.
+
+
+7. CREAR LA APLICACIÓN PARA DROPSHIPPING API
+--------------------------------------------
+La segunda aplicación es la que utilizarás para crear pedidos y manejar dropshipping.
+
+7.1. Crear nueva app de tipo Dropshipping
+----------------------------------------
+- En "App Management", pulsa de nuevo "Create App".
+- Elige el tipo de app relacionado con Dropshipping, por ejemplo:
+  - "Dropshipping App".
+  - "AliExpress Drop Shipping API App".
+  - "DS API App".
+
+7.2. Completar la configuración de la app
+-----------------------------------------
+Ejemplo de valores recomendados:
+
+- App Name:
+  => "AutoDropshipperApp".
+
+- Description:
+  "Aplicación SaaS privada para automatizar importación de productos, sincronización
+   de precios e inventario y creación de órdenes de compra en AliExpress para
+   clientes finales. El pago de los pedidos se realiza siempre en la web de AliExpress,
+   respetando completamente las políticas de la plataforma."
+
+- Callback URL:
+  => "https://tuservidor.com/aliexpress/callback"
+
+- Industry / Category:
+  - E-commerce.
+  - Dropshipping.
+
+- Permissions:
+  Selecciona los módulos de:
+  - Product / Offer DS (para obtener info de productos).
+  - Trade / Order (para crear pedidos).
+  - Logistics / Tracking (para obtener tracking y estados).
+
+7.3. App Key, App Secret y Access Tokens (Dropshipping)
+-------------------------------------------------------
+Tras la aprobación de la app de Dropshipping, también tendrás:
+
+- app_key
+- app_secret
+
+A diferencia de muchas operaciones de Affiliate, aquí normalmente necesitarás:
+
+- access_token (token OAuth asociado a tu cuenta de AliExpress).
+
+El flujo típico es:
+1) Redirigir a una URL de autorización de AliExpress (si usas OAuth completo).
+2) Recibir un code en tu callback URL.
+3) Intercambiar ese code por un access_token usando app_key y app_secret.
+
+También existen métodos para obtener tokens en consola o en modo simplificado
+cuando la app solo se usa para una única cuenta (como un dropshipper individual).
+
+
+8. PARA QUÉ SIRVE CADA API EN TU SAAS
+-------------------------------------
+Con las dos apps creadas, el reparto de responsabilidades es:
+
+8.1. Affiliate API (App de catálogo)
+------------------------------------
+En tu backend, usarás métodos como:
+
+- aliexpress.affiliate.product.query
+  * Para buscar productos por palabra clave, categoría, rango de precio, país de envío, etc.
+  * Devuelve listas de productos con:
+    - product_id
+    - product_title
+    - sale_price, original_price
+    - product_main_image_url, product_small_image_urls
+    - rating, volumen de ventas, etc.
+
+- aliexpress.affiliate.productdetail.get
+  * Para obtener detalles específicos de uno o varios product_id.
+  * Útil para mostrar fichas de producto más completas.
+
+- aliexpress.affiliate.product.sku.detail.get
+  * Para obtener las variaciones (SKUs) del producto
+    (por ejemplo, talla, color, etc.), con precios y stock.
+
+Uso en el SaaS:
+- Construir el COMPARADOR DE PRECIOS.
+- Mostrar listados y fichas con imágenes y precios actualizados.
+- Opcionalmente, generar enlaces de afiliado para comisiones.
+
+8.2. Dropshipping API (App de pedidos)
+--------------------------------------
+A través de esta API podrás:
+
+- Obtener información detallada de un producto para dropshipping
+  (similar a la Affiliate, pero más orientada a stock, SKUs y logística).
+
+- Crear pedidos (Place Order) en AliExpress, con:
+  - Datos del cliente final (nombre, dirección, teléfono).
+  - Lista de productos y SKUs a comprar.
+  - Método de envío elegido.
+
+- Consultar el estado de los pedidos y el tracking logístico.
+
+Uso en el SaaS:
+- Automatizar el DROPSHIPPING.
+- Sincronizar estados de pedido con los clientes de tu plataforma.
+- Reducir trabajo manual en la creación de órdenes dentro de AliExpress.
+
+
+9. RECOMENDACIÓN DE ARQUITECTURA BÁSICA
+---------------------------------------
+Un diseño simple para un SaaS como el tuyo puede ser:
+
+- Módulo "Catalog Service" (usa Affiliate API):
+  - Endpoints internos:
+    * /searchProducts
+    * /getProductDetail
+    * /getProductSkus
+  - Base de datos con tabla de productos, precios históricos, imágenes, etc.
+
+- Módulo "Dropshipping Service" (usa Dropshipping API):
+  - Endpoints internos:
+    * /createAliExpressOrder
+    * /getOrderStatus
+    * /syncTracking
+  - Base de datos con tabla de órdenes, relación con pedidos de tus clientes, etc.
+
+- Módulo "Core SaaS":
+  - Lógica de negocio propia:
+    * Usuarios de tu plataforma.
+    * Tiendas o integraciones.
+    * Reglas para cuándo crear pedidos automáticamente.
+    * Panel de control para ver estado de pedidos y comparaciones de precio.
+
+
+10. CHECKLIST FINAL
+-------------------
+Para comprobar que tienes todo listo:
+
+[ ] Tienes cuenta de AliExpress verificada.
+[ ] Entraste a https://open.aliexpress.com y elegiste
+    "Desarrolladores de dropshipping/afiliados" -> "Dropshipping (Individual)".
+[ ] Completaste la sección Base information con tus datos reales y subiste
+    tu cédula por ambos lados.
+[ ] Completaste Data Compliance DD con:
+    - Location: Chile.
+    - No sanciones previas.
+    - No brechas de datos en 5 años.
+    - Confirmación de poder borrar/anonimizar/actualizar datos (Yes).
+[ ] Completaste Data Compliance Assessment con:
+    - No terceros procesando datos.
+    - No transferencias internacionales a terceros.
+    - No uso de datos para fines propios fuera del servicio.
+    - No retención de datos tras terminar la cooperación.
+[ ] Enviastes el formulario y tu perfil está aprobado.
+[ ] En App Management creaste la app de Affiliate API y tienes su app_key y app_secret.
+[ ] En App Management creaste la app de Dropshipping API y tienes su app_key y app_secret.
+[ ] (Opcional) Ya generaste un access_token para la app de Dropshipping.
+[ ] Ya puedes hacer tu primera llamada de prueba a la API desde tu backend.
+
+Con todo lo anterior, tu proyecto de comparador de precios + dropshipping automatizado
+está listo para empezar a consumir de forma oficial y autorizada las APIs de AliExpress,
+sin depender de scraping ni de soluciones no oficiales.

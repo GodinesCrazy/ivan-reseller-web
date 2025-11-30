@@ -1068,6 +1068,34 @@ export class AutopilotSystem extends EventEmitter {
         return newProduct;
       });
 
+      // ✅ CRÍTICO: Si analyze está en modo automatic, aprobar automáticamente el producto
+      // Esto permite que el workflow avance de ANALYZE a PUBLISH
+      const analyzeMode = await workflowConfigService.getStageMode(currentUserId, 'analyze');
+      if (analyzeMode === 'automatic') {
+        try {
+          const { productService } = await import('./product.service');
+          await productService.updateProductStatusSafely(
+            product.id,
+            'APPROVED',
+            currentUserId,
+            'Autopilot: Aprobación automática (analyze en modo automatic)'
+          );
+          
+          logger.info('Autopilot: Producto aprobado automáticamente', {
+            productId: product.id,
+            userId: currentUserId,
+            analyzeMode
+          });
+        } catch (approveError: any) {
+          logger.error('Autopilot: Error aprobando producto automáticamente', {
+            productId: product.id,
+            userId: currentUserId,
+            error: approveError?.message || String(approveError)
+          });
+          // No fallar el flujo si la aprobación automática falla
+        }
+      }
+
       // ✅ Programar despublicación automática basada en tiempo óptimo
       await publicationOptimizerService.scheduleAutoUnpublish(
         currentUserId,
@@ -1353,12 +1381,41 @@ export class AutopilotSystem extends EventEmitter {
         }
       }
 
+      // ✅ CRÍTICO: Si analyze está en modo automatic, aprobar automáticamente el producto
+      // Esto permite que el workflow avance de ANALYZE a PUBLISH
+      const analyzeMode = await workflowConfigService.getStageMode(currentUserId, 'analyze');
+      if (analyzeMode === 'automatic') {
+        try {
+          const { productService } = await import('./product.service');
+          await productService.updateProductStatusSafely(
+            product.id,
+            'APPROVED',
+            currentUserId,
+            'Autopilot: Aprobación automática (analyze en modo automatic)'
+          );
+          
+          logger.info('Autopilot: Producto aprobado automáticamente en sendToApprovalQueue', {
+            productId: product.id,
+            userId: currentUserId,
+            analyzeMode
+          });
+        } catch (approveError: any) {
+          logger.error('Autopilot: Error aprobando producto automáticamente en sendToApprovalQueue', {
+            productId: product.id,
+            userId: currentUserId,
+            error: approveError?.message || String(approveError)
+          });
+          // No fallar el flujo si la aprobación automática falla
+        }
+      }
+
       logger.info('Autopilot: Product sent to approval queue', {
         productId: product.id,
         title: opportunity.title,
         userId: currentUserId,
         estimatedCost: opportunity.estimatedCost,
-        estimatedProfit: opportunity.estimatedProfit
+        estimatedProfit: opportunity.estimatedProfit,
+        analyzeMode
       });
 
       // ✅ MEJORA: Enviar notificación al usuario
