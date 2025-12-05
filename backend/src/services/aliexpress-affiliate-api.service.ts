@@ -182,16 +182,25 @@ export class AliExpressAffiliateAPIService {
       allParams.tracking_id = this.credentials.trackingId;
     }
 
-    try {
-      logger.info('[ALIEXPRESS-AFFILIATE-API] Making request', {
-        method,
-        endpoint: this.endpoint,
-        timestamp: allParams.timestamp,
-        app_key: allParams.app_key,
-        params_count: Object.keys(allParams).length,
-        timeout: '30000ms (axios) con Promise.race de 35s para fallback'
-      });
+    const requestStartTime = Date.now();
+    
+    // ✅ LOG OBLIGATORIO: ANTES de la llamada HTTP
+    const requestPayloadSize = JSON.stringify(allParams).length;
+    logger.info('[ALIEXPRESS-AFFILIATE-API] Request →', {
+      endpoint: this.endpoint,
+      method: method,
+      httpMethod: 'POST',
+      query: params.keywords || 'N/A',
+      timestamp: allParams.timestamp,
+      app_key: allParams.app_key?.substring(0, 8) + '...',
+      params_count: Object.keys(allParams).length,
+      payloadSize: `${requestPayloadSize} bytes`,
+      timeout: '30000ms (axios)',
+      hasCredentials: !!this.credentials,
+      credentialsSandbox: this.credentials?.sandbox
+    });
 
+    try {
       // ✅ MEJORADO: Usar URLSearchParams para enviar datos correctamente
       const formData = new URLSearchParams();
       Object.keys(allParams).forEach(key => {
@@ -212,34 +221,108 @@ export class AliExpressAffiliateAPIService {
         timeout: 30000, // ✅ Aumentado a 30s - AliExpress TOP API puede ser lenta
       });
 
+      const elapsedMs = Date.now() - requestStartTime;
+
       // La respuesta de TOP API viene en formato: { response: { result: { ... } } }
       if (response.data.error_response) {
         const error = response.data.error_response;
-        throw new Error(`AliExpress API Error: ${error.msg || error.sub_msg || 'Unknown error'} (Code: ${error.code || 'UNKNOWN'})`);
+        const errorCode = error.code || 'UNKNOWN';
+        const errorMsg = error.msg || error.sub_msg || 'Unknown error';
+        
+        // ✅ LOG OBLIGATORIO: Error de la API
+        logger.error('[ALIEXPRESS-AFFILIATE-API] Error ←', {
+          status: response.status,
+          code: errorCode,
+          message: errorMsg,
+          elapsedMs: `${elapsedMs}ms`,
+          endpoint: this.endpoint,
+          method: method,
+          errorType: 'api_error_response'
+        });
+        
+        throw new Error(`AliExpress API Error: ${errorMsg} (Code: ${errorCode})`);
       }
 
       const result = response.data[`${method.replace(/\./g, '_')}_response`] || response.data.response?.result;
       
       if (!result) {
-        logger.warn('[ALIEXPRESS-AFFILIATE-API] Unexpected response format', {
-          method,
-          responseData: response.data,
+        // ✅ LOG OBLIGATORIO: Formato inesperado
+        logger.error('[ALIEXPRESS-AFFILIATE-API] Error ←', {
+          status: response.status,
+          code: 'UNEXPECTED_FORMAT',
+          message: 'Unexpected response format from AliExpress API',
+          elapsedMs: `${elapsedMs}ms`,
+          endpoint: this.endpoint,
+          method: method,
+          errorType: 'unexpected_response_format',
+          responseKeys: Object.keys(response.data || {})
         });
         throw new Error('Unexpected response format from AliExpress API');
       }
 
+      // ✅ LOG OBLIGATORIO: Éxito
+      const resultSize = JSON.stringify(result).length;
+      logger.info('[ALIEXPRESS-AFFILIATE-API] Success ←', {
+        status: response.status,
+        elapsedMs: `${elapsedMs}ms`,
+        endpoint: this.endpoint,
+        method: method,
+        resultSize: `${resultSize} bytes`,
+        hasData: !!result
+      });
+
       return result;
     } catch (error: any) {
+      const elapsedMs = Date.now() - requestStartTime;
+      
       if (axios.isAxiosError(error)) {
-        logger.error('[ALIEXPRESS-AFFILIATE-API] Request failed', {
-          method,
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          data: error.response?.data,
+        const httpStatus = error.response?.status;
+        const statusText = error.response?.statusText;
+        const errorData = error.response?.data;
+        const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+        const isNetworkError = error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT';
+        
+        // ✅ LOG OBLIGATORIO: Error HTTP detallado
+        logger.error('[ALIEXPRESS-AFFILIATE-API] Error ←', {
+          status: httpStatus || 'NO_STATUS',
+          statusText: statusText || 'NO_STATUS_TEXT',
+          code: error.code || 'UNKNOWN',
           message: error.message,
+          elapsedMs: `${elapsedMs}ms`,
+          endpoint: this.endpoint,
+          method: method,
+          errorType: isTimeout ? 'timeout' : isNetworkError ? 'network_error' : 'http_error',
+          isTimeout,
+          isNetworkError,
+          errorResponseData: errorData ? (typeof errorData === 'object' ? JSON.stringify(errorData).substring(0, 200) : String(errorData).substring(0, 200)) : undefined
         });
-        throw new Error(`AliExpress API request failed: ${error.message}`);
+        
+        // Clasificar el error para mejor manejo
+        if (isTimeout) {
+          throw new Error(`AliExpress API timeout after ${elapsedMs}ms: ${error.message}`);
+        } else if (isNetworkError) {
+          throw new Error(`AliExpress API network error: ${error.message}`);
+        } else if (httpStatus === 401 || httpStatus === 403) {
+          throw new Error(`AliExpress API authentication error (${httpStatus}): ${errorData?.msg || error.message}`);
+        } else if (httpStatus === 429) {
+          throw new Error(`AliExpress API rate limit exceeded (429): ${errorData?.msg || error.message}`);
+        } else {
+          throw new Error(`AliExpress API request failed (${httpStatus || 'NO_STATUS'}): ${error.message}`);
+        }
       }
+      
+      // ✅ LOG OBLIGATORIO: Error no-HTTP
+      logger.error('[ALIEXPRESS-AFFILIATE-API] Error ←', {
+        status: 'NO_HTTP_RESPONSE',
+        code: error?.code || 'UNKNOWN',
+        message: error?.message || String(error),
+        elapsedMs: `${elapsedMs}ms`,
+        endpoint: this.endpoint,
+        method: method,
+        errorType: 'non_http_error',
+        stack: error?.stack?.substring(0, 500)
+      });
+      
       throw error;
     }
   }
