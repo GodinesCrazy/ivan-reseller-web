@@ -577,8 +577,32 @@ export class AdvancedMarketplaceScraper {
     
     logger.info('[SCRAPER] scrapeAliExpress iniciado', { query, userId, environment, userBaseCurrency });
     
-    // ✅ PRIORIDAD 1: Intentar usar Affiliate API primero (fuente principal)
-    // Solo usar scraping nativo como fallback explícito si la API falla realmente
+    // ============================================================================
+    // FLUJO: PRIORIDAD 1 - AliExpress Affiliate API → PRIORIDAD 2 - Scraping Nativo
+    // ============================================================================
+    // 
+    // DECISIÓN CRÍTICA:
+    // 1. Buscar credenciales en BD (sandbox y production)
+    // 2. Si hay credenciales → Intentar llamada HTTP a API oficial
+    //    - Si API responde → Retornar productos de API
+    //    - Si API falla → Continuar con scraping nativo (fallback)
+    // 3. Si NO hay credenciales → Usar scraping nativo directamente
+    //
+    // LOGS CLAVE PARA DEBUGGING:
+    // - [ALIEXPRESS-API] ✅ Credenciales encontradas → Se intentará usar API
+    // - [ALIEXPRESS-API] ✅ PREPARANDO LLAMADA HTTP → Está por hacer la llamada
+    // - [ALIEXPRESS-API] ✅ EJECUTANDO LLAMADA HTTP → Justo antes de HTTP
+    // - [ALIEXPRESS-AFFILIATE-API] Request → → Llamada HTTP iniciada
+    // - [ALIEXPRESS-AFFILIATE-API] Success ← → API respondió correctamente
+    // - [ALIEXPRESS-AFFILIATE-API] Error ← → API falló (revisar detalles)
+    // - [ALIEXPRESS-FALLBACK] → Usando scraping nativo como fallback
+    //
+    // BUG RAÍZ IDENTIFICADO (corregido):
+    // - Error "apiName is not defined" en línea 633 causaba que el código fallara
+    //   silenciosamente al intentar normalizar credenciales, haciendo fallback inmediato
+    // - Solución: Eliminada referencia a variable no definida
+    // ============================================================================
+    
     try {
       const { CredentialsManager } = await import('./credentials-manager.service');
       const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
@@ -684,6 +708,17 @@ export class AdvancedMarketplaceScraper {
           note: 'If API fails or times out, will fallback to native scraping'
         });
         
+        // ✅ CRÍTICO: Log obligatorio ANTES de configurar servicio y hacer llamada HTTP
+        logger.info('[ALIEXPRESS-API] ✅ PREPARANDO LLAMADA HTTP a AliExpress Affiliate API', {
+          userId,
+          query,
+          environment: resolvedEnv || preferredEnvironment,
+          hasCredentials: !!affiliateCreds,
+          appKey: affiliateCreds.appKey ? `${affiliateCreds.appKey.substring(0, 6)}...` : 'missing',
+          endpoint: 'https://gw.api.taobao.com/router/rest',
+          note: 'Si NO ves logs [ALIEXPRESS-AFFILIATE-API] Request → después de este mensaje, hay un problema en el código'
+        });
+        
         try {
           aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
           
@@ -700,14 +735,15 @@ export class AdvancedMarketplaceScraper {
           
           const apiCallStartTime = Date.now();
           try {
-            logger.debug('[ALIEXPRESS-API] Iniciando llamada a searchProducts', {
+            // ✅ LOG OBLIGATORIO: Justo antes de hacer la llamada HTTP real
+            logger.info('[ALIEXPRESS-API] ✅ EJECUTANDO LLAMADA HTTP - searchProducts()', {
               query,
               pageSize: 5,
               targetCurrency: userBaseCurrency || 'USD',
               shipToCountry,
               timeout: '30s (axios) + 35s (race)',
               endpoint: 'https://gw.api.taobao.com/router/rest',
-              note: 'Si la API no responde en 35s, se hará fallback a scraping nativo'
+              note: 'A partir de aquí deberías ver logs [ALIEXPRESS-AFFILIATE-API] Request → y Success/Error ←'
             });
             
             affiliateProducts = await Promise.race([
@@ -945,35 +981,73 @@ export class AdvancedMarketplaceScraper {
           }
         } catch (apiError: any) {
           const errorMessage = apiError?.message || String(apiError);
-          const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('API timeout');
-          const isAuthError = errorMessage.includes('credentials') || errorMessage.includes('unauthorized') || errorMessage.includes('401');
+          
+          // ✅ Clasificar errores de manera explícita
+          const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('API timeout') || errorMessage.includes('ECONNABORTED');
+          const isAuthError = errorMessage.includes('credentials') || 
+                              errorMessage.includes('unauthorized') || 
+                              errorMessage.includes('401') || 
+                              errorMessage.includes('403') ||
+                              errorMessage.includes('INVALID_SIGNATURE') ||
+                              errorMessage.includes('AUTH_ERROR');
           const isRateLimit = errorMessage.includes('rate limit') || errorMessage.includes('429');
           const isServerError = errorMessage.includes('500') || errorMessage.includes('502') || errorMessage.includes('503');
+          const isNetworkError = errorMessage.includes('network') || 
+                                 errorMessage.includes('ECONNREFUSED') || 
+                                 errorMessage.includes('ETIMEDOUT') ||
+                                 errorMessage.includes('ENOTFOUND') ||
+                                 errorMessage.includes('NETWORK_ERROR');
           
-          // ✅ Clasificar el error para logging detallado
+          // ✅ Clasificar el error para logging detallado y decisión de fallback
           let reasonCode = 'unknown_error';
-          if (isTimeout) reasonCode = 'api_timeout';
-          else if (isAuthError) reasonCode = 'invalid_credentials';
-          else if (isRateLimit) reasonCode = 'rate_limit_exceeded';
-          else if (isServerError) reasonCode = 'server_error';
+          let shouldRetry = false;
+          let shouldFallbackToScraping = true; // Por defecto, siempre hacer fallback si falla
           
-          logger.warn('[ALIEXPRESS-FALLBACK] Using native scraper because API is unavailable', {
+          if (isTimeout) {
+            reasonCode = 'api_timeout';
+            shouldRetry = false; // No retry inmediato para timeouts
+            shouldFallbackToScraping = true;
+          } else if (isAuthError) {
+            reasonCode = 'invalid_credentials';
+            shouldRetry = false; // No retry para errores de autenticación
+            shouldFallbackToScraping = true;
+          } else if (isRateLimit) {
+            reasonCode = 'rate_limit_exceeded';
+            shouldRetry = false; // No retry inmediato para rate limits
+            shouldFallbackToScraping = true;
+          } else if (isServerError) {
+            reasonCode = 'server_error';
+            shouldRetry = false; // No retry para errores del servidor de AliExpress
+            shouldFallbackToScraping = true;
+          } else if (isNetworkError) {
+            reasonCode = 'network_error';
+            shouldRetry = false; // No retry para errores de red
+            shouldFallbackToScraping = true;
+          }
+          
+          // ✅ LOG OBLIGATORIO: Error detallado antes de hacer fallback
+          logger.warn('[ALIEXPRESS-FALLBACK] API failed - using native scraper', {
             reason: reasonCode,
-            error: errorMessage,
+            error: errorMessage.substring(0, 500), // Limitar tamaño
+            errorType: isTimeout ? 'timeout' : isAuthError ? 'auth' : isRateLimit ? 'rate_limit' : isNetworkError ? 'network' : 'unknown',
             isTimeout,
             isAuthError,
             isRateLimit,
             isServerError,
+            isNetworkError,
             query,
             userId,
             fallbackSource: 'native-scraping',
-            note: isTimeout 
-              ? 'API no respondió a tiempo (25s) - usando scraping nativo como fallback' 
-              : isAuthError
-              ? 'Error de autenticación - verificar credenciales en API Settings'
-              : 'Error en API - usando scraping nativo como fallback seguro'
+            willFallback: shouldFallbackToScraping,
+            recommendation: isAuthError 
+              ? 'Verificar credenciales en Settings → API Settings → AliExpress Affiliate API'
+              : isTimeout || isNetworkError
+              ? 'Problema de conectividad. El fallback a scraping nativo continuará.'
+              : 'Revisar logs detallados para más información'
           });
+          
           // Continuar con scraping nativo si falla la API
+          // (no lanzar error, simplemente continuar con el código de scraping más abajo)
         }
       } else {
         // ✅ No hay credenciales configuradas - usar scraping nativo

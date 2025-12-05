@@ -1,0 +1,207 @@
+/**
+ * Debug Routes
+ * 
+ * Endpoints de debugging para probar APIs directamente sin pasar por toda la lógica
+ * de oportunidades y scraping.
+ */
+
+import { Router, Request, Response } from 'express';
+import { authenticate } from '../../middleware/auth.middleware';
+import { AliExpressAffiliateAPIService } from '../../services/aliexpress-affiliate-api.service';
+import { CredentialsManager } from '../../services/credentials-manager.service';
+import { resolveEnvironment } from '../../utils/environment-resolver';
+import logger from '../../config/logger';
+
+const router = Router();
+
+// Require authentication for all endpoints
+router.use(authenticate);
+
+/**
+ * GET /debug/aliexpress/test-search
+ * 
+ * Prueba directa de la AliExpress Affiliate API sin pasar por scraping
+ * 
+ * Query params:
+ * - query (required): Término de búsqueda
+ * - userId (optional): ID del usuario (default: usuario autenticado)
+ * - environment (optional): sandbox | production
+ */
+router.get('/aliexpress/test-search', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId || Number(req.query.userId);
+    if (!userId || userId <= 0) {
+      return res.status(401).json({ 
+        status: 'error',
+        code: 'AUTH_REQUIRED',
+        message: 'User ID is required' 
+      });
+    }
+
+    const query = String(req.query.query || 'test');
+    const environment = req.query.environment as 'sandbox' | 'production' | undefined;
+
+    logger.info('[DEBUG-API] Test search requested', {
+      userId,
+      query,
+      environment: environment || 'auto'
+    });
+
+    // Resolver ambiente
+    const preferredEnvironment = await resolveEnvironment({
+      explicit: environment,
+      userId,
+      default: 'production'
+    });
+
+    // Buscar credenciales en ambos ambientes
+    const environmentsToTry: Array<'sandbox' | 'production'> = [preferredEnvironment];
+    environmentsToTry.push(preferredEnvironment === 'production' ? 'sandbox' : 'production');
+
+    let affiliateCreds: any = null;
+    let resolvedEnv: 'sandbox' | 'production' | null = null;
+
+    for (const env of environmentsToTry) {
+      try {
+        logger.debug('[DEBUG-API] Checking credentials', { environment: env, userId });
+        
+        const creds = await CredentialsManager.getCredentials(
+          userId,
+          'aliexpress-affiliate',
+          env
+        );
+
+        if (creds) {
+          creds.sandbox = env === 'sandbox';
+          affiliateCreds = creds;
+          resolvedEnv = env;
+          logger.info('[DEBUG-API] Credentials found', {
+            environment: env,
+            appKey: creds.appKey ? `${creds.appKey.substring(0, 6)}...` : 'missing'
+          });
+          break;
+        }
+      } catch (credError: any) {
+        logger.warn('[DEBUG-API] Error checking credentials', {
+          environment: env,
+          error: credError?.message || String(credError)
+        });
+      }
+    }
+
+    if (!affiliateCreds) {
+      return res.status(400).json({
+        status: 'error',
+        code: 'NO_CREDENTIALS',
+        message: 'AliExpress Affiliate API credentials not found',
+        recommendation: 'Configure credentials in Settings → API Settings → AliExpress Affiliate API',
+        environmentsChecked: environmentsToTry
+      });
+    }
+
+    // Inicializar servicio de API
+    const apiService = new AliExpressAffiliateAPIService();
+    apiService.setCredentials(affiliateCreds);
+
+    const startTime = Date.now();
+
+    try {
+      logger.info('[DEBUG-API] Calling AliExpress Affiliate API', {
+        userId,
+        query,
+        environment: resolvedEnv
+      });
+
+      const products = await apiService.searchProducts({
+        keywords: query,
+        pageSize: 5,
+        targetCurrency: 'USD',
+        targetLanguage: 'ES',
+        shipToCountry: 'CL',
+        sort: 'LAST_VOLUME_DESC',
+      });
+
+      const duration = Date.now() - startTime;
+
+      logger.info('[DEBUG-API] API call successful', {
+        productsFound: products.length,
+        duration: `${duration}ms`
+      });
+
+      return res.json({
+        status: 'ok',
+        items: products.length,
+        duration: `${duration}ms`,
+        environment: resolvedEnv,
+        firstProduct: products[0] ? {
+          title: products[0].productTitle?.substring(0, 100),
+          price: products[0].salePrice,
+          currency: products[0].currency,
+          productId: products[0].productId,
+          hasImages: !!(products[0].productMainImageUrl || products[0].productSmallImageUrls?.length)
+        } : null,
+        allProducts: products.map(p => ({
+          productId: p.productId,
+          title: p.productTitle?.substring(0, 80),
+          price: p.salePrice,
+          currency: p.currency
+        }))
+      });
+
+    } catch (apiError: any) {
+      const duration = Date.now() - startTime;
+      const errorMessage = apiError?.message || String(apiError);
+      
+      logger.error('[DEBUG-API] API call failed', {
+        error: errorMessage,
+        duration: `${duration}ms`,
+        stack: apiError?.stack?.substring(0, 500)
+      });
+
+      // Determinar tipo de error
+      let code = 'API_ERROR';
+      let httpStatus = 500;
+
+      if (errorMessage.includes('timeout')) {
+        code = 'TIMEOUT';
+        httpStatus = 504;
+      } else if (errorMessage.includes('authentication') || errorMessage.includes('401') || errorMessage.includes('403')) {
+        code = 'AUTH_ERROR';
+        httpStatus = 401;
+      } else if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+        code = 'RATE_LIMIT';
+        httpStatus = 429;
+      } else if (errorMessage.includes('network') || errorMessage.includes('ECONNREFUSED') || errorMessage.includes('ETIMEDOUT')) {
+        code = 'NETWORK_ERROR';
+        httpStatus = 503;
+      }
+
+      return res.status(httpStatus).json({
+        status: 'error',
+        code,
+        message: errorMessage,
+        duration: `${duration}ms`,
+        recommendation: code === 'AUTH_ERROR' 
+          ? 'Verify credentials in Settings → API Settings'
+          : code === 'NETWORK_ERROR'
+          ? 'Check network connectivity to AliExpress API'
+          : 'Check logs for details'
+      });
+    }
+
+  } catch (error: any) {
+    logger.error('[DEBUG-API] Unexpected error', {
+      error: error?.message || String(error),
+      stack: error?.stack
+    });
+
+    return res.status(500).json({
+      status: 'error',
+      code: 'INTERNAL_ERROR',
+      message: error?.message || 'Internal server error'
+    });
+  }
+});
+
+export default router;
+
