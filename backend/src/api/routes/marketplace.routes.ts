@@ -661,6 +661,60 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         const needsEncoding = /[^a-zA-Z0-9\-_.]/.test(redirectUri);
         const encodedRedirectUri = needsEncoding ? encodeURIComponent(redirectUri) : redirectUri;
         
+        // ✅ VALIDACIÓN CRÍTICA: Verificar que redirectUri no tenga espacios internos
+        // eBay es muy estricto - cualquier espacio o carácter inesperado causa "invalid_request"
+        if (/\s/.test(redirectUri)) {
+          logger.error('[eBay OAuth] CRITICAL: Redirect URI contains spaces', {
+            redirectUri: redirectUri.substring(0, 50) + '...',
+            redirectUriLength: redirectUri.length,
+            spacesFound: redirectUri.match(/\s/g)?.length || 0,
+            warning: 'eBay does not allow spaces in RuName. This will cause "invalid_request" error.'
+          });
+          throw new AppError(
+            'El Redirect URI (RuName) contiene espacios. eBay no permite espacios en el RuName. Por favor, copia el RuName exactamente desde eBay Developer Portal sin espacios.',
+            400,
+            ErrorCode.VALIDATION_ERROR,
+            { field: 'redirectUri', apiName: 'ebay' }
+          );
+        }
+        
+        // ✅ VALIDACIÓN: Verificar que el redirectUri solo contenga caracteres permitidos
+        // eBay RuName solo permite: letras, números, guiones (-), guiones bajos (_)
+        const allowedPattern = /^[a-zA-Z0-9\-_]+$/;
+        if (!allowedPattern.test(redirectUri)) {
+          const invalidChars = redirectUri.match(/[^a-zA-Z0-9\-_]/g);
+          logger.error('[eBay OAuth] CRITICAL: Redirect URI contains invalid characters', {
+            redirectUri: redirectUri.substring(0, 50) + '...',
+            invalidChars: invalidChars?.join(', ') || 'unknown',
+            warning: 'eBay RuName only allows: letters, numbers, hyphens (-), underscores (_)'
+          });
+          throw new AppError(
+            `El Redirect URI (RuName) contiene caracteres inválidos: ${invalidChars?.join(', ') || 'desconocidos'}. eBay solo permite letras, números, guiones (-) y guiones bajos (_).`,
+            400,
+            ErrorCode.VALIDATION_ERROR,
+            { field: 'redirectUri', apiName: 'ebay', invalidChars: invalidChars }
+          );
+        }
+        
+        // ✅ VALIDACIÓN: Verificar que el App ID no esté vacío después de limpiar
+        if (!finalAppId || finalAppId.length === 0) {
+          throw new AppError(
+            'El App ID está vacío después de limpiar. Por favor, verifica que el App ID sea correcto.',
+            400,
+            ErrorCode.VALIDATION_ERROR,
+            { field: 'appId', apiName: 'ebay' }
+          );
+        }
+        
+        // ✅ VALIDACIÓN: Verificar que el state no sea demasiado largo
+        // eBay tiene un límite de longitud para parámetros (aunque no está documentado claramente)
+        if (state.length > 2000) {
+          logger.warn('[eBay OAuth] State parameter is very long', {
+            stateLength: state.length,
+            warning: 'eBay may reject very long state parameters'
+          });
+        }
+        
         const finalParams = [
           `client_id=${encodeURIComponent(finalAppId)}`,
           `redirect_uri=${encodedRedirectUri}`, // Codificar solo si es necesario
@@ -670,6 +724,69 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         ].join('&');
         
         authUrl = `${authBase}?${finalParams}`;
+        
+        // ✅ VALIDACIÓN FINAL: Parsear la URL para verificar que todos los parámetros están presentes
+        try {
+          const testUrl = new URL(authUrl);
+          const hasClientId = testUrl.searchParams.has('client_id');
+          const hasRedirectUri = testUrl.searchParams.has('redirect_uri');
+          const hasResponseType = testUrl.searchParams.has('response_type');
+          const hasScope = testUrl.searchParams.has('scope');
+          const hasState = testUrl.searchParams.has('state');
+          
+          if (!hasClientId || !hasRedirectUri || !hasResponseType || !hasScope || !hasState) {
+            logger.error('[eBay OAuth] CRITICAL: Missing required parameters in generated URL', {
+              hasClientId,
+              hasRedirectUri,
+              hasResponseType,
+              hasScope,
+              hasState,
+              warning: 'This will cause "invalid_request" error from eBay'
+            });
+            throw new AppError(
+              'Error al generar URL de autorización: faltan parámetros requeridos. Por favor, verifica las credenciales.',
+              500,
+              ErrorCode.INTERNAL_ERROR
+            );
+          }
+          
+          // Verificar que los valores no estén vacíos
+          const clientIdValue = testUrl.searchParams.get('client_id');
+          const redirectUriValue = testUrl.searchParams.get('redirect_uri');
+          
+          if (!clientIdValue || clientIdValue.length === 0) {
+            throw new AppError(
+              'El client_id está vacío en la URL generada. Por favor, verifica el App ID.',
+              500,
+              ErrorCode.INTERNAL_ERROR
+            );
+          }
+          
+          if (!redirectUriValue || redirectUriValue.length === 0) {
+            throw new AppError(
+              'El redirect_uri está vacío en la URL generada. Por favor, verifica el Redirect URI (RuName).',
+              500,
+              ErrorCode.INTERNAL_ERROR
+            );
+          }
+          
+          // Verificar que el redirectUri decodificado coincida con el original
+          const decodedRedirectUri = decodeURIComponent(redirectUriValue);
+          if (decodedRedirectUri !== redirectUri && encodedRedirectUri === redirectUri) {
+            logger.warn('[eBay OAuth] Redirect URI may have been double-encoded', {
+              original: redirectUri,
+              decoded: decodedRedirectUri,
+              warning: 'This mismatch may cause "invalid_request" error'
+            });
+          }
+          
+        } catch (urlValidationError: any) {
+          logger.error('[eBay OAuth] Error validating generated URL', {
+            error: urlValidationError.message,
+            authUrlPreview: authUrl.substring(0, 200) + '...'
+          });
+          // No lanzar error aquí - la URL podría ser válida, solo loguear
+        }
         
         // Logging detallado para debugging
         const urlObj = new URL(authUrl);
@@ -691,6 +808,11 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
           authUrlPreview: redactUrlForLogging(authUrl), // Redactar URL completa
           needsEncoding,
           encodedRedirectUri: encodedRedirectUri.substring(0, 30) + '...',
+          // ✅ DEBUG: Información adicional para troubleshooting
+          hasSpaces: /\s/.test(redirectUri),
+          allowedCharsOnly: /^[a-zA-Z0-9\-_]+$/.test(redirectUri),
+          stateLength: state.length,
+          scopesCount: scopes.length,
         });
         
         // ✅ VALIDACIÓN: Verificar que el redirectUri se mantuvo igual después de decodificar
