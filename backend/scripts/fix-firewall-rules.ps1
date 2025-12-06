@@ -54,46 +54,58 @@ foreach ($path in $chromePaths) {
 }
 
 # Crear regla para Node.js (Salida)
-Write-Host "`n📝 Creando regla de salida para Node.js..." -ForegroundColor Cyan
+Write-Host ""
+Write-Host "📝 Creando regla de salida para Node.js..." -ForegroundColor Cyan
 $ruleName = "Node.js - Conexiones Salientes HTTPS"
+$ruleDesc = "Permitir conexiones HTTPS/HTTP salientes para Node.js"
 
 # Eliminar regla existente si existe
-netsh advfirewall firewall delete rule name="$ruleName" 2>$null | Out-Null
+$null = netsh advfirewall firewall delete rule name="$ruleName" 2>$null
 
 # Crear nueva regla
-netsh advfirewall firewall add rule name="$ruleName" dir=out action=allow program="$nodePath" enable=yes protocol=TCP localport=any remoteport=443,80 description="Permitir conexiones HTTPS/HTTP salientes para Node.js" | Out-Null
+$command = "netsh advfirewall firewall add rule name=`"$ruleName`" dir=out action=allow program=`"$nodePath`" enable=yes protocol=TCP localport=any remoteport=443,80"
+$result = Invoke-Expression $command 2>&1
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "✅ Regla creada exitosamente: $ruleName" -ForegroundColor Green
 } else {
     Write-Host "❌ Error creando regla para Node.js" -ForegroundColor Red
+    Write-Host "   Detalles: $result" -ForegroundColor Yellow
 }
 
 # Crear regla para Chrome (si existe)
 if ($chromePath) {
-    Write-Host "`n📝 Creando regla de salida para Chrome..." -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "📝 Creando regla de salida para Chrome..." -ForegroundColor Cyan
     $chromeRuleName = "Chrome - Conexiones Salientes HTTPS"
     
-    netsh advfirewall firewall delete rule name="$chromeRuleName" 2>$null | Out-Null
-    netsh advfirewall firewall add rule name="$chromeRuleName" dir=out action=allow program="$chromePath" enable=yes protocol=TCP localport=any remoteport=443,80 description="Permitir conexiones HTTPS/HTTP salientes para Chrome (Puppeteer)" | Out-Null
+    $null = netsh advfirewall firewall delete rule name="$chromeRuleName" 2>$null
+    
+    $chromeCommand = "netsh advfirewall firewall add rule name=`"$chromeRuleName`" dir=out action=allow program=`"$chromePath`" enable=yes protocol=TCP localport=any remoteport=443,80"
+    $chromeResult = Invoke-Expression $chromeCommand 2>&1
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "✅ Regla creada exitosamente: $chromeRuleName" -ForegroundColor Green
     } else {
         Write-Host "❌ Error creando regla para Chrome" -ForegroundColor Red
+        Write-Host "   Detalles: $chromeResult" -ForegroundColor Yellow
     }
 }
 
-# Crear regla para permitir conexiones salientes a puerto 443 en general (si es necesario)
-Write-Host "`n📝 Verificando reglas de puerto 443..." -ForegroundColor Cyan
-$portRule = netsh advfirewall firewall show rule name="Node.js HTTPS Outbound" 2>$null
-if (-not $portRule) {
-    Write-Host "⚠️  Considera crear regla general para puerto 443 si los problemas persisten" -ForegroundColor Yellow
+# Verificar reglas
+Write-Host ""
+Write-Host "📝 Verificando reglas creadas..." -ForegroundColor Cyan
+$existingRules = netsh advfirewall firewall show rule name=all | Select-String "Node.js"
+if ($existingRules) {
+    Write-Host "✅ Reglas de Node.js encontradas en firewall" -ForegroundColor Green
+} else {
+    Write-Host "⚠️  No se encontraron reglas de Node.js" -ForegroundColor Yellow
 }
 
-Write-Host "`n✅ Proceso completado!" -ForegroundColor Green
-Write-Host "`n💡 Próximos pasos:" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "✅ Proceso completado!" -ForegroundColor Green
+Write-Host ""
+Write-Host "💡 Próximos pasos:" -ForegroundColor Cyan
 Write-Host "   1. Verificar reglas en 'Firewall de Windows Defender con seguridad avanzada'" -ForegroundColor White
 Write-Host "   2. Ejecutar: npm run diagnose:connectivity" -ForegroundColor White
 Write-Host "   3. Si persiste, verificar antivirus" -ForegroundColor White
-
