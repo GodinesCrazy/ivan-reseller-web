@@ -25,7 +25,8 @@
     "configure-apis": "tsx scripts/configure-apis-from-file.ts",
     "configure-and-test": "tsx scripts/configure-and-test-apis.ts",
     "test-apis": "tsx scripts/test-apis.ts",
-    "test:connectivity": "tsx src/scripts/test-aliexpress-connectivity.ts"
+    "test:connectivity": "tsx src/scripts/test-aliexpress-connectivity.ts",
+    "diagnose:connectivity": "tsx scripts/diagnose-connectivity.ts"
   },
   "keywords": [
     "dropshipping",
