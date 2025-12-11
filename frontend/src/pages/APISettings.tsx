@@ -1771,46 +1771,73 @@ export default function APISettings() {
         params: { environment, scope: currentScope },
       });
       const storedCreds = credentialResponse.data?.data?.credentials || {};
-      let ruName = storedCreds.redirectUri || storedCreds.ruName || storedCreds.RuName;
       
-      // Logging detallado para debugging
-      log.debug('[APISettings] eBay credentials before OAuth:', {
-        hasAppId: !!storedCreds.appId,
-        appIdLength: storedCreds.appId?.length || 0,
-        appIdPreview: storedCreds.appId ? storedCreds.appId.substring(0, 20) + '...' : 'N/A',
-        hasDevId: !!storedCreds.devId,
-        hasCertId: !!storedCreds.certId,
-        hasRedirectUri: !!ruName,
-        redirectUri: ruName,
-        redirectUriLength: ruName?.length || 0,
-        redirectUriHasSpaces: ruName?.includes(' ') || false,
-        environment,
-      });
+      // ✅ AliExpress Dropshipping usa un callback URL fijo configurado en AliExpress Open Service
+      // No requiere que el usuario lo ingrese manualmente
+      let ruName: string | null = null;
       
-      if (!ruName) {
-        toast.error('Debes completar y guardar el campo "Redirect URI (RuName)" antes de autorizar.');
-        setOauthing(null);
-        return;
+      if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') {
+        // Usar el callback URL fijo para AliExpress Dropshipping
+        // Debe coincidir exactamente con el configurado en AliExpress Open Service
+        // En producción: https://ivanreseller.com/aliexpress/callback
+        const callbackUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+          ? 'https://ivanreseller.com/aliexpress/callback' // Usar producción incluso en desarrollo
+          : `${window.location.protocol}//${window.location.host}/aliexpress/callback`;
+        ruName = callbackUrl;
+        
+        // Validar que App Key y App Secret estén configurados
+        const missing = ['appKey', 'appSecret'].filter((field) => !String(storedCreds[field] || '').trim());
+        if (missing.length) {
+          toast.error('Completa y guarda App Key y App Secret antes de autorizar con OAuth.');
+          setOauthing(null);
+          return;
+        }
+      } else {
+        // Para otros marketplaces (eBay, MercadoLibre), validar redirect URI
+        ruName = storedCreds.redirectUri || storedCreds.ruName || storedCreds.RuName || null;
+        
+        // Logging detallado para debugging
+        log.debug('[APISettings] Marketplace credentials before OAuth:', {
+          apiName,
+          hasAppId: !!storedCreds.appId,
+          appIdLength: storedCreds.appId?.length || 0,
+          appIdPreview: storedCreds.appId ? storedCreds.appId.substring(0, 20) + '...' : 'N/A',
+          hasDevId: !!storedCreds.devId,
+          hasCertId: !!storedCreds.certId,
+          hasRedirectUri: !!ruName,
+          redirectUri: ruName,
+          redirectUriLength: ruName?.length || 0,
+          redirectUriHasSpaces: ruName?.includes(' ') || false,
+          environment,
+        });
+        
+        if (!ruName) {
+          toast.error('Debes completar y guardar el campo "Redirect URI (RuName)" antes de autorizar.');
+          setOauthing(null);
+          return;
+        }
+        
+        // Limpiar el Redirect URI (remover espacios al inicio y final)
+        ruName = String(ruName).trim();
+        
+        // Advertencia si contiene espacios (eBay requiere coincidencia exacta)
+        if (ruName.includes(' ')) {
+          log.warn('[APISettings] Redirect URI contains spaces:', {
+            ruName,
+            spacesCount: (ruName.match(/ /g) || []).length,
+          });
+          toast('⚠️ El Redirect URI contiene espacios. eBay requiere que coincida EXACTAMENTE con el registrado. Verifica que no haya espacios adicionales.', {
+            duration: 6000,
+            icon: '⚠️'
+          });
+        }
       }
       
-      // Limpiar el Redirect URI (remover espacios al inicio y final)
-      ruName = String(ruName).trim();
-      
-      // Advertencia si contiene espacios (eBay requiere coincidencia exacta)
-      if (ruName.includes(' ')) {
-        log.warn('[APISettings] Redirect URI contains spaces:', {
-          ruName,
-          spacesCount: (ruName.match(/ /g) || []).length,
-        });
-        toast('⚠️ El Redirect URI contiene espacios. eBay requiere que coincida EXACTAMENTE con el registrado. Verifica que no haya espacios adicionales.', {
-          duration: 6000,
-          icon: '⚠️'
-        });
-      }
       if (apiName === 'ebay') {
         const missing = ['appId', 'devId', 'certId'].filter((field) => !String(storedCreds[field] || '').trim());
         if (missing.length) {
           toast.error('Completa y guarda App ID, Dev ID y Cert ID antes de autorizar con OAuth.');
+          setOauthing(null);
           return;
         }
       }
@@ -1818,6 +1845,7 @@ export default function APISettings() {
         const missing = ['clientId', 'clientSecret'].filter((field) => !String(storedCreds[field] || '').trim());
         if (missing.length) {
           toast.error('Completa y guarda Client ID y Client Secret antes de autorizar con OAuth.');
+          setOauthing(null);
           return;
         }
       }

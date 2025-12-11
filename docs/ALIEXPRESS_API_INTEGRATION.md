@@ -201,12 +201,16 @@ Retorna el estado de todas las APIs configuradas, incluyendo:
 - `sandbox`: `true` para sandbox, `false` para production
 
 **OAuth Flow:**
-1. Usuario hace click en "OAuth" en API Settings
-2. Sistema genera URL de autorización con `client_id`, `redirect_uri`, `state`
-3. Usuario autoriza en AliExpress
-4. AliExpress redirige a `/api/marketplace-oauth/aliexpress/callback?code=XXX&state=YYY`
-5. Sistema intercambia `code` por `access_token` y `refresh_token`
-6. Tokens se guardan encriptados en `ApiCredential` table
+1. Usuario configura `appKey` y `appSecret` en API Settings y hace click en "Guardar"
+2. Usuario hace click en "OAuth" en API Settings
+3. Sistema genera automáticamente el callback URL: `https://ivanreseller.com/aliexpress/callback` (no requiere configuración manual)
+4. Sistema genera URL de autorización con `client_id`, `redirect_uri`, `state`
+5. Usuario autoriza en AliExpress
+6. AliExpress redirige a `/aliexpress/callback?code=XXX&state=YYY`
+7. Sistema intercambia `code` por `access_token` y `refresh_token`
+8. Tokens se guardan automáticamente y encriptados en `ApiCredential` table
+
+**Nota importante:** A diferencia de eBay y MercadoLibre, **no es necesario configurar manualmente el Redirect URI** para AliExpress Dropshipping. El sistema usa automáticamente el callback URL configurado en AliExpress Open Service (`https://ivanreseller.com/aliexpress/callback`).
 
 **Refresh Token:**
 - Los tokens expiran después de `expires_in` (generalmente 24 horas)
@@ -289,14 +293,15 @@ ALIEXPRESS_DROPSHIPPING_SANDBOX_APP_SECRET=sandbox_app_secret
 ### Problema: OAuth de Dropshipping API falla
 
 **Posibles causas:**
-1. `redirect_uri` no coincide con el configurado en AliExpress Open Platform
-2. `appKey` o `appSecret` incorrectos
-3. `authorization_code` expirado (válido solo 10 minutos)
+1. `appKey` o `appSecret` incorrectos o no guardados
+2. `authorization_code` expirado (válido solo 10 minutos)
+3. Callback URL no coincide con el configurado en AliExpress Open Platform (debe ser `https://ivanreseller.com/aliexpress/callback`)
 
 **Solución:**
-1. Verificar `redirect_uri` en AliExpress Open Platform
-2. Verificar `appKey` y `appSecret` en API Settings
-3. Intentar autorizar de nuevo (el código expira rápido)
+1. Verificar que `appKey` y `appSecret` estén correctamente guardados en API Settings antes de hacer clic en OAuth
+2. Verificar que el Callback URL en AliExpress Open Platform sea exactamente: `https://ivanreseller.com/aliexpress/callback`
+3. Intentar autorizar de nuevo (el código expira rápido, generalmente 10 minutos)
+4. **No es necesario configurar Redirect URI manualmente** - el sistema lo maneja automáticamente
 
 ## Referencias
 
