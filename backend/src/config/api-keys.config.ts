@@ -210,6 +210,13 @@ export const API_KEY_NAMES = {
     }
   },
 
+  SERPAPI: {
+    // Google Trends via SerpAPI
+    API_KEY: 'SERP_API_KEY',
+    // Alias para compatibilidad
+    GOOGLE_TRENDS_API_KEY: 'GOOGLE_TRENDS_API_KEY',
+  },
+
 } as const;
 
 /**
@@ -232,6 +239,8 @@ export const API_NAMES = {
   TWILIO: 'twilio',
   SLACK: 'slack',
   STRIPE: 'stripe',
+  SERPAPI: 'serpapi',
+  GOOGLETRENDS: 'googletrends', // Alias para serpapi
 } as const;
 
 /**

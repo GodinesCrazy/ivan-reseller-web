@@ -45,6 +45,7 @@ export class GoogleTrendsService {
   private apiKey?: string;
   private useSerpAPI: boolean;
   private serpApiClient?: AxiosInstance;
+  private userId?: number; // ✅ NUEVO: Guardar userId para obtener credenciales del usuario
 
   constructor(config?: GoogleTrendsConfig) {
     this.apiKey = config?.apiKey || process.env.SERP_API_KEY || process.env.GOOGLE_TRENDS_API_KEY;
@@ -59,6 +60,91 @@ export class GoogleTrendsService {
           engine: 'google_trends'
         }
       });
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Configurar API key desde credenciales del usuario
+   * Actualiza el cliente de SerpAPI con la nueva API key
+   */
+  async setUserCredentials(userId: number): Promise<void> {
+    this.userId = userId;
+    try {
+      // Intentar obtener credenciales del usuario desde CredentialsManager
+      const { CredentialsManager } = await import('./credentials-manager.service');
+      
+      // Intentar 'serpapi' primero, luego 'googletrends' como alias
+      let credentials = await CredentialsManager.getCredentials(userId, 'serpapi', 'production');
+      if (!credentials || !credentials.apiKey) {
+        credentials = await CredentialsManager.getCredentials(userId, 'googletrends', 'production');
+      }
+      
+      if (credentials && credentials.apiKey) {
+        this.apiKey = String(credentials.apiKey).trim();
+        this.useSerpAPI = true;
+        
+        // Recrear cliente con nueva API key
+        this.serpApiClient = axios.create({
+          baseURL: 'https://serpapi.com',
+          timeout: 10000,
+          params: {
+            api_key: this.apiKey,
+            engine: 'google_trends'
+          }
+        });
+        
+        logger.info('[GoogleTrendsService] Credenciales del usuario configuradas', {
+          userId,
+          hasApiKey: !!this.apiKey,
+          apiKeyPrefix: this.apiKey.substring(0, 6) + '...'
+        });
+      } else {
+        // Si no hay credenciales del usuario, usar variables de entorno como fallback
+        const envApiKey = process.env.SERP_API_KEY || process.env.GOOGLE_TRENDS_API_KEY;
+        if (envApiKey) {
+          this.apiKey = envApiKey;
+          this.useSerpAPI = true;
+          this.serpApiClient = axios.create({
+            baseURL: 'https://serpapi.com',
+            timeout: 10000,
+            params: {
+              api_key: this.apiKey,
+              engine: 'google_trends'
+            }
+          });
+          logger.info('[GoogleTrendsService] Usando API key de variables de entorno (usuario no configurado)', {
+            userId,
+            hasEnvApiKey: true
+          });
+        } else {
+          this.apiKey = undefined;
+          this.useSerpAPI = false;
+          this.serpApiClient = undefined;
+          logger.warn('[GoogleTrendsService] No hay API key configurada (ni usuario ni variables de entorno)', {
+            userId
+          });
+        }
+      }
+    } catch (error: any) {
+      logger.warn('[GoogleTrendsService] Error obteniendo credenciales del usuario, usando fallback', {
+        userId,
+        error: error?.message || String(error)
+      });
+      
+      // Fallback a variables de entorno
+      const envApiKey = process.env.SERP_API_KEY || process.env.GOOGLE_TRENDS_API_KEY;
+      if (envApiKey) {
+        this.apiKey = envApiKey;
+        this.useSerpAPI = true;
+        this.serpApiClient = axios.create({
+          baseURL: 'https://serpapi.com',
+          timeout: 10000,
+          params: {
+            api_key: this.apiKey,
+            engine: 'google_trends'
+          }
+        });
+      }
     }
   }
 
@@ -427,10 +513,40 @@ export class GoogleTrendsService {
   }
 }
 
-// Singleton instance
+// ✅ MODIFICADO: Ya no usamos singleton global - cada usuario debe tener su propia instancia
+// Esto permite que cada usuario use sus propias credenciales de SerpAPI
+
+/**
+ * ✅ NUEVO: Obtener instancia de GoogleTrendsService para un usuario específico
+ * Si userId no se proporciona, retorna una instancia con variables de entorno
+ */
+export function getGoogleTrendsService(userId?: number): GoogleTrendsService {
+  const service = new GoogleTrendsService({
+    apiKey: process.env.SERP_API_KEY || process.env.GOOGLE_TRENDS_API_KEY,
+    useSerpAPI: !!(process.env.SERP_API_KEY || process.env.GOOGLE_TRENDS_API_KEY)
+  });
+  
+  // Si se proporciona userId, intentar obtener credenciales del usuario
+  if (userId) {
+    service.setUserCredentials(userId).catch((error: any) => {
+      logger.warn('[getGoogleTrendsService] Error configurando credenciales del usuario, usando fallback', {
+        userId,
+        error: error?.message || String(error)
+      });
+    });
+  }
+  
+  return service;
+}
+
+// ✅ MANTENER: Singleton para retrocompatibilidad (usa variables de entorno)
 let googleTrendsServiceInstance: GoogleTrendsService | null = null;
 
-export function getGoogleTrendsService(): GoogleTrendsService {
+/**
+ * @deprecated Usar getGoogleTrendsService(userId) para obtener credenciales del usuario
+ * Este método solo usa variables de entorno
+ */
+export function getDefaultGoogleTrendsService(): GoogleTrendsService {
   if (!googleTrendsServiceInstance) {
     googleTrendsServiceInstance = new GoogleTrendsService({
       apiKey: process.env.SERP_API_KEY || process.env.GOOGLE_TRENDS_API_KEY,
@@ -440,5 +556,5 @@ export function getGoogleTrendsService(): GoogleTrendsService {
   return googleTrendsServiceInstance;
 }
 
-export default getGoogleTrendsService();
+export default getDefaultGoogleTrendsService();
 

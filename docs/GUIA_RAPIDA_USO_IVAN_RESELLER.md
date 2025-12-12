@@ -122,6 +122,17 @@ Esta guía te ayudará a comenzar a usar Ivan Reseller, desde el primer acceso h
      5. Haz clic en "Guardar Configuración"
    - **Nota:** GROQ ofrece generosas cuotas gratuitas y es muy rápida.
 
+   #### **Google Trends API (SerpAPI) - Opcional pero Recomendado**
+   - **Campo requerido:**
+     - API Key (SerpAPI Key)
+   - **Pasos:**
+     1. Ve a [serpapi.com/users/sign_up](https://serpapi.com/users/sign_up) y crea una cuenta (gratis)
+     2. Ve a [serpapi.com/dashboard](https://serpapi.com/dashboard)
+     3. Copia tu API Key (formato: `abc123def456...`)
+     4. Pégala en el sistema en la sección Google Trends API (SerpAPI)
+     5. Haz clic en "Guardar Configuración"
+   - **Nota:** Es opcional. Si no se configura, el sistema usará análisis de datos internos. Sin embargo, es recomendable para validaciones más precisas de demanda real.
+
    #### **ScraperAPI o ZenRows (Recomendado para Autopilot)**
    - **Campo requerido:**
      - API Key
@@ -149,17 +160,29 @@ Esta guía te ayudará a comenzar a usar Ivan Reseller, desde el primer acceso h
 #### **1. Buscar Oportunidades**
 
 1. Ve a **"Opportunities"** en el menú
-2. Ingresa un término de búsqueda (ej: "auriculares bluetooth")
+2. Ingresa un término de búsqueda (ej: "auriculares bluetooth", "iphone 15 case")
+   - 💡 **Tip:** Usa palabras clave específicas para mejores resultados
 3. Selecciona:
-   - Región (país)
-   - Cantidad de resultados (1-10)
-   - Marketplaces donde buscar competencia
-4. Haz clic en **"Search Opportunities"**
-5. Revisa los resultados:
-   - Título, precio, margen, ROI
-   - Score de confianza (0-100)
-   - Imagen del producto
-   - Link a AliExpress
+   - **Marketplace destino:** (eBay, Amazon, MercadoLibre)
+   - **Región (país):** Para calcular impuestos correctamente
+   - **Cantidad máxima de resultados:** Recomendado: 10-20
+4. Haz clic en **"Search Opportunities"** o **"Buscar Oportunidades"**
+
+**✅ Validación Automática de Calidad:**
+
+El sistema valida automáticamente cada producto antes de mostrarlo. Solo verás productos que cumplen:
+- ✅ Margen mínimo ≥ 10%
+- ✅ Demanda real verificada (volumen de búsqueda ≥ 100)
+- ✅ Tendencias favorables (no declinantes)
+- ✅ Tiempo hasta primera venta ≤ 60 días
+- ✅ Tiempo hasta break-even ≤ 90 días
+
+5. Revisa los resultados mostrados:
+   - **Financiera:** Precio, margen, ROI, costos totales
+   - **Demanda:** Volumen de búsqueda, tendencia, confianza
+   - **Tiempos:** Días hasta primera venta, días hasta break-even
+   - **Competencia:** Nivel de competencia, precios promedio
+   - **Producto:** Título, imagen, link a AliExpress
 
 #### **2. Importar Producto**
 

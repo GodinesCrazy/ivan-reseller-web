@@ -107,11 +107,20 @@ const UniversalSearchDashboard: React.FC = () => {
           externalUrl: item.productUrl || '',
           riskLevel: marginPercent > 50 ? 'LOW' : marginPercent > 30 ? 'MEDIUM' : 'HIGH',
           recommendedAction: marginPercent > 50 ? 'BUY' : marginPercent > 30 ? 'MONITOR' : 'RESEARCH',
-          category: 'General',
+          category: item.category || 'General',
+          // ✅ CORREGIDO: Usar datos reales del backend en lugar de valores aleatorios
           trends: {
-            demand: 70 + Math.floor(Math.random() * 20),
-            competition: 50 + Math.floor(Math.random() * 30),
-            seasonality: 'Stable'
+            demand: item.trendData?.searchVolume 
+              ? Math.min(100, Math.round((item.trendData.searchVolume / 5000) * 100)) // Escalar volumen real (máx 5000 = 100)
+              : (item.marketDemand === 'high' ? 80 : item.marketDemand === 'medium' ? 50 : item.marketDemand === 'low' ? 30 : undefined),
+            competition: item.competitionLevel === 'low' ? 20 : 
+                        item.competitionLevel === 'medium' ? 50 : 
+                        item.competitionLevel === 'high' ? 80 : 50,
+            trend: item.trendData?.trend || 'stable',
+            searchVolume: item.trendData?.searchVolume || undefined,
+            timeToFirstSale: item.estimatedTimeToFirstSale || undefined,
+            breakEvenTime: item.breakEvenTime || undefined,
+            seasonality: 'Stable' // TODO: Implementar análisis de estacionalidad
           }
         };
       });

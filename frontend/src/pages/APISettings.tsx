@@ -349,6 +349,43 @@ export default function APISettings() {
   } | null>(null);
   const [apiTesting, setApiTesting] = useState(false);
   const [showApiTestResults, setShowApiTestResults] = useState(false);
+  // ✅ Estado para APIs mínimas de dropshipping
+  const [minimumDropshippingAPIs, setMinimumDropshippingAPIs] = useState<{
+    apis: Array<{
+      apiName: string;
+      name: string;
+      description: string;
+      category: string;
+      required: boolean;
+      isConfigured: boolean;
+      isAvailable: boolean;
+      status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+      message?: string;
+      error?: string;
+      alternatives?: Array<{
+        apiName: string;
+        name: string;
+        isConfigured: boolean;
+        isAvailable: boolean;
+        status: string;
+      }>;
+    }>;
+    progress: {
+      configured: number;
+      total: number;
+      percentage: number;
+      isComplete: boolean;
+    };
+    overallStatus: 'complete' | 'partial' | 'incomplete';
+    summary?: {
+      search?: any;
+      publish?: any;
+      payment?: any;
+      purchase?: any;
+    };
+  } | null>(null);
+  const [loadingMinimumAPIs, setLoadingMinimumAPIs] = useState(false);
+  const [showOnlyEssential, setShowOnlyEssential] = useState(false);
   const apiBaseUrl = useMemo(() => {
     const base = api.defaults.baseURL || window.location.origin;
     return base.replace(/\/+$/, '');
@@ -379,6 +416,7 @@ export default function APISettings() {
 
   useEffect(() => {
     loadCredentials();
+    loadMinimumDropshippingAPIs();
   }, []);
 
   useEffect(() => {
@@ -386,6 +424,22 @@ export default function APISettings() {
       fetchAuthStatuses();
     }
   }, [authStatuses, fetchAuthStatuses]);
+
+  // ✅ Función para cargar APIs mínimas de dropshipping
+  const loadMinimumDropshippingAPIs = async () => {
+    setLoadingMinimumAPIs(true);
+    try {
+      const response = await api.get('/api/credentials/minimum-dropshipping');
+      if (response.data?.success && response.data?.data) {
+        setMinimumDropshippingAPIs(response.data.data);
+      }
+    } catch (error: any) {
+      log.error('Error loading minimum dropshipping APIs:', error);
+      // No mostrar error al usuario, simplemente no mostrar la sección
+    } finally {
+      setLoadingMinimumAPIs(false);
+    }
+  };
 
   // Estado para almacenar las definiciones de APIs del backend
   const [backendApiDefinitions, setBackendApiDefinitions] = useState<Record<string, BackendAPIDefinition>>({});
@@ -893,8 +947,8 @@ export default function APISettings() {
     actionMessage?: string;
     actionButton?: { label: string; onClick: () => void };
   } => {
-    // Para APIs que requieren OAuth (eBay, MercadoLibre)
-    if (['ebay', 'mercadolibre'].includes(apiName)) {
+    // Para APIs que requieren OAuth (eBay, MercadoLibre, AliExpress Dropshipping)
+    if (['ebay', 'mercadolibre', 'aliexpress-dropshipping'].includes(apiName)) {
       // ✅ CORRECCIÓN: Verificar credenciales básicas usando diag/issues (no existe credential.credentials)
       const hasBasicCredsIssue = diag?.issues?.some(issue => 
         issue.toLowerCase().includes('faltan credenciales') || 
@@ -1117,6 +1171,44 @@ export default function APISettings() {
         'PAYPAL_CLIENT_ID': 'clientId',
         'PAYPAL_CLIENT_SECRET': 'clientSecret',
         'PAYPAL_MODE': 'environment',
+        // Stripe API
+        'STRIPE_PUBLIC_KEY': 'publicKey',
+        'STRIPE_PUBLISHABLE_KEY': 'publicKey',
+        'STRIPE_SECRET_KEY': 'secretKey',
+        'STRIPE_WEBHOOK_SECRET': 'webhookSecret',
+        'STRIPE_SANDBOX_PUBLIC_KEY': 'publicKey',
+        'STRIPE_SANDBOX_SECRET_KEY': 'secretKey',
+        'STRIPE_PRODUCTION_PUBLIC_KEY': 'publicKey',
+        'STRIPE_PRODUCTION_SECRET_KEY': 'secretKey',
+        // Email/SMTP API
+        'EMAIL_HOST': 'host',
+        'SMTP_HOST': 'host',
+        'EMAIL_PORT': 'port',
+        'SMTP_PORT': 'port',
+        'EMAIL_USER': 'user',
+        'SMTP_USER': 'user',
+        'EMAIL_PASSWORD': 'password',
+        'SMTP_PASS': 'password',
+        'EMAIL_FROM': 'from',
+        'SMTP_FROM': 'from',
+        'EMAIL_FROM_NAME': 'fromName',
+        'SMTP_FROM_NAME': 'fromName',
+        'EMAIL_SECURE': 'secure',
+        'SMTP_SECURE': 'secure',
+        // Twilio API
+        'TWILIO_ACCOUNT_SID': 'accountSid',
+        'TWILIO_AUTH_TOKEN': 'authToken',
+        'TWILIO_PHONE_NUMBER': 'phoneNumber',
+        'TWILIO_FROM_NUMBER': 'phoneNumber',
+        'TWILIO_WHATSAPP_NUMBER': 'whatsappNumber',
+        // Slack API
+        'SLACK_WEBHOOK_URL': 'webhookUrl',
+        'SLACK_BOT_TOKEN': 'botToken',
+        'SLACK_CHANNEL': 'channel',
+        // OpenAI API
+        'OPENAI_API_KEY': 'apiKey',
+        'OPENAI_ORGANIZATION': 'organization',
+        'OPENAI_MODEL': 'model',
         // AliExpress usa email/password directamente del backend
         'email': 'email',
         'password': 'password',
@@ -1362,6 +1454,7 @@ export default function APISettings() {
           Promise.all([
             loadCredentials(),
             fetchAuthStatuses(),
+            loadMinimumDropshippingAPIs(),
           ]),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
         ]);
@@ -1375,13 +1468,17 @@ export default function APISettings() {
       const warnings = saveData.warnings || [];
       
       // ✅ MEJORA: Determinar si requiere OAuth y mostrar mensaje apropiado
-      const isOAuthRequired = ['ebay', 'mercadolibre'].includes(apiName);
+      const isOAuthRequired = ['ebay', 'mercadolibre', 'aliexpress-dropshipping'].includes(apiName);
       const hasBasicCreds = apiName === 'ebay' 
         ? (credentials.appId && credentials.devId && credentials.certId)
         : apiName === 'mercadolibre'
         ? (credentials.clientId && credentials.clientSecret)
+        : apiName === 'aliexpress-dropshipping'
+        ? (credentials.appKey && credentials.appSecret)
         : true;
-      const hasToken = credentials.token || credentials.refreshToken || credentials.authToken;
+      const hasToken = apiName === 'aliexpress-dropshipping'
+        ? (credentials.accessToken || credentials.refreshToken)
+        : (credentials.token || credentials.refreshToken || credentials.authToken);
       
       if (isOAuthRequired && hasBasicCreds && !hasToken) {
         // Credenciales básicas guardadas, falta OAuth - mensaje claro con siguiente paso
@@ -2717,6 +2814,172 @@ export default function APISettings() {
         )}
       </div>
 
+      {/* ✅ Sección de APIs Mínimas para Dropshipping */}
+      {minimumDropshippingAPIs && (
+        <div className="mb-6 rounded-lg border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-lg">
+          <div className="border-b border-blue-200 bg-blue-100 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600">
+                  <span className="text-xl">🎯</span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-800">APIs Mínimas para Dropshipping Completo</h2>
+                  <p className="text-sm text-gray-600">Configura estas APIs para operar dropshipping desde búsqueda hasta compra automatizada</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                {/* Badge de progreso */}
+                <div className="flex items-center gap-2 rounded-full bg-white px-4 py-2 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-24 rounded-full bg-gray-200 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-500"
+                        style={{ width: `${minimumDropshippingAPIs.progress.percentage}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-700">
+                      {minimumDropshippingAPIs.progress.configured}/{minimumDropshippingAPIs.progress.total}
+                    </span>
+                  </div>
+                </div>
+                {/* Botón para refrescar */}
+                <button
+                  onClick={loadMinimumDropshippingAPIs}
+                  disabled={loadingMinimumAPIs}
+                  className="flex items-center gap-2 rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingMinimumAPIs ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Actualizar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {minimumDropshippingAPIs.apis.map((apiItem) => {
+                const isConfigured = apiItem.isConfigured;
+                const isAvailable = apiItem.isAvailable;
+                const getStatusIconColor = () => {
+                  if (isConfigured && isAvailable) {
+                    return apiItem.status === 'healthy' ? 'text-green-600' : 
+                           apiItem.status === 'degraded' ? 'text-amber-600' : 'text-red-600';
+                  }
+                  return isConfigured ? 'text-amber-600' : 'text-gray-400';
+                };
+                
+                return (
+                  <div
+                    key={apiItem.apiName}
+                    className={`rounded-lg border-2 p-4 transition-all ${
+                      isConfigured && isAvailable
+                        ? 'border-green-300 bg-green-50'
+                        : isConfigured
+                        ? 'border-amber-300 bg-amber-50'
+                        : 'border-gray-300 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-3 flex-1">
+                        {isConfigured && isAvailable ? (
+                          <CheckCircle className={`w-6 h-6 ${getStatusIconColor()} flex-shrink-0`} />
+                        ) : isConfigured ? (
+                          <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0" />
+                        ) : (
+                          <XCircle className="w-6 h-6 text-gray-400 flex-shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-gray-800 mb-1">{apiItem.name}</h3>
+                          <p className="text-xs text-gray-600 mb-2">{apiItem.description}</p>
+                          {apiItem.apiName === 'marketplace' && apiItem.alternatives && (
+                            <div className="mt-2 space-y-1">
+                              {apiItem.alternatives.map((alt) => (
+                                <div key={alt.apiName} className="flex items-center gap-2 text-xs">
+                                  {alt.isConfigured ? (
+                                    <CheckCircle className="w-4 h-4 text-green-600" />
+                                  ) : (
+                                    <XCircle className="w-4 h-4 text-gray-400" />
+                                  )}
+                                  <span className={alt.isConfigured ? 'text-green-700 font-medium' : 'text-gray-500'}>
+                                    {alt.name}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      {isConfigured && isAvailable ? (
+                        <p className="text-xs text-green-700 font-medium">✅ Configurada y funcionando</p>
+                      ) : isConfigured ? (
+                        <p className="text-xs text-amber-700">{apiItem.message || 'Configurada pero con problemas'}</p>
+                      ) : (
+                        <div>
+                          <p className="text-xs text-red-700 font-medium mb-2">❌ No configurada</p>
+                          <button
+                            onClick={() => {
+                              // Expandir la API correspondiente en la lista principal
+                              if (apiItem.apiName === 'marketplace') {
+                                // Si es marketplace, expandir el primer marketplace disponible
+                                const firstMarketplace = apiItem.alternatives?.find(alt => !alt.isConfigured);
+                                if (firstMarketplace) {
+                                  setExpandedApi(firstMarketplace.apiName);
+                                  // Scroll a la sección
+                                  setTimeout(() => {
+                                    const element = document.querySelector(`[data-api-name="${firstMarketplace.apiName}"]`);
+                                    element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  }, 100);
+                                }
+                              } else {
+                                setExpandedApi(apiItem.apiName);
+                                setTimeout(() => {
+                                  const element = document.querySelector(`[data-api-name="${apiItem.apiName}"]`);
+                                  element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }, 100);
+                              }
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium underline"
+                          >
+                            → Configurar ahora
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {minimumDropshippingAPIs.progress.isComplete && (
+              <div className="mt-4 rounded-lg border border-green-300 bg-green-50 p-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  <p className="text-sm font-semibold text-green-800">
+                    ¡Excelente! Todas las APIs mínimas están configuradas. Tu sistema de dropshipping está listo para operar.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Filtro para mostrar solo APIs esenciales */}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showOnlyEssential}
+              onChange={(e) => setShowOnlyEssential(e.target.checked)}
+              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+            />
+            <span className="text-sm font-medium text-gray-700">Mostrar solo APIs esenciales</span>
+          </label>
+        </div>
+      </div>
+
       {/* ✅ Resultados de Tests de APIs */}
       {showApiTestResults && apiTestResults && (
         <div className="mb-6 rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -2819,7 +3082,23 @@ export default function APISettings() {
 
       {/* API Cards */}
       <div className="grid gap-4">
-        {Object.values(API_DEFINITIONS).map((apiDef) => {
+        {Object.values(API_DEFINITIONS)
+          .filter((apiDef) => {
+            // ✅ Filtro para mostrar solo APIs esenciales
+            if (showOnlyEssential) {
+              const essentialAPIs = [
+                'aliexpress-affiliate',
+                'mercadolibre',
+                'ebay',
+                'amazon',
+                'paypal',
+                'aliexpress-dropshipping'
+              ];
+              return essentialAPIs.includes(apiDef.name);
+            }
+            return true;
+          })
+          .map((apiDef) => {
           const backendDef = backendApiDefinitions[apiDef.name];
           const supportsEnv = backendDef?.supportsEnvironments && backendDef?.environments;
           const envOptions: string[] = supportsEnv && backendDef.environments 
@@ -2864,7 +3143,26 @@ export default function APISettings() {
           const displayName = backendDef?.name || apiDef.displayName;
           const description = backendDef?.description || apiDef.description;
           const diag = marketplaceDiagnostics[apiDef.name] || null;
-          const statusInfo = authStatuses?.[apiDef.name];
+          
+          // ✅ CORRECCIÓN: Obtener statusInfo de la fuente correcta según el tipo de API
+          // AliExpress usa authStatuses (MarketplaceAuthStatus desde /api/auth-status)
+          // eBay y MercadoLibre usan statuses (APIStatus desde /api/credentials/status)
+          let statusInfo: APIStatus | { status?: string; message?: string | null; requiresManual?: boolean } | undefined;
+          if (apiDef.name === 'aliexpress') {
+            statusInfo = authStatuses?.[apiDef.name];
+          } else {
+            // Para eBay, MercadoLibre y otras APIs, usar statusMap desde /api/credentials/status
+            const apiStatus = statuses[statusKey];
+            if (apiStatus) {
+              // Convertir APIStatus al formato esperado
+              statusInfo = {
+                status: apiStatus.available ? 'healthy' : (diag?.issues?.length ? 'unhealthy' : 'degraded'),
+                message: apiStatus.message,
+                isAvailable: apiStatus.available,
+                error: diag?.issues?.[0],
+              } as APIStatus;
+            }
+          }
           const badgeTheme =
             statusInfo?.status && STATUS_BADGE_STYLES[statusInfo.status]
               ? STATUS_BADGE_STYLES[statusInfo.status]
@@ -2873,6 +3171,7 @@ export default function APISettings() {
           return (
             <div
               key={apiDef.name}
+              data-api-name={apiDef.name}
               className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
             >
               {/* Card Header */}

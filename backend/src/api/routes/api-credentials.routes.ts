@@ -162,6 +162,168 @@ router.get('/status', async (req: Request, res: Response, next) => {
   }
 });
 
+// GET /api/credentials/minimum-dropshipping - Estado de APIs mínimas necesarias para dropshipping completo
+router.get('/minimum-dropshipping', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user!.userId;
+    
+    // Obtener estados de todas las APIs
+    let allStatuses: any[] = [];
+    try {
+      allStatuses = await apiAvailability.getAllAPIStatus(userId);
+    } catch (statusError: any) {
+      logger.error('Error getting API statuses for minimum dropshipping check', {
+        error: statusError?.message || String(statusError),
+        userId
+      });
+      allStatuses = [];
+    }
+
+    // Definir APIs mínimas necesarias para dropshipping completo
+    const minimumAPIs = [
+      {
+        apiName: 'aliexpress-affiliate',
+        name: 'AliExpress Affiliate API',
+        description: 'Búsqueda de oportunidades de negocio y productos',
+        category: 'search',
+        required: true
+      },
+      {
+        apiName: 'marketplace',
+        name: 'Marketplace API',
+        description: 'Publicación de productos en marketplaces',
+        category: 'publish',
+        required: true,
+        alternatives: ['mercadolibre', 'ebay', 'amazon'] // Al menos uno debe estar configurado
+      },
+      {
+        apiName: 'paypal',
+        name: 'PayPal API',
+        description: 'Procesamiento de pagos y recepción de comisiones',
+        category: 'payment',
+        required: true
+      },
+      {
+        apiName: 'aliexpress-dropshipping',
+        name: 'AliExpress Dropshipping API',
+        description: 'Compra automatizada para el cliente final',
+        category: 'purchase',
+        required: true
+      }
+    ];
+
+    // Verificar estado de cada API mínima
+    const apiStatuses = minimumAPIs.map(minAPI => {
+      if (minAPI.apiName === 'marketplace') {
+        // Para marketplace, verificar si al menos uno de los alternativos está configurado
+        const marketplaceAPIs = ['mercadolibre', 'ebay', 'amazon'];
+        const marketplaceStatuses = marketplaceAPIs.map(mpName => {
+          const status = allStatuses.find(s => s.apiName === mpName);
+          return {
+            apiName: mpName,
+            name: mpName === 'mercadolibre' ? 'MercadoLibre API' : 
+                  mpName === 'ebay' ? 'eBay API' : 'Amazon SP-API',
+            isConfigured: status?.isConfigured || false,
+            isAvailable: status?.isAvailable || false,
+            status: status?.status || 'unknown',
+            message: status?.message,
+            error: status?.error
+          };
+        });
+
+        const atLeastOneConfigured = marketplaceStatuses.some(s => s.isConfigured);
+        const atLeastOneAvailable = marketplaceStatuses.some(s => s.isAvailable);
+
+        return {
+          apiName: minAPI.apiName,
+          name: minAPI.name,
+          description: minAPI.description,
+          category: minAPI.category,
+          required: minAPI.required,
+          isConfigured: atLeastOneConfigured,
+          isAvailable: atLeastOneAvailable,
+          status: atLeastOneAvailable ? 'healthy' : (atLeastOneConfigured ? 'degraded' : 'unhealthy'),
+          alternatives: marketplaceStatuses,
+          message: atLeastOneConfigured 
+            ? `Al menos un marketplace configurado: ${marketplaceStatuses.filter(s => s.isConfigured).map(s => s.name).join(', ')}`
+            : 'Configura al menos un marketplace (MercadoLibre, eBay o Amazon)',
+          error: atLeastOneConfigured ? undefined : 'Ningún marketplace configurado'
+        };
+      } else {
+        // Para otras APIs, buscar directamente en allStatuses
+        const status = allStatuses.find(s => s.apiName === minAPI.apiName);
+        return {
+          apiName: minAPI.apiName,
+          name: minAPI.name,
+          description: minAPI.description,
+          category: minAPI.category,
+          required: minAPI.required,
+          isConfigured: status?.isConfigured || false,
+          isAvailable: status?.isAvailable || false,
+          status: status?.status || 'unknown',
+          message: status?.message || (status?.isConfigured ? 'Configurada' : 'No configurada'),
+          error: status?.error
+        };
+      }
+    });
+
+    // Calcular progreso
+    const configuredCount = apiStatuses.filter(s => s.isConfigured).length;
+    const totalCount = apiStatuses.length;
+    const progressPercentage = Math.round((configuredCount / totalCount) * 100);
+    const isComplete = apiStatuses.every(s => s.isConfigured && s.isAvailable);
+
+    // Determinar estado general
+    let overallStatus: 'complete' | 'partial' | 'incomplete' = 'incomplete';
+    if (isComplete) {
+      overallStatus = 'complete';
+    } else if (configuredCount > 0) {
+      overallStatus = 'partial';
+    }
+
+    res.json({
+      success: true,
+      data: {
+        apis: apiStatuses,
+        progress: {
+          configured: configuredCount,
+          total: totalCount,
+          percentage: progressPercentage,
+          isComplete
+        },
+        overallStatus,
+        summary: {
+          search: apiStatuses.find(s => s.category === 'search'),
+          publish: apiStatuses.find(s => s.category === 'publish'),
+          payment: apiStatuses.find(s => s.category === 'payment'),
+          purchase: apiStatuses.find(s => s.category === 'purchase')
+        }
+      }
+    });
+  } catch (error: any) {
+    logger.error('Error in /api/credentials/minimum-dropshipping', {
+      error: error?.message || String(error),
+      userId: req.user?.userId,
+      stack: error?.stack
+    });
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        apis: [],
+        progress: {
+          configured: 0,
+          total: 4,
+          percentage: 0,
+          isComplete: false
+        },
+        overallStatus: 'incomplete',
+        error: 'No se pudieron cargar los estados de las APIs mínimas.'
+      }
+    });
+  }
+});
+
 /**
  * @swagger
  * /api/api-credentials/{apiName}:
@@ -947,6 +1109,10 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
       case 'scraperapi':
         status = await apiAvailability.checkScraperAPI(userId);
         break;
+      case 'serpapi':
+      case 'googletrends': // ✅ NUEVO: Alias para serpapi
+        status = await apiAvailability.checkSerpAPI(userId);
+        break;
       case 'zenrows':
         status = await apiAvailability.checkZenRowsAPI(userId);
         break;
@@ -955,6 +1121,21 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
         break;
       case 'paypal':
         status = await apiAvailability.checkPayPalAPI(userId);
+        break;
+      case 'stripe':
+        status = await apiAvailability.checkStripeAPI(userId);
+        break;
+      case 'email':
+        status = await apiAvailability.checkEmailAPI(userId);
+        break;
+      case 'twilio':
+        status = await apiAvailability.checkTwilioAPI(userId);
+        break;
+      case 'slack':
+        status = await apiAvailability.checkSlackAPI(userId);
+        break;
+      case 'openai':
+        status = await apiAvailability.checkOpenAIAPI(userId);
         break;
       case 'aliexpress':
         status = await apiAvailability.checkAliExpressAPI(userId);

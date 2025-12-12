@@ -11,6 +11,7 @@ import { formatPriceByCurrency } from '../utils/currency.utils';
 import { workflowConfigService } from './workflow-config.service';
 import { logger } from '../config/logger';
 import taxCalculatorService from './tax-calculator.service'; // ✅ MEJORADO: Servicio de impuestos
+import { getGoogleTrendsService, type TrendData } from './google-trends.service'; // ✅ NUEVO: Google Trends para validar demanda real
 import {
   DEFAULT_COMPARATOR_MARKETPLACES,
   OPTIONAL_MARKETPLACES,
@@ -55,11 +56,28 @@ export interface OpportunityItem {
   importTax?: number; // ✅ Impuestos de importación
   totalCost?: number; // ✅ Costo total (producto + envío + impuestos)
   targetCountry?: string; // ✅ País destino para cálculo de impuestos
+  // ✅ NUEVO: Datos de demanda real validados con Google Trends
+  trendData?: {
+    trend: 'rising' | 'stable' | 'declining';
+    searchVolume: number;
+    validation: {
+      viable: boolean;
+      confidence: number;
+      reason: string;
+    };
+  };
+  estimatedTimeToFirstSale?: number; // ✅ NUEVO: Días estimados hasta primera venta
+  breakEvenTime?: number; // ✅ NUEVO: Días hasta recuperar inversión (break-even)
 }
 
 class OpportunityFinderService {
   private minMargin = Number(process.env.MIN_OPPORTUNITY_MARGIN || '0.10'); // ✅ Reducido de 0.20 a 0.10 para permitir más oportunidades válidas
   private duplicateThreshold = Number(process.env.OPPORTUNITY_DUPLICATE_THRESHOLD || '0.85'); // Similarity threshold (85%)
+  // ✅ NUEVO: Filtros de calidad para garantizar oportunidades reales
+  private minSearchVolume = Number(process.env.MIN_SEARCH_VOLUME || '100'); // Volumen mínimo de búsqueda
+  private minTrendConfidence = Number(process.env.MIN_TREND_CONFIDENCE || '30'); // Confianza mínima de tendencias (%)
+  private maxTimeToFirstSale = Number(process.env.MAX_TIME_TO_FIRST_SALE || '60'); // Días máximos hasta primera venta
+  private maxBreakEvenTime = Number(process.env.MAX_BREAK_EVEN_TIME || '90'); // Días máximos hasta break-even
 
   /**
    * ✅ NUEVO: Detectar y eliminar oportunidades duplicadas o muy similares
@@ -200,6 +218,97 @@ class OpportunityFinderService {
       // Si no se pueden parsear URLs, comparar strings directamente
       return url1 === url2 ? 1 : 0;
     }
+  }
+
+  /**
+   * ✅ NUEVO: Estimar tiempo hasta primera venta basado en volumen de búsqueda, tendencia y competencia
+   */
+  private estimateTimeToFirstSale(
+    searchVolume: number,
+    trend: 'rising' | 'stable' | 'declining',
+    competitorCount: number
+  ): number {
+    // Base: días estimados hasta primera venta
+    let days = 30; // Por defecto 30 días
+    
+    // Ajustar según volumen de búsqueda
+    if (searchVolume > 5000) {
+      days -= 15; // Alta demanda = venta más rápida
+    } else if (searchVolume > 1000) {
+      days -= 10;
+    } else if (searchVolume < 100) {
+      days += 20; // Baja demanda = venta más lenta
+    }
+    
+    // Ajustar según tendencia
+    if (trend === 'rising') {
+      days -= 10; // Tendencia creciente = venta más rápida
+    } else if (trend === 'declining') {
+      days += 15; // Tendencia declinante = venta más lenta
+    }
+    
+    // Ajustar según competencia
+    if (competitorCount < 10) {
+      days -= 5; // Poca competencia = venta más rápida
+    } else if (competitorCount > 50) {
+      days += 10; // Mucha competencia = venta más lenta
+    }
+    
+    // Mínimo 3 días, máximo 90 días
+    return Math.max(3, Math.min(90, days));
+  }
+
+  /**
+   * ✅ NUEVO: Calcular tiempo hasta recuperar inversión (break-even)
+   */
+  private calculateBreakEvenTime(
+    profitPerUnit: number,
+    searchVolume: number,
+    trend: 'rising' | 'stable' | 'declining'
+  ): number {
+    if (profitPerUnit <= 0) return 999; // Nunca recupera
+    
+    // Estimación de tasa de conversión basada en volumen de búsqueda
+    // Alta demanda = mayor tasa de conversión
+    let conversionRate = 0.01; // 1% por defecto
+    
+    if (searchVolume > 5000) {
+      conversionRate = 0.03; // 3% para alta demanda
+    } else if (searchVolume > 1000) {
+      conversionRate = 0.02; // 2% para demanda media-alta
+    } else if (searchVolume < 100) {
+      conversionRate = 0.005; // 0.5% para baja demanda
+    }
+    
+    // Ajustar por tendencia
+    if (trend === 'rising') {
+      conversionRate *= 1.5; // +50% si está en crecimiento
+    } else if (trend === 'declining') {
+      conversionRate *= 0.7; // -30% si está declinando
+    }
+    
+    // Calcular ventas estimadas por día
+    // Asumir que volumen de búsqueda mensual se distribuye en 30 días
+    const estimatedDailySales = (searchVolume / 30) * conversionRate; // Búsquedas por día * conversión
+    
+    // Si no hay búsquedas estimadas, usar mínimo razonable
+    const dailySalesAdjusted = Math.max(0.01, estimatedDailySales); // Mínimo 0.01 ventas/día
+    
+    // Calcular ganancia diaria
+    const dailyProfit = dailySalesAdjusted * profitPerUnit;
+    
+    // Asumir inversión inicial = costo de 5 unidades (para empezar)
+    // Para simplificar: si profitPerUnit es X, entonces costUnit = X * algún factor
+    // Usamos una estimación conservadora: inversión = 5 * (ganancia unitaria * 10)
+    // Esto asume que el costo es ~10x la ganancia (margen ~10%)
+    const estimatedCostPerUnit = profitPerUnit / 0.1; // Asumir margen del 10%
+    const initialInvestment = 5 * estimatedCostPerUnit; // Stock inicial de 5 unidades
+    
+    // Días hasta break-even
+    if (dailyProfit <= 0) return 999;
+    const breakEvenDays = initialInvestment / dailyProfit;
+    
+    return Math.max(1, Math.ceil(breakEvenDays));
   }
 
   /**
@@ -425,7 +534,18 @@ class OpportunityFinderService {
           // Ya no necesitamos esta validación de reconversión porque la conversión inicial es correcta
 
           if (priceInBase <= 0 && sourcePrice > 0) {
-            priceInBase = fxService.convert(sourcePrice, detectedCurrency, baseCurrency);
+            try {
+              priceInBase = fxService.convert(sourcePrice, detectedCurrency, baseCurrency);
+            } catch (error: any) {
+              logger.warn('[OpportunityFinder] FX conversion failed, using source price', {
+                from: detectedCurrency,
+                to: baseCurrency,
+                amount: sourcePrice,
+                error: error?.message
+              });
+              // Fallback: usar precio sin convertir (asumir que ya está en baseCurrency si falla)
+              priceInBase = sourcePrice;
+            }
           }
 
           const priceMinBase =
@@ -437,9 +557,29 @@ class OpportunityFinderService {
           let shippingCost = 0;
           if (p.shipping?.cost !== undefined && typeof p.shipping.cost === 'number' && p.shipping.cost > 0) {
             // Convertir shipping cost a moneda base si es necesario
-            shippingCost = fxService.convert(p.shipping.cost, detectedCurrency, baseCurrency);
+            try {
+              shippingCost = fxService.convert(p.shipping.cost, detectedCurrency, baseCurrency);
+            } catch (error: any) {
+              logger.warn('[OpportunityFinder] FX conversion failed for shipping cost', {
+                from: detectedCurrency,
+                to: baseCurrency,
+                amount: p.shipping.cost,
+                error: error?.message
+              });
+              shippingCost = p.shipping.cost; // Fallback: usar sin convertir
+            }
           } else if (typeof p.shippingCost === 'number' && p.shippingCost > 0) {
-            shippingCost = fxService.convert(p.shippingCost, detectedCurrency, baseCurrency);
+            try {
+              shippingCost = fxService.convert(p.shippingCost, detectedCurrency, baseCurrency);
+            } catch (error: any) {
+              logger.warn('[OpportunityFinder] FX conversion failed for shipping cost', {
+                from: detectedCurrency,
+                to: baseCurrency,
+                amount: p.shippingCost,
+                error: error?.message
+              });
+              shippingCost = p.shippingCost; // Fallback: usar sin convertir
+            }
           }
 
           return {
@@ -626,11 +766,33 @@ class OpportunityFinderService {
           .map((p: any) => {
             const sourceCurrency = String(p.currency || baseCurrency || 'USD').toUpperCase();
             const sourcePrice = Number(p.price) || 0;
-            const priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
+            let priceInBase = sourcePrice;
+            try {
+              priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
+            } catch (error: any) {
+              logger.warn('[OpportunityFinder] FX conversion failed for price', {
+                from: sourceCurrency,
+                to: baseCurrency,
+                amount: sourcePrice,
+                error: error?.message
+              });
+              // Fallback: usar precio sin convertir
+              priceInBase = sourcePrice;
+            }
             // ✅ MEJORADO: Extraer shipping cost si está disponible
             let shippingCost = 0;
             if (typeof p.shippingCost === 'number' && p.shippingCost > 0) {
-              shippingCost = fxService.convert(p.shippingCost, sourceCurrency, baseCurrency);
+              try {
+                shippingCost = fxService.convert(p.shippingCost, sourceCurrency, baseCurrency);
+              } catch (error: any) {
+                logger.warn('[OpportunityFinder] FX conversion failed for shipping cost', {
+                  from: sourceCurrency,
+                  to: baseCurrency,
+                  amount: p.shippingCost,
+                  error: error?.message
+                });
+                shippingCost = p.shippingCost; // Fallback: usar sin convertir
+              }
             }
 
             return {
@@ -827,6 +989,11 @@ class OpportunityFinderService {
     const opportunities: OpportunityItem[] = [];
     let skippedInvalid = 0;
     let skippedLowMargin = 0;
+    let skippedLowDemand = 0; // ✅ NUEVO: Contador de productos descartados por baja demanda
+    let skippedDecliningTrend = 0; // ✅ NUEVO: Contador de productos descartados por tendencia declinante
+    let skippedLowVolume = 0; // ✅ NUEVO: Contador de productos descartados por bajo volumen de búsqueda
+    let skippedSlowSale = 0; // ✅ NUEVO: Contador de productos descartados por tiempo largo hasta primera venta
+    let skippedLongBreakEven = 0; // ✅ NUEVO: Contador de productos descartados por tiempo largo hasta break-even
     let processedCount = 0;
 
     for (const product of products) {
@@ -1049,6 +1216,120 @@ class OpportunityFinderService {
         }
       }
 
+      // ✅ NUEVO: Validar demanda real con Google Trends DESPUÉS de validar margen
+      let trendsValidation: TrendData | null = null;
+
+      try {
+        // ✅ NUEVO: Obtener instancia de Google Trends con credenciales del usuario
+        const googleTrends = getGoogleTrendsService(userId);
+        logger.debug('[OPPORTUNITY-FINDER] Validando demanda real con Google Trends', {
+          productTitle: product.title.substring(0, 60),
+          category: product.category || 'general',
+          userId
+        });
+        
+        trendsValidation = await googleTrends.validateProductViability(
+          product.title,
+          product.category || 'general',
+          undefined // Keywords se extraen automáticamente del título
+        );
+        
+        logger.debug('[OPPORTUNITY-FINDER] Resultado validación Google Trends', {
+          viable: trendsValidation.validation.viable,
+          confidence: trendsValidation.validation.confidence,
+          trend: trendsValidation.trend,
+          searchVolume: trendsValidation.searchVolume,
+          reason: trendsValidation.validation.reason
+        });
+        
+        // ❌ DESCARTA si NO es viable o confianza muy baja
+        if (!trendsValidation.validation.viable || trendsValidation.validation.confidence < this.minTrendConfidence) {
+          logger.info('[OPPORTUNITY-FINDER] Producto descartado - baja demanda o no viable según Google Trends', {
+            title: product.title.substring(0, 50),
+            viable: trendsValidation.validation.viable,
+            confidence: trendsValidation.validation.confidence,
+            minRequired: this.minTrendConfidence,
+            reason: trendsValidation.validation.reason
+          });
+          skippedLowDemand++;
+          continue; // ❌ DESCARTA PRODUCTO
+        }
+        
+        // ❌ DESCARTA si tendencia está declinando significativamente
+        if (trendsValidation.trend === 'declining' && trendsValidation.validation.confidence < 50) {
+          logger.info('[OPPORTUNITY-FINDER] Producto descartado - tendencia declinante', {
+            title: product.title.substring(0, 50),
+            trend: trendsValidation.trend,
+            confidence: trendsValidation.validation.confidence,
+            reason: trendsValidation.validation.reason
+          });
+          skippedDecliningTrend++;
+          continue; // ❌ DESCARTA PRODUCTO
+        }
+        
+        // ❌ DESCARTA si volumen de búsqueda es muy bajo
+        if (trendsValidation.searchVolume < this.minSearchVolume) {
+          logger.info('[OPPORTUNITY-FINDER] Producto descartado - volumen de búsqueda muy bajo', {
+            title: product.title.substring(0, 50),
+            searchVolume: trendsValidation.searchVolume,
+            minRequired: this.minSearchVolume
+          });
+          skippedLowVolume++;
+          continue; // ❌ DESCARTA PRODUCTO
+        }
+        
+      } catch (trendsError: any) {
+        logger.warn('[OPPORTUNITY-FINDER] Error validando con Google Trends, continuando con advertencia', {
+          error: trendsError?.message || String(trendsError),
+          productTitle: product.title.substring(0, 50)
+        });
+        // ⚠️ Si falla Google Trends, continuar pero marcar como "baja confianza"
+        // No descartar el producto completamente si Google Trends falla
+        estimationNotes.push('No se pudo validar demanda con Google Trends. Se recomienda verificar manualmente la demanda del producto.');
+      }
+
+      // ✅ NUEVO: Calcular tiempo hasta primera venta y break-even
+      // Nota: totalCost se calcula más adelante, usamos variables locales aquí
+      const productShippingCostCalc = product.shippingCost || 0;
+      const importTaxCalc = importTax; // Ya calculado arriba
+      const totalCostCalc = product.price + productShippingCostCalc + importTaxCalc;
+      const competitorCount = valid ? (valid.listingsFound || 0) : 0;
+      const estimatedTimeToFirstSale = this.estimateTimeToFirstSale(
+        trendsValidation?.searchVolume || 0,
+        trendsValidation?.trend || 'stable',
+        competitorCount
+      );
+      
+      // Calcular ganancia por unidad para break-even
+      const profitPerUnit = best.priceBase - totalCostCalc;
+      const breakEvenTime = this.calculateBreakEvenTime(
+        profitPerUnit,
+        trendsValidation?.searchVolume || 0,
+        trendsValidation?.trend || 'stable'
+      );
+
+      // ✅ NUEVO: Descartar si tiempo hasta primera venta es muy largo
+      if (estimatedTimeToFirstSale > this.maxTimeToFirstSale) {
+        logger.info('[OPPORTUNITY-FINDER] Producto descartado - tiempo hasta primera venta muy largo', {
+          title: product.title.substring(0, 50),
+          estimatedTimeToFirstSale,
+          maxAllowed: this.maxTimeToFirstSale
+        });
+        skippedSlowSale++;
+        continue;
+      }
+
+      // ✅ NUEVO: Descartar si break-even time es muy largo
+      if (breakEvenTime > this.maxBreakEvenTime) {
+        logger.info('[OPPORTUNITY-FINDER] Producto descartado - tiempo hasta break-even muy largo', {
+          title: product.title.substring(0, 50),
+          breakEvenTime,
+          maxAllowed: this.maxBreakEvenTime
+        });
+        skippedLongBreakEven++;
+        continue;
+      }
+
       if (manualAuthPending) {
         estimationNotes.push('Sesión de AliExpress pendiente de confirmación. Completa el login manual desde la barra superior para obtener datos completos.');
       }
@@ -1060,6 +1341,15 @@ class OpportunityFinderService {
 
       // ✅ Validar que el producto tenga URL antes de crear la oportunidad
       if (!product.productUrl || product.productUrl.length < 10) {
+        logger.warn('Producto sin URL válida, saltando oportunidad', {
+          service: 'opportunity-finder',
+          title: product.title?.substring(0, 50),
+          hasUrl: !!product.productUrl,
+          urlLength: product.productUrl?.length || 0,
+          productUrl: product.productUrl?.substring(0, 80) || 'NO_URL'
+        });
+        continue; // Saltar productos sin URL válida
+      }
         logger.warn('Producto sin URL válida, saltando oportunidad', {
           service: 'opportunity-finder',
           title: product.title?.substring(0, 50),
@@ -1180,14 +1470,40 @@ class OpportunityFinderService {
         importTax: importTax > 0 ? importTax : undefined,
         totalCost: totalCost > product.price ? totalCost : undefined, // Solo incluir si hay costos adicionales
         targetCountry: targetCountry,
-        suggestedPriceUsd: best.priceBase || fxService.convert(best.price, best.currency || baseCurrency, baseCurrency),
+        suggestedPriceUsd: best.priceBase || (() => {
+            try {
+              return fxService.convert(best.price, best.currency || baseCurrency, baseCurrency);
+            } catch (error: any) {
+              logger.warn('[OpportunityFinder] FX conversion failed for suggested price', {
+                from: best.currency || baseCurrency,
+                to: baseCurrency,
+                amount: best.price,
+                error: error?.message
+              });
+              return best.price; // Fallback: usar sin convertir
+            }
+          })(),
         suggestedPriceAmount: best.price,
         suggestedPriceCurrency: best.currency || baseCurrency,
         profitMargin: finalMargin, // ✅ MEJORADO: Margen basado en costo total
         roiPercentage: finalROI, // ✅ MEJORADO: ROI basado en costo total
         competitionLevel: 'unknown',
-        marketDemand: 'real',
-        confidenceScore: valid ? 0.5 : 0.3,
+        marketDemand: trendsValidation 
+          ? (trendsValidation.trend === 'rising' ? 'high' : 
+             trendsValidation.trend === 'stable' ? 'medium' : 'low')
+          : 'unknown', // ✅ NUEVO: Usar demanda real de Google Trends
+        confidenceScore: trendsValidation 
+          ? Math.min(0.9, 0.5 + (trendsValidation.validation.confidence || 0) / 200)
+          : (valid ? 0.5 : 0.3), // ✅ NUEVO: Ajustar confianza con Google Trends
+        // ✅ NUEVO: Datos de demanda real validados con Google Trends
+        trendData: trendsValidation ? {
+          trend: trendsValidation.trend,
+          searchVolume: trendsValidation.searchVolume,
+          validation: trendsValidation.validation
+        } : undefined,
+        // ✅ NUEVO: Estimación de velocidad de venta
+        estimatedTimeToFirstSale: estimatedTimeToFirstSale,
+        breakEvenTime: breakEvenTime,
         targetMarketplaces: marketplaces,
         feesConsidered: bestBreakdown,
         generatedAt: new Date().toISOString(),
@@ -1232,7 +1548,19 @@ class OpportunityFinderService {
       productsProcessed: processedCount,
       skippedInvalid,
       skippedLowMargin,
-      opportunitiesFound: opportunities.length
+      skippedLowDemand, // ✅ NUEVO: Productos descartados por baja demanda
+      skippedDecliningTrend, // ✅ NUEVO: Productos descartados por tendencia declinante
+      skippedLowVolume, // ✅ NUEVO: Productos descartados por bajo volumen de búsqueda
+      skippedSlowSale, // ✅ NUEVO: Productos descartados por tiempo largo hasta primera venta
+      skippedLongBreakEven, // ✅ NUEVO: Productos descartados por tiempo largo hasta break-even
+      opportunitiesFound: opportunities.length,
+      qualityFilters: {
+        minMargin: `${(this.minMargin * 100).toFixed(1)}%`,
+        minSearchVolume: this.minSearchVolume,
+        minTrendConfidence: `${this.minTrendConfidence}%`,
+        maxTimeToFirstSale: `${this.maxTimeToFirstSale} días`,
+        maxBreakEvenTime: `${this.maxBreakEvenTime} días`
+      }
     });
 
     if (opportunities.length === 0 && products.length > 0) {

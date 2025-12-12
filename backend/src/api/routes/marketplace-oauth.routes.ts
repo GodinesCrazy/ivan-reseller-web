@@ -293,19 +293,101 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         apiStatusRefreshed: true
       });
     } else if (marketplace === 'mercadolibre') {
+      logger.info('[OAuth Callback] Processing MercadoLibre OAuth', {
+        service: 'marketplace-oauth',
+        userId,
+        environment,
+        codeLength: code.length
+      });
+      
       const cred = await marketplaceService.getCredentials(userId, 'mercadolibre', environment);
       const clientId = cred?.credentials?.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '';
       const clientSecret = cred?.credentials?.clientSecret || process.env.MERCADOLIBRE_CLIENT_SECRET || '';
       const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLM';
+      
       if (!clientId || !clientSecret) {
+        logger.error('[OAuth Callback] Missing MercadoLibre base credentials', {
+          service: 'marketplace-oauth',
+          userId,
+          environment,
+          hasClientId: !!clientId,
+          hasClientSecret: !!clientSecret,
+        });
         return res
           .status(400)
           .send('<html><body>Base credentials missing. Please save Client ID and Client Secret before authorizing.</body></html>');
       }
+      
+      logger.info('[OAuth Callback] Exchanging code for MercadoLibre tokens', {
+        service: 'marketplace-oauth',
+        userId,
+        environment,
+        codeLength: code.length,
+        redirectUriLength: redirectUri?.length || 0,
+      });
+      
       const ml = new MercadoLibreService({ clientId, clientSecret, siteId });
       const tokens = await ml.exchangeCodeForToken(code, redirectUri);
-      const newCreds = { ...(cred?.credentials || {}), accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, userId: tokens.userId };
+      
+      logger.info('[OAuth Callback] MercadoLibre token exchange successful', {
+        service: 'marketplace-oauth',
+        userId,
+        environment,
+        hasAccessToken: !!tokens.accessToken,
+        accessTokenLength: tokens.accessToken?.length || 0,
+        hasRefreshToken: !!tokens.refreshToken,
+        refreshTokenLength: tokens.refreshToken?.length || 0,
+        hasUserId: !!tokens.userId,
+      });
+      
+      // ✅ CORRECCIÓN MERCADOLIBRE OAUTH: Sincronizar sandbox flag con environment
+      const newCreds = { 
+        ...(cred?.credentials || {}), 
+        accessToken: tokens.accessToken, 
+        refreshToken: tokens.refreshToken, 
+        userId: tokens.userId,
+        // ✅ CRÍTICO: Sincronizar sandbox flag con environment
+        sandbox: environment === 'sandbox'
+      };
+      
+      logger.info('[OAuth Callback] Saving MercadoLibre credentials', {
+        service: 'marketplace-oauth',
+        userId,
+        environment,
+        sandbox: newCreds.sandbox,
+        credentialKeys: Object.keys(newCreds),
+        hasAccessToken: !!newCreds.accessToken,
+        hasRefreshToken: !!newCreds.refreshToken,
+      });
+      
+      // ✅ CORRECCIÓN: Guardar credenciales con environment explícito
       await marketplaceService.saveCredentials(userId, 'mercadolibre', newCreds, environment);
+      
+      // ✅ CORRECCIÓN MERCADOLIBRE OAUTH: Limpiar cache de credenciales
+      const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
+      clearCredentialsCache(userId, 'mercadolibre', environment);
+      clearCredentialsCache(userId, 'mercadolibre', environment === 'sandbox' ? 'production' : 'sandbox');
+      
+      // ✅ CORRECCIÓN: Limpiar también el cache de API availability para forzar re-verificación
+      const { APIAvailabilityService } = await import('../../services/api-availability.service');
+      const apiAvailabilityService = new APIAvailabilityService();
+      // Invalidar cache de status para forzar re-verificación
+      await apiAvailabilityService.checkMercadoLibreAPI(userId, environment, true).catch((err) => {
+        logger.warn('[OAuth Callback] Error forcing MercadoLibre API status refresh', {
+          error: err?.message || String(err),
+          userId,
+          environment
+        });
+      });
+      
+      logger.info('[OAuth Callback] MercadoLibre credentials saved successfully', {
+        service: 'marketplace-oauth',
+        userId,
+        environment,
+        duration: Date.now() - startTime,
+        cacheCleared: true,
+        apiStatusRefreshed: true
+      });
     } else if (marketplace === 'aliexpress-dropshipping' || marketplace === 'aliexpress_dropshipping') {
       logger.info('[OAuth Callback] Processing AliExpress Dropshipping OAuth', {
         service: 'marketplace-oauth',
@@ -376,6 +458,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         });
 
         // 🔥 PASO 5: Guardar tokens en base de datos
+        // ✅ CORRECCIÓN ALIEXPRESS DROPSHIPPING OAUTH: Sincronizar sandbox flag con environment
         const updatedCreds: any = {
           ...cred,
           accessToken: tokens.accessToken,
@@ -383,19 +466,46 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
           // Calcular fecha de expiración
           accessTokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
           refreshTokenExpiresAt: new Date(Date.now() + tokens.refreshExpiresIn * 1000).toISOString(),
+          // ✅ CRÍTICO: Sincronizar sandbox flag con environment
+          sandbox: environment === 'sandbox'
         };
+
+        logger.info('[OAuth Callback] Saving AliExpress Dropshipping credentials', {
+          service: 'marketplace-oauth',
+          userId,
+          environment,
+          sandbox: updatedCreds.sandbox,
+          credentialKeys: Object.keys(updatedCreds),
+          hasAccessToken: !!updatedCreds.accessToken,
+          hasRefreshToken: !!updatedCreds.refreshToken,
+        });
 
         await CredentialsManager.saveCredentials(userId, 'aliexpress-dropshipping', updatedCreds, environment);
 
-        // Limpiar cache de credenciales
+        // ✅ CORRECCIÓN ALIEXPRESS DROPSHIPPING OAUTH: Limpiar cache de credenciales
         const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
         clearCredentialsCache(userId, 'aliexpress-dropshipping', environment);
+        clearCredentialsCache(userId, 'aliexpress-dropshipping', environment === 'sandbox' ? 'production' : 'sandbox');
+        
+        // ✅ CORRECCIÓN: Limpiar también el cache de API availability para forzar re-verificación
+        const { APIAvailabilityService } = await import('../../services/api-availability.service');
+        const apiAvailabilityService = new APIAvailabilityService();
+        // Invalidar cache de status para forzar re-verificación
+        await apiAvailabilityService.checkAliExpressDropshippingAPI(userId, environment, true).catch((err) => {
+          logger.warn('[OAuth Callback] Error forcing AliExpress Dropshipping API status refresh', {
+            error: err?.message || String(err),
+            userId,
+            environment
+          });
+        });
 
         logger.info('[OAuth Callback] AliExpress Dropshipping credentials saved successfully', {
           service: 'marketplace-oauth',
           userId,
           environment,
           duration: Date.now() - startTime,
+          cacheCleared: true,
+          apiStatusRefreshed: true
         });
 
         // Opcional: Verificar que el token funciona (PASO 6)

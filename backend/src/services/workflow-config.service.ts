@@ -79,10 +79,23 @@ export class WorkflowConfigService {
 
   /**
    * Obtener modo de una etapa específica
+   * ✅ CORREGIDO: Ahora respeta workflowMode global (manual/automatic override stages)
    */
   async getStageMode(userId: number, stage: WorkflowStageConfig['stage']): Promise<'manual' | 'automatic' | 'guided'> {
     const config = await this.getUserConfig(userId);
+    const workflowMode = config.workflowMode as 'manual' | 'automatic' | 'hybrid';
     
+    // ✅ Si workflowMode es 'manual', todos los stages son manual (override)
+    if (workflowMode === 'manual') {
+      return 'manual';
+    }
+    
+    // ✅ Si workflowMode es 'automatic', todos los stages son automatic (override)
+    if (workflowMode === 'automatic') {
+      return 'automatic';
+    }
+    
+    // ✅ Si workflowMode es 'hybrid', respetar configuración individual de cada stage
     switch (stage) {
       case 'scrape':
         return config.stageScrape as 'manual' | 'automatic' | 'guided';
@@ -99,6 +112,78 @@ export class WorkflowConfigService {
       default:
         return 'manual';
     }
+  }
+  
+  /**
+   * ✅ NUEVO: Obtener modo efectivo considerando workflowMode (mismo comportamiento que getStageMode pero más explícito)
+   */
+  async getEffectiveStageMode(userId: number, stage: WorkflowStageConfig['stage']): Promise<'manual' | 'automatic' | 'guided'> {
+    return await this.getStageMode(userId, stage);
+  }
+  
+  /**
+   * ✅ NUEVO: Validar consistencia de configuración
+   */
+  async validateConfig(userId: number): Promise<{ valid: boolean; warnings: string[]; errors: string[] }> {
+    const config = await this.getUserConfig(userId);
+    const warnings: string[] = [];
+    const errors: string[] = [];
+    
+    // Validar que workflowMode y stages sean coherentes
+    const workflowMode = config.workflowMode as 'manual' | 'automatic' | 'hybrid';
+    
+    if (workflowMode === 'manual') {
+      // Si es manual, todos los stages deberían ser manual (pero no es error, solo warning)
+      const stages = [
+        { key: 'stageScrape', name: 'scrape' },
+        { key: 'stageAnalyze', name: 'analyze' },
+        { key: 'stagePublish', name: 'publish' },
+        { key: 'stagePurchase', name: 'purchase' },
+        { key: 'stageFulfillment', name: 'fulfillment' },
+        { key: 'stageCustomerService', name: 'customerService' }
+      ];
+      
+      for (const stage of stages) {
+        const stageMode = (config as any)[stage.key] as string;
+        if (stageMode !== 'manual') {
+          warnings.push(`workflowMode es 'manual' pero ${stage.name} está en modo '${stageMode}'. Se usará 'manual' para esta etapa.`);
+        }
+      }
+    }
+    
+    if (workflowMode === 'automatic') {
+      // Si es automatic, todos los stages deberían ser automatic (pero no es error, solo warning)
+      const stages = [
+        { key: 'stageScrape', name: 'scrape' },
+        { key: 'stageAnalyze', name: 'analyze' },
+        { key: 'stagePublish', name: 'publish' },
+        { key: 'stagePurchase', name: 'purchase' },
+        { key: 'stageFulfillment', name: 'fulfillment' },
+        { key: 'stageCustomerService', name: 'customerService' }
+      ];
+      
+      for (const stage of stages) {
+        const stageMode = (config as any)[stage.key] as string;
+        if (stageMode !== 'automatic') {
+          warnings.push(`workflowMode es 'automatic' pero ${stage.name} está en modo '${stageMode}'. Se usará 'automatic' para esta etapa.`);
+        }
+      }
+    }
+    
+    // Validar capital de trabajo
+    const workingCapital = config.workingCapital ? Number(config.workingCapital) : 500;
+    if (workingCapital < 0) {
+      errors.push('El capital de trabajo no puede ser negativo');
+    }
+    if (workingCapital < 100 && workflowMode === 'automatic') {
+      warnings.push('Capital de trabajo muy bajo para modo automático. Recomendado: mínimo $500 USD');
+    }
+    
+    return {
+      valid: errors.length === 0,
+      warnings,
+      errors
+    };
   }
 
   /**

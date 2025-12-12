@@ -302,9 +302,14 @@ export default function WorkflowConfig() {
               onChange={(e) => setConfig({ ...config, workflowMode: e.target.value as any })}
               className="w-4 h-4 text-blue-600"
             />
-            <div>
-              <span className="font-medium text-gray-900">Manual</span>
-              <p className="text-sm text-gray-600">Todas las etapas requieren aprobación manual</p>
+            <div className="flex-1">
+              <div className="flex items-center space-x-2">
+                <span className="font-medium text-gray-900">Manual</span>
+                <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">Override</span>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Todas las etapas requieren aprobación manual. Esta configuración sobrescribe la configuración individual de cada etapa.
+              </p>
             </div>
           </label>
 
@@ -317,9 +322,14 @@ export default function WorkflowConfig() {
               onChange={(e) => setConfig({ ...config, workflowMode: e.target.value as any })}
               className="w-4 h-4 text-blue-600"
             />
-            <div>
-              <span className="font-medium text-gray-900">Automatic</span>
-              <p className="text-sm text-gray-600">Todas las etapas se ejecutan automáticamente</p>
+            <div className="flex-1">
+              <div className="flex items-center space-x-2">
+                <span className="font-medium text-gray-900">Automatic</span>
+                <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">Override</span>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Todas las etapas se ejecutan automáticamente sin intervención. Esta configuración sobrescribe la configuración individual de cada etapa.
+              </p>
             </div>
           </label>
 
@@ -332,12 +342,31 @@ export default function WorkflowConfig() {
               onChange={(e) => setConfig({ ...config, workflowMode: e.target.value as any })}
               className="w-4 h-4 text-blue-600"
             />
-            <div>
-              <span className="font-medium text-gray-900">Hybrid</span>
-              <p className="text-sm text-gray-600">Configuración mixta por etapa (recomendado)</p>
+            <div className="flex-1">
+              <div className="flex items-center space-x-2">
+                <span className="font-medium text-gray-900">Hybrid</span>
+                <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded">Recomendado</span>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Configuración mixta por etapa. Respeta la configuración individual de cada etapa que defines abajo.
+              </p>
             </div>
           </label>
         </div>
+        
+        {config.workflowMode !== 'hybrid' && (
+          <div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            <div className="flex items-start space-x-2">
+              <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+              <div className="text-sm text-yellow-800">
+                <p className="font-medium">Modo {config.workflowMode === 'manual' ? 'Manual' : 'Automático'} activo</p>
+                <p className="mt-1">
+                  La configuración de etapas individuales será ignorada. Todas las etapas se comportarán como <strong>{config.workflowMode === 'manual' ? 'manual' : 'automático'}</strong>.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Configuración por Etapa */}
@@ -399,10 +428,27 @@ export default function WorkflowConfig() {
                   </button>
                 </div>
 
-                <div className="mt-3 text-xs text-gray-500">
-                  <strong>Manual:</strong> Requiere aprobación tuya en cada paso.{' '}
-                  <strong>Automatic:</strong> Se ejecuta sin intervención.{' '}
-                  <strong>Guided:</strong> Te notifica y espera confirmación rápida.
+                <div className="mt-3 space-y-2">
+                  <div className="text-xs text-gray-600 space-y-1">
+                    <div className="flex items-start space-x-2">
+                      <span className="font-semibold text-red-700">Manual:</span>
+                      <span>Requiere aprobación tuya en cada paso. El proceso se pausa y te envía una notificación.</span>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <span className="font-semibold text-green-700">Automatic:</span>
+                      <span>Se ejecuta sin intervención. El proceso continúa automáticamente sin esperar tu confirmación.</span>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <span className="font-semibold text-yellow-700">Guided:</span>
+                      <span>Te notifica antes de ejecutar y espera tu confirmación. Si no respondes en 5 minutos, continúa automáticamente.</span>
+                    </div>
+                  </div>
+                  
+                  {config.workflowMode !== 'hybrid' && (
+                    <div className="text-xs bg-gray-100 text-gray-600 p-2 rounded">
+                      <span className="font-medium">Nota:</span> Como el Modo de Workflow está en <strong>{config.workflowMode === 'manual' ? 'Manual' : 'Automático'}</strong>, esta configuración será ignorada. Todas las etapas se comportarán como <strong>{config.workflowMode === 'manual' ? 'manual' : 'automático'}</strong>.
+                    </div>
+                  )}
                 </div>
               </div>
             );

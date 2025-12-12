@@ -184,6 +184,16 @@ const apiSchemas = {
       .min(1, 'API Key is required')
       .max(500, 'API Key must not exceed 500 characters'),
   }),
+  serpapi: z.object({
+    apiKey: z.string()
+      .min(1, 'API Key is required')
+      .max(500, 'API Key must not exceed 500 characters'),
+  }),
+  googletrends: z.object({
+    apiKey: z.string()
+      .min(1, 'API Key is required')
+      .max(500, 'API Key must not exceed 500 characters'),
+  }),
   paypal: z.object({
     clientId: z.string()
       .min(1, 'Client ID is required')
@@ -487,6 +497,168 @@ export class CredentialsManager {
       // Esto asegura que si las credenciales se guardaron con sandbox:false pero están en ambiente sandbox,
       // se corrijan al recuperarlas
       creds.sandbox = environment === 'sandbox';
+    }
+
+    // ✅ Stripe API normalization
+    if (apiName === 'stripe') {
+      // Normalize field names from UPPER_CASE to camelCase
+      if (creds.STRIPE_PUBLIC_KEY && !creds.publicKey) creds.publicKey = creds.STRIPE_PUBLIC_KEY;
+      if (creds.STRIPE_PUBLISHABLE_KEY && !creds.publicKey) creds.publicKey = creds.STRIPE_PUBLISHABLE_KEY;
+      if (creds.STRIPE_SECRET_KEY && !creds.secretKey) creds.secretKey = creds.STRIPE_SECRET_KEY;
+      if (creds.STRIPE_WEBHOOK_SECRET && !creds.webhookSecret) creds.webhookSecret = creds.STRIPE_WEBHOOK_SECRET;
+      
+      // Normalize sandbox flag based on environment
+      if (typeof creds.sandbox === 'undefined') {
+        creds.sandbox = environment === 'sandbox';
+      }
+      
+      // Normalize environment-specific keys
+      if (environment === 'sandbox') {
+        if (creds.STRIPE_SANDBOX_PUBLIC_KEY && !creds.publicKey) creds.publicKey = creds.STRIPE_SANDBOX_PUBLIC_KEY;
+        if (creds.STRIPE_SANDBOX_SECRET_KEY && !creds.secretKey) creds.secretKey = creds.STRIPE_SANDBOX_SECRET_KEY;
+        if (creds.STRIPE_SANDBOX_WEBHOOK_SECRET && !creds.webhookSecret) creds.webhookSecret = creds.STRIPE_SANDBOX_WEBHOOK_SECRET;
+      } else {
+        if (creds.STRIPE_PRODUCTION_PUBLIC_KEY && !creds.publicKey) creds.publicKey = creds.STRIPE_PRODUCTION_PUBLIC_KEY;
+        if (creds.STRIPE_PRODUCTION_SECRET_KEY && !creds.secretKey) creds.secretKey = creds.STRIPE_PRODUCTION_SECRET_KEY;
+        if (creds.STRIPE_PRODUCTION_WEBHOOK_SECRET && !creds.webhookSecret) creds.webhookSecret = creds.STRIPE_PRODUCTION_WEBHOOK_SECRET;
+      }
+      
+      // Trim keys
+      if (creds.publicKey && typeof creds.publicKey === 'string') {
+        creds.publicKey = creds.publicKey.trim();
+      }
+      if (creds.secretKey && typeof creds.secretKey === 'string') {
+        creds.secretKey = creds.secretKey.trim();
+      }
+      if (creds.webhookSecret && typeof creds.webhookSecret === 'string') {
+        creds.webhookSecret = creds.webhookSecret.trim();
+      }
+    }
+
+    // ✅ Email/SMTP API normalization
+    if (apiName === 'email') {
+      // Normalize field names from UPPER_CASE to camelCase
+      if (creds.EMAIL_HOST && !creds.host) creds.host = creds.EMAIL_HOST;
+      if (creds.SMTP_HOST && !creds.host) creds.host = creds.SMTP_HOST;
+      if (creds.EMAIL_PORT && !creds.port) creds.port = typeof creds.EMAIL_PORT === 'number' ? creds.EMAIL_PORT : parseInt(String(creds.EMAIL_PORT));
+      if (creds.SMTP_PORT && !creds.port) creds.port = typeof creds.SMTP_PORT === 'number' ? creds.SMTP_PORT : parseInt(String(creds.SMTP_PORT));
+      if (creds.EMAIL_USER && !creds.user) creds.user = creds.EMAIL_USER;
+      if (creds.SMTP_USER && !creds.user) creds.user = creds.SMTP_USER;
+      if (creds.EMAIL_PASSWORD && !creds.password) creds.password = creds.EMAIL_PASSWORD;
+      if (creds.SMTP_PASS && !creds.password) creds.password = creds.SMTP_PASS;
+      if (creds.EMAIL_FROM && !creds.from) creds.from = creds.EMAIL_FROM;
+      if (creds.SMTP_FROM && !creds.from) creds.from = creds.SMTP_FROM;
+      if (creds.EMAIL_FROM_NAME && !creds.fromName) creds.fromName = creds.EMAIL_FROM_NAME;
+      if (creds.SMTP_FROM_NAME && !creds.fromName) creds.fromName = creds.SMTP_FROM_NAME;
+      
+      // Normalize secure flag
+      if (typeof creds.secure === 'undefined' || creds.secure === null) {
+        if (creds.EMAIL_SECURE !== undefined) {
+          creds.secure = creds.EMAIL_SECURE === 'true' || creds.EMAIL_SECURE === true;
+        } else if (creds.SMTP_SECURE !== undefined) {
+          creds.secure = creds.SMTP_SECURE === 'true' || creds.SMTP_SECURE === true;
+        } else {
+          // Default: true if port is 465, false otherwise
+          const port = creds.port || 587;
+          creds.secure = port === 465;
+        }
+      }
+      
+      // Normalize port to number
+      if (creds.port && typeof creds.port === 'string') {
+        creds.port = parseInt(creds.port);
+      }
+      
+      // Trim string fields
+      if (creds.host && typeof creds.host === 'string') {
+        creds.host = creds.host.trim();
+      }
+      if (creds.user && typeof creds.user === 'string') {
+        creds.user = creds.user.trim();
+      }
+      if (creds.password && typeof creds.password === 'string') {
+        creds.password = creds.password.trim();
+      }
+      if (creds.from && typeof creds.from === 'string') {
+        creds.from = creds.from.trim();
+      }
+      if (creds.fromName && typeof creds.fromName === 'string') {
+        creds.fromName = creds.fromName.trim();
+      }
+    }
+
+    // ✅ Twilio API normalization
+    if (apiName === 'twilio') {
+      // Normalize field names from UPPER_CASE to camelCase
+      if (creds.TWILIO_ACCOUNT_SID && !creds.accountSid) creds.accountSid = creds.TWILIO_ACCOUNT_SID;
+      if (creds.TWILIO_AUTH_TOKEN && !creds.authToken) creds.authToken = creds.TWILIO_AUTH_TOKEN;
+      if (creds.TWILIO_PHONE_NUMBER && !creds.phoneNumber) creds.phoneNumber = creds.TWILIO_PHONE_NUMBER;
+      if (creds.TWILIO_FROM_NUMBER && !creds.phoneNumber) creds.phoneNumber = creds.TWILIO_FROM_NUMBER; // Fallback
+      if (creds.TWILIO_WHATSAPP_NUMBER && !creds.whatsappNumber) creds.whatsappNumber = creds.TWILIO_WHATSAPP_NUMBER;
+      
+      // Trim string fields
+      if (creds.accountSid && typeof creds.accountSid === 'string') {
+        creds.accountSid = creds.accountSid.trim();
+      }
+      if (creds.authToken && typeof creds.authToken === 'string') {
+        creds.authToken = creds.authToken.trim();
+      }
+      if (creds.phoneNumber && typeof creds.phoneNumber === 'string') {
+        creds.phoneNumber = creds.phoneNumber.trim();
+      }
+      if (creds.whatsappNumber && typeof creds.whatsappNumber === 'string') {
+        creds.whatsappNumber = creds.whatsappNumber.trim();
+      }
+    }
+
+    // ✅ Slack API normalization
+    if (apiName === 'slack') {
+      // Normalize field names from UPPER_CASE to camelCase
+      if (creds.SLACK_WEBHOOK_URL && !creds.webhookUrl) creds.webhookUrl = creds.SLACK_WEBHOOK_URL;
+      if (creds.SLACK_BOT_TOKEN && !creds.botToken) creds.botToken = creds.SLACK_BOT_TOKEN;
+      if (creds.SLACK_CHANNEL && !creds.channel) creds.channel = creds.SLACK_CHANNEL;
+      
+      // Trim string fields
+      if (creds.webhookUrl && typeof creds.webhookUrl === 'string') {
+        creds.webhookUrl = creds.webhookUrl.trim();
+      }
+      if (creds.botToken && typeof creds.botToken === 'string') {
+        creds.botToken = creds.botToken.trim();
+      }
+      if (creds.channel && typeof creds.channel === 'string') {
+        creds.channel = creds.channel.trim();
+      }
+    }
+
+    // ✅ OpenAI API normalization
+    if (apiName === 'openai') {
+      // Normalize field names from UPPER_CASE to camelCase
+      if (creds.OPENAI_API_KEY && !creds.apiKey) creds.apiKey = creds.OPENAI_API_KEY;
+      if (creds.OPENAI_ORGANIZATION && !creds.organization) creds.organization = creds.OPENAI_ORGANIZATION;
+      if (creds.OPENAI_MODEL && !creds.model) creds.model = creds.OPENAI_MODEL;
+      
+      // Trim string fields
+      if (creds.apiKey && typeof creds.apiKey === 'string') {
+        creds.apiKey = creds.apiKey.trim();
+      }
+      if (creds.organization && typeof creds.organization === 'string') {
+        creds.organization = creds.organization.trim();
+      }
+      if (creds.model && typeof creds.model === 'string') {
+        creds.model = creds.model.trim();
+      }
+    }
+
+    // ✅ SerpAPI/Google Trends normalization
+    if (apiName === 'serpapi' || apiName === 'googletrends') {
+      // Normalize field names from UPPER_CASE to camelCase
+      if (creds.SERP_API_KEY && !creds.apiKey) creds.apiKey = creds.SERP_API_KEY;
+      if (creds.GOOGLE_TRENDS_API_KEY && !creds.apiKey) creds.apiKey = creds.GOOGLE_TRENDS_API_KEY;
+      
+      // Trim string fields
+      if (creds.apiKey && typeof creds.apiKey === 'string') {
+        creds.apiKey = creds.apiKey.trim();
+      }
     }
 
     return creds;
@@ -806,6 +978,32 @@ export class CredentialsManager {
         }
         if (creds.sandbox === undefined) {
           creds.sandbox = environment === 'sandbox';
+        }
+      }
+      
+      // ✅ CORRECCIÓN PAYPAL: Normalizar campos y environment
+      if (apiName === 'paypal') {
+        // Normalizar nombres de campos (aceptar UPPER_CASE y camelCase)
+        if (creds.PAYPAL_CLIENT_ID && !creds.clientId) {
+          creds.clientId = creds.PAYPAL_CLIENT_ID;
+        }
+        if (creds.PAYPAL_CLIENT_SECRET && !creds.clientSecret) {
+          creds.clientSecret = creds.PAYPAL_CLIENT_SECRET;
+        }
+        if (creds.PAYPAL_MODE && !creds.environment) {
+          // PAYPAL_MODE puede ser 'sandbox' o 'live'
+          creds.environment = creds.PAYPAL_MODE === 'live' ? 'live' : 'sandbox';
+        }
+        if (creds.PAYPAL_ENVIRONMENT && !creds.environment) {
+          creds.environment = creds.PAYPAL_ENVIRONMENT === 'live' || creds.PAYPAL_ENVIRONMENT === 'production' ? 'live' : 'sandbox';
+        }
+        // Asegurar que environment esté en formato correcto ('sandbox' o 'live')
+        if (creds.environment === 'production') {
+          creds.environment = 'live';
+        }
+        // Sincronizar con environment si no está definido
+        if (!creds.environment) {
+          creds.environment = environment === 'sandbox' ? 'sandbox' : 'live';
         }
       }
       

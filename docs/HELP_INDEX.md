@@ -111,6 +111,14 @@
 - **Guía:** [Sección 5 - Integración de APIs](./HELP_USER_GUIDE.md#5-integración-de-apis)
 - **Problemas:** [Troubleshooting - Sección 2.1 y 4](./HELP_TROUBLESHOOTING.md#21-apis-no-funcionan)
 - **Configuración PayPal:** [GUIA_CONFIGURACION_APIS_GOOGLE_PAYPAL.md](../GUIA_CONFIGURACION_APIS_GOOGLE_PAYPAL.md)
+- **Configuración Google Trends (SerpAPI):** [Sección 5.5 - Google Trends](./HELP_USER_GUIDE.md#55-configuración-de-google-trends-serpapi)
+- **Integración SerpAPI:** [INTEGRACION_SERPAPI_GOOGLE_TRENDS.md](../INTEGRACION_SERPAPI_GOOGLE_TRENDS.md)
+
+### 🎯 Sistema de Oportunidades
+
+- **Guía:** [Sección 2.1 - Buscar Oportunidad](./HELP_USER_GUIDE.md#21-publicar-producto-con-múltiples-imágenes)
+- **Mejoras implementadas:** [AUDITORIA_OPORTUNIDADES_IMPLEMENTACION_COMPLETA.md](../AUDITORIA_OPORTUNIDADES_IMPLEMENTACION_COMPLETA.md)
+- **Análisis del sistema:** [AUDITORIA_OPORTUNIDADES_NEGOCIO_COMPLETA.md](../AUDITORIA_OPORTUNIDADES_NEGOCIO_COMPLETA.md)
 
 ### ⚙️ Job Scheduler y Automatizaciones
 
@@ -119,6 +127,20 @@
 ---
 
 ## 🔄 Actualizaciones Recientes
+
+### Versión 2.1 (2025-01-26)
+
+**Nuevas Funcionalidades:**
+- ✅ **Sistema de Oportunidades Mejorado:** Validación automática de demanda real con Google Trends
+- ✅ **Integración SerpAPI/Google Trends:** Configuración desde UI para validar demanda de productos
+- ✅ **Criterios de Calidad:** Filtros automáticos basados en volumen de búsqueda, tendencias, velocidad de venta y viabilidad financiera
+- ✅ **Métricas Avanzadas:** Días hasta primera venta y días hasta break-even calculados automáticamente
+
+**Mejoras:**
+- ✅ El sistema ahora solo muestra oportunidades con demanda real verificada
+- ✅ Validación de tendencias (creciente/estable/declinante) antes de mostrar productos
+- ✅ Estimación de velocidad de venta basada en datos reales
+- ✅ Configuración opcional de SerpAPI con fallback a análisis interno
 
 ### Versión 2.0 (2025-01-28)
 

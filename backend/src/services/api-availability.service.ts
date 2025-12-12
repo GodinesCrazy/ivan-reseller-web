@@ -782,18 +782,26 @@ export class APIAvailabilityService {
       }
 
       const validation = this.hasRequiredFields(credentials, requiredFields);
+      
+      // ✅ CORRECCIÓN MERCADOLIBRE OAUTH: Verificar tokens OAuth
+      const accessToken = credentials['accessToken'] || credentials['MERCADOLIBRE_ACCESS_TOKEN'] || '';
+      const refreshToken = credentials['refreshToken'] || credentials['MERCADOLIBRE_REFRESH_TOKEN'] || '';
+      const tokenLike = accessToken;
+      const hasToken = !!(tokenLike || refreshToken);
 
       const status: APIStatus = {
         apiName: 'mercadolibre',
         name: 'MercadoLibre API',
         isConfigured: validation.valid,
-        isAvailable: validation.valid,
+        isAvailable: validation.valid && hasToken,
+        status: validation.valid && hasToken ? 'healthy' : (validation.valid ? 'degraded' : 'unhealthy'),
         environment,
         lastChecked: new Date(),
         missingFields: validation.missing,
         isOptional,
       };
 
+      // ✅ MEJORA: Distinguir entre "falta todo" vs "credenciales básicas guardadas pero falta OAuth"
       if (!validation.valid) {
         const missingList = validation.missing.join(', ');
         if (isOptional) {
@@ -802,6 +810,12 @@ export class APIAvailabilityService {
           status.error = `Missing credentials: ${missingList}`;
           status.message = `Faltan credenciales requeridas: ${missingList}`;
         }
+      } else if (!hasToken) {
+        // ✅ CORRECCIÓN: Si las credenciales básicas están correctas pero falta OAuth
+        status.isAvailable = false;
+        status.status = 'degraded';
+        status.error = 'Falta token OAuth de MercadoLibre';
+        status.message = 'Credenciales básicas guardadas. Completa la autorización OAuth para activar.';
       } else {
         status.message = 'API configurada correctamente';
       }
@@ -835,7 +849,7 @@ export class APIAvailabilityService {
     }
 
     try {
-      const requiredFields = ['GROQ_API_KEY'];
+      // ✅ CORRECCIÓN GROQ: Buscar campo en camelCase (como se guarda) y UPPER_CASE (legacy)
       const credentials = await this.getUserCredentials(userId, 'groq');
       
       if (!credentials) {
@@ -851,21 +865,28 @@ export class APIAvailabilityService {
         return status;
       }
 
-      const validation = this.hasRequiredFields(credentials, requiredFields);
+      // ✅ CORRECCIÓN GROQ: Verificar campo con nombres correctos (camelCase + UPPER_CASE para compatibilidad)
+      const apiKey = credentials['apiKey'] || credentials['GROQ_API_KEY'];
+      const hasApiKey = !!(apiKey && String(apiKey).trim());
+
+      const validation = {
+        valid: hasApiKey,
+        missing: !hasApiKey ? ['apiKey'] : []
+      };
 
       const status: APIStatus = {
         apiName: 'groq',
         name: 'GROQ AI API',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
+        status: validation.valid ? 'healthy' : 'unhealthy',
         lastChecked: new Date(),
         missingFields: validation.missing
       };
 
       if (!validation.valid) {
-        const missingList = validation.missing.join(', ');
-        status.error = `Missing credentials: ${missingList}`;
-        status.message = `Faltan credenciales requeridas: ${missingList}`;
+        status.error = `Missing credentials: apiKey`;
+        status.message = `Faltan credenciales requeridas: apiKey`;
       } else {
         status.message = 'API configurada correctamente';
       }
@@ -889,6 +910,100 @@ export class APIAvailabilityService {
   /**
    * Check ScraperAPI availability for specific user
    */
+  async checkSerpAPI(userId: number): Promise<APIStatus> {
+    try {
+      const credentials = await this.getUserCredentials(userId, 'serpapi', 'production');
+      
+      if (!credentials) {
+        // Intentar también con 'googletrends' como alias
+        const googletrendsCreds = await this.getUserCredentials(userId, 'googletrends', 'production');
+        if (!googletrendsCreds) {
+          return {
+            apiName: 'serpapi',
+            name: 'SerpAPI (Google Trends)',
+            isConfigured: false,
+            isAvailable: false,
+            lastChecked: new Date(),
+            message: 'API key no configurada. Opcional: si no se configura, el sistema usará análisis de datos internos.',
+            status: 'unhealthy'
+          };
+        }
+        
+        // Si hay credenciales con alias 'googletrends', usarlas
+        const apiKey = googletrendsCreds.apiKey || googletrendsCreds.SERP_API_KEY || googletrendsCreds.GOOGLE_TRENDS_API_KEY;
+        if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
+          return {
+            apiName: 'serpapi',
+            name: 'SerpAPI (Google Trends)',
+            isConfigured: false,
+            isAvailable: false,
+            lastChecked: new Date(),
+            message: 'API key vacía o inválida',
+            status: 'unhealthy'
+          };
+        }
+        
+        return {
+          apiName: 'serpapi',
+          name: 'SerpAPI (Google Trends)',
+          isConfigured: true,
+          isAvailable: true,
+          lastChecked: new Date(),
+          message: 'API configurada y lista para usar',
+          status: 'healthy'
+        };
+      }
+      
+      const apiKey = credentials.apiKey || credentials.SERP_API_KEY || credentials.GOOGLE_TRENDS_API_KEY;
+      
+      if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
+        return {
+          apiName: 'serpapi',
+          name: 'SerpAPI (Google Trends)',
+          isConfigured: false,
+          isAvailable: false,
+          lastChecked: new Date(),
+          message: 'API key vacía o inválida',
+          status: 'unhealthy'
+        };
+      }
+      
+      // Validar formato básico de API key (típicamente alfanumérica)
+      if (!/^[a-zA-Z0-9_-]+$/.test(apiKey)) {
+        return {
+          apiName: 'serpapi',
+          name: 'SerpAPI (Google Trends)',
+          isConfigured: true,
+          isAvailable: false,
+          lastChecked: new Date(),
+          message: 'API key con formato inválido',
+          status: 'unhealthy'
+        };
+      }
+      
+      return {
+        apiName: 'serpapi',
+        name: 'SerpAPI (Google Trends)',
+        isConfigured: true,
+        isAvailable: true,
+        lastChecked: new Date(),
+        message: 'API configurada y lista para usar',
+        status: 'healthy'
+      };
+    } catch (error: any) {
+      logger.error('Error checking SerpAPI', { userId, error: error.message });
+      return {
+        apiName: 'serpapi',
+        name: 'SerpAPI (Google Trends)',
+        isConfigured: false,
+        isAvailable: false,
+        lastChecked: new Date(),
+        error: error.message,
+        status: 'unhealthy'
+      };
+    }
+  }
+
   async checkScraperAPI(userId: number): Promise<APIStatus> {
     const cacheKey = this.getCacheKey(userId, 'scraperapi');
     const cached = await this.getCached(cacheKey);
@@ -897,7 +1012,7 @@ export class APIAvailabilityService {
     }
 
     try {
-      const requiredFields = ['SCRAPER_API_KEY'];
+      // ✅ CORRECCIÓN SCRAPERAPI: Buscar campo en camelCase (como se guarda) y UPPER_CASE (legacy)
       const credentials = await this.getUserCredentials(userId, 'scraperapi');
       
       if (!credentials) {
@@ -913,21 +1028,28 @@ export class APIAvailabilityService {
         return status;
       }
 
-      const validation = this.hasRequiredFields(credentials, requiredFields);
+      // ✅ CORRECCIÓN SCRAPERAPI: Verificar campo con nombres correctos (camelCase + UPPER_CASE para compatibilidad)
+      const apiKey = credentials['apiKey'] || credentials['SCRAPERAPI_KEY'] || credentials['SCRAPER_API_KEY'];
+      const hasApiKey = !!(apiKey && String(apiKey).trim());
+
+      const validation = {
+        valid: hasApiKey,
+        missing: !hasApiKey ? ['apiKey'] : []
+      };
 
       const status: APIStatus = {
         apiName: 'scraperapi',
         name: 'ScraperAPI',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
+        status: validation.valid ? 'healthy' : 'unhealthy',
         lastChecked: new Date(),
         missingFields: validation.missing
       };
 
       if (!validation.valid) {
-        const missingList = validation.missing.join(', ');
-        status.error = `Missing credentials: ${missingList}`;
-        status.message = `Faltan credenciales requeridas: ${missingList}`;
+        status.error = `Missing credentials: apiKey`;
+        status.message = `Faltan credenciales requeridas: apiKey`;
       } else {
         status.message = 'API configurada correctamente';
       }
@@ -959,7 +1081,7 @@ export class APIAvailabilityService {
     }
 
     try {
-      const requiredFields = ['ZENROWS_API_KEY'];
+      // ✅ CORRECCIÓN ZENROWS: Buscar campo en camelCase (como se guarda) y UPPER_CASE (legacy)
       const credentials = await this.getUserCredentials(userId, 'zenrows');
       
       if (!credentials) {
@@ -975,21 +1097,28 @@ export class APIAvailabilityService {
         return status;
       }
 
-      const validation = this.hasRequiredFields(credentials, requiredFields);
+      // ✅ CORRECCIÓN ZENROWS: Verificar campo con nombres correctos (camelCase + UPPER_CASE para compatibilidad)
+      const apiKey = credentials['apiKey'] || credentials['ZENROWS_API_KEY'];
+      const hasApiKey = !!(apiKey && String(apiKey).trim());
+
+      const validation = {
+        valid: hasApiKey,
+        missing: !hasApiKey ? ['apiKey'] : []
+      };
 
       const status: APIStatus = {
         apiName: 'zenrows',
         name: 'ZenRows',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
+        status: validation.valid ? 'healthy' : 'unhealthy',
         lastChecked: new Date(),
         missingFields: validation.missing
       };
 
       if (!validation.valid) {
-        const missingList = validation.missing.join(', ');
-        status.error = `Missing credentials: ${missingList}`;
-        status.message = `Faltan credenciales requeridas: ${missingList}`;
+        status.error = `Missing credentials: apiKey`;
+        status.message = `Faltan credenciales requeridas: apiKey`;
       } else {
         status.message = 'API configurada correctamente';
       }
@@ -1021,7 +1150,7 @@ export class APIAvailabilityService {
     }
 
     try {
-      const requiredFields = ['CAPTCHA_2CAPTCHA_KEY'];
+      // ✅ CORRECCIÓN 2CAPTCHA: Buscar campo en camelCase (como se guarda) y UPPER_CASE (legacy)
       const credentials = await this.getUserCredentials(userId, '2captcha');
       
       if (!credentials) {
@@ -1037,21 +1166,28 @@ export class APIAvailabilityService {
         return status;
       }
 
-      const validation = this.hasRequiredFields(credentials, requiredFields);
+      // ✅ CORRECCIÓN 2CAPTCHA: Verificar campo con nombres correctos (camelCase + múltiples variantes UPPER_CASE para compatibilidad)
+      const apiKey = credentials['apiKey'] || credentials['CAPTCHA_2CAPTCHA_KEY'] || credentials['TWO_CAPTCHA_API_KEY'] || credentials['2CAPTCHA_API_KEY'];
+      const hasApiKey = !!(apiKey && String(apiKey).trim());
+
+      const validation = {
+        valid: hasApiKey,
+        missing: !hasApiKey ? ['apiKey'] : []
+      };
 
       const status: APIStatus = {
         apiName: '2captcha',
         name: '2Captcha',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
+        status: validation.valid ? 'healthy' : 'unhealthy',
         lastChecked: new Date(),
         missingFields: validation.missing
       };
 
       if (!validation.valid) {
-        const missingList = validation.missing.join(', ');
-        status.error = `Missing credentials: ${missingList}`;
-        status.message = `Faltan credenciales requeridas: ${missingList}`;
+        status.error = `Missing credentials: apiKey`;
+        status.message = `Faltan credenciales requeridas: apiKey`;
       } else {
         status.message = 'API configurada correctamente';
       }
@@ -1074,17 +1210,21 @@ export class APIAvailabilityService {
 
   /**
    * Check PayPal Payouts API availability for specific user
+   * 
+   * ✅ NOTA: PayPal usa 'live' en el schema pero 'production' internamente en el servicio
+   * El servicio convierte 'live' a 'production' automáticamente
    */
-  async checkPayPalAPI(userId: number): Promise<APIStatus> {
-    const cacheKey = this.getCacheKey(userId, 'paypal');
+  async checkPayPalAPI(userId: number, environment: 'sandbox' | 'production' = 'production', forceRefresh: boolean = false): Promise<APIStatus> {
+    const cacheKey = this.getCacheKey(userId, `paypal-${environment}`);
     const cached = await this.getCached(cacheKey);
-    if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
+    if (!forceRefresh && cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
       return cached;
     }
 
     try {
-      const requiredFields = ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET', 'PAYPAL_ENVIRONMENT'];
-      const credentials = await this.getUserCredentials(userId, 'paypal');
+      // ✅ CORRECCIÓN PAYPAL: Buscar campos en camelCase (como se guardan) y UPPER_CASE (legacy)
+      const requiredFields = ['clientId', 'clientSecret', 'environment'];
+      const credentials = await this.getUserCredentials(userId, 'paypal', environment);
       
       if (!credentials) {
         const status: APIStatus = {
@@ -1092,6 +1232,7 @@ export class APIAvailabilityService {
           name: 'PayPal Payouts API',
           isConfigured: false,
           isAvailable: false,
+          environment,
           lastChecked: new Date(),
           error: 'PayPal API not configured for this user'
         };
@@ -1099,13 +1240,36 @@ export class APIAvailabilityService {
         return status;
       }
 
-      const validation = this.hasRequiredFields(credentials, requiredFields);
+      // ✅ CORRECCIÓN PAYPAL: Verificar campos con nombres correctos (camelCase)
+      // También aceptar UPPER_CASE para compatibilidad
+      const clientId = credentials['clientId'] || credentials['PAYPAL_CLIENT_ID'];
+      const clientSecret = credentials['clientSecret'] || credentials['PAYPAL_CLIENT_SECRET'];
+      const env = credentials['environment'] || credentials['PAYPAL_ENVIRONMENT'] || credentials['PAYPAL_MODE'];
+      
+      const hasClientId = !!(clientId && String(clientId).trim());
+      const hasClientSecret = !!(clientSecret && String(clientSecret).trim());
+      const hasEnvironment = !!(env && (env === 'sandbox' || env === 'live' || env === 'production'));
+      
+      const validation = {
+        valid: hasClientId && hasClientSecret && hasEnvironment,
+        missing: [
+          !hasClientId && 'clientId',
+          !hasClientSecret && 'clientSecret',
+          !hasEnvironment && 'environment'
+        ].filter(Boolean) as string[]
+      };
+
+      // ✅ VERIFICAR: Si el environment en las credenciales coincide con el solicitado
+      const credEnv = env === 'live' ? 'production' : (env === 'production' ? 'production' : 'sandbox');
+      const envMismatch = credEnv !== environment;
 
       const status: APIStatus = {
         apiName: 'paypal',
         name: 'PayPal Payouts API',
         isConfigured: validation.valid,
-        isAvailable: validation.valid,
+        isAvailable: validation.valid && !envMismatch,
+        status: validation.valid && !envMismatch ? 'healthy' : (validation.valid ? 'degraded' : 'unhealthy'),
+        environment,
         lastChecked: new Date(),
         missingFields: validation.missing
       };
@@ -1114,6 +1278,11 @@ export class APIAvailabilityService {
         const missingList = validation.missing.join(', ');
         status.error = `Missing credentials: ${missingList}`;
         status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else if (envMismatch) {
+        // ✅ ADVERTENCIA: environment en credenciales no coincide con el solicitado
+        status.status = 'degraded';
+        status.error = `Environment mismatch: credenciales tienen environment=${env} pero se solicitó ${environment}`;
+        status.message = `Advertencia: El environment de las credenciales (${env}) no coincide con el solicitado (${environment}).`;
       } else {
         status.message = 'API configurada correctamente';
       }
@@ -1126,6 +1295,7 @@ export class APIAvailabilityService {
         name: 'PayPal Payouts API',
         isConfigured: false,
         isAvailable: false,
+        environment,
         lastChecked: new Date(),
         error: error instanceof Error ? error.message : 'Unknown error'
       };
@@ -1145,7 +1315,7 @@ export class APIAvailabilityService {
     }
 
     try {
-      const requiredFields = ['ALIEXPRESS_EMAIL', 'ALIEXPRESS_PASSWORD'];
+      // ✅ CORRECCIÓN ALIEXPRESS AUTO-PURCHASE: Buscar campos en camelCase (como se guardan) y UPPER_CASE (legacy)
       const credentials = await this.getUserCredentials(userId, 'aliexpress');
       
       if (!credentials) {
@@ -1161,13 +1331,27 @@ export class APIAvailabilityService {
         return status;
       }
 
-      const validation = this.hasRequiredFields(credentials, requiredFields);
+      // ✅ CORRECCIÓN ALIEXPRESS AUTO-PURCHASE: Verificar campos con nombres correctos (camelCase + múltiples variantes UPPER_CASE para compatibilidad)
+      const email = credentials['email'] || credentials['ALIEXPRESS_EMAIL'] || credentials['ALIEXPRESS_USERNAME'];
+      const password = credentials['password'] || credentials['ALIEXPRESS_PASSWORD'];
+      
+      const hasEmail = !!(email && String(email).trim());
+      const hasPassword = !!(password && String(password).trim());
+
+      const validation = {
+        valid: hasEmail && hasPassword,
+        missing: [
+          !hasEmail && 'email',
+          !hasPassword && 'password'
+        ].filter(Boolean) as string[]
+      };
 
       const status: APIStatus = {
         apiName: 'aliexpress',
         name: 'AliExpress Auto-Purchase',
         isConfigured: validation.valid,
         isAvailable: validation.valid,
+        status: validation.valid ? 'healthy' : 'unhealthy',
         lastChecked: new Date(),
         missingFields: validation.missing
       };
@@ -1186,6 +1370,681 @@ export class APIAvailabilityService {
       const status: APIStatus = {
         apiName: 'aliexpress',
         name: 'AliExpress Auto-Purchase',
+        isConfigured: false,
+        isAvailable: false,
+        lastChecked: new Date(),
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+      this.cache.set(cacheKey, status);
+      return status;
+    }
+  }
+
+  /**
+   * Check AliExpress Affiliate API availability for specific user
+   * 
+   * ✅ NOTA: AliExpress Affiliate API usa el mismo endpoint para sandbox y production
+   * La distinción es solo organizacional. Sin embargo, validamos por ambiente
+   * para mantener consistencia con otras APIs.
+   */
+  async checkAliExpressAffiliateAPI(userId: number, environment: 'sandbox' | 'production' = 'production', forceRefresh: boolean = false): Promise<APIStatus> {
+    const cacheKey = this.getCacheKey(userId, `aliexpress-affiliate-${environment}`);
+    const cached = await this.getCached(cacheKey);
+    if (!forceRefresh && cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
+      return cached;
+    }
+
+    try {
+      const requiredFields = ['appKey', 'appSecret'];
+      const credentials = await this.getUserCredentials(userId, 'aliexpress-affiliate', environment);
+      
+      if (!credentials) {
+        const status: APIStatus = {
+          apiName: 'aliexpress-affiliate',
+          name: 'AliExpress Affiliate API',
+          isConfigured: false,
+          isAvailable: false,
+          environment,
+          lastChecked: new Date(),
+          error: 'AliExpress Affiliate API not configured for this user'
+        };
+        await this.setCached(cacheKey, status);
+        return status;
+      }
+
+      const validation = this.hasRequiredFields(credentials, requiredFields);
+      
+      // ✅ CRÍTICO: Sincronizar sandbox flag con environment
+      // Aunque el endpoint es el mismo, mantenemos consistencia organizacional
+      const credSandbox = credentials['sandbox'];
+      const envSandbox = environment === 'sandbox';
+      const sandboxMismatch = credSandbox !== undefined && credSandbox !== envSandbox;
+
+      const status: APIStatus = {
+        apiName: 'aliexpress-affiliate',
+        name: 'AliExpress Affiliate API',
+        isConfigured: validation.valid,
+        isAvailable: validation.valid,
+        status: validation.valid ? 'healthy' : 'unhealthy',
+        environment,
+        lastChecked: new Date(),
+        missingFields: validation.missing,
+      };
+
+      if (!validation.valid) {
+        const missingList = validation.missing.join(', ');
+        status.error = `Missing credentials: ${missingList}`;
+        status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else if (sandboxMismatch) {
+        // ✅ ADVERTENCIA: sandbox flag no coincide con environment
+        status.status = 'degraded';
+        status.error = `Sandbox flag mismatch: credenciales tienen sandbox=${credSandbox} pero environment=${environment}`;
+        status.message = `Advertencia: El flag sandbox de las credenciales no coincide con el ambiente seleccionado. Nota: AliExpress Affiliate API usa el mismo endpoint para ambos ambientes, pero mantenemos la distinción por consistencia.`;
+      } else {
+        status.message = 'API configurada correctamente';
+      }
+
+      this.cache.set(cacheKey, status);
+      return status;
+    } catch (error) {
+      const status: APIStatus = {
+        apiName: 'aliexpress-affiliate',
+        name: 'AliExpress Affiliate API',
+        isConfigured: false,
+        isAvailable: false,
+        environment,
+        lastChecked: new Date(),
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      this.cache.set(cacheKey, status);
+      return status;
+    }
+  }
+
+  /**
+   * Check AliExpress Dropshipping API availability for specific user
+   */
+  async checkAliExpressDropshippingAPI(userId: number, environment: 'sandbox' | 'production' = 'production', forceRefresh: boolean = false): Promise<APIStatus> {
+    const cacheKey = this.getCacheKey(userId, `aliexpress-dropshipping-${environment}`);
+    const cached = await this.getCached(cacheKey);
+    if (!forceRefresh && cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
+      return cached;
+    }
+
+    try {
+      const requiredFields = ['appKey', 'appSecret'];
+      const credentials = await this.getUserCredentials(userId, 'aliexpress-dropshipping', environment);
+      
+      if (!credentials) {
+        const status: APIStatus = {
+          apiName: 'aliexpress-dropshipping',
+          name: 'AliExpress Dropshipping API',
+          isConfigured: false,
+          isAvailable: false,
+          environment,
+          lastChecked: new Date(),
+          error: 'AliExpress Dropshipping API not configured for this user'
+        };
+        await this.setCached(cacheKey, status);
+        return status;
+      }
+
+      const validation = this.hasRequiredFields(credentials, requiredFields);
+      
+      // ✅ CORRECCIÓN ALIEXPRESS DROPSHIPPING OAUTH: Verificar tokens OAuth
+      const accessToken = credentials['accessToken'] || '';
+      const refreshToken = credentials['refreshToken'] || '';
+      const hasToken = !!(accessToken || refreshToken);
+      
+      // ✅ CRÍTICO: Sincronizar sandbox flag con environment
+      const credSandbox = credentials['sandbox'];
+      const envSandbox = environment === 'sandbox';
+      const sandboxMismatch = credSandbox !== undefined && credSandbox !== envSandbox;
+
+      const status: APIStatus = {
+        apiName: 'aliexpress-dropshipping',
+        name: 'AliExpress Dropshipping API',
+        isConfigured: validation.valid,
+        isAvailable: validation.valid && hasToken,
+        status: validation.valid && hasToken ? 'healthy' : (validation.valid ? 'degraded' : 'unhealthy'),
+        environment,
+        lastChecked: new Date(),
+        missingFields: validation.missing,
+      };
+
+      // ✅ MEJORA: Distinguir entre "falta todo" vs "credenciales básicas guardadas pero falta OAuth"
+      if (!validation.valid) {
+        const missingList = validation.missing.join(', ');
+        status.error = `Missing credentials: ${missingList}`;
+        status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else if (sandboxMismatch) {
+        // ✅ ADVERTENCIA: sandbox flag no coincide con environment
+        status.status = 'degraded';
+        status.error = `Sandbox flag mismatch: credenciales tienen sandbox=${credSandbox} pero environment=${environment}`;
+        status.message = `Advertencia: El flag sandbox de las credenciales no coincide con el ambiente seleccionado.`;
+      } else if (!hasToken) {
+        // ✅ CORRECCIÓN: Si las credenciales básicas están correctas pero falta OAuth
+        status.isAvailable = false;
+        status.status = 'degraded';
+        status.error = 'Falta token OAuth de AliExpress Dropshipping';
+        status.message = 'Credenciales básicas guardadas. Completa la autorización OAuth para activar.';
+      } else {
+        status.message = 'API configurada correctamente';
+      }
+
+      this.cache.set(cacheKey, status);
+      return status;
+    } catch (error) {
+      const status: APIStatus = {
+        apiName: 'aliexpress-dropshipping',
+        name: 'AliExpress Dropshipping API',
+        isConfigured: false,
+        isAvailable: false,
+        environment,
+        lastChecked: new Date(),
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+      this.cache.set(cacheKey, status);
+      return status;
+    }
+  }
+
+  /**
+   * Check Email/SMTP API availability for specific user
+   */
+  async checkEmailAPI(userId: number, forceRefresh: boolean = false): Promise<APIStatus> {
+    const cacheKey = this.getCacheKey(userId, 'email', 'production');
+    if (!forceRefresh) {
+      const cached = await this.getCached(cacheKey);
+      if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
+        return cached;
+      }
+    } else {
+      await this.deleteCached(cacheKey);
+    }
+
+    try {
+      // ✅ CORRECCIÓN EMAIL: Buscar credenciales en CredentialsManager primero, luego variables de entorno
+      let credentials = await this.getUserCredentials(userId, 'email', 'production').catch(() => null);
+      
+      // Si no hay credenciales en la BD, verificar variables de entorno
+      if (!credentials) {
+        const hasEnvHost = !!(process.env.EMAIL_HOST || process.env.SMTP_HOST);
+        const hasEnvUser = !!(process.env.EMAIL_USER || process.env.SMTP_USER);
+        const hasEnvPass = !!(process.env.EMAIL_PASSWORD || process.env.SMTP_PASS);
+        const hasEnvFrom = !!(process.env.EMAIL_FROM || process.env.SMTP_FROM);
+        
+        if (hasEnvHost && hasEnvUser && hasEnvPass && hasEnvFrom) {
+          // Usar variables de entorno como credenciales
+          credentials = {
+            host: process.env.EMAIL_HOST || process.env.SMTP_HOST || '',
+            port: parseInt(process.env.EMAIL_PORT || process.env.SMTP_PORT || '587'),
+            user: process.env.EMAIL_USER || process.env.SMTP_USER || '',
+            password: process.env.EMAIL_PASSWORD || process.env.SMTP_PASS || '',
+            from: process.env.EMAIL_FROM || process.env.SMTP_FROM || '',
+            fromName: process.env.EMAIL_FROM_NAME || process.env.SMTP_FROM_NAME,
+            secure: process.env.EMAIL_SECURE === 'true' || process.env.SMTP_SECURE === 'true' || false,
+          };
+        }
+      }
+      
+      if (!credentials) {
+        const status: APIStatus = {
+          apiName: 'email',
+          name: 'Email SMTP',
+          isConfigured: false,
+          isAvailable: false,
+          lastChecked: new Date(),
+          error: 'Email SMTP not configured for this user'
+        };
+        await this.setCached(cacheKey, status);
+        return status;
+      }
+
+      // ✅ CORRECCIÓN EMAIL: Verificar campos con nombres correctos (camelCase + múltiples variantes)
+      const host = credentials['host'] || credentials['EMAIL_HOST'] || credentials['SMTP_HOST'] || '';
+      const port = credentials['port'] || parseInt(String(credentials['EMAIL_PORT'] || credentials['SMTP_PORT'] || '587'));
+      const user = credentials['user'] || credentials['EMAIL_USER'] || credentials['SMTP_USER'] || '';
+      const password = credentials['password'] || credentials['EMAIL_PASSWORD'] || credentials['SMTP_PASS'] || '';
+      const from = credentials['from'] || credentials['EMAIL_FROM'] || credentials['SMTP_FROM'] || '';
+      
+      const hasHost = !!(host && String(host).trim());
+      const hasPort = !!(port && port > 0 && port <= 65535);
+      const hasUser = !!(user && String(user).trim());
+      const hasPassword = !!(password && String(password).trim());
+      const hasFrom = !!(from && String(from).trim() && from.includes('@')); // Validar que sea un email válido
+
+      const validation = {
+        valid: hasHost && hasPort && hasUser && hasPassword && hasFrom,
+        missing: [
+          !hasHost && 'host',
+          !hasPort && 'port',
+          !hasUser && 'user',
+          !hasPassword && 'password',
+          !hasFrom && 'from'
+        ].filter(Boolean) as string[]
+      };
+
+      // ✅ VALIDAR: Formato de puerto
+      let portValid = true;
+      let portError: string | undefined;
+      if (hasPort) {
+        const portNum = typeof port === 'number' ? port : parseInt(String(port));
+        if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+          portValid = false;
+          portError = 'Port must be a number between 1 and 65535';
+        }
+      }
+
+      // ✅ VALIDAR: Formato de email en 'from'
+      let fromEmailValid = true;
+      let fromEmailError: string | undefined;
+      if (hasFrom) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(String(from).trim())) {
+          fromEmailValid = false;
+          fromEmailError = 'From address must be a valid email address';
+        }
+      }
+
+      const status: APIStatus = {
+        apiName: 'email',
+        name: 'Email SMTP',
+        isConfigured: validation.valid && portValid && fromEmailValid,
+        isAvailable: validation.valid && portValid && fromEmailValid,
+        status: validation.valid && portValid && fromEmailValid ? 'healthy' : 'unhealthy',
+        lastChecked: new Date(),
+        missingFields: validation.missing
+      };
+
+      if (!validation.valid) {
+        const missingList = validation.missing.join(', ');
+        status.error = `Missing credentials: ${missingList}`;
+        status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else if (!portValid) {
+        status.error = portError || 'Port format invalid';
+        status.message = portError || 'El puerto debe ser un número entre 1 y 65535';
+      } else if (!fromEmailValid) {
+        status.error = fromEmailError || 'From email format invalid';
+        status.message = fromEmailError || 'La dirección de email "from" debe ser un email válido';
+      } else {
+        status.message = 'API configurada correctamente';
+      }
+
+      this.cache.set(cacheKey, status);
+      return status;
+    } catch (error) {
+      const status: APIStatus = {
+        apiName: 'email',
+        name: 'Email SMTP',
+        isConfigured: false,
+        isAvailable: false,
+        lastChecked: new Date(),
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+      this.cache.set(cacheKey, status);
+      return status;
+    }
+  }
+
+  /**
+   * Check Twilio API availability for specific user
+   */
+  async checkTwilioAPI(userId: number, forceRefresh: boolean = false): Promise<APIStatus> {
+    const cacheKey = this.getCacheKey(userId, 'twilio', 'production');
+    if (!forceRefresh) {
+      const cached = await this.getCached(cacheKey);
+      if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
+        return cached;
+      }
+    } else {
+      await this.deleteCached(cacheKey);
+    }
+
+    try {
+      // ✅ CORRECCIÓN TWILIO: Buscar credenciales en CredentialsManager primero, luego variables de entorno
+      let credentials = await this.getUserCredentials(userId, 'twilio', 'production').catch(() => null);
+      
+      // Si no hay credenciales en la BD, verificar variables de entorno
+      if (!credentials) {
+        const hasEnvAccountSid = !!(process.env.TWILIO_ACCOUNT_SID);
+        const hasEnvAuthToken = !!(process.env.TWILIO_AUTH_TOKEN);
+        const hasEnvPhoneNumber = !!(process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_FROM_NUMBER);
+        
+        if (hasEnvAccountSid && hasEnvAuthToken && hasEnvPhoneNumber) {
+          // Usar variables de entorno como credenciales
+          credentials = {
+            accountSid: process.env.TWILIO_ACCOUNT_SID || '',
+            authToken: process.env.TWILIO_AUTH_TOKEN || '',
+            phoneNumber: process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_FROM_NUMBER || '',
+            whatsappNumber: process.env.TWILIO_WHATSAPP_NUMBER,
+          };
+        }
+      }
+      
+      if (!credentials) {
+        const status: APIStatus = {
+          apiName: 'twilio',
+          name: 'Twilio API',
+          isConfigured: false,
+          isAvailable: false,
+          lastChecked: new Date(),
+          error: 'Twilio API not configured for this user'
+        };
+        await this.setCached(cacheKey, status);
+        return status;
+      }
+
+      // ✅ CORRECCIÓN TWILIO: Verificar campos con nombres correctos (camelCase + múltiples variantes)
+      const accountSid = credentials['accountSid'] || credentials['TWILIO_ACCOUNT_SID'] || '';
+      const authToken = credentials['authToken'] || credentials['TWILIO_AUTH_TOKEN'] || '';
+      const phoneNumber = credentials['phoneNumber'] || credentials['TWILIO_PHONE_NUMBER'] || credentials['TWILIO_FROM_NUMBER'] || '';
+      
+      const hasAccountSid = !!(accountSid && String(accountSid).trim());
+      const hasAuthToken = !!(authToken && String(authToken).trim());
+      const hasPhoneNumber = !!(phoneNumber && String(phoneNumber).trim());
+
+      const validation = {
+        valid: hasAccountSid && hasAuthToken && hasPhoneNumber,
+        missing: [
+          !hasAccountSid && 'accountSid',
+          !hasAuthToken && 'authToken',
+          !hasPhoneNumber && 'phoneNumber'
+        ].filter(Boolean) as string[]
+      };
+
+      // ✅ VALIDAR: Formato de Account SID (debe empezar con 'AC')
+      let accountSidValid = true;
+      let accountSidError: string | undefined;
+      if (hasAccountSid) {
+        const accountSidStr = String(accountSid).trim();
+        if (!accountSidStr.startsWith('AC')) {
+          accountSidValid = false;
+          accountSidError = 'Account SID debe empezar con "AC"';
+        } else if (accountSidStr.length < 32 || accountSidStr.length > 34) {
+          accountSidValid = false;
+          accountSidError = 'Account SID debe tener entre 32 y 34 caracteres';
+        }
+      }
+
+      // ✅ VALIDAR: Formato de número de teléfono (debe empezar con +)
+      let phoneNumberValid = true;
+      let phoneNumberError: string | undefined;
+      if (hasPhoneNumber) {
+        const phoneNumberStr = String(phoneNumber).trim();
+        if (!phoneNumberStr.startsWith('+') && !phoneNumberStr.startsWith('whatsapp:+')) {
+          phoneNumberValid = false;
+          phoneNumberError = 'Phone Number debe empezar con "+" o "whatsapp:+"';
+        }
+      }
+
+      const status: APIStatus = {
+        apiName: 'twilio',
+        name: 'Twilio API',
+        isConfigured: validation.valid && accountSidValid && phoneNumberValid,
+        isAvailable: validation.valid && accountSidValid && phoneNumberValid,
+        status: validation.valid && accountSidValid && phoneNumberValid ? 'healthy' : 'unhealthy',
+        lastChecked: new Date(),
+        missingFields: validation.missing
+      };
+
+      if (!validation.valid) {
+        const missingList = validation.missing.join(', ');
+        status.error = `Missing credentials: ${missingList}`;
+        status.message = `Faltan credenciales requeridas: ${missingList}`;
+      } else if (!accountSidValid) {
+        status.error = accountSidError || 'Account SID format invalid';
+        status.message = accountSidError || 'El Account SID tiene un formato inválido';
+      } else if (!phoneNumberValid) {
+        status.error = phoneNumberError || 'Phone Number format invalid';
+        status.message = phoneNumberError || 'El número de teléfono tiene un formato inválido';
+      } else {
+        status.message = 'API configurada correctamente';
+      }
+
+      this.cache.set(cacheKey, status);
+      return status;
+    } catch (error) {
+      const status: APIStatus = {
+        apiName: 'twilio',
+        name: 'Twilio API',
+        isConfigured: false,
+        isAvailable: false,
+        lastChecked: new Date(),
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+      this.cache.set(cacheKey, status);
+      return status;
+    }
+  }
+
+  /**
+   * Check Slack API availability for specific user
+   */
+  async checkSlackAPI(userId: number, forceRefresh: boolean = false): Promise<APIStatus> {
+    const cacheKey = this.getCacheKey(userId, 'slack', 'production');
+    if (!forceRefresh) {
+      const cached = await this.getCached(cacheKey);
+      if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
+        return cached;
+      }
+    } else {
+      await this.deleteCached(cacheKey);
+    }
+
+    try {
+      // ✅ CORRECCIÓN SLACK: Buscar credenciales en CredentialsManager primero, luego variables de entorno
+      let credentials = await this.getUserCredentials(userId, 'slack', 'production').catch(() => null);
+      
+      // Si no hay credenciales en la BD, verificar variables de entorno
+      if (!credentials) {
+        const hasEnvWebhookUrl = !!(process.env.SLACK_WEBHOOK_URL);
+        const hasEnvBotToken = !!(process.env.SLACK_BOT_TOKEN);
+        
+        if (hasEnvWebhookUrl || hasEnvBotToken) {
+          // Usar variables de entorno como credenciales
+          credentials = {
+            webhookUrl: process.env.SLACK_WEBHOOK_URL || undefined,
+            botToken: process.env.SLACK_BOT_TOKEN || undefined,
+            channel: process.env.SLACK_CHANNEL || '#ivan-reseller',
+          };
+        }
+      }
+      
+      if (!credentials) {
+        const status: APIStatus = {
+          apiName: 'slack',
+          name: 'Slack API',
+          isConfigured: false,
+          isAvailable: false,
+          lastChecked: new Date(),
+          error: 'Slack API not configured for this user'
+        };
+        await this.setCached(cacheKey, status);
+        return status;
+      }
+
+      // ✅ CORRECCIÓN SLACK: Verificar campos con nombres correctos (camelCase + múltiples variantes)
+      const webhookUrl = credentials['webhookUrl'] || credentials['SLACK_WEBHOOK_URL'] || '';
+      const botToken = credentials['botToken'] || credentials['SLACK_BOT_TOKEN'] || '';
+      const channel = credentials['channel'] || credentials['SLACK_CHANNEL'] || '';
+      
+      const hasWebhookUrl = !!(webhookUrl && String(webhookUrl).trim());
+      const hasBotToken = !!(botToken && String(botToken).trim());
+
+      // ✅ VALIDACIÓN ESPECIAL SLACK: Requiere AL MENOS uno de webhookUrl o botToken
+      const validation = {
+        valid: hasWebhookUrl || hasBotToken,
+        missing: (!hasWebhookUrl && !hasBotToken) ? ['webhookUrl o botToken (al menos uno es requerido)'] : []
+      };
+
+      // ✅ VALIDAR: Formato de Webhook URL (debe ser URL válida)
+      let webhookUrlValid = true;
+      let webhookUrlError: string | undefined;
+      if (hasWebhookUrl) {
+        const webhookUrlStr = String(webhookUrl).trim();
+        try {
+          const url = new URL(webhookUrlStr);
+          if (!url.href.startsWith('https://hooks.slack.com/')) {
+            webhookUrlValid = false;
+            webhookUrlError = 'Webhook URL debe ser una URL de Slack válida (https://hooks.slack.com/...)';
+          }
+        } catch {
+          webhookUrlValid = false;
+          webhookUrlError = 'Webhook URL debe ser una URL válida';
+        }
+      }
+
+      // ✅ VALIDAR: Formato de Bot Token (debe empezar con xoxb- o xoxp-)
+      let botTokenValid = true;
+      let botTokenError: string | undefined;
+      if (hasBotToken) {
+        const botTokenStr = String(botToken).trim();
+        if (!botTokenStr.startsWith('xoxb-') && !botTokenStr.startsWith('xoxp-')) {
+          botTokenValid = false;
+          botTokenError = 'Bot Token debe empezar con "xoxb-" (bot) o "xoxp-" (user)';
+        }
+      }
+
+      const status: APIStatus = {
+        apiName: 'slack',
+        name: 'Slack API',
+        isConfigured: validation.valid && (!hasWebhookUrl || webhookUrlValid) && (!hasBotToken || botTokenValid),
+        isAvailable: validation.valid && (!hasWebhookUrl || webhookUrlValid) && (!hasBotToken || botTokenValid),
+        status: validation.valid && (!hasWebhookUrl || webhookUrlValid) && (!hasBotToken || botTokenValid) ? 'healthy' : 'unhealthy',
+        lastChecked: new Date(),
+        missingFields: validation.missing
+      };
+
+      if (!validation.valid) {
+        status.error = 'Either webhookUrl or botToken is required';
+        status.message = 'Se requiere al menos uno de: webhookUrl o botToken';
+      } else if (hasWebhookUrl && !webhookUrlValid) {
+        status.error = webhookUrlError || 'Webhook URL format invalid';
+        status.message = webhookUrlError || 'El Webhook URL tiene un formato inválido';
+      } else if (hasBotToken && !botTokenValid) {
+        status.error = botTokenError || 'Bot Token format invalid';
+        status.message = botTokenError || 'El Bot Token tiene un formato inválido';
+      } else {
+        status.message = 'API configurada correctamente';
+      }
+
+      this.cache.set(cacheKey, status);
+      return status;
+    } catch (error) {
+      const status: APIStatus = {
+        apiName: 'slack',
+        name: 'Slack API',
+        isConfigured: false,
+        isAvailable: false,
+        lastChecked: new Date(),
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+      this.cache.set(cacheKey, status);
+      return status;
+    }
+  }
+
+  /**
+   * Check OpenAI API availability for specific user
+   */
+  async checkOpenAIAPI(userId: number, forceRefresh: boolean = false): Promise<APIStatus> {
+    const cacheKey = this.getCacheKey(userId, 'openai', 'production');
+    if (!forceRefresh) {
+      const cached = await this.getCached(cacheKey);
+      if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
+        return cached;
+      }
+    } else {
+      await this.deleteCached(cacheKey);
+    }
+
+    try {
+      // ✅ CORRECCIÓN OPENAI: Buscar credenciales en CredentialsManager primero, luego variables de entorno
+      let credentials = await this.getUserCredentials(userId, 'openai', 'production').catch(() => null);
+      
+      // Si no hay credenciales en la BD, verificar variables de entorno
+      if (!credentials) {
+        const hasEnvApiKey = !!(process.env.OPENAI_API_KEY);
+        
+        if (hasEnvApiKey) {
+          // Usar variables de entorno como credenciales
+          credentials = {
+            apiKey: process.env.OPENAI_API_KEY || '',
+            organization: process.env.OPENAI_ORGANIZATION,
+            model: process.env.OPENAI_MODEL,
+          };
+        }
+      }
+      
+      if (!credentials) {
+        const status: APIStatus = {
+          apiName: 'openai',
+          name: 'OpenAI API',
+          isConfigured: false,
+          isAvailable: false,
+          lastChecked: new Date(),
+          error: 'OpenAI API not configured for this user'
+        };
+        await this.setCached(cacheKey, status);
+        return status;
+      }
+
+      // ✅ CORRECCIÓN OPENAI: Verificar campos con nombres correctos (camelCase + múltiples variantes)
+      const apiKey = credentials['apiKey'] || credentials['OPENAI_API_KEY'] || '';
+      const organization = credentials['organization'] || credentials['OPENAI_ORGANIZATION'];
+      const model = credentials['model'] || credentials['OPENAI_MODEL'];
+      
+      const hasApiKey = !!(apiKey && String(apiKey).trim());
+
+      const validation = {
+        valid: hasApiKey,
+        missing: !hasApiKey ? ['apiKey'] : []
+      };
+
+      // ✅ VALIDAR: Formato de API Key (debe empezar con 'sk-')
+      let apiKeyValid = true;
+      let apiKeyError: string | undefined;
+      if (hasApiKey) {
+        const apiKeyStr = String(apiKey).trim();
+        if (!apiKeyStr.startsWith('sk-')) {
+          apiKeyValid = false;
+          apiKeyError = 'API Key debe empezar con "sk-"';
+        } else if (apiKeyStr.length < 20) {
+          apiKeyValid = false;
+          apiKeyError = 'API Key parece ser demasiado corta (debe tener al menos 20 caracteres)';
+        }
+      }
+
+      const status: APIStatus = {
+        apiName: 'openai',
+        name: 'OpenAI API',
+        isConfigured: validation.valid && apiKeyValid,
+        isAvailable: validation.valid && apiKeyValid,
+        status: validation.valid && apiKeyValid ? 'healthy' : 'unhealthy',
+        lastChecked: new Date(),
+        missingFields: validation.missing
+      };
+
+      if (!validation.valid) {
+        status.error = 'Missing credentials: apiKey';
+        status.message = 'Faltan credenciales requeridas: apiKey';
+      } else if (!apiKeyValid) {
+        status.error = apiKeyError || 'API Key format invalid';
+        status.message = apiKeyError || 'El API Key tiene un formato inválido';
+      } else {
+        status.message = 'API configurada correctamente';
+        if (model) {
+          status.message += ` (Modelo: ${model})`;
+        }
+      }
+
+      this.cache.set(cacheKey, status);
+      return status;
+    } catch (error) {
+      const status: APIStatus = {
+        apiName: 'openai',
+        name: 'OpenAI API',
         isConfigured: false,
         isAvailable: false,
         lastChecked: new Date(),
@@ -1210,7 +2069,8 @@ export class APIAvailabilityService {
       () => this.checkEbayAPI(userId, 'production'),
       () => this.checkAmazonAPI(userId, 'production'),
       () => this.checkMercadoLibreAPI(userId, 'production'),
-      () => this.checkPayPalAPI(userId),
+      () => this.checkPayPalAPI(userId, 'production'),
+      () => this.checkStripeAPI(userId, 'production'),
     ];
     
     const simpleChecks = [
@@ -1219,11 +2079,17 @@ export class APIAvailabilityService {
       () => this.checkZenRowsAPI(userId),
       () => this.check2CaptchaAPI(userId),
       () => this.checkAliExpressAPI(userId),
+      () => this.checkAliExpressAffiliateAPI(userId, 'production'),
+      () => this.checkAliExpressDropshippingAPI(userId, 'production'),
+      () => this.checkEmailAPI(userId),
+      () => this.checkTwilioAPI(userId),
+      () => this.checkSlackAPI(userId),
+      () => this.checkOpenAIAPI(userId),
     ];
     
     // Ejecutar checks críticos en serie con timeout y error handling
     const criticalResults: APIStatus[] = [];
-    const criticalCheckNames = ['ebay', 'amazon', 'mercadolibre', 'paypal'];
+    const criticalCheckNames = ['ebay', 'amazon', 'mercadolibre', 'paypal', 'stripe'];
     for (let i = 0; i < criticalChecks.length; i++) {
       const check = criticalChecks[i];
       const checkName = criticalCheckNames[i] || 'unknown';
@@ -1289,7 +2155,7 @@ export class APIAvailabilityService {
       lastChecked: new Date(),
       error: 'Check failed',
     } as APIStatus;
-    const paypal = criticalResults[3] || {
+    const paypalProduction = criticalResults[3] || {
       apiName: 'paypal',
       name: 'PayPal API',
       isConfigured: false,
@@ -1299,13 +2165,20 @@ export class APIAvailabilityService {
     } as APIStatus;
     
     // Extraer resultados simples con nombres correctos
-    const simpleCheckNames = ['groq', 'scraperapi', 'zenrows', '2captcha', 'aliexpress'];
+    const simpleCheckNames = ['groq', 'scraperapi', 'serpapi', 'zenrows', '2captcha', 'aliexpress', 'aliexpress-affiliate', 'aliexpress-dropshipping', 'email', 'twilio', 'slack', 'openai'];
     const [
       groq,
       scraper,
+      serpapi,
       zenrows,
       captcha,
-      aliexpress
+      aliexpress,
+      aliexpressAffiliate,
+      aliexpressDropshipping,
+      email,
+      twilio,
+      slack,
+      openai
     ] = simpleResults.map((result, index) => {
       if (result.status === 'fulfilled') {
         return result.value;
@@ -1332,10 +2205,18 @@ export class APIAvailabilityService {
       mercadolibreProduction,
       groq,
       scraper,
+      serpapi, // ✅ NUEVO: SerpAPI/Google Trends
       zenrows,
       captcha,
-      paypal,
-      aliexpress
+      paypalProduction,
+      stripeProduction,
+      aliexpress,
+      aliexpressAffiliate,
+      aliexpressDropshipping,
+      email,
+      twilio,
+      slack,
+      openai
     ];
 
     if (supportsEnvironments('ebay')) {
@@ -1359,6 +2240,36 @@ export class APIAvailabilityService {
     if (supportsEnvironments('mercadolibre')) {
       const index = statuses.findIndex((status) => status.apiName === 'mercadolibre');
       const sandboxStatus = await this.checkMercadoLibreAPI(userId, 'sandbox');
+      if (index >= 0) {
+        statuses.splice(index + 1, 0, sandboxStatus);
+      } else {
+        statuses.push(sandboxStatus);
+      }
+    }
+    
+    // ✅ CORRECCIÓN ALIEXPRESS AFFILIATE: Agregar sandbox si aplica
+    // Nota: Aunque AliExpress Affiliate usa el mismo endpoint, mantenemos la distinción por consistencia
+    const aliexpressAffiliateIndex = statuses.findIndex((status) => status.apiName === 'aliexpress-affiliate');
+    if (aliexpressAffiliateIndex >= 0) {
+      const sandboxStatus = await this.checkAliExpressAffiliateAPI(userId, 'sandbox');
+      statuses.splice(aliexpressAffiliateIndex + 1, 0, sandboxStatus);
+    }
+    
+    // ✅ CORRECCIÓN PAYPAL: Agregar sandbox si aplica
+    if (supportsEnvironments('paypal')) {
+      const index = statuses.findIndex((status) => status.apiName === 'paypal');
+      const sandboxStatus = await this.checkPayPalAPI(userId, 'sandbox');
+      if (index >= 0) {
+        statuses.splice(index + 1, 0, sandboxStatus);
+      } else {
+        statuses.push(sandboxStatus);
+      }
+    }
+    
+    // ✅ CORRECCIÓN ALIEXPRESS DROPSHIPPING: Agregar sandbox si aplica
+    if (supportsEnvironments('aliexpress-dropshipping')) {
+      const index = statuses.findIndex((status) => status.apiName === 'aliexpress-dropshipping');
+      const sandboxStatus = await this.checkAliExpressDropshippingAPI(userId, 'sandbox');
       if (index >= 0) {
         statuses.splice(index + 1, 0, sandboxStatus);
       } else {

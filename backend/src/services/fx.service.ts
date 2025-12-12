@@ -18,6 +18,7 @@ class FXService {
   private providerEnabled = (process.env.FX_PROVIDER_ENABLED || 'true').toLowerCase() !== 'false';
   private providerUrl = process.env.FX_PROVIDER_URL || 'https://open.er-api.com/v6/latest/{base}';
   private providerSymbols = process.env.FX_PROVIDER_SYMBOLS;
+  private providerApiKey = process.env.EXCHANGERATE_API_KEY || process.env.FX_API_KEY; // Soporte para API Key
   private refreshInFlight: Promise<void> | null = null;
 
   // ✅ Monedas que no usan decimales (redondear a enteros)
@@ -79,7 +80,10 @@ class FXService {
       base: this.base,
       rates: { ...this.rates },
       lastUpdated: this.lastUpdated?.toISOString() ?? null,
-      provider: this.providerEnabled ? 'exchangerate.host' : 'manual',
+      provider: this.providerEnabled 
+        ? (this.providerApiKey ? 'exchangerate-api.com' : 'open.er-api.com')
+        : 'manual',
+      hasApiKey: !!this.providerApiKey,
     };
   }
 
@@ -119,25 +123,43 @@ class FXService {
 
   private buildProviderUrl(base: string): string {
     if (!this.providerUrl) {
+      // ✅ Si hay API Key, usar exchangerate-api.com (más profesional)
+      if (this.providerApiKey) {
+        return `https://v6.exchangerate-api.com/v6/${this.providerApiKey}/latest/${base}`;
+      }
       return `https://open.er-api.com/v6/latest/${base}`;
     }
 
+    let url: string;
     if (this.providerUrl.includes('{base}')) {
-      return this.providerUrl.replace('{base}', base);
+      url = this.providerUrl.replace('{base}', base);
+    } else {
+      try {
+        const urlObj = new URL(this.providerUrl);
+        urlObj.searchParams.set('base', base);
+        if (this.providerSymbols) {
+          urlObj.searchParams.set('symbols', this.providerSymbols);
+        }
+        // ✅ Agregar API Key si está disponible y la URL lo soporta
+        if (this.providerApiKey) {
+          // Para exchangerate-api.com, la API key va en la URL
+          if (urlObj.hostname.includes('exchangerate-api.com')) {
+            // Ya está en la URL en buildProviderUrl
+          } else {
+            // Para otros proveedores, agregar como query param
+            urlObj.searchParams.set('apikey', this.providerApiKey);
+          }
+        }
+        url = urlObj.toString();
+      } catch {
+        const separator = this.providerUrl.includes('?') ? '&' : '?';
+        const symbolsParam = this.providerSymbols ? `&symbols=${encodeURIComponent(this.providerSymbols)}` : '';
+        const apiKeyParam = this.providerApiKey ? `&apikey=${encodeURIComponent(this.providerApiKey)}` : '';
+        url = `${this.providerUrl}${separator}base=${base}${symbolsParam}${apiKeyParam}`;
+      }
     }
 
-    try {
-      const url = new URL(this.providerUrl);
-      url.searchParams.set('base', base);
-      if (this.providerSymbols) {
-        url.searchParams.set('symbols', this.providerSymbols);
-      }
-      return url.toString();
-    } catch {
-      const separator = this.providerUrl.includes('?') ? '&' : '?';
-      const symbolsParam = this.providerSymbols ? `&symbols=${encodeURIComponent(this.providerSymbols)}` : '';
-      return `${this.providerUrl}${separator}base=${base}${symbolsParam}`;
-    }
+    return url;
   }
 
   async refreshRates(base: string = this.base): Promise<void> {
@@ -153,7 +175,18 @@ class FXService {
 
     this.refreshInFlight = (async () => {
       const url = this.buildProviderUrl(targetBase);
-      const response = await axios.get(url, { timeout: 10_000 });
+      
+      // ✅ Configurar headers con API Key si es necesario (para algunos proveedores)
+      const headers: Record<string, string> = {};
+      if (this.providerApiKey && !url.includes(this.providerApiKey)) {
+        // Si la API key no está en la URL, agregarla como header
+        headers['apikey'] = this.providerApiKey;
+      }
+      
+      const response = await axios.get(url, { 
+        timeout: 10_000,
+        headers: Object.keys(headers).length > 0 ? headers : undefined
+      });
       const data = response.data;
       if (!data || typeof data !== 'object') {
         throw new Error('Empty FX provider response');
@@ -174,9 +207,21 @@ class FXService {
         }
         rates = data.rates as Rates;
       } else if (data.conversion_rates) {
+        // ✅ Formato exchangerate-api.com
         providerBase = (data.base_code || targetBase || this.base).toUpperCase();
         if (data.time_last_update_unix) {
           timestamp = new Date(data.time_last_update_unix * 1000);
+        } else if (data.time_last_update_utc) {
+          timestamp = new Date(data.time_last_update_utc);
+        }
+        rates = data.conversion_rates as Rates;
+      } else if (data.result === 'success' && data.conversion_rates) {
+        // ✅ Formato alternativo exchangerate-api.com
+        providerBase = (data.base_code || targetBase || this.base).toUpperCase();
+        if (data.time_last_update_unix) {
+          timestamp = new Date(data.time_last_update_unix * 1000);
+        } else if (data.time_last_update_utc) {
+          timestamp = new Date(data.time_last_update_utc);
         }
         rates = data.conversion_rates as Rates;
       }

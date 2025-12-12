@@ -235,9 +235,52 @@ export class AutomatedBusinessService {
         return;
       }
       
-      // 1. Buscar nuevas oportunidades (si está en automatic o guided)
-      if (scrapeMode === 'automatic' || scrapeMode === 'guided') {
+      // 1. Buscar nuevas oportunidades
+      if (scrapeMode === 'automatic') {
         await this.discoverOpportunities(currentUserId, environment);
+      } else if (scrapeMode === 'guided') {
+        // ✅ GUIDED MODE: Notificar antes de buscar oportunidades
+        const { notificationService } = await import('./notification.service');
+        const { guidedActionTracker } = await import('./guided-action-tracker.service');
+        const actionId = await guidedActionTracker.registerAction(
+          currentUserId,
+          'scrape',
+          'confirm',
+          { userId: currentUserId },
+          5, // 5 minutos timeout
+          async () => {
+            await this.discoverOpportunities(currentUserId, environment);
+          }
+        );
+        
+        await notificationService.sendToUser(currentUserId, {
+          type: 'ACTION_REQUIRED',
+          title: 'Búsqueda guiada - ¿Buscar oportunidades ahora?',
+          message: 'El sistema está listo para buscar nuevas oportunidades. ¿Deseas iniciar la búsqueda ahora? (Se iniciará automáticamente en 5 minutos si no respondes)',
+          priority: 'NORMAL',
+          category: 'JOB',
+          data: {
+            stage: 'scrape',
+            mode: 'guided',
+            actionId,
+            userId: currentUserId,
+            expiresAt: new Date(Date.now() + 5 * 60 * 1000)
+          },
+          actions: [
+            { 
+              id: `${actionId}_confirm`, 
+              label: '✅ Iniciar Búsqueda', 
+              action: 'confirm_scrape_guided', 
+              variant: 'primary' 
+            },
+            { 
+              id: `${actionId}_skip`, 
+              label: '⏭️ Omitir Ahora', 
+              action: 'skip_scrape_guided', 
+              variant: 'secondary' 
+            }
+          ]
+        });
       }
       
       // ✅ Verificar etapa ANALYZE
@@ -255,9 +298,53 @@ export class AutomatedBusinessService {
         return;
       }
       
-      // 2. Monitorear precios existentes (si está en automatic o guided)
-      if (analyzeMode === 'automatic' || analyzeMode === 'guided') {
+      // 2. Monitorear precios existentes
+      if (analyzeMode === 'automatic') {
         await this.monitorPricing(currentUserId);
+      } else if (analyzeMode === 'guided') {
+        // ✅ GUIDED MODE: Notificar antes de analizar
+        const { notificationService } = await import('./notification.service');
+        const actionId = `guided_analyze_${currentUserId}_${Date.now()}`;
+        
+        await notificationService.sendToUser(currentUserId, {
+          type: 'ACTION_REQUIRED',
+          title: 'Análisis guiado - ¿Analizar productos ahora?',
+          message: 'El sistema está listo para analizar precios y oportunidades existentes. ¿Deseas iniciar el análisis ahora? (Se iniciará automáticamente en 5 minutos si no respondes)',
+          priority: 'NORMAL',
+          category: 'JOB',
+          data: {
+            stage: 'analyze',
+            mode: 'guided',
+            actionId,
+            userId: currentUserId,
+            expiresAt: new Date(Date.now() + 5 * 60 * 1000)
+          },
+          actions: [
+            { 
+              id: `${actionId}_confirm`, 
+              label: '✅ Iniciar Análisis', 
+              action: 'confirm_analyze_guided', 
+              variant: 'primary' 
+            },
+            { 
+              id: `${actionId}_skip`, 
+              label: '⏭️ Omitir Ahora', 
+              action: 'skip_analyze_guided', 
+              variant: 'secondary' 
+            }
+          ]
+        });
+
+        // Programar análisis automático después de timeout
+        setTimeout(async () => {
+          const currentMode = await workflowConfigService.getStageMode(currentUserId, 'analyze');
+          if (currentMode === 'guided') {
+            logger.info('AutomatedBusiness: Guided analyze - No response, executing automatically after timeout', {
+              userId: currentUserId
+            });
+            await this.monitorPricing(currentUserId);
+          }
+        }, 5 * 60 * 1000);
       }
       
       // ✅ Verificar etapa PUBLISH
@@ -275,9 +362,53 @@ export class AutomatedBusinessService {
         return;
       }
       
-      // 3. Procesar órdenes pendientes (si está en automatic o guided)
-      if (publishMode === 'automatic' || publishMode === 'guided') {
+      // 3. Procesar órdenes pendientes
+      if (publishMode === 'automatic') {
         await this.processOrders(currentUserId);
+      } else if (publishMode === 'guided') {
+        // ✅ GUIDED MODE: Notificar antes de procesar publicaciones pendientes
+        const { notificationService } = await import('./notification.service');
+        const actionId = `guided_publish_process_${currentUserId}_${Date.now()}`;
+        
+        await notificationService.sendToUser(currentUserId, {
+          type: 'ACTION_REQUIRED',
+          title: 'Procesamiento guiado - ¿Procesar publicaciones pendientes ahora?',
+          message: 'Hay productos listos para publicar. ¿Deseas procesarlos ahora? (Se procesarán automáticamente en 5 minutos si no respondes)',
+          priority: 'NORMAL',
+          category: 'PRODUCT',
+          data: {
+            stage: 'publish',
+            mode: 'guided',
+            actionId,
+            userId: currentUserId,
+            expiresAt: new Date(Date.now() + 5 * 60 * 1000)
+          },
+          actions: [
+            { 
+              id: `${actionId}_confirm`, 
+              label: '✅ Procesar Ahora', 
+              action: 'confirm_publish_process_guided', 
+              variant: 'primary' 
+            },
+            { 
+              id: `${actionId}_skip`, 
+              label: '⏭️ Omitir Ahora', 
+              action: 'skip_publish_process_guided', 
+              variant: 'secondary' 
+            }
+          ]
+        });
+
+        // Programar procesamiento automático después de timeout
+        setTimeout(async () => {
+          const currentMode = await workflowConfigService.getStageMode(currentUserId, 'publish');
+          if (currentMode === 'guided') {
+            logger.info('AutomatedBusiness: Guided publish process - No response, executing automatically after timeout', {
+              userId: currentUserId
+            });
+            await this.processOrders(currentUserId);
+          }
+        }, 5 * 60 * 1000);
       }
       
       // ✅ Verificar etapa FULFILLMENT

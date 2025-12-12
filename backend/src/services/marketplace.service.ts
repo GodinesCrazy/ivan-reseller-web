@@ -1093,11 +1093,23 @@ export class MarketplaceService {
       // Convert price to marketplace currency
       const fxService = (await import('./fx.service')).default;
       const suggestedPriceBase = toNumber(product.finalPrice || product.suggestedPrice);
-      const priceInMarketplaceCurrency = fxService.convert(
-        suggestedPriceBase,
-        productCurrency,
-        marketplaceConfig.currency
-      );
+      let priceInMarketplaceCurrency = suggestedPriceBase;
+      try {
+        priceInMarketplaceCurrency = fxService.convert(
+          suggestedPriceBase,
+          productCurrency,
+          marketplaceConfig.currency
+        );
+      } catch (error: any) {
+        logger.warn('[MarketplaceService] FX conversion failed for suggested price', {
+          from: productCurrency,
+          to: marketplaceConfig.currency,
+          amount: suggestedPriceBase,
+          error: error?.message
+        });
+        // Fallback: usar precio sin convertir
+        priceInMarketplaceCurrency = suggestedPriceBase;
+      }
 
       // Generate AI title and description (reuse existing methods)
       let finalTitle = product.title;
@@ -1131,11 +1143,23 @@ export class MarketplaceService {
       
       // Calculate profit
       const costBase = toNumber(product.aliexpressPrice);
-      const costInMarketplaceCurrency = fxService.convert(
-        costBase,
-        productCurrency,
-        marketplaceConfig.currency
-      );
+      let costInMarketplaceCurrency = costBase;
+      try {
+        costInMarketplaceCurrency = fxService.convert(
+          costBase,
+          productCurrency,
+          marketplaceConfig.currency
+        );
+      } catch (error: any) {
+        logger.warn('[MarketplaceService] FX conversion failed for cost', {
+          from: productCurrency,
+          to: marketplaceConfig.currency,
+          amount: costBase,
+          error: error?.message
+        });
+        // Fallback: usar costo sin convertir
+        costInMarketplaceCurrency = costBase;
+      }
       const potentialProfit = priceInMarketplaceCurrency - costInMarketplaceCurrency;
       const profitMargin = priceInMarketplaceCurrency > 0 
         ? (potentialProfit / priceInMarketplaceCurrency) * 100 
