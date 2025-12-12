@@ -1350,15 +1350,6 @@ class OpportunityFinderService {
         });
         continue; // Saltar productos sin URL válida
       }
-        logger.warn('Producto sin URL válida, saltando oportunidad', {
-          service: 'opportunity-finder',
-          title: product.title?.substring(0, 50),
-          hasUrl: !!product.productUrl,
-          urlLength: product.productUrl?.length || 0,
-          productUrl: product.productUrl?.substring(0, 80) || 'NO_URL'
-        });
-        continue; // Saltar productos sin URL válida
-      }
 
       // ✅ TAREA 1: Validar y normalizar URL de imagen con fallback
       let imageUrl = product.imageUrl;
@@ -1538,7 +1529,9 @@ class OpportunityFinderService {
           feesConsidered: opp.feesConsidered,
           targetMarketplaces: opp.targetMarketplaces,
         }, analysis as any);
-      } catch { }
+      } catch (e) {
+        // Ignorar errores al guardar oportunidad
+      }
     }
 
     logger.info('Resumen de procesamiento', {
@@ -1548,11 +1541,11 @@ class OpportunityFinderService {
       productsProcessed: processedCount,
       skippedInvalid,
       skippedLowMargin,
-      skippedLowDemand, // ✅ NUEVO: Productos descartados por baja demanda
-      skippedDecliningTrend, // ✅ NUEVO: Productos descartados por tendencia declinante
-      skippedLowVolume, // ✅ NUEVO: Productos descartados por bajo volumen de búsqueda
-      skippedSlowSale, // ✅ NUEVO: Productos descartados por tiempo largo hasta primera venta
-      skippedLongBreakEven, // ✅ NUEVO: Productos descartados por tiempo largo hasta break-even
+      skippedLowDemand, // NUEVO: Productos descartados por baja demanda
+      skippedDecliningTrend, // NUEVO: Productos descartados por tendencia declinante
+      skippedLowVolume, // NUEVO: Productos descartados por bajo volumen de búsqueda
+      skippedSlowSale, // NUEVO: Productos descartados por tiempo largo hasta primera venta
+      skippedLongBreakEven, // NUEVO: Productos descartados por tiempo largo hasta break-even
       opportunitiesFound: opportunities.length,
       qualityFilters: {
         minMargin: `${(this.minMargin * 100).toFixed(1)}%`,

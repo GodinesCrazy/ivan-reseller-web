@@ -412,49 +412,6 @@ router.post('/handle-guided-action', async (req: Request, res: Response, next) =
   } catch (error: any) {
     next(error);
   }
-});('[Workflow] Error continuing stage', {
-          userId,
-          stage,
-          error: serviceError?.message || String(serviceError)
-        });
-        res.json({ 
-          success: true, 
-          message: `Stage ${stage} continued (service notification may have failed)`,
-          stage,
-          action: 'continued',
-          warning: serviceError?.message
-        });
-      }
-    } else if (action === 'skip') {
-      logger.info('[Workflow] Skipping stage in guided mode', {
-        userId,
-        stage,
-        action: 'skip'
-      });
-      
-      res.json({ 
-        success: true, 
-        message: `Stage ${stage} skipped`,
-        stage,
-        action: 'skipped'
-      });
-    } else if (action === 'cancel') {
-      logger.info('[Workflow] Cancelling stage in guided mode', {
-        userId,
-        stage,
-        action: 'cancel'
-      });
-      
-      res.json({ 
-        success: true, 
-        message: `Stage ${stage} cancelled`,
-        stage,
-        action: 'cancelled'
-      });
-    }
-  } catch (error) {
-    next(error);
-  }
 });
 
 export default router;
