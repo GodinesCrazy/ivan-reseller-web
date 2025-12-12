@@ -265,9 +265,11 @@ function InicioRapido() {
               <li>• Para usar IA: Solo necesitas GROQ API Key (gratis, sin tarjeta de crédito)</li>
               <li>• Para vender: Configura eBay, Amazon o MercadoLibre (OAuth 2.0)</li>
               <li>• Para buscar productos: Configura AliExpress (sesión manual) y ScraperAPI/ZenRows (opcional)</li>
+              <li>• Para validar demanda real: Configura Google Trends API (SerpAPI) - opcional pero recomendado</li>
               <li>• Todas las credenciales se encriptan con AES-256-GCM antes de guardarse</li>
               <li>• El dashboard se actualiza en tiempo real con Socket.IO</li>
               <li>• Puedes tener credenciales en Sandbox y Production simultáneamente</li>
+              <li>• El sistema de oportunidades valida automáticamente demanda real con Google Trends</li>
             </ul>
           </div>
         </div>
@@ -428,6 +430,10 @@ function APIsCredenciales() {
             <li>
               <strong>Críticas:</strong> AliExpress (origen), eBay (comparador), ScraperAPI o ZenRows (anti-bloqueo) y Groq
               (IA). Si faltan, el sistema no podrá evaluar oportunidades con precisión.
+            </li>
+            <li>
+              <strong>Recomendada para validación:</strong> Google Trends API (SerpAPI) - Opcional pero recomendada para validar demanda real de productos. 
+              Si no se configura, el sistema usará análisis de datos internos como fallback.
             </li>
             <li>
               <strong>Recomendadas (APIs oficiales):</strong> AliExpress Affiliate API (para scraping rápido) y AliExpress Dropshipping API 
@@ -769,6 +775,66 @@ function APIsCredenciales() {
               </div>
               <div className="bg-green-50 border border-green-200 text-green-700 rounded p-3 text-xs">
                 <strong>Ventaja:</strong> GROQ ofrece generosas cuotas gratuitas (hasta 30 requests/minuto) y es muy rápida. Perfecta para uso en producción.
+              </div>
+            </div>
+          </div>
+
+          {/* Google Trends / SerpAPI */}
+          <div className="border rounded-xl p-6 bg-gradient-to-r from-indigo-50 to-blue-50">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900">Google Trends API (SerpAPI)</h4>
+                <span className="text-sm text-indigo-600 font-medium">Recomendada para validar demanda real</span>
+              </div>
+              <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
+                Opcional
+              </span>
+            </div>
+            <p className="text-gray-700 mb-3">
+              Valida demanda real de productos usando datos de Google Trends. El sistema usa esta API para verificar que los productos 
+              identificados como oportunidades tienen demanda real en el mercado antes de considerarlos válidos.
+            </p>
+            <div className="bg-white border rounded-lg p-4 space-y-3">
+              <div className="text-sm">
+                <strong>Campo requerido:</strong> API Key (SerpAPI Key)
+              </div>
+              <div className="pt-2 border-t text-sm text-gray-700 space-y-2">
+                <div className="font-semibold text-gray-900">Pasos para obtener la API Key:</div>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Ve a <a href="https://serpapi.com/users/sign_up" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">serpapi.com/users/sign_up <ExternalLink className="w-3 h-3 inline" /></a></li>
+                  <li>Crea una cuenta (hay plan gratuito con límites)</li>
+                  <li>Inicia sesión y ve a <strong>"Dashboard"</strong> o <a href="https://serpapi.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">serpapi.com/dashboard <ExternalLink className="w-3 h-3 inline" /></a></li>
+                  <li>En el dashboard, encuentra tu <strong>API Key</strong> (formato: <code>abc123def456...</code>)</li>
+                  <li><strong>IMPORTANTE:</strong> Copia tu API Key inmediatamente</li>
+                  <li>Ve a Ivan Reseller → <strong>Settings → Configuración de APIs → Google Trends API (SerpAPI)</strong></li>
+                  <li>Pega la API Key en el campo <strong>"SerpAPI Key"</strong></li>
+                  <li>Haz clic en <strong>"Guardar Configuración"</strong></li>
+                  <li>El estado cambiará a <strong>"Configurada y funcionando"</strong> ✅</li>
+                </ol>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 text-blue-700 rounded p-3 text-xs">
+                <strong>¿Cómo se usa en el sistema?</strong>
+                <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                  <li>Cuando buscas oportunidades, el sistema valida cada producto con Google Trends</li>
+                  <li>Verifica volumen de búsqueda, tendencias (creciente/estable/declinante), y confianza</li>
+                  <li>Solo productos con demanda real verificada aparecen como oportunidades válidas</li>
+                  <li>Esto garantiza que solo veas productos que realmente tienen potencial de venta</li>
+                </ul>
+              </div>
+              <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 rounded p-3 text-xs">
+                <strong>Nota importante:</strong>
+                <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                  <li>Es <strong>opcional</strong>: Si no configuras SerpAPI, el sistema usará análisis de datos internos como fallback</li>
+                  <li>Es <strong>recomendado</strong> para validaciones más precisas de demanda real</li>
+                  <li>Plan gratuito tiene límites de requests - verifica tu uso en el dashboard de SerpAPI</li>
+                  <li>El sistema prioriza las credenciales del usuario, luego variables de entorno, luego fallback interno</li>
+                </ul>
+              </div>
+              <div className="text-sm text-gray-600">
+                <strong>Documentación:</strong> 
+                <a href="https://serpapi.com/google-trends-api" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+                  serpapi.com/google-trends-api <ExternalLink className="w-3 h-3 inline" />
+                </a>
               </div>
             </div>
           </div>
@@ -1340,14 +1406,210 @@ function Oportunidades() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-4">🎯 Oportunidades</h2>
-        <p className="text-gray-600 text-lg">Productos rentables con IA</p>
+        <h2 className="text-3xl font-bold text-gray-900 mb-4">🎯 Oportunidades de Negocio</h2>
+        <p className="text-gray-600 text-lg">Sistema inteligente para encontrar productos rentables con demanda real</p>
       </div>
-      <div className="bg-purple-50 border border-purple-200 rounded-xl p-6">
-        <p className="text-gray-700">
-          El sistema analiza productos con IA para encontrar las mejores oportunidades de venta basándose en 
-          múltiples factores: margen, demanda, competencia y tendencias.
+
+      {/* Qué es */}
+      <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-xl p-6">
+        <h3 className="text-xl font-semibold text-gray-900 mb-3">¿Qué es el Sistema de Oportunidades?</h3>
+        <p className="text-gray-700 mb-4">
+          El sistema de oportunidades analiza productos de AliExpress usando <strong>múltiples criterios de calidad</strong> 
+          para identificar solo productos que realmente tienen potencial de venta rápida y rentabilidad real.
         </p>
+        <div className="grid grid-cols-2 gap-4 mt-4">
+          <div className="bg-white p-4 rounded-lg border border-purple-200">
+            <CheckCircle className="w-6 h-6 text-green-600 mb-2" />
+            <div className="font-semibold text-gray-900">Validación Real</div>
+            <div className="text-sm text-gray-600">Demanda verificada con Google Trends</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-purple-200">
+            <CheckCircle className="w-6 h-6 text-green-600 mb-2" />
+            <div className="font-semibold text-gray-900">Análisis de Tendencias</div>
+            <div className="text-sm text-gray-600">Detección de productos en crecimiento</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-purple-200">
+            <CheckCircle className="w-6 h-6 text-green-600 mb-2" />
+            <div className="font-semibold text-gray-900">Velocidad de Venta</div>
+            <div className="text-sm text-gray-600">Estimación de días hasta primera venta</div>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-purple-200">
+            <CheckCircle className="w-6 h-6 text-green-600 mb-2" />
+            <div className="font-semibold text-gray-900">Viabilidad Financiera</div>
+            <div className="text-sm text-gray-600">Cálculo de tiempo hasta break-even</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Cómo usar */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+        <h3 className="text-xl font-semibold text-gray-900 mb-4">📋 Cómo Usar el Sistema</h3>
+        <ol className="space-y-4 text-gray-700">
+          <li className="flex items-start gap-3">
+            <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold flex-shrink-0">1</div>
+            <div>
+              <div className="font-semibold text-gray-900 mb-1">Ir a Opportunities</div>
+              <p>Desde el menú lateral, haz clic en <strong>"Opportunities"</strong></p>
+            </div>
+          </li>
+          <li className="flex items-start gap-3">
+            <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold flex-shrink-0">2</div>
+            <div>
+              <div className="font-semibold text-gray-900 mb-1">Ingresar Búsqueda</div>
+              <p>Escribe palabras clave del producto que buscas (ej: "phone case", "wireless earbuds")</p>
+            </div>
+          </li>
+          <li className="flex items-start gap-3">
+            <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold flex-shrink-0">3</div>
+            <div>
+              <div className="font-semibold text-gray-900 mb-1">Configurar Filtros</div>
+              <ul className="list-disc list-inside mt-1 space-y-1 text-sm">
+                <li><strong>Marketplace:</strong> Selecciona donde quieres vender (eBay, Amazon, MercadoLibre)</li>
+                <li><strong>Región:</strong> País destino (US, MX, CL, etc.)</li>
+                <li><strong>Máximo de productos:</strong> Cuántos resultados quieres ver (recomendado: 10-20)</li>
+              </ul>
+            </div>
+          </li>
+          <li className="flex items-start gap-3">
+            <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold flex-shrink-0">4</div>
+            <div>
+              <div className="font-semibold text-gray-900 mb-1">Analizar Resultados</div>
+              <p>El sistema mostrará solo productos que cumplen todos los criterios de calidad:</p>
+              <ul className="list-disc list-inside mt-2 space-y-1 text-sm bg-white p-3 rounded border border-blue-200">
+                <li>✅ Margen mínimo del 10% o más</li>
+                <li>✅ Demanda real verificada (volumen de búsqueda ≥ 100)</li>
+                <li>✅ Tendencias favorables (no declinantes)</li>
+                <li>✅ Tiempo hasta primera venta ≤ 60 días</li>
+                <li>✅ Break-even time ≤ 90 días</li>
+              </ul>
+            </div>
+          </li>
+          <li className="flex items-start gap-3">
+            <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center font-bold flex-shrink-0">5</div>
+            <div>
+              <div className="font-semibold text-gray-900 mb-1">Seleccionar Oportunidad</div>
+              <p>Revisa los detalles de cada oportunidad y haz clic en <strong>"Crear Producto"</strong> para publicarlo</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+
+      {/* Criterios de calidad */}
+      <div className="bg-green-50 border border-green-200 rounded-xl p-6">
+        <h3 className="text-xl font-semibold text-gray-900 mb-4">✅ Criterios de Calidad Implementados</h3>
+        <div className="space-y-3 text-gray-700">
+          <div className="bg-white p-4 rounded-lg border border-green-200">
+            <div className="font-semibold text-gray-900 mb-2">1. Margen Rentable</div>
+            <p className="text-sm">Margen mínimo del 10% (configurable). El sistema calcula margen considerando: precio de AliExpress, costos de envío, impuestos de importación, y comisiones del marketplace.</p>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-green-200">
+            <div className="font-semibold text-gray-900 mb-2">2. Demanda Real Verificada</div>
+            <p className="text-sm">
+              El sistema valida demanda usando <strong>Google Trends (SerpAPI)</strong>. Solo acepta productos con:
+            </p>
+            <ul className="list-disc list-inside mt-2 text-sm space-y-1">
+              <li>Volumen de búsqueda ≥ 100</li>
+              <li>Confianza de tendencias ≥ 30%</li>
+              <li>Tendencia no declinante con baja confianza</li>
+            </ul>
+            <p className="text-sm mt-2 text-gray-600">
+              💡 <strong>Nota:</strong> Si no tienes SerpAPI configurado, el sistema usará análisis de datos internos como fallback.
+            </p>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-green-200">
+            <div className="font-semibold text-gray-900 mb-2">3. Velocidad de Venta</div>
+            <p className="text-sm">
+              Estimación de días hasta primera venta basada en volumen de búsqueda, tendencia, y competencia. 
+              Solo se aceptan productos con estimación ≤ 60 días (configurable).
+            </p>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-green-200">
+            <div className="font-semibold text-gray-900 mb-2">4. Viabilidad Financiera</div>
+            <p className="text-sm">
+              Cálculo de tiempo hasta recuperar inversión (break-even). Solo se aceptan productos con break-even ≤ 90 días (configurable).
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Información mostrada */}
+      <div className="bg-purple-50 border border-purple-200 rounded-xl p-6">
+        <h3 className="text-xl font-semibold text-gray-900 mb-4">📊 Información Mostrada en cada Oportunidad</h3>
+        <div className="grid grid-cols-2 gap-4 text-gray-700">
+          <div className="bg-white p-4 rounded-lg border border-purple-200">
+            <div className="font-semibold text-gray-900 mb-2">💰 Financiera</div>
+            <ul className="text-sm space-y-1">
+              <li>• Precio de compra (AliExpress)</li>
+              <li>• Precio sugerido de venta</li>
+              <li>• Margen de ganancia (%)</li>
+              <li>• ROI (Return on Investment)</li>
+              <li>• Costos totales (envío + impuestos)</li>
+            </ul>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-purple-200">
+            <div className="font-semibold text-gray-900 mb-2">📈 Demanda y Tendencias</div>
+            <ul className="text-sm space-y-1">
+              <li>• Volumen de búsqueda</li>
+              <li>• Tendencia (creciente/estable/declinante)</li>
+              <li>• Nivel de confianza</li>
+              <li>• Razón de viabilidad</li>
+            </ul>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-purple-200">
+            <div className="font-semibold text-gray-900 mb-2">⏱️ Tiempos Estimados</div>
+            <ul className="text-sm space-y-1">
+              <li>• Días hasta primera venta</li>
+              <li>• Días hasta break-even</li>
+            </ul>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-purple-200">
+            <div className="font-semibold text-gray-900 mb-2">🏪 Competencia</div>
+            <ul className="text-sm space-y-1">
+              <li>• Nivel de competencia</li>
+              <li>• Precios promedio en marketplace</li>
+              <li>• Precio competitivo sugerido</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Configuración recomendada */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
+        <div className="flex items-start gap-3">
+          <Info className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-semibold text-gray-900 mb-2">💡 Recomendaciones para Mejores Resultados</h4>
+            <ul className="space-y-2 text-gray-700">
+              <li>
+                <strong>1. Configura Google Trends (SerpAPI):</strong> 
+                <span className="text-sm block mt-1">
+                  Ve a Settings → Configuración de APIs → Google Trends API (SerpAPI). 
+                  Es opcional pero recomendado para validaciones más precisas de demanda real.
+                </span>
+              </li>
+              <li>
+                <strong>2. Configura Marketplaces:</strong>
+                <span className="text-sm block mt-1">
+                  Para análisis de competencia más preciso, configura eBay, Amazon o MercadoLibre. 
+                  Sin ellos, el sistema usará estimaciones heurísticas.
+                </span>
+              </li>
+              <li>
+                <strong>3. Usa palabras clave específicas:</strong>
+                <span className="text-sm block mt-1">
+                  En lugar de "phone", busca "iphone 15 pro max case". 
+                  Palabras más específicas = resultados más precisos.
+                </span>
+              </li>
+              <li>
+                <strong>4. Revisa los filtros:</strong>
+                <span className="text-sm block mt-1">
+                  Si no encuentras productos, intenta aumentar el margen mínimo o cambiar el marketplace destino.
+                </span>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   );

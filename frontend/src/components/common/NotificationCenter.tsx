@@ -115,7 +115,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
               {notification.actions.map((action) => (
                 <button
                   key={action.id}
-                  onClick={() => handleActionClick(action)}
+                  onClick={() => handleActionClick({ ...action, notification } as any)}
                   className={getActionButtonClass(action.variant)}
                 >
                   {action.label}
@@ -148,10 +148,39 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ className = '' 
     try {
       if (action.action && action.action.startsWith('continue_stage:')) {
         const stage = action.action.split(':')[1];
-        await api.post(`/api/automation/continue/${stage}`);
+        await api.post(`/api/workflow/continue-stage`, {
+          stage,
+          action: 'continue'
+        });
+      } else if (action.action && (action.action.includes('_guided') || action.action.includes('guided'))) {
+        // Manejar acciones guided (confirm/cancel)
+        const notificationData = (action as any).notification?.data || {};
+        const actionId = notificationData.actionId || action.id;
+        
+        if (action.action.includes('confirm_')) {
+          // Confirmar acción guided
+          await api.post('/api/workflow/handle-guided-action', {
+            action: action.action,
+            actionId: actionId,
+            data: notificationData
+          });
+        } else if (action.action.includes('cancel_')) {
+          // Cancelar acción guided
+          await api.post('/api/workflow/handle-guided-action', {
+            action: action.action,
+            actionId: actionId,
+            data: notificationData
+          });
+        }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to perform action:', e);
+      // Mostrar error al usuario
+      if (e.response?.data?.error) {
+        alert(`Error: ${e.response.data.error}`);
+      } else {
+        alert('Error al procesar la acción. Por favor, intenta nuevamente.');
+      }
     }
   };
 

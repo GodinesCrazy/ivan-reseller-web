@@ -10,6 +10,7 @@ export interface CostBreakdown {
 }
 
 import fx from './fx.service';
+import { logger } from '../config/logger';
 
 export class CostCalculatorService {
   // Base default fees; region can override
@@ -88,7 +89,19 @@ export class CostCalculatorService {
     };
 
     // Convert source cost to sale currency
-    const costInSaleCurrency = fx.convert(sourceCost, sourceCurrency, saleCurrency);
+    let costInSaleCurrency = sourceCost;
+    try {
+      costInSaleCurrency = fx.convert(sourceCost, sourceCurrency, saleCurrency);
+    } catch (error: any) {
+      logger.warn('[CostCalculator] FX conversion failed, using source cost', {
+        from: sourceCurrency,
+        to: saleCurrency,
+        amount: sourceCost,
+        error: error?.message
+      });
+      // Fallback: usar costo sin convertir
+      costInSaleCurrency = sourceCost;
+    }
     const shippingCost = opts?.shippingCost ?? 0;
     const importTax = opts?.importTax ?? 0; // ✅ MEJORADO: Impuestos de importación
     const taxes = salePrice * (opts?.taxesPct ?? 0); // Otros impuestos como porcentaje

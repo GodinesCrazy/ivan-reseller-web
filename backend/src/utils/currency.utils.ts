@@ -268,7 +268,19 @@ export function resolvePrice(input: PriceResolutionInput): {
     textHints: input.textHints?.slice(0, 3).map(t => String(t).substring(0, 30))
   });
   
-  const amountInBase = fxService.convert(amount, sourceCurrency, baseCurrency);
+  let amountInBase = amount;
+  try {
+    amountInBase = fxService.convert(amount, sourceCurrency, baseCurrency);
+  } catch (error: any) {
+    logger.warn('[CurrencyUtils] FX conversion failed', {
+      from: sourceCurrency,
+      to: baseCurrency,
+      amount,
+      error: error?.message
+    });
+    // Fallback: usar amount sin convertir
+    amountInBase = amount;
+  }
   
   // ✅ Logging de conversión
   if (sourceCurrency !== baseCurrency) {

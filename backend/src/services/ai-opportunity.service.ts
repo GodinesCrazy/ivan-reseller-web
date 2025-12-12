@@ -69,7 +69,9 @@ export class AIOpportunityEngine {
       ],
       proxyList: [], // Configurar proxies reales en producción
     });
-    this.googleTrendsService = getGoogleTrendsService();
+    // ✅ MODIFICADO: Usar instancia sin userId (se configurará por método si es necesario)
+    // Para AIOpportunityEngine, podría necesitar userId más adelante
+    this.googleTrendsService = getGoogleTrendsService(); // Usa variables de entorno por defecto
   }
 
   /**

@@ -21,8 +21,11 @@ Sistema completo de dropshipping automatizado con arquitectura web moderna (Node
 - **👥 Multi-Usuario** - Sistema de roles (Admin/User)
 - **💰 Comisiones Automáticas** - Cálculo y seguimiento automático (10% + costo fijo)
 - **🛒 Multi-Marketplace** - eBay, MercadoLibre, Amazon
-- **🔍 Scraping Inteligente** - AliExpress con IA
+- **🔍 Scraping Inteligente** - AliExpress con IA y validación de demanda real (Google Trends)
+- **⚙️ Sistema de Workflow Flexible** - Manual, Automatic o Guided por etapa
+- **🌐 Ambientes Separados** - Sandbox y Production por usuario
 - **📊 Dashboard en Tiempo Real** - Métricas y analytics
+- **🔔 Notificaciones en Tiempo Real** - Socket.IO para alertas y acciones guided
 - **⚡ Hot Reload** - Desarrollo ultra-rápido
 - **🐳 Docker** - Despliegue con un comando
 
@@ -129,6 +132,13 @@ npm run dev
 ---
 
 ## 📚 Documentación
+
+### Documentos Principales
+
+- **Guía de Usuario:** `docs/GUIDE_MOD_GUIDED_USUARIOS.md`
+- **Estado Funcional:** `docs/ESTADO_FUNCIONAL_WORKFLOW_SISTEMA.md`
+- **Auditoría Completa:** `docs/AUDITORIA_COMPLETA_FLUJO_DROPSHIPPING.md`
+- **Changelog:** `docs/CHANGELOG_WORKFLOW_2025_01_26.md`
 
 ### Estructura del Proyecto
 
@@ -276,7 +286,23 @@ openssl rand -base64 64
 
 ## 🛠️ Configuración de APIs
 
-### eBay
+Las APIs se configuran desde la interfaz web en **Settings → Configuración de APIs** o mediante variables de entorno.
+
+### APIs Críticas para Dropshipping
+
+1. **AliExpress Affiliate** - Para búsqueda de productos
+2. **Marketplace (eBay/MercadoLibre/Amazon)** - Para publicar productos
+3. **PayPal** - Para gestionar pagos
+4. **AliExpress Dropshipping** - Para compras automáticas
+
+### APIs Recomendadas
+
+- **Google Trends (SerpAPI)** - Para validación de demanda real
+- **GROQ AI** - Para análisis inteligente de oportunidades
+
+### Configuración Manual (Variables de Entorno)
+
+#### eBay
 
 1. Crear app en [eBay Developers](https://developer.ebay.com/)
 2. Obtener App ID, Dev ID, Cert ID
@@ -289,17 +315,56 @@ EBAY_CERT_ID=your-cert-id
 EBAY_SANDBOX=true
 ```
 
-### MercadoLibre
+#### MercadoLibre
 
 1. Crear app en [MercadoLibre Developers](https://developers.mercadolibre.com/)
 2. Obtener Client ID y Secret
-3. Configurar en `backend/.env`
+3. Configurar en `backend/.env` o desde la UI (OAuth)
 
-### PayPal
+#### PayPal
 
 1. Crear app en [PayPal Developer](https://developer.paypal.com/)
 2. Obtener Client ID y Secret
-3. Modo sandbox o production en `.env`
+3. Modo sandbox o production en `.env` o desde la UI
+
+---
+
+## ⚙️ Sistema de Workflow
+
+El sistema permite configurar el comportamiento de cada etapa del proceso de dropshipping de forma flexible.
+
+### Modos de Workflow
+
+- **Manual Global:** Todas las etapas requieren aprobación manual
+- **Automatic Global:** Todas las etapas se ejecutan automáticamente
+- **Hybrid:** Configuración individual por etapa
+
+### Modos por Etapa
+
+Cada etapa puede configurarse individualmente:
+
+- **Manual:** Pausa y requiere aprobación en cada paso
+- **Automatic:** Se ejecuta sin intervención
+- **Guided:** Notifica y espera confirmación (timeout de 5 minutos)
+
+### Etapas Disponibles
+
+1. **SCRAPE** - Búsqueda de oportunidades en AliExpress
+2. **ANALYZE** - Análisis de rentabilidad y demanda
+3. **PUBLISH** - Publicación en marketplaces
+4. **PURCHASE** - Compra automática cuando hay ventas
+5. **FULFILLMENT** - Gestión de envíos y tracking
+6. **CUSTOMER SERVICE** - Atención al cliente
+
+### Configuración
+
+1. Ir a **Settings → Configuración de Workflow**
+2. Seleccionar ambiente (Sandbox/Production)
+3. Seleccionar modo global (Manual/Automatic/Hybrid)
+4. Configurar cada etapa individualmente
+5. Guardar configuración
+
+**Documentación completa:** Ver `docs/GUIDE_MOD_GUIDED_USUARIOS.md` y `docs/ESTADO_FUNCIONAL_WORKFLOW_SISTEMA.md`
 
 ---
 
@@ -340,6 +405,28 @@ POST /api/products/:id/publish
 Body: { marketplace: "ebay" | "mercadolibre" }
 ```
 
+### Workflow
+
+```bash
+# Get workflow configuration
+GET /api/workflow/config
+
+# Update workflow configuration
+PUT /api/workflow/config
+Body: { environment, workflowMode, stageScrape, stageAnalyze, ... }
+
+# Validate configuration
+GET /api/workflow/validate
+
+# Handle guided action
+POST /api/workflow/handle-guided-action
+Body: { action, actionId, data }
+
+# Continue stage (guided mode)
+POST /api/workflow/continue-stage
+Body: { stage, action, data }
+```
+
 ### Dashboard
 
 ```bash
@@ -348,7 +435,7 @@ GET /api/dashboard/stats
 Response: { totalProducts, totalSales, totalRevenue, pendingCommissions }
 ```
 
-Ver documentación completa en `API_GUIDE.md` (próximamente con Swagger).
+Ver documentación completa en `docs/` (auditorías y guías detalladas).
 
 ---
 
@@ -475,12 +562,25 @@ MIT License - Ver [LICENSE](./LICENSE) para detalles
 - ✅ **Fase 1**: Arquitectura y estructura base
 - ✅ **Fase 2**: Backend core (Auth, Database, API)
 - ✅ **Fase 3**: Frontend base (React, Dashboard)
-- 🔄 **Fase 4**: Integraciones marketplace (En progreso)
-- 📅 **Fase 5**: Background jobs y scraping
-- 📅 **Fase 6**: Testing y optimización
-- 📅 **Fase 7**: Documentación y despliegue
+- ✅ **Fase 4**: Integraciones marketplace (eBay, MercadoLibre, Amazon)
+- ✅ **Fase 5**: Background jobs y scraping
+- ✅ **Fase 6**: Sistema de Workflow completo (Manual/Automatic/Guided)
+- ✅ **Fase 7**: Validación de oportunidades con Google Trends
+- 🔄 **Fase 8**: Testing y optimización (En progreso)
+- ✅ **Fase 9**: Documentación completa
 
-**Última actualización**: 28 de Octubre, 2025
+### Funcionalidades Completadas
+
+- ✅ Sistema de workflow flexible (Manual/Automatic/Guided)
+- ✅ Ambientes separados (Sandbox/Production) por usuario
+- ✅ Validación de demanda real con Google Trends
+- ✅ Compra automática con validación de capital
+- ✅ Publicación multi-marketplace
+- ✅ Notificaciones en tiempo real (Socket.IO)
+- ✅ Tracking de acciones guided con timeouts
+- ✅ Scripts de prueba automatizados
+
+**Última actualización**: 26 de Enero, 2025
 
 ---
 

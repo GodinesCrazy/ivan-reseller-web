@@ -49,6 +49,17 @@ router.put('/config', async (req: Request, res: Response, next) => {
 
     const validatedData = updateSchema.parse(req.body);
     
+    // ✅ NUEVO: Validar consistencia de configuración antes de guardar
+    const validation = await workflowConfigService.validateConfig(userId);
+    if (!validation.valid) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid configuration',
+        errors: validation.errors,
+        warnings: validation.warnings
+      });
+    }
+    
     // ✅ Logging: Detectar cambio de ambiente
     if (validatedData.environment) {
       const currentConfig = await workflowConfigService.getUserConfig(userId);
@@ -249,6 +260,159 @@ router.post('/continue-stage', async (req: Request, res: Response, next) => {
         });
       } catch (serviceError: any) {
         logger.error('[Workflow] Error continuing stage', {
+          error: serviceError?.message || String(serviceError),
+          userId,
+          stage
+        });
+        
+        res.status(500).json({ 
+          success: false, 
+          error: 'Error continuing stage',
+          details: serviceError?.message || String(serviceError)
+        });
+      }
+    } else if (action === 'skip') {
+      logger.info('[Workflow] Skipping stage in guided mode', {
+        userId,
+        stage,
+        action: 'skip'
+      });
+      
+      res.json({ 
+        success: true, 
+        message: `Stage ${stage} skipped`,
+        stage,
+        action: 'skipped'
+      });
+    } else if (action === 'cancel') {
+      logger.info('[Workflow] Cancelling stage in guided mode', {
+        userId,
+        stage,
+        action: 'cancel'
+      });
+      
+      res.json({ 
+        success: true, 
+        message: `Stage ${stage} cancelled`,
+        stage,
+        action: 'cancelled'
+      });
+    } else {
+      res.status(400).json({ 
+        success: false, 
+        error: `Unknown action: ${action}` 
+      });
+    }
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+// ✅ POST /api/workflow/handle-guided-action - Manejar acciones de modo guided
+router.post('/handle-guided-action', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const schema = z.object({
+      action: z.string(), // Ej: 'confirm_purchase_guided', 'cancel_publish_guided'
+      actionId: z.string().optional(),
+      data: z.any().optional()
+    });
+
+    const { action, actionId, data } = schema.parse(req.body);
+    const logger = (await import('../../config/logger')).default;
+
+    // Procesar acciones según tipo
+    if (action === 'confirm_purchase_guided' && actionId) {
+      // Confirmar compra guided usando tracker
+      const { guidedActionTracker } = await import('../../services/guided-action-tracker.service');
+      
+      const confirmed = await guidedActionTracker.confirmAction(actionId);
+      
+      if (!confirmed) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Action not found or already processed' 
+        });
+      }
+
+      logger.info('[Workflow] Guided purchase confirmed and executed', {
+        userId,
+        actionId
+      });
+
+      res.json({ success: true, message: 'Purchase confirmed and executed' });
+    } else if (action === 'cancel_purchase_guided' && actionId) {
+      // Cancelar compra guided usando tracker
+      const { guidedActionTracker } = await import('../../services/guided-action-tracker.service');
+      
+      const cancelled = await guidedActionTracker.cancelAction(actionId);
+      
+      if (!cancelled) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Action not found or already processed' 
+        });
+      }
+
+      logger.info('[Workflow] Guided purchase cancelled', {
+        userId,
+        actionId
+      });
+
+      res.json({ success: true, message: 'Purchase cancelled' });
+    } else if (action.startsWith('confirm_publish_guided')) {
+      // Confirmar publicación guided
+      // Esta acción se manejaría cuando el usuario confirma la publicación
+      logger.info('[Workflow] Guided publish confirmed', {
+        userId,
+        action,
+        data
+      });
+
+      res.json({ success: true, message: 'Publish confirmed' });
+    } else if (action.startsWith('cancel_publish_guided')) {
+      // Cancelar publicación guided
+      logger.info('[Workflow] Guided publish cancelled', {
+        userId,
+        action,
+        data
+      });
+
+      res.json({ success: true, message: 'Publish cancelled' });
+    } else if (action.startsWith('confirm_') && action.includes('_guided')) {
+      // Acción genérica guided confirmada
+      logger.info('[Workflow] Guided action confirmed', {
+        userId,
+        action,
+        actionId,
+        data
+      });
+
+      res.json({ success: true, message: 'Action confirmed' });
+    } else if (action.startsWith('cancel_') && action.includes('_guided')) {
+      // Acción genérica guided cancelada
+      logger.info('[Workflow] Guided action cancelled', {
+        userId,
+        action,
+        actionId,
+        data
+      });
+
+      res.json({ success: true, message: 'Action cancelled' });
+    } else {
+      res.status(400).json({ 
+        success: false, 
+        error: `Unknown guided action: ${action}` 
+      });
+    }
+  } catch (error: any) {
+    next(error);
+  }
+});('[Workflow] Error continuing stage', {
           userId,
           stage,
           error: serviceError?.message || String(serviceError)

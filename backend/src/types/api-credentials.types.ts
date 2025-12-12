@@ -336,6 +336,17 @@ export interface StripeCredentials {
 }
 
 /**
+ * Credenciales de SerpAPI (Google Trends)
+ * 
+ * @see https://serpapi.com/google-trends-api
+ * Usado para validar demanda real de productos con Google Trends
+ */
+export interface SerpAPICredentials {
+  /** SerpAPI Key - Obtenido de https://serpapi.com/dashboard */
+  apiKey: string;
+}
+
+/**
  * Tipo unión de todas las credenciales
  */
 export type ApiCredentials =
@@ -354,7 +365,8 @@ export type ApiCredentials =
   | EmailCredentials
   | TwilioCredentials
   | SlackCredentials
-  | StripeCredentials;
+  | StripeCredentials
+  | SerpAPICredentials;
 
 /**
  * Mapeo de nombre de API a tipo de credenciales
@@ -376,6 +388,8 @@ export type ApiCredentialsMap = {
   twilio: TwilioCredentials;
   slack: SlackCredentials;
   stripe: StripeCredentials;
+  serpapi: SerpAPICredentials; // ✅ NUEVO: Google Trends via SerpAPI
+  googletrends: SerpAPICredentials; // ✅ ALIAS: Google Trends (mismo tipo que serpapi)
 };
 
 /**

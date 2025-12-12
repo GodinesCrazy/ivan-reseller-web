@@ -75,7 +75,18 @@ export class SaleService {
     let costPriceInSaleCurrency = data.costPrice;
     if (saleCurrency.toUpperCase() !== costCurrency.toUpperCase()) {
       try {
-        costPriceInSaleCurrency = fxService.convert(data.costPrice, costCurrency, saleCurrency);
+        try {
+          costPriceInSaleCurrency = fxService.convert(data.costPrice, costCurrency, saleCurrency);
+        } catch (error: any) {
+          logger.warn('[SaleService] FX conversion failed, using cost price without conversion', {
+            from: costCurrency,
+            to: saleCurrency,
+            amount: data.costPrice,
+            error: error?.message
+          });
+          // Fallback: usar precio de costo sin convertir
+          costPriceInSaleCurrency = data.costPrice;
+        }
         logger.debug('[SALE] Converted cost price to sale currency', {
           userId,
           productId: data.productId,
@@ -331,7 +342,7 @@ export class SaleService {
       logger.error('Error sending sale notification', { error, saleId: sale.id });
     }
 
-    // ✅ VERIFICAR MODO DE COMPRA (AUTO o MANUAL) y EJECUTAR FLUJO
+    // ✅ VERIFICAR MODO DE COMPRA (AUTO, MANUAL o GUIDED) y EJECUTAR FLUJO
     try {
       const { workflowConfigService } = await import('./workflow-config.service');
       const purchaseMode = await workflowConfigService.getStageMode(userId, 'purchase').catch(() => 'manual');
@@ -387,24 +398,140 @@ export class SaleService {
         await automationService.executeAutomatedFlow(automatedOrder);
 
         logger.info('Automatic purchase flow executed', { saleId: sale.id, orderId: sale.orderId });
-      } else {
-        // ✅ MODO MANUAL - Notificar y esperar confirmación
+      } else if (purchaseMode === 'guided') {
+        // ✅ MODO GUIDED - Notificar y esperar confirmación rápida antes de ejecutar
+        const { guidedActionTracker } = await import('./guided-action-tracker.service');
+        const { AutomationService } = await import('./automation.service');
+        const { workflowConfigService } = await import('./workflow-config.service');
+        
+        const userEnvironment = await workflowConfigService.getUserEnvironment(userId);
+        
+        // Registrar acción guided con callback
+        const actionId = await guidedActionTracker.registerAction(
+          userId,
+          'purchase',
+          'confirm',
+          {
+            saleId: sale.id,
+            orderId: sale.orderId,
+            productTitle: sale.product.title,
+            amount: toNumber(sale.salePrice),
+            cost: toNumber(sale.aliexpressCost || 0)
+          },
+          5, // 5 minutos timeout
+          async () => {
+            // Callback que se ejecuta si hay timeout o confirmación
+            const automationService = new AutomationService({
+              mode: 'automatic',
+              environment: userEnvironment || 'sandbox',
+              maxConcurrentJobs: 5,
+              retryAttempts: 3,
+              delayBetweenOperations: 1000,
+              enableRealTimeNotifications: true
+            });
+            
+            const automatedOrder: AutomatedOrder = {
+              id: sale.orderId,
+              opportunityId: sale.product.id.toString(),
+              customerId: sale.userId.toString(),
+              customerInfo: {
+                name: data.buyerEmail || 'Cliente',
+                email: data.buyerEmail || '',
+                address: data.shippingAddress ? {
+                  street: typeof data.shippingAddress === 'string' ? data.shippingAddress : (data.shippingAddress as any).street || '',
+                  city: typeof data.shippingAddress === 'string' ? '' : (data.shippingAddress as any).city || '',
+                  state: typeof data.shippingAddress === 'string' ? '' : (data.shippingAddress as any).state || '',
+                  zipCode: typeof data.shippingAddress === 'string' ? '' : (data.shippingAddress as any).zipCode || '',
+                  country: typeof data.shippingAddress === 'string' ? '' : (data.shippingAddress as any).country || ''
+                } : {
+                  street: '',
+                  city: '',
+                  state: '',
+                  zipCode: '',
+                  country: ''
+                }
+              },
+              orderDetails: {
+                quantity: 1,
+                unitPrice: toNumber(sale.salePrice),
+                totalAmount: toNumber(sale.salePrice),
+                paymentMethod: 'pending'
+              } as any,
+              status: 'pending',
+              timestamps: {
+                created: new Date()
+              }
+            };
+            
+            await automationService.executeAutomatedFlow(automatedOrder);
+          }
+        );
+        
         await notificationService.sendAlert({
           type: 'action_required',
-          title: 'Venta requiere compra manual',
-          message: `Venta ${sale.orderId} por $${sale.salePrice} requiere procesamiento manual. ¿Desea proceder con la compra?`,
+          title: 'Compra guiada - Confirmación requerida',
+          message: `Venta ${sale.orderId} por $${sale.salePrice.toFixed(2)} lista para compra automática. ¿Deseas proceder ahora? (Se ejecutará automáticamente en 5 minutos si no respondes)`,
           priority: 'HIGH',
+          category: 'SALE',
           data: { 
             saleId: sale.id, 
             orderId: sale.orderId,
             stage: 'purchase',
-            userId: userId
+            mode: 'guided',
+            actionId,
+            userId: userId,
+            productTitle: sale.product.title,
+            productUrl: sale.product.aliexpressUrl || sale.product.sourceUrl || '',
+            amount: toNumber(sale.salePrice),
+            cost: toNumber(sale.aliexpressCost || 0)
           },
           actions: [
             { 
-              id: 'confirm_purchase', 
+              id: `${actionId}_confirm`, 
+              label: '✅ Confirmar y Comprar Ahora', 
+              action: 'confirm_purchase_guided', 
+              variant: 'primary' 
+            },
+            { 
+              id: `${actionId}_cancel`, 
+              label: '❌ Cancelar Compra', 
+              action: 'cancel_purchase_guided', 
+              variant: 'danger' 
+            }
+          ],
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000) // 5 minutos timeout
+        });
+
+        logger.info('Guided purchase flow initiated - waiting for user confirmation', { 
+          saleId: sale.id, 
+          orderId: sale.orderId,
+          actionId,
+          timeoutMinutes: 5
+        });
+      } else {
+        // ✅ MODO MANUAL - Notificar y esperar acción manual del usuario
+        await notificationService.sendAlert({
+          type: 'action_required',
+          title: 'Venta requiere compra manual',
+          message: `Venta ${sale.orderId} por $${sale.salePrice.toFixed(2)} requiere procesamiento manual. ¿Desea proceder con la compra?`,
+          priority: 'HIGH',
+          category: 'SALE',
+          data: { 
+            saleId: sale.id, 
+            orderId: sale.orderId,
+            stage: 'purchase',
+            mode: 'manual',
+            userId: userId,
+            productTitle: sale.product.title,
+            productUrl: sale.product.aliexpressUrl || sale.product.sourceUrl || '',
+            amount: toNumber(sale.salePrice),
+            cost: toNumber(sale.aliexpressCost || 0)
+          },
+          actions: [
+            { 
+              id: `manual_purchase_${sale.id}_confirm`, 
               label: 'Confirmar Compra', 
-              action: 'confirm_purchase', 
+              action: 'confirm_purchase_manual', 
               variant: 'primary' 
             }
           ]

@@ -69,20 +69,55 @@
 #### **Paso 1: Buscar Oportunidad**
 
 1. Ve a **Opportunities** en el menú
-2. Ingresa palabras clave (ej: "iphone case")
+2. Ingresa palabras clave (ej: "iphone case", "wireless earbuds")
+   - 💡 **Tip:** Usa palabras clave específicas para mejores resultados
+   - Ejemplo: En lugar de "phone", busca "iphone 15 pro max case"
 3. Selecciona filtros:
-   - Margen mínimo (recomendado: 30%+)
-   - Marketplace destino (eBay, Amazon, MercadoLibre)
-   - País destino
+   - **Marketplace destino:** (eBay, Amazon, MercadoLibre)
+   - **Región (país):** Para calcular impuestos correctamente
+   - **Máximo de productos:** Recomendado: 10-20
 4. Haz clic en **"Buscar Oportunidades"**
+
+**✅ Validación Automática de Calidad:**
+
+El sistema valida automáticamente cada producto usando múltiples criterios antes de mostrarlo como oportunidad válida:
+
+- ✅ **Margen mínimo:** ≥ 10% (configurable)
+- ✅ **Demanda real verificada:** Volumen de búsqueda ≥ 100 (usando Google Trends/SerpAPI)
+- ✅ **Tendencias favorables:** Productos con tendencia creciente o estable
+- ✅ **Velocidad de venta:** Tiempo estimado hasta primera venta ≤ 60 días
+- ✅ **Viabilidad financiera:** Tiempo hasta break-even ≤ 90 días
+
+💡 **Nota:** Si no tienes Google Trends (SerpAPI) configurado, el sistema usará análisis de datos internos como fallback. Sin embargo, es recomendable configurarlo para validaciones más precisas (ver Sección 5.5).
 
 #### **Paso 2: Seleccionar Producto**
 
-La lista muestra:
-- ✅ **ROI** calculado
-- ✅ **Margen** estimado
-- ✅ **Precio sugerido**
+La lista muestra solo productos que cumplen todos los criterios de calidad:
+
+**Información Financiera:**
+- ✅ **ROI** calculado (%)
+- ✅ **Margen** estimado (%)
+- ✅ **Precio de compra** (AliExpress)
+- ✅ **Precio sugerido** de venta
+- ✅ **Costos totales** (envío + impuestos)
+
+**Demanda y Tendencias:**
+- ✅ **Volumen de búsqueda** (Google Trends)
+- ✅ **Tendencia** (creciente/estable/declinante)
+- ✅ **Nivel de confianza** (%)
+
+**Tiempos Estimados:**
+- ✅ **Días hasta primera venta** (estimación)
+- ✅ **Días hasta break-even** (tiempo para recuperar inversión)
+
+**Competencia:**
+- ✅ **Nivel de competencia**
+- ✅ **Precios promedio** en marketplace
+- ✅ **Precio competitivo** sugerido
+
+**Producto:**
 - ✅ **Imagen principal**
+- ✅ **Título del producto**
 
 Haz clic en **"Crear Producto"** del producto que te interese.
 
@@ -619,6 +654,33 @@ d) Haz clic en "Guardar"
 - ✅ **Si la configuras:** El sistema usa datos reales de Google Trends para validar productos
 - ❌ **Si NO la configuras:** El sistema usa análisis de datos internos (productos existentes, ventas, etc.)
 
+#### 5.5. Configuración de Google Trends (SerpAPI)
+
+**¿Qué es?**
+Google Trends API (via SerpAPI) valida demanda real de productos antes de mostrarlos como oportunidades. El sistema verifica volumen de búsqueda, tendencias, y confianza para asegurar que solo veas productos con verdadero potencial de venta.
+
+**Pasos para Configurar:**
+
+1. Ve a: Settings → Configuración de APIs
+2. Busca sección "Google Trends API (SerpAPI)" 📈
+3. Completa:
+   - **SerpAPI Key:** Tu API key de SerpAPI
+4. Haz clic en "Guardar Configuración"
+
+**Cómo Obtener la API Key:**
+
+1. Ve a [serpapi.com/users/sign_up](https://serpapi.com/users/sign_up)
+2. Crea una cuenta (hay plan gratuito con límites)
+3. Ve a [serpapi.com/dashboard](https://serpapi.com/dashboard)
+4. Copia tu API Key (formato: `abc123def456...`)
+5. Pégala en el sistema
+
+**💡 Importante:**
+
+- **Opcional:** Si no configuras SerpAPI, el sistema usará análisis de datos internos como fallback
+- **Recomendado:** Configurar SerpAPI para validaciones más precisas de demanda real
+- **Límites:** Plan gratuito tiene límites de requests - verifica tu uso en el dashboard
+
 #### 💡 Ventajas de Configurar Google Trends
 
 | Ventaja | Beneficio |
@@ -626,6 +688,8 @@ d) Haz clic en "Guardar"
 | **Validación de Tendencias** | Detecta productos en tendencia vs productos en declive |
 | **Mayor Confianza** | Ajusta la confianza de oportunidades basado en búsquedas reales |
 | **Mejor ROI** | Filtra productos con baja demanda antes de publicar |
+| **Velocidad de Venta** | Estima días hasta primera venta basado en datos reales |
+| **Viabilidad Financiera** | Calcula tiempo hasta break-even con mayor precisión |
 
 ### 5.4. Configuración de AliExpress
 

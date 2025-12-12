@@ -2884,7 +2884,19 @@ export class AdvancedMarketplaceScraper {
           
           if (price > 1000 && sourceCurrency === baseCurrency && Math.abs(price - sourcePrice) < sourcePrice * 0.1) {
             // Ambos precios son muy similares y altos, probablemente son CLP sin convertir
-            const convertedFromCLP = fxService.convert(sourcePrice, 'CLP', baseCurrency);
+            let convertedFromCLP = sourcePrice;
+            try {
+              convertedFromCLP = fxService.convert(sourcePrice, 'CLP', baseCurrency);
+            } catch (error: any) {
+              logger.warn('[SCRAPER] FX conversion failed for CLP detection', {
+                from: 'CLP',
+                to: baseCurrency,
+                amount: sourcePrice,
+                error: error?.message
+              });
+              // Fallback: usar precio sin convertir
+              convertedFromCLP = sourcePrice;
+            }
             
             // Si la conversión da un valor razonable (<1000 USD) y es menor que el precio actual,
             // entonces eran CLP

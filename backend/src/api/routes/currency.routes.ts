@@ -35,8 +35,23 @@ router.post('/convert', (req, res) => {
   if (typeof amount !== 'number' || !from || !to) {
     return res.status(400).json({ success: false, error: 'amount, from, to required' });
   }
-  const result = fxService.convert(amount, from, to);
-  return res.json({ success: true, amount, from, to, result });
+  try {
+    const result = fxService.convert(amount, from, to);
+    return res.json({ success: true, amount, from, to, result });
+  } catch (error: any) {
+    const rates = fxService.getRates();
+    return res.status(400).json({ 
+      success: false, 
+      error: error?.message || 'Conversion failed',
+      details: {
+        from,
+        to,
+        amount,
+        availableRates: Object.keys(rates.rates).slice(0, 20),
+        baseCurrency: rates.base
+      }
+    });
+  }
 });
 
 export default router;

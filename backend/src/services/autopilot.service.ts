@@ -882,7 +882,7 @@ export class AutopilotSystem extends EventEmitter {
     for (const opp of opportunities) {
       try {
         // ✅ Verificar modo de publicación
-        if (currentPublishMode === 'automatic' || (currentPublishMode === 'guided' && this.config.publicationMode === 'automatic')) {
+        if (currentPublishMode === 'automatic') {
           // Auto-publish to marketplace
           const result = await this.publishToMarketplace(opp, currentUserId, currentEnvironment);
           if (result.success) {
@@ -891,6 +891,67 @@ export class AutopilotSystem extends EventEmitter {
               title: opp.title
             });
           }
+        } else if (currentPublishMode === 'guided') {
+          // ✅ GUIDED MODE: Notificar y esperar confirmación antes de publicar
+          const { notificationService } = await import('./notification.service');
+          const actionId = `guided_publish_${opp.url}_${Date.now()}`;
+          
+          await notificationService.sendToUser(currentUserId, {
+            type: 'ACTION_REQUIRED',
+            title: 'Publicación guiada - Confirmación requerida',
+            message: `Producto "${opp.title.substring(0, 50)}..." está listo para publicar. ¿Deseas proceder ahora? (Se publicará automáticamente en 5 minutos si no respondes)`,
+            priority: 'HIGH',
+            category: 'PRODUCT',
+            data: {
+              opportunity: opp,
+              stage: 'publish',
+              mode: 'guided',
+              actionId,
+              userId: currentUserId,
+              expiresAt: new Date(Date.now() + 5 * 60 * 1000) // 5 minutos
+            },
+            actions: [
+              { 
+                id: `${actionId}_confirm`, 
+                label: '✅ Confirmar y Publicar', 
+                action: 'confirm_publish_guided', 
+                variant: 'primary' 
+              },
+              { 
+                id: `${actionId}_cancel`, 
+                label: '❌ Cancelar', 
+                action: 'cancel_publish_guided', 
+                variant: 'danger' 
+              }
+            ]
+          });
+
+          // Programar publicación automática después de timeout
+          setTimeout(async () => {
+            // Verificar si ya se procesó
+            const product = await prisma.product.findFirst({
+              where: {
+                userId: currentUserId,
+                aliexpressUrl: opp.url
+              }
+            });
+
+            if (!product || !product.isPublished) {
+              // No hubo respuesta, publicar automáticamente
+              logger.info('Autopilot: Guided publish - No response, executing automatically after timeout', {
+                title: opp.title
+              });
+              const result = await this.publishToMarketplace(opp, currentUserId, currentEnvironment);
+              if (result.success) {
+                published++;
+              }
+            }
+          }, 5 * 60 * 1000); // 5 minutos
+
+          approved++; // Se cuenta como aprobado (pendiente de confirmación)
+          logger.info('Autopilot: Product sent to guided approval', {
+            title: opp.title
+          });
         } else if (currentPublishMode === 'manual') {
           // ✅ Send to manual approval queue (con userId)
           await this.sendToApprovalQueue(opp, currentUserId);
