@@ -26,6 +26,7 @@ import { useAuthStatusStore } from '@stores/authStatusStore';
 import { useAuthStore } from '@stores/authStore';
 import toast from 'react-hot-toast';
 import { log } from '../utils/logger';
+import { io, Socket } from 'socket.io-client';
 import APIConfigurationWizard, { WizardData } from '../components/api-configuration/APIConfigurationWizard';
 import FieldTooltip from '../components/api-configuration/FieldTooltip';
 import ValidationIndicator from '../components/api-configuration/ValidationIndicator';
@@ -297,6 +298,7 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
 };
 
 export default function APISettings() {
+  const { token, user } = useAuthStore();
   const [credentials, setCredentials] = useState<APICredential[]>([]);
   const [statuses, setStatuses] = useState<Record<string, APIStatus>>({});
   const [loading, setLoading] = useState(true);
@@ -424,6 +426,63 @@ export default function APISettings() {
       fetchAuthStatuses();
     }
   }, [authStatuses, fetchAuthStatuses]);
+
+  // ✅ NUEVO: Listener de Socket.IO para actualizaciones de estado de APIs en tiempo real
+  useEffect(() => {
+    if (!token || !user) return;
+
+    const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      timeout: 20000,
+    });
+
+    socket.on('connect', () => {
+      log.debug('[APISettings] Socket.IO connected');
+      socket.emit('join_room', `user_${user.id}`);
+    });
+
+    // Escuchar actualizaciones de estado de APIs
+    socket.on('api_status_update', (statusUpdate: APIStatus) => {
+      log.debug('[APISettings] Received API status update via WebSocket', statusUpdate);
+      
+      // Actualizar el estado local con la nueva información
+      const envKey = makeEnvKey(statusUpdate.apiName, statusUpdate.environment || 'production');
+      
+      setStatuses((prevStatuses) => ({
+        ...prevStatuses,
+        [envKey]: {
+          ...prevStatuses[envKey],
+          ...statusUpdate,
+          lastChecked: statusUpdate.lastChecked || new Date().toISOString(),
+        },
+      }));
+
+      // Mostrar notificación si el estado cambió significativamente
+      if (statusUpdate.isConfigured && statusUpdate.isAvailable) {
+        toast.success(`✅ ${statusUpdate.name || statusUpdate.apiName} está configurada y funcionando`, {
+          duration: 3000,
+        });
+      } else if (statusUpdate.error) {
+        toast.error(`❌ Error en ${statusUpdate.name || statusUpdate.apiName}: ${statusUpdate.message || statusUpdate.error}`, {
+          duration: 5000,
+        });
+      }
+    });
+
+    socket.on('disconnect', () => {
+      log.warn('[APISettings] Socket.IO disconnected');
+    });
+
+    socket.on('connect_error', (error: Error) => {
+      log.error('[APISettings] Socket.IO connection error:', error);
+    });
+
+    return () => {
+      log.debug('[APISettings] Cleaning up Socket.IO connection');
+      socket.close();
+    };
+  }, [token, user]);
 
   // ✅ Función para cargar APIs mínimas de dropshipping
   const loadMinimumDropshippingAPIs = async () => {

@@ -11,6 +11,7 @@ import { OPTIONAL_MARKETPLACES } from '../config/marketplaces.config';
 import { redis, isRedisAvailable } from '../config/redis';
 import { circuitBreakerManager } from './circuit-breaker.service';
 import { retryWithBackoff, isRetryableError } from '../utils/retry';
+import { normalizeAPIName, resolveToCanonical } from '../utils/api-name-resolver';
 
 export type APIHealthStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
 
@@ -958,17 +959,18 @@ export class APIAvailabilityService {
         cacheKey
       });
       
-      const credentials = await this.getUserCredentials(userId, 'serpapi', 'production');
+      // ✅ REFACTOR: Usar nombre canónico directamente (serpapi)
+      const canonicalName = resolveToCanonical('serpapi');
+      let credentials = await this.getUserCredentials(userId, canonicalName, 'production');
       
       logger.info('[checkSerpAPI] Resultado búsqueda con serpapi', {
         userId,
         found: !!credentials,
-        credentialKeys: credentials ? Object.keys(credentials) : [],
-        hasApiKey: credentials ? !!(credentials.apiKey || credentials.SERP_API_KEY || credentials.GOOGLE_TRENDS_API_KEY) : false
+        credentialKeys: credentials ? Object.keys(credentials) : []
       });
       
+      // Si no se encontraron credenciales con 'serpapi', intentar con alias 'googletrends'
       if (!credentials) {
-        // Intentar también con 'googletrends' como alias
         logger.info('[checkSerpAPI] No se encontraron credenciales con serpapi, intentando con googletrends', { userId });
         const googletrendsCreds = await this.getUserCredentials(userId, 'googletrends', 'production');
         
@@ -978,7 +980,12 @@ export class APIAvailabilityService {
           credentialKeys: googletrendsCreds ? Object.keys(googletrendsCreds) : []
         });
         
-        if (!googletrendsCreds) {
+        if (googletrendsCreds) {
+          credentials = googletrendsCreds;
+        }
+      }
+        
+      if (!credentials) {
           logger.warn('[checkSerpAPI] No se encontraron credenciales ni con serpapi ni con googletrends', { userId });
           const status: APIStatus = {
             apiName: 'serpapi',
@@ -994,9 +1001,9 @@ export class APIAvailabilityService {
           return status;
         }
         
-        // Si hay credenciales con alias 'googletrends', usarlas
-        const apiKey = googletrendsCreds.apiKey || googletrendsCreds.SERP_API_KEY || googletrendsCreds.GOOGLE_TRENDS_API_KEY;
-        logger.info('[checkSerpAPI] Verificando API key de googletrends', {
+        // Usar credenciales encontradas (pueden ser de 'serpapi' o 'googletrends')
+        const apiKey = credentials.apiKey || credentials.SERP_API_KEY || credentials.GOOGLE_TRENDS_API_KEY;
+        logger.info('[checkSerpAPI] Verificando API key', {
           userId,
           hasApiKey: !!apiKey,
           apiKeyLength: apiKey ? apiKey.length : 0,
@@ -1004,7 +1011,7 @@ export class APIAvailabilityService {
         });
         
         if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
-          logger.warn('[checkSerpAPI] API key vacía o inválida en credenciales googletrends', { userId });
+          logger.warn('[checkSerpAPI] API key vacía o inválida', { userId });
           const status: APIStatus = {
             apiName: 'serpapi',
             name: 'SerpAPI (Google Trends)',
@@ -1019,7 +1026,7 @@ export class APIAvailabilityService {
           return status;
         }
         
-        logger.info('[checkSerpAPI] API key válida encontrada en googletrends', { userId });
+        logger.info('[checkSerpAPI] API key válida encontrada', { userId });
         const status: APIStatus = {
           apiName: 'serpapi',
           name: 'SerpAPI (Google Trends)',
