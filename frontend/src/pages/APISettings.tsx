@@ -1028,16 +1028,28 @@ export default function APISettings() {
     }
     
     // Para otras APIs
+    // ✅ FIX: Si no hay credential local, verificar statusInfo primero (puede ser credenciales globales)
+    const status = statusInfo && 'status' in statusInfo ? statusInfo.status : undefined;
+    const isAvailable = statusInfo && 'isAvailable' in statusInfo ? statusInfo.isAvailable : undefined;
+    const isConfigured = statusInfo && 'isConfigured' in statusInfo ? statusInfo.isConfigured : undefined;
+    
+    // Si no hay credential pero status indica que está configurado (credenciales globales), mostrar como configurado
     if (!credential) {
+      if (status === 'healthy' || isAvailable || isConfigured) {
+        return {
+          status: 'configured',
+          message: statusInfo && 'message' in statusInfo && statusInfo.message 
+            ? statusInfo.message 
+            : 'Configurado y funcionando',
+        };
+      }
+      // Solo mostrar 'not_configured' si realmente no está configurado
       return {
         status: 'not_configured',
         message: 'No configurado',
         actionMessage: 'Ingresa las credenciales y guárdalas.',
       };
     }
-    
-    const status = statusInfo && 'status' in statusInfo ? statusInfo.status : undefined;
-    const isAvailable = statusInfo && 'isAvailable' in statusInfo ? statusInfo.isAvailable : undefined;
     
     if (status === 'healthy' || isAvailable) {
       return {
