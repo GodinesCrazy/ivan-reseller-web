@@ -394,9 +394,34 @@ export class CredentialsManager {
 
     // API-specific normalization
     if (apiName === 'ebay') {
+      // ✅ FIX: Normalizar nombres de campos UPPER_CASE → camelCase (bidireccional)
+      // El frontend envía EBAY_APP_ID pero el backend busca appId
+      if (creds.EBAY_APP_ID && !creds.appId) {
+        creds.appId = creds.EBAY_APP_ID;
+      }
+      if (creds.EBAY_DEV_ID && !creds.devId) {
+        creds.devId = creds.EBAY_DEV_ID;
+      }
+      if (creds.EBAY_CERT_ID && !creds.certId) {
+        creds.certId = creds.EBAY_CERT_ID;
+      }
+      // También normalizar en dirección inversa para compatibilidad
+      if (creds.appId && !creds.EBAY_APP_ID) {
+        creds.EBAY_APP_ID = creds.appId;
+      }
+      if (creds.devId && !creds.EBAY_DEV_ID) {
+        creds.EBAY_DEV_ID = creds.devId;
+      }
+      if (creds.certId && !creds.EBAY_CERT_ID) {
+        creds.EBAY_CERT_ID = creds.certId;
+      }
+      
       // Normalize token field: use 'token' as primary, 'authToken' as alias
       if (creds.authToken && !creds.token) {
         creds.token = creds.authToken;
+      }
+      if (creds.EBAY_TOKEN && !creds.token && !creds.authToken) {
+        creds.token = creds.EBAY_TOKEN;
       }
       
       // Normalize sandbox flag based on environment
@@ -411,6 +436,9 @@ export class CredentialsManager {
       }
       if (creds.redirect_uri && !creds.redirectUri) {
         creds.redirectUri = creds.redirect_uri;
+      }
+      if (creds.EBAY_REDIRECT_URI && !creds.redirectUri) {
+        creds.redirectUri = creds.EBAY_REDIRECT_URI;
       }
       
       // Trim redirectUri (eBay is strict about exact matching)
