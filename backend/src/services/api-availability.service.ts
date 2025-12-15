@@ -507,7 +507,16 @@ export class APIAvailabilityService {
       const requiredFields = ['appId', 'devId', 'certId'];
       const credentials = await this.getUserCredentials(userId, 'ebay', environment);
       
+      // ✅ FIX: Logging detallado para debugging
+      logger.info('[checkEbayAPI] Verificando credenciales', {
+        userId,
+        environment,
+        hasCredentials: !!credentials,
+        credentialKeys: credentials ? Object.keys(credentials) : [],
+      });
+      
       if (!credentials) {
+        logger.warn('[checkEbayAPI] No se encontraron credenciales', { userId, environment });
         const status: APIStatus = {
           apiName: 'ebay',
           name: 'eBay Trading API',
@@ -521,16 +530,38 @@ export class APIAvailabilityService {
         return status;
       }
 
-      // Normalize field names (credentials manager uses different names)
+      // ✅ FIX: Normalización mejorada de nombres de campos (bidireccional)
       const normalizedCreds: Record<string, string> = {
         appId: credentials['appId'] || credentials['EBAY_APP_ID'] || '',
         devId: credentials['devId'] || credentials['EBAY_DEV_ID'] || '',
         certId: credentials['certId'] || credentials['EBAY_CERT_ID'] || '',
-        token: credentials['token'] || credentials['authToken'] || credentials['accessToken'] || '',
-        refreshToken: credentials['refreshToken'] || '',
+        token: credentials['token'] || credentials['authToken'] || credentials['accessToken'] || credentials['EBAY_TOKEN'] || '',
+        refreshToken: credentials['refreshToken'] || credentials['EBAY_REFRESH_TOKEN'] || '',
+        redirectUri: credentials['redirectUri'] || credentials['ruName'] || credentials['EBAY_REDIRECT_URI'] || '',
       };
 
+      // ✅ FIX: Logging de normalización
+      logger.info('[checkEbayAPI] Credenciales normalizadas', {
+        userId,
+        environment,
+        hasAppId: !!normalizedCreds.appId && normalizedCreds.appId.length > 0,
+        hasDevId: !!normalizedCreds.devId && normalizedCreds.devId.length > 0,
+        hasCertId: !!normalizedCreds.certId && normalizedCreds.certId.length > 0,
+        appIdLength: normalizedCreds.appId.length,
+        devIdLength: normalizedCreds.devId.length,
+        certIdLength: normalizedCreds.certId.length,
+        hasToken: !!normalizedCreds.token,
+      });
+
       const validation = this.hasRequiredFields(normalizedCreds, requiredFields);
+      
+      // ✅ FIX: Logging de validación
+      logger.info('[checkEbayAPI] Validación de campos', {
+        userId,
+        environment,
+        valid: validation.valid,
+        missing: validation.missing,
+      });
 
       // Level 2: Real health check (only if fields are valid and not recently checked)
       let healthCheckResult: { success: boolean; error?: string } | null = null;
