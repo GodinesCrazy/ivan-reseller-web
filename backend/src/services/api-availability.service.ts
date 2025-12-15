@@ -946,16 +946,40 @@ export class APIAvailabilityService {
     const cacheKey = this.getCacheKey(userId, 'serpapi');
     const cached = await this.getCached(cacheKey);
     if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
+      logger.debug('[checkSerpAPI] Returning cached status', { userId, cacheKey, isConfigured: cached.isConfigured });
       return cached;
     }
     
     try {
+      // ✅ FIX: Logging detallado para debugging
+      logger.info('[checkSerpAPI] Verificando credenciales', {
+        userId,
+        searchingFor: 'serpapi',
+        cacheKey
+      });
+      
       const credentials = await this.getUserCredentials(userId, 'serpapi', 'production');
+      
+      logger.info('[checkSerpAPI] Resultado búsqueda con serpapi', {
+        userId,
+        found: !!credentials,
+        credentialKeys: credentials ? Object.keys(credentials) : [],
+        hasApiKey: credentials ? !!(credentials.apiKey || credentials.SERP_API_KEY || credentials.GOOGLE_TRENDS_API_KEY) : false
+      });
       
       if (!credentials) {
         // Intentar también con 'googletrends' como alias
+        logger.info('[checkSerpAPI] No se encontraron credenciales con serpapi, intentando con googletrends', { userId });
         const googletrendsCreds = await this.getUserCredentials(userId, 'googletrends', 'production');
+        
+        logger.info('[checkSerpAPI] Resultado búsqueda con googletrends', {
+          userId,
+          found: !!googletrendsCreds,
+          credentialKeys: googletrendsCreds ? Object.keys(googletrendsCreds) : []
+        });
+        
         if (!googletrendsCreds) {
+          logger.warn('[checkSerpAPI] No se encontraron credenciales ni con serpapi ni con googletrends', { userId });
           const status: APIStatus = {
             apiName: 'serpapi',
             name: 'SerpAPI (Google Trends)',
@@ -971,7 +995,15 @@ export class APIAvailabilityService {
         
         // Si hay credenciales con alias 'googletrends', usarlas
         const apiKey = googletrendsCreds.apiKey || googletrendsCreds.SERP_API_KEY || googletrendsCreds.GOOGLE_TRENDS_API_KEY;
+        logger.info('[checkSerpAPI] Verificando API key de googletrends', {
+          userId,
+          hasApiKey: !!apiKey,
+          apiKeyLength: apiKey ? apiKey.length : 0,
+          apiKeyPreview: apiKey ? `${apiKey.substring(0, 10)}...` : 'none'
+        });
+        
         if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
+          logger.warn('[checkSerpAPI] API key vacía o inválida en credenciales googletrends', { userId });
           const status: APIStatus = {
             apiName: 'serpapi',
             name: 'SerpAPI (Google Trends)',
@@ -985,6 +1017,7 @@ export class APIAvailabilityService {
           return status;
         }
         
+        logger.info('[checkSerpAPI] API key válida encontrada en googletrends', { userId });
         const status: APIStatus = {
           apiName: 'serpapi',
           name: 'SerpAPI (Google Trends)',
@@ -1000,7 +1033,15 @@ export class APIAvailabilityService {
       
       const apiKey = credentials.apiKey || credentials.SERP_API_KEY || credentials.GOOGLE_TRENDS_API_KEY;
       
+      logger.info('[checkSerpAPI] Verificando API key de serpapi', {
+        userId,
+        hasApiKey: !!apiKey,
+        apiKeyLength: apiKey ? apiKey.length : 0,
+        apiKeyPreview: apiKey ? `${apiKey.substring(0, 10)}...` : 'none'
+      });
+      
       if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
+        logger.warn('[checkSerpAPI] API key vacía o inválida en credenciales serpapi', { userId });
         const status: APIStatus = {
           apiName: 'serpapi',
           name: 'SerpAPI (Google Trends)',
@@ -1016,6 +1057,7 @@ export class APIAvailabilityService {
       
       // Validar formato básico de API key (típicamente alfanumérica)
       if (!/^[a-zA-Z0-9_-]+$/.test(apiKey)) {
+        logger.warn('[checkSerpAPI] API key con formato inválido', { userId, apiKeyLength: apiKey.length });
         const status: APIStatus = {
           apiName: 'serpapi',
           name: 'SerpAPI (Google Trends)',
@@ -1029,6 +1071,7 @@ export class APIAvailabilityService {
         return status;
       }
       
+      logger.info('[checkSerpAPI] API key válida encontrada en serpapi', { userId });
       const status: APIStatus = {
         apiName: 'serpapi',
         name: 'SerpAPI (Google Trends)',
@@ -1041,7 +1084,7 @@ export class APIAvailabilityService {
       await this.setCached(cacheKey, status);
       return status;
     } catch (error: any) {
-      logger.error('Error checking SerpAPI', { userId, error: error.message });
+      logger.error('Error checking SerpAPI', { userId, error: error.message, stack: error.stack });
       const status: APIStatus = {
         apiName: 'serpapi',
         name: 'SerpAPI (Google Trends)',

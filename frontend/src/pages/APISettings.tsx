@@ -1609,6 +1609,31 @@ export default function APISettings() {
         [scopeKey]: scopeToPersist,
       }));
 
+      // ✅ FIX: Usar immediateStatus si está disponible (para Google Trends/SerpAPI)
+      const saveData = response.data?.data || {};
+      const immediateStatus = saveData.immediateStatus;
+      
+      // Si hay immediateStatus, actualizar el estado local inmediatamente
+      if (immediateStatus && (apiName === 'googletrends' || apiName === 'serpapi')) {
+        const statusKey = makeEnvKey(apiName === 'serpapi' ? 'googletrends' : apiName, currentEnvironment);
+        setStatuses((prev: Record<string, any>) => ({
+          ...prev,
+          [statusKey]: {
+            apiName: apiName === 'serpapi' ? 'googletrends' : apiName,
+            environment: currentEnvironment,
+            available: immediateStatus.isAvailable || false,
+            message: immediateStatus.message || undefined,
+            lastChecked: new Date().toISOString(),
+          }
+        }));
+        log.info('[APISettings] Updated status from immediateStatus', {
+          apiName,
+          statusKey,
+          isConfigured: immediateStatus.isConfigured,
+          isAvailable: immediateStatus.isAvailable
+        });
+      }
+
       // Recargar credenciales (con timeout para evitar que se quede colgado)
       try {
         await Promise.race([
@@ -1625,7 +1650,6 @@ export default function APISettings() {
       }
 
       // ✅ MEJORA: Mensaje de éxito mejorado y más claro según el estado
-      const saveData = response.data?.data || {};
       const warnings = saveData.warnings || [];
       
       // ✅ MEJORA: Determinar si requiere OAuth y mostrar mensaje apropiado
