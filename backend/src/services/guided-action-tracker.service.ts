@@ -79,27 +79,28 @@ export class GuidedActionTrackerService {
 
     this.timeouts.set(actionId, timeout);
 
-    // Guardar en base de datos (opcional, para persistencia)
-    try {
-      await prisma.guidedAction.create({
-        data: {
-          actionId,
-          userId,
-          stage,
-          actionType,
-          data: JSON.stringify(data),
-          expiresAt,
-          status: 'PENDING',
-          createdAt: new Date()
-        }
-      });
-    } catch (error: any) {
-      // Si la tabla no existe, solo loguear warning (no crítico)
-      logger.warn('GuidedActionTracker: Could not save to database (table may not exist)', {
-        error: error?.message,
-        actionId
-      });
-    }
+    // ✅ FIX: GuidedAction model no existe en Prisma aún, usando solo in-memory storage
+    // Guardar en base de datos (opcional, para persistencia) - DESHABILITADO hasta que se agregue el modelo
+    // try {
+    //   await prisma.guidedAction.create({
+    //     data: {
+    //       actionId,
+    //       userId,
+    //       stage,
+    //       actionType,
+    //       data: JSON.stringify(data),
+    //       expiresAt,
+    //       status: 'PENDING',
+    //       createdAt: new Date()
+    //     }
+    //   });
+    // } catch (error: any) {
+    //   // Si la tabla no existe, solo loguear warning (no crítico)
+    //   logger.warn('GuidedActionTracker: Could not save to database (table may not exist)', {
+    //     error: error?.message,
+    //     actionId
+    //   });
+    // }
 
     logger.info('GuidedActionTracker: Action registered', {
       actionId,
@@ -116,11 +117,16 @@ export class GuidedActionTrackerService {
   /**
    * Confirmar una acción guided
    */
-  async confirmAction(actionId: string): Promise<boolean> {
+  async confirmAction(userId: number, actionId: string, data?: any): Promise<boolean> {
     const action = this.pendingActions.get(actionId);
 
     if (!action) {
-      logger.warn('GuidedActionTracker: Action not found', { actionId });
+      logger.warn('GuidedActionTracker: Action not found', { actionId, userId });
+      return false;
+    }
+    
+    if (action.userId !== userId) {
+      logger.warn('GuidedActionTracker: Action userId mismatch', { actionId, userId, actionUserId: action.userId });
       return false;
     }
 
@@ -157,21 +163,22 @@ export class GuidedActionTrackerService {
       }
     }
 
-    // Actualizar en base de datos
-    try {
-      await prisma.guidedAction.updateMany({
-        where: { actionId },
-        data: {
-          status: 'CONFIRMED',
-          executedAt: new Date()
-        }
-      });
-    } catch (error: any) {
-      logger.warn('GuidedActionTracker: Could not update database', {
-        error: error?.message,
-        actionId
-      });
-    }
+    // ✅ FIX: GuidedAction model no existe en Prisma aún
+    // Actualizar en base de datos - DESHABILITADO hasta que se agregue el modelo
+    // try {
+    //   await prisma.guidedAction.updateMany({
+    //     where: { actionId },
+    //     data: {
+    //       status: 'CONFIRMED',
+    //       executedAt: new Date()
+    //     }
+    //   });
+    // } catch (error: any) {
+    //   logger.warn('GuidedActionTracker: Could not update database', {
+    //     error: error?.message,
+    //     actionId
+    //   });
+    // }
 
     // Remover de memoria después de un tiempo
     setTimeout(() => {
@@ -186,11 +193,16 @@ export class GuidedActionTrackerService {
   /**
    * Cancelar una acción guided
    */
-  async cancelAction(actionId: string): Promise<boolean> {
+  async cancelAction(userId: number, actionId: string, data?: any): Promise<boolean> {
     const action = this.pendingActions.get(actionId);
 
     if (!action) {
-      logger.warn('GuidedActionTracker: Action not found', { actionId });
+      logger.warn('GuidedActionTracker: Action not found', { actionId, userId });
+      return false;
+    }
+    
+    if (action.userId !== userId) {
+      logger.warn('GuidedActionTracker: Action userId mismatch', { actionId, userId, actionUserId: action.userId });
       return false;
     }
 
@@ -212,21 +224,22 @@ export class GuidedActionTrackerService {
     // Actualizar estado
     action.status = 'cancelled';
 
-    // Actualizar en base de datos
-    try {
-      await prisma.guidedAction.updateMany({
-        where: { actionId },
-        data: {
-          status: 'CANCELLED',
-          executedAt: new Date()
-        }
-      });
-    } catch (error: any) {
-      logger.warn('GuidedActionTracker: Could not update database', {
-        error: error?.message,
-        actionId
-      });
-    }
+    // ✅ FIX: GuidedAction model no existe en Prisma aún
+    // Actualizar en base de datos - DESHABILITADO hasta que se agregue el modelo
+    // try {
+    //   await prisma.guidedAction.updateMany({
+    //     where: { actionId },
+    //     data: {
+    //       status: 'CANCELLED',
+    //       executedAt: new Date()
+    //     }
+    //   });
+    // } catch (error: any) {
+    //   logger.warn('GuidedActionTracker: Could not update database', {
+    //     error: error?.message,
+    //     actionId
+    //   });
+    // }
 
     // Remover de memoria
     this.pendingActions.delete(actionId);
@@ -268,21 +281,22 @@ export class GuidedActionTrackerService {
       }
     }
 
-    // Actualizar en base de datos
-    try {
-      await prisma.guidedAction.updateMany({
-        where: { actionId },
-        data: {
-          status: 'EXPIRED',
-          executedAt: new Date()
-        }
-      });
-    } catch (error: any) {
-      logger.warn('GuidedActionTracker: Could not update database', {
-        error: error?.message,
-        actionId
-      });
-    }
+    // ✅ FIX: GuidedAction model no existe en Prisma aún
+    // Actualizar en base de datos - DESHABILITADO hasta que se agregue el modelo
+    // try {
+    //   await prisma.guidedAction.updateMany({
+    //     where: { actionId },
+    //     data: {
+    //       status: 'EXPIRED',
+    //       executedAt: new Date()
+    //     }
+    //   });
+    // } catch (error: any) {
+    //   logger.warn('GuidedActionTracker: Could not update database', {
+    //     error: error?.message,
+    //     actionId
+    //   });
+    // }
 
     // Remover timeout
     this.timeouts.delete(actionId);
