@@ -942,6 +942,13 @@ export class APIAvailabilityService {
    * Check ScraperAPI availability for specific user
    */
   async checkSerpAPI(userId: number): Promise<APIStatus> {
+    // ✅ FIX: Agregar caché como otros métodos de verificación
+    const cacheKey = this.getCacheKey(userId, 'serpapi');
+    const cached = await this.getCached(cacheKey);
+    if (cached && Date.now() - cached.lastChecked.getTime() < this.cacheExpiry) {
+      return cached;
+    }
+    
     try {
       const credentials = await this.getUserCredentials(userId, 'serpapi', 'production');
       
@@ -949,7 +956,7 @@ export class APIAvailabilityService {
         // Intentar también con 'googletrends' como alias
         const googletrendsCreds = await this.getUserCredentials(userId, 'googletrends', 'production');
         if (!googletrendsCreds) {
-          return {
+          const status: APIStatus = {
             apiName: 'serpapi',
             name: 'SerpAPI (Google Trends)',
             isConfigured: false,
@@ -958,12 +965,14 @@ export class APIAvailabilityService {
             message: 'API key no configurada. Opcional: si no se configura, el sistema usará análisis de datos internos.',
             status: 'unhealthy'
           };
+          await this.setCached(cacheKey, status);
+          return status;
         }
         
         // Si hay credenciales con alias 'googletrends', usarlas
         const apiKey = googletrendsCreds.apiKey || googletrendsCreds.SERP_API_KEY || googletrendsCreds.GOOGLE_TRENDS_API_KEY;
         if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
-          return {
+          const status: APIStatus = {
             apiName: 'serpapi',
             name: 'SerpAPI (Google Trends)',
             isConfigured: false,
@@ -972,9 +981,11 @@ export class APIAvailabilityService {
             message: 'API key vacía o inválida',
             status: 'unhealthy'
           };
+          await this.setCached(cacheKey, status);
+          return status;
         }
         
-        return {
+        const status: APIStatus = {
           apiName: 'serpapi',
           name: 'SerpAPI (Google Trends)',
           isConfigured: true,
@@ -983,12 +994,14 @@ export class APIAvailabilityService {
           message: 'API configurada y lista para usar',
           status: 'healthy'
         };
+        await this.setCached(cacheKey, status);
+        return status;
       }
       
       const apiKey = credentials.apiKey || credentials.SERP_API_KEY || credentials.GOOGLE_TRENDS_API_KEY;
       
       if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
-        return {
+        const status: APIStatus = {
           apiName: 'serpapi',
           name: 'SerpAPI (Google Trends)',
           isConfigured: false,
@@ -997,11 +1010,13 @@ export class APIAvailabilityService {
           message: 'API key vacía o inválida',
           status: 'unhealthy'
         };
+        await this.setCached(cacheKey, status);
+        return status;
       }
       
       // Validar formato básico de API key (típicamente alfanumérica)
       if (!/^[a-zA-Z0-9_-]+$/.test(apiKey)) {
-        return {
+        const status: APIStatus = {
           apiName: 'serpapi',
           name: 'SerpAPI (Google Trends)',
           isConfigured: true,
@@ -1010,9 +1025,11 @@ export class APIAvailabilityService {
           message: 'API key con formato inválido',
           status: 'unhealthy'
         };
+        await this.setCached(cacheKey, status);
+        return status;
       }
       
-      return {
+      const status: APIStatus = {
         apiName: 'serpapi',
         name: 'SerpAPI (Google Trends)',
         isConfigured: true,
@@ -1021,9 +1038,11 @@ export class APIAvailabilityService {
         message: 'API configurada y lista para usar',
         status: 'healthy'
       };
+      await this.setCached(cacheKey, status);
+      return status;
     } catch (error: any) {
       logger.error('Error checking SerpAPI', { userId, error: error.message });
-      return {
+      const status: APIStatus = {
         apiName: 'serpapi',
         name: 'SerpAPI (Google Trends)',
         isConfigured: false,
@@ -1032,6 +1051,8 @@ export class APIAvailabilityService {
         error: error.message,
         status: 'unhealthy'
       };
+      await this.setCached(cacheKey, status);
+      return status;
     }
   }
 

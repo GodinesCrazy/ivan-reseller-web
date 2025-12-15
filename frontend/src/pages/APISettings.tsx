@@ -467,6 +467,14 @@ export default function APISettings() {
         ? credsResponse.data.data
         : [];
       
+      // ✅ FIX: Mapear 'serpapi' a 'googletrends' para el frontend
+      // El backend guarda como 'serpapi' pero el frontend usa 'googletrends'
+      configuredApisRaw.forEach((record: BackendCredentialRecord) => {
+        if (record.apiName === 'serpapi') {
+          record.apiName = 'googletrends'; // Mapear para el frontend
+        }
+      });
+      
       // Crear un mapa de APIs configuradas por apiName-environment priorizando credenciales personales del usuario actual
       const configuredMap = new Map<string, BackendCredentialRecord>();
       configuredApisRaw.forEach((record: BackendCredentialRecord) => {
@@ -687,7 +695,10 @@ export default function APISettings() {
         }
 
         creds.forEach((cred) => {
-          const match = statusLookup.get(normalize(cred.apiName));
+          // ✅ FIX: Normalizar 'googletrends' a 'serpapi' para búsqueda de estado
+          // El backend usa 'serpapi' pero el frontend puede usar 'googletrends'
+          const normalizedApiName = cred.apiName === 'googletrends' ? 'serpapi' : cred.apiName;
+          const match = statusLookup.get(normalize(normalizedApiName)) || statusLookup.get(normalize(cred.apiName));
           if (match) {
             const available = match.isAvailable ?? match.available ?? cred.isActive;
             const messageRaw = match.message ?? match.error;
@@ -807,9 +818,13 @@ export default function APISettings() {
       // normalized queda como objeto vacío {}
       // Los valores por defecto se mostrarán en el input a través de field.value
 
+      // ✅ FIX: Siempre establecer formData, incluso si normalized está vacío
+      // Esto asegura que cuando no hay credenciales para un entorno, el formulario esté vacío
       setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: normalized }));
     } catch (error) {
-      setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: prev[formKey] || {} }));
+      // ✅ FIX: En caso de error, establecer formData como objeto vacío para el nuevo entorno
+      // Esto evita mostrar datos del entorno anterior
+      setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: {} }));
     } finally {
       setLoadingEnvironment((prev: Record<string, boolean>) => ({ ...prev, [formKey]: false }));
     }
@@ -818,9 +833,22 @@ export default function APISettings() {
   const handleEnvironmentSelect = (apiName: string, environment: string) => {
     setSelectedEnvironment((prev: Record<string, string>) => ({ ...prev, [apiName]: environment }));
     const scopeKey = makeEnvKey(apiName, environment);
+    
+    // ✅ FIX: Limpiar el formData del entorno anterior ANTES de cargar el nuevo entorno
+    // Esto asegura que no se muestren credenciales mezcladas entre entornos
+    const currentFormKey = makeFormKey(apiName, environment);
+    setFormData((prev: Record<string, Record<string, string>>) => {
+      const next = { ...prev };
+      // Eliminar datos del formulario para este API/entorno para forzar recarga limpia
+      delete next[currentFormKey];
+      return next;
+    });
+    
     const credential = getCredentialForAPI(apiName, environment);
     const scopeForEnv = credential?.scope || scopeSelection[scopeKey] || 'user';
     setScopeSelection((prev: Record<string, 'user' | 'global'>) => ({ ...prev, [scopeKey]: scopeForEnv }));
+    
+    // Cargar el formulario con el nuevo entorno (force=true para asegurar recarga)
     loadEnvironmentForm(apiName, environment, true, scopeForEnv);
   };
 

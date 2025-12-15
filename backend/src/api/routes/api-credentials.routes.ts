@@ -65,14 +65,22 @@ router.get('/', async (req: Request, res: Response, next) => {
     
     // Usar CredentialsManager para listar APIs configuradas
     const apis = await CredentialsManager.listConfiguredApis(userId);
-    const personalCount = apis.filter(
+    
+    // ✅ FIX: Mapear 'serpapi' a 'googletrends' para el frontend
+    // El backend usa 'serpapi' internamente pero el frontend espera 'googletrends'
+    const mappedApis = apis.map(api => ({
+      ...api,
+      apiName: api.apiName === 'serpapi' ? 'googletrends' : api.apiName
+    }));
+    
+    const personalCount = mappedApis.filter(
       (api) => api.scope === 'user' && api.owner?.id === userId
     ).length;
-    const sharedCount = apis.filter((api) => api.scope === 'global').length;
+    const sharedCount = mappedApis.filter((api) => api.scope === 'global').length;
 
     res.json({
       success: true,
-      data: apis,
+      data: mappedApis,
       summary: {
         total: apis.length,
         personal: personalCount,
@@ -98,6 +106,12 @@ router.get('/status', async (req: Request, res: Response, next) => {
     
     try {
       statuses = await apiAvailability.getAllAPIStatus(userId);
+      // ✅ FIX: Mapear 'serpapi' a 'googletrends' para el frontend
+      statuses = statuses.map(status => ({
+        ...status,
+        apiName: status.apiName === 'serpapi' ? 'googletrends' : status.apiName,
+        name: status.name === 'SerpAPI (Google Trends)' ? 'Google Trends API (SerpAPI)' : status.name
+      }));
     } catch (statusError: any) {
       logger.error('Error getting API statuses', {
         error: statusError?.message || String(statusError),
@@ -380,12 +394,16 @@ router.get('/:apiName', authenticate, async (req: Request, res: Response, next) 
     const userId = req.user!.userId;
     const role = req.user!.role?.toUpperCase() || 'USER';
     const targetUserId = resolveTargetUserId(req, req.query.targetUserId);
-    const { apiName } = req.params;
+    let { apiName } = req.params;
     const environment = (req.query.environment as ApiEnvironment) || 'production';
     const includeGlobal = req.query.includeGlobal !== 'false';
 
-    // ✅ VALIDACIÓN: Validar que API soporte ambientes antes de aceptar parámetro
-    const supportsEnv = supportsEnvironments(apiName);
+    // ✅ FIX: Normalizar 'googletrends' a 'serpapi' para búsqueda en backend
+    // El frontend usa 'googletrends' pero el backend usa 'serpapi' internamente
+    const backendApiName = apiName === 'googletrends' ? 'serpapi' : apiName;
+
+    // ✅ VALIDACIÓN: Validar que API soporte ambientes antes de aceptar parámetro (usar backendApiName)
+    const supportsEnv = supportsEnvironments(backendApiName);
     if (!supportsEnv && environment !== 'production') {
       throw new AppError(
         `API "${apiName}" does not support environments. Only "production" is allowed.`,
@@ -407,16 +425,19 @@ router.get('/:apiName', authenticate, async (req: Request, res: Response, next) 
 
     const entry = await CredentialsManager.getCredentialEntry(
       targetUserId,
-      apiName as ApiName,
+      backendApiName as ApiName,
       supportsEnv ? environment : 'production',
       { includeGlobal }
     );
 
     if (!entry) {
+      // ✅ FIX: Mapear 'serpapi' a 'googletrends' para el frontend
+      const displayApiName = apiName === 'googletrends' ? 'googletrends' : (backendApiName === 'serpapi' ? 'googletrends' : apiName);
       return res.json({
         success: true,
         data: {
-          apiName,
+          apiName: displayApiName,
+          originalApiName: backendApiName !== displayApiName ? backendApiName : undefined,
           environment,
           credentials: null,
           isActive: false,
@@ -427,11 +448,15 @@ router.get('/:apiName', authenticate, async (req: Request, res: Response, next) 
 
     const shouldMaskCredentials = entry.scope === 'global' && role !== 'ADMIN';
     const credentials = shouldMaskCredentials ? {} : entry.credentials;
+    
+    // ✅ FIX: Mapear 'serpapi' a 'googletrends' para el frontend
+    const displayApiName = backendApiName === 'serpapi' ? 'googletrends' : apiName;
  
     res.json({ 
       success: true,
       data: {
-        apiName,
+        apiName: displayApiName,
+        originalApiName: apiName !== displayApiName ? apiName : undefined,
         environment,
         credentials,
         isActive: entry.isActive,
@@ -462,15 +487,7 @@ router.post('/', async (req: Request, res: Response, next) => {
     } = req.body;
 
     const targetUserId = resolveTargetUserId(req, targetUserIdRaw);
-    const scope = normalizeScope(scopeRaw, actorRole, apiName);
-    const ownerUserId = scope === 'global' ? actorId : targetUserId;
-    const sharedByUserId =
-      scope === 'global'
-        ? actorId
-        : actorRole === 'ADMIN' && ownerUserId !== actorId
-        ? actorId
-        : null;
-
+    
     // Validar apiName
     if (!apiName || typeof apiName !== 'string') {
       throw new AppError(
@@ -481,8 +498,22 @@ router.post('/', async (req: Request, res: Response, next) => {
       );
     }
 
+    // ✅ FIX: Normalizar 'googletrends' a 'serpapi' para consistencia
+    // El frontend usa 'googletrends' pero el backend usa 'serpapi' internamente
+    const normalizedApiName = apiName === 'googletrends' ? 'serpapi' : apiName;
+    
+    // ✅ VALIDACIÓN: Usar normalizedApiName para scope y validaciones
+    const scope = normalizeScope(scopeRaw, actorRole, normalizedApiName);
+    const ownerUserId = scope === 'global' ? actorId : targetUserId;
+    const sharedByUserId =
+      scope === 'global'
+        ? actorId
+        : actorRole === 'ADMIN' && ownerUserId !== actorId
+        ? actorId
+        : null;
+
     // ✅ VALIDACIÓN: Validar que API soporte ambientes antes de aceptar parámetro
-    const supportsEnv = supportsEnvironments(apiName);
+    const supportsEnv = supportsEnvironments(normalizedApiName);
     if (!supportsEnv && environment !== 'production') {
       throw new AppError(
         `API "${apiName}" does not support environments. Only "production" is allowed.`,
@@ -529,23 +560,24 @@ router.post('/', async (req: Request, res: Response, next) => {
     const { APICredentialsAuditService } = await import('../../services/api-credentials-audit.service');
     const startTime = Date.now();
 
-    // Validar credenciales usando CredentialsManager
+    // Validar credenciales usando CredentialsManager (usar nombre normalizado)
     const validation = CredentialsManager.validateCredentials(
-      apiName as ApiName,
+      normalizedApiName as ApiName,
       credentials
     );
 
     if (!validation.valid) {
-      logger.error(`[API Credentials] Validation failed for ${apiName}`, { 
+      logger.error(`[API Credentials] Validation failed for ${normalizedApiName}`, { 
         errors: validation.errors,
-        apiName,
+        apiName: normalizedApiName,
+        originalApiName: apiName !== normalizedApiName ? apiName : undefined,
         userId: ownerUserId
       });
 
       // ✅ AUDITORÍA: Registrar error de validación
       await APICredentialsAuditService.logSaveAttempt({
         userId: ownerUserId,
-        apiName,
+        apiName: normalizedApiName, // ✅ Usar nombre normalizado
         environment: env,
         success: false,
         error: 'Invalid credentials format',
@@ -553,7 +585,9 @@ router.post('/', async (req: Request, res: Response, next) => {
         fieldErrors: validation.errors,
         metadata: {
           credentialKeys: Object.keys(credentials || {}),
-          validationErrors: validation.errors
+          validationErrors: validation.errors,
+          originalApiName: apiName, // Guardar nombre original para auditoría
+          normalizedApiName: normalizedApiName
         }
       });
 
@@ -581,10 +615,10 @@ router.post('/', async (req: Request, res: Response, next) => {
         const { MarketplaceService } = await import('../../services/marketplace.service');
         const marketplaceService = new MarketplaceService();
         
-        // Test connection before saving
+        // Test connection before saving (usar normalizedApiName)
         const testResult = await marketplaceService.testConnection(
           ownerUserId,
-          apiName.toLowerCase() as 'ebay' | 'amazon' | 'mercadolibre',
+          normalizedApiName.toLowerCase() as 'ebay' | 'amazon' | 'mercadolibre',
           env
         );
         
@@ -602,16 +636,18 @@ router.post('/', async (req: Request, res: Response, next) => {
               message: testResult.message,
             });
           } else {
-            logger.warn(`Credentials validation failed for ${apiName}`, {
+            logger.warn(`Credentials validation failed for ${normalizedApiName}`, {
               userId: ownerUserId,
               error: testResult.message,
+              originalApiName: apiName !== normalizedApiName ? apiName : undefined
             });
           }
         }
       } catch (error: any) {
-        logger.warn(`Error validating credentials for ${apiName}`, {
+        logger.warn(`Error validating credentials for ${normalizedApiName}`, {
           userId: ownerUserId,
           error: error.message,
+          originalApiName: apiName !== normalizedApiName ? apiName : undefined
         });
         // Continue saving even if validation fails (might be temporary issue)
       }
@@ -622,10 +658,10 @@ router.post('/', async (req: Request, res: Response, next) => {
       });
     }
 
-    // Guardar credenciales usando CredentialsManager
+    // Guardar credenciales usando CredentialsManager (usar nombre normalizado)
     await CredentialsManager.saveCredentials(
       ownerUserId,
-      apiName as ApiName,
+      normalizedApiName as ApiName,
       credentials,
       env,
       {
@@ -634,11 +670,11 @@ router.post('/', async (req: Request, res: Response, next) => {
       }
     );
 
-    // Actualizar isActive si es necesario
+    // Actualizar isActive si es necesario (usar nombre normalizado)
     if (isActive !== undefined) {
       await CredentialsManager.toggleCredentials(
         ownerUserId,
-        apiName as ApiName,
+        normalizedApiName as ApiName,
         env,
         scope,
         isActive
@@ -646,41 +682,55 @@ router.post('/', async (req: Request, res: Response, next) => {
     }
 
     // 🚀 PERFORMANCE: Asegurar invalidación de caché incluso si hay errores
+    // ✅ FIX: Usar normalizedApiName y también limpiar caché para ambos nombres (googletrends y serpapi)
     try {
+      // Lista de nombres de API para limpiar caché (normalizado + original si es diferente)
+      const apiNamesToClear = [normalizedApiName];
+      if (apiName !== normalizedApiName) {
+        apiNamesToClear.push(apiName); // Limpiar también el nombre original
+      }
+      
       if (scope === 'global' && actorRole === 'ADMIN') {
         // Si es credencial global, invalidar cache para todos los usuarios
         const users = await prisma.user.findMany({ select: { id: true } });
-        const invalidationPromises = users.map(user => 
-          apiAvailability.clearAPICache(user.id, apiName).catch(err => {
-            logger.warn(`Failed to clear cache for user ${user.id}`, { error: err, apiName });
-            return null; // Continuar con otros usuarios aunque falle uno
-          })
+        const invalidationPromises = users.flatMap(user => 
+          apiNamesToClear.map(apiNameToClear =>
+            apiAvailability.clearAPICache(user.id, apiNameToClear).catch(err => {
+              logger.warn(`Failed to clear cache for user ${user.id}`, { error: err, apiName: apiNameToClear });
+              return null; // Continuar con otros usuarios aunque falle uno
+            })
+          )
         );
         await Promise.all(invalidationPromises);
-        logger.info(`Cache invalidated for all users (global ${apiName} credentials)`);
+        logger.info(`Cache invalidated for all users (global ${normalizedApiName} credentials, cleared for: ${apiNamesToClear.join(', ')})`);
       } else {
         // Si es credencial personal, invalidar cache solo para el usuario objetivo
-        await apiAvailability.clearAPICache(targetUserId, apiName).catch(err => {
-          logger.warn(`Failed to clear cache for user ${targetUserId}`, { error: err, apiName });
-          // No fallar la request si la invalidación falla
-        });
-        logger.info(`Cache invalidated for user ${targetUserId} (${apiName} credentials)`);
+        const clearPromises = apiNamesToClear.map(apiNameToClear =>
+          apiAvailability.clearAPICache(targetUserId, apiNameToClear).catch(err => {
+            logger.warn(`Failed to clear cache for user ${targetUserId}`, { error: err, apiName: apiNameToClear });
+            // No fallar la request si la invalidación falla
+          })
+        );
+        await Promise.all(clearPromises);
+        logger.info(`Cache invalidated for user ${targetUserId} (${normalizedApiName} credentials, cleared for: ${apiNamesToClear.join(', ')})`);
       }
       
       // 🚀 PERFORMANCE: Invalidar también el caché de credenciales desencriptadas
       // Nota: clearCredentialsCache es síncrona (void), no una Promise
       try {
         const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
-        clearCredentialsCache(targetUserId, apiName, env);
+        apiNamesToClear.forEach(apiNameToClear => {
+          clearCredentialsCache(targetUserId, apiNameToClear, env);
+        });
       } catch (err: any) {
-        logger.warn(`Failed to clear credentials cache`, { error: err?.message || err, userId: targetUserId, apiName, environment: env });
+        logger.warn(`Failed to clear credentials cache`, { error: err?.message || err, userId: targetUserId, apiName: normalizedApiName, environment: env });
       }
     } catch (error: any) {
       // Log pero no fallar la request si la invalidación de caché falla
       logger.error('Error invalidating cache after saving credentials', {
         error: error.message,
         userId: targetUserId,
-        apiName,
+        apiName: normalizedApiName,
         scope
       });
     }
@@ -696,14 +746,15 @@ router.post('/', async (req: Request, res: Response, next) => {
       logger.warn('Error performing immediate health check after saving credentials', { error });
     }
 
-    // Log activity
+    // Log activity (usar nombre normalizado pero mantener original en metadata)
     await prisma.activity.create({
       data: {
         userId: actorId,
         action: 'API_CREDENTIAL_UPDATED',
-        description: `API credentials updated: ${apiName} (${env}) [${scope}]`,
+        description: `API credentials updated: ${normalizedApiName} (${env}) [${scope}]`,
         metadata: JSON.stringify({
-          apiName,
+          apiName: normalizedApiName, // Usar nombre normalizado
+          originalApiName: apiName !== normalizedApiName ? apiName : undefined, // Guardar original solo si es diferente
           environment: env,
           isActive,
           scope,
@@ -712,10 +763,10 @@ router.post('/', async (req: Request, res: Response, next) => {
       },
     });
 
-    // ✅ AUDITORÍA: Registrar guardado exitoso
+    // ✅ AUDITORÍA: Registrar guardado exitoso (usar nombre normalizado)
     await APICredentialsAuditService.logSaveAttempt({
       userId: ownerUserId,
-      apiName,
+      apiName: normalizedApiName,
       environment: env,
       success: true,
       metadata: {
@@ -723,15 +774,17 @@ router.post('/', async (req: Request, res: Response, next) => {
         isActive,
         validationResult: validationResult?.success ? 'passed' : (validationResult ? 'failed' : 'skipped'),
         validationMessage: validationResult?.message,
-        duration: Date.now() - startTime
+        duration: Date.now() - startTime,
+        originalApiName: apiName !== normalizedApiName ? apiName : undefined
       }
     }).catch(err => {
       logger.warn('[API Credentials Audit] Failed to log successful save', { error: err });
       // No fallar la request si la auditoría falla
     });
 
-    // Build response message
-    let message = `${apiName} credentials saved successfully for ${env} environment`;
+    // Build response message (usar nombre normalizado pero mostrar original al usuario)
+    const displayName = apiName !== normalizedApiName ? `${apiName} (normalized to ${normalizedApiName})` : normalizedApiName;
+    let message = `${displayName} credentials saved successfully for ${env} environment`;
     if (validationResult !== null) {
       if (validationResult.success) {
         message += ' and validated successfully';
@@ -744,10 +797,11 @@ router.post('/', async (req: Request, res: Response, next) => {
       success: true,
       message,
       data: {
-        apiName,
+        apiName: normalizedApiName, // ✅ Retornar nombre normalizado
+        originalApiName: apiName !== normalizedApiName ? apiName : undefined, // Incluir original si es diferente
         environment: env,
         isActive,
-        supportsEnvironments: supportsEnvironments(apiName),
+        supportsEnvironments: supportsEnvironments(normalizedApiName),
         scope,
         validated: validationResult !== null,
         validationSuccess: validationResult?.success ?? null,
@@ -972,11 +1026,15 @@ router.delete('/:apiName', async (req: Request, res: Response, next) => {
 router.post('/:apiName/test', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
-    const { apiName } = req.params;
+    let { apiName } = req.params;
     const { environment = 'production', credentials: tempCredentials } = req.body;
 
-    // ✅ VALIDACIÓN: Validar que API soporte ambientes antes de aceptar parámetro
-    const supportsEnv = supportsEnvironments(apiName);
+    // ✅ FIX: Normalizar 'googletrends' a 'serpapi' para búsqueda en backend
+    // El frontend usa 'googletrends' pero el backend usa 'serpapi' internamente
+    const normalizedApiName = apiName === 'googletrends' ? 'serpapi' : apiName;
+
+    // ✅ VALIDACIÓN: Validar que API soporte ambientes antes de aceptar parámetro (usar normalizedApiName)
+    const supportsEnv = supportsEnvironments(normalizedApiName);
     if (!supportsEnv && environment !== 'production') {
       throw new AppError(
         `API "${apiName}" does not support environments. Only "production" is allowed.`,
@@ -998,9 +1056,9 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
 
     // ✅ Si se proporcionan credenciales temporales del formulario, validarlas primero
     if (tempCredentials && typeof tempCredentials === 'object') {
-      // Validar formato de credenciales
+      // Validar formato de credenciales (usar normalizedApiName)
       const validation = CredentialsManager.validateCredentials(
-        apiName as ApiName,
+        normalizedApiName as ApiName,
         tempCredentials
       );
 
@@ -1031,10 +1089,12 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
         '2captcha': ['CAPTCHA_2CAPTCHA_KEY'],
         'paypal': ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET'],
         'googletrends': [], // ✅ Opcional - no requiere campos
+        'serpapi': [], // ✅ Opcional - mismo que googletrends
         'aliexpress': ['ALIEXPRESS_EMAIL', 'ALIEXPRESS_PASSWORD'],
       };
 
-      const requiredFields = requiredFieldsMap[apiName] || [];
+      // ✅ FIX: Usar normalizedApiName para buscar requiredFields
+      const requiredFields = requiredFieldsMap[normalizedApiName] || requiredFieldsMap[apiName] || [];
       const missingFields: string[] = [];
 
       // Mapear credenciales del backend a nombres de campos requeridos
@@ -1048,10 +1108,12 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
         '2captcha': { 'apiKey': 'CAPTCHA_2CAPTCHA_KEY' },
         'paypal': { 'clientId': 'PAYPAL_CLIENT_ID', 'clientSecret': 'PAYPAL_CLIENT_SECRET', 'environment': 'PAYPAL_ENVIRONMENT' },
         'googletrends': { 'apiKey': 'SERP_API_KEY' }, // ✅ Google Trends usa SerpAPI Key
+        'serpapi': { 'apiKey': 'SERP_API_KEY' }, // ✅ SerpAPI mismo mapping
         'aliexpress': { 'email': 'ALIEXPRESS_EMAIL', 'password': 'ALIEXPRESS_PASSWORD' },
       };
 
-      const mapping = fieldMapping[apiName] || {};
+      // ✅ FIX: Usar normalizedApiName para buscar el mapping
+      const mapping = fieldMapping[normalizedApiName] || fieldMapping[apiName] || {};
       for (const requiredField of requiredFields) {
         const backendKey = Object.keys(mapping).find(key => mapping[key] === requiredField);
         if (!backendKey || !tempCredentials[backendKey] || String(tempCredentials[backendKey]).trim() === '') {
@@ -1088,12 +1150,15 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
     }
 
     // Si no hay credenciales temporales, usar el método normal (buscar en DB)
-    // Force re-check by clearing cache
-    await apiAvailability.clearAPICache(userId, apiName);
+    // Force re-check by clearing cache (limpiar para ambos nombres si es necesario)
+    await apiAvailability.clearAPICache(userId, normalizedApiName);
+    if (apiName !== normalizedApiName) {
+      await apiAvailability.clearAPICache(userId, apiName); // Limpiar también el nombre original
+    }
 
-    // Check API status (con environment)
+    // Check API status (con environment) - usar normalizedApiName
     let status;
-    switch (apiName) {
+    switch (normalizedApiName) {
       case 'ebay':
         status = await apiAvailability.checkEbayAPI(userId, environment);
         break;
@@ -1110,7 +1175,7 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
         status = await apiAvailability.checkScraperAPI(userId);
         break;
       case 'serpapi':
-      case 'googletrends': // ✅ NUEVO: Alias para serpapi
+        // ✅ FIX: Normalizar siempre a 'serpapi' para el check (ya está normalizado arriba)
         status = await apiAvailability.checkSerpAPI(userId);
         break;
       case 'zenrows':
@@ -1153,11 +1218,11 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
         throw new AppError('Invalid API name', 400);
     }
 
-    // ✅ AUDITORÍA: Registrar test de conexión
+    // ✅ AUDITORÍA: Registrar test de conexión (usar normalizedApiName)
     const { APICredentialsAuditService } = await import('../../services/api-credentials-audit.service');
     await APICredentialsAuditService.logTestAttempt({
       userId,
-      apiName,
+      apiName: normalizedApiName,
       environment,
       success: status.isAvailable || false,
       message: status.message,
@@ -1165,15 +1230,23 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
       latency: status.latency,
       metadata: {
         isConfigured: status.isConfigured,
-        status: status.status
+        status: status.status,
+        originalApiName: apiName !== normalizedApiName ? apiName : undefined
       }
     }).catch(err => {
       logger.warn('[API Credentials Audit] Failed to log test attempt', { error: err });
     });
 
+    // ✅ FIX: Mapear 'serpapi' a 'googletrends' en la respuesta si el request original fue para 'googletrends'
+    const responseStatus = { ...status };
+    if (apiName === 'googletrends' && responseStatus.apiName === 'serpapi') {
+      responseStatus.apiName = 'googletrends';
+      responseStatus.name = responseStatus.name?.replace('SerpAPI', 'Google Trends API (SerpAPI)') || 'Google Trends API (SerpAPI)';
+    }
+
     res.json({ 
       success: true,
-      data: status 
+      data: responseStatus 
     });
   } catch (error) {
     next(error);
