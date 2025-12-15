@@ -1242,7 +1242,7 @@ export default function APISettings() {
         // El defaultValue puede venir de field.value (del backend cuando se cargan credenciales)
         const defaultValue = field.value !== undefined && field.value !== null ? String(field.value) : '';
         
-        // Intentar leer el valor directamente del input del DOM PRIMERO
+        // ✅ FIX: Intentar leer el valor directamente del input del DOM PRIMERO
         // Esto captura el valor visible en el input aunque no esté en formData
         // Esto es especialmente útil cuando el usuario ve un valor pero no lo ha editado
         let domValue: string = '';
@@ -1256,23 +1256,37 @@ export default function APISettings() {
               log.debug(`[APISettings] Valor leído del DOM para ${fieldLabel}:`, domValue.substring(0, 30) + (domValue.length > 30 ? '...' : ''));
             }
           }
+          
+          // ✅ FIX: Si no se encontró con data- attributes, intentar buscar por name o id
+          if (!domValue || !domValue.trim()) {
+            // Intentar buscar por name attribute (algunos inputs pueden tener name)
+            const nameSelector = `input[name="${fieldKey}"], input[id="${fieldKey}"]`;
+            const altInputElement = document.querySelector(nameSelector) as HTMLInputElement;
+            if (altInputElement && altInputElement.value && altInputElement.value.trim()) {
+              domValue = altInputElement.value.trim();
+              log.debug(`[APISettings] Valor encontrado usando selector alternativo para ${fieldLabel}`);
+            }
+          }
         } catch (error) {
           // Si falla al leer del DOM, continuar con otros métodos
           log.warn(`[APISettings] Error al leer valor del DOM para ${fieldLabel}:`, error);
         }
         
-        // Determinar el valor final: priorizar formData, luego DOM, luego defaultValue
+        // ✅ FIX: Determinar el valor final: priorizar DOM (valor visible), luego formData, luego defaultValue
+        // Esto asegura que si el usuario ve un valor en el input, se use ese valor
         let value: string;
-        if (rawValue !== undefined && rawValue !== null && String(rawValue).trim()) {
-          // Si hay un valor en formData (y no está vacío), usarlo
+        if (domValue && domValue.trim()) {
+          // Si hay valor en el DOM (valor visible), usarlo primero
+          value = domValue.trim();
+          log.debug(`[APISettings] Usando valor del DOM para ${fieldLabel} (prioridad 1)`);
+        } else if (rawValue !== undefined && rawValue !== null && String(rawValue).trim()) {
+          // Si no hay valor en DOM pero hay en formData, usarlo
           value = typeof rawValue === 'string' ? rawValue : String(rawValue);
-        } else if (domValue && domValue.trim()) {
-          // Si no hay valor en formData pero hay valor en el DOM, usarlo
-          value = domValue;
-          log.debug(`[APISettings] Usando valor del DOM para ${fieldLabel} (no estaba en formData)`);
+          log.debug(`[APISettings] Usando valor de formData para ${fieldLabel} (prioridad 2)`);
         } else if (defaultValue && defaultValue.trim()) {
-          // Si no hay valor en formData ni DOM pero hay defaultValue, usarlo
+          // Si no hay valor en DOM ni formData pero hay defaultValue, usarlo
           value = defaultValue;
+          log.debug(`[APISettings] Usando defaultValue para ${fieldLabel} (prioridad 3)`);
         } else {
           // Si no hay ninguno, usar cadena vacía
           value = '';
@@ -1302,12 +1316,54 @@ export default function APISettings() {
           });
         }
 
-        // Validar campo requerido: debe tener un valor no vacío después de trim
+        // ✅ FIX: Validar campo requerido: debe tener un valor no vacío después de trim
         // Si el campo es requerido y el valor está vacío después de trim, lanzar error
         if (fieldRequired) {
-          const trimmedValue = value.toString().trim();
+          let trimmedValue = value.toString().trim();
+          
+          // ✅ FIX: Si el valor está vacío, intentar leer del DOM una vez más antes de fallar
+          // Esto maneja casos donde el input se renderizó después o el selector no funcionó
           if (!trimmedValue) {
-            throw new Error(`El campo "${fieldLabel}" es requerido`);
+            let finalDomValue = '';
+            try {
+              // Intentar múltiples selectores para encontrar el input
+              const selectors = [
+                `input[data-form-key="${formKey}"][data-field-key="${fieldKey}"]`,
+                `input[name="${fieldKey}"]`,
+                `input[id="${fieldKey}"]`,
+                // También buscar por el label asociado
+                `input[placeholder*="${fieldLabel.substring(0, 10)}"]`
+              ];
+              
+              for (const selector of selectors) {
+                const inputElement = document.querySelector(selector) as HTMLInputElement;
+                if (inputElement && inputElement.value && inputElement.value.trim()) {
+                  finalDomValue = inputElement.value.trim();
+                  log.debug(`[APISettings] Valor encontrado en DOM en validación final para ${fieldLabel} usando selector: ${selector}`, finalDomValue.substring(0, 30));
+                  break;
+                }
+              }
+            } catch (error) {
+              // Ignorar errores de DOM
+              log.warn(`[APISettings] Error al leer del DOM en validación final para ${fieldLabel}:`, error);
+            }
+            
+            if (finalDomValue) {
+              // Usar el valor del DOM encontrado
+              value = finalDomValue;
+              trimmedValue = finalDomValue;
+            } else {
+              // Si aún no hay valor, lanzar error
+              log.error(`[APISettings] Campo requerido ${fieldLabel} está vacío después de todos los intentos`, {
+                fieldKey,
+                formKey,
+                rawValue,
+                defaultValue,
+                domValue,
+                formDataValue: formData[formKey]?.[fieldKey]
+              });
+              throw new Error(`El campo "${fieldLabel}" es requerido`);
+            }
           }
         }
         // Incluir campos incluso si están vacíos para AliExpress (twoFactorEnabled puede ser false)
