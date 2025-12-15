@@ -898,6 +898,33 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       url.searchParams.set('state', state);
       authUrl = url.toString();
     } else if (marketplace === 'aliexpress-dropshipping' || marketplace === 'aliexpress_dropshipping') {
+      // ✅ FIX: Definir variables necesarias para AliExpress Dropshipping
+      // Obtener credenciales primero para determinar el ambiente
+      const credTemp = await marketplaceService.getCredentials(userId, 'aliexpress-dropshipping');
+      
+      // Resolver ambiente
+      const { resolveEnvironment } = await import('../../utils/environment-resolver');
+      const resolvedEnv = await resolveEnvironment({
+        explicit: environment as 'sandbox' | 'production' | undefined,
+        fromCredentials: credTemp?.environment as 'sandbox' | 'production' | undefined,
+        userId,
+        default: 'production'
+      });
+      
+      // Definir callbackUrl y state
+      const callbackUrl = typeof redirect_uri === 'string' && redirect_uri.length > 0
+        ? redirect_uri
+        : credTemp?.credentials?.redirectUri || process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI || '';
+      
+      if (!callbackUrl) {
+        return res.status(400).json({ success: false, message: 'Missing AliExpress Dropshipping Redirect URI' });
+      }
+      
+      const redirB64 = Buffer.from(String(callbackUrl)).toString('base64url');
+      const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv].join('|');
+      const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+      const state = Buffer.from([payload, sig].join('|')).toString('base64url');
+      
       logger.info('[AliExpress Dropshipping OAuth] Generating authorization URL', {
         userId,
         environment: resolvedEnv,

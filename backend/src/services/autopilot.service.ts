@@ -897,7 +897,7 @@ export class AutopilotSystem extends EventEmitter {
           const actionId = `guided_publish_${opp.url}_${Date.now()}`;
           
           await notificationService.sendToUser(currentUserId, {
-            type: 'ACTION_REQUIRED',
+            type: 'USER_ACTION', // ✅ FIX: Changed from 'ACTION_REQUIRED' to valid type
             title: 'Publicación guiada - Confirmación requerida',
             message: `Producto "${opp.title.substring(0, 50)}..." está listo para publicar. ¿Deseas proceder ahora? (Se publicará automáticamente en 5 minutos si no respondes)`,
             priority: 'HIGH',
@@ -1187,11 +1187,11 @@ export class AutopilotSystem extends EventEmitter {
           // Enviar notificación al usuario sobre credenciales faltantes
           const { notificationService } = await import('./notification.service');
           notificationService.sendToUser(currentUserId, {
-            type: 'WARNING',
+            type: 'SYSTEM_ALERT', // ✅ FIX: Changed from 'WARNING' to valid type
             title: 'Autopilot: Publicación omitida',
             message: `No se pudo publicar producto en ${marketplace} porque faltan credenciales válidas. Por favor, configura tus credenciales en Settings → API Settings.`,
             priority: 'NORMAL',
-            category: 'AUTOPILOT',
+            category: 'SYSTEM', // ✅ FIX: Changed from 'AUTOPILOT' to valid category
             data: { productId: product.id, marketplace, environment: currentEnvironment }
           });
           
@@ -1213,11 +1213,11 @@ export class AutopilotSystem extends EventEmitter {
           // Enviar notificación al usuario sobre problemas con credenciales
           const { notificationService } = await import('./notification.service');
           notificationService.sendToUser(currentUserId, {
-            type: 'WARNING',
+            type: 'SYSTEM_ALERT', // ✅ FIX: Changed from 'WARNING' to valid type
             title: 'Autopilot: Publicación omitida',
             message: `No se pudo publicar producto en ${marketplace} debido a problemas con las credenciales: ${credentials.issues.join(', ')}. Por favor, revisa tus credenciales en Settings → API Settings.`,
             priority: 'NORMAL',
-            category: 'AUTOPILOT',
+            category: 'SYSTEM', // ✅ FIX: Changed from 'AUTOPILOT' to valid category
             data: { productId: product.id, marketplace, environment: currentEnvironment, issues: credentials.issues }
           });
           
@@ -1486,7 +1486,7 @@ export class AutopilotSystem extends EventEmitter {
           type: 'USER_ACTION',
           title: 'Producto pendiente de aprobación',
           message: `El producto "${opportunity.title}" ha sido enviado a la cola de aprobación. Profit estimado: $${opportunity.estimatedProfit.toFixed(2)}`,
-          priority: 'MEDIUM',
+          priority: 'NORMAL', // ✅ FIX: Changed from 'MEDIUM' to valid priority
           data: {
             productId: product.id,
             userId: currentUserId,
