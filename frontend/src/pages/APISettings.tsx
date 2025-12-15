@@ -1247,25 +1247,64 @@ export default function APISettings() {
         // Esto es especialmente útil cuando el usuario ve un valor pero no lo ha editado
         let domValue: string = '';
         try {
-          // Buscar el input usando atributos data- para identificarlo de forma única
-          const inputSelector = `input[data-form-key="${formKey}"][data-field-key="${fieldKey}"]`;
-          const inputElement = document.querySelector(inputSelector) as HTMLInputElement;
-          if (inputElement) {
-            domValue = inputElement.value || '';
-            if (domValue && domValue.trim()) {
-              log.debug(`[APISettings] Valor leído del DOM para ${fieldLabel}:`, domValue.substring(0, 30) + (domValue.length > 30 ? '...' : ''));
+          // Función auxiliar para buscar el input de múltiples formas
+          const findInputElement = (): HTMLInputElement | null => {
+            // Método 1: Buscar por data-form-key y data-field-key (método preferido)
+            try {
+              // Escapar caracteres especiales en formKey para el selector CSS
+              const escapedFormKey = formKey.replace(/[:"']/g, '\\$&');
+              const inputSelector = `input[data-form-key="${escapedFormKey}"][data-field-key="${fieldKey}"]`;
+              const element = document.querySelector(inputSelector) as HTMLInputElement;
+              if (element && element.value) return element;
+            } catch (e) {
+              log.warn(`[APISettings] Error con selector data-form-key para ${fieldLabel}:`, e);
             }
-          }
+            
+            // Método 2: Buscar todos los inputs con data-field-key y filtrar por data-form-key
+            try {
+              const allInputs = document.querySelectorAll(`input[data-field-key="${fieldKey}"]`) as NodeListOf<HTMLInputElement>;
+              for (const input of allInputs) {
+                if (input.getAttribute('data-form-key') === formKey && input.value) {
+                  return input;
+                }
+              }
+            } catch (e) {
+              log.warn(`[APISettings] Error buscando inputs con data-field-key para ${fieldLabel}:`, e);
+            }
+            
+            // Método 3: Buscar por name o id (como fallback)
+            try {
+              const nameElement = document.querySelector(`input[name="${fieldKey}"]`) as HTMLInputElement;
+              if (nameElement && nameElement.value) return nameElement;
+              const idElement = document.querySelector(`input[id="${fieldKey}"]`) as HTMLInputElement;
+              if (idElement && idElement.value) return idElement;
+            } catch (e) {
+              log.warn(`[APISettings] Error buscando por name/id para ${fieldLabel}:`, e);
+            }
+            
+            // Método 4: Buscar todos los inputs en la página y verificar por placeholder (último recurso)
+            try {
+              const allInputs = document.querySelectorAll('input[type="text"], input[type="password"]') as NodeListOf<HTMLInputElement>;
+              for (const input of allInputs) {
+                const placeholder = input.placeholder || '';
+                // Buscar si el placeholder contiene palabras clave del label
+                if (placeholder && fieldLabel && 
+                    (placeholder.toLowerCase().includes(fieldLabel.toLowerCase().substring(0, 5)) ||
+                     fieldLabel.toLowerCase().includes(placeholder.toLowerCase().substring(0, 5)))) {
+                  if (input.value) return input;
+                }
+              }
+            } catch (e) {
+              log.warn(`[APISettings] Error en búsqueda exhaustiva para ${fieldLabel}:`, e);
+            }
+            
+            return null;
+          };
           
-          // ✅ FIX: Si no se encontró con data- attributes, intentar buscar por name o id
-          if (!domValue || !domValue.trim()) {
-            // Intentar buscar por name attribute (algunos inputs pueden tener name)
-            const nameSelector = `input[name="${fieldKey}"], input[id="${fieldKey}"]`;
-            const altInputElement = document.querySelector(nameSelector) as HTMLInputElement;
-            if (altInputElement && altInputElement.value && altInputElement.value.trim()) {
-              domValue = altInputElement.value.trim();
-              log.debug(`[APISettings] Valor encontrado usando selector alternativo para ${fieldLabel}`);
-            }
+          const inputElement = findInputElement();
+          if (inputElement && inputElement.value && inputElement.value.trim()) {
+            domValue = inputElement.value.trim();
+            log.debug(`[APISettings] Valor leído del DOM para ${fieldLabel}:`, domValue.substring(0, 30) + (domValue.length > 30 ? '...' : ''));
           }
         } catch (error) {
           // Si falla al leer del DOM, continuar con otros métodos
@@ -1326,22 +1365,54 @@ export default function APISettings() {
           if (!trimmedValue) {
             let finalDomValue = '';
             try {
-              // Intentar múltiples selectores para encontrar el input
-              const selectors = [
-                `input[data-form-key="${formKey}"][data-field-key="${fieldKey}"]`,
-                `input[name="${fieldKey}"]`,
-                `input[id="${fieldKey}"]`,
-                // También buscar por el label asociado
-                `input[placeholder*="${fieldLabel.substring(0, 10)}"]`
-              ];
+              // Usar la misma lógica mejorada de búsqueda
+              const findInputElement = (): HTMLInputElement | null => {
+                // Escapar caracteres especiales en formKey para el selector CSS
+                const escapedFormKey = formKey.replace(/[:"']/g, '\\$&');
+                
+                // Método 1: Buscar por data-form-key y data-field-key
+                try {
+                  const inputSelector = `input[data-form-key="${escapedFormKey}"][data-field-key="${fieldKey}"]`;
+                  const element = document.querySelector(inputSelector) as HTMLInputElement;
+                  if (element && element.value) return element;
+                } catch (e) {}
+                
+                // Método 2: Buscar todos los inputs con data-field-key y filtrar
+                try {
+                  const allInputs = document.querySelectorAll(`input[data-field-key="${fieldKey}"]`) as NodeListOf<HTMLInputElement>;
+                  for (const input of allInputs) {
+                    if (input.getAttribute('data-form-key') === formKey && input.value) {
+                      return input;
+                    }
+                  }
+                } catch (e) {}
+                
+                // Método 3: Buscar por name o id
+                try {
+                  const nameElement = document.querySelector(`input[name="${fieldKey}"]`) as HTMLInputElement;
+                  if (nameElement && nameElement.value) return nameElement;
+                } catch (e) {}
+                
+                // Método 4: Buscar por placeholder (último recurso)
+                try {
+                  const allInputs = document.querySelectorAll('input[type="text"], input[type="password"]') as NodeListOf<HTMLInputElement>;
+                  for (const input of allInputs) {
+                    const placeholder = input.placeholder || '';
+                    if (placeholder && fieldLabel && 
+                        (placeholder.toLowerCase().includes(fieldLabel.toLowerCase().substring(0, 5)) ||
+                         fieldLabel.toLowerCase().includes(placeholder.toLowerCase().substring(0, 5)))) {
+                      if (input.value) return input;
+                    }
+                  }
+                } catch (e) {}
+                
+                return null;
+              };
               
-              for (const selector of selectors) {
-                const inputElement = document.querySelector(selector) as HTMLInputElement;
-                if (inputElement && inputElement.value && inputElement.value.trim()) {
-                  finalDomValue = inputElement.value.trim();
-                  log.debug(`[APISettings] Valor encontrado en DOM en validación final para ${fieldLabel} usando selector: ${selector}`, finalDomValue.substring(0, 30));
-                  break;
-                }
+              const inputElement = findInputElement();
+              if (inputElement && inputElement.value && inputElement.value.trim()) {
+                finalDomValue = inputElement.value.trim();
+                log.debug(`[APISettings] Valor encontrado en DOM en validación final para ${fieldLabel}`, finalDomValue.substring(0, 30));
               }
             } catch (error) {
               // Ignorar errores de DOM
@@ -1360,7 +1431,12 @@ export default function APISettings() {
                 rawValue,
                 defaultValue,
                 domValue,
-                formDataValue: formData[formKey]?.[fieldKey]
+                formDataValue: formData[formKey]?.[fieldKey],
+                // Agregar información de debugging adicional
+                allInputsWithFieldKey: Array.from(document.querySelectorAll(`input[data-field-key="${fieldKey}"]`)).map((el: Element) => ({
+                  dataFormKey: (el as HTMLInputElement).getAttribute('data-form-key'),
+                  value: (el as HTMLInputElement).value?.substring(0, 20)
+                }))
               });
               throw new Error(`El campo "${fieldLabel}" es requerido`);
             }
@@ -3736,6 +3812,8 @@ export default function APISettings() {
                               onChange={(e) => handleInputChange(apiDef.name, currentEnvironment, fieldKey, e.target.value)}
                               placeholder={fieldPlaceholder}
                               disabled={inputDisabled}
+                              name={fieldKey}
+                              id={`${formKey}-${fieldKey}`}
                               data-form-key={formKey}
                               data-field-key={fieldKey}
                               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
