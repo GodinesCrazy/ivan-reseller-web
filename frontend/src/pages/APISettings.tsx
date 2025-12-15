@@ -2798,7 +2798,11 @@ export default function APISettings() {
     const credential = getCredentialForAPI(apiName, environment);
     const status = statuses[makeEnvKey(apiName, environment)];
 
+    // ✅ FIX: Si no hay credential pero status indica que está configurado (puede ser global o estado del backend)
     if (!credential) {
+      if (status?.status === 'healthy' || status?.available) {
+        return <CheckCircle className="w-5 h-5 text-green-500" />;
+      }
       if (status?.optional) {
         return <AlertTriangle className="w-5 h-5 text-amber-500" />;
       }
@@ -2865,9 +2869,19 @@ export default function APISettings() {
     const credential = getCredentialForAPI(apiName, environment);
     const status = statuses[makeEnvKey(apiName, environment)];
 
+    // ✅ FIX: Para APIs opcionales como Google Trends, si status indica que está configurado pero no hay credential local,
+    // puede ser porque las credenciales son globales o porque status viene del backend
     if (!credential) {
       if (status?.optional) {
+        // Si hay status y está disponible/configurado, mostrar estado positivo
+        if (status.status === 'healthy' || status.available) {
+          return status.message || 'Configurado y funcionando';
+        }
         return status.message || 'Opcional (sin configurar)';
+      }
+      // ✅ FIX: Si no hay credential pero status indica que está configurado (puede ser global o estado del backend)
+      if (status?.status === 'healthy' || status?.available) {
+        return status.message || 'Configurado y funcionando';
       }
       return 'No configurada';
     }
@@ -2892,7 +2906,7 @@ export default function APISettings() {
       
       switch (status.status) {
         case 'healthy':
-          return `Funcionando correctamente${latencyText}${trustText}`;
+          return `Configurado y funcionando${latencyText}${trustText}`;
         case 'degraded':
           return `Funcionando con problemas${latencyText}${trustText}${status.message ? `: ${status.message}` : ''}`;
         case 'unhealthy':
@@ -2908,7 +2922,7 @@ export default function APISettings() {
       return status.message || 'Opcional (configura para mayor precisión)';
     }
 
-    return status.available ? 'Disponible' : `Error: ${status.message || 'No disponible'}`;
+    return status.available ? 'Configurado y funcionando' : `Error: ${status.message || 'No disponible'}`;
   };
 
   const optionalCoverage = useMemo(() => {
