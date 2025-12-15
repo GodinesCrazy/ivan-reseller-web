@@ -816,7 +816,8 @@ export default function APISettings() {
       }
       // Si no hay credenciales (modo personal sin credenciales guardadas),
       // normalized queda como objeto vacío {}
-      // Los valores por defecto se mostrarán en el input a través de field.value
+      // ✅ FIX: NO usar field.value como defaultValue porque puede venir de otro entorno
+      // Solo usar valores de formData específicos para el entorno actual (formKey)
 
       // ✅ FIX: Siempre establecer formData, incluso si normalized está vacío
       // Esto asegura que cuando no hay credenciales para un entorno, el formulario esté vacío
@@ -3811,13 +3812,16 @@ export default function APISettings() {
                       const fieldHelpText = field.helpText;
                       const showKey = `${formKey}:${fieldKey}`;
                       const isDisabled = field.disabled || false;
-                      const defaultValue = field.value !== undefined && field.value !== null ? String(field.value) : '';
                       const inputDisabled = isDisabled || isReadOnly;
 
                       // ✅ MEJORA UX: Obtener estado de validación
                       const validationKey = `${formKey}::${fieldKey}`;
                       const validation = fieldValidation[validationKey] || { status: 'idle' as const };
-                      const fieldValue = formData[formKey]?.[fieldKey] ?? defaultValue;
+                      
+                      // ✅ FIX: NO usar defaultValue de field.value porque puede venir de otro entorno
+                      // Solo usar el valor de formData para el entorno actual (formKey específico)
+                      // Si formData está vacío, significa que no hay credenciales para este entorno y debe estar vacío
+                      const fieldValue = formData[formKey]?.[fieldKey] ?? '';
 
                       return (
                         <div key={fieldKey}>
