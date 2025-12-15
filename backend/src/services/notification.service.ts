@@ -181,6 +181,46 @@ class NotificationService {
   }
 
   /**
+   * ✅ NUEVO: Emitir actualización de estado de API a usuario(s) conectados
+   * Esto permite que el frontend se actualice en tiempo real sin polling
+   */
+  emitAPIStatusUpdate(
+    userId: number | number[],
+    apiStatus: {
+      apiName: string;
+      status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+      isConfigured: boolean;
+      isAvailable: boolean;
+      message?: string;
+      environment?: 'sandbox' | 'production';
+    }
+  ): void {
+    if (!this.io) {
+      return;
+    }
+
+    const userIds = Array.isArray(userId) ? userId : [userId];
+    
+    for (const uid of userIds) {
+      const connectedUser = this.connectedUsers.get(uid);
+      if (connectedUser && connectedUser.length > 0) {
+        connectedUser.forEach(user => {
+          this.io?.to(user.socketId).emit('api_status_update', {
+            ...apiStatus,
+            timestamp: new Date().toISOString(),
+          });
+        });
+      }
+    }
+
+    logger.debug('[NotificationService] API status update emitted', {
+      userIds,
+      apiName: apiStatus.apiName,
+      status: apiStatus.status,
+    });
+  }
+
+  /**
    * ✅ MEJORADO: Enviar notificación por email
    */
   private async sendEmailNotification(userId: number, notification: NotificationPayload): Promise<void> {

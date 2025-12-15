@@ -7,6 +7,9 @@ import { CredentialsManager } from '../../services/credentials-manager.service';
 import { supportsEnvironments } from '../../config/api-keys.config';
 import { logger } from '../../config/logger';
 import type { ApiName, ApiEnvironment } from '../../types/api-credentials.types';
+import { normalizeAPIName, resolveToFrontend } from '../../utils/api-name-resolver';
+import { apiHealthCheckQueueService } from '../../services/api-health-check-queue.service';
+import { notificationService } from '../../services/notification.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -398,9 +401,8 @@ router.get('/:apiName', authenticate, async (req: Request, res: Response, next) 
     const environment = (req.query.environment as ApiEnvironment) || 'production';
     const includeGlobal = req.query.includeGlobal !== 'false';
 
-    // ✅ FIX: Normalizar 'googletrends' a 'serpapi' para búsqueda en backend
-    // El frontend usa 'googletrends' pero el backend usa 'serpapi' internamente
-    const backendApiName = apiName === 'googletrends' ? 'serpapi' : apiName;
+    // ✅ REFACTOR: Usar APINameResolver centralizado
+    const backendApiName = normalizeAPIName(apiName);
 
     // ✅ VALIDACIÓN: Validar que API soporte ambientes antes de aceptar parámetro (usar backendApiName)
     const supportsEnv = supportsEnvironments(backendApiName);
@@ -431,8 +433,8 @@ router.get('/:apiName', authenticate, async (req: Request, res: Response, next) 
     );
 
     if (!entry) {
-      // ✅ FIX: Mapear 'serpapi' a 'googletrends' para el frontend
-      const displayApiName = apiName === 'googletrends' ? 'googletrends' : (backendApiName === 'serpapi' ? 'googletrends' : apiName);
+      // ✅ REFACTOR: Usar resolver para mapeo frontend
+      const displayApiName = resolveToFrontend(backendApiName);
       return res.json({
         success: true,
         data: {
@@ -449,8 +451,8 @@ router.get('/:apiName', authenticate, async (req: Request, res: Response, next) 
     const shouldMaskCredentials = entry.scope === 'global' && role !== 'ADMIN';
     const credentials = shouldMaskCredentials ? {} : entry.credentials;
     
-    // ✅ FIX: Mapear 'serpapi' a 'googletrends' para el frontend
-    const displayApiName = backendApiName === 'serpapi' ? 'googletrends' : apiName;
+    // ✅ REFACTOR: Usar resolver para mapeo frontend
+    const displayApiName = resolveToFrontend(backendApiName);
  
     res.json({ 
       success: true,
@@ -498,9 +500,8 @@ router.post('/', async (req: Request, res: Response, next) => {
       );
     }
 
-    // ✅ FIX: Normalizar 'googletrends' a 'serpapi' para consistencia
-    // El frontend usa 'googletrends' pero el backend usa 'serpapi' internamente
-    const normalizedApiName = apiName === 'googletrends' ? 'serpapi' : apiName;
+    // ✅ REFACTOR: Usar APINameResolver centralizado para normalización
+    const normalizedApiName = normalizeAPIName(apiName);
     
     // ✅ VALIDACIÓN: Usar normalizedApiName para scope y validaciones
     const scope = normalizeScope(scopeRaw, actorRole, normalizedApiName);
@@ -793,41 +794,44 @@ router.post('/', async (req: Request, res: Response, next) => {
       }
     }
 
-    // ✅ FIX: Forzar verificación inmediata del estado después de guardar (sin caché)
-    // Esto asegura que el frontend reciba el estado actualizado inmediatamente
-    // IMPORTANTE: Enviar respuesta ANTES de guardar en caché para evitar que crash SIGSEGV interrumpa la respuesta
-    let immediateStatus = null;
+    // ✅ REFACTOR: Encolar health check asíncrono en lugar de ejecutar síncronamente
+    // Esto previene bloqueos y crashes SIGSEGV, y permite que la respuesta se envíe inmediatamente
+    let healthCheckJobId: string | null = null;
     try {
-      // Limpiar caché antes de verificar (sin await para no bloquear)
+      // Limpiar caché antes de encolar verificación (sin await para no bloquear)
       apiAvailability.clearAPICache(targetUserId, normalizedApiName).catch(() => {});
-      if (apiName !== normalizedApiName) {
-        apiAvailability.clearAPICache(targetUserId, apiName).catch(() => {});
-      }
       
-      // Verificar estado inmediatamente (sin usar caché)
-      if (normalizedApiName === 'serpapi' || apiName === 'googletrends') {
-        // ✅ FIX: Obtener status sin guardar en caché de forma síncrona
-        // Esto previene que el crash SIGSEGV interrumpa la respuesta HTTP
-        immediateStatus = await apiAvailability.checkSerpAPI(targetUserId);
-      }
-    } catch (statusError: any) {
-      logger.warn('Failed to get immediate status after saving', {
-        error: statusError?.message,
+      // Encolar health check asíncrono
+      healthCheckJobId = await apiHealthCheckQueueService.enqueueHealthCheck(
+        targetUserId,
+        normalizedApiName,
+        env
+      );
+      
+      logger.debug('[API Credentials] Health check enqueued', {
+        jobId: healthCheckJobId,
+        userId: targetUserId,
+        apiName: normalizedApiName,
+      });
+    } catch (queueError: any) {
+      logger.warn('Failed to enqueue health check after saving', {
+        error: queueError?.message,
         userId: targetUserId,
         apiName: normalizedApiName
       });
-      // ✅ FIX: Si falla la verificación, NO asumir que está configurado
-      // El frontend deberá verificar el estado usando el endpoint /status después
-      // Esto previene mostrar "configurado" cuando en realidad no se pudo verificar
-      immediateStatus = null;
+      // Continuar aunque falle el encolado - el usuario puede verificar manualmente después
     }
+    
+    // ✅ REFACTOR: Retornar jobId en lugar de immediateStatus
+    // El frontend puede verificar el estado del job o esperar evento WebSocket
+    const immediateStatus = null; // Ya no retornamos status síncrono
 
     // ✅ FIX: Enviar respuesta inmediatamente, antes de cualquier operación que pueda causar crash
     res.json({
       success: true,
       message,
       data: {
-        apiName: apiName === 'serpapi' ? 'googletrends' : apiName, // ✅ FIX: Mapear serpapi a googletrends para frontend
+        apiName: resolveToFrontend(normalizedApiName), // ✅ REFACTOR: Usar resolver para mapeo frontend
         originalApiName: apiName !== normalizedApiName ? apiName : undefined, // Incluir original si es diferente
         environment: env,
         isActive,
@@ -838,13 +842,9 @@ router.post('/', async (req: Request, res: Response, next) => {
         validationMessage: validationResult?.message,
         // ✅ Incluir advertencias de validación si hay errores
         warnings: validation.errors && validation.errors.length > 0 ? validation.errors : undefined,
-        // ✅ Incluir estado inmediato si está disponible
-        immediateStatus: immediateStatus ? {
-          isConfigured: immediateStatus.isConfigured,
-          isAvailable: immediateStatus.isAvailable,
-          status: immediateStatus.status,
-          message: immediateStatus.message
-        } : undefined
+        // ✅ REFACTOR: Retornar jobId para que frontend pueda rastrear el health check
+        healthCheckJobId: healthCheckJobId || undefined,
+        // Nota: El estado se emitirá vía WebSocket cuando el health check complete
       }
     });
   } catch (error: any) {
@@ -1066,9 +1066,8 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
     let { apiName } = req.params;
     const { environment = 'production', credentials: tempCredentials } = req.body;
 
-    // ✅ FIX: Normalizar 'googletrends' a 'serpapi' para búsqueda en backend
-    // El frontend usa 'googletrends' pero el backend usa 'serpapi' internamente
-    const normalizedApiName = apiName === 'googletrends' ? 'serpapi' : apiName;
+    // ✅ REFACTOR: Usar APINameResolver centralizado
+    const normalizedApiName = normalizeAPIName(apiName);
 
     // ✅ VALIDACIÓN: Validar que API soporte ambientes antes de aceptar parámetro (usar normalizedApiName)
     const supportsEnv = supportsEnvironments(normalizedApiName);
