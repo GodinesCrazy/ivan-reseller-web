@@ -793,11 +793,33 @@ router.post('/', async (req: Request, res: Response, next) => {
       }
     }
 
-    res.json({ 
+    // ✅ FIX: Forzar verificación inmediata del estado después de guardar (sin caché)
+    // Esto asegura que el frontend reciba el estado actualizado inmediatamente
+    let immediateStatus = null;
+    try {
+      // Limpiar caché antes de verificar
+      await apiAvailability.clearAPICache(targetUserId, normalizedApiName);
+      if (apiName !== normalizedApiName) {
+        await apiAvailability.clearAPICache(targetUserId, apiName);
+      }
+      
+      // Verificar estado inmediatamente (sin usar caché)
+      if (normalizedApiName === 'serpapi' || apiName === 'googletrends') {
+        immediateStatus = await apiAvailability.checkSerpAPI(targetUserId);
+      }
+    } catch (statusError: any) {
+      logger.warn('Failed to get immediate status after saving', {
+        error: statusError?.message,
+        userId: targetUserId,
+        apiName: normalizedApiName
+      });
+    }
+
+    res.json({
       success: true,
       message,
       data: {
-        apiName: normalizedApiName, // ✅ Retornar nombre normalizado
+        apiName: apiName === 'serpapi' ? 'googletrends' : apiName, // ✅ FIX: Mapear serpapi a googletrends para frontend
         originalApiName: apiName !== normalizedApiName ? apiName : undefined, // Incluir original si es diferente
         environment: env,
         isActive,
@@ -808,6 +830,13 @@ router.post('/', async (req: Request, res: Response, next) => {
         validationMessage: validationResult?.message,
         // ✅ Incluir advertencias de validación si hay errores
         warnings: validation.errors && validation.errors.length > 0 ? validation.errors : undefined,
+        // ✅ Incluir estado inmediato si está disponible
+        immediateStatus: immediateStatus ? {
+          isConfigured: immediateStatus.isConfigured,
+          isAvailable: immediateStatus.isAvailable,
+          status: immediateStatus.status,
+          message: immediateStatus.message
+        } : undefined
       }
     });
   } catch (error: any) {
