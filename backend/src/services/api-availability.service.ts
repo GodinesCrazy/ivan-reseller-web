@@ -989,7 +989,8 @@ export class APIAvailabilityService {
             message: 'API key no configurada. Opcional: si no se configura, el sistema usará análisis de datos internos.',
             status: 'unhealthy'
           };
-          await this.setCached(cacheKey, status);
+          // ✅ FIX: Guardar en caché de forma asíncrona
+          this.setCached(cacheKey, status).catch(() => {});
           return status;
         }
         
@@ -1013,7 +1014,8 @@ export class APIAvailabilityService {
             message: 'API key vacía o inválida',
             status: 'unhealthy'
           };
-          await this.setCached(cacheKey, status);
+          // ✅ FIX: Guardar en caché de forma asíncrona
+          this.setCached(cacheKey, status).catch(() => {});
           return status;
         }
         
@@ -1027,7 +1029,10 @@ export class APIAvailabilityService {
           message: 'API configurada y lista para usar',
           status: 'healthy'
         };
-        await this.setCached(cacheKey, status);
+        // ✅ FIX: Guardar en caché de forma asíncrona después de retornar para evitar que crash SIGSEGV interrumpa la respuesta
+        this.setCached(cacheKey, status).catch((err) => {
+          logger.warn('[checkSerpAPI] Failed to cache status (non-blocking)', { userId, error: err?.message });
+        });
         return status;
       }
       
@@ -1051,7 +1056,8 @@ export class APIAvailabilityService {
           message: 'API key vacía o inválida',
           status: 'unhealthy'
         };
-        await this.setCached(cacheKey, status);
+        // ✅ FIX: Guardar en caché de forma asíncrona
+        this.setCached(cacheKey, status).catch(() => {});
         return status;
       }
       
@@ -1067,7 +1073,8 @@ export class APIAvailabilityService {
           message: 'API key con formato inválido',
           status: 'unhealthy'
         };
-        await this.setCached(cacheKey, status);
+        // ✅ FIX: Guardar en caché de forma asíncrona
+        this.setCached(cacheKey, status).catch(() => {});
         return status;
       }
       
@@ -1081,7 +1088,11 @@ export class APIAvailabilityService {
         message: 'API configurada y lista para usar',
         status: 'healthy'
       };
-      await this.setCached(cacheKey, status);
+      // ✅ FIX: Guardar en caché de forma asíncrona después de retornar para evitar que crash SIGSEGV interrumpa la respuesta
+      // Esto permite que la respuesta HTTP se envíe inmediatamente
+      this.setCached(cacheKey, status).catch((err) => {
+        logger.warn('[checkSerpAPI] Failed to cache status (non-blocking)', { userId, error: err?.message });
+      });
       return status;
     } catch (error: any) {
       logger.error('Error checking SerpAPI', { userId, error: error.message, stack: error.stack });
@@ -1094,7 +1105,8 @@ export class APIAvailabilityService {
         error: error.message,
         status: 'unhealthy'
       };
-      await this.setCached(cacheKey, status);
+      // ✅ FIX: Guardar en caché de forma asíncrona
+      this.setCached(cacheKey, status).catch(() => {});
       return status;
     }
   }
