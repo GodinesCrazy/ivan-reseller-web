@@ -2101,7 +2101,7 @@ export class APIAvailabilityService {
       () => this.checkAmazonAPI(userId, 'production'),
       () => this.checkMercadoLibreAPI(userId, 'production'),
       () => this.checkPayPalAPI(userId, 'production'),
-      () => this.checkStripeAPI(userId, 'production'),
+      // ✅ FIX: Stripe check removed - not implemented yet
     ];
     
     const simpleChecks = [
@@ -2120,7 +2120,7 @@ export class APIAvailabilityService {
     
     // Ejecutar checks críticos en serie con timeout y error handling
     const criticalResults: APIStatus[] = [];
-    const criticalCheckNames = ['ebay', 'amazon', 'mercadolibre', 'paypal', 'stripe'];
+    const criticalCheckNames = ['ebay', 'amazon', 'mercadolibre', 'paypal']; // ✅ FIX: Removed 'stripe' as checkStripeAPI doesn't exist
     for (let i = 0; i < criticalChecks.length; i++) {
       const check = criticalChecks[i];
       const checkName = criticalCheckNames[i] || 'unknown';
@@ -2240,7 +2240,7 @@ export class APIAvailabilityService {
       zenrows,
       captcha,
       paypalProduction,
-      stripeProduction,
+      // ✅ FIX: stripeProduction removed - Stripe check not implemented
       aliexpress,
       aliexpressAffiliate,
       aliexpressDropshipping,

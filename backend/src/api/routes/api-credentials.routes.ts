@@ -1123,7 +1123,16 @@ router.post('/:apiName/test', async (req: Request, res: Response, next) => {
         status = await apiAvailability.checkPayPalAPI(userId);
         break;
       case 'stripe':
-        status = await apiAvailability.checkStripeAPI(userId);
+        // ✅ FIX: Stripe API check not implemented yet
+        status = {
+          apiName: 'stripe',
+          name: 'Stripe API',
+          isConfigured: false,
+          isAvailable: false,
+          lastChecked: new Date(),
+          error: 'Stripe API check not implemented',
+          message: 'Stripe API check not implemented yet'
+        } as any;
         break;
       case 'email':
         status = await apiAvailability.checkEmailAPI(userId);
