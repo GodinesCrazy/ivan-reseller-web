@@ -816,18 +816,10 @@ router.post('/', async (req: Request, res: Response, next) => {
         userId: targetUserId,
         apiName: normalizedApiName
       });
-      // ✅ FIX: Si falla la verificación, crear un status básico para que el frontend sepa que se guardó
-      if (normalizedApiName === 'serpapi' || apiName === 'googletrends') {
-        immediateStatus = {
-          apiName: 'serpapi',
-          name: 'SerpAPI (Google Trends)',
-          isConfigured: true, // Asumir que está configurado si se guardó exitosamente
-          isAvailable: true,
-          status: 'healthy' as const,
-          message: 'API configurada y lista para usar',
-          lastChecked: new Date()
-        };
-      }
+      // ✅ FIX: Si falla la verificación, NO asumir que está configurado
+      // El frontend deberá verificar el estado usando el endpoint /status después
+      // Esto previene mostrar "configurado" cuando en realidad no se pudo verificar
+      immediateStatus = null;
     }
 
     // ✅ FIX: Enviar respuesta inmediatamente, antes de cualquier operación que pueda causar crash
