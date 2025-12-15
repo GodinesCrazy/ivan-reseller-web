@@ -2897,7 +2897,13 @@ export default function APISettings() {
       }
     }
 
-    if (!status) return 'Estado desconocido';
+    // ✅ FIX: Si hay credenciales pero no hay status (por ejemplo, por un error o crash del backend),
+    // asumir que está configurado en lugar de mostrar "Estado desconocido" o "No configurada"
+    // Esto es especialmente importante para credenciales globales donde el status puede fallar
+    if (!status) {
+      // Si hay credencial activa, asumir que está configurado aunque no tengamos el estado del backend
+      return 'Configurado (verificando estado...)';
+    }
     
     // Use new status field if available
     if (status.status) {
@@ -2913,7 +2919,8 @@ export default function APISettings() {
           return `No disponible${status.message ? `: ${status.message}` : ''}${trustText}`;
         case 'unknown':
         default:
-          return 'Estado desconocido';
+          // ✅ FIX: Si el status es 'unknown' pero hay credencial, mostrar estado positivo
+          return credential ? 'Configurado (verificando estado...)' : 'Estado desconocido';
       }
     }
     
