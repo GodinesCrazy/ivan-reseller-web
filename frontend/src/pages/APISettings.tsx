@@ -1633,7 +1633,10 @@ export default function APISettings() {
           [statusKey]: {
             apiName: apiName === 'serpapi' ? 'googletrends' : apiName,
             environment: currentEnvironment,
-            available: immediateStatus.isAvailable || false,
+            status: immediateStatus.status || undefined, // ✅ FIX: Incluir status ('healthy', 'unhealthy', etc.)
+            isConfigured: immediateStatus.isConfigured || false, // ✅ FIX: Incluir isConfigured
+            isAvailable: immediateStatus.isAvailable || false,
+            available: immediateStatus.isAvailable || false, // Mantener para compatibilidad
             message: immediateStatus.message || undefined,
             lastChecked: new Date().toISOString(),
           }
@@ -1641,6 +1644,7 @@ export default function APISettings() {
         log.info('[APISettings] Updated status from immediateStatus', {
           apiName,
           statusKey,
+          status: immediateStatus.status,
           isConfigured: immediateStatus.isConfigured,
           isAvailable: immediateStatus.isAvailable
         });
