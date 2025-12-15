@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../../config/database';
+import { logger } from '../../config/logger'; // ✅ FIX: Import logger at top level
 import costCalculator from '../../services/cost-calculator.service';
 import { notificationService } from '../../services/notification.service';
 
@@ -171,7 +172,7 @@ async function recordSaleFromWebhook(params: {
 
         // Enviar notificación con link para compra manual
         await notificationService.sendToUser(listing.userId, {
-          type: 'ACTION_REQUIRED',
+          type: 'USER_ACTION', // ✅ FIX: Changed from 'ACTION_REQUIRED' to valid type
           title: 'Compra manual requerida',
           message: `Capital insuficiente. Disponible: $${availableCapital.toFixed(2)}, Requerido: $${requiredCapital.toFixed(2)}`,
           category: 'SALE',
@@ -179,7 +180,7 @@ async function recordSaleFromWebhook(params: {
           data: {
             saleId: sale.id,
             orderId,
-            productUrl: product.aliexpressUrl || product.sourceUrl || '',
+            productUrl: product.aliexpressUrl || '', // ✅ FIX: Removed sourceUrl (doesn't exist)
             manualPurchaseRequired: true,
             availableCapital,
             requiredCapital
@@ -219,7 +220,7 @@ async function recordSaleFromWebhook(params: {
 
         // Similar a capital insuficiente
         await notificationService.sendToUser(listing.userId, {
-          type: 'ACTION_REQUIRED',
+          type: 'USER_ACTION', // ✅ FIX: Changed from 'ACTION_REQUIRED' to valid type
           title: 'Saldo PayPal insuficiente',
           message: `Saldo PayPal: $${paypalBalance.available.toFixed(2)}, Requerido: $${requiredCapital.toFixed(2)}`,
           category: 'SALE',
@@ -227,7 +228,7 @@ async function recordSaleFromWebhook(params: {
           data: {
             saleId: sale.id,
             orderId,
-            productUrl: product.aliexpressUrl || product.sourceUrl || '',
+            productUrl: product.aliexpressUrl || '', // ✅ FIX: Removed sourceUrl (doesn't exist)
             manualPurchaseRequired: true
           }
         });
@@ -319,11 +320,11 @@ async function recordSaleFromWebhook(params: {
 
             // Notificar éxito
             await notificationService.sendToUser(listing.userId, {
-              type: 'PURCHASE_COMPLETED',
+              type: 'JOB_COMPLETED', // ✅ FIX: Changed from 'PURCHASE_COMPLETED' to valid type
               title: 'Compra automática completada',
               message: `Orden ${orderId} procesada. Tracking: ${purchaseResult.trackingNumber || 'Pendiente'}`,
               category: 'SALE',
-              priority: 'MEDIUM',
+              priority: 'NORMAL', // ✅ FIX: Changed from 'MEDIUM' to valid priority
               data: {
                 saleId: sale.id,
                 orderId,
@@ -355,7 +356,7 @@ async function recordSaleFromWebhook(params: {
 
           // Notificar error y enviar link para compra manual
           await notificationService.sendToUser(listing.userId, {
-            type: 'PURCHASE_FAILED',
+            type: 'JOB_FAILED', // ✅ FIX: Changed from 'PURCHASE_FAILED' to valid type
             title: 'Compra automática falló',
             message: `Error: ${purchaseError.message}. Requiere acción manual.`,
             category: 'SALE',
@@ -378,7 +379,7 @@ async function recordSaleFromWebhook(params: {
       });
 
       await notificationService.sendToUser(listing.userId, {
-        type: 'ACTION_REQUIRED',
+        type: 'USER_ACTION', // ✅ FIX: Changed from 'ACTION_REQUIRED' to valid type
         title: 'Compra manual requerida',
         message: `Nueva venta recibida. Orden ${orderId} requiere procesamiento manual.`,
         category: 'SALE',
@@ -386,7 +387,7 @@ async function recordSaleFromWebhook(params: {
         data: {
           saleId: sale.id,
           orderId,
-          productUrl: product.aliexpressUrl || product.sourceUrl || '',
+          productUrl: product.aliexpressUrl || '', // ✅ FIX: Removed sourceUrl (doesn't exist)
           manualPurchaseRequired: true,
           buyerEmail,
           shippingAddress: shippingAddressStr

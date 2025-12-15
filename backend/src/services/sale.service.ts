@@ -331,7 +331,7 @@ export class SaleService {
         title: 'Nueva Venta Registrada',
         message: `Venta ${sale.orderId} por $${toNumber(sale.salePrice).toFixed(2)} - ${sale.product.title}`,
         priority: 'HIGH',
-        category: 'SALE',
+            // ✅ FIX: No category field allowed in sendAlert (removed duplicate)
         data: {
           saleId: sale.id,
           orderId: sale.orderId,
@@ -468,11 +468,11 @@ export class SaleService {
         );
         
         await notificationService.sendAlert({
-          type: 'action_required',
+          type: 'USER_ACTION', // ✅ FIX: sendAlert usa misma interfaz que sendToUser
           title: 'Compra guiada - Confirmación requerida',
           message: `Venta ${sale.orderId} por $${sale.salePrice.toFixed(2)} lista para compra automática. ¿Deseas proceder ahora? (Se ejecutará automáticamente en 5 minutos si no respondes)`,
           priority: 'HIGH',
-          category: 'SALE',
+            // ✅ FIX: No category field allowed in sendAlert (removed duplicate)
           data: { 
             saleId: sale.id, 
             orderId: sale.orderId,
@@ -515,7 +515,7 @@ export class SaleService {
           title: 'Venta requiere compra manual',
           message: `Venta ${sale.orderId} por $${sale.salePrice.toFixed(2)} requiere procesamiento manual. ¿Desea proceder con la compra?`,
           priority: 'HIGH',
-          category: 'SALE',
+            // ✅ FIX: No category field allowed in sendAlert (removed duplicate)
           data: { 
             saleId: sale.id, 
             orderId: sale.orderId,

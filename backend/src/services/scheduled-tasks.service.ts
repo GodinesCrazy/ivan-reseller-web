@@ -1158,11 +1158,11 @@ export class ScheduledTasksService {
 
                 totalUnpublished++;
                 await notificationService.sendToUser(user.id, {
-                  type: 'PRODUCT_UNPUBLISHED',
+                  type: 'SYSTEM_ALERT', // ✅ FIX: Changed from 'PRODUCT_UNPUBLISHED' to valid type
                   title: 'Producto despublicado automáticamente',
                   message: `El producto "${product.title.substring(0, 50)}" ha sido despublicado. Razones: ${reasons.join('; ')}`,
                   category: 'PRODUCT',
-                  priority: 'MEDIUM',
+                  priority: 'NORMAL', // ✅ FIX: Changed from 'MEDIUM' to valid priority
                   data: { productId: product.id, productTitle: product.title, reasons }
                 });
               } catch (error: any) {
