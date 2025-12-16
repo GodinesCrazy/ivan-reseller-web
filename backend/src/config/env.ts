@@ -263,6 +263,47 @@ if (!process.env.REDIS_URL && redisUrl && redisUrl !== 'redis://localhost:6379')
   console.log('✅ REDIS_URL configurada desde variable alternativa');
 }
 
+/**
+ * ✅ PRODUCTION READY: Validar ENCRYPTION_KEY explícitamente
+ * Esta validación es crítica para la seguridad de credenciales
+ */
+function validateEncryptionKey(): void {
+  let encryptionKey = process.env.ENCRYPTION_KEY?.trim();
+  const jwtSecret = process.env.JWT_SECRET?.trim();
+  
+  // Si no hay ENCRYPTION_KEY pero hay JWT_SECRET válido, usarlo como fallback
+  if (!encryptionKey || encryptionKey.length < 32) {
+    if (jwtSecret && jwtSecret.length >= 32) {
+      encryptionKey = jwtSecret;
+      process.env.ENCRYPTION_KEY = jwtSecret;
+      console.log('✅ ENCRYPTION_KEY configurada desde JWT_SECRET');
+    } else {
+      console.error('❌ ERROR CRÍTICO DE SEGURIDAD: ENCRYPTION_KEY no válida');
+      console.error('   ENCRYPTION_KEY o JWT_SECRET debe estar configurado y tener al menos 32 caracteres');
+      console.error('   Sin una clave válida, las credenciales no pueden encriptarse correctamente');
+      console.error('');
+      console.error('🔧 SOLUCIÓN:');
+      console.error('   1. Genera una clave segura:');
+      console.error('      node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+      console.error('   2. Agrega ENCRYPTION_KEY en tus variables de entorno');
+      console.error('   3. Reinicia la aplicación');
+      console.error('');
+      process.exit(1);
+    }
+  }
+  
+  if (encryptionKey.length < 32) {
+    console.error('❌ ERROR: ENCRYPTION_KEY debe tener al menos 32 caracteres');
+    console.error(`   Longitud actual: ${encryptionKey.length}`);
+    process.exit(1);
+  }
+  
+  console.log('✅ ENCRYPTION_KEY validada (longitud: ' + encryptionKey.length + ' caracteres)');
+}
+
+// Validar ENCRYPTION_KEY antes de continuar
+validateEncryptionKey();
+
 // Validar DATABASE_URL antes de parsear todo el schema
 if (process.env.DATABASE_URL) {
   const dbUrlValue = process.env.DATABASE_URL.trim();
