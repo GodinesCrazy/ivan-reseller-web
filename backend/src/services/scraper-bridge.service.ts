@@ -31,25 +31,66 @@ export class ScraperBridgeService {
   }
 
   async health(): Promise<{ status: string; details?: any }> {
-    const { data } = await this.client.get('/health');
-    return data;
+    // ✅ PRODUCTION READY: Retry logic para health checks
+    const { retryWithBackoff } = await import('../utils/retry');
+    const result = await retryWithBackoff(
+      async () => {
+        const { data } = await this.client.get('/health');
+        return data;
+      },
+      {
+        maxAttempts: 3,
+        initialDelay: 1000,
+        retryable: (error: any) => {
+          // Reintentar en errores de red o timeout
+          return !error.response || (error.response.status >= 500 && error.response.status < 600);
+        },
+      }
+    );
+    return result;
   }
 
   async aliexpressSearch(params: AliExpressSearchParams): Promise<AliExpressProduct[]> {
-    const { data } = await this.client.post('/scraping/aliexpress/search', {
-      query: params.query,
-      max_items: Math.min(Math.max(params.maxItems || 10, 1), 20),
-      locale: params.locale || 'es-ES',
-    });
-    // Detect CAPTCHA requirement patterns from bridge
-    const lower = JSON.stringify(data || {}).toLowerCase();
-    if ((data && (data.captcha_required || data.requires_captcha)) || /captcha/.test(lower)) {
-      const err: any = new Error('CAPTCHA_REQUIRED');
-      err.code = 'CAPTCHA_REQUIRED';
-      err.details = data;
-      throw err;
-    }
-    return (data?.items || data || []) as AliExpressProduct[];
+    // ✅ PRODUCTION READY: Retry logic para búsquedas (crítico)
+    const { retryWithBackoff } = await import('../utils/retry');
+    
+    const result = await retryWithBackoff(
+      async () => {
+        const { data } = await this.client.post('/scraping/aliexpress/search', {
+          query: params.query,
+          max_items: Math.min(Math.max(params.maxItems || 10, 1), 20),
+          locale: params.locale || 'es-ES',
+        });
+        
+        // Detect CAPTCHA requirement patterns from bridge
+        const lower = JSON.stringify(data || {}).toLowerCase();
+        if ((data && (data.captcha_required || data.requires_captcha)) || /captcha/.test(lower)) {
+          const err: any = new Error('CAPTCHA_REQUIRED');
+          err.code = 'CAPTCHA_REQUIRED';
+          err.details = data;
+          throw err; // No reintentar CAPTCHA
+        }
+        
+        return (data?.items || data || []) as AliExpressProduct[];
+      },
+      {
+        maxAttempts: 3,
+        initialDelay: 2000,
+        retryable: (error: any) => {
+          // No reintentar si es CAPTCHA requerido
+          if (error.code === 'CAPTCHA_REQUIRED') {
+            return false;
+          }
+          // Reintentar en errores de red, timeout o 5xx
+          return !error.response || 
+                 (error.response.status >= 500 && error.response.status < 600) ||
+                 error.code === 'ECONNREFUSED' ||
+                 error.code === 'ETIMEDOUT';
+        },
+      }
+    );
+    
+    return result;
   }
 }
 
