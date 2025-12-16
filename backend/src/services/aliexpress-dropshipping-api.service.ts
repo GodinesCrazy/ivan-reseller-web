@@ -8,9 +8,10 @@
  * @see instalarAPi.txt - Documentación técnica de la API
  */
 
-import axios, { AxiosInstance } from 'axios';
 import crypto from 'crypto';
 import logger from '../config/logger';
+// ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
+import { httpClient, type AxiosInstance } from '../config/http-client';
 import type { AliExpressDropshippingCredentials } from '../types/api-credentials.types';
 
 // Tipos de datos de la API

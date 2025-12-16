@@ -12,6 +12,8 @@ import { workflowConfigService } from './workflow-config.service';
 import { logger } from '../config/logger';
 import taxCalculatorService from './tax-calculator.service'; // ✅ MEJORADO: Servicio de impuestos
 import { getGoogleTrendsService, type TrendData } from './google-trends.service'; // ✅ NUEVO: Google Trends para validar demanda real
+// ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
+import { scrapingHttpClient } from '../config/http-client';
 import {
   DEFAULT_COMPARATOR_MARKETPLACES,
   OPTIONAL_MARKETPLACES,
@@ -1676,12 +1678,11 @@ class OpportunityFinderService {
     shippingCost?: number;
   }>> {
     try {
-      const axios = (await import('axios')).default;
+      // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout y logging
       const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`;
       const scraperApiUrl = `http://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(searchUrl)}&render=true`;
 
-      const response = await axios.get(scraperApiUrl, {
-        timeout: 30000,
+      const response = await scrapingHttpClient.get(scraperApiUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
@@ -1764,12 +1765,11 @@ class OpportunityFinderService {
     shippingCost?: number;
   }>> {
     try {
-      const axios = (await import('axios')).default;
+      // ✅ PRODUCTION READY: Usar cliente HTTP centralizado (ya tiene timeout de 60s)
       const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`;
       const zenRowsUrl = `https://api.zenrows.com/v1/?apikey=${apiKey}&url=${encodeURIComponent(searchUrl)}&js_render=true&premium_proxy=true`;
 
-      const response = await axios.get(zenRowsUrl, {
-        timeout: 30000,
+      const response = await scrapingHttpClient.get(zenRowsUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
