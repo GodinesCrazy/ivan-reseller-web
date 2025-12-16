@@ -34,15 +34,30 @@ const createProductSchema = z.object({
 
 const updateProductSchema = createProductSchema.partial();
 
+// ✅ PRODUCTION READY: Validación de query parameters para paginación
+const getProductsQuerySchema = z.object({
+  status: z.string().optional(),
+  page: z.string().optional().transform(val => val ? parseInt(val, 10) : 1).pipe(z.number().int().min(1).max(1000)),
+  limit: z.string().optional().transform(val => val ? parseInt(val, 10) : 50).pipe(z.number().int().min(1).max(100)),
+});
+
 // GET /api/products - Listar productos
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // ✅ PRODUCTION READY: Validar query parameters
+    const validatedQuery = getProductsQuerySchema.parse(req.query);
+    
     // Normalizar rol a mayúsculas para comparación case-insensitive
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
     const userId = isAdmin ? undefined : req.user?.userId;
-    const status = req.query.status as string | undefined;
-    const products = await productService.getProducts(userId, status);
+    const status = validatedQuery.status;
+    
+    // ✅ PRODUCTION READY: Usar paginación
+    const result = await productService.getProducts(userId, status, {
+      page: validatedQuery.page,
+      limit: validatedQuery.limit,
+    });
     
     // ✅ Función helper para extraer imageUrl del campo images (JSON)
     const extractImageUrl = (imagesString: string | null | undefined): string | null => {
@@ -59,7 +74,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     };
     
     // ✅ Mapear datos del backend al formato esperado por el frontend
-    const mappedProducts = products.map((product) => {
+    const mappedProducts = result.products.map((product) => {
       // Calcular profit (precio final - precio AliExpress)
       const calculatedProfit = (toNumber(product.finalPrice) || toNumber(product.suggestedPrice) || 0) - toNumber(product.aliexpressPrice);
       
@@ -88,7 +103,12 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       };
     });
     
-    res.json({ success: true, data: { products: mappedProducts }, count: mappedProducts.length });
+    res.json({ 
+      success: true, 
+      data: { products: mappedProducts }, 
+      count: mappedProducts.length,
+      pagination: result.pagination, // ✅ PRODUCTION READY: Incluir metadata de paginación
+    });
   } catch (error) {
     next(error);
   }
