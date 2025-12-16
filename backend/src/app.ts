@@ -182,13 +182,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Compression
 app.use(compression());
 
-// Request logging (development)
-if (env.NODE_ENV === 'development') {
-  app.use((req: Request, _res: Response, next: NextFunction) => {
-    logger.debug('HTTP Request', { method: req.method, path: req.path });
-    next();
-  });
-}
+// ✅ PRODUCTION READY: Request logging estructurado (todos los ambientes)
+import { requestLoggerMiddleware } from './middleware/request-logger.middleware';
+app.use(requestLoggerMiddleware);
 
 // ====================================
 // ROUTES
