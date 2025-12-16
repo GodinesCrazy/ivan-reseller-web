@@ -96,6 +96,7 @@
 - **Correcciones Medias:**
   - ✅ R16: Correlation IDs implementados para observabilidad
   - ✅ Paginación agregada a GET /api/products
+  - ✅ Validación Zod agregada a endpoints críticos (sales, notifications)
 - **Correcciones Altas:** 0% (0/12) ⚠️
 - **Correcciones Medias:** 0% (0/15) ⚠️
 
