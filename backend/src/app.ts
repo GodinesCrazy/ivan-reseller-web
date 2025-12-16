@@ -181,41 +181,88 @@ if (env.NODE_ENV === 'development') {
 // ROUTES
 // ====================================
 
-// Health check básico
+/**
+ * ✅ PRODUCTION READY: Health Check Endpoints
+ * 
+ * /health - Liveness probe (is the app running?)
+ * /ready - Readiness probe (can the app serve traffic?)
+ */
+
+// Liveness probe: Verifica que la aplicación está corriendo
 app.get('/health', async (_req: Request, res: Response) => {
-  const checks: Record<string, any> = {
-    status: 'ok',
+  // Health check simple y rápido - solo verifica que el proceso está vivo
+  res.status(200).json({
+    status: 'healthy',
     timestamp: new Date().toISOString(),
-    environment: env.NODE_ENV,
+    uptime: process.uptime(),
+    service: 'ivan-reseller-backend',
+    version: process.env.npm_package_version || '1.0.0',
+    environment: env.NODE_ENV
+  });
+});
+
+// Readiness probe: Verifica que la aplicación puede servir tráfico
+app.get('/ready', async (_req: Request, res: Response) => {
+  const checks: Record<string, any> = {
+    timestamp: new Date().toISOString(),
+    service: 'ivan-reseller-backend',
+    environment: env.NODE_ENV
   };
 
-  // Verificar conexión a base de datos
+  let isReady = true;
+
+  // Verificar conexión a base de datos (crítico)
   try {
     const { prisma } = await import('./config/database');
-    await prisma.$queryRaw`SELECT 1`;
+    // Timeout de 2 segundos para no bloquear
+    const dbCheck = Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Database timeout')), 2000))
+    ]);
+    await dbCheck;
     checks.database = { status: 'healthy', connected: true };
   } catch (error: any) {
-    checks.database = { status: 'unhealthy', connected: false, error: error.message };
+    checks.database = { 
+      status: 'unhealthy', 
+      connected: false, 
+      error: error.message || 'Database connection failed'
+    };
+    isReady = false;
   }
 
-  // Verificar conexión a Redis (si está configurado)
+  // Verificar conexión a Redis (opcional pero recomendado)
   try {
     const redisModule = await import('./config/redis');
     if (redisModule.isRedisAvailable) {
-      await redisModule.redis.ping();
+      // Timeout de 1 segundo para Redis
+      const redisCheck = Promise.race([
+        redisModule.redis.ping(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 1000))
+      ]);
+      await redisCheck;
       checks.redis = { status: 'healthy', connected: true };
     } else {
       checks.redis = { status: 'not_configured', connected: false };
+      // Redis no es crítico, no afecta readiness
     }
   } catch (error: any) {
-    checks.redis = { status: 'unhealthy', connected: false, error: error.message };
+    checks.redis = { 
+      status: 'unhealthy', 
+      connected: false, 
+      error: error.message || 'Redis connection failed'
+    };
+    // Redis no es crítico, no afecta readiness si DB está OK
   }
 
   // Determinar estado general
-  const isHealthy = checks.database?.status === 'healthy' && 
-                    (checks.redis?.status === 'healthy' || checks.redis?.status === 'not_configured');
+  // Listo si DB está healthy (Redis es opcional)
+  const isServiceReady = checks.database?.status === 'healthy';
   
-  res.status(isHealthy ? 200 : 503).json(checks);
+  res.status(isServiceReady ? 200 : 503).json({
+    ready: isServiceReady,
+    checks,
+    uptime: process.uptime()
+  });
 });
 
 // API routes
