@@ -1,442 +1,401 @@
-# 🔍 PRODUCTION READINESS REPORT
-## Ivan Reseller - Sistema SaaS de Dropshipping Automatizado
+# 🔒 PRODUCTION READINESS REPORT - Ivan Reseller SaaS
 
-**Fecha de Auditoría:** 2025-12-15  
+**Fecha:** 2025-12-15  
 **Auditor:** Principal Engineer + Security Lead + SRE  
-**Versión del Sistema:** 1.0.0  
-**Branch de Auditoría:** `audit/production-ready`
+**Versión:** 1.0.0  
+**Estado:** 🟡 EN PROGRESO
 
 ---
 
 ## 📋 RESUMEN EJECUTIVO
 
+Este reporte documenta la auditoría completa de preparación para producción del sistema SaaS "Ivan Reseller", un sistema automatizado de dropshipping que depende de múltiples APIs externas.
+
 ### Estado General
-El sistema **Ivan Reseller** es una plataforma SaaS multi-tenant para dropshipping automatizado que integra múltiples marketplaces (eBay, Amazon, MercadoLibre), servicios de scraping, IA, y sistemas de pago. 
+- **Stack:** Node.js 20+ / TypeScript / Express / React / PostgreSQL / Redis
+- **Deployment:** Railway (Backend) + Vercel (Frontend)
+- **APIs Integradas:** 15+ servicios externos
+- **Riesgos Críticos Identificados:** 10
+- **Riesgos Altos:** 15+
+- **Riesgos Medios:** 20+
 
-**Estado de Producción:** 🟡 **REQUIERE CORRECCIONES CRÍTICAS**
-
-**Calificación:** 65/100
-
-### Hallazgos Principales
-- ✅ **Fortalezas:** Arquitectura sólida, manejo de errores centralizado, autenticación JWT, encriptación de credenciales
-- ⚠️ **Riesgos Críticos:** 3 hallazgos que bloquean producción
-- ⚠️ **Riesgos Altos:** 7 hallazgos que deben corregirse antes de producción
-- ℹ️ **Mejoras Recomendadas:** 15+ hallazgos de mejora continua
+### Métricas Clave
+- ✅ **Seguridad Básica:** Configurada (JWT, bcrypt, helmet, CORS)
+- ⚠️ **Resiliencia APIs:** Parcial (algunos servicios sin timeouts/retries)
+- ⚠️ **Observabilidad:** Básica (logs estructurados parciales)
+- ⚠️ **Validaciones:** Inconsistentes (algunos endpoints sin validación)
+- ✅ **Gestión Secretos:** Correcta (variables de entorno, encriptación)
 
 ---
 
 ## 🗺️ MAPA DEL SISTEMA
 
-### Stack Tecnológico
-- **Backend:** Node.js 20+ / TypeScript / Express
-- **Frontend:** React + Vite + TypeScript
-- **Base de Datos:** PostgreSQL (Prisma ORM)
-- **Cache/Queue:** Redis + BullMQ
-- **Autenticación:** JWT (Access + Refresh tokens)
-- **Deploy:** Railway (Backend + DB + Redis), Vercel (Frontend)
+### Arquitectura General
 
-### Módulos Principales
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    FRONTEND (React + Vite)                    │
+│  - Pages: Dashboard, Products, Opportunities, Settings       │
+│  - Components: API Configuration, Workflow Pipeline           │
+│  - State: Zustand (auth, notifications)                      │
+│  - Real-time: Socket.IO Client                                │
+└──────────────────────┬────────────────────────────────────────┘
+                       │ HTTP/WebSocket
+┌──────────────────────▼────────────────────────────────────────┐
+│              BACKEND (Node.js + Express)                       │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │ API Routes (40+ endpoints)                               │ │
+│  │  - Auth, Users, Products, Sales, Opportunities          │ │
+│  │  - Marketplaces (eBay, Amazon, MercadoLibre)            │ │
+│  │  - API Credentials Management                           │ │
+│  │  - Webhooks, Notifications, Reports                     │ │
+│  └──────────────────────────────────────────────────────────┘ │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │ Services (90+ servicios)                                 │ │
+│  │  - Marketplace Services (eBay, Amazon, ML)              │ │
+│  │  - Scraping Services (Puppeteer, Stealth)                │ │
+│  │  - AI Services (GROQ, OpenAI)                           │ │
+│  │  - Automation Services (Autopilot, Workflow)             │ │
+│  │  - Financial Services (PayPal, Commissions)             │ │
+│  └──────────────────────────────────────────────────────────┘ │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │ Background Jobs (BullMQ)                                 │ │
+│  │  - API Health Checks                                     │ │
+│  │  - Scheduled Tasks                                      │ │
+│  │  - Report Generation                                     │ │
+│  └──────────────────────────────────────────────────────────┘ │
+└──────────┬──────────────────────────┬──────────────────────────┘
+           │                          │
+    ┌──────▼──────┐          ┌────────▼────────┐
+    │ PostgreSQL  │          │     Redis      │
+    │  (Prisma)   │          │  (Cache/Queue) │
+    └─────────────┘          └────────────────┘
+```
 
-#### 1. **Autenticación y Autorización**
-- **Archivos:** `auth.routes.ts`, `auth.middleware.ts`, `auth.service.ts`
-- **Funcionalidad:** Login, registro, refresh tokens, RBAC (ADMIN/USER)
-- **Estado:** ✅ Funcional con validaciones básicas
+### Entry Points
 
-#### 2. **Gestión de Credenciales API**
-- **Archivos:** `api-credentials.routes.ts`, `credentials-manager.service.ts`
-- **Funcionalidad:** Encriptación de credenciales, multi-tenant, scope global/user
-- **Estado:** ✅ Funcional, encriptación AES-256
+#### Backend
+- **Main:** `backend/src/server.ts`
+- **Port:** 3000 (configurable via `PORT` env)
+- **Health Check:** `/health` (debe implementarse)
+- **API Base:** `/api/*`
 
-#### 3. **Integración Marketplaces**
-- **eBay:** `ebay.service.ts` - OAuth2, Trading API
-- **Amazon:** `amazon.service.ts` - SP-API con AWS SigV4
-- **MercadoLibre:** `mercadolibre.service.ts` - OAuth2
-- **Estado:** ✅ Funcional con timeouts parciales
+#### Frontend
+- **Main:** `frontend/src/main.tsx`
+- **Port:** 5173 (dev) / Build estático (prod)
+- **API URL:** Configurado via `VITE_API_URL`
 
-#### 4. **Búsqueda de Oportunidades**
-- **Archivos:** `opportunity-finder.service.ts`, `advanced-scraper.service.ts`
-- **APIs Externas:** ScraperAPI, ZenRows, SerpAPI (Google Trends), 2Captcha
-- **Estado:** ⚠️ Requiere timeouts consistentes
+### Base de Datos
 
-#### 5. **IA y Optimización**
-- **GROQ AI:** Generación de títulos, descripciones
-- **Archivos:** `ai-suggestions.service.ts`, `marketplace.service.ts`
-- **Estado:** ⚠️ Timeouts configurados parcialmente
+- **ORM:** Prisma
+- **Schema:** `backend/prisma/schema.prisma`
+- **Migrations:** `backend/prisma/migrations/`
+- **Connection:** `DATABASE_URL` (PostgreSQL)
 
-#### 6. **Sistema de Publicación**
-- **Archivos:** `publisher.routes.ts`, `marketplace.service.ts`
-- **Funcionalidad:** Publicación automática en múltiples marketplaces
-- **Estado:** ✅ Funcional
+### Colas y Workers
 
-#### 7. **Gestión de Productos y Ventas**
-- **Archivos:** `products.routes.ts`, `sales.routes.ts`
-- **Funcionalidad:** CRUD productos, tracking de ventas, comisiones
-- **Estado:** ✅ Funcional
+- **Queue System:** BullMQ (Redis-based)
+- **Workers:**
+  - API Health Check Queue (`api-health-check-queue.service.ts`)
+  - Scheduled Tasks (`scheduled-tasks.service.ts`)
+  - Report Generation (`scheduled-reports.service.ts`)
 
-#### 8. **Jobs y Background Workers**
-- **BullMQ:** Colas para health checks, procesamiento asíncrono
-- **Archivos:** `api-health-check-queue.service.ts`, `scheduled-tasks.service.ts`
-- **Estado:** ✅ Funcional
+### APIs Externas Integradas
 
-#### 9. **Notificaciones**
-- **Socket.IO:** Real-time updates
-- **Email/SMS:** Nodemailer, Twilio
-- **Slack:** Webhooks
-- **Estado:** ⚠️ Requiere validación de config
+#### Marketplaces (3)
+1. **eBay Trading API** - OAuth2, Sandbox + Production
+2. **Amazon SP-API** - AWS SigV4, Sandbox + Production
+3. **MercadoLibre API** - OAuth2, Sandbox + Production
 
-#### 10. **Observabilidad**
-- **Logging:** Winston (estructurado)
-- **Health Checks:** `/health`, `/ready`
-- **Estado:** ✅ Básico funcional, requiere mejoras
+#### Inteligencia Artificial (2)
+4. **GROQ AI API** - Text generation
+5. **OpenAI API** - Text generation (alternativa)
+
+#### Web Scraping (3)
+6. **ScraperAPI** - Anti-detection scraping
+7. **ZenRows API** - Advanced scraping
+8. **2Captcha** - CAPTCHA solving
+
+#### Pagos (1)
+9. **PayPal Payouts API** - Sandbox + Production
+
+#### Notificaciones (3)
+10. **Email (SMTP)** - Nodemailer
+11. **Twilio API** - SMS
+12. **Slack API** - Notifications
+
+#### Compra Automatizada (1)
+13. **AliExpress Auto-Purchase** - Puppeteer-based
+
+#### Otros (2)
+14. **SerpAPI (Google Trends)** - Search trends
+15. **AliExpress Dropshipping API** - Product data
 
 ---
 
 ## 🚨 TOP 10 RIESGOS CRÍTICOS
 
-### 🔴 CRÍTICO 1: Llamadas HTTP Sin Timeout Global
-**Severidad:** CRÍTICA  
-**Impacto:** El sistema puede quedar bloqueado indefinidamente esperando respuestas de APIs externas.
-
-**Archivos Afectados:**
-- `backend/src/services/marketplace.service.ts:999` - Llamada GROQ sin timeout
-- `backend/src/services/marketplace.service.ts:1277` - Llamada GROQ sin timeout
-- `backend/src/services/ebay.service.ts` - Múltiples llamadas sin timeout explícito
-- `backend/src/services/mercadolibre.service.ts` - Sin timeout configurado
-- `backend/src/services/paypal-rest.service.ts` - Sin timeout
-- `backend/src/services/paypal-payout.service.ts` - Sin timeout
+### 1. ⚠️ **CRÍTICO: Requests HTTP sin timeouts consistentes**
+**Severidad:** 🔴 CRÍTICA  
+**Archivos afectados:**
+- `backend/src/services/opportunity-finder.service.ts:1683,1771`
+- `backend/src/services/fx.service.ts:186`
+- `backend/src/services/aliexpress-dropshipping-api.service.ts:529`
+- Múltiples servicios que usan `axios` directamente
 
 **Problema:**
-```typescript
-// ❌ MAL - Sin timeout
-const response = await axios.post('https://api.groq.com/...', data, {
-  headers: { 'Authorization': `Bearer ${key}` }
-});
+- Algunos servicios crean instancias de `axios` sin timeout
+- Aunque existe `http-client.ts` con clientes configurados, no todos los servicios lo usan
+- Requests pueden bloquearse indefinidamente
 
-// ✅ BIEN - Con timeout
-const response = await axios.post('https://api.groq.com/...', data, {
-  headers: { 'Authorization': `Bearer ${key}` },
-  timeout: 30000 // 30 segundos
-});
-```
+**Impacto:**
+- Bloqueo de workers/threads
+- Timeouts de aplicación
+- Degradación de performance
 
 **Solución:**
-1. Crear instancia axios global con timeout por defecto
-2. Configurar timeouts apropiados por tipo de API:
-   - APIs rápidas (GROQ, validaciones): 10-15s
-   - APIs normales (marketplaces): 30s
-   - Scraping/Puppeteer: 60-120s
-
-**Fix Propuesto:**
-```typescript
-// backend/src/config/http-client.ts
-import axios from 'axios';
-
-export const httpClient = axios.create({
-  timeout: 30000, // Default 30s
-});
-
-export const fastHttpClient = axios.create({
-  timeout: 10000, // 10s para APIs rápidas
-});
-
-export const slowHttpClient = axios.create({
-  timeout: 120000, // 120s para scraping
-});
-```
+- Migrar todos los servicios a usar clientes de `http-client.ts`
+- Agregar timeout por defecto a todas las instancias de axios
+- Implementar circuit breakers para APIs externas
 
 ---
 
-### 🔴 CRÍTICO 2: Falta Validación de Variables de Entorno Críticas
-**Severidad:** CRÍTICA  
-**Impacto:** El sistema puede iniciar con configuración inválida, causando fallos en runtime.
-
-**Archivos Afectados:**
-- `backend/src/config/env.ts` - Valida DATABASE_URL y JWT_SECRET pero no todas las críticas
-- `backend/src/server.ts` - Valida ENCRYPTION_KEY al inicio ✅
+### 2. ⚠️ **CRÍTICO: Falta de health checks en producción**
+**Severidad:** 🔴 CRÍTICA  
+**Archivos afectados:**
+- `backend/src/server.ts`
+- `backend/src/app.ts`
 
 **Problema:**
-- `ENCRYPTION_KEY` se valida en `server.ts` pero puede fallar silenciosamente si `JWT_SECRET` se usa como fallback
-- Variables opcionales sin validación de formato cuando están presentes
+- No hay endpoint `/health` implementado
+- No hay endpoint `/ready` para readiness checks
+- Railway/load balancers no pueden verificar estado
+
+**Impacto:**
+- No se puede detectar cuando el servicio está caído
+- Load balancers pueden enviar tráfico a instancias no saludables
+- No hay forma de hacer graceful shutdown
 
 **Solución:**
-1. Validar todas las variables críticas al inicio
-2. Falla temprano si falta algo esencial
-3. Validar formato de URLs y keys cuando están presentes
-
-**Fix Propuesto:**
-```typescript
-// Validar ENCRYPTION_KEY explícitamente
-if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY.length < 32) {
-  if (process.env.JWT_SECRET && process.env.JWT_SECRET.length >= 32) {
-    process.env.ENCRYPTION_KEY = process.env.JWT_SECRET;
-  } else {
-    throw new Error('ENCRYPTION_KEY or JWT_SECRET must be >= 32 characters');
-  }
-}
-```
+- Implementar `/health` (liveness)
+- Implementar `/ready` (readiness) con checks de DB/Redis
+- Agregar métricas básicas
 
 ---
 
-### 🔴 CRÍTICO 3: Manejo de Errores de APIs Externas Inconsistente
-**Severidad:** CRÍTICA  
-**Impacto:** Errores de APIs externas pueden causar crashes o dejar el sistema en estado inconsistente.
-
-**Archivos Afectados:**
-- `backend/src/services/marketplace.service.ts` - No valida respuesta antes de acceder a campos
-- `backend/src/services/opportunity-finder.service.ts` - Acceso directo a `response.data` sin validar
+### 3. ⚠️ **CRÍTICO: Manejo de errores inconsistente en APIs externas**
+**Severidad:** 🔴 CRÍTICA  
+**Archivos afectados:**
+- Múltiples servicios de marketplace
+- Servicios de scraping
 
 **Problema:**
-```typescript
-// ❌ MAL - Acceso directo sin validar
-const aiTitle = response.data.choices[0]?.message?.content?.trim();
-return aiTitle || product.title;
+- Algunos servicios no validan respuestas de APIs
+- Errores de API pueden causar crashes
+- No hay retry logic consistente
 
-// ✅ BIEN - Validar estructura
-if (!response.data?.choices?.[0]?.message?.content) {
-  logger.warn('Invalid response structure from GROQ');
-  return product.title;
-}
-```
+**Impacto:**
+- Crashes inesperados
+- Pérdida de datos
+- Experiencia de usuario degradada
 
 **Solución:**
-1. Validar estructura de respuesta antes de acceder
-2. Usar try-catch específico por tipo de error
-3. Logging estructurado de errores de API
+- Implementar retry con backoff exponencial
+- Validar todas las respuestas de API
+- Normalizar errores a formato consistente
 
 ---
 
-### 🟠 ALTO 4: Falta Rate Limiting en Llamadas a APIs Externas
-**Severidad:** ALTA  
-**Impacto:** Puede exceder límites de APIs y causar baneos temporales o permanentes.
-
-**Archivos Afectados:**
-- `backend/src/services/google-trends.service.ts`
-- `backend/src/services/marketplace.service.ts`
-- `backend/src/services/opportunity-finder.service.ts`
+### 4. ⚠️ **ALTO: Falta de validación de entrada en algunos endpoints**
+**Severidad:** 🟠 ALTA  
+**Archivos afectados:**
+- Múltiples rutas en `backend/src/api/routes/`
 
 **Problema:**
-- No hay throttling centralizado para APIs con rate limits
-- Cada servicio implementa su propio rate limiting (o no)
+- No todos los endpoints usan validación con Zod
+- Inputs de usuario pueden causar errores SQL/API
+- Posible inyección de datos maliciosos
+
+**Impacto:**
+- Errores 500 inesperados
+- Posible inyección SQL (aunque Prisma ayuda)
+- Datos corruptos en DB
 
 **Solución:**
-- Implementar rate limiter centralizado por API
-- Usar Redis para tracking de rate limits
-- Respeta límites conocidos:
-  - GROQ: 30 req/min (gratis), 1440 req/min (paid)
-  - ScraperAPI: Variable por plan
-  - eBay: 5000 calls/day
+- Agregar validación Zod a todos los endpoints
+- Sanitizar inputs de usuario
+- Validar tipos y rangos
 
 ---
 
-### 🟠 ALTO 5: Falta Circuit Breaker en Todas las APIs Externas
-**Severidad:** ALTA  
-**Impacto:** Si una API falla, el sistema sigue intentando, causando degradación general.
-
-**Archivos Afectados:**
-- Todos los servicios de integración de APIs
+### 5. ⚠️ **ALTO: Falta de rate limiting en endpoints críticos**
+**Severidad:** 🟠 ALTA  
+**Archivos afectados:**
+- `backend/src/middleware/rate-limit.middleware.ts`
+- Rutas sin rate limiting
 
 **Problema:**
-- Existe `circuit-breaker.service.ts` pero no se usa consistentemente
-- Algunos servicios usan retry sin circuit breaker
+- No todos los endpoints tienen rate limiting
+- Endpoints de API credentials pueden ser abusados
+- Endpoints de scraping pueden ser sobrecargados
+
+**Impacto:**
+- Abuso de APIs
+- Costos elevados
+- Degradación de servicio
 
 **Solución:**
-- Envolver todas las llamadas a APIs externas con circuit breaker
-- Configurar umbrales apropiados (5 fallos → abrir)
+- Aplicar rate limiting a todos los endpoints públicos
+- Rate limiting más estricto en endpoints de credenciales
+- Rate limiting por usuario en endpoints autenticados
 
 ---
 
-### 🟠 ALTO 6: Exposición de Stack Traces en Producción
-**Severidad:** ALTA  
-**Impacto:** Stack traces pueden exponer información sensible (rutas, estructura interna).
-
-**Archivos Afectados:**
-- `backend/src/middleware/error.middleware.ts:149`
+### 6. ⚠️ **ALTO: Logs pueden exponer información sensible**
+**Severidad:** 🟠 ALTA  
+**Archivos afectados:**
+- `backend/src/config/logger.ts`
+- Múltiples servicios que logean
 
 **Problema:**
-```typescript
-// ❌ MAL - Stack trace en desarrollo puede filtrarse
-if (process.env.NODE_ENV === 'development' && !isOperational && err.stack) {
-  response.stack = err.stack;
-}
-```
+- Algunos logs pueden contener API keys, tokens, o datos sensibles
+- Stack traces completos en producción
+- Logs no estructurados en algunos lugares
+
+**Impacto:**
+- Exposición de credenciales
+- Violación de privacidad
+- Dificultad para debugging
 
 **Solución:**
-- ✅ Ya está bien implementado (solo en development)
-- Verificar que `NODE_ENV=production` siempre en producción
+- Usar `redact.ts` en todos los logs
+- Logs estructurados (JSON) en producción
+- Niveles de log apropiados
 
 ---
 
-### 🟠 ALTO 7: Falta Validación de Entrada en Endpoints Críticos
-**Severidad:** ALTA  
-**Impacto:** Inputs maliciosos o mal formados pueden causar errores o inyecciones.
-
-**Archivos Afectados:**
-- `backend/src/api/routes/api-credentials.routes.ts` - Validación básica
-- `backend/src/api/routes/marketplace.routes.ts` - Falta validación en algunos endpoints
+### 7. ⚠️ **ALTO: Falta de transacciones en operaciones críticas**
+**Severidad:** 🟠 ALTA  
+**Archivos afectados:**
+- `backend/src/services/sale.service.ts`
+- `backend/src/services/automation.service.ts`
 
 **Problema:**
-- Algunos endpoints usan Zod, otros no
-- Validación inconsistente entre rutas
+- Algunas operaciones multi-paso no usan transacciones
+- Puede haber inconsistencias en DB si falla a mitad de proceso
+- Race conditions posibles
+
+**Impacto:**
+- Datos inconsistentes
+- Pérdida de integridad referencial
+- Problemas de negocio (ej: ventas duplicadas)
 
 **Solución:**
-- Agregar validación Zod en todos los endpoints
-- Crear middleware de validación centralizado
+- Usar `prisma.$transaction()` en operaciones críticas
+- Implementar idempotencia donde sea necesario
+- Validar estados antes de transiciones
 
 ---
 
-### 🟠 ALTO 8: SQL Injection Potencial (Low Risk con Prisma)
-**Severidad:** MEDIA-ALTA  
-**Impacto:** Prisma previene inyección, pero queries raw podrían ser vulnerables.
-
-**Archivos Afectados:**
-- Revisar todos los `prisma.$queryRaw` o `prisma.$executeRaw`
+### 8. ⚠️ **MEDIO: Falta de correlation IDs en logs**
+**Severidad:** 🟡 MEDIA  
+**Archivos afectados:**
+- Todos los servicios
 
 **Problema:**
-- Prisma es seguro por defecto, pero queries raw necesitan validación
+- Logs no tienen correlation ID por request
+- Difícil rastrear un request a través de múltiples servicios
+- No se puede correlacionar logs con jobs
+
+**Impacto:**
+- Debugging difícil
+- No se puede rastrear flujos completos
+- Troubleshooting lento
 
 **Solución:**
-- Auditar todos los queries raw
-- Usar `Prisma.sql` template tags
-- Validar inputs antes de queries raw
+- Agregar middleware para correlation ID
+- Propagar correlation ID a todos los logs
+- Incluir correlation ID en respuestas de error
 
 ---
 
-### 🟠 ALTO 9: Falta Health Check para Dependencias
-**Severidad:** ALTA  
-**Impacto:** El sistema puede reportar "healthy" aunque Redis/DB estén caídos.
-
-**Archivos Afectados:**
-- `backend/src/api/routes/system.routes.ts` - Health check básico
+### 9. ⚠️ **MEDIO: Falta de paginación en algunos endpoints**
+**Severidad:** 🟡 MEDIA  
+**Archivos afectados:**
+- `backend/src/api/routes/products.routes.ts`
+- `backend/src/api/routes/opportunities.routes.ts`
+- Otros endpoints de listado
 
 **Problema:**
-- Health check solo valida que el servidor responde
-- No verifica conectividad a DB, Redis, APIs externas
+- Algunos endpoints retornan todos los resultados sin paginación
+- Puede causar timeouts con grandes datasets
+- Consumo excesivo de memoria
+
+**Impacto:**
+- Timeouts en requests grandes
+- Degradación de performance
+- Alto consumo de recursos
 
 **Solución:**
-```typescript
-// Health check mejorado
-app.get('/health', async (req, res) => {
-  const checks = {
-    server: 'ok',
-    database: await checkDatabase(),
-    redis: await checkRedis(),
-    criticalApis: await checkCriticalAPIs(),
-  };
-  
-  const isHealthy = Object.values(checks).every(v => v === 'ok');
-  res.status(isHealthy ? 200 : 503).json(checks);
-});
-```
+- Implementar paginación en todos los endpoints de listado
+- Límites por defecto (ej: 50 items)
+- Cursor-based pagination para datasets grandes
 
 ---
 
-### 🟠 ALTO 10: Falta Correlation ID en Logs
-**Severidad:** MEDIA-ALTA  
-**Impacto:** Difícil rastrear requests a través de múltiples servicios/jobs.
-
-**Archivos Afectados:**
-- Todos los servicios y rutas
+### 10. ⚠️ **MEDIO: Falta de circuit breakers para APIs externas**
+**Severidad:** 🟡 MEDIA  
+**Archivos afectados:**
+- Servicios de marketplace
+- Servicios de scraping
 
 **Problema:**
-- Logs no tienen correlation ID para trazar requests completos
-- Jobs asíncronos no propagan correlation ID
+- Aunque existe `circuit-breaker.service.ts`, no todos los servicios lo usan
+- APIs caídas pueden causar cascading failures
+- No hay fallback cuando APIs fallan
+
+**Impacto:**
+- Cascading failures
+- Degradación de servicio completo
+- No hay graceful degradation
 
 **Solución:**
-- Middleware para generar correlation ID por request
-- Propagar a jobs de BullMQ
-- Incluir en todos los logs
+- Integrar circuit breakers en todos los servicios de API
+- Implementar fallbacks cuando sea posible
+- Timeouts más cortos con circuit breakers
 
 ---
 
 ## 📊 MATRIZ DE RIESGOS
 
-Ver archivo `RISK_MATRIX.md` para detalles completos.
+Ver `RISK_MATRIX.md` para detalles completos.
 
 ---
 
 ## ✅ CORRECCIONES IMPLEMENTADAS
 
-### Commit 1: Fix Timeouts HTTP Globales
-**Archivo:** `backend/src/config/http-client.ts` (nuevo)  
-**Cambios:**
-- Crear instancias axios con timeouts por defecto
-- Clientes especializados para diferentes tipos de APIs
-
-### Commit 2: Validación Mejorada de ENCRYPTION_KEY
-**Archivo:** `backend/src/config/env.ts`  
-**Cambios:**
-- Validación explícita de ENCRYPTION_KEY
-- Mensaje de error claro si falta
-
-### Commit 3: Circuit Breaker en APIs Críticas
-**Archivos:** Múltiples servicios  
-**Cambios:**
-- Envolver llamadas a APIs con circuit breaker
-- Configurar umbrales apropiados
+*(Se actualizará durante la auditoría)*
 
 ---
 
-## ⏳ PENDIENTES
+## 📝 PENDIENTES
 
-### Alta Prioridad
-1. Implementar rate limiting centralizado
-2. Health checks mejorados para dependencias
-3. Correlation ID en todos los logs
-4. Validación de entrada consistente en todos los endpoints
-
-### Media Prioridad
-1. Auditoría de queries raw SQL
-2. Métricas de performance (Prometheus/Grafana)
-3. Alertas automáticas (PagerDuty/Slack)
-4. Documentación de runbooks operacionales
-
-### Baja Prioridad
-1. Optimización de queries N+1
-2. Cache estratégico adicional
-3. Load testing
-4. Disaster recovery plan documentado
+*(Se actualizará durante la auditoría)*
 
 ---
 
-## 🧪 VALIDACIONES REALIZADAS
+## 🔧 CÓMO USAR ESTE REPORTE
 
-### Build
-```bash
-cd backend && npm run build
-# ✅ Exit code: 0 (con errores TypeScript no críticos)
-```
-
-### Lint
-```bash
-cd backend && npm run lint
-# ⚠️ Algunos warnings, no bloqueantes
-```
-
-### Tests
-```bash
-cd backend && npm test
-# ⚠️ Tests parciales, cobertura limitada
-```
+1. **Revisar Top 10 Riesgos:** Priorizar correcciones por severidad
+2. **Revisar Matriz de Riesgos:** Entender probabilidad e impacto
+3. **Seguir Runbook:** `RUNBOOK_PROD.md` para configuración y troubleshooting
+4. **Validar Cambios:** Ejecutar tests y validaciones después de cada corrección
 
 ---
 
-## 📝 RECOMENDACIONES FINALES
-
-### Antes de Producción (BLOCKERS)
-1. ✅ Implementar timeouts HTTP globales
-2. ✅ Validar ENCRYPTION_KEY explícitamente
-3. ✅ Mejorar manejo de errores de APIs
-4. ⏳ Agregar rate limiting centralizado
-5. ⏳ Health checks mejorados
-
-### Post-Lanzamiento (Mejoras Continuas)
-1. Observabilidad completa (métricas, traces)
-2. Load testing y optimización
-3. Documentación operacional
-4. Disaster recovery plan
-
----
-
-**Auditoría completada:** 2025-12-15  
-**Próxima revisión recomendada:** Post-implementación de fixes críticos
-
+**Próximos Pasos:**
+1. Corregir riesgos críticos (#1-3)
+2. Implementar health checks (#2)
+3. Migrar servicios a http-client (#1)
+4. Agregar validaciones (#4)
+5. Implementar correlation IDs (#8)

@@ -1,117 +1,109 @@
-# 🎯 MATRIZ DE RIESGOS
-## Ivan Reseller - Análisis de Riesgos para Producción
+# 🎯 MATRIZ DE RIESGOS - Ivan Reseller SaaS
 
 **Fecha:** 2025-12-15  
 **Metodología:** Probabilidad × Impacto
 
 ---
 
-## 📊 Leyenda
+## 📊 LEGENDA
 
-| Severidad | Descripción | Acción Requerida |
-|-----------|-------------|------------------|
-| 🔴 **CRÍTICO** | Bloquea producción | **CORREGIR INMEDIATAMENTE** |
-| 🟠 **ALTO** | Riesgo significativo | **CORREGIR ANTES DE PRODUCCIÓN** |
-| 🟡 **MEDIO** | Riesgo moderado | **CORREGIR EN PRÓXIMA ITERACIÓN** |
-| 🟢 **BAJO** | Riesgo menor | **MEJORA CONTINUA** |
+- **Probabilidad:** Baja (B) | Media (M) | Alta (A)
+- **Impacto:** Bajo (1) | Medio (2) | Alto (3) | Crítico (4)
+- **Severidad:** 🟢 Baja | 🟡 Media | 🟠 Alta | 🔴 Crítica
 
 ---
 
-## 🔴 RIESGOS CRÍTICOS (Probabilidad Alta × Impacto Alto)
+## 🔴 RIESGOS CRÍTICOS (Prioridad 1)
 
-| ID | Riesgo | Probabilidad | Impacto | Severidad | Prioridad |
-|----|--------|--------------|---------|-----------|-----------|
-| C1 | Llamadas HTTP sin timeout global | **Alta** (90%) | **Alto** (DoS, bloqueo) | 🔴 CRÍTICO | **P0** |
-| C2 | Falta validación ENCRYPTION_KEY | **Media** (40%) | **Crítico** (Pérdida datos) | 🔴 CRÍTICO | **P0** |
-| C3 | Manejo de errores APIs inconsistente | **Alta** (80%) | **Alto** (Crashes) | 🔴 CRÍTICO | **P0** |
-
----
-
-## 🟠 RIESGOS ALTOS (Probabilidad Media-Alta × Impacto Alto)
-
-| ID | Riesgo | Probabilidad | Impacto | Severidad | Prioridad |
-|----|--------|--------------|---------|-----------|-----------|
-| A1 | Falta rate limiting APIs externas | **Alta** (70%) | **Alto** (Baneos API) | 🟠 ALTO | **P1** |
-| A2 | Falta circuit breaker consistente | **Media** (50%) | **Alto** (Degradación) | 🟠 ALTO | **P1** |
-| A3 | Exposición stack traces (si NODE_ENV mal) | **Baja** (10%) | **Crítico** (Info leak) | 🟠 ALTO | **P1** |
-| A4 | Falta validación entrada endpoints | **Media** (60%) | **Alto** (Inyección) | 🟠 ALTO | **P1** |
-| A5 | SQL Injection en queries raw | **Baja** (20%) | **Crítico** (DB compromise) | 🟠 ALTO | **P1** |
-| A6 | Health check incompleto | **Media** (50%) | **Alto** (Falsos positivos) | 🟠 ALTO | **P1** |
-| A7 | Falta correlation ID logs | **Media** (60%) | **Medio** (Debug difícil) | 🟠 ALTO | **P2** |
+| ID | Riesgo | Prob | Impacto | Severidad | Archivo(s) | Estado |
+|----|--------|------|---------|-----------|------------|--------|
+| R1 | Requests HTTP sin timeouts | A | 4 | 🔴 | `opportunity-finder.service.ts`, `fx.service.ts`, múltiples | ⚠️ Pendiente |
+| R2 | Falta de health checks | A | 4 | 🔴 | `server.ts`, `app.ts` | ⚠️ Pendiente |
+| R3 | Manejo de errores inconsistente APIs | A | 3 | 🔴 | Servicios de marketplace, scraping | ⚠️ Pendiente |
 
 ---
 
-## 🟡 RIESGOS MEDIOS (Probabilidad Media × Impacto Medio)
+## 🟠 RIESGOS ALTOS (Prioridad 2)
 
-| ID | Riesgo | Probabilidad | Impacto | Severidad | Prioridad |
-|----|--------|--------------|---------|-----------|-----------|
-| M1 | Queries N+1 en listados | **Alta** (70%) | **Medio** (Performance) | 🟡 MEDIO | **P2** |
-| M2 | Falta paginación en algunos endpoints | **Media** (50%) | **Medio** (Memory) | 🟡 MEDIO | **P2** |
-| M3 | Cache no optimizado | **Media** (50%) | **Medio** (Latency) | 🟡 MEDIO | **P3** |
-| M4 | Falta métricas de performance | **Alta** (80%) | **Medio** (Observabilidad) | 🟡 MEDIO | **P2** |
-| M5 | Dependencias vulnerables | **Baja** (30%) | **Medio** (Seguridad) | 🟡 MEDIO | **P2** |
-| M6 | Falta alertas automáticas | **Alta** (70%) | **Medio** (Time to detect) | 🟡 MEDIO | **P3** |
-| M7 | Documentación operacional incompleta | **Media** (60%) | **Medio** (Onboarding) | 🟡 MEDIO | **P3** |
-
----
-
-## 🟢 RIESGOS BAJOS (Probabilidad Baja × Impacto Bajo-Medio)
-
-| ID | Riesgo | Probabilidad | Impacto | Severidad | Prioridad |
-|----|--------|--------------|---------|-----------|-----------|
-| B1 | Código duplicado | **Alta** (80%) | **Bajo** (Mantenibilidad) | 🟢 BAJO | **P4** |
-| B2 | Tests insuficientes | **Media** (60%) | **Medio** (Calidad) | 🟢 BAJO | **P3** |
-| B3 | Falta load testing | **Alta** (90%) | **Medio** (Escalabilidad) | 🟢 BAJO | **P3** |
-| B4 | Logs muy verbosos | **Media** (50%) | **Bajo** (Storage cost) | 🟢 BAJO | **P4** |
+| ID | Riesgo | Prob | Impacto | Severidad | Archivo(s) | Estado |
+|----|--------|------|---------|-----------|------------|--------|
+| R4 | Falta validación entrada endpoints | M | 3 | 🟠 | Múltiples rutas | ⚠️ Pendiente |
+| R5 | Falta rate limiting endpoints críticos | M | 3 | 🟠 | `rate-limit.middleware.ts` | ⚠️ Pendiente |
+| R6 | Logs exponen información sensible | M | 3 | 🟠 | `logger.ts`, múltiples servicios | ⚠️ Pendiente |
+| R7 | Falta transacciones operaciones críticas | M | 3 | 🟠 | `sale.service.ts`, `automation.service.ts` | ⚠️ Pendiente |
+| R8 | Secretos hardcodeados (si existen) | B | 4 | 🟠 | Revisar todos los archivos | ✅ Verificado |
+| R9 | Falta validación JWT refresh tokens | M | 2 | 🟠 | `auth.middleware.ts` | ⚠️ Pendiente |
+| R10 | CORS demasiado permisivo | M | 2 | 🟠 | `app.ts` | ⚠️ Pendiente |
+| R11 | Falta sanitización inputs usuario | M | 3 | 🟠 | Múltiples endpoints | ⚠️ Pendiente |
+| R12 | Falta validación tipos en respuestas API | M | 2 | 🟠 | Servicios de marketplace | ⚠️ Pendiente |
+| R13 | Race conditions en operaciones concurrentes | M | 3 | 🟠 | `automation.service.ts` | ⚠️ Pendiente |
+| R14 | Falta idempotencia en operaciones críticas | M | 2 | 🟠 | `sale.service.ts`, webhooks | ⚠️ Pendiente |
+| R15 | Falta manejo de rate limits de APIs externas | A | 2 | 🟠 | Servicios de marketplace | ⚠️ Pendiente |
 
 ---
 
-## 📈 PRIORIZACIÓN
+## 🟡 RIESGOS MEDIOS (Prioridad 3)
 
-### P0 - Bloqueadores de Producción (HACER AHORA)
-1. **C1:** Timeouts HTTP globales
-2. **C2:** Validación ENCRYPTION_KEY
-3. **C3:** Manejo de errores APIs
-
-### P1 - Antes de Producción (HACER PRONTO)
-4. **A1:** Rate limiting APIs
-5. **A2:** Circuit breaker consistente
-6. **A3:** Verificar NODE_ENV
-7. **A4:** Validación entrada
-8. **A5:** Auditar queries raw
-9. **A6:** Health checks mejorados
-
-### P2 - Primera Iteración Post-Launch (HACER DESPUÉS)
-10. **A7:** Correlation ID
-11. **M1:** Optimizar queries N+1
-12. **M2:** Paginación
-13. **M4:** Métricas
-14. **M5:** Auditoría dependencias
-
-### P3 - Mejoras Continuas (BACKLOG)
-- Resto de riesgos medios/bajos
+| ID | Riesgo | Prob | Impacto | Severidad | Archivo(s) | Estado |
+|----|--------|------|---------|-----------|------------|--------|
+| R16 | Falta correlation IDs en logs | M | 2 | 🟡 | Todos los servicios | ⚠️ Pendiente |
+| R17 | Falta paginación endpoints | M | 2 | 🟡 | `products.routes.ts`, `opportunities.routes.ts` | ⚠️ Pendiente |
+| R18 | Falta circuit breakers APIs | M | 2 | 🟡 | Servicios de marketplace | ⚠️ Pendiente |
+| R19 | Logs no estructurados | M | 1 | 🟡 | Múltiples servicios | ⚠️ Pendiente |
+| R20 | Falta métricas básicas | M | 2 | 🟡 | `server.ts` | ⚠️ Pendiente |
+| R21 | Falta graceful shutdown | M | 2 | 🟡 | `server.ts` | ⚠️ Pendiente |
+| R22 | Falta validación tamaño payloads | B | 2 | 🟡 | `app.ts` | ⚠️ Pendiente |
+| R23 | Falta compresión en respuestas grandes | B | 1 | 🟡 | `app.ts` | ✅ Implementado |
+| R24 | Falta cache en consultas frecuentes | M | 1 | 🟡 | Múltiples servicios | ⚠️ Parcial |
+| R25 | N+1 queries posibles | M | 2 | 🟡 | Servicios con Prisma | ⚠️ Pendiente |
+| R26 | Falta índices en queries frecuentes | B | 2 | 🟡 | Schema Prisma | ⚠️ Pendiente |
+| R27 | Falta validación monedas | M | 2 | 🟡 | `currency.routes.ts` | ⚠️ Pendiente |
+| R28 | Falta manejo timeouts Puppeteer | M | 2 | 🟡 | Servicios de scraping | ⚠️ Parcial |
+| R29 | Falta cleanup recursos Puppeteer | M | 1 | 🟡 | Servicios de scraping | ⚠️ Pendiente |
+| R30 | Falta validación URLs externas | M | 2 | 🟡 | Servicios de scraping | ⚠️ Pendiente |
 
 ---
 
-## 🎯 RESUMEN POR CATEGORÍA
+## 🟢 RIESGOS BAJOS (Prioridad 4)
 
-| Categoría | Cantidad | Acción |
-|-----------|----------|--------|
-| 🔴 Críticos | 3 | **Bloquean producción** |
-| 🟠 Altos | 7 | **Antes de producción** |
-| 🟡 Medios | 7 | **Post-launch** |
-| 🟢 Bajos | 4 | **Backlog** |
-| **TOTAL** | **21** | |
+| ID | Riesgo | Prob | Impacto | Severidad | Archivo(s) | Estado |
+|----|--------|------|---------|-----------|------------|--------|
+| R31 | Falta documentación API | B | 1 | 🟢 | Swagger configurado | ✅ Parcial |
+| R32 | Falta tests unitarios | M | 1 | 🟢 | Múltiples servicios | ⚠️ Parcial |
+| R33 | Falta tests de integración | M | 1 | 🟢 | Endpoints | ⚠️ Parcial |
+| R34 | Falta validación versiones dependencias | B | 1 | 🟢 | `package.json` | ⚠️ Pendiente |
+| R35 | Falta CI/CD pipeline | B | 1 | 🟢 | GitHub Actions | ⚠️ Pendiente |
 
 ---
 
-## 📝 NOTAS
+## 📈 RESUMEN POR PRIORIDAD
 
-- **Probabilidad:** Basada en frecuencia observada en logs y código
-- **Impacto:** Basado en impacto potencial en producción
-- **Prioridad:** Considera facilidad de fix y riesgo residual
+- **🔴 Críticos:** 3 riesgos
+- **🟠 Altos:** 12 riesgos
+- **🟡 Medios:** 15 riesgos
+- **🟢 Bajos:** 5 riesgos
+
+**Total:** 35 riesgos identificados
+
+---
+
+## 🎯 PLAN DE ACCIÓN
+
+### Fase 1: Críticos (Semana 1)
+- [ ] R1: Migrar servicios a http-client con timeouts
+- [ ] R2: Implementar /health y /ready
+- [ ] R3: Implementar retry logic y validación respuestas
+
+### Fase 2: Altos (Semana 2-3)
+- [ ] R4-R7: Validaciones, rate limiting, logs, transacciones
+- [ ] R9-R15: Seguridad y resiliencia adicional
+
+### Fase 3: Medios (Semana 4)
+- [ ] R16-R30: Observabilidad, performance, optimizaciones
+
+### Fase 4: Bajos (Ongoing)
+- [ ] R31-R35: Documentación, tests, CI/CD
 
 ---
 
 **Última actualización:** 2025-12-15
-
