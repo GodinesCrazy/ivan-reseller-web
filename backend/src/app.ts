@@ -167,6 +167,10 @@ app.use(cookieParser());
 // ✅ PRODUCTION READY: Correlation ID middleware (después de cookie parser, antes de rutas)
 app.use(correlationMiddleware);
 
+// ✅ PRODUCTION READY: Rate limiting global para todas las rutas API
+import { createRoleBasedRateLimit } from './middleware/rate-limit.middleware';
+app.use('/api', createRoleBasedRateLimit());
+
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
