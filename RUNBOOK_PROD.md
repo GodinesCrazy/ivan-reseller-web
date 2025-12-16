@@ -1,518 +1,337 @@
-# 🚀 RUNBOOK DE PRODUCCIÓN
-## Ivan Reseller - Guía Operacional
+# 🚀 RUNBOOK PRODUCCIÓN - Ivan Reseller SaaS
 
-**Versión:** 1.0.0  
-**Última actualización:** 2025-12-15
+**Última actualización:** 2025-12-15  
+**Versión:** 1.0.0
 
 ---
 
-## 📋 TABLA DE CONTENIDOS
+## 📋 ÍNDICE
 
 1. [Configuración Inicial](#configuración-inicial)
 2. [Variables de Entorno](#variables-de-entorno)
-3. [Deployment](#deployment)
-4. [Health Checks](#health-checks)
-5. [Troubleshooting](#troubleshooting)
-6. [Monitoreo](#monitoreo)
-7. [Incident Response](#incident-response)
+3. [Despliegue](#despliegue)
+4. [Troubleshooting](#troubleshooting)
+5. [Monitoreo](#monitoreo)
+6. [Escalado](#escalado)
 
 ---
 
-## ⚙️ CONFIGURACIÓN INICIAL
+## 🔧 CONFIGURACIÓN INICIAL
 
-### Prerequisitos
+### Requisitos Previos
 
-#### Backend (Railway)
 - Node.js 20+
-- PostgreSQL 14+
-- Redis 6+
-- Railway CLI (opcional)
+- PostgreSQL 16+
+- Redis 7+ (opcional pero recomendado)
+- Railway account (o similar)
+- Vercel account (para frontend)
 
-#### Frontend (Vercel)
-- Node.js 20+
-- Vercel CLI (opcional)
+### Instalación Local (Desarrollo)
+
+```bash
+# Clonar repositorio
+git clone <repo-url>
+cd ivan-reseller-web
+
+# Backend
+cd backend
+npm install
+cp .env.example .env
+# Editar .env con tus credenciales
+npm run dev
+
+# Frontend (en otra terminal)
+cd frontend
+npm install
+cp .env.example .env
+# Editar .env con VITE_API_URL
+npm run dev
+```
 
 ---
 
 ## 🔐 VARIABLES DE ENTORNO
 
-### Backend - Variables Críticas (REQUERIDAS)
+### Variables Críticas (OBLIGATORIAS)
 
 ```bash
 # Base de Datos
 DATABASE_URL=postgresql://user:password@host:5432/database
 
-# Redis
-REDIS_URL=redis://user:password@host:6379
+# Redis (opcional pero recomendado)
+REDIS_URL=redis://host:6379
 
-# Seguridad
-JWT_SECRET=<min-32-characters-random-string>
-ENCRYPTION_KEY=<min-32-characters-random-string>  # Puede ser igual a JWT_SECRET
-
-# Servidor
-NODE_ENV=production
-PORT=3000
-API_URL=https://your-backend.railway.app
+# Seguridad (MÍNIMO 32 caracteres)
+JWT_SECRET=your-super-secret-jwt-key-minimum-32-characters-long
+ENCRYPTION_KEY=your-64-character-hexadecimal-encryption-key-0123456789abcdef0123456789abcdef
 
 # CORS
-CORS_ORIGIN=https://your-frontend.vercel.app,https://your-domain.com
+CORS_ORIGIN=https://yourdomain.com,https://www.yourdomain.com
+FRONTEND_URL=https://yourdomain.com
+
+# Entorno
+NODE_ENV=production
+PORT=3000
 ```
 
-### Backend - Variables Opcionales (APIs Externas)
+### Variables de APIs (Opcionales)
 
-```bash
-# eBay (Opcional - se configura desde UI)
-EBAY_APP_ID=
-EBAY_DEV_ID=
-EBAY_CERT_ID=
+Ver `ENV_VARIABLES_DOCUMENTATION.md` para lista completa.
 
-# MercadoLibre (Opcional)
-MERCADOLIBRE_CLIENT_ID=
-MERCADOLIBRE_CLIENT_SECRET=
-
-# PayPal (Opcional)
-PAYPAL_CLIENT_ID=
-PAYPAL_CLIENT_SECRET=
-PAYPAL_ENVIRONMENT=sandbox  # o 'production'
-
-# GROQ AI (Opcional)
-GROQ_API_KEY=
-
-# ScraperAPI (Opcional)
-SCRAPERAPI_KEY=
-```
-
-### Frontend - Variables
-
-```bash
-VITE_API_URL=https://your-backend.railway.app
-```
-
-### Generar Claves Seguras
-
-```bash
-# Generar JWT_SECRET / ENCRYPTION_KEY
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-
-# Debe generar una cadena de 64 caracteres hexadecimales
-```
-
-### Verificación de Variables
-
-```bash
-# En Railway, verificar que todas las variables estén configuradas
-railway variables
-
-# O desde el dashboard web
-# Railway → tu-proyecto → Variables
-```
+**Importante:** NUNCA commitees archivos `.env` con valores reales.
 
 ---
 
-## 🚀 DEPLOYMENT
+## 🚀 DESPLIEGUE
 
-### Backend (Railway)
+### Railway (Backend)
 
-#### Deployment Manual
+1. **Conectar Repositorio:**
+   - Railway Dashboard → New Project → Deploy from GitHub
+   - Seleccionar repositorio y rama `main`
 
-1. **Push a GitHub:**
-   ```bash
-   git push origin main
-   ```
+2. **Configurar Variables:**
+   - Settings → Variables
+   - Agregar todas las variables críticas
+   - **CRÍTICO:** `ENCRYPTION_KEY` debe tener 64 caracteres hexadecimales
 
-2. **Railway detecta automáticamente el push y despliega**
+3. **Configurar Servicios:**
+   - Agregar PostgreSQL service
+   - Agregar Redis service (opcional)
+   - Conectar servicios al backend
 
-3. **Verificar deployment:**
-   ```bash
-   railway logs
-   ```
+4. **Health Checks:**
+   - Railway detectará automáticamente `/health` y `/ready`
+   - Verificar que ambos endpoints respondan 200
 
-#### Deployment con Railway CLI
+### Vercel (Frontend)
 
-```bash
-# Login
-railway login
+1. **Conectar Repositorio:**
+   - Vercel Dashboard → New Project
+   - Importar repositorio
 
-# Link proyecto
-railway link
+2. **Configurar Build:**
+   - Framework Preset: Vite
+   - Build Command: `npm run build`
+   - Output Directory: `dist`
 
-# Deploy
-railway up
-
-# Ver logs
-railway logs --follow
-```
-
-#### Verificar Build
-
-```bash
-# Localmente antes de push
-cd backend
-npm run build
-
-# Debe completar sin errores críticos
-# Errores TypeScript menores son aceptables si el build completa
-```
-
-### Frontend (Vercel)
-
-#### Deployment Manual
-
-1. **Push a GitHub** (mismo repo)
-
-2. **Vercel detecta automáticamente y despliega**
-
-3. **Verificar en dashboard de Vercel**
-
-#### Deployment con Vercel CLI
-
-```bash
-cd frontend
-vercel --prod
-```
+3. **Variables de Entorno:**
+   - `VITE_API_URL`: URL del backend en Railway
+   - `VITE_WS_URL`: WebSocket URL (mismo dominio que API)
 
 ---
 
-## ✅ HEALTH CHECKS
-
-### Endpoints Disponibles
-
-#### Health Check Básico
-```bash
-GET /health
-
-# Respuesta esperada:
-{
-  "status": "ok",
-  "timestamp": "2025-12-15T10:00:00Z"
-}
-```
-
-#### Ready Check
-```bash
-GET /ready
-
-# Respuesta esperada:
-{
-  "ready": true,
-  "database": "connected",
-  "redis": "connected"  # si está configurado
-}
-```
-
-#### Verificar desde CLI
-
-```bash
-# Health check
-curl https://your-backend.railway.app/health
-
-# Ready check
-curl https://your-backend.railway.app/ready
-```
-
-### Monitoreo Externo
-
-Configurar en servicio de monitoreo (UptimeRobot, Pingdom, etc.):
-- **URL:** `https://your-backend.railway.app/health`
-- **Intervalo:** 5 minutos
-- **Timeout:** 10 segundos
-- **Alerta si:** Status != 200 o respuesta != `{"status":"ok"}`
-
----
-
-## 🔧 TROUBLESHOOTING
+## 🔍 TROUBLESHOOTING
 
 ### Problema: Backend no inicia
 
-#### Síntomas
-- Railway muestra "Crashed"
-- Logs muestran error de inicialización
+**Síntomas:**
+- Logs muestran "DATABASE_URL no encontrada"
+- Error de conexión a base de datos
 
-#### Diagnóstico
+**Solución:**
+1. Verificar que `DATABASE_URL` esté configurada en Railway
+2. Verificar que la URL sea interna (`postgres.railway.internal`)
+3. Verificar que el servicio PostgreSQL esté corriendo
 
-1. **Verificar logs:**
-   ```bash
-   railway logs --tail 100
-   ```
-
-2. **Errores comunes:**
-
-   **a) DATABASE_URL no configurada:**
-   ```
-   ❌ ERROR: DATABASE_URL no está configurada
-   ```
-   **Solución:**
-   - Railway Dashboard → Variables → Agregar `DATABASE_URL`
-   - Copiar valor de Postgres → Variables → `DATABASE_URL`
-
-   **b) ENCRYPTION_KEY inválida:**
-   ```
-   ❌ ERROR CRÍTICO DE SEGURIDAD: ENCRYPTION_KEY no válida
-   ```
-   **Solución:**
-   - Generar clave: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-   - Agregar en Railway Variables como `ENCRYPTION_KEY`
-
-   **c) Error de migraciones:**
-   ```
-   Error: Migration failed
-   ```
-   **Solución:**
-   - Verificar conexión a DB
-   - Ejecutar manualmente: `railway run npx prisma migrate deploy`
+**Comando de diagnóstico:**
+```bash
+# En Railway, ejecutar en shell del servicio
+echo $DATABASE_URL
+```
 
 ---
 
-### Problema: APIs externas fallan
+### Problema: Health checks fallan
 
-#### Síntomas
-- Errores 500 en endpoints de marketplace
-- Logs muestran "External API error"
+**Síntomas:**
+- `/health` retorna 503
+- `/ready` retorna 503
 
-#### Diagnóstico
-
-1. **Verificar credenciales:**
+**Solución:**
+1. Verificar logs del servicio
+2. Verificar conexión a PostgreSQL:
    ```bash
-   # Desde la UI: /settings/apis
-   # Verificar que las APIs estén "Configurado y funcionando"
+   # En Railway shell
+   npx prisma db pull
    ```
-
-2. **Errores comunes:**
-
-   **a) Rate Limit excedido:**
-   ```
-   API_RATE_LIMIT: Too many requests
-   ```
-   **Solución:**
-   - Esperar cooldown period
-   - Verificar límites del plan de la API
-   - Implementar rate limiting (ver PRODUCTION_READINESS_REPORT.md)
-
-   **b) Timeout:**
-   ```
-   API_TIMEOUT: Request timeout
-   ```
-   **Solución:**
-   - Verificar conectividad
-   - Revisar logs de la API externa
-   - Verificar que la API esté online
-
-   **c) Credenciales inválidas:**
-   ```
-   CREDENTIALS_ERROR: Invalid API key
-   ```
-   **Solución:**
-   - Verificar credenciales en `/settings/apis`
-   - Re-generar keys si es necesario
-   - Verificar que las credenciales correspondan al ambiente (sandbox/production)
-
----
-
-### Problema: Base de datos no conecta
-
-#### Síntomas
-- Errores de conexión en logs
-- Health check falla
-
-#### Diagnóstico
-
-1. **Verificar DATABASE_URL:**
+3. Verificar conexión a Redis (si está configurado):
    ```bash
-   # En Railway, verificar variable
-   railway variables
-   ```
-
-2. **Verificar Postgres:**
-   - Railway Dashboard → Postgres → Verificar que esté "Online"
-   - Verificar que el plan tenga recursos disponibles
-
-3. **Probar conexión:**
-   ```bash
-   # Desde Railway CLI
-   railway connect postgres
-   
-   # O desde terminal local con DATABASE_URL
-   psql $DATABASE_URL
+   redis-cli -u $REDIS_URL ping
    ```
 
 ---
 
-### Problema: Redis no conecta
+### Problema: APIs externas no funcionan
 
-#### Síntomas
-- Warnings en logs: "Redis not configured"
-- Cache no funciona (pero sistema sigue funcionando)
+**Síntomas:**
+- Errores 401/403 en llamadas a APIs
+- Mensajes "API not configured"
 
-#### Diagnóstico
+**Solución:**
+1. Verificar credenciales en `/api/system/api-status`
+2. Verificar que las credenciales estén encriptadas correctamente
+3. Verificar que `ENCRYPTION_KEY` esté configurada
+4. Revisar logs para errores específicos de API
 
-1. **Redis es opcional** - El sistema funciona sin Redis pero con cache in-memory
-
-2. **Si Redis está configurado pero falla:**
-   - Verificar `REDIS_URL` en Railway Variables
-   - Verificar que Redis service esté "Online"
-   - Sistema debería degradar gracefully a cache in-memory
+**Comando de diagnóstico:**
+```bash
+# Verificar estado de APIs
+curl -H "Authorization: Bearer <token>" \
+  https://your-backend.railway.app/api/system/api-status
+```
 
 ---
 
-### Problema: Frontend no conecta al backend
+### Problema: Frontend no se conecta al backend
 
-#### Síntomas
+**Síntomas:**
 - Errores CORS en consola del navegador
-- Requests fallan con 401/403
+- Requests fallan con 401
 
-#### Diagnóstico
+**Solución:**
+1. Verificar `CORS_ORIGIN` en backend incluye el dominio del frontend
+2. Verificar `VITE_API_URL` en frontend apunta al backend correcto
+3. Verificar que ambos estén en HTTPS en producción
 
-1. **Verificar CORS_ORIGIN:**
+---
+
+### Problema: Migraciones fallan
+
+**Síntomas:**
+- Error "Migration failed" en logs
+- Tablas no se crean
+
+**Solución:**
+1. Verificar que `DATABASE_URL` sea correcta
+2. Ejecutar migraciones manualmente:
    ```bash
-   # Backend debe tener frontend URL en CORS_ORIGIN
-   CORS_ORIGIN=https://your-frontend.vercel.app
+   npx prisma migrate deploy
    ```
-
-2. **Verificar VITE_API_URL:**
+3. Si falla, usar `db push` como fallback:
    ```bash
-   # Frontend debe apuntar al backend correcto
-   VITE_API_URL=https://your-backend.railway.app
+   npx prisma db push --accept-data-loss
    ```
-
-3. **Verificar HTTPS:**
-   - Ambos deben usar HTTPS en producción
-   - Verificar certificados SSL
 
 ---
 
 ## 📊 MONITOREO
 
+### Health Checks
+
+**Endpoints:**
+- `GET /health` - Liveness probe (proceso vivo)
+- `GET /ready` - Readiness probe (puede servir tráfico)
+
+**Configuración Railway:**
+- Health Check Path: `/health`
+- Health Check Port: `3000`
+- Health Check Timeout: `5s`
+
+### Logs
+
+**Ubicación:**
+- Railway: Dashboard → Service → Logs
+- Vercel: Dashboard → Project → Logs
+
+**Niveles:**
+- `error` - Errores críticos
+- `warn` - Advertencias
+- `info` - Información general
+- `debug` - Debugging (solo desarrollo)
+
+**Búsqueda de errores:**
+```bash
+# En Railway logs, buscar:
+grep -i "error\|fatal\|critical" logs.txt
+```
+
 ### Métricas Clave
 
-#### Backend
-- **Uptime:** > 99.5%
-- **Response Time:** < 500ms (p95)
-- **Error Rate:** < 1%
-- **API Success Rate:** > 95%
+**Monitorear:**
+- Tiempo de respuesta de `/health` y `/ready`
+- Tasa de errores 5xx
+- Uso de memoria y CPU
+- Conexiones a base de datos
+- Tasa de éxito de APIs externas
 
-#### Base de Datos
-- **Connection Pool:** < 80% utilizado
-- **Query Time:** < 100ms (p95)
-- **Replication Lag:** < 1s (si aplica)
+---
 
-#### APIs Externas
-- **Success Rate:** > 90%
-- **Rate Limit Usage:** < 80%
-- **Timeout Rate:** < 5%
+## 📈 ESCALADO
 
-### Logs Importantes
+### Escalar Backend
 
-#### Niveles de Log
-- **ERROR:** Errores críticos que requieren atención inmediata
-- **WARN:** Advertencias que pueden indicar problemas futuros
-- **INFO:** Información operacional normal
-- **DEBUG:** Detalles para debugging (solo en desarrollo)
+**Railway:**
+1. Settings → Scaling
+2. Aumentar número de instancias
+3. Configurar load balancer (automático)
 
-#### Buscar en Logs
+**Consideraciones:**
+- Redis debe estar disponible para sesiones compartidas
+- Base de datos debe soportar conexiones concurrentes
+- Health checks deben estar configurados
 
+### Escalar Base de Datos
+
+**Railway PostgreSQL:**
+1. Settings → Scaling
+2. Aumentar recursos (CPU, RAM, Storage)
+3. Considerar read replicas para alta carga
+
+---
+
+## 🔒 SEGURIDAD
+
+### Checklist Pre-Producción
+
+- [ ] `ENCRYPTION_KEY` configurada (64 caracteres hex)
+- [ ] `JWT_SECRET` configurado (mínimo 32 caracteres)
+- [ ] `CORS_ORIGIN` restringido a dominios permitidos
+- [ ] HTTPS habilitado en producción
+- [ ] Variables de entorno no expuestas en logs
+- [ ] Rate limiting configurado
+- [ ] Helmet configurado (CSP, HSTS)
+- [ ] Credenciales de APIs encriptadas
+
+### Rotación de Secretos
+
+**Frecuencia recomendada:**
+- `JWT_SECRET`: Cada 90 días
+- `ENCRYPTION_KEY`: Cada 180 días (requiere re-encriptar credenciales)
+- API Keys: Según política del proveedor
+
+**Proceso:**
+1. Generar nuevo secreto
+2. Actualizar variable de entorno
+3. Reiniciar servicio
+4. Verificar que todo funcione
+
+---
+
+## 📞 CONTACTO Y SOPORTE
+
+**Documentación:**
+- Reporte de Producción: `PRODUCTION_READINESS_REPORT.md`
+- Matriz de Riesgos: `RISK_MATRIX.md`
+- Variables de Entorno: `ENV_VARIABLES_DOCUMENTATION.md`
+
+**Comandos Útiles:**
 ```bash
-# Errores críticos
-railway logs | grep ERROR
+# Verificar estado del sistema
+curl https://your-backend.railway.app/health
+curl https://your-backend.railway.app/ready
 
-# Warnings de APIs
-railway logs | grep "API.*WARN"
+# Verificar APIs configuradas (requiere auth)
+curl -H "Authorization: Bearer <token>" \
+  https://your-backend.railway.app/api/system/api-status
 
-# Timeouts
-railway logs | grep "timeout"
+# Ejecutar migraciones
+npx prisma migrate deploy
 
-# Rate limits
-railway logs | grep "rate.*limit"
+# Generar Prisma Client
+npx prisma generate
 ```
 
 ---
 
-## 🚨 INCIDENT RESPONSE
-
-### Niveles de Severidad
-
-| Severidad | Descripción | Response Time | Escalación |
-|-----------|-------------|---------------|------------|
-| **P0 - Crítico** | Sistema completamente caído | < 15 min | Inmediato |
-| **P1 - Alto** | Funcionalidad crítica degradada | < 1 hora | 30 min |
-| **P2 - Medio** | Funcionalidad no crítica afectada | < 4 horas | 2 horas |
-| **P3 - Bajo** | Mejora menor o bug cosmético | < 24 horas | 8 horas |
-
-### Procedimiento P0 - Sistema Caído
-
-1. **Verificar estado:**
-   ```bash
-   curl https://your-backend.railway.app/health
-   ```
-
-2. **Revisar logs:**
-   ```bash
-   railway logs --tail 200
-   ```
-
-3. **Verificar servicios dependientes:**
-   - Postgres: Railway Dashboard
-   - Redis: Railway Dashboard
-   - APIs externas: Status pages
-
-4. **Acciones inmediatas:**
-   - Si es DB: Verificar Postgres service
-   - Si es código: Rollback a versión anterior
-   - Si es infraestructura: Escalar en Railway dashboard
-
-5. **Comunicación:**
-   - Actualizar status page (si aplica)
-   - Notificar a usuarios afectados
-
-### Rollback
-
-#### Railway
-```bash
-# Ver deployments
-railway deployments
-
-# Rollback a versión anterior
-railway rollback <deployment-id>
-```
-
-#### Vercel
-```bash
-# Desde dashboard: Deployments → Previous → Promote to Production
-# O CLI:
-vercel rollback
-```
-
----
-
-## 📞 CONTACTOS Y RECURSOS
-
-### Documentación
-- **Este Runbook:** `RUNBOOK_PROD.md`
-- **Reporte de Auditoría:** `PRODUCTION_READINESS_REPORT.md`
-- **Matriz de Riesgos:** `RISK_MATRIX.md`
-
-### Recursos Externos
-- **Railway Dashboard:** https://railway.app
-- **Vercel Dashboard:** https://vercel.com
-- **Postgres Docs:** https://www.postgresql.org/docs/
-- **Redis Docs:** https://redis.io/docs/
-
-### Checklists
-
-#### Pre-Deployment
-- [ ] Variables de entorno configuradas
-- [ ] Health checks pasando
-- [ ] Tests ejecutados (si aplica)
-- [ ] Logs revisados
-- [ ] Backup de DB realizado (si cambios de schema)
-
-#### Post-Deployment
-- [ ] Health check pasando
-- [ ] Logs sin errores críticos
-- [ ] Funcionalidad crítica verificada
-- [ ] Monitoreo activo
-
----
-
-**Última actualización:** 2025-12-15  
-**Mantenedor:** DevOps Team
-
+**Última revisión:** 2025-12-15
