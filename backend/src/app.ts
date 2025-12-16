@@ -203,14 +203,21 @@ app.use(requestLoggerMiddleware);
 
 // Liveness probe: Verifica que la aplicación está corriendo
 app.get('/health', async (_req: Request, res: Response) => {
-  // Health check simple y rápido - solo verifica que el proceso está vivo
+  // ✅ PRODUCTION READY: Health check simple y rápido - solo verifica que el proceso está vivo
+  const { getMemoryStatsFormatted, checkMemoryHealth } = await import('./utils/memory-monitor');
+  const memoryStats = getMemoryStatsFormatted();
+  const memoryHealth = checkMemoryHealth();
+  
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     service: 'ivan-reseller-backend',
     version: process.env.npm_package_version || '1.0.0',
-    environment: env.NODE_ENV
+    environment: env.NODE_ENV,
+    memory: memoryStats,
+    memoryHealthy: memoryHealth.healthy,
+    ...(memoryHealth.warning && { memoryWarning: memoryHealth.warning }),
   });
 });
 
