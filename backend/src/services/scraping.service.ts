@@ -1,5 +1,6 @@
 // @ts-nocheck
-import axios from 'axios';
+// ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout y logging
+import { scrapingHttpClient } from '../config/http-client';
 import puppeteer, { Browser, Page } from 'puppeteer-core';
 import { AppError } from '../middleware/error.middleware';
 import { stealthScrapingService, EnhancedScrapedProduct } from './stealth-scraping.service';
@@ -174,18 +175,19 @@ export class AdvancedScrapingService {
       let response;
 
       if (this.PROXY_API_KEY) {
+        // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
         // Use ScraperAPI proxy service
-        response = await axios.get('http://api.scraperapi.com', {
+        response = await scrapingHttpClient.get('http://api.scraperapi.com', {
           params: {
             api_key: this.PROXY_API_KEY,
             url: url,
             render: true, // Enable JavaScript rendering
           },
-          timeout: 30000,
         });
       } else {
+        // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
         // Direct request with user agent
-        response = await axios.get(url, {
+        response = await scrapingHttpClient.get(url, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -193,7 +195,6 @@ export class AdvancedScrapingService {
             'Accept-Encoding': 'gzip, deflate',
             'Connection': 'keep-alive',
           },
-          timeout: 15000,
         });
       }
 
