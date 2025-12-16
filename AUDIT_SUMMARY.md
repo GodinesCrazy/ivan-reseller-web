@@ -92,6 +92,8 @@
   - ✅ R2: Health Checks
   - ✅ R1: Timeouts HTTP (mayormente resuelto)
   - ⚠️ R3: Retry logic (revisión pendiente - algunos servicios ya lo tienen)
+- **Correcciones Medias:**
+  - ✅ R16: Correlation IDs implementados para observabilidad
 - **Correcciones Altas:** 0% (0/12) ⚠️
 - **Correcciones Medias:** 0% (0/15) ⚠️
 
