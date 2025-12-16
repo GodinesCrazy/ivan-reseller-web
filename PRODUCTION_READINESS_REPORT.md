@@ -374,13 +374,43 @@ Ver `RISK_MATRIX.md` para detalles completos.
 
 ## ✅ CORRECCIONES IMPLEMENTADAS
 
-*(Se actualizará durante la auditoría)*
+### R2: Health Checks Mejorados ✅
+**Archivo:** `backend/src/app.ts`  
+**Cambios:**
+- Implementado `/health` como liveness probe (simple, rápido)
+- Implementado `/ready` como readiness probe (verifica DB y Redis)
+- Agregados timeouts a checks de DB (2s) y Redis (1s)
+- Separación clara entre liveness y readiness
+
+**Justificación:**
+- Railway y load balancers necesitan endpoints separados
+- Liveness debe ser rápido (no bloquea)
+- Readiness debe verificar dependencias críticas
+
+**Prueba:**
+```bash
+curl https://your-backend.railway.app/health
+curl https://your-backend.railway.app/ready
+```
 
 ---
 
 ## 📝 PENDIENTES
 
-*(Se actualizará durante la auditoría)*
+### Críticos (Prioridad 1)
+- [ ] **R1:** Migrar servicios a http-client con timeouts consistentes
+- [ ] **R3:** Implementar retry logic y validación de respuestas API
+
+### Altos (Prioridad 2)
+- [ ] **R4:** Agregar validación Zod a endpoints sin validación
+- [ ] **R5:** Aplicar rate limiting a endpoints críticos
+- [ ] **R6:** Usar redact.ts en todos los logs
+- [ ] **R7:** Agregar transacciones a operaciones críticas
+
+### Medios (Prioridad 3)
+- [ ] **R16:** Implementar correlation IDs
+- [ ] **R17:** Agregar paginación a endpoints de listado
+- [ ] **R18:** Integrar circuit breakers en servicios de API
 
 ---
 
