@@ -153,7 +153,7 @@ const corsOptions: CorsOptions = {
     logger.warn('CORS: origin not allowed', { origin, allowedOrigins });
     return callback(new Error('Not allowed by CORS policy'), false);
   },
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-Correlation-ID'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   preflightContinue: false,
   optionsSuccessStatus: 204,
