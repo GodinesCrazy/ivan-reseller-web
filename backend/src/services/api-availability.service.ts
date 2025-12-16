@@ -68,7 +68,10 @@ export class APIAvailabilityService {
   /**
    * Generate cache key including userId for multi-tenant isolation
    */
-  private getCacheKey(userId: number, apiName: string): string {
+  private getCacheKey(userId: number, apiName: string, environment?: string): string {
+    if (environment) {
+      return `user_${userId}_${apiName}-${environment}`;
+    }
     return `user_${userId}_${apiName}`;
   }
 
@@ -986,66 +989,25 @@ export class APIAvailabilityService {
       }
         
       if (!credentials) {
-          logger.warn('[checkSerpAPI] No se encontraron credenciales ni con serpapi ni con googletrends', { userId });
-          const status: APIStatus = {
-            apiName: 'serpapi',
-            name: 'SerpAPI (Google Trends)',
-            isConfigured: false,
-            isAvailable: false,
-            lastChecked: new Date(),
-            message: 'API key no configurada. Opcional: si no se configura, el sistema usará análisis de datos internos.',
-            status: 'unhealthy'
-          };
-          // ✅ FIX: Guardar en caché de forma asíncrona
-          this.setCached(cacheKey, status).catch(() => {});
-          return status;
-        }
-        
-        // Usar credenciales encontradas (pueden ser de 'serpapi' o 'googletrends')
-        const apiKey = credentials.apiKey || credentials.SERP_API_KEY || credentials.GOOGLE_TRENDS_API_KEY;
-        logger.info('[checkSerpAPI] Verificando API key', {
-          userId,
-          hasApiKey: !!apiKey,
-          apiKeyLength: apiKey ? apiKey.length : 0,
-          apiKeyPreview: apiKey ? `${apiKey.substring(0, 10)}...` : 'none'
-        });
-        
-        if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
-          logger.warn('[checkSerpAPI] API key vacía o inválida', { userId });
-          const status: APIStatus = {
-            apiName: 'serpapi',
-            name: 'SerpAPI (Google Trends)',
-            isConfigured: false,
-            isAvailable: false,
-            lastChecked: new Date(),
-            message: 'API key vacía o inválida',
-            status: 'unhealthy'
-          };
-          // ✅ FIX: Guardar en caché de forma asíncrona
-          this.setCached(cacheKey, status).catch(() => {});
-          return status;
-        }
-        
-        logger.info('[checkSerpAPI] API key válida encontrada', { userId });
+        logger.warn('[checkSerpAPI] No se encontraron credenciales ni con serpapi ni con googletrends', { userId });
         const status: APIStatus = {
           apiName: 'serpapi',
           name: 'SerpAPI (Google Trends)',
-          isConfigured: true,
-          isAvailable: true,
+          isConfigured: false,
+          isAvailable: false,
           lastChecked: new Date(),
-          message: 'API configurada y lista para usar',
-          status: 'healthy'
+          message: 'API key no configurada. Opcional: si no se configura, el sistema usará análisis de datos internos.',
+          status: 'unhealthy'
         };
-        // ✅ FIX: Guardar en caché de forma asíncrona después de retornar para evitar que crash SIGSEGV interrumpa la respuesta
-        this.setCached(cacheKey, status).catch((err) => {
-          logger.warn('[checkSerpAPI] Failed to cache status (non-blocking)', { userId, error: err?.message });
-        });
+        // ✅ FIX: Guardar en caché de forma asíncrona
+        this.setCached(cacheKey, status).catch(() => {});
         return status;
       }
       
+      // Usar credenciales encontradas (pueden ser de 'serpapi' o 'googletrends')
       const apiKey = credentials.apiKey || credentials.SERP_API_KEY || credentials.GOOGLE_TRENDS_API_KEY;
       
-      logger.info('[checkSerpAPI] Verificando API key de serpapi', {
+      logger.info('[checkSerpAPI] Verificando API key', {
         userId,
         hasApiKey: !!apiKey,
         apiKeyLength: apiKey ? apiKey.length : 0,
@@ -1532,7 +1494,8 @@ export class APIAvailabilityService {
       // Aunque el endpoint es el mismo, mantenemos consistencia organizacional
       const credSandbox = credentials['sandbox'];
       const envSandbox = environment === 'sandbox';
-      const sandboxMismatch = credSandbox !== undefined && credSandbox !== envSandbox;
+      const credSandboxBool = credSandbox === 'true' || credSandbox === '1';
+      const sandboxMismatch = credSandbox !== undefined && credSandboxBool !== envSandbox;
 
       const status: APIStatus = {
         apiName: 'aliexpress-affiliate',
@@ -1613,7 +1576,8 @@ export class APIAvailabilityService {
       // ✅ CRÍTICO: Sincronizar sandbox flag con environment
       const credSandbox = credentials['sandbox'];
       const envSandbox = environment === 'sandbox';
-      const sandboxMismatch = credSandbox !== undefined && credSandbox !== envSandbox;
+      const credSandboxBool = credSandbox === 'true' || credSandbox === '1';
+      const sandboxMismatch = credSandbox !== undefined && credSandboxBool !== envSandbox;
 
       const status: APIStatus = {
         apiName: 'aliexpress-dropshipping',
