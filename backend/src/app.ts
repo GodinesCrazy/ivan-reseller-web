@@ -171,6 +171,10 @@ app.use(correlationMiddleware);
 import { securityHeadersMiddleware } from './middleware/security-headers.middleware';
 app.use(securityHeadersMiddleware);
 
+// ✅ PRODUCTION READY: Response time headers
+import { responseTimeMiddleware } from './middleware/response-time.middleware';
+app.use(responseTimeMiddleware);
+
 // ✅ PRODUCTION READY: Rate limiting global para todas las rutas API
 import { createRoleBasedRateLimit } from './middleware/rate-limit.middleware';
 app.use('/api', createRoleBasedRateLimit());
