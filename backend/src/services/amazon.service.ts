@@ -173,7 +173,8 @@ class AmazonService {
       // ✅ Usar retry para autenticación (crítico)
       const result = await retryMarketplaceOperation(
         () => axios.post('https://api.amazon.com/auth/o2/token', form.toString(), {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          timeout: 10000, // 10 segundos para autenticación
         }),
         'amazon',
         {
@@ -601,10 +602,12 @@ class AmazonService {
     const feedDocumentId = feedDocResponse.data.feedDocumentId;
 
     // Upload content to presigned URL
+    // ✅ PRODUCTION READY: Agregar timeout para prevenir bloqueos
     await axios.put(uploadUrl, content, {
       headers: {
         'Content-Type': 'text/xml; charset=UTF-8'
-      }
+      },
+      timeout: 60000, // 60 segundos para uploads grandes
     });
 
     return feedDocumentId;
