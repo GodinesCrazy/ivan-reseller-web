@@ -8,6 +8,7 @@ import logger from '../config/logger';
 import crypto from 'crypto';
 import type { CredentialScope } from '@prisma/client';
 import { toNumber } from '../utils/decimal.utils';
+import { fastHttpClient } from '../config/http-client'; // ✅ PRODUCTION READY: Usar cliente HTTP configurado
 
 // ✅ BAJA PRIORIDAD: Tipo union estricto para marketplace
 export type MarketplaceName = 'ebay' | 'mercadolibre' | 'amazon';
@@ -995,8 +996,8 @@ export class MarketplaceService {
         return product.title; // Fallback a título original
       }
 
-      const axios = (await import('axios')).default;
-      const response = await axios.post(
+      // ✅ PRODUCTION READY: Usar cliente HTTP configurado con timeout
+      const response = await fastHttpClient.post(
         'https://api.groq.com/openai/v1/chat/completions',
         {
           model: 'llama-3.1-8b-instant',
@@ -1018,11 +1019,20 @@ export class MarketplaceService {
             'Authorization': `Bearer ${groqCreds.apiKey}`,
             'Content-Type': 'application/json',
           },
-          timeout: 10000,
         }
       );
 
-      const aiTitle = response.data.choices[0]?.message?.content?.trim();
+      // ✅ PRODUCTION READY: Validar estructura de respuesta antes de acceder
+      if (!response.data?.choices?.[0]?.message?.content) {
+        logger.warn('Invalid response structure from GROQ API', {
+          hasData: !!response.data,
+          hasChoices: !!response.data?.choices,
+          choicesLength: response.data?.choices?.length,
+        });
+        return product.title;
+      }
+      
+      const aiTitle = response.data.choices[0].message.content.trim();
       return aiTitle && aiTitle.length > 0 ? aiTitle : product.title;
     } catch (error) {
       logger.debug('Failed to generate AI title, using original', {
@@ -1267,14 +1277,13 @@ export class MarketplaceService {
         return `Product Description:\n\n${product.title}\n\nThis product offers excellent quality and value. Perfect for your needs.`;
       }
 
-      const axios = (await import('axios')).default;
-      
+      // ✅ PRODUCTION READY: Usar cliente HTTP configurado con timeout
       // ✅ MEJORADO: Mejorar el prompt para generar descripción más coherente cuando no hay descripción válida
       const userPrompt = isDescriptionValid
         ? `Create an optimized product description for ${marketplace}:\nTitle: ${product.title}\nOriginal description: ${currentDescription}\nCategory: ${product.category || 'general'}\n\nReturn only the optimized description, no explanations.`
         : `Create a comprehensive and compelling product description for ${marketplace} based only on the product title:\nTitle: ${product.title}\nCategory: ${product.category || 'general'}\n\nGenerate a detailed product description (200-400 words) that highlights key features, benefits, and specifications. Make it SEO-friendly and optimized for conversions. Return only the description, no explanations.`;
 
-      const response = await axios.post(
+      const response = await fastHttpClient.post(
         'https://api.groq.com/openai/v1/chat/completions',
         {
           model: 'llama-3.1-8b-instant',
@@ -1296,11 +1305,20 @@ export class MarketplaceService {
             'Authorization': `Bearer ${groqCreds.apiKey}`,
             'Content-Type': 'application/json',
           },
-          timeout: 15000,
         }
       );
 
-      const aiDescription = response.data.choices[0]?.message?.content?.trim();
+      // ✅ PRODUCTION READY: Validar estructura de respuesta antes de acceder
+      if (!response.data?.choices?.[0]?.message?.content) {
+        logger.warn('Invalid response structure from GROQ API for description', {
+          hasData: !!response.data,
+          hasChoices: !!response.data?.choices,
+          choicesLength: response.data?.choices?.length,
+        });
+        return isDescriptionValid ? currentDescription : `Product Description:\n\n${product.title}\n\nThis product offers excellent quality and value. Perfect for your needs.`;
+      }
+      
+      const aiDescription = response.data.choices[0].message.content.trim();
       return aiDescription && aiDescription.length > 0 ? aiDescription : (isDescriptionValid ? currentDescription : `Product Description:\n\n${product.title}\n\nThis product offers excellent quality and value. Perfect for your needs.`);
     } catch (error) {
       logger.debug('Failed to generate AI description, using original', {
