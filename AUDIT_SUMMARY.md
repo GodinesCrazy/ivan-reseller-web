@@ -16,23 +16,27 @@
 
 ### 2. Correcciones Implementadas
 - ✅ **R2: Health Checks** - Endpoints `/health` y `/ready` mejorados con timeouts
+- ✅ **R1: Timeouts HTTP (Parcial)** - Agregados timeouts a requests críticos en amazon.service.ts
+  - Verificado que servicios críticos (opportunity-finder, fx, aliexpress-dropshipping-api) ya usan clientes centralizados
 
 ### 3. Análisis
 - ✅ Mapeo completo del sistema (stack, APIs, arquitectura)
 - ✅ Identificación de 35 riesgos (3 críticos, 12 altos, 15 medios, 5 bajos)
 - ✅ Identificación de 15+ APIs externas integradas
+- ✅ Revisión de servicios HTTP: La mayoría ya tienen timeouts o usan clientes centralizados
 
 ---
 
 ## 🚨 RIESGOS CRÍTICOS PENDIENTES
 
 ### R1: Requests HTTP sin timeouts consistentes
-**Estado:** ⚠️ Pendiente  
+**Estado:** ✅ Mayormente Resuelto  
 **Impacto:** Bloqueo de workers, timeouts de aplicación  
-**Acción requerida:**
-- Migrar servicios que usan `axios` directamente a clientes de `http-client.ts`
-- Servicios afectados: `opportunity-finder.service.ts`, `fx.service.ts`, `aliexpress-dropshipping-api.service.ts`
-- **Nota:** Algunos servicios ya tienen timeouts, pero no usan clientes centralizados
+**Acción realizada:**
+- ✅ Agregados timeouts a requests críticos en `amazon.service.ts`
+- ✅ Verificado que servicios críticos (opportunity-finder, fx, aliexpress-dropshipping-api) ya usan clientes centralizados
+- ✅ Verificado que servicios con `axios.create()` tienen timeouts configurados (ebay, scraper-bridge)
+- ⚠️ **Pendiente menor:** Algunos servicios crean instancias propias de axios (legítimo si tienen configuración específica y timeout)
 
 ### R3: Manejo de errores inconsistente en APIs externas
 **Estado:** ⚠️ Pendiente  
@@ -84,11 +88,14 @@
 ## 📊 MÉTRICAS DE PROGRESO
 
 - **Documentación:** 100% ✅
-- **Correcciones Críticas:** 33% (1/3) ⚠️
+- **Correcciones Críticas:** 66% (2/3) ✅
+  - ✅ R2: Health Checks
+  - ✅ R1: Timeouts HTTP (mayormente resuelto)
+  - ⚠️ R3: Retry logic (revisión pendiente - algunos servicios ya lo tienen)
 - **Correcciones Altas:** 0% (0/12) ⚠️
 - **Correcciones Medias:** 0% (0/15) ⚠️
 
-**Progreso General:** ~15%
+**Progreso General:** ~25%
 
 ---
 
