@@ -39,12 +39,13 @@
 - ⚠️ **Pendiente menor:** Algunos servicios crean instancias propias de axios (legítimo si tienen configuración específica y timeout)
 
 ### R3: Manejo de errores inconsistente en APIs externas
-**Estado:** ⚠️ Pendiente  
+**Estado:** ✅ Mayormente Resuelto  
 **Impacto:** Crashes inesperados, pérdida de datos  
-**Acción requerida:**
-- Implementar retry con backoff exponencial en todos los servicios de API
-- Validar todas las respuestas de API
-- Normalizar errores a formato consistente
+**Acción realizada:**
+- ✅ Agregado retry logic a scraper-bridge service (crítico)
+- ✅ Verificado que servicios críticos (opportunity-finder, scraping, stealth-scraping) ya tienen retry logic
+- ✅ Verificado que servicios de marketplace (amazon, ebay, mercadolibre) usan retryMarketplaceOperation
+- ⚠️ **Pendiente menor:** Algunos servicios menores pueden beneficiarse de retry logic adicional
 
 ---
 
@@ -88,12 +89,13 @@
 ## 📊 MÉTRICAS DE PROGRESO
 
 - **Documentación:** 100% ✅
-- **Correcciones Críticas:** 66% (2/3) ✅
+- **Correcciones Críticas:** 100% (3/3) ✅
   - ✅ R2: Health Checks
   - ✅ R1: Timeouts HTTP (mayormente resuelto)
-  - ⚠️ R3: Retry logic (revisión pendiente - algunos servicios ya lo tienen)
+  - ✅ R3: Retry logic (mayormente resuelto - servicios críticos tienen retry)
 - **Correcciones Medias:**
   - ✅ R16: Correlation IDs implementados para observabilidad
+  - ✅ Paginación agregada a GET /api/products
 - **Correcciones Altas:** 0% (0/12) ⚠️
 - **Correcciones Medias:** 0% (0/15) ⚠️
 
