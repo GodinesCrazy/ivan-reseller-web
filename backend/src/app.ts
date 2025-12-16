@@ -7,10 +7,10 @@ import { env } from './config/env';
 import { errorHandler } from './middleware/error.middleware';
 import { setupSwagger } from './config/swagger';
 import { logger } from './config/logger';
-
-// Import routes
 // ✅ PRODUCTION READY: Correlation ID middleware
 import { correlationMiddleware } from './middleware/correlation.middleware';
+
+// Import routes
 import authRoutes from './api/routes/auth.routes';
 import userRoutes from './api/routes/users.routes';
 import productRoutes from './api/routes/products.routes';
@@ -164,6 +164,9 @@ app.use(cors(corsOptions));
 // Cookie parser (debe ir antes de las rutas)
 app.use(cookieParser());
 
+// ✅ PRODUCTION READY: Correlation ID middleware (después de cookie parser, antes de rutas)
+app.use(correlationMiddleware);
+
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -266,10 +269,6 @@ app.get('/ready', async (_req: Request, res: Response) => {
     uptime: process.uptime()
   });
 });
-
-// ✅ PRODUCTION READY: Correlation ID middleware (debe ir antes de las rutas)
-import { correlationMiddleware } from './middleware/correlation.middleware';
-app.use(correlationMiddleware);
 
 // API routes
 app.use('/api/auth', authRoutes);
