@@ -14,6 +14,8 @@ import taxCalculatorService from './tax-calculator.service'; // ✅ MEJORADO: Se
 import { getGoogleTrendsService, type TrendData } from './google-trends.service'; // ✅ NUEVO: Google Trends para validar demanda real
 // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
 import { scrapingHttpClient } from '../config/http-client';
+// ✅ PRODUCTION READY: Retry logic para operaciones de scraping
+import { retryWithBackoff, isRetryableError } from '../utils/retry';
 import {
   DEFAULT_COMPARATOR_MARKETPLACES,
   OPTIONAL_MARKETPLACES,
@@ -1682,11 +1684,29 @@ class OpportunityFinderService {
       const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`;
       const scraperApiUrl = `http://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(searchUrl)}&render=true`;
 
-      const response = await scrapingHttpClient.get(scraperApiUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      // ✅ PRODUCTION READY: Retry logic para operaciones de scraping
+      const response = await retryWithBackoff(
+        async () => {
+          const resp = await scrapingHttpClient.get(scraperApiUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+          });
+          
+          // ✅ Validar respuesta
+          if (!resp.data) {
+            throw new Error('Empty response from ScraperAPI');
+          }
+          
+          return resp;
+        },
+        {
+          maxAttempts: 3,
+          initialDelay: 1000,
+          maxDelay: 10000,
+          retryable: isRetryableError,
         }
-      });
+      );
 
       // Parsear HTML usando cheerio
       const cheerio = (await import('cheerio')).default;

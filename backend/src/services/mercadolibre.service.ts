@@ -86,13 +86,45 @@ export class MercadoLibreService {
     expiresIn: number;
   }> {
     try {
-      const response = await axios.post(`${this.baseUrl}/oauth/token`, {
-        grant_type: 'authorization_code',
-        client_id: this.credentials.clientId,
-        client_secret: this.credentials.clientSecret,
-        code,
-        redirect_uri: redirectUri,
-      });
+      // ✅ PRODUCTION READY: Usar retry para operación crítica de autenticación
+      const { retryMarketplaceOperation } = await import('../utils/retry.util');
+      const logger = (await import('../config/logger')).default;
+      
+      const result = await retryMarketplaceOperation(
+        async () => {
+          const response = await axios.post(`${this.baseUrl}/oauth/token`, {
+            grant_type: 'authorization_code',
+            client_id: this.credentials.clientId,
+            client_secret: this.credentials.clientSecret,
+            code,
+            redirect_uri: redirectUri,
+          });
+          
+          // ✅ Validar respuesta
+          if (!response.data || !response.data.access_token) {
+            throw new Error('Invalid token exchange response: missing access_token');
+          }
+          
+          return response;
+        },
+        'mercadolibre',
+        {
+          maxRetries: 3,
+          initialDelay: 1500,
+          onRetry: (attempt, error, delay) => {
+            logger.warn(`Retrying exchangeCodeForToken for MercadoLibre (attempt ${attempt})`, {
+              error: error.message,
+              delay,
+            });
+          },
+        }
+      );
+
+      if (!result.success || !result.data) {
+        throw new Error(`Failed to exchange code for token after retries: ${result.error?.message || 'Unknown error'}`);
+      }
+
+      const response = result.data;
 
       return {
         accessToken: response.data.access_token,
