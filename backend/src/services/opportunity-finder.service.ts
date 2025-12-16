@@ -1785,15 +1785,33 @@ class OpportunityFinderService {
     shippingCost?: number;
   }>> {
     try {
-      // ✅ PRODUCTION READY: Usar cliente HTTP centralizado (ya tiene timeout de 60s)
+      // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con retry logic
       const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`;
       const zenRowsUrl = `https://api.zenrows.com/v1/?apikey=${apiKey}&url=${encodeURIComponent(searchUrl)}&js_render=true&premium_proxy=true`;
 
-      const response = await scrapingHttpClient.get(zenRowsUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      // ✅ PRODUCTION READY: Retry logic para operaciones de scraping
+      const response = await retryWithBackoff(
+        async () => {
+          const resp = await scrapingHttpClient.get(zenRowsUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+          });
+          
+          // ✅ Validar respuesta
+          if (!resp.data) {
+            throw new Error('Empty response from ZenRows');
+          }
+          
+          return resp;
+        },
+        {
+          maxAttempts: 3,
+          initialDelay: 1000,
+          maxDelay: 10000,
+          retryable: isRetryableError,
         }
-      });
+      );
 
       // Parsear HTML usando cheerio
       const cheerio = (await import('cheerio')).default;

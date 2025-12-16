@@ -1,7 +1,8 @@
-import axios from 'axios';
 import { Prisma } from '@prisma/client';
 import { logger } from '../config/logger';
 import { redis, isRedisAvailable } from '../config/redis';
+// ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
+import { fastHttpClient } from '../config/http-client';
 
 type Rates = Record<string, number>;
 
@@ -183,8 +184,8 @@ class FXService {
         headers['apikey'] = this.providerApiKey;
       }
       
-      const response = await axios.get(url, { 
-        timeout: 10_000,
+      // ✅ PRODUCTION READY: Usar cliente HTTP centralizado (ya tiene timeout de 10s)
+      const response = await fastHttpClient.get(url, { 
         headers: Object.keys(headers).length > 0 ? headers : undefined
       });
       const data = response.data;
