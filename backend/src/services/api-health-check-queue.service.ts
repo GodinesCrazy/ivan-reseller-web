@@ -95,7 +95,7 @@ if (isRedisAvailable && bullMQRedis && apiHealthCheckQueue) {
 
         // Emitir actualización de estado vía WebSocket
         const frontendApiName = resolveToFrontend(apiName);
-        await notificationService.emitAPIStatusUpdate(userId, {
+        notificationService.emitAPIStatusUpdate(userId, {
           ...status,
           apiName: frontendApiName, // Mapear a nombre de frontend
         });
@@ -124,19 +124,21 @@ if (isRedisAvailable && bullMQRedis && apiHealthCheckQueue) {
 
         // Emitir estado de error vía WebSocket
         const frontendApiName = resolveToFrontend(apiName);
-        await notificationService.emitAPIStatusUpdate(userId, {
-          apiName: frontendApiName,
-          name: `${apiName} API`,
-          isConfigured: false,
-          isAvailable: false,
-          status: 'unhealthy',
-          error: error.message,
-          message: `Error verificando API: ${error.message}`,
-          lastChecked: new Date(),
-          environment,
-        } as any).catch(err => {
+        try {
+          notificationService.emitAPIStatusUpdate(userId, {
+            apiName: frontendApiName,
+            name: `${apiName} API`,
+            isConfigured: false,
+            isAvailable: false,
+            status: 'unhealthy',
+            error: error.message,
+            message: `Error verificando API: ${error.message}`,
+            lastChecked: new Date(),
+            environment,
+          } as any);
+        } catch (err: any) {
           logger.warn('[APIHealthCheckQueue] Failed to emit error status', { error: err });
-        });
+        }
 
         throw error;
       }
