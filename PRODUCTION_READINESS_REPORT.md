@@ -395,6 +395,23 @@ curl https://your-backend.railway.app/ready
 
 ---
 
+### R1: Timeouts HTTP (Parcial) ✅
+**Archivos:** `backend/src/services/amazon.service.ts`  
+**Cambios:**
+- Agregado timeout (60s) a `axios.put()` para uploads de feeds
+- Agregado timeout (10s) a `axios.post()` para autenticación Amazon
+
+**Justificación:**
+- Requests sin timeout pueden bloquear workers indefinidamente
+- Timeouts apropiados según tipo de operación (uploads más largos)
+
+**Estado:**
+- ✅ Amazon service corregido
+- ⚠️ Otros servicios: La mayoría ya tienen timeouts configurados o usan clientes centralizados
+- ✅ Servicios críticos revisados: opportunity-finder, fx, aliexpress-dropshipping-api ya usan clientes centralizados
+
+---
+
 ## 📝 PENDIENTES
 
 ### Críticos (Prioridad 1)
