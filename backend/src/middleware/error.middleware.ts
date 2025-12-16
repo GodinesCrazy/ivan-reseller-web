@@ -110,9 +110,13 @@ export const errorHandler = (
     details = { validationErrors: (err as any).errors };
   }
 
+  // ✅ PRODUCTION READY: Incluir correlation ID en logs
+  const correlationId = (req as any).correlationId || 'unknown';
+
   // Logging estructurado
   const logContext = {
     errorId,
+    correlationId, // ✅ Agregar correlation ID
     errorCode,
     statusCode,
     message: err.message,
@@ -132,12 +136,16 @@ export const errorHandler = (
     logger.warn('Client error', logContext);
   }
 
+  // ✅ PRODUCTION READY: Incluir correlation ID en respuesta
+  const correlationId = (req as any).correlationId || 'unknown';
+
   // Respuesta al cliente
   const response: any = {
     success: false,
     error: message,
     errorCode,
     errorId,
+    correlationId, // ✅ Agregar correlation ID
     timestamp: new Date().toISOString(),
   };
 

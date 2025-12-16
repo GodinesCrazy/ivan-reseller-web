@@ -9,6 +9,8 @@ import { setupSwagger } from './config/swagger';
 import { logger } from './config/logger';
 
 // Import routes
+// ✅ PRODUCTION READY: Correlation ID middleware
+import { correlationMiddleware } from './middleware/correlation.middleware';
 import authRoutes from './api/routes/auth.routes';
 import userRoutes from './api/routes/users.routes';
 import productRoutes from './api/routes/products.routes';
@@ -264,6 +266,10 @@ app.get('/ready', async (_req: Request, res: Response) => {
     uptime: process.uptime()
   });
 });
+
+// ✅ PRODUCTION READY: Correlation ID middleware (debe ir antes de las rutas)
+import { correlationMiddleware } from './middleware/correlation.middleware';
+app.use(correlationMiddleware);
 
 // API routes
 app.use('/api/auth', authRoutes);
