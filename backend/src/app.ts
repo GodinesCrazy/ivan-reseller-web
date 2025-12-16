@@ -167,6 +167,10 @@ app.use(cookieParser());
 // ✅ PRODUCTION READY: Correlation ID middleware (después de cookie parser, antes de rutas)
 app.use(correlationMiddleware);
 
+// ✅ PRODUCTION READY: Security headers adicionales
+import { securityHeadersMiddleware } from './middleware/security-headers.middleware';
+app.use(securityHeadersMiddleware);
+
 // ✅ PRODUCTION READY: Rate limiting global para todas las rutas API
 import { createRoleBasedRateLimit } from './middleware/rate-limit.middleware';
 app.use('/api', createRoleBasedRateLimit());
