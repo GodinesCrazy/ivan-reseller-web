@@ -61,13 +61,13 @@ export class PendingProductsLimitService {
 
     try {
       await prisma.systemConfig.upsert({
-        where: { key: this.CONFIG_KEY },
+        where: { key: PendingProductsLimitService.CONFIG_KEY },
         update: {
           value: String(limit),
           updatedAt: new Date()
         },
         create: {
-          key: this.CONFIG_KEY,
+          key: PendingProductsLimitService.CONFIG_KEY,
           value: String(limit)
         }
       });
@@ -115,7 +115,7 @@ export class PendingProductsLimitService {
       throw new AppError(
         `Has alcanzado el límite de productos pendientes de publicación (${maxLimit}). Publica o elimina algunos productos antes de agregar nuevos.`,
         429, // 429 Too Many Requests
-        'VALIDATION_ERROR' // ✅ FIX: ErrorCode no incluye PENDING_PRODUCTS_LIMIT_EXCEEDED
+        ErrorCode.VALIDATION_ERROR // ✅ FIX: ErrorCode enum
       );
     }
 
