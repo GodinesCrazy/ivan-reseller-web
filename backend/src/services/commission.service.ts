@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
+import { toNumber } from '../utils/decimal.utils';
 
 const prisma = new PrismaClient();
 
@@ -215,7 +216,7 @@ export class CommissionService {
 
     return {
       paid: results.length,
-      totalAmount: commissions.reduce((sum, c) => sum + c.amount, 0),
+      totalAmount: commissions.reduce((sum, c) => sum + toNumber(c.amount), 0),
       commissions: results,
     };
   }
@@ -247,14 +248,18 @@ export class CommissionService {
       }),
     ]);
 
+    // ✅ FIX: Convert Decimal to number for arithmetic operations
+    const totalAmountNum = toNumber(totalAmount._sum.amount || 0);
+    const pendingAmountNum = toNumber(pendingAmount._sum.amount || 0);
+    
     return {
       total,
       pending,
       scheduled,
       paid,
-      totalAmount: totalAmount._sum.amount || 0,
-      pendingAmount: pendingAmount._sum.amount || 0,
-      paidAmount: (totalAmount._sum.amount || 0) - (pendingAmount._sum.amount || 0),
+      totalAmount: totalAmountNum,
+      pendingAmount: pendingAmountNum,
+      paidAmount: totalAmountNum - pendingAmountNum,
     };
   }
 
