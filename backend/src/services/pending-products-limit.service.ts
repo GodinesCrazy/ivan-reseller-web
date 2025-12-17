@@ -1,6 +1,6 @@
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
-import { AppError } from '../middleware/error.middleware';
+import { AppError, ErrorCode } from '../middleware/error.middleware';
 
 /**
  * Servicio para gestionar el límite de productos pendientes
