@@ -105,23 +105,14 @@ export class ProductStateMachineService {
 
         // Registrar transición en log (si existe tabla de logs)
         // Esto permite auditoría de cambios de estado
-        try {
-          await tx.productUpdateLog.create({
-            data: {
-              productId,
-              fromStatus: currentStatus,
-              toStatus: newStatus,
-              reason: reason || 'Status transition',
-              userId: userId || product.userId,
-              createdAt: new Date(),
-            },
-          });
-        } catch (logError: any) {
-          // Si no existe la tabla, solo loguear
-          logger.debug('ProductUpdateLog table not available', {
-            error: logError.message,
-          });
-        }
+        // ✅ FIX: Tabla productUpdateLog no existe en schema, usar logger estructurado
+        logger.info('[ProductStateMachine] Status transition logged', {
+          productId,
+          fromStatus: currentStatus,
+          toStatus: newStatus,
+          reason: reason || 'Status transition',
+          userId: userId || product.userId,
+        });
       });
 
       logger.info('[ProductStateMachine] Product status transitioned', {

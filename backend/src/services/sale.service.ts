@@ -6,7 +6,7 @@ import { notificationService } from './notification.service';
 import { UserSettingsService } from './user-settings.service';
 import { toNumber } from '../utils/decimal.utils';
 import type { AutomatedOrder } from './automation.service';
-import { AutomatedOrder } from './automation.service';
+// ✅ FIX: Eliminar import duplicado (type import ya incluye el tipo)
 
 const prisma = new PrismaClient();
 
