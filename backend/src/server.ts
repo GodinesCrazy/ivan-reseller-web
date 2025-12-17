@@ -83,11 +83,23 @@ async function ensureAdminUser() {
   }
 }
 
+// ✅ FASE 9: Migraciones con fail-fast en producción
 async function runMigrations(maxRetries = 3): Promise<void> {
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
+  const isProduction = env.NODE_ENV === 'production';
+  // ✅ FASE 9: En producción, solo 1 intento (fail-fast)
+  const actualRetries = isProduction ? 1 : maxRetries;
+  
+  for (let attempt = 0; attempt < actualRetries; attempt++) {
     try {
-      console.log(`🔄 Running database migrations... (attempt ${attempt + 1}/${maxRetries})`);
+      console.log(`🔄 Running database migrations... (attempt ${attempt + 1}/${actualRetries})`);
       console.log(`   DATABASE_URL: ${env.DATABASE_URL ? '✅ Configurada' : '❌ No configurada'}`);
+      
+      // ✅ FASE 9: En producción, validar DATABASE_URL antes de intentar
+      if (isProduction && !env.DATABASE_URL) {
+        console.error('❌ ERROR CRÍTICO: DATABASE_URL no configurada en producción');
+        console.error('   El servidor no puede iniciar sin una base de datos.');
+        process.exit(1);
+      }
       
       const migrateResult = await execAsync('npx prisma migrate deploy', {
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
@@ -165,22 +177,6 @@ async function runMigrations(maxRetries = 3): Promise<void> {
           console.log('✅ Schema aplicado con db push');
         } catch (dbPushError: any) {
           console.error('⚠️  db push falló:', dbPushError.message?.substring(0, 200));
-        }
-      }
-      
-      console.log('✅ Migrations completed');
-      
-      // Intentar ejecutar seed completo
-      if (env.NODE_ENV === 'production') {
-        try {
-          console.log('🌱 Seeding database...');
-          await execAsync('npx tsx prisma/seed.ts');
-          console.log('✅ Database seeded');
-        } catch (seedError: any) {
-          console.log('ℹ️  Seed completo falló, verificando usuario admin...');
-          console.log(`   Error: ${seedError.message?.substring(0, 100)}`);
-          // Aunque el seed falle, verificamos que el admin exista
-          await ensureAdminUser();
         }
       }
       

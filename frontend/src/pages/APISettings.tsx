@@ -437,6 +437,13 @@ export default function APISettings() {
       timeout: 20000,
     });
 
+    // ✅ FASE 7: Configurar reconexión automática con backoff exponencial
+    socket.io.opts.reconnection = true;
+    socket.io.opts.reconnectionAttempts = Infinity; // Reintentar indefinidamente
+    socket.io.opts.reconnectionDelay = 1000; // 1 segundo inicial
+    socket.io.opts.reconnectionDelayMax = 30000; // Máximo 30 segundos
+    socket.io.opts.timeout = 20000; // 20 segundos timeout
+    
     socket.on('connect', () => {
       log.debug('[APISettings] Socket.IO connected');
       socket.emit('join_room', `user_${user.id}`);
@@ -470,11 +477,22 @@ export default function APISettings() {
       }
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
+      // ✅ FASE 7: Log desconexión con razón
+      log.warn('WebSocket disconnected', { reason });
+      
+      // ✅ FASE 7: Si fue desconexión por servidor, reconectar automáticamente
+      if (reason === 'io server disconnect') {
+        // El servidor desconectó el socket, reconectar manualmente
+        socket.connect();
+      }
+      // Si fue por transporte close, el cliente ya está reconectando automáticamente
       log.warn('[APISettings] Socket.IO disconnected');
     });
 
     socket.on('connect_error', (error: Error) => {
+      // ✅ FASE 7: Log error pero no bloquear (reconexión automática)
+      log.warn('WebSocket connection error (will retry)', { error: error.message });
       log.error('[APISettings] Socket.IO connection error:', error);
     });
 
