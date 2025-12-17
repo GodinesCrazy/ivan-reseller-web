@@ -1,337 +1,318 @@
-# 🚀 RUNBOOK PRODUCCIÓN - Ivan Reseller SaaS
+# Runbook de Producción - Ivan Reseller Web
 
-**Última actualización:** 2025-12-15  
-**Versión:** 1.0.0
+## 📋 Variables de Entorno Requeridas
 
----
-
-## 📋 ÍNDICE
-
-1. [Configuración Inicial](#configuración-inicial)
-2. [Variables de Entorno](#variables-de-entorno)
-3. [Despliegue](#despliegue)
-4. [Troubleshooting](#troubleshooting)
-5. [Monitoreo](#monitoreo)
-6. [Escalado](#escalado)
-
----
-
-## 🔧 CONFIGURACIÓN INICIAL
-
-### Requisitos Previos
-
-- Node.js 20+
-- PostgreSQL 16+
-- Redis 7+ (opcional pero recomendado)
-- Railway account (o similar)
-- Vercel account (para frontend)
-
-### Instalación Local (Desarrollo)
-
-```bash
-# Clonar repositorio
-git clone <repo-url>
-cd ivan-reseller-web
-
-# Backend
-cd backend
-npm install
-cp .env.example .env
-# Editar .env con tus credenciales
-npm run dev
-
-# Frontend (en otra terminal)
-cd frontend
-npm install
-cp .env.example .env
-# Editar .env con VITE_API_URL
-npm run dev
+### Base de Datos
+```env
+DATABASE_URL=postgresql://user:password@host:5432/database
 ```
 
----
+### Seguridad
+```env
+JWT_SECRET=tu-secreto-jwt-minimo-32-caracteres
+ENCRYPTION_KEY=tu-clave-encryption-32-caracteres
+```
 
-## 🔐 VARIABLES DE ENTORNO
-
-### Variables Críticas (OBLIGATORIAS)
-
-```bash
-# Base de Datos
-DATABASE_URL=postgresql://user:password@host:5432/database
-
-# Redis (opcional pero recomendado)
+### Redis (Opcional pero recomendado)
+```env
 REDIS_URL=redis://host:6379
+```
 
-# Seguridad (MÍNIMO 32 caracteres)
-JWT_SECRET=your-super-secret-jwt-key-minimum-32-characters-long
-ENCRYPTION_KEY=your-64-character-hexadecimal-encryption-key-0123456789abcdef0123456789abcdef
+### APIs Críticas
 
-# CORS
-CORS_ORIGIN=https://yourdomain.com,https://www.yourdomain.com
-FRONTEND_URL=https://yourdomain.com
+#### eBay
+```env
+EBAY_APP_ID=tu-app-id
+EBAY_DEV_ID=tu-dev-id
+EBAY_CERT_ID=tu-cert-id
+WEBHOOK_SECRET_EBAY=secreto-para-validar-webhooks
+```
 
-# Entorno
+#### MercadoLibre
+```env
+MERCADOLIBRE_CLIENT_ID=tu-client-id
+MERCADOLIBRE_CLIENT_SECRET=tu-client-secret
+WEBHOOK_SECRET_MERCADOLIBRE=secreto-para-validar-webhooks
+```
+
+#### PayPal
+```env
+PAYPAL_CLIENT_ID=tu-client-id
+PAYPAL_CLIENT_SECRET=tu-client-secret
+PAYPAL_ENVIRONMENT=sandbox|production
+```
+
+### Feature Flags
+
+#### Health Checks
+```env
+API_HEALTHCHECK_ENABLED=true|false  # Default: false
+API_HEALTHCHECK_MODE=async|sync     # Default: async (recomendado)
+API_HEALTHCHECK_INTERVAL_MS=900000  # Default: 15 minutos (900000ms)
+```
+
+#### Scraping
+```env
+SCRAPER_BRIDGE_ENABLED=true|false   # Default: true
+SCRAPER_BRIDGE_URL=http://host:8077 # URL del microservicio Python
+SCRAPER_FALLBACK_TO_STEALTH=true    # Default: true
+```
+
+#### Webhooks
+```env
+WEBHOOK_VERIFY_SIGNATURE=true|false              # Default: true
+WEBHOOK_VERIFY_SIGNATURE_EBAY=true|false         # Por marketplace
+WEBHOOK_VERIFY_SIGNATURE_MERCADOLIBRE=true|false
+WEBHOOK_VERIFY_SIGNATURE_AMAZON=true|false
+WEBHOOK_SECRET_EBAY=secreto-hmac
+WEBHOOK_SECRET_MERCADOLIBRE=secreto-hmac
+WEBHOOK_SECRET_AMAZON=secreto-hmac
+WEBHOOK_ALLOW_INVALID_SIGNATURE=false            # Solo dev (NUNCA true en prod)
+```
+
+#### Auto-Purchase (Crítico - Seguridad Financiera)
+```env
+AUTO_PURCHASE_ENABLED=false                      # Default: false (IMPORTANTE)
+AUTO_PURCHASE_MODE=sandbox|production            # Default: sandbox
+AUTO_PURCHASE_DRY_RUN=false                      # Default: false
+AUTO_PURCHASE_DAILY_LIMIT=1000                   # Default: $1000/día
+AUTO_PURCHASE_MONTHLY_LIMIT=10000                # Default: $10k/mes
+AUTO_PURCHASE_MAX_PER_ORDER=500                  # Default: $500/orden
+```
+
+#### Rate Limiting
+```env
+RATE_LIMIT_ENABLED=true|false                    # Default: true
+RATE_LIMIT_DEFAULT=200                           # Requests por 15 min (usuarios)
+RATE_LIMIT_ADMIN=1000                            # Requests por 15 min (admin)
+RATE_LIMIT_LOGIN=5                               # Intentos login por 15 min
+RATE_LIMIT_WINDOW_MS=900000                      # Ventana en ms (default: 15 min)
+```
+
+### Otros
+```env
 NODE_ENV=production
 PORT=3000
-```
-
-### Variables de APIs (Opcionales)
-
-Ver `ENV_VARIABLES_DOCUMENTATION.md` para lista completa.
-
-**Importante:** NUNCA commitees archivos `.env` con valores reales.
-
----
-
-## 🚀 DESPLIEGUE
-
-### Railway (Backend)
-
-1. **Conectar Repositorio:**
-   - Railway Dashboard → New Project → Deploy from GitHub
-   - Seleccionar repositorio y rama `main`
-
-2. **Configurar Variables:**
-   - Settings → Variables
-   - Agregar todas las variables críticas
-   - **CRÍTICO:** `ENCRYPTION_KEY` debe tener 64 caracteres hexadecimales
-
-3. **Configurar Servicios:**
-   - Agregar PostgreSQL service
-   - Agregar Redis service (opcional)
-   - Conectar servicios al backend
-
-4. **Health Checks:**
-   - Railway detectará automáticamente `/health` y `/ready`
-   - Verificar que ambos endpoints respondan 200
-
-### Vercel (Frontend)
-
-1. **Conectar Repositorio:**
-   - Vercel Dashboard → New Project
-   - Importar repositorio
-
-2. **Configurar Build:**
-   - Framework Preset: Vite
-   - Build Command: `npm run build`
-   - Output Directory: `dist`
-
-3. **Variables de Entorno:**
-   - `VITE_API_URL`: URL del backend en Railway
-   - `VITE_WS_URL`: WebSocket URL (mismo dominio que API)
-
----
-
-## 🔍 TROUBLESHOOTING
-
-### Problema: Backend no inicia
-
-**Síntomas:**
-- Logs muestran "DATABASE_URL no encontrada"
-- Error de conexión a base de datos
-
-**Solución:**
-1. Verificar que `DATABASE_URL` esté configurada en Railway
-2. Verificar que la URL sea interna (`postgres.railway.internal`)
-3. Verificar que el servicio PostgreSQL esté corriendo
-
-**Comando de diagnóstico:**
-```bash
-# En Railway, ejecutar en shell del servicio
-echo $DATABASE_URL
+CORS_ORIGIN=https://tu-dominio.com
+LOG_LEVEL=info|warn|error
 ```
 
 ---
 
-### Problema: Health checks fallan
+## 🚀 Despliegue
 
-**Síntomas:**
-- `/health` retorna 503
-- `/ready` retorna 503
-
-**Solución:**
-1. Verificar logs del servicio
-2. Verificar conexión a PostgreSQL:
-   ```bash
-   # En Railway shell
-   npx prisma db pull
-   ```
-3. Verificar conexión a Redis (si está configurado):
-   ```bash
-   redis-cli -u $REDIS_URL ping
-   ```
-
----
-
-### Problema: APIs externas no funcionan
-
-**Síntomas:**
-- Errores 401/403 en llamadas a APIs
-- Mensajes "API not configured"
-
-**Solución:**
-1. Verificar credenciales en `/api/system/api-status`
-2. Verificar que las credenciales estén encriptadas correctamente
-3. Verificar que `ENCRYPTION_KEY` esté configurada
-4. Revisar logs para errores específicos de API
-
-**Comando de diagnóstico:**
+### 1. Preparación
 ```bash
-# Verificar estado de APIs
-curl -H "Authorization: Bearer <token>" \
-  https://your-backend.railway.app/api/system/api-status
+# Instalar dependencias
+npm install
+
+# Generar cliente Prisma
+npx prisma generate
+
+# Verificar configuración
+npm run verify  # Si existe script de verificación
 ```
 
----
-
-### Problema: Frontend no se conecta al backend
-
-**Síntomas:**
-- Errores CORS en consola del navegador
-- Requests fallan con 401
-
-**Solución:**
-1. Verificar `CORS_ORIGIN` en backend incluye el dominio del frontend
-2. Verificar `VITE_API_URL` en frontend apunta al backend correcto
-3. Verificar que ambos estén en HTTPS en producción
-
----
-
-### Problema: Migraciones fallan
-
-**Síntomas:**
-- Error "Migration failed" en logs
-- Tablas no se crean
-
-**Solución:**
-1. Verificar que `DATABASE_URL` sea correcta
-2. Ejecutar migraciones manualmente:
-   ```bash
-   npx prisma migrate deploy
-   ```
-3. Si falla, usar `db push` como fallback:
-   ```bash
-   npx prisma db push --accept-data-loss
-   ```
-
----
-
-## 📊 MONITOREO
-
-### Health Checks
-
-**Endpoints:**
-- `GET /health` - Liveness probe (proceso vivo)
-- `GET /ready` - Readiness probe (puede servir tráfico)
-
-**Configuración Railway:**
-- Health Check Path: `/health`
-- Health Check Port: `3000`
-- Health Check Timeout: `5s`
-
-### Logs
-
-**Ubicación:**
-- Railway: Dashboard → Service → Logs
-- Vercel: Dashboard → Project → Logs
-
-**Niveles:**
-- `error` - Errores críticos
-- `warn` - Advertencias
-- `info` - Información general
-- `debug` - Debugging (solo desarrollo)
-
-**Búsqueda de errores:**
+### 2. Migraciones
 ```bash
-# En Railway logs, buscar:
-grep -i "error\|fatal\|critical" logs.txt
-```
-
-### Métricas Clave
-
-**Monitorear:**
-- Tiempo de respuesta de `/health` y `/ready`
-- Tasa de errores 5xx
-- Uso de memoria y CPU
-- Conexiones a base de datos
-- Tasa de éxito de APIs externas
-
----
-
-## 📈 ESCALADO
-
-### Escalar Backend
-
-**Railway:**
-1. Settings → Scaling
-2. Aumentar número de instancias
-3. Configurar load balancer (automático)
-
-**Consideraciones:**
-- Redis debe estar disponible para sesiones compartidas
-- Base de datos debe soportar conexiones concurrentes
-- Health checks deben estar configurados
-
-### Escalar Base de Datos
-
-**Railway PostgreSQL:**
-1. Settings → Scaling
-2. Aumentar recursos (CPU, RAM, Storage)
-3. Considerar read replicas para alta carga
-
----
-
-## 🔒 SEGURIDAD
-
-### Checklist Pre-Producción
-
-- [ ] `ENCRYPTION_KEY` configurada (64 caracteres hex)
-- [ ] `JWT_SECRET` configurado (mínimo 32 caracteres)
-- [ ] `CORS_ORIGIN` restringido a dominios permitidos
-- [ ] HTTPS habilitado en producción
-- [ ] Variables de entorno no expuestas en logs
-- [ ] Rate limiting configurado
-- [ ] Helmet configurado (CSP, HSTS)
-- [ ] Credenciales de APIs encriptadas
-
-### Rotación de Secretos
-
-**Frecuencia recomendada:**
-- `JWT_SECRET`: Cada 90 días
-- `ENCRYPTION_KEY`: Cada 180 días (requiere re-encriptar credenciales)
-- API Keys: Según política del proveedor
-
-**Proceso:**
-1. Generar nuevo secreto
-2. Actualizar variable de entorno
-3. Reiniciar servicio
-4. Verificar que todo funcione
-
----
-
-## 📞 CONTACTO Y SOPORTE
-
-**Documentación:**
-- Reporte de Producción: `PRODUCTION_READINESS_REPORT.md`
-- Matriz de Riesgos: `RISK_MATRIX.md`
-- Variables de Entorno: `ENV_VARIABLES_DOCUMENTATION.md`
-
-**Comandos Útiles:**
-```bash
-# Verificar estado del sistema
-curl https://your-backend.railway.app/health
-curl https://your-backend.railway.app/ready
-
-# Verificar APIs configuradas (requiere auth)
-curl -H "Authorization: Bearer <token>" \
-  https://your-backend.railway.app/api/system/api-status
-
-# Ejecutar migraciones
+# En producción: migraciones fail-fast
 npx prisma migrate deploy
 
-# Generar Prisma Client
-npx prisma generate
+# Verificar que las migraciones fueron exitosas
+npx prisma migrate status
+```
+
+### 3. Build
+```bash
+# Backend
+cd backend
+npm run build
+
+# Frontend
+cd frontend
+npm run build
+```
+
+### 4. Iniciar Servidor
+```bash
+# Producción (con migraciones automáticas)
+npm run start:with-migrations
+
+# O manualmente
+npx prisma migrate deploy && npm start
 ```
 
 ---
 
-**Última revisión:** 2025-12-15
+## 🔍 Troubleshooting
+
+### Problema: Servidor no inicia - "DATABASE_URL not configured"
+**Solución:**
+1. Verificar que `DATABASE_URL` está configurada en variables de entorno
+2. Verificar formato: `postgresql://user:password@host:5432/database`
+3. Verificar conectividad: `psql $DATABASE_URL`
+
+### Problema: Migraciones fallan
+**En Producción:**
+- El servidor se detiene automáticamente (fail-fast)
+- Revisar logs para error específico
+- Verificar permisos de la base de datos
+- Verificar que todas las migraciones previas están aplicadas
+
+**Solución:**
+```bash
+# Verificar estado de migraciones
+npx prisma migrate status
+
+# Si hay migraciones pendientes
+npx prisma migrate deploy
+```
+
+### Problema: SIGSEGV crashes recurrentes
+**Solución:**
+1. Verificar `API_HEALTHCHECK_MODE=async` (NO sync)
+2. Verificar que Redis está disponible (para BullMQ)
+3. Revisar logs para identificar patrón
+4. Si persiste, deshabilitar temporalmente: `API_HEALTHCHECK_ENABLED=false`
+
+### Problema: Webhooks rechazados con 401
+**Solución:**
+1. Verificar que `WEBHOOK_VERIFY_SIGNATURE=true`
+2. Verificar secretos configurados: `WEBHOOK_SECRET_{MARKETPLACE}`
+3. Verificar que el marketplace envía el header correcto:
+   - eBay: `X-EBAY-SIGNATURE`
+   - MercadoLibre: `x-signature`
+   - Amazon: `x-amzn-signature`
+
+### Problema: Rate limiting muy restrictivo
+**Solución:**
+1. Ajustar `RATE_LIMIT_DEFAULT` según necesidad
+2. Verificar que `RATE_LIMIT_ENABLED=true`
+3. Si Redis está disponible, los límites son compartidos entre instancias
+
+### Problema: Compra automática no funciona
+**Verificaciones:**
+1. `AUTO_PURCHASE_ENABLED=true` (debe estar explícitamente habilitado)
+2. Verificar límites diarios/mensuales no excedidos
+3. Verificar capital disponible
+4. Verificar logs para razón específica de bloqueo
+
+### Problema: Scraping falla
+**Solución:**
+1. Verificar `SCRAPER_BRIDGE_URL` si está habilitado
+2. Si bridge no está disponible, sistema usa fallback automático
+3. Verificar Chromium/Puppeteer si usa stealth-scraping:
+   - `PUPPETEER_EXECUTABLE_PATH` configurado
+   - Chromium instalado en sistema
+
+---
+
+## 📊 Health Checks
+
+### Liveness Probe
+```bash
+curl http://localhost:3000/health
+```
+
+**Respuesta esperada:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "...",
+  "uptime": 12345,
+  "service": "ivan-reseller-backend",
+  "memory": { ... }
+}
+```
+
+### Readiness Probe
+```bash
+curl http://localhost:3000/ready
+```
+
+**Respuesta esperada:**
+```json
+{
+  "ready": true,
+  "checks": {
+    "database": { "status": "healthy", "connected": true },
+    "redis": { "status": "healthy", "connected": true }
+  }
+}
+```
+
+**Si `ready: false`:**
+- Revisar estado de base de datos
+- Revisar logs del servidor
+- Verificar conectividad de red
+
+---
+
+## 🔐 Seguridad
+
+### Checklist Pre-Producción
+- [ ] `AUTO_PURCHASE_ENABLED=false` (o con límites muy conservadores)
+- [ ] `WEBHOOK_VERIFY_SIGNATURE=true` para todos los marketplaces
+- [ ] Secretos de webhooks configurados y seguros
+- [ ] `JWT_SECRET` y `ENCRYPTION_KEY` son únicos y seguros (32+ caracteres)
+- [ ] `NODE_ENV=production`
+- [ ] `LOG_LEVEL=info` o `warn` (no `debug` en prod)
+- [ ] CORS configurado correctamente (`CORS_ORIGIN`)
+- [ ] Rate limiting habilitado (`RATE_LIMIT_ENABLED=true`)
+
+### Rotación de Secretos
+1. Generar nuevos secretos
+2. Actualizar variables de entorno
+3. Reiniciar servicio
+4. Verificar que webhooks siguen funcionando
+
+---
+
+## 📈 Monitoreo
+
+### Logs Importantes
+- **Health checks:** Buscar `[APIHealthCheckQueue]` en logs
+- **Webhooks:** Buscar `[WebhookSignature]` en logs
+- **Auto-purchase:** Buscar `[AutoPurchaseGuardrails]` en logs
+- **Rate limiting:** Buscar respuestas `429` en logs
+
+### Métricas Clave
+- Uptime del servidor
+- Tasa de errores (5xx)
+- Latencia de respuestas
+- Uso de memoria
+- Conexiones a DB/Redis
+
+---
+
+## 🆘 Escalación
+
+### Niveles de Severidad
+
+**P0 - Crítico (Detener Servicio)**
+- Base de datos no accesible
+- Migraciones fallan
+- Compra automática sin guardrails activa
+
+**P1 - Alto (Degradación de Servicio)**
+- Redis no disponible (afecta rate limiting multi-instancia)
+- APIs críticas no disponibles
+- Rate limiting bloqueando usuarios legítimos
+
+**P2 - Medio (Impacto Limitado)**
+- Health checks fallando
+- Webhooks rechazados
+- Scraping no disponible
+
+**P3 - Bajo (Observación)**
+- Logs con warnings
+- Métricas degradadas
+- Funcionalidades no críticas
+
+---
+
+## 📞 Contactos
+
+- **Admin Backend:** [configurar]
+- **DevOps:** [configurar]
+- **Database Admin:** [configurar]
