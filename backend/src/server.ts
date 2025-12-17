@@ -253,69 +253,77 @@ async function runMigrations(maxRetries = 3): Promise<void> {
   }
 }
 
-async function startServer() {
-  try {
-    // ✅ A3: Validar ENCRYPTION_KEY antes de iniciar cualquier servicio
-    console.log('🔒 Validating encryption key...');
-    validateEncryptionKey();
-    
-    // ✅ FASE 2: Validar configuración de Scraper Bridge
-    const { env } = await import('./config/env');
-    const scraperBridgeEnabled = env.SCRAPER_BRIDGE_ENABLED ?? true;
-    const scraperBridgeURL = env.SCRAPER_BRIDGE_URL;
-    
-    if (scraperBridgeEnabled && !scraperBridgeURL) {
-      console.warn('⚠️  ADVERTENCIA: SCRAPER_BRIDGE_ENABLED=true pero SCRAPER_BRIDGE_URL no está configurada');
-      console.warn('   - El sistema usará fallback a stealth-scraping');
-      console.warn('   - Para habilitar bridge Python: configure SCRAPER_BRIDGE_URL');
-      console.warn('   - Para deshabilitar bridge: configure SCRAPER_BRIDGE_ENABLED=false');
-    } else if (scraperBridgeEnabled && scraperBridgeURL) {
-      console.log(`✅ Scraper Bridge configurado: ${scraperBridgeURL}`);
-      // ✅ FASE 2: Verificar que el bridge esté disponible (timeout corto, no bloqueante)
-      try {
-        const scraperBridge = (await import('./services/scraper-bridge.service')).default;
-        const isAvailable = await Promise.race([
-          scraperBridge.isAvailable(),
-          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000)),
-        ]);
-        if (isAvailable) {
-          console.log('✅ Scraper Bridge está disponible y respondiendo');
-        } else {
-          console.warn('⚠️  Scraper Bridge no responde (timeout o no disponible)');
-          console.warn('   - El sistema usará fallback a stealth-scraping');
-        }
-      } catch (error: any) {
-        console.warn('⚠️  Error verificando Scraper Bridge:', error?.message || 'Unknown error');
-        console.warn('   - El sistema usará fallback a stealth-scraping');
-      }
-    } else {
-      console.log('ℹ️  Scraper Bridge deshabilitado (SCRAPER_BRIDGE_ENABLED=false)');
-      console.log('   - El sistema usará stealth-scraping directamente');
-    }
-    
-    process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
+// ✅ FASE 1: Instrumentación - Helper para logs con timestamps
+function logMilestone(milestone: string): void {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] 🎯 MILESTONE: ${milestone}`);
+}
+
+// ✅ FASE 1: Global error handlers (instrumentación)
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  const timestamp = new Date().toISOString();
+  console.error(`[${timestamp}] ❌ UNHANDLED REJECTION:`, reason);
+  console.error('Stack:', reason?.stack || 'No stack trace');
+  // Don't exit immediately - let the server try to recover
+  // process.exit(1) will be handled by the catch block in startServer
+});
+
+process.on('uncaughtException', (error: Error) => {
+  const timestamp = new Date().toISOString();
+  console.error(`[${timestamp}] ❌ UNCAUGHT EXCEPTION:`, error);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+});
+
+// ✅ FASE 1: Lazy-load Chromium (no al boot)
+async function ensureChromiumLazyLoad(): Promise<void> {
+  // Solo intentar resolver Chromium si realmente se va a usar scraping
+  // Esto se llama cuando se necesita, no durante boot
+  const { env } = await import('./config/env');
+  const scraperBridgeEnabled = env.SCRAPER_BRIDGE_ENABLED ?? true;
+  
+  // Si Scraper Bridge está habilitado y disponible, no necesitamos Chromium
+  if (scraperBridgeEnabled && env.SCRAPER_BRIDGE_URL) {
+    return; // Chromium no necesario si bridge está disponible
+  }
+  
+  // Solo resolver Chromium si es realmente necesario
+  if (!process.env.PUPPETEER_EXECUTABLE_PATH && !process.env.CHROMIUM_PATH) {
+    logMilestone('Resolving Chromium executable (lazy-load)');
     try {
+      process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
       const chromiumPath = await resolveChromiumExecutable();
       process.env.PUPPETEER_EXECUTABLE_PATH = chromiumPath;
       process.env.CHROMIUM_PATH = chromiumPath;
-      console.log(`✅ Chromium executable ready at: ${chromiumPath}`);
+      logMilestone(`Chromium executable ready: ${chromiumPath}`);
     } catch (error: any) {
       console.warn('⚠️  Unable to resolve Chromium executable automatically:', error?.message || error);
       console.warn('   - El scraping puede fallar si Chromium no está disponible');
-      console.warn('   - Configure PUPPETEER_EXECUTABLE_PATH o use Scraper Bridge como alternativa');
     }
-    console.log('🚀 Iniciando servidor...');
-    console.log(`📦 Environment: ${env.NODE_ENV}`);
-    console.log(`🔌 Port: ${PORT}`);
+  }
+}
+
+async function startServer() {
+  const startTime = Date.now();
+  try {
+    logMilestone('Starting server initialization');
+    
+    // ✅ A3: Validar ENCRYPTION_KEY antes de iniciar cualquier servicio
+    logMilestone('Validating encryption key');
+    validateEncryptionKey();
+    
+    const { env } = await import('./config/env');
+    logMilestone(`Environment: ${env.NODE_ENV}, Port: ${PORT}`);
     
     // Run migrations before connecting
-    console.log('🔄 Ejecutando migraciones...');
+    logMilestone('Running database migrations');
     await runMigrations();
     
     // Test database connection with retry
-    console.log('🔌 Conectando a la base de datos...');
+    logMilestone('Connecting to database');
     try {
       await connectWithRetry(5, 2000);
+      logMilestone('Database connected successfully');
     } catch (dbError: any) {
       console.error('❌ ERROR DE CONEXIÓN A LA BASE DE DATOS:');
       console.error(`   Mensaje: ${dbError.message}`);
@@ -348,133 +356,190 @@ async function startServer() {
       throw dbError;
     }
     
-    // Asegurar que el usuario admin existe (verificación final)
-    // No bloqueamos el inicio del servidor si esto falla
-    console.log('👤 Verificando usuario admin...');
-    ensureAdminUser().catch((error) => {
-      console.error('⚠️  Warning: No se pudo verificar/crear usuario admin:', error.message);
-      console.log('⚠️  El servidor continuará iniciando. El usuario admin puede no existir.');
-    });
-
     // Test Redis connection (only if configured)
     if (isRedisAvailable) {
-      console.log('🔌 Conectando a Redis...');
-      await redis.ping();
-      console.log('✅ Redis connected');
+      logMilestone('Connecting to Redis');
+      try {
+        await redis.ping();
+        logMilestone('Redis connected successfully');
+      } catch (redisError: any) {
+        console.warn('⚠️  Redis connection failed, continuing without Redis:', redisError.message);
+      }
     } else {
-      console.log('⚠️  Redis no configurado, continuando sin Redis');
+      logMilestone('Redis not configured, skipping');
     }
 
-    // Start HTTP server for Socket.io support
-    console.log('🌐 Iniciando servidor HTTP...');
+    // ✅ FASE 1 CRÍTICO: Start HTTP server EARLY (before heavy initializations)
+    logMilestone('Creating HTTP server');
     const httpServer = http.createServer(app);
     
     // ✅ CRÍTICO: Inicializar Socket.io antes de que el servidor escuche
-    console.log('🔌 Inicializando Socket.IO...');
+    logMilestone('Initializing Socket.IO');
     notificationService.initialize(httpServer);
-    console.log('✅ Socket.IO notification service initialized');
+    logMilestone('Socket.IO initialized');
     
-    httpServer.listen(PORT, '0.0.0.0', async () => {
+    // ✅ FASE 1 CRÍTICO: Start listening IMMEDIATELY (before heavy async init)
+    logMilestone('Starting HTTP server listen');
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      const listenTime = Date.now() - startTime;
       console.log('');
       console.log('🚀 Ivan Reseller API Server');
       console.log('================================');
+      console.log(`✅ HTTP SERVER LISTENING on port ${PORT} (after ${listenTime}ms)`);
       console.log(`Environment: ${env.NODE_ENV}`);
       console.log(`Server: http://localhost:${PORT}`);
       console.log(`Health: http://localhost:${PORT}/health`);
+      console.log(`Ready: http://localhost:${PORT}/ready`);
       console.log('================================');
       console.log('');
-      console.log('✅ Scheduled tasks initialized');
-      console.log('  - Financial alerts: Daily at 6:00 AM');
-      console.log('  - Commission processing: Daily at 2:00 AM');
-      console.log('');
       
-      // Initialize scheduled reports
-      try {
-        await scheduledReportsService.initializeScheduledReports();
-        console.log('✅ Scheduled reports initialized');
-      } catch (error: any) {
-        console.warn('⚠️  Warning: Could not initialize scheduled reports:', error.message);
-      }
-      console.log('');
+      // ✅ FASE 1: Continue with non-critical initializations AFTER listen is active
+      logMilestone('HTTP server listening, starting non-critical initializations');
       
-      // Recover persisted API statuses
-      try {
-        await apiAvailability.recoverPersistedStatuses();
-        console.log('✅ Recovered persisted API statuses from database');
-      } catch (error: any) {
-        console.warn('⚠️  Warning: Could not recover persisted API statuses:', error.message);
-      }
-      
-      // ✅ FASE 1: API Health Monitor con feature flags y modo async
-      const { env } = await import('./config/env');
-      const healthCheckEnabled = env.API_HEALTHCHECK_ENABLED ?? false;
-      const healthCheckMode = env.API_HEALTHCHECK_MODE ?? 'async';
-      const healthCheckInterval = env.API_HEALTHCHECK_INTERVAL_MS ?? 15 * 60 * 1000;
-      
-      if (healthCheckEnabled) {
-        console.log('✅ API Health Monitor configurado:');
-        console.log(`  - Modo: ${healthCheckMode}`);
-        console.log(`  - Intervalo: ${healthCheckInterval / 1000 / 60} minutos`);
-        console.log(`  - Checks asíncronos: ${healthCheckMode === 'async' ? 'Sí (BullMQ)' : 'No (síncrono)'}`);
-        
-        if (healthCheckMode === 'async') {
-          // ✅ FASE 1: Modo async usa BullMQ - más seguro, no bloquea request thread
-          console.log('  - Todos los health checks se ejecutan en cola BullMQ (previene SIGSEGV)');
-          // El monitor automático NO ejecuta health checks directamente,
-          // solo los encola en BullMQ para procesamiento asíncrono
-          
-          // Configurar monitor para usar intervalo personalizado
-          apiHealthMonitor.updateConfig({
-            checkInterval: healthCheckInterval,
-            enabled: true,
+      // Non-blocking: Continue init in background
+      (async () => {
+        try {
+          // Asegurar que el usuario admin existe (no bloqueante)
+          logMilestone('Ensuring admin user exists');
+          ensureAdminUser().catch((error) => {
+            console.warn('⚠️  Warning: No se pudo verificar/crear usuario admin:', error.message);
           });
           
-          // Delay start to avoid conflicts during server initialization
-          setTimeout(async () => {
-            try {
-              await apiHealthMonitor.start();
-              console.log('✅ API Health Monitor started (async mode - BullMQ)');
-            } catch (healthError: any) {
-              console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
-              console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
-            }
-          }, 10000); // Start after 10 seconds to let server fully initialize
-        } else {
-          // Modo sync - solo en desarrollo con advertencia
-          const isProduction = process.env.NODE_ENV === 'production';
-          if (isProduction) {
-            console.warn('⚠️  ADVERTENCIA: Modo sync habilitado en producción puede causar SIGSEGV');
-            console.warn('  - Recomendado: usar API_HEALTHCHECK_MODE=async en producción');
+          // ✅ FASE 1: Lazy-load Chromium (no bloquea boot)
+          // Solo si Scraper Bridge no está disponible
+          const scraperBridgeEnabled = env.SCRAPER_BRIDGE_ENABLED ?? true;
+          if (!scraperBridgeEnabled || !env.SCRAPER_BRIDGE_URL) {
+            logMilestone('Lazy-loading Chromium (background)');
+            ensureChromiumLazyLoad().catch((error) => {
+              console.warn('⚠️  Chromium lazy-load failed (non-critical):', error.message);
+            });
+          } else {
+            logMilestone('Scraper Bridge enabled, skipping Chromium initialization');
           }
           
-          setTimeout(async () => {
+          // ✅ FASE 2: Validar configuración de Scraper Bridge (no bloqueante)
+          if (scraperBridgeEnabled && !env.SCRAPER_BRIDGE_URL) {
+            console.warn('⚠️  ADVERTENCIA: SCRAPER_BRIDGE_ENABLED=true pero SCRAPER_BRIDGE_URL no está configurada');
+            console.warn('   - El sistema usará fallback a stealth-scraping');
+          } else if (scraperBridgeEnabled && env.SCRAPER_BRIDGE_URL) {
+            logMilestone('Verifying Scraper Bridge availability');
             try {
-              await apiHealthMonitor.start();
-              console.log('✅ API Health Monitor started (sync mode - solo desarrollo)');
-            } catch (healthError: any) {
-              console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
+              const scraperBridge = (await import('./services/scraper-bridge.service')).default;
+              const isAvailable = await Promise.race([
+                scraperBridge.isAvailable(),
+                new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000)),
+              ]);
+              if (isAvailable) {
+                logMilestone('Scraper Bridge is available');
+              } else {
+                console.warn('⚠️  Scraper Bridge no responde (timeout o no disponible)');
+              }
+            } catch (error: any) {
+              console.warn('⚠️  Error verificando Scraper Bridge:', error?.message || 'Unknown error');
             }
-          }, 10000);
+          }
+          
+          logMilestone('Scheduled tasks initialized');
+          console.log('✅ Scheduled tasks initialized');
+          console.log('  - Financial alerts: Daily at 6:00 AM');
+          console.log('  - Commission processing: Daily at 2:00 AM');
+          console.log('');
+          
+          // Initialize scheduled reports (non-blocking)
+          try {
+            logMilestone('Initializing scheduled reports');
+            await scheduledReportsService.initializeScheduledReports();
+            logMilestone('Scheduled reports initialized');
+          } catch (error: any) {
+            console.warn('⚠️  Warning: Could not initialize scheduled reports:', error.message);
+          }
+          
+          // Recover persisted API statuses (non-blocking)
+          try {
+            logMilestone('Recovering persisted API statuses');
+            await apiAvailability.recoverPersistedStatuses();
+            logMilestone('Persisted API statuses recovered');
+          } catch (error: any) {
+            console.warn('⚠️  Warning: Could not recover persisted API statuses:', error.message);
+          }
+          
+          // ✅ FASE 1: API Health Monitor con feature flags y modo async
+          const healthCheckEnabled = env.API_HEALTHCHECK_ENABLED ?? false;
+          const healthCheckMode = env.API_HEALTHCHECK_MODE ?? 'async';
+          const healthCheckInterval = env.API_HEALTHCHECK_INTERVAL_MS ?? 15 * 60 * 1000;
+          
+          if (healthCheckEnabled) {
+            logMilestone('Configuring API Health Monitor');
+            console.log('✅ API Health Monitor configurado:');
+            console.log(`  - Modo: ${healthCheckMode}`);
+            console.log(`  - Intervalo: ${healthCheckInterval / 1000 / 60} minutos`);
+            
+            if (healthCheckMode === 'async') {
+              apiHealthMonitor.updateConfig({
+                checkInterval: healthCheckInterval,
+                enabled: true,
+              });
+              
+              // Delay start to avoid conflicts during server initialization
+              setTimeout(async () => {
+                try {
+                  await apiHealthMonitor.start();
+                  logMilestone('API Health Monitor started (async mode)');
+                } catch (healthError: any) {
+                  console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
+                }
+              }, 10000);
+            } else {
+              const isProduction = process.env.NODE_ENV === 'production';
+              if (isProduction) {
+                console.warn('⚠️  ADVERTENCIA: Modo sync habilitado en producción puede causar SIGSEGV');
+              }
+              
+              setTimeout(async () => {
+                try {
+                  await apiHealthMonitor.start();
+                  logMilestone('API Health Monitor started (sync mode)');
+                } catch (healthError: any) {
+                  console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
+                }
+              }, 10000);
+            }
+          } else {
+            logMilestone('API Health Monitor disabled');
+          }
+          
+          logMilestone('Starting AliExpress Auth Monitor');
+          aliExpressAuthMonitor.start();
+          
+          // ✅ FASE 5: Inicializar Workflow Scheduler (non-blocking)
+          try {
+            logMilestone('Initializing Workflow Scheduler');
+            const { workflowSchedulerService } = await import('./services/workflow-scheduler.service');
+            await workflowSchedulerService.initialize();
+            logMilestone('Workflow Scheduler initialized');
+          } catch (error: any) {
+            console.warn('⚠️  Warning: Could not initialize workflow scheduler:', error.message);
+          }
+          
+          const totalInitTime = Date.now() - startTime;
+          logMilestone(`Server fully initialized (total: ${totalInitTime}ms)`);
+          console.log('');
+        } catch (initError: any) {
+          console.error('⚠️  Warning: Error during background initialization:', initError.message);
+          // Server is already listening, so continue running
         }
+      })();
+    });
+    
+    // ✅ FASE 1: Error handling for listen()
+    httpServer.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} is already in use`);
+        process.exit(1);
       } else {
-        console.log('ℹ️  API Health Monitor automático DESHABILITADO');
-        console.log('  - Para habilitarlo: API_HEALTHCHECK_ENABLED=true');
-        console.log('  - Los checks manuales desde la UI (/api/system/test-apis) siguen funcionando');
+        console.error('❌ HTTP Server error:', error);
+        process.exit(1);
       }
-      console.log('');
-      
-      aliExpressAuthMonitor.start();
-      
-      // ✅ FASE 5: Inicializar Workflow Scheduler
-      try {
-        const { workflowSchedulerService } = await import('./services/workflow-scheduler.service');
-        await workflowSchedulerService.initialize();
-        console.log('✅ Workflow Scheduler initialized');
-        console.log('  - Personal workflows will run according to their schedules');
-      } catch (error: any) {
-        console.warn('⚠️  Warning: Could not initialize workflow scheduler:', error.message);
-      }
-      console.log('');
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
