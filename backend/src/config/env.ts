@@ -253,6 +253,11 @@ const envSchema = z.object({
   API_HEALTHCHECK_ENABLED: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
   API_HEALTHCHECK_MODE: z.enum(['sync', 'async']).default('async'),
   API_HEALTHCHECK_INTERVAL_MS: z.string().optional().transform(val => val ? parseInt(val, 10) : 15 * 60 * 1000), // 15 min default
+  
+  // ✅ FASE 2: Scraper Bridge Configuration
+  SCRAPER_BRIDGE_URL: z.string().url().optional(),
+  SCRAPER_BRIDGE_ENABLED: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
+  SCRAPER_FALLBACK_TO_STEALTH: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
 });
 
 // Asegurar que DATABASE_URL esté en process.env
