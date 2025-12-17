@@ -303,8 +303,32 @@ async function ensureChromiumLazyLoad(): Promise<void> {
   }
 }
 
+// ✅ FASE A: Readiness state tracking (global para acceso desde app.ts /ready endpoint)
+declare global {
+  // eslint-disable-next-line no-var
+  var __isDatabaseReady: boolean | undefined;
+  // eslint-disable-next-line no-var
+  var __isRedisReady: boolean | undefined;
+  // eslint-disable-next-line no-var
+  var __isServerReady: boolean | undefined;
+}
+
+let isDatabaseReady = false;
+let isRedisReady = false;
+let isServerReady = false;
+let bootstrapStartTime: number | null = null;
+
+// ✅ FASE A: Helper para actualizar estado global
+function updateReadinessState() {
+  (global as any).__isDatabaseReady = isDatabaseReady;
+  (global as any).__isRedisReady = isRedisReady;
+  (global as any).__isServerReady = isServerReady;
+}
+
 async function startServer() {
   const startTime = Date.now();
+  bootstrapStartTime = startTime;
+  
   try {
     logMilestone('Starting server initialization');
     
@@ -315,62 +339,8 @@ async function startServer() {
     const { env } = await import('./config/env');
     logMilestone(`Environment: ${env.NODE_ENV}, Port: ${PORT}`);
     
-    // Run migrations before connecting
-    logMilestone('Running database migrations');
-    await runMigrations();
-    
-    // Test database connection with retry
-    logMilestone('Connecting to database');
-    try {
-      await connectWithRetry(5, 2000);
-      logMilestone('Database connected successfully');
-    } catch (dbError: any) {
-      console.error('❌ ERROR DE CONEXIÓN A LA BASE DE DATOS:');
-      console.error(`   Mensaje: ${dbError.message}`);
-      
-      // Mostrar información detallada del error
-      if (dbError.message?.includes('P1000') || dbError.message?.includes('Authentication failed')) {
-        console.error('');
-        console.error('🔧 ERROR DE AUTENTICACIÓN DETECTADO:');
-        console.error('   Esto indica que las credenciales de PostgreSQL no son válidas.');
-        console.error('');
-        console.error('📋 VERIFICACIÓN:');
-        console.error(`   DATABASE_URL configurada: ${env.DATABASE_URL ? '✅ Sí' : '❌ No'}`);
-        if (env.DATABASE_URL) {
-          try {
-            const url = new URL(env.DATABASE_URL);
-            console.error(`   Host: ${url.hostname}`);
-            console.error(`   Port: ${url.port || '5432'}`);
-            console.error(`   Database: ${url.pathname.replace('/', '')}`);
-            console.error(`   User: ${url.username}`);
-          } catch (e) {
-            console.error('   ⚠️  No se pudo parsear DATABASE_URL');
-          }
-        }
-        console.error('');
-        console.error('🔧 SOLUCIÓN AUTOMÁTICA:');
-        console.error('   El código intentará múltiples formas de obtener DATABASE_URL.');
-        console.error('   Si el problema persiste, verifica las variables en Railway.');
-        console.error('');
-      }
-      throw dbError;
-    }
-    
-    // Test Redis connection (only if configured)
-    if (isRedisAvailable) {
-      logMilestone('Connecting to Redis');
-      try {
-        await redis.ping();
-        logMilestone('Redis connected successfully');
-      } catch (redisError: any) {
-        console.warn('⚠️  Redis connection failed, continuing without Redis:', redisError.message);
-      }
-    } else {
-      logMilestone('Redis not configured, skipping');
-    }
-
-    // ✅ FASE 1 CRÍTICO: Start HTTP server EARLY (before heavy initializations)
-    logMilestone('Creating HTTP server');
+    // ✅ FASE A CRÍTICO: Create HTTP server FIRST (NO awaits before this)
+    logMilestone('Creating HTTP server (BEFORE any DB/Redis/migrations)');
     const httpServer = http.createServer(app);
     
     // ✅ CRÍTICO: Inicializar Socket.io antes de que el servidor escuche
@@ -378,14 +348,22 @@ async function startServer() {
     notificationService.initialize(httpServer);
     logMilestone('Socket.IO initialized');
     
-    // ✅ FASE 1 CRÍTICO: Start listening IMMEDIATELY (before heavy async init)
-    logMilestone('Starting HTTP server listen');
+    // ✅ FASE A CRÍTICO: Start listening IMMEDIATELY (NO awaits before this point)
+    logMilestone('BEFORE_LISTEN - About to call httpServer.listen()');
+    const listenStartTime = Date.now();
+    
     httpServer.listen(PORT, '0.0.0.0', () => {
-      const listenTime = Date.now() - startTime;
+      const listenTime = Date.now() - listenStartTime;
+      const address = httpServer.address();
+      const addressStr = typeof address === 'string' 
+        ? address 
+        : address ? `${address.address}:${address.port}` : 'unknown';
+      
       console.log('');
       console.log('🚀 Ivan Reseller API Server');
       console.log('================================');
-      console.log(`✅ HTTP SERVER LISTENING on port ${PORT} (after ${listenTime}ms)`);
+      console.log(`✅ LISTEN_CALLBACK - HTTP SERVER LISTENING on ${addressStr} (listen took ${listenTime}ms)`);
+      console.log(`   Total time to listen: ${Date.now() - startTime}ms`);
       console.log(`Environment: ${env.NODE_ENV}`);
       console.log(`Server: http://localhost:${PORT}`);
       console.log(`Health: http://localhost:${PORT}/health`);
@@ -393,14 +371,98 @@ async function startServer() {
       console.log('================================');
       console.log('');
       
-      // ✅ FASE 1: Continue with non-critical initializations AFTER listen is active
-      logMilestone('HTTP server listening, starting non-critical initializations');
+      isServerReady = true;
+      updateReadinessState();
+      logMilestone('LISTEN_CALLBACK - Server is listening and ready to accept connections');
       
-      // Non-blocking: Continue init in background
+      // ✅ FASE A: NOW start bootstrap in background (non-blocking)
+      logMilestone('Starting bootstrap in background (DB, Redis, migrations, etc.)');
       (async () => {
         try {
+          // Run migrations (non-blocking for server startup)
+          logMilestone('Bootstrap: Running database migrations');
+          try {
+            await runMigrations();
+            logMilestone('Bootstrap: Database migrations completed');
+          } catch (migrationError: any) {
+            console.error('⚠️  Warning: Database migrations failed (server continues running):', migrationError.message);
+            // Server continues but /ready will return 503
+          }
+          
+          // Test database connection with retry (non-blocking for server startup)
+          logMilestone('Bootstrap: Connecting to database');
+          try {
+            // ✅ FASE A: Add timeout to DB connection
+            const dbConnectionPromise = connectWithRetry(5, 2000);
+            const dbTimeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Database connection timeout after 15s')), 15000)
+            );
+            
+            await Promise.race([dbConnectionPromise, dbTimeoutPromise]);
+            isDatabaseReady = true;
+            updateReadinessState();
+            logMilestone('Bootstrap: Database connected successfully');
+          } catch (dbError: any) {
+            console.error('⚠️  Warning: Database connection failed (server continues in degraded mode):');
+            console.error(`   ${dbError.message}`);
+            // Server continues but /ready will return 503
+            isDatabaseReady = false;
+            updateReadinessState();
+            
+            // Log detailed error info (non-blocking)
+            if (dbError.message?.includes('P1000') || dbError.message?.includes('Authentication failed')) {
+              console.error('');
+              console.error('🔧 ERROR DE AUTENTICACIÓN DETECTADO:');
+              console.error('   Esto indica que las credenciales de PostgreSQL no son válidas.');
+              console.error('');
+              console.error('📋 VERIFICACIÓN:');
+              console.error(`   DATABASE_URL configurada: ${env.DATABASE_URL ? '✅ Sí' : '❌ No'}`);
+              if (env.DATABASE_URL) {
+                try {
+                  const url = new URL(env.DATABASE_URL);
+                  console.error(`   Host: ${url.hostname}`);
+                  console.error(`   Port: ${url.port || '5432'}`);
+                  console.error(`   Database: ${url.pathname.replace('/', '')}`);
+                  console.error(`   User: ${url.username}`);
+                } catch (e) {
+                  console.error('   ⚠️  No se pudo parsear DATABASE_URL');
+                }
+              }
+              console.error('');
+              console.error('🔧 SOLUCIÓN:');
+              console.error('   Verifica las variables en Railway y reinicia el servidor.');
+              console.error('   El servidor continuará ejecutándose pero /ready devolverá 503 hasta que la DB esté conectada.');
+              console.error('');
+            }
+          }
+          
+          // Test Redis connection (only if configured) - non-blocking
+          if (isRedisAvailable) {
+            logMilestone('Bootstrap: Connecting to Redis');
+            try {
+              // ✅ FASE A: Add timeout to Redis connection
+              const redisPingPromise = redis.ping();
+              const redisTimeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Redis connection timeout after 5s')), 5000)
+              );
+              
+              await Promise.race([redisPingPromise, redisTimeoutPromise]);
+              isRedisReady = true;
+              updateReadinessState();
+              logMilestone('Bootstrap: Redis connected successfully');
+            } catch (redisError: any) {
+              console.warn('⚠️  Redis connection failed (server continues without Redis):', redisError.message);
+              isRedisReady = false;
+              updateReadinessState();
+            }
+          } else {
+            logMilestone('Bootstrap: Redis not configured, skipping');
+            isRedisReady = true; // Not required, so mark as ready
+            updateReadinessState();
+          }
+          
           // Asegurar que el usuario admin existe (no bloqueante)
-          logMilestone('Ensuring admin user exists');
+          logMilestone('Bootstrap: Ensuring admin user exists');
           ensureAdminUser().catch((error) => {
             console.warn('⚠️  Warning: No se pudo verificar/crear usuario admin:', error.message);
           });

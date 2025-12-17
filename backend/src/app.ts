@@ -221,6 +221,17 @@ app.get('/health', async (_req: Request, res: Response) => {
   });
 });
 
+// ✅ FASE A: Readiness state variables (imported from server.ts)
+// These are set during bootstrap
+declare global {
+  // eslint-disable-next-line no-var
+  var __isDatabaseReady: boolean | undefined;
+  // eslint-disable-next-line no-var
+  var __isRedisReady: boolean | undefined;
+  // eslint-disable-next-line no-var
+  var __isServerReady: boolean | undefined;
+}
+
 // Readiness probe: Verifica que la aplicación puede servir tráfico
 app.get('/ready', async (_req: Request, res: Response) => {
   const checks: Record<string, any> = {
@@ -229,55 +240,74 @@ app.get('/ready', async (_req: Request, res: Response) => {
     environment: env.NODE_ENV
   };
 
-  let isReady = true;
+  // ✅ FASE A: Use global state if available (set during bootstrap)
+  const isDBReady = (global as any).__isDatabaseReady ?? false;
+  const isRedisReady = (global as any).__isRedisReady ?? false;
+  const isServerReady = (global as any).__isServerReady ?? false;
 
-  // Verificar conexión a base de datos (crítico)
-  try {
-    const { prisma } = await import('./config/database');
-    // Timeout de 2 segundos para no bloquear
-    const dbCheck = Promise.race([
-      prisma.$queryRaw`SELECT 1`,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Database timeout')), 2000))
-    ]);
-    await dbCheck;
-    checks.database = { status: 'healthy', connected: true };
-  } catch (error: any) {
-    checks.database = { 
-      status: 'unhealthy', 
-      connected: false, 
-      error: error.message || 'Database connection failed'
-    };
-    isReady = false;
+  // ✅ FASE A: Verificar conexión a base de datos (crítico) con timeout corto
+  // Si el estado global indica que está listo, usar ese. Si no, verificar directamente.
+  if (isDBReady) {
+    checks.database = { status: 'healthy', connected: true, source: 'bootstrap_state' };
+  } else {
+    try {
+      const { prisma } = await import('./config/database');
+      // Timeout de 2 segundos para no bloquear
+      const dbCheck = Promise.race([
+        prisma.$queryRaw`SELECT 1`,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Database timeout')), 2000))
+      ]);
+      await dbCheck;
+      checks.database = { status: 'healthy', connected: true, source: 'live_check' };
+    } catch (error: any) {
+      checks.database = { 
+        status: 'unhealthy', 
+        connected: false, 
+        error: error.message || 'Database connection failed',
+        source: 'live_check'
+      };
+    }
   }
 
   // Verificar conexión a Redis (opcional pero recomendado)
-  try {
-    const redisModule = await import('./config/redis');
-    if (redisModule.isRedisAvailable) {
-      // Timeout de 1 segundo para Redis
-      const redisCheck = Promise.race([
-        redisModule.redis.ping(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 1000))
-      ]);
-      await redisCheck;
-      checks.redis = { status: 'healthy', connected: true };
-    } else {
-      checks.redis = { status: 'not_configured', connected: false };
-      // Redis no es crítico, no afecta readiness
-    }
-  } catch (error: any) {
+  if ((global as any).__isRedisReady === true || (global as any).__isRedisReady === false) {
+    // Bootstrap state available
     checks.redis = { 
-      status: 'unhealthy', 
-      connected: false, 
-      error: error.message || 'Redis connection failed'
+      status: isRedisReady ? 'healthy' : 'not_configured_or_unavailable', 
+      connected: isRedisReady,
+      source: 'bootstrap_state'
     };
-    // Redis no es crítico, no afecta readiness si DB está OK
+  } else {
+    // Check live
+    try {
+      const redisModule = await import('./config/redis');
+      if (redisModule.isRedisAvailable) {
+        // Timeout de 1 segundo para Redis
+        const redisCheck = Promise.race([
+          redisModule.redis.ping(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 1000))
+        ]);
+        await redisCheck;
+        checks.redis = { status: 'healthy', connected: true, source: 'live_check' };
+      } else {
+        checks.redis = { status: 'not_configured', connected: false, source: 'live_check' };
+      }
+    } catch (error: any) {
+      checks.redis = { 
+        status: 'unhealthy', 
+        connected: false, 
+        error: error.message || 'Redis connection failed',
+        source: 'live_check'
+      };
+    }
   }
 
-  // Determinar estado general
-  // Listo si DB está healthy (Redis es opcional)
-  const isServiceReady = checks.database?.status === 'healthy';
+  // ✅ FASE A: Determinar estado general
+  // CRÍTICO: DB debe estar healthy. Redis es opcional.
+  const dbHealthy = checks.database?.status === 'healthy';
+  const isServiceReady = dbHealthy && isServerReady;
   
+  // ✅ FASE A: Devolver 503 si no está listo, 200 si está listo
   res.status(isServiceReady ? 200 : 503).json({
     ready: isServiceReady,
     checks,
