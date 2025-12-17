@@ -115,7 +115,7 @@ export class PendingProductsLimitService {
       throw new AppError(
         `Has alcanzado el límite de productos pendientes de publicación (${maxLimit}). Publica o elimina algunos productos antes de agregar nuevos.`,
         429, // 429 Too Many Requests
-        'PENDING_PRODUCTS_LIMIT_EXCEEDED'
+        'VALIDATION_ERROR' // ✅ FIX: ErrorCode no incluye PENDING_PRODUCTS_LIMIT_EXCEEDED
       );
     }
 
