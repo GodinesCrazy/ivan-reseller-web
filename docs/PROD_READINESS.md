@@ -44,12 +44,22 @@
   - [ ] Smoke tests implementados
 
 ### 🔴 CRÍTICO - Webhooks sin validación de firma
-- **Estado:** 🔴 PENDIENTE
+- **Estado:** ✅ COMPLETADO (FASE 3)
 - **Fase:** FASE 3
 - **Descripción:** Webhooks aceptan payloads sin validar firmas HMAC
 - **Ubicación:** `backend/src/api/routes/webhooks.routes.ts`
-- **Riesgo:** Alto - Seguridad
-- **Acción requerida:** Implementar validación HMAC por marketplace con feature flags
+- **Acciones completadas:**
+  - ✅ Middleware de validación HMAC implementado
+  - ✅ Validación para eBay (X-EBAY-SIGNATURE)
+  - ✅ Validación para MercadoLibre (x-signature)
+  - ✅ Validación para Amazon (x-amzn-signature)
+  - ✅ Feature flags por marketplace: `WEBHOOK_VERIFY_SIGNATURE_{MARKETPLACE}`
+  - ✅ Variables de entorno: `WEBHOOK_SECRET_EBAY`, `WEBHOOK_SECRET_MERCADOLIBRE`, `WEBHOOK_SECRET_AMAZON`
+  - ✅ Rechazo automático en producción si firma inválida
+  - ✅ Warning en desarrollo con opción de permitir
+- **Pendiente:**
+  - [ ] Tests unitarios de validación de firmas
+  - [ ] Documentar en SECURITY_NOTES.md
 
 ### 🔴 CRÍTICO - Compra automática sin guardrails
 - **Estado:** 🔴 PENDIENTE

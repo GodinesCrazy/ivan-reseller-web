@@ -102,10 +102,22 @@ async function recordSaleFromWebhook(params: {
     const { toNumber } = await import('../../utils/decimal.utils');
     const aliexpressAutoPurchaseService = (await import('../../services/aliexpress-auto-purchase.service')).default;
 
-    // Verificar si el flujo está en modo automático
+    // ✅ FASE 4: Verificar feature flag global de compra automática
+    const AutoPurchaseGuardrails = (await import('../../services/auto-purchase-guardrails.service')).AutoPurchaseGuardrailsService;
+    const autoPurchaseEnabled = AutoPurchaseGuardrails.isEnabled();
+    
+    if (!autoPurchaseEnabled) {
+      logger.info('Auto-purchase disabled globally, skipping automatic purchase flow', {
+        saleId: sale.id,
+        userId: listing.userId,
+        orderId,
+      });
+    }
+    
+    // Verificar si el flujo está en modo automático Y está habilitado globalmente
     const purchaseMode = await workflowConfigService.getStageMode(listing.userId, 'purchase');
     
-    if (purchaseMode === 'automatic') {
+    if (purchaseMode === 'automatic' && autoPurchaseEnabled) {
       logger.info('Flujo post-venta en modo automático - iniciando compra automática', {
         saleId: sale.id,
         userId: listing.userId,
@@ -138,6 +150,89 @@ async function recordSaleFromWebhook(params: {
 
       const availableCapital = totalCapital - pendingCost - approvedCost;
       const purchaseCost = toNumber(product.aliexpressPrice || 0);
+
+      // ✅ FASE 4: Validar guardrails antes de continuar
+      const validation = await AutoPurchaseGuardrails.validatePurchase(
+        listing.userId,
+        purchaseCost,
+        orderId,
+        product.id
+      );
+
+      if (!validation.allowed) {
+        logger.warn('[AutoPurchase] Purchase blocked by guardrails', {
+          userId: listing.userId,
+          orderId,
+          reason: validation.reason,
+          amount: purchaseCost,
+        });
+
+        await notificationService.sendToUser(listing.userId, {
+          type: 'USER_ACTION',
+          title: 'Compra automática bloqueada',
+          message: validation.reason || 'Compra no permitida por límites de seguridad',
+          category: 'SALE',
+          priority: 'HIGH',
+          data: {
+            saleId: sale.id,
+            orderId,
+            productUrl: product.aliexpressUrl || '',
+            manualPurchaseRequired: true,
+            reason: validation.reason,
+          },
+        });
+
+        // Registrar en PurchaseLog como bloqueado
+        try {
+          await prisma.purchaseLog.create({
+            data: {
+              userId: listing.userId,
+              saleId: sale.id,
+              orderId,
+              productId: product.id,
+              supplierUrl: product.aliexpressUrl || '',
+              purchaseAmount: purchaseCost,
+              quantity: 1,
+              status: 'PENDING',
+              success: false,
+              capitalValidated: false,
+              errorMessage: validation.reason || 'Blocked by guardrails',
+              retryAttempt: 0,
+              maxRetries: 0,
+            },
+          });
+        } catch (logError) {
+          logger.error('Error creando PurchaseLog (blocked)', { error: logError });
+        }
+
+        // No continuar con compra automática
+        return sale;
+      }
+
+      // Si está en dry-run, solo registrar y notificar, no ejecutar
+      if (validation.dryRun) {
+        logger.info('[AutoPurchase] DRY-RUN: Purchase would be executed', {
+          userId: listing.userId,
+          orderId,
+          amount: purchaseCost,
+        });
+
+        await notificationService.sendToUser(listing.userId, {
+          type: 'INFO',
+          title: 'Compra automática (DRY-RUN)',
+          message: `Modo dry-run: La compra se simularía por $${purchaseCost.toFixed(2)}`,
+          category: 'SALE',
+          priority: 'NORMAL',
+          data: {
+            saleId: sale.id,
+            orderId,
+            dryRun: true,
+            simulatedAmount: purchaseCost,
+          },
+        });
+
+        return sale;
+      }
 
       // 2. Validar saldo PayPal (si está disponible)
       // ✅ MEJORADO: Intentar usar credenciales del usuario primero, luego variables de entorno
