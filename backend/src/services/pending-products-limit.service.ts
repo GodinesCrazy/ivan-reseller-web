@@ -40,7 +40,7 @@ export class PendingProductsLimitService {
       logger.error('Error getting max pending products limit', { 
         error: error?.message || error,
         errorCode: error?.code,
-        configKey: this.CONFIG_KEY
+        configKey: PendingProductsLimitService.CONFIG_KEY
       });
       return this.DEFAULT_LIMIT;
     }
