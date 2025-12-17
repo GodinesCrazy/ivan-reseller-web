@@ -46,8 +46,9 @@ export class PublicationOptimizerService {
       });
 
       // Calcular capital comprometido en productos activos
+      const { toNumber } = require('../utils/decimal.utils');
       const committedCapital = activeProducts.reduce(
-        (sum, product) => sum + (product.aliexpressPrice || 0),
+        (sum, product) => sum + toNumber(product.aliexpressPrice || 0),
         0
       );
 

@@ -223,10 +223,11 @@ export class PricingTiersService {
       // Recomendar plan basado en uso
       const recommendedPlan = await this.recommendPlan(userId);
 
+      const { toNumber } = require('../utils/decimal.utils');
       return {
         plan: userPlan,
-        currentCost: user.fixedMonthlyCost,
-        currentCommissionRate: user.commissionRate,
+        currentCost: toNumber(user.fixedMonthlyCost),
+        currentCommissionRate: toNumber(user.commissionRate),
         recommendedPlan
       };
     } catch (error) {
@@ -376,10 +377,13 @@ export class PricingTiersService {
       for (const user of users) {
         // Identificar plan
         let planType: PlanType | null = null;
+        const { toNumber } = require('../utils/decimal.utils');
+        const userMonthlyCost = toNumber(user.fixedMonthlyCost);
+        const userCommissionRate = toNumber(user.commissionRate);
         for (const [id, plan] of Object.entries(PRICING_PLANS)) {
           if (
-            Math.abs(plan.monthlyCost - user.fixedMonthlyCost) < 0.01 &&
-            Math.abs(plan.commissionRate - user.commissionRate) < 0.001
+            Math.abs(plan.monthlyCost - userMonthlyCost) < 0.01 &&
+            Math.abs(plan.commissionRate - userCommissionRate) < 0.001
           ) {
             planType = id as PlanType;
             break;
@@ -387,12 +391,14 @@ export class PricingTiersService {
         }
 
         if (planType) {
-          stats[planType].users++;
-          stats[planType].revenue += user.fixedMonthlyCost;
+        stats[planType].users++;
+        const { toNumber } = require('../utils/decimal.utils');
+        stats[planType].revenue += toNumber(user.fixedMonthlyCost);
         }
 
-        stats.total.users++;
-        stats.total.revenue += user.fixedMonthlyCost;
+      stats.total.users++;
+      const { toNumber } = require('../utils/decimal.utils');
+      stats.total.revenue += toNumber(user.fixedMonthlyCost);
       }
 
       return stats;
