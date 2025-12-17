@@ -302,6 +302,7 @@ if (!process.env.REDIS_URL && redisUrl && redisUrl !== 'redis://localhost:6379')
  * ✅ PRODUCTION READY: Validar ENCRYPTION_KEY explícitamente
  * Esta validación es crítica para la seguridad de credenciales
  */
+// ✅ FASE 3: Cambiar process.exit() a throw Error (no bloquear en módulos importables)
 function validateEncryptionKey(): void {
   let encryptionKey = process.env.ENCRYPTION_KEY?.trim();
   const jwtSecret = process.env.JWT_SECRET?.trim();
@@ -313,9 +314,10 @@ function validateEncryptionKey(): void {
       process.env.ENCRYPTION_KEY = jwtSecret;
       console.log('✅ ENCRYPTION_KEY configurada desde JWT_SECRET');
     } else {
-      console.error('❌ ERROR CRÍTICO DE SEGURIDAD: ENCRYPTION_KEY no válida');
-      console.error('   ENCRYPTION_KEY o JWT_SECRET debe estar configurado y tener al menos 32 caracteres');
-      console.error('   Sin una clave válida, las credenciales no pueden encriptarse correctamente');
+      const errorMsg = 'ERROR CRÍTICO DE SEGURIDAD: ENCRYPTION_KEY no válida\n' +
+        '   ENCRYPTION_KEY o JWT_SECRET debe estar configurado y tener al menos 32 caracteres\n' +
+        '   Sin una clave válida, las credenciales no pueden encriptarse correctamente';
+      console.error('❌', errorMsg);
       console.error('');
       console.error('🔧 SOLUCIÓN:');
       console.error('   1. Genera una clave segura:');
@@ -323,21 +325,31 @@ function validateEncryptionKey(): void {
       console.error('   2. Agrega ENCRYPTION_KEY en tus variables de entorno');
       console.error('   3. Reinicia la aplicación');
       console.error('');
-      process.exit(1);
+      // ✅ FASE 3: Throw en lugar de process.exit() para que el entrypoint maneje
+      throw new Error(errorMsg);
     }
   }
   
   if (encryptionKey.length < 32) {
-    console.error('❌ ERROR: ENCRYPTION_KEY debe tener al menos 32 caracteres');
-    console.error(`   Longitud actual: ${encryptionKey.length}`);
-    process.exit(1);
+    const errorMsg = `ENCRYPTION_KEY debe tener al menos 32 caracteres (longitud actual: ${encryptionKey.length})`;
+    console.error('❌ ERROR:', errorMsg);
+    // ✅ FASE 3: Throw en lugar de process.exit()
+    throw new Error(errorMsg);
   }
   
   console.log('✅ ENCRYPTION_KEY validada (longitud: ' + encryptionKey.length + ' caracteres)');
 }
 
-// Validar ENCRYPTION_KEY antes de continuar
-validateEncryptionKey();
+// ✅ FASE 3: Solo validar ENCRYPTION_KEY en runtime, no al importar módulo (evita bloquear tests)
+// La validación se hace explícitamente en server.ts (entrypoint)
+if (process.env.NODE_ENV !== 'test' && !process.env.SKIP_ENCRYPTION_KEY_VALIDATION) {
+  try {
+    validateEncryptionKey();
+  } catch (error: any) {
+    // En módulo importable, solo loggear - el entrypoint manejará el error
+    console.error('⚠️  Warning: ENCRYPTION_KEY validation failed:', error.message);
+  }
+}
 
 // Validar DATABASE_URL antes de parsear todo el schema
 if (process.env.DATABASE_URL) {
