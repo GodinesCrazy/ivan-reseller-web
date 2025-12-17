@@ -373,36 +373,61 @@ async function startServer() {
         console.warn('⚠️  Warning: Could not recover persisted API statuses:', error.message);
       }
       
-      // ⚠️ CRITICAL FIX SIGSEGV: Deshabilitar API Health Monitor automático en producción
-      // Los logs muestran crashes SIGSEGV cada 45-50 minutos debido a la acumulación de
-      // operaciones crypto nativas + Prisma queries + HTTP requests durante los health checks.
-      // Los checks manuales desde la UI (/api/system/test-apis) siguen funcionando correctamente.
-      const isProduction = process.env.NODE_ENV === 'production';
-      if (isProduction) {
-        console.log('⚠️  API Health Monitor automático DESHABILITADO en producción');
-        console.log('  - Esto previene crashes SIGSEGV recurrentes causados por operaciones crypto acumuladas');
-        console.log('  - Los checks manuales desde la UI (Settings → API Settings → Test APIs) siguen funcionando');
-        console.log('  - Para habilitarlo en el futuro, considera aumentar el intervalo a 1 hora o más');
-      } else {
-        // En desarrollo/staging, el monitor puede estar habilitado con intervalos largos
-        try {
+      // ✅ FASE 1: API Health Monitor con feature flags y modo async
+      const { env } = await import('./config/env');
+      const healthCheckEnabled = env.API_HEALTHCHECK_ENABLED ?? false;
+      const healthCheckMode = env.API_HEALTHCHECK_MODE ?? 'async';
+      const healthCheckInterval = env.API_HEALTHCHECK_INTERVAL_MS ?? 15 * 60 * 1000;
+      
+      if (healthCheckEnabled) {
+        console.log('✅ API Health Monitor configurado:');
+        console.log(`  - Modo: ${healthCheckMode}`);
+        console.log(`  - Intervalo: ${healthCheckInterval / 1000 / 60} minutos`);
+        console.log(`  - Checks asíncronos: ${healthCheckMode === 'async' ? 'Sí (BullMQ)' : 'No (síncrono)'}`);
+        
+        if (healthCheckMode === 'async') {
+          // ✅ FASE 1: Modo async usa BullMQ - más seguro, no bloquea request thread
+          console.log('  - Todos los health checks se ejecutan en cola BullMQ (previene SIGSEGV)');
+          // El monitor automático NO ejecuta health checks directamente,
+          // solo los encola en BullMQ para procesamiento asíncrono
+          
+          // Configurar monitor para usar intervalo personalizado
+          apiHealthMonitor.updateConfig({
+            checkInterval: healthCheckInterval,
+            enabled: true,
+          });
+          
           // Delay start to avoid conflicts during server initialization
           setTimeout(async () => {
             try {
               await apiHealthMonitor.start();
-              console.log('✅ API Health Monitor started (development mode)');
-              console.log('  - Monitoring API health every 15 minutes');
-              console.log('  - Checks are serialized to prevent SIGSEGV crashes');
-              console.log('  - Only credential validation (no HTTP requests) during automated checks');
+              console.log('✅ API Health Monitor started (async mode - BullMQ)');
             } catch (healthError: any) {
               console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
               console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
             }
           }, 10000); // Start after 10 seconds to let server fully initialize
-        } catch (error: any) {
-          console.warn('⚠️  Warning: Could not initialize API Health Monitor:', error.message);
-          console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
+        } else {
+          // Modo sync - solo en desarrollo con advertencia
+          const isProduction = process.env.NODE_ENV === 'production';
+          if (isProduction) {
+            console.warn('⚠️  ADVERTENCIA: Modo sync habilitado en producción puede causar SIGSEGV');
+            console.warn('  - Recomendado: usar API_HEALTHCHECK_MODE=async en producción');
+          }
+          
+          setTimeout(async () => {
+            try {
+              await apiHealthMonitor.start();
+              console.log('✅ API Health Monitor started (sync mode - solo desarrollo)');
+            } catch (healthError: any) {
+              console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
+            }
+          }, 10000);
         }
+      } else {
+        console.log('ℹ️  API Health Monitor automático DESHABILITADO');
+        console.log('  - Para habilitarlo: API_HEALTHCHECK_ENABLED=true');
+        console.log('  - Los checks manuales desde la UI (/api/system/test-apis) siguen funcionando');
       }
       console.log('');
       

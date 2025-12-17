@@ -83,22 +83,47 @@ export class APIAvailabilityService {
   }
 
   /**
-   * Get from cache (Redis or memory)
+   * ✅ FASE 1: Get from cache (Redis or memory) with timeout protection
+   * Prevents SIGSEGV by adding strict timeouts to Redis operations
    */
   private async getCached(key: string): Promise<APIStatus | null> {
     if (this.useRedis) {
       try {
-        const cached = await redis.get(this.redisPrefix + key);
+        // ✅ FASE 1: Timeout estricto de 1 segundo para evitar bloqueos
+        const cached = await Promise.race([
+          redis.get(this.redisPrefix + key),
+          new Promise<string | null>((_, reject) =>
+            setTimeout(() => reject(new Error('Redis get timeout')), 1000)
+          ),
+        ]) as string | null;
+        
         if (cached) {
-          const parsed = JSON.parse(cached);
-          // Convertir lastChecked de string a Date
-          if (parsed.lastChecked) {
-            parsed.lastChecked = new Date(parsed.lastChecked);
+          try {
+            const parsed = JSON.parse(cached);
+            // Convertir lastChecked de string a Date
+            if (parsed.lastChecked) {
+              parsed.lastChecked = new Date(parsed.lastChecked);
+            }
+            return parsed as APIStatus;
+          } catch (parseError) {
+            logger.warn('Failed to parse cached value, falling back to memory', { 
+              error: parseError instanceof Error ? parseError.message : String(parseError),
+              key 
+            });
+            // Fallback a cache en memoria si parsing falla
           }
-          return parsed as APIStatus;
         }
       } catch (error) {
-        logger.warn('Failed to get from Redis cache, falling back to memory', { error });
+        // ✅ FASE 1: No loguear timeout como error crítico, solo como warning
+        const isTimeout = error instanceof Error && error.message === 'Redis get timeout';
+        if (isTimeout) {
+          logger.debug('Redis get timeout, falling back to memory cache', { key });
+        } else {
+          logger.warn('Failed to get from Redis cache, falling back to memory', { 
+            error: error instanceof Error ? error.message : String(error),
+            key 
+          });
+        }
         // Fallback a cache en memoria
       }
     }
@@ -108,27 +133,46 @@ export class APIAvailabilityService {
   }
 
   /**
-   * Set cache (Redis or memory)
+   * ✅ FASE 1: Set cache (Redis or memory) with timeout protection
+   * Prevents SIGSEGV by adding strict timeouts and non-blocking fallback
    */
   private async setCached(key: string, value: APIStatus): Promise<void> {
-    if (this.useRedis) {
-      try {
-        const serialized = JSON.stringify(value);
-        // Guardar en Redis con TTL
-        await redis.setex(
-          this.redisPrefix + key,
-          Math.floor(this.cacheExpiry / 1000), // TTL en segundos
-          serialized
-        );
-        return;
-      } catch (error) {
-        logger.warn('Failed to set Redis cache, falling back to memory', { error });
-        // Fallback a cache en memoria
-      }
-    }
-    
-    // Fallback a cache en memoria
+    // ✅ FASE 1: Siempre guardar en memoria primero (no bloqueante)
     this.cache.set(key, value);
+    
+    // ✅ FASE 1: Intentar guardar en Redis de forma asíncrona con timeout
+    if (this.useRedis) {
+      // Ejecutar Redis set en background sin bloquear
+      Promise.race([
+        (async () => {
+          try {
+            const serialized = JSON.stringify(value);
+            // Guardar en Redis con TTL
+            await redis.setex(
+              this.redisPrefix + key,
+              Math.floor(this.cacheExpiry / 1000), // TTL en segundos
+              serialized
+            );
+          } catch (error) {
+            // Error ya manejado por Promise.race timeout o Redis error
+            throw error;
+          }
+        })(),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('Redis setex timeout')), 1000)
+        ),
+      ]).catch((error) => {
+        // ✅ FASE 1: No loguear timeout como error crítico
+        const isTimeout = error instanceof Error && error.message === 'Redis setex timeout';
+        if (!isTimeout) {
+          logger.warn('Failed to set Redis cache (non-blocking)', { 
+            error: error instanceof Error ? error.message : String(error),
+            key 
+          });
+        }
+        // Cache en memoria ya está actualizado, no es crítico
+      });
+    }
   }
 
   /**
