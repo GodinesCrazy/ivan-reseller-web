@@ -1,6 +1,7 @@
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { AppError } from '../middleware/error.middleware';
+import { toNumber } from '../utils/decimal.utils';
 
 /**
  * Pricing Tiers Service
@@ -205,10 +206,12 @@ export class PricingTiersService {
 
       // Identificar plan basado en costo y comisión
       let userPlan: PricingPlan | null = null;
+      const userMonthlyCost = toNumber(user.fixedMonthlyCost);
+      const userCommissionRate = toNumber(user.commissionRate);
       for (const plan of Object.values(PRICING_PLANS)) {
         if (
-          Math.abs(plan.monthlyCost - user.fixedMonthlyCost) < 0.01 &&
-          Math.abs(plan.commissionRate - user.commissionRate) < 0.001
+          Math.abs(plan.monthlyCost - userMonthlyCost) < 0.01 &&
+          Math.abs(plan.commissionRate - userCommissionRate) < 0.001
         ) {
           userPlan = plan;
           break;
@@ -223,7 +226,6 @@ export class PricingTiersService {
       // Recomendar plan basado en uso
       const recommendedPlan = await this.recommendPlan(userId);
 
-      const { toNumber } = require('../utils/decimal.utils');
       return {
         plan: userPlan,
         currentCost: toNumber(user.fixedMonthlyCost),
@@ -377,7 +379,6 @@ export class PricingTiersService {
       for (const user of users) {
         // Identificar plan
         let planType: PlanType | null = null;
-        const { toNumber } = require('../utils/decimal.utils');
         const userMonthlyCost = toNumber(user.fixedMonthlyCost);
         const userCommissionRate = toNumber(user.commissionRate);
         for (const [id, plan] of Object.entries(PRICING_PLANS)) {
@@ -390,15 +391,15 @@ export class PricingTiersService {
           }
         }
 
+        const userMonthlyCostNum = toNumber(user.fixedMonthlyCost);
+        
         if (planType) {
-        stats[planType].users++;
-        const { toNumber } = require('../utils/decimal.utils');
-        stats[planType].revenue += toNumber(user.fixedMonthlyCost);
+          stats[planType].users++;
+          stats[planType].revenue += userMonthlyCostNum;
         }
 
-      stats.total.users++;
-      const { toNumber } = require('../utils/decimal.utils');
-      stats.total.revenue += toNumber(user.fixedMonthlyCost);
+        stats.total.users++;
+        stats.total.revenue += userMonthlyCostNum;
       }
 
       return stats;
