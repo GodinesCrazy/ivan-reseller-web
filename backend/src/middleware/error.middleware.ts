@@ -161,8 +161,7 @@ export const errorHandler = (
     logger.warn('Client error', logContext);
   }
 
-  // ✅ PRODUCTION READY: Incluir correlation ID en respuesta
-  const correlationId = (req as any).correlationId || 'unknown';
+  // ✅ PRODUCTION READY: Incluir correlation ID en respuesta (reutilizar variable ya declarada)
 
   // Respuesta al cliente
   const response: any = {

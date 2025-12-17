@@ -11,6 +11,6 @@ jest.mock('../config/database', () => ({
 
 // Set test environment variables
 process.env.NODE_ENV = 'test';
-process.env.JWT_SECRET = 'test-jwt-secret';
-process.env.ENCRYPTION_KEY = 'test-encryption-key';
+process.env.JWT_SECRET = 'test-jwt-secret-key-32-chars-minimum-required';
+process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-minimum-required';
 

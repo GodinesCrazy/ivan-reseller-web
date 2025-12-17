@@ -81,9 +81,10 @@ export class CircuitBreaker {
       this.lastFailureTime = now;
 
       // Si excede el threshold, abrir el circuito
+      // ✅ FIX: Verificar explícitamente los estados válidos para transición
       if (
         this.failureCount >= this.options.failureThreshold &&
-        this.state !== CircuitState.OPEN
+        (this.state === CircuitState.CLOSED || this.state === CircuitState.HALF_OPEN)
       ) {
         this.state = CircuitState.OPEN;
       }
