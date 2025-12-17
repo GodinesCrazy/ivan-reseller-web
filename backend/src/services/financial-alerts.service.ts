@@ -36,11 +36,12 @@ export class FinancialAlertsService {
         }
       });
 
+      const { toNumber } = require('../utils/decimal.utils');
       const usersWithNegativeBalance = users.map(user => ({
         userId: user.id,
         username: user.username,
         email: user.email,
-        balance: user.balance
+        balance: toNumber(user.balance)
       }));
 
       // Enviar alertas a admin
