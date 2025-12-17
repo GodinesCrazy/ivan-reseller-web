@@ -135,7 +135,8 @@ export class FinancialAlertsService {
             pendingCommissions: 0
           };
         }
-        acc[userId].pendingCommissions += commission.amount;
+        const { toNumber } = require('../utils/decimal.utils');
+        acc[userId].pendingCommissions += toNumber(commission.amount);
         return acc;
       }, {} as Record<number, { userId: number; username: string; email: string; pendingCommissions: number }>);
 
