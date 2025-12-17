@@ -29,7 +29,7 @@ export class PendingProductsLimitService {
 
       if (config?.value) {
         const limit = parseInt(String(config.value), 10);
-        if (!isNaN(limit) && limit >= this.MIN_LIMIT && limit <= this.MAX_LIMIT) {
+        if (!isNaN(limit) && limit >= PendingProductsLimitService.MIN_LIMIT && limit <= PendingProductsLimitService.MAX_LIMIT) {
           return limit;
         }
       }
@@ -52,9 +52,9 @@ export class PendingProductsLimitService {
    * @throws AppError si el límite está fuera del rango válido
    */
   async setMaxPendingProducts(limit: number): Promise<void> {
-    if (limit < this.MIN_LIMIT || limit > this.MAX_LIMIT) {
+    if (limit < PendingProductsLimitService.MIN_LIMIT || limit > PendingProductsLimitService.MAX_LIMIT) {
       throw new AppError(
-        `El límite debe estar entre ${this.MIN_LIMIT} y ${this.MAX_LIMIT}`,
+        `El límite debe estar entre ${PendingProductsLimitService.MIN_LIMIT} y ${PendingProductsLimitService.MAX_LIMIT}`,
         400
       );
     }
