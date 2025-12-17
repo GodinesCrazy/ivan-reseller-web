@@ -3,6 +3,8 @@ import { prisma } from '../../config/database';
 import { logger } from '../../config/logger'; // ✅ FIX: Import logger at top level
 import costCalculator from '../../services/cost-calculator.service';
 import { notificationService } from '../../services/notification.service';
+// ✅ FASE 3: Webhook signature validation middleware
+import { createWebhookSignatureValidator } from '../../middleware/webhook-signature.middleware';
 
 const router = Router();
 
@@ -406,7 +408,8 @@ async function recordSaleFromWebhook(params: {
   return sale;
 }
 
-router.post('/mercadolibre', async (req: Request, res: Response) => {
+// ✅ FASE 3: Validar firma de MercadoLibre antes de procesar
+router.post('/mercadolibre', createWebhookSignatureValidator('mercadolibre'), async (req: Request, res: Response) => {
   try {
     const body: any = req.body || {};
     const listingId = body.listingId || body.resourceId || body?.order?.order_items?.[0]?.item?.id || body?.order_items?.[0]?.item?.id;
@@ -450,7 +453,8 @@ router.post('/mercadolibre', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/ebay', async (req: Request, res: Response) => {
+// ✅ FASE 3: Validar firma de eBay antes de procesar
+router.post('/ebay', createWebhookSignatureValidator('ebay'), async (req: Request, res: Response) => {
   try {
     const body: any = req.body || {};
     const listingId = body.listingId || body.itemId || body?.transaction?.itemId;

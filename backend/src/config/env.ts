@@ -258,6 +258,16 @@ const envSchema = z.object({
   SCRAPER_BRIDGE_URL: z.string().url().optional(),
   SCRAPER_BRIDGE_ENABLED: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
   SCRAPER_FALLBACK_TO_STEALTH: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
+  
+  // ✅ FASE 3: Webhook Signature Validation
+  WEBHOOK_VERIFY_SIGNATURE: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
+  WEBHOOK_VERIFY_SIGNATURE_EBAY: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
+  WEBHOOK_VERIFY_SIGNATURE_MERCADOLIBRE: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
+  WEBHOOK_VERIFY_SIGNATURE_AMAZON: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
+  WEBHOOK_SECRET_EBAY: z.string().optional(),
+  WEBHOOK_SECRET_MERCADOLIBRE: z.string().optional(),
+  WEBHOOK_SECRET_AMAZON: z.string().optional(),
+  WEBHOOK_ALLOW_INVALID_SIGNATURE: z.enum(['true', 'false']).default('false').transform(val => val === 'true'), // Solo dev
 });
 
 // Asegurar que DATABASE_URL esté en process.env

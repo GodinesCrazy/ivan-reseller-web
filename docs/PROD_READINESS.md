@@ -26,16 +26,22 @@
   - [ ] Validar en staging que no hay SIGSEGV
 
 ### 🔴 CRÍTICO - Scraping (bridge Python faltante)
-- **Estado:** 🔴 PENDIENTE
+- **Estado:** 🟡 EN PROGRESO (FASE 2)
 - **Fase:** FASE 2
 - **Descripción:** Dependencia de microservicio Python no incluido en repo
 - **Ubicación:** `backend/src/services/scraper-bridge.service.ts`
-- **Problema:** Hardcode a `http://localhost:5000/scraping/aliexpress/search`
-- **Acción requerida:** 
-  - Crear env `SCRAPER_BRIDGE_URL`
-  - Opción A: Incluir bridge Python en repo
-  - Opción B: Eliminar bridge, usar solo stealth-scraping
-  - Documentar en `docs/SCRAPING.md`
+- **Acciones completadas:**
+  - ✅ Env `SCRAPER_BRIDGE_URL` agregado y validado
+  - ✅ Feature flag `SCRAPER_BRIDGE_ENABLED` agregado
+  - ✅ Validación al boot (fail-fast si está habilitado y falta URL)
+  - ✅ Fallback robusto: Bridge → Stealth → ScraperAPI/ZenRows
+  - ✅ Timeouts estrictos agregados (5s health, 120s search)
+  - ✅ Documentación completa en `docs/SCRAPING.md`
+  - ✅ Verificación de disponibilidad al boot (no bloqueante)
+- **Pendiente:**
+  - [ ] Incluir bridge Python en repo (opcional, puede ser servicio separado)
+  - [ ] Validar Puppeteer en Railway/producción
+  - [ ] Smoke tests implementados
 
 ### 🔴 CRÍTICO - Webhooks sin validación de firma
 - **Estado:** 🔴 PENDIENTE
