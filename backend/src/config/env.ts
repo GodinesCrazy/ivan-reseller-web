@@ -276,6 +276,13 @@ const envSchema = z.object({
   AUTO_PURCHASE_DAILY_LIMIT: z.string().optional().transform(val => val ? parseFloat(val) : 1000), // $1000 por defecto
   AUTO_PURCHASE_MONTHLY_LIMIT: z.string().optional().transform(val => val ? parseFloat(val) : 10000), // $10k por defecto
   AUTO_PURCHASE_MAX_PER_ORDER: z.string().optional().transform(val => val ? parseFloat(val) : 500), // $500 por orden
+  
+  // ✅ FASE 8: Rate Limiting Configurable
+  RATE_LIMIT_ENABLED: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
+  RATE_LIMIT_DEFAULT: z.string().optional().transform(val => val ? parseInt(val, 10) : 200), // requests por 15 min
+  RATE_LIMIT_ADMIN: z.string().optional().transform(val => val ? parseInt(val, 10) : 1000),
+  RATE_LIMIT_LOGIN: z.string().optional().transform(val => val ? parseInt(val, 10) : 5), // intentos por 15 min
+  RATE_LIMIT_WINDOW_MS: z.string().optional().transform(val => val ? parseInt(val, 10) : 15 * 60 * 1000), // 15 minutos
 });
 
 // Asegurar que DATABASE_URL esté en process.env
