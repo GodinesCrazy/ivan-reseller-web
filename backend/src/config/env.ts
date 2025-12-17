@@ -268,6 +268,14 @@ const envSchema = z.object({
   WEBHOOK_SECRET_MERCADOLIBRE: z.string().optional(),
   WEBHOOK_SECRET_AMAZON: z.string().optional(),
   WEBHOOK_ALLOW_INVALID_SIGNATURE: z.enum(['true', 'false']).default('false').transform(val => val === 'true'), // Solo dev
+  
+  // ✅ FASE 4: Auto-Purchase Guardrails
+  AUTO_PURCHASE_ENABLED: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
+  AUTO_PURCHASE_MODE: z.enum(['sandbox', 'production']).default('sandbox'),
+  AUTO_PURCHASE_DRY_RUN: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
+  AUTO_PURCHASE_DAILY_LIMIT: z.string().optional().transform(val => val ? parseFloat(val) : 1000), // $1000 por defecto
+  AUTO_PURCHASE_MONTHLY_LIMIT: z.string().optional().transform(val => val ? parseFloat(val) : 10000), // $10k por defecto
+  AUTO_PURCHASE_MAX_PER_ORDER: z.string().optional().transform(val => val ? parseFloat(val) : 500), // $500 por orden
 });
 
 // Asegurar que DATABASE_URL esté en process.env
