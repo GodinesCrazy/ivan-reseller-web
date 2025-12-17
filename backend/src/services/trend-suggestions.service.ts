@@ -157,22 +157,26 @@ export class TrendSuggestionsService {
           entry.titles.push(opp.title);
           
           // ✅ CORRECCIÓN CRÍTICA: Sanitizar valores antes de agregarlos
-          const sanitizedMargin = this.sanitizeNumericValue(opp.profitMargin, 0, 1, 0);
+          // ✅ FIX: Convertir Decimal a number antes de sanitizar
+          const profitMarginNum = toNumber(opp.profitMargin);
+          const sanitizedMargin = this.sanitizeNumericValue(profitMarginNum, 0, 1, 0);
           if (sanitizedMargin > 0) entry.margins.push(sanitizedMargin);
           
           // ✅ CORRECCIÓN CRÍTICA: ROI debe estar entre 0 y 1000% (10x) - valores extremos indican datos corruptos
-          const sanitizedROI = this.sanitizeNumericValue(opp.roiPercentage, 0, 1000, 0);
+          const roiPercentageNum = toNumber(opp.roiPercentage);
+          const sanitizedROI = this.sanitizeNumericValue(roiPercentageNum, 0, 1000, 0);
           if (sanitizedROI > 0 && sanitizedROI <= 1000) {
             entry.rois.push(sanitizedROI);
-          } else if (opp.roiPercentage && opp.roiPercentage > 1000) {
+          } else if (roiPercentageNum > 1000) {
             logger.warn('TrendSuggestions: ROI extremo detectado y filtrado', { 
-              roiPercentage: opp.roiPercentage, 
+              roiPercentage: roiPercentageNum, 
               keyword,
               title: opp.title.substring(0, 50)
             });
           }
           
-          const sanitizedConfidence = this.sanitizeNumericValue(opp.confidenceScore, 0, 1, 0);
+          const confidenceScoreNum = toNumber(opp.confidenceScore);
+          const sanitizedConfidence = this.sanitizeNumericValue(confidenceScoreNum, 0, 1, 0);
           if (sanitizedConfidence > 0) entry.confidences.push(sanitizedConfidence);
           if (Array.isArray(opp.targetMarketplaces)) {
             opp.targetMarketplaces.forEach(mp => entry.marketplaces.push(mp));
