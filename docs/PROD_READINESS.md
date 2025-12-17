@@ -62,18 +62,22 @@
   - [ ] Documentar en SECURITY_NOTES.md
 
 ### 🔴 CRÍTICO - Compra automática sin guardrails
-- **Estado:** 🔴 PENDIENTE
+- **Estado:** ✅ COMPLETADO (FASE 4)
 - **Fase:** FASE 4
 - **Descripción:** Compra automática implementada pero sin validación en producción
 - **Ubicación:** `backend/src/services/aliexpress-auto-purchase.service.ts`
-- **Riesgo:** Alto - Financiero
-- **Acción requerida:**
-  - Feature flag `AUTO_PURCHASE_ENABLED=false` por defecto
-  - Límites diarios/mensuales
-  - Validación de capital robusta
-  - Idempotencia
-  - Modo dry-run
-  - Tests
+- **Acciones completadas:**
+  - ✅ Feature flag `AUTO_PURCHASE_ENABLED=false` por defecto
+  - ✅ Límites diarios/mensuales configurables (`AUTO_PURCHASE_DAILY_LIMIT`, `AUTO_PURCHASE_MONTHLY_LIMIT`)
+  - ✅ Límite por orden (`AUTO_PURCHASE_MAX_PER_ORDER`)
+  - ✅ Validación de capital robusta (ya existía, mejorada)
+  - ✅ Idempotencia (verifica PurchaseLog antes de comprar)
+  - ✅ Modo dry-run (`AUTO_PURCHASE_DRY_RUN=true`)
+  - ✅ Guardrails service centralizado (`auto-purchase-guardrails.service.ts`)
+  - ✅ Validación en webhook antes de ejecutar compra
+- **Pendiente:**
+  - [ ] Tests unitarios de guardrails
+  - [ ] Tests de idempotencia
 
 ### 🟡 MEDIO - Inconsistencias frontend/backend (estados de APIs)
 - **Estado:** 🟡 PENDIENTE
