@@ -263,6 +263,40 @@ async function startServer() {
     console.log('🔒 Validating encryption key...');
     validateEncryptionKey();
     
+    // ✅ FASE 2: Validar configuración de Scraper Bridge
+    const { env } = await import('./config/env');
+    const scraperBridgeEnabled = env.SCRAPER_BRIDGE_ENABLED ?? true;
+    const scraperBridgeURL = env.SCRAPER_BRIDGE_URL;
+    
+    if (scraperBridgeEnabled && !scraperBridgeURL) {
+      console.warn('⚠️  ADVERTENCIA: SCRAPER_BRIDGE_ENABLED=true pero SCRAPER_BRIDGE_URL no está configurada');
+      console.warn('   - El sistema usará fallback a stealth-scraping');
+      console.warn('   - Para habilitar bridge Python: configure SCRAPER_BRIDGE_URL');
+      console.warn('   - Para deshabilitar bridge: configure SCRAPER_BRIDGE_ENABLED=false');
+    } else if (scraperBridgeEnabled && scraperBridgeURL) {
+      console.log(`✅ Scraper Bridge configurado: ${scraperBridgeURL}`);
+      // ✅ FASE 2: Verificar que el bridge esté disponible (timeout corto, no bloqueante)
+      try {
+        const scraperBridge = (await import('./services/scraper-bridge.service')).default;
+        const isAvailable = await Promise.race([
+          scraperBridge.isAvailable(),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000)),
+        ]);
+        if (isAvailable) {
+          console.log('✅ Scraper Bridge está disponible y respondiendo');
+        } else {
+          console.warn('⚠️  Scraper Bridge no responde (timeout o no disponible)');
+          console.warn('   - El sistema usará fallback a stealth-scraping');
+        }
+      } catch (error: any) {
+        console.warn('⚠️  Error verificando Scraper Bridge:', error?.message || 'Unknown error');
+        console.warn('   - El sistema usará fallback a stealth-scraping');
+      }
+    } else {
+      console.log('ℹ️  Scraper Bridge deshabilitado (SCRAPER_BRIDGE_ENABLED=false)');
+      console.log('   - El sistema usará stealth-scraping directamente');
+    }
+    
     process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
     try {
       const chromiumPath = await resolveChromiumExecutable();
@@ -271,6 +305,8 @@ async function startServer() {
       console.log(`✅ Chromium executable ready at: ${chromiumPath}`);
     } catch (error: any) {
       console.warn('⚠️  Unable to resolve Chromium executable automatically:', error?.message || error);
+      console.warn('   - El scraping puede fallar si Chromium no está disponible');
+      console.warn('   - Configure PUPPETEER_EXECUTABLE_PATH o use Scraper Bridge como alternativa');
     }
     console.log('🚀 Iniciando servidor...');
     console.log(`📦 Environment: ${env.NODE_ENV}`);

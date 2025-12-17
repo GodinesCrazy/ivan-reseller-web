@@ -759,6 +759,12 @@ class OpportunityFinderService {
           nativeProductsFound: 0,
           reason: nativeErrorForLogs ? 'Error en scraping nativo' : 'Scraping nativo retornó vacío (posible bloqueo)'
         });
+        // ✅ FASE 2: Verificar que el bridge esté disponible antes de usarlo
+        const isBridgeAvailable = await scraperBridge.isAvailable().catch(() => false);
+        if (!isBridgeAvailable) {
+          throw new Error('Scraper bridge not available');
+        }
+        
         const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
         logger.info('Bridge Python completado', {
           service: 'opportunity-finder',
@@ -860,14 +866,32 @@ class OpportunityFinderService {
       } catch (bridgeError: any) {
         const msg = String(bridgeError?.message || '').toLowerCase();
         const isCaptchaError = bridgeError?.code === 'CAPTCHA_REQUIRED' || msg.includes('captcha');
+        const isBridgeDisabled = bridgeError?.code === 'BRIDGE_DISABLED' || msg.includes('disabled');
+        const isBridgeUnavailable = msg.includes('not available') || msg.includes('timeout') || msg.includes('econnrefused');
 
-        logger.error('Bridge Python falló', {
-          service: 'opportunity-finder',
-          userId,
-          query,
-          error: bridgeError.message,
-          isCaptchaError
-        });
+        // ✅ FASE 2: Log diferenciado según tipo de error
+        if (isBridgeDisabled) {
+          logger.info('Bridge Python deshabilitado, usando fallback', {
+            service: 'opportunity-finder',
+            userId,
+            query,
+          });
+        } else if (isBridgeUnavailable) {
+          logger.warn('Bridge Python no disponible, usando fallback', {
+            service: 'opportunity-finder',
+            userId,
+            query,
+            error: bridgeError.message,
+          });
+        } else {
+          logger.error('Bridge Python falló', {
+            service: 'opportunity-finder',
+            userId,
+            query,
+            error: bridgeError.message,
+            isCaptchaError,
+          });
+        }
 
         // Solo intentar resolver CAPTCHA si ambos métodos fallaron Y es un error de CAPTCHA
         if (isCaptchaError && !manualAuthPending) {

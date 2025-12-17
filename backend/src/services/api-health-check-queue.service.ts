@@ -43,54 +43,39 @@ if (isRedisAvailable && bullMQRedis && apiHealthCheckQueue) {
       try {
         // ✅ FASE 1: Ejecutar health check con timeout estricto
         const apiAvailability = new APIAvailabilityService();
-        let status;
 
         // ✅ FASE 1: Wrapper con timeout para prevenir bloqueos
         const healthCheckPromise = (async () => {
           // Ejecutar el health check apropiado según el nombre de la API
           switch (apiName.toLowerCase()) {
           case 'serpapi':
-            status = await apiAvailability.checkSerpAPI(userId);
-            break;
+            return await apiAvailability.checkSerpAPI(userId);
           case 'ebay':
-            status = await apiAvailability.checkEbayAPI(userId, environment);
-            break;
+            return await apiAvailability.checkEbayAPI(userId, environment);
           case 'amazon':
-            status = await apiAvailability.checkAmazonAPI(userId, environment);
-            break;
+            return await apiAvailability.checkAmazonAPI(userId, environment);
           case 'mercadolibre':
-            status = await apiAvailability.checkMercadoLibreAPI(userId, environment);
-            break;
+            return await apiAvailability.checkMercadoLibreAPI(userId, environment);
           case 'paypal':
-            status = await apiAvailability.checkPayPalAPI(userId, environment);
-            break;
+            return await apiAvailability.checkPayPalAPI(userId, environment);
           case 'groq':
-            status = await apiAvailability.checkGroqAPI(userId);
-            break;
+            return await apiAvailability.checkGroqAPI(userId);
           case 'scraperapi':
-            status = await apiAvailability.checkScraperAPI(userId);
-            break;
+            return await apiAvailability.checkScraperAPI(userId);
           case 'zenrows':
-            status = await apiAvailability.checkZenRowsAPI(userId);
-            break;
+            return await apiAvailability.checkZenRowsAPI(userId);
           case '2captcha':
-            status = await apiAvailability.check2CaptchaAPI(userId);
-            break;
+            return await apiAvailability.check2CaptchaAPI(userId);
           case 'aliexpress':
-            status = await apiAvailability.checkAliExpressAPI(userId);
-            break;
+            return await apiAvailability.checkAliExpressAPI(userId);
           case 'email':
-            status = await apiAvailability.checkEmailAPI(userId);
-            break;
+            return await apiAvailability.checkEmailAPI(userId);
           case 'twilio':
-            status = await apiAvailability.checkTwilioAPI(userId);
-            break;
+            return await apiAvailability.checkTwilioAPI(userId);
           case 'slack':
-            status = await apiAvailability.checkSlackAPI(userId);
-            break;
+            return await apiAvailability.checkSlackAPI(userId);
           case 'openai':
-            status = await apiAvailability.checkOpenAIAPI(userId);
-            break;
+            return await apiAvailability.checkOpenAIAPI(userId);
           default:
             logger.warn('[APIHealthCheckQueue] Unknown API name', { apiName });
             throw new Error(`Unknown API: ${apiName}`);
@@ -98,7 +83,7 @@ if (isRedisAvailable && bullMQRedis && apiHealthCheckQueue) {
         })();
 
         // ✅ FASE 1: Timeout estricto de 25 segundos (menos que el timeout del worker)
-        status = await Promise.race([
+        const status = await Promise.race([
           healthCheckPromise,
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('Health check timeout after 25s')), 25000)
