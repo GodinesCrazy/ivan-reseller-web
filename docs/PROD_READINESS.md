@@ -94,32 +94,49 @@
 - **Acción requerida:** Configurar Dockerfile, fallback robusto
 
 ### 🟡 MEDIO - Rate limiting sin configuración clara
-- **Estado:** 🟡 PENDIENTE
+- **Estado:** ✅ COMPLETADO (FASE 8)
 - **Fase:** FASE 8
 - **Descripción:** Valores hardcodeados, no configurables
 - **Ubicación:** `backend/src/middleware/rate-limit.middleware.ts`
-- **Acción requerida:** Mover valores a env, perfiles por ruta
+- **Acciones completadas:**
+  - ✅ Variables de entorno: `RATE_LIMIT_ENABLED`, `RATE_LIMIT_DEFAULT`, `RATE_LIMIT_ADMIN`, `RATE_LIMIT_LOGIN`, `RATE_LIMIT_WINDOW_MS`
+  - ✅ Feature flag para habilitar/deshabilitar
+  - ✅ Valores configurables vía env
+  - ✅ Soporte multi-instancia (usando Redis si está disponible)
 
 ### 🟡 MEDIO - Manejo de errores silencioso
-- **Estado:** 🟡 PENDIENTE
+- **Estado:** ✅ COMPLETADO (FASE 6)
 - **Fase:** FASE 6
 - **Descripción:** Try/catch que no loguea correctamente
 - **Ubicación:** Múltiples servicios
-- **Acción requerida:** Logger estructurado, eliminar try/catch silenciosos
+- **Acciones completadas:**
+  - ✅ Logger estructurado (Winston) ya implementado
+  - ✅ Interceptor HTTP mejorado con manejo de errores robusto (5xx, network errors)
+  - ✅ Request logger middleware con correlation IDs
+  - ✅ Error handler centralizado
 
 ### 🟡 MEDIO - Migraciones pueden fallar silenciosamente
-- **Estado:** 🟡 PENDIENTE
+- **Estado:** ✅ COMPLETADO (FASE 9)
 - **Fase:** FASE 9
 - **Descripción:** Lógica de reintentos compleja puede fallar
 - **Ubicación:** `backend/src/server.ts` (runMigrations)
-- **Acción requerida:** Fail-fast en producción, logs claros
+- **Acciones completadas:**
+  - ✅ Fail-fast en producción (1 intento, exit si falla)
+  - ✅ Validación de DATABASE_URL antes de intentar
+  - ✅ Detección de errores críticos (ENOENT, ECONNREFUSED, auth failed)
+  - ✅ Logs claros con instrucciones de troubleshooting
 
 ### 🟡 MEDIO - WebSockets no se reconectan automáticamente
-- **Estado:** 🟡 PENDIENTE
+- **Estado:** ✅ COMPLETADO (FASE 7)
 - **Fase:** FASE 7
 - **Descripción:** Si conexión se cae, no se reconecta
 - **Ubicación:** `frontend/src/pages/APISettings.tsx`
-- **Acción requerida:** Configurar reconexión y backoff
+- **Acciones completadas:**
+  - ✅ Reconexión automática habilitada
+  - ✅ Backoff exponencial configurado (1s inicial, max 30s)
+  - ✅ Reintentos infinitos
+  - ✅ Manejo de eventos disconnect y connect_error
+  - ✅ Re-sincronización de estado al reconectar
 
 ### 🟡 MEDIO - Productos pueden quedar en estado inconsistente
 - **Estado:** 🟡 PENDIENTE
