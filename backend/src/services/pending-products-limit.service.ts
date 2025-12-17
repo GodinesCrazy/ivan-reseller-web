@@ -18,7 +18,7 @@ export class PendingProductsLimitService {
   async getMaxPendingProducts(): Promise<number> {
     try {
       // ✅ Validar que CONFIG_KEY esté definido
-      if (!this.CONFIG_KEY || typeof this.CONFIG_KEY !== 'string' || this.CONFIG_KEY.trim().length === 0) {
+      if (!PendingProductsLimitService.CONFIG_KEY || typeof PendingProductsLimitService.CONFIG_KEY !== 'string' || PendingProductsLimitService.CONFIG_KEY.trim().length === 0) {
         logger.warn('PendingProductsLimitService: CONFIG_KEY no válido, usando valor por defecto');
         return PendingProductsLimitService.DEFAULT_LIMIT;
       }
