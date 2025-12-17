@@ -257,12 +257,13 @@ export class FinancialAlertsService {
             }
           });
 
+          const { toNumber } = require('../utils/decimal.utils');
           const pendingCost = pendingOrders.reduce((sum, order) => 
-            sum + (order.aliexpressCost || 0), 0
+            sum + toNumber(order.aliexpressCost || 0), 0
           );
 
           const approvedCost = approvedProducts.reduce((sum, product) => 
-            sum + (product.aliexpressPrice || 0), 0
+            sum + toNumber(product.aliexpressPrice || 0), 0
           );
 
           const committedCapital = pendingCost + approvedCost;
