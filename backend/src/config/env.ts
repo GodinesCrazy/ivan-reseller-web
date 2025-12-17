@@ -248,6 +248,11 @@ const envSchema = z.object({
   PAYPAL_ENVIRONMENT: z.enum(['sandbox', 'production']).default('sandbox'),
   GROQ_API_KEY: z.string().optional(),
   SCRAPERAPI_KEY: z.string().optional(),
+  
+  // ✅ FASE 1: API Health Check Feature Flags
+  API_HEALTHCHECK_ENABLED: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
+  API_HEALTHCHECK_MODE: z.enum(['sync', 'async']).default('async'),
+  API_HEALTHCHECK_INTERVAL_MS: z.string().optional().transform(val => val ? parseInt(val, 10) : 15 * 60 * 1000), // 15 min default
 });
 
 // Asegurar que DATABASE_URL esté en process.env

@@ -8,12 +8,15 @@ import { logger } from '../config/logger';
 import { prisma } from '../config/database';
 import { apiAvailability } from './api-availability.service';
 import { circuitBreakerManager } from './circuit-breaker.service';
+import { apiHealthCheckQueueService } from './api-health-check-queue.service';
+import { env } from '../config/env';
 
 export interface HealthMonitorConfig {
   checkInterval: number;        // Interval between checks (ms)
   enabled: boolean;            // Enable/disable monitoring
   checkAllUsers: boolean;      // Check all users or just active ones
   apisToMonitor: string[];     // APIs to monitor (empty = all)
+  useAsyncMode: boolean;       // ✅ FASE 1: Use BullMQ for async health checks
 }
 
 export class APIHealthMonitorService extends EventEmitter {
@@ -23,11 +26,16 @@ export class APIHealthMonitorService extends EventEmitter {
 
   constructor(config: Partial<HealthMonitorConfig> = {}) {
     super();
+    // ✅ FASE 1: Determinar modo async basado en env y configuración
+    const healthCheckMode = env.API_HEALTHCHECK_MODE ?? 'async';
+    const useAsyncMode = config.useAsyncMode ?? (healthCheckMode === 'async');
+    
     this.config = {
       checkInterval: config.checkInterval ?? 15 * 60 * 1000, // 15 minutes
       enabled: config.enabled ?? true,
       checkAllUsers: config.checkAllUsers ?? false,
       apisToMonitor: config.apisToMonitor ?? [],
+      useAsyncMode, // ✅ FASE 1: Usar BullMQ para prevenir SIGSEGV
     };
   }
 
@@ -190,67 +198,96 @@ export class APIHealthMonitorService extends EventEmitter {
         ? statuses.filter(s => this.config.apisToMonitor.includes(s.apiName))
         : statuses;
 
-      // Check each API that is configured
-      // ✅ FIX SIGSEGV: NO forzar health checks reales (HTTP requests) en startup
-      // Solo validar credenciales sin hacer llamadas HTTP, para evitar saturar recursos
+      // ✅ FASE 1: Check each API that is configured
+      // Si está en modo async, encolar en BullMQ (previene SIGSEGV)
+      // Si está en modo sync, ejecutar directamente (solo desarrollo)
       for (const status of apisToCheck) {
         if (!status.isConfigured) {
           continue; // Skip unconfigured APIs
         }
 
-        // ✅ NO forzar health checks reales durante monitor automático (solo validar credenciales)
-        // Force health check solo se debe usar en tests manuales (/api/system/test-apis)
         try {
-          let newStatus;
-          
-          switch (status.apiName) {
-            case 'ebay':
-              newStatus = await apiAvailability.checkEbayAPI(
-                userId,
-                status.environment || 'production',
-                false // ✅ NO forzar health check real - solo validar credenciales
-              );
-              break;
-            case 'amazon':
-              newStatus = await apiAvailability.checkAmazonAPI(
-                userId,
-                status.environment || 'production'
-              );
-              break;
-            case 'mercadolibre':
-              newStatus = await apiAvailability.checkMercadoLibreAPI(
-                userId,
-                status.environment || 'production'
-              );
-              break;
-            default:
-              // For other APIs, just refresh status
-              continue;
-          }
-
-          // Detect status changes
-          if (newStatus && status.isAvailable !== newStatus.isAvailable) {
-            this.emit('api-status-changed', {
+          if (this.config.useAsyncMode) {
+            // ✅ FASE 1: Modo async - encolar en BullMQ (no bloquea request thread)
+            const jobId = await apiHealthCheckQueueService.enqueueHealthCheck(
               userId,
-              apiName: status.apiName,
-              environment: status.environment,
-              previousStatus: status.isAvailable,
-              newStatus: newStatus.isAvailable,
-              error: newStatus.error,
-              timestamp: new Date(),
-            });
+              status.apiName,
+              status.environment || 'production',
+              {
+                priority: 5, // Prioridad normal
+                delay: 0, // Sin delay
+              }
+            );
+            
+            if (jobId) {
+              logger.debug(`Health check enqueued for user ${userId}, API ${status.apiName}`, {
+                jobId,
+                apiName: status.apiName,
+                environment: status.environment,
+              });
+            } else {
+              logger.warn(`Failed to enqueue health check for user ${userId}, API ${status.apiName}`, {
+                apiName: status.apiName,
+                reason: 'Queue not available (Redis disabled?)',
+              });
+            }
+            // No esperar resultado - será procesado asíncronamente y notificado vía WebSocket
+            continue;
+          } else {
+            // ✅ FASE 1: Modo sync (solo desarrollo) - ejecutar directamente
+            // NO forzar health checks reales durante monitor automático (solo validar credenciales)
+            let newStatus;
+            
+            switch (status.apiName) {
+              case 'ebay':
+                newStatus = await apiAvailability.checkEbayAPI(
+                  userId,
+                  status.environment || 'production',
+                  false // ✅ NO forzar health check real - solo validar credenciales
+                );
+                break;
+              case 'amazon':
+                newStatus = await apiAvailability.checkAmazonAPI(
+                  userId,
+                  status.environment || 'production'
+                );
+                break;
+              case 'mercadolibre':
+                newStatus = await apiAvailability.checkMercadoLibreAPI(
+                  userId,
+                  status.environment || 'production'
+                );
+                break;
+              default:
+                // For other APIs, just refresh status
+                continue;
+            }
 
-            logger.warn(`API status changed for user ${userId}`, {
-              apiName: status.apiName,
-              environment: status.environment,
-              previous: status.isAvailable ? 'available' : 'unavailable',
-              current: newStatus.isAvailable ? 'available' : 'unavailable',
-              error: newStatus.error,
-            });
+            // ✅ FASE 1: Detect status changes (solo en modo sync)
+            if (newStatus && status.isAvailable !== newStatus.isAvailable) {
+              this.emit('api-status-changed', {
+                userId,
+                apiName: status.apiName,
+                environment: status.environment,
+                previousStatus: status.isAvailable,
+                newStatus: newStatus.isAvailable,
+                error: newStatus.error,
+                timestamp: new Date(),
+              });
+
+              logger.warn(`API status changed for user ${userId}`, {
+                apiName: status.apiName,
+                environment: status.environment,
+                previous: status.isAvailable ? 'available' : 'unavailable',
+                current: newStatus.isAvailable ? 'available' : 'unavailable',
+                error: newStatus.error,
+              });
+            }
           }
         } catch (error: any) {
           logger.warn(`Error checking ${status.apiName} for user ${userId}`, {
             error: error.message,
+            mode: this.config.useAsyncMode ? 'async' : 'sync',
           });
         }
       }
@@ -275,13 +312,35 @@ export class APIHealthMonitorService extends EventEmitter {
   }
 
   /**
-   * Manually trigger health checks
+   * ✅ FASE 1: Manually trigger health checks
+   * Si está en modo async, encola en BullMQ; si está en sync, ejecuta directamente
    */
   async triggerHealthCheck(userId?: number): Promise<void> {
-    if (userId) {
-      await this.checkUserAPIs(userId);
+    if (this.config.useAsyncMode) {
+      // ✅ FASE 1: Modo async - encolar en BullMQ
+      if (userId) {
+        // Encolar checks para APIs configuradas del usuario
+        const statuses = await apiAvailability.getAllAPIStatus(userId);
+        for (const status of statuses) {
+          if (status.isConfigured) {
+            await apiHealthCheckQueueService.enqueueHealthCheck(
+              userId,
+              status.apiName,
+              status.environment || 'production'
+            );
+          }
+        }
+      } else {
+        // Encolar checks para todos los usuarios activos
+        await this.performHealthChecks(); // performHealthChecks ya maneja modo async
+      }
     } else {
-      await this.performHealthChecks();
+      // Modo sync - ejecutar directamente
+      if (userId) {
+        await this.checkUserAPIs(userId);
+      } else {
+        await this.performHealthChecks();
+      }
     }
   }
 
