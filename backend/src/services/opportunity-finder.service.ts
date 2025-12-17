@@ -1252,13 +1252,13 @@ class OpportunityFinderService {
         const googleTrends = getGoogleTrendsService(userId);
         logger.debug('[OPPORTUNITY-FINDER] Validando demanda real con Google Trends', {
           productTitle: product.title.substring(0, 60),
-          category: product.category || 'general',
+          category: (product as any).category || 'general',
           userId
         });
         
         trendsValidation = await googleTrends.validateProductViability(
           product.title,
-          product.category || 'general',
+          (product as any).category || 'general',
           undefined // Keywords se extraen automáticamente del título
         );
         
