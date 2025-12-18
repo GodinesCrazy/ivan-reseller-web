@@ -8,7 +8,7 @@
 import { AliExpressAffiliateAPIService } from '../services/aliexpress-affiliate-api.service';
 import { CredentialsManager } from '../services/credentials-manager.service';
 import { AdvancedMarketplaceScraper } from '../services/advanced-scraper.service';
-import { OpportunityFinderService } from '../services/opportunity-finder.service';
+import OpportunityFinderService from '../services/opportunity-finder.service';
 import logger from '../config/logger';
 
 async function testCompleteFlow() {
