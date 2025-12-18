@@ -897,7 +897,8 @@ export class AutopilotSystem extends EventEmitter {
           const actionId = `guided_publish_${opp.url}_${Date.now()}`;
           
           await notificationService.sendToUser(currentUserId, {
-            type: 'USER_ACTION', // ✅ FIX: Changed from 'ACTION_REQUIRED' to valid type
+            type: 'USER_ACTION',
+            category: 'PRODUCT', // ✅ FIX: Changed from 'ACTION_REQUIRED' to valid type
             title: 'Publicación guiada - Confirmación requerida',
             message: `Producto "${opp.title.substring(0, 50)}..." está listo para publicar. ¿Deseas proceder ahora? (Se publicará automáticamente en 5 minutos si no respondes)`,
             priority: 'HIGH',

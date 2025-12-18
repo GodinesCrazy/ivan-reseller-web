@@ -99,7 +99,7 @@ export class BusinessMetricsService {
 
         // LTV = (Ingresos promedio por mes) / Churn rate
         // Para simplificar: LTV = totalEarnings (ya incluye comisiones) + (fixedMonthlyCost * meses activo)
-        const totalRevenue = user.totalEarnings + (user.fixedMonthlyCost * monthsActive);
+        const totalRevenue = toNumber(user.totalEarnings || 0) + (toNumber(user.fixedMonthlyCost || 0) * monthsActive);
         const ltv = totalRevenue;
 
         return {
@@ -133,7 +133,7 @@ export class BusinessMetricsService {
         const monthsActive = Math.max(1, Math.floor(
           (Date.now() - user.createdAt.getTime()) / (1000 * 60 * 60 * 24 * 30)
         ));
-        const totalRevenue = user.totalEarnings + (user.fixedMonthlyCost * monthsActive);
+        const totalRevenue = toNumber(user.totalEarnings || 0) + (toNumber(user.fixedMonthlyCost || 0) * monthsActive);
         return {
           userId: user.id,
           username: user.username,
