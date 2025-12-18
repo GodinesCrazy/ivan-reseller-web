@@ -178,11 +178,11 @@ export class AccessRequestService {
         adminId
       });
 
-      // ✅ CORRECCIÓN: tempPassword está definido en el scope del try
+      // ✅ FIX: tempPassword debe ser el password proporcionado (plain text para enviar por email)
       const result = {
         request: updatedRequest,
         user: newUser,
-        tempPassword // En producción, esto debe enviarse por email
+        tempPassword: password // En producción, esto debe enviarse por email
       };
       
       return result;

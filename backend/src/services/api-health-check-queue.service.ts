@@ -92,9 +92,15 @@ if (isRedisAvailable && bullMQRedis && apiHealthCheckQueue) {
 
         // Emitir actualización de estado vía WebSocket
         const frontendApiName = resolveToFrontend(apiName);
+        // ✅ FIX: emitAPIStatusUpdate requiere status obligatorio, asegurar que esté presente
+        const statusValue = status.status || (status.isAvailable ? 'healthy' : 'unhealthy');
         notificationService.emitAPIStatusUpdate(userId, {
-          ...status,
-          apiName: frontendApiName, // Mapear a nombre de frontend
+          apiName: frontendApiName,
+          status: statusValue as 'healthy' | 'degraded' | 'unhealthy' | 'unknown',
+          isConfigured: status.isConfigured,
+          isAvailable: status.isAvailable,
+          message: status.message,
+          environment: status.environment,
         });
 
         logger.info('[APIHealthCheckQueue] Health check completed', {
@@ -154,10 +160,8 @@ if (isRedisAvailable && bullMQRedis && apiHealthCheckQueue) {
       },
       removeOnFail: {
         age: 86400, // Mantener jobs fallidos por 24 horas
-      },
-      // ✅ FASE 1: Timeout global para jobs (30 segundos)
-      // Si un health check tarda más, se marca como fallido
-      timeout: 30000,
+      }
+      // ✅ FIX: timeout no existe en WorkerOptions de BullMQ, se maneja en el job handler
     }
   );
 
