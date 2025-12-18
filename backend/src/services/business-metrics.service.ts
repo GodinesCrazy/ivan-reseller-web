@@ -1,5 +1,6 @@
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
+import { toNumber } from '../utils/decimal.utils';
 
 /**
  * Business Metrics Service
@@ -274,8 +275,8 @@ export class BusinessMetricsService {
         };
       }
 
-      const totalFixedCosts = activeUsers.reduce((sum, user) => sum + user.fixedMonthlyCost, 0);
-      const totalCommissions = activeUsers.reduce((sum, user) => sum + user.totalEarnings, 0);
+      const totalFixedCosts = activeUsers.reduce((sum, user) => sum + toNumber(user.fixedMonthlyCost || 0), 0);
+      const totalCommissions = activeUsers.reduce((sum, user) => sum + toNumber(user.totalEarnings || 0), 0);
       const totalRevenue = totalFixedCosts + totalCommissions;
 
       const rpu = totalRevenue / activeUsers.length;
@@ -366,7 +367,7 @@ export class BusinessMetricsService {
       const cohorts = Array.from(cohortsMap.entries()).map(([cohort, cohortUsers]) => {
         const activeUsers = cohortUsers.filter(u => u.isActive).length;
         const totalRevenue = cohortUsers.reduce((sum, u) => 
-          sum + u.totalEarnings + (u.fixedMonthlyCost * Math.max(1, Math.floor(
+          sum + toNumber(u.totalEarnings || 0) + (toNumber(u.fixedMonthlyCost || 0) * Math.max(1, Math.floor(
             (Date.now() - u.createdAt.getTime()) / (1000 * 60 * 60 * 24 * 30)
           ))), 0
         );
