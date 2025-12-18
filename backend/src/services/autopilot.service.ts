@@ -782,8 +782,9 @@ export class AutopilotSystem extends EventEmitter {
         }
       });
 
+      const { toNumber } = require('../utils/decimal.utils');
       const approvedCost = approvedProducts.reduce((sum, product) => 
-        sum + (product.aliexpressPrice || 0), 0
+        sum + toNumber(product.aliexpressPrice || 0), 0
       );
 
       const available = totalCapital - pendingCost - approvedCost;
@@ -1123,7 +1124,7 @@ export class AutopilotSystem extends EventEmitter {
             suggestedPriceUsd: opportunity.estimatedCost * 2,
             profitMargin: ((opportunity.estimatedCost * 2 - opportunity.estimatedCost) / opportunity.estimatedCost) * 100,
             roiPercentage: ((opportunity.estimatedProfit / opportunity.estimatedCost) * 100),
-            confidenceScore: opportunity.confidence || 50,
+            confidenceScore: (opportunity as any).confidence || opportunity.confidenceScore || 50,
             status: 'PENDING'
           }
         });
