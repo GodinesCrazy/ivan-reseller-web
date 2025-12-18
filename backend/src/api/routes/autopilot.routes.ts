@@ -208,7 +208,8 @@ router.post('/workflows', async (req: Request, res: Response, next) => {
     }
 
     const validatedData = createWorkflowSchema.parse(req.body);
-    const workflow = await workflowService.createWorkflow(userId, validatedData);
+    // ✅ FIX: Asegurar que validatedData cumple con CreateWorkflowDto
+    const workflow = await workflowService.createWorkflow(userId, validatedData as any);
 
     res.status(201).json({
       success: true,

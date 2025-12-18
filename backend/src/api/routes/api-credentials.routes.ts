@@ -686,9 +686,9 @@ router.post('/', async (req: Request, res: Response, next) => {
     // ✅ FIX: Usar normalizedApiName y también limpiar caché para ambos nombres (googletrends y serpapi)
     try {
       // Lista de nombres de API para limpiar caché (normalizado + original si es diferente)
-      const apiNamesToClear = [normalizedApiName];
+      const apiNamesToClear: string[] = [normalizedApiName];
       if (apiName !== normalizedApiName) {
-        apiNamesToClear.push(apiName); // Limpiar también el nombre original
+        apiNamesToClear.push(apiName as string); // ✅ FIX: Cast a string ya que APIName es más restrictivo
       }
       
       if (scope === 'global' && actorRole === 'ADMIN') {
