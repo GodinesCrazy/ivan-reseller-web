@@ -123,6 +123,7 @@ export class AutopilotSystem extends EventEmitter {
   private cycleTimer: NodeJS.Timeout | null = null;
   private lastCycleResult: CycleResult | null = null;
   private currentUserId: number | null = null; // ✅ Usuario actual que está ejecutando el Autopilot
+  private marketplaceService: MarketplaceService; // ✅ FIX: Declare property
 
   constructor() {
     super();
@@ -1488,6 +1489,7 @@ export class AutopilotSystem extends EventEmitter {
           title: 'Producto pendiente de aprobación',
           message: `El producto "${opportunity.title}" ha sido enviado a la cola de aprobación. Profit estimado: $${opportunity.estimatedProfit.toFixed(2)}`,
           priority: 'NORMAL', // ✅ FIX: Changed from 'MEDIUM' to valid priority
+          category: 'PRODUCT', // ✅ FIX: Add required category
           data: {
             productId: product.id,
             userId: currentUserId,
