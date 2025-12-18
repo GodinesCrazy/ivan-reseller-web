@@ -28,8 +28,8 @@ export const requestLoggerMiddleware = (
   });
 
   // Interceptar res.end para loggear respuesta
-  const originalEnd = res.end;
-  res.end = function (chunk?: any, encoding?: any) {
+  const originalEnd = res.end.bind(res);
+  res.end = function (chunk?: any, encoding?: any): Response {
     const duration = Date.now() - startTime;
     
     // Log response
@@ -54,7 +54,7 @@ export const requestLoggerMiddleware = (
     }
 
     // Restaurar función original
-    originalEnd.call(this, chunk, encoding);
+    return originalEnd.call(this, chunk, encoding) as Response;
   };
 
   next();

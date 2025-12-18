@@ -15,8 +15,8 @@ export const responseTimeMiddleware = (
   const startTime = Date.now();
 
   // Interceptar res.end para agregar headers
-  const originalEnd = res.end;
-  res.end = function (chunk?: any, encoding?: any) {
+  const originalEnd = res.end.bind(res);
+  res.end = function (chunk?: any, encoding?: any): Response {
     const duration = Date.now() - startTime;
     
     // ✅ PRODUCTION READY: Agregar header de tiempo de respuesta
@@ -27,7 +27,7 @@ export const responseTimeMiddleware = (
     res.setHeader('X-Process-Time', `${seconds}s`);
 
     // Restaurar función original
-    originalEnd.call(this, chunk, encoding);
+    return originalEnd.call(this, chunk, encoding) as Response;
   };
 
   next();

@@ -218,7 +218,7 @@ async function recordSaleFromWebhook(params: {
         });
 
         await notificationService.sendToUser(listing.userId, {
-          type: 'INFO',
+          type: 'SYSTEM_ALERT', // ✅ FIX: NotificationType no tiene 'info', usar 'SYSTEM_ALERT'
           title: 'Compra automática (DRY-RUN)',
           message: `Modo dry-run: La compra se simularía por $${purchaseCost.toFixed(2)}`,
           category: 'SALE',
@@ -292,7 +292,7 @@ async function recordSaleFromWebhook(params: {
               saleId: sale.id,
               orderId,
               productId: product.id,
-              supplierUrl: product.aliexpressUrl || product.sourceUrl || '',
+              supplierUrl: product.aliexpressUrl || '',
               purchaseAmount: purchaseCost,
               quantity: 1,
               status: 'PENDING',
@@ -334,7 +334,7 @@ async function recordSaleFromWebhook(params: {
         logger.info('Ejecutando compra automática', {
           saleId: sale.id,
           userId: listing.userId,
-          productUrl: product.aliexpressUrl || product.sourceUrl,
+          productUrl: product.aliexpressUrl || '',
           purchaseCost
         });
 
@@ -352,7 +352,7 @@ async function recordSaleFromWebhook(params: {
 
         // Preparar datos de compra
         const purchaseRequest = {
-          productUrl: product.aliexpressUrl || product.sourceUrl || '',
+          productUrl: product.aliexpressUrl || '',
           quantity: 1,
           maxPrice: purchaseCost * 1.1, // 10% de margen para variaciones de precio
           shippingAddress: shippingAddressObj || {

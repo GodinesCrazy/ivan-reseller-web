@@ -211,12 +211,14 @@ router.get('/pending', async (req: Request, res: Response) => {
     
     // Admin puede ver todos los productos pendientes, usuarios solo los suyos
     const items = await productService.getProducts(isAdmin ? undefined : userId, 'PENDING');
+    // ✅ FIX: items puede ser { products: [], pagination: {} }
+    const products = (items as any).products || (Array.isArray(items) ? items : []);
     
     logger.info('[PUBLISHER] Found pending products', {
       userId,
       isAdmin,
-      count: items.length,
-      productIds: items.slice(0, 5).map(i => i.id)
+      count: products.length,
+      productIds: products.slice(0, 5).map((i: any) => i.id)
     });
     
     // ✅ Helper para extraer imageUrl del campo images (JSON string)
@@ -238,7 +240,7 @@ router.get('/pending', async (req: Request, res: Response) => {
 
     // ✅ Enriquecer con información adicional
     const enrichedItems = await Promise.all(
-      items.map(async (item) => {
+      products.map(async (item) => {
         try {
           const productData = item.productData ? JSON.parse(item.productData as string) : {};
           const imageUrl = extractImageUrl(item.images) || null;
