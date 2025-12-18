@@ -1,84 +1,74 @@
-# Progress Report: Fix GO Certification
-**Rama:** `fix/go-certification`  
-**Fecha:** 2025-12-17  
-**Objetivo:** Convertir NO-GO a GO
+# Progress Report: Fix GO Certification (Railway)
+**Rama:** `fix/go-certification-2`  
+**Fecha:** 2025-01-XX (Reanudación)  
+**Objetivo:** Certificación GO con despliegue Railway + pruebas reales
 
 ---
 
-## Estado Actual
+## RESUME: 2025-01-XX / branch: fix/go-certification-2 / starting phase: S / last good commit: ffd40df
 
-### ✅ Completado
+### Estado Actual (Reanudación)
 
-#### FASE 1: Fix Arranque Backend
-- ✅ Movido `httpServer.listen()` ANTES de inicializaciones pesadas
-- ✅ Chromium lazy-loading (no al boot)
-- ✅ Instrumentación con logs timestamped y error handlers globales
-- ✅ Inicializaciones no-críticas movidas a background (después de listen)
-- **Commit:** `f972f18`
+#### ✅ Completado Previamente
+- **FASE B (Parcial):** Errores Decimal arithmetic resueltos en commission.service.ts y cost-optimization.service.ts
+- **Commit:** `ffd40df` - FIX(ts): resolve remaining Decimal arithmetic errors
+- **APIS.txt:** Verificado en .gitignore, NO trackeado en git ✅
+- **Server config:** Ya usa PORT y bind 0.0.0.0 ✅
 
-#### FASE 2: Fix TypeScript Críticos
-- ✅ `sale.service.ts:135` - Decimal vs number (usar `toNumber()`)
-- ✅ `sale.service.ts:471` - 'USER_ACTION' → 'action_required'
-- ✅ `sale.service.ts:505` - Removido `expiresAt` (no existe en tipo)
-- ✅ `trend-suggestions.service.ts` - Decimal conversions con `toNumber()`
-- **Commit:** `0e6b7aa`
-
-**Errores TypeScript restantes (no críticos, en servicios menos usados):**
-- `scheduled-tasks.service.ts` - 8 errores (Prisma includes)
-- `workflow-scheduler.service.ts` - 1 error (TaskOptions)
-- `commission.service.ts` - 3 errores (Decimal operations)
-
-#### FASE 3: Fix Tests
-- ✅ Eliminado `process.exit()` en `env.ts` (ahora throw Error)
-- ✅ Validación de ENCRYPTION_KEY opcional en módulo (solo en runtime)
-- ✅ Tests ahora ejecutan (12 failed, 43 passed - mejor que antes)
-- **Commit:** `d106155`
+#### ⏸️ En Progreso / Pendiente
+- **FASE S:** Setup Railway + APIS loader seguro (INICIANDO)
+- **FASE A:** Railway startup verification
+- **FASE B:** Build estricto TypeScript (completar)
+- **FASE C:** Tests 0 failed
+- **FASE D:** Configurar APIs en Railway
+- **FASE E:** Integration checks
+- **FASE F:** E2E Playwright contra Railway
+- **FASE G:** Certificación final GO
 
 ---
 
-### ⚠️ Pendiente / En Progreso
+## FASE S: SETUP RAILWAY + APIS LOADER SEGURO
 
-#### Backend Arranque
-- **Estado:** Servidor aún no responde en puerto 3000
-- **Posibles causas:**
-  1. Conexión DB se cuelga (timeout)
-  2. Algún await bloqueante antes de listen()
-  3. Error silencioso no capturado
+### S1: Arquitectura Railway Detectada
+**Estado:** ✅ Detectado
+- **nixpacks.toml:** Presente en backend/
+- **Procfile:** `web: npm run start:with-migrations`
+- **Arquitectura:** Backend como servicio único (Railway detecta Procfile)
+- **Start command:** `sh ./start.sh` (según nixpacks.toml)
 
-**Acciones necesarias:**
-- Revisar logs completos del proceso
-- Verificar si `listen()` callback se ejecuta
-- Agregar más instrumentación si necesario
+### S2: APIS.txt Security
+**Estado:** ✅ Verificado
+- **APIS.txt:** Existe localmente, NO trackeado en git
+- **.gitignore:** Incluye APIS.txt (línea 59) ✅
+- **Verificación:** `git ls-files APIS.txt` → vacío ✅
 
-#### FASE 4: Suite E2E
-- ⏸️ No iniciada
-- Requiere: Backend funcionando primero
-
-#### FASE 5: Re-certificación
-- ⏸️ Pendiente hasta resolver arranque
+### S3: Loader Seguro para APIS.txt
+**Estado:** 🔄 Creando scripts/load-apis-from-txt.ts
 
 ---
 
 ## Próximos Pasos Inmediatos
 
-1. **Depurar arranque backend:**
-   - Ver logs completos del proceso
-   - Verificar si hay timeouts en DB/Redis
-   - Confirmar que `listen()` callback se ejecuta
-
-2. **Completar TypeScript fixes (opcional):**
-   - Arreglar errores restantes en scheduled-tasks/workflow-scheduler
-   - O usar `@ts-expect-error` temporalmente
-
-3. **Suite E2E mínima:**
-   - Instalar Playwright
-   - Crear 5 tests básicos
+1. **Crear loader seguro APIS.txt** (scripts/load-apis-from-txt.ts)
+2. **Verificar server.ts usa PORT y 0.0.0.0** (ya verificado ✅)
+3. **Deploy Railway y verificar /health y /ready**
+4. **Completar build estricto TypeScript**
+5. **Ejecutar tests y corregir fallos**
+6. **Configurar APIs en Railway usando loader**
+7. **E2E Playwright contra Railway URL**
+8. **Certificación final GO**
 
 ---
 
-## Commits Realizados
+## Commits Realizados (Esta Sesión)
 
-1. `f972f18` - FASE 1: Fix arranque backend
-2. `0e6b7aa` - FASE 2: Fix TypeScript críticos
-3. `d106155` - FASE 3: Eliminar process.exit() en env.ts
+1. `ffd40df` - FIX(ts): resolve remaining Decimal arithmetic errors (commission/cost optimization)
 
+---
+
+## Notas de Seguridad
+
+- ✅ APIS.txt NUNCA se commitea (verificado)
+- ✅ .gitignore incluye APIS.txt, *.key, *.pem, secrets/
+- ⚠️ Loader debe enmascarar valores al loguear (solo 4 primeros + 4 últimos caracteres)
+- ⚠️ Loader debe poder configurar APIs vía HTTP endpoint (sin exponer valores)
