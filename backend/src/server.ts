@@ -83,11 +83,23 @@ async function ensureAdminUser() {
   }
 }
 
+// ✅ FASE 9: Migraciones con fail-fast en producción
 async function runMigrations(maxRetries = 3): Promise<void> {
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
+  const isProduction = env.NODE_ENV === 'production';
+  // ✅ FASE 9: En producción, solo 1 intento (fail-fast)
+  const actualRetries = isProduction ? 1 : maxRetries;
+  
+  for (let attempt = 0; attempt < actualRetries; attempt++) {
     try {
-      console.log(`🔄 Running database migrations... (attempt ${attempt + 1}/${maxRetries})`);
+      console.log(`🔄 Running database migrations... (attempt ${attempt + 1}/${actualRetries})`);
       console.log(`   DATABASE_URL: ${env.DATABASE_URL ? '✅ Configurada' : '❌ No configurada'}`);
+      
+      // ✅ FASE 9: En producción, validar DATABASE_URL antes de intentar
+      if (isProduction && !env.DATABASE_URL) {
+        console.error('❌ ERROR CRÍTICO: DATABASE_URL no configurada en producción');
+        console.error('   El servidor no puede iniciar sin una base de datos.');
+        process.exit(1);
+      }
       
       const migrateResult = await execAsync('npx prisma migrate deploy', {
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
@@ -168,22 +180,6 @@ async function runMigrations(maxRetries = 3): Promise<void> {
         }
       }
       
-      console.log('✅ Migrations completed');
-      
-      // Intentar ejecutar seed completo
-      if (env.NODE_ENV === 'production') {
-        try {
-          console.log('🌱 Seeding database...');
-          await execAsync('npx tsx prisma/seed.ts');
-          console.log('✅ Database seeded');
-        } catch (seedError: any) {
-          console.log('ℹ️  Seed completo falló, verificando usuario admin...');
-          console.log(`   Error: ${seedError.message?.substring(0, 100)}`);
-          // Aunque el seed falle, verificamos que el admin exista
-          await ensureAdminUser();
-        }
-      }
-      
       return; // Éxito, salir de la función
     } catch (error: any) {
       const isLastAttempt = attempt === maxRetries - 1;
@@ -257,167 +253,355 @@ async function runMigrations(maxRetries = 3): Promise<void> {
   }
 }
 
-async function startServer() {
-  try {
-    // ✅ A3: Validar ENCRYPTION_KEY antes de iniciar cualquier servicio
-    console.log('🔒 Validating encryption key...');
-    validateEncryptionKey();
-    
-    process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
+// ✅ FASE 1: Instrumentación - Helper para logs con timestamps
+function logMilestone(milestone: string): void {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] 🎯 MILESTONE: ${milestone}`);
+}
+
+// ✅ FASE 1: Global error handlers (instrumentación)
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  const timestamp = new Date().toISOString();
+  console.error(`[${timestamp}] ❌ UNHANDLED REJECTION:`, reason);
+  console.error('Stack:', reason?.stack || 'No stack trace');
+  // Don't exit immediately - let the server try to recover
+  // process.exit(1) will be handled by the catch block in startServer
+});
+
+process.on('uncaughtException', (error: Error) => {
+  const timestamp = new Date().toISOString();
+  console.error(`[${timestamp}] ❌ UNCAUGHT EXCEPTION:`, error);
+  console.error('Stack:', error.stack);
+  process.exit(1);
+});
+
+// ✅ FASE 1: Lazy-load Chromium (no al boot)
+async function ensureChromiumLazyLoad(): Promise<void> {
+  // Solo intentar resolver Chromium si realmente se va a usar scraping
+  // Esto se llama cuando se necesita, no durante boot
+  const { env } = await import('./config/env');
+  const scraperBridgeEnabled = env.SCRAPER_BRIDGE_ENABLED ?? true;
+  
+  // Si Scraper Bridge está habilitado y disponible, no necesitamos Chromium
+  if (scraperBridgeEnabled && env.SCRAPER_BRIDGE_URL) {
+    return; // Chromium no necesario si bridge está disponible
+  }
+  
+  // Solo resolver Chromium si es realmente necesario
+  if (!process.env.PUPPETEER_EXECUTABLE_PATH && !process.env.CHROMIUM_PATH) {
+    logMilestone('Resolving Chromium executable (lazy-load)');
     try {
+      process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
       const chromiumPath = await resolveChromiumExecutable();
       process.env.PUPPETEER_EXECUTABLE_PATH = chromiumPath;
       process.env.CHROMIUM_PATH = chromiumPath;
-      console.log(`✅ Chromium executable ready at: ${chromiumPath}`);
+      logMilestone(`Chromium executable ready: ${chromiumPath}`);
     } catch (error: any) {
       console.warn('⚠️  Unable to resolve Chromium executable automatically:', error?.message || error);
+      console.warn('   - El scraping puede fallar si Chromium no está disponible');
     }
-    console.log('🚀 Iniciando servidor...');
-    console.log(`📦 Environment: ${env.NODE_ENV}`);
-    console.log(`🔌 Port: ${PORT}`);
-    
-    // Run migrations before connecting
-    console.log('🔄 Ejecutando migraciones...');
-    await runMigrations();
-    
-    // Test database connection with retry
-    console.log('🔌 Conectando a la base de datos...');
-    try {
-      await connectWithRetry(5, 2000);
-    } catch (dbError: any) {
-      console.error('❌ ERROR DE CONEXIÓN A LA BASE DE DATOS:');
-      console.error(`   Mensaje: ${dbError.message}`);
-      
-      // Mostrar información detallada del error
-      if (dbError.message?.includes('P1000') || dbError.message?.includes('Authentication failed')) {
-        console.error('');
-        console.error('🔧 ERROR DE AUTENTICACIÓN DETECTADO:');
-        console.error('   Esto indica que las credenciales de PostgreSQL no son válidas.');
-        console.error('');
-        console.error('📋 VERIFICACIÓN:');
-        console.error(`   DATABASE_URL configurada: ${env.DATABASE_URL ? '✅ Sí' : '❌ No'}`);
-        if (env.DATABASE_URL) {
-          try {
-            const url = new URL(env.DATABASE_URL);
-            console.error(`   Host: ${url.hostname}`);
-            console.error(`   Port: ${url.port || '5432'}`);
-            console.error(`   Database: ${url.pathname.replace('/', '')}`);
-            console.error(`   User: ${url.username}`);
-          } catch (e) {
-            console.error('   ⚠️  No se pudo parsear DATABASE_URL');
-          }
-        }
-        console.error('');
-        console.error('🔧 SOLUCIÓN AUTOMÁTICA:');
-        console.error('   El código intentará múltiples formas de obtener DATABASE_URL.');
-        console.error('   Si el problema persiste, verifica las variables en Railway.');
-        console.error('');
-      }
-      throw dbError;
-    }
-    
-    // Asegurar que el usuario admin existe (verificación final)
-    // No bloqueamos el inicio del servidor si esto falla
-    console.log('👤 Verificando usuario admin...');
-    ensureAdminUser().catch((error) => {
-      console.error('⚠️  Warning: No se pudo verificar/crear usuario admin:', error.message);
-      console.log('⚠️  El servidor continuará iniciando. El usuario admin puede no existir.');
-    });
+  }
+}
 
-    // Test Redis connection (only if configured)
-    if (isRedisAvailable) {
-      console.log('🔌 Conectando a Redis...');
-      await redis.ping();
-      console.log('✅ Redis connected');
-    } else {
-      console.log('⚠️  Redis no configurado, continuando sin Redis');
-    }
+// ✅ FASE A: Readiness state tracking (global para acceso desde app.ts /ready endpoint)
+declare global {
+  // eslint-disable-next-line no-var
+  var __isDatabaseReady: boolean | undefined;
+  // eslint-disable-next-line no-var
+  var __isRedisReady: boolean | undefined;
+  // eslint-disable-next-line no-var
+  var __isServerReady: boolean | undefined;
+}
 
-    // Start HTTP server for Socket.io support
-    console.log('🌐 Iniciando servidor HTTP...');
+let isDatabaseReady = false;
+let isRedisReady = false;
+let isServerReady = false;
+let bootstrapStartTime: number | null = null;
+
+// ✅ FASE A: Helper para actualizar estado global
+function updateReadinessState() {
+  (global as any).__isDatabaseReady = isDatabaseReady;
+  (global as any).__isRedisReady = isRedisReady;
+  (global as any).__isServerReady = isServerReady;
+}
+
+async function startServer() {
+  const startTime = Date.now();
+  bootstrapStartTime = startTime;
+  
+  try {
+    logMilestone('Starting server initialization');
+    
+    // ✅ A3: Validar ENCRYPTION_KEY antes de iniciar cualquier servicio
+    logMilestone('Validating encryption key');
+    validateEncryptionKey();
+    
+    const { env } = await import('./config/env');
+    logMilestone(`Environment: ${env.NODE_ENV}, Port: ${PORT}`);
+    
+    // ✅ FASE A CRÍTICO: Create HTTP server FIRST (NO awaits before this)
+    logMilestone('Creating HTTP server (BEFORE any DB/Redis/migrations)');
     const httpServer = http.createServer(app);
     
     // ✅ CRÍTICO: Inicializar Socket.io antes de que el servidor escuche
-    console.log('🔌 Inicializando Socket.IO...');
+    logMilestone('Initializing Socket.IO');
     notificationService.initialize(httpServer);
-    console.log('✅ Socket.IO notification service initialized');
+    logMilestone('Socket.IO initialized');
     
-    httpServer.listen(PORT, '0.0.0.0', async () => {
+    // ✅ FASE A CRÍTICO: Start listening IMMEDIATELY (NO awaits before this point)
+    logMilestone('BEFORE_LISTEN - About to call httpServer.listen()');
+    const listenStartTime = Date.now();
+    
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      const listenTime = Date.now() - listenStartTime;
+      const address = httpServer.address();
+      const addressStr = typeof address === 'string' 
+        ? address 
+        : address ? `${address.address}:${address.port}` : 'unknown';
+      
       console.log('');
       console.log('🚀 Ivan Reseller API Server');
       console.log('================================');
+      console.log(`✅ LISTEN_CALLBACK - HTTP SERVER LISTENING on ${addressStr} (listen took ${listenTime}ms)`);
+      console.log(`   Total time to listen: ${Date.now() - startTime}ms`);
       console.log(`Environment: ${env.NODE_ENV}`);
       console.log(`Server: http://localhost:${PORT}`);
       console.log(`Health: http://localhost:${PORT}/health`);
+      console.log(`Ready: http://localhost:${PORT}/ready`);
       console.log('================================');
       console.log('');
-      console.log('✅ Scheduled tasks initialized');
-      console.log('  - Financial alerts: Daily at 6:00 AM');
-      console.log('  - Commission processing: Daily at 2:00 AM');
-      console.log('');
       
-      // Initialize scheduled reports
-      try {
-        await scheduledReportsService.initializeScheduledReports();
-        console.log('✅ Scheduled reports initialized');
-      } catch (error: any) {
-        console.warn('⚠️  Warning: Could not initialize scheduled reports:', error.message);
-      }
-      console.log('');
+      isServerReady = true;
+      updateReadinessState();
+      logMilestone('LISTEN_CALLBACK - Server is listening and ready to accept connections');
       
-      // Recover persisted API statuses
-      try {
-        await apiAvailability.recoverPersistedStatuses();
-        console.log('✅ Recovered persisted API statuses from database');
-      } catch (error: any) {
-        console.warn('⚠️  Warning: Could not recover persisted API statuses:', error.message);
-      }
-      
-      // ⚠️ CRITICAL FIX SIGSEGV: Deshabilitar API Health Monitor automático en producción
-      // Los logs muestran crashes SIGSEGV cada 45-50 minutos debido a la acumulación de
-      // operaciones crypto nativas + Prisma queries + HTTP requests durante los health checks.
-      // Los checks manuales desde la UI (/api/system/test-apis) siguen funcionando correctamente.
-      const isProduction = process.env.NODE_ENV === 'production';
-      if (isProduction) {
-        console.log('⚠️  API Health Monitor automático DESHABILITADO en producción');
-        console.log('  - Esto previene crashes SIGSEGV recurrentes causados por operaciones crypto acumuladas');
-        console.log('  - Los checks manuales desde la UI (Settings → API Settings → Test APIs) siguen funcionando');
-        console.log('  - Para habilitarlo en el futuro, considera aumentar el intervalo a 1 hora o más');
-      } else {
-        // En desarrollo/staging, el monitor puede estar habilitado con intervalos largos
+      // ✅ FASE A: NOW start bootstrap in background (non-blocking)
+      logMilestone('Starting bootstrap in background (DB, Redis, migrations, etc.)');
+      (async () => {
         try {
-          // Delay start to avoid conflicts during server initialization
-          setTimeout(async () => {
-            try {
-              await apiHealthMonitor.start();
-              console.log('✅ API Health Monitor started (development mode)');
-              console.log('  - Monitoring API health every 15 minutes');
-              console.log('  - Checks are serialized to prevent SIGSEGV crashes');
-              console.log('  - Only credential validation (no HTTP requests) during automated checks');
-            } catch (healthError: any) {
-              console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
-              console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
+          // Run migrations (non-blocking for server startup)
+          logMilestone('Bootstrap: Running database migrations');
+          try {
+            await runMigrations();
+            logMilestone('Bootstrap: Database migrations completed');
+          } catch (migrationError: any) {
+            console.error('⚠️  Warning: Database migrations failed (server continues running):', migrationError.message);
+            // Server continues but /ready will return 503
+          }
+          
+          // Test database connection with retry (non-blocking for server startup)
+          logMilestone('Bootstrap: Connecting to database');
+          try {
+            // ✅ FASE A: Add timeout to DB connection
+            const dbConnectionPromise = connectWithRetry(5, 2000);
+            const dbTimeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Database connection timeout after 15s')), 15000)
+            );
+            
+            await Promise.race([dbConnectionPromise, dbTimeoutPromise]);
+            isDatabaseReady = true;
+            updateReadinessState();
+            logMilestone('Bootstrap: Database connected successfully');
+          } catch (dbError: any) {
+            console.error('⚠️  Warning: Database connection failed (server continues in degraded mode):');
+            console.error(`   ${dbError.message}`);
+            // Server continues but /ready will return 503
+            isDatabaseReady = false;
+            updateReadinessState();
+            
+            // Log detailed error info (non-blocking)
+            if (dbError.message?.includes('P1000') || dbError.message?.includes('Authentication failed')) {
+              console.error('');
+              console.error('🔧 ERROR DE AUTENTICACIÓN DETECTADO:');
+              console.error('   Esto indica que las credenciales de PostgreSQL no son válidas.');
+              console.error('');
+              console.error('📋 VERIFICACIÓN:');
+              console.error(`   DATABASE_URL configurada: ${env.DATABASE_URL ? '✅ Sí' : '❌ No'}`);
+              if (env.DATABASE_URL) {
+                try {
+                  const url = new URL(env.DATABASE_URL);
+                  console.error(`   Host: ${url.hostname}`);
+                  console.error(`   Port: ${url.port || '5432'}`);
+                  console.error(`   Database: ${url.pathname.replace('/', '')}`);
+                  console.error(`   User: ${url.username}`);
+                } catch (e) {
+                  console.error('   ⚠️  No se pudo parsear DATABASE_URL');
+                }
+              }
+              console.error('');
+              console.error('🔧 SOLUCIÓN:');
+              console.error('   Verifica las variables en Railway y reinicia el servidor.');
+              console.error('   El servidor continuará ejecutándose pero /ready devolverá 503 hasta que la DB esté conectada.');
+              console.error('');
             }
-          }, 10000); // Start after 10 seconds to let server fully initialize
-        } catch (error: any) {
-          console.warn('⚠️  Warning: Could not initialize API Health Monitor:', error.message);
-          console.log('⚠️  API health monitoring is disabled. The server will continue without it.');
+          }
+          
+          // Test Redis connection (only if configured) - non-blocking
+          if (isRedisAvailable) {
+            logMilestone('Bootstrap: Connecting to Redis');
+            try {
+              // ✅ FASE A: Add timeout to Redis connection
+              const redisPingPromise = redis.ping();
+              const redisTimeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Redis connection timeout after 5s')), 5000)
+              );
+              
+              await Promise.race([redisPingPromise, redisTimeoutPromise]);
+              isRedisReady = true;
+              updateReadinessState();
+              logMilestone('Bootstrap: Redis connected successfully');
+            } catch (redisError: any) {
+              console.warn('⚠️  Redis connection failed (server continues without Redis):', redisError.message);
+              isRedisReady = false;
+              updateReadinessState();
+            }
+          } else {
+            logMilestone('Bootstrap: Redis not configured, skipping');
+            isRedisReady = true; // Not required, so mark as ready
+            updateReadinessState();
+          }
+          
+          // Asegurar que el usuario admin existe (no bloqueante)
+          logMilestone('Bootstrap: Ensuring admin user exists');
+          ensureAdminUser().catch((error) => {
+            console.warn('⚠️  Warning: No se pudo verificar/crear usuario admin:', error.message);
+          });
+          
+          // ✅ FASE 1: Lazy-load Chromium (no bloquea boot)
+          // Solo si Scraper Bridge no está disponible
+          const scraperBridgeEnabled = env.SCRAPER_BRIDGE_ENABLED ?? true;
+          if (!scraperBridgeEnabled || !env.SCRAPER_BRIDGE_URL) {
+            logMilestone('Lazy-loading Chromium (background)');
+            ensureChromiumLazyLoad().catch((error) => {
+              console.warn('⚠️  Chromium lazy-load failed (non-critical):', error.message);
+            });
+          } else {
+            logMilestone('Scraper Bridge enabled, skipping Chromium initialization');
+          }
+          
+          // ✅ FASE 2: Validar configuración de Scraper Bridge (no bloqueante)
+          if (scraperBridgeEnabled && !env.SCRAPER_BRIDGE_URL) {
+            console.warn('⚠️  ADVERTENCIA: SCRAPER_BRIDGE_ENABLED=true pero SCRAPER_BRIDGE_URL no está configurada');
+            console.warn('   - El sistema usará fallback a stealth-scraping');
+          } else if (scraperBridgeEnabled && env.SCRAPER_BRIDGE_URL) {
+            logMilestone('Verifying Scraper Bridge availability');
+            try {
+              const scraperBridge = (await import('./services/scraper-bridge.service')).default;
+              const isAvailable = await Promise.race([
+                scraperBridge.isAvailable(),
+                new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000)),
+              ]);
+              if (isAvailable) {
+                logMilestone('Scraper Bridge is available');
+              } else {
+                console.warn('⚠️  Scraper Bridge no responde (timeout o no disponible)');
+              }
+            } catch (error: any) {
+              console.warn('⚠️  Error verificando Scraper Bridge:', error?.message || 'Unknown error');
+            }
+          }
+          
+          logMilestone('Scheduled tasks initialized');
+          console.log('✅ Scheduled tasks initialized');
+          console.log('  - Financial alerts: Daily at 6:00 AM');
+          console.log('  - Commission processing: Daily at 2:00 AM');
+          console.log('');
+          
+          // Initialize scheduled reports (non-blocking)
+          try {
+            logMilestone('Initializing scheduled reports');
+            await scheduledReportsService.initializeScheduledReports();
+            logMilestone('Scheduled reports initialized');
+          } catch (error: any) {
+            console.warn('⚠️  Warning: Could not initialize scheduled reports:', error.message);
+          }
+          
+          // Recover persisted API statuses (non-blocking)
+          try {
+            logMilestone('Recovering persisted API statuses');
+            await apiAvailability.recoverPersistedStatuses();
+            logMilestone('Persisted API statuses recovered');
+          } catch (error: any) {
+            console.warn('⚠️  Warning: Could not recover persisted API statuses:', error.message);
+          }
+          
+          // ✅ FASE 1: API Health Monitor con feature flags y modo async
+          const healthCheckEnabled = env.API_HEALTHCHECK_ENABLED ?? false;
+          const healthCheckMode = env.API_HEALTHCHECK_MODE ?? 'async';
+          const healthCheckInterval = env.API_HEALTHCHECK_INTERVAL_MS ?? 15 * 60 * 1000;
+          
+          if (healthCheckEnabled) {
+            logMilestone('Configuring API Health Monitor');
+            console.log('✅ API Health Monitor configurado:');
+            console.log(`  - Modo: ${healthCheckMode}`);
+            console.log(`  - Intervalo: ${healthCheckInterval / 1000 / 60} minutos`);
+            
+            if (healthCheckMode === 'async') {
+              apiHealthMonitor.updateConfig({
+                checkInterval: healthCheckInterval,
+                enabled: true,
+              });
+              
+              // Delay start to avoid conflicts during server initialization
+              setTimeout(async () => {
+                try {
+                  await apiHealthMonitor.start();
+                  logMilestone('API Health Monitor started (async mode)');
+                } catch (healthError: any) {
+                  console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
+                }
+              }, 10000);
+            } else {
+              const isProduction = process.env.NODE_ENV === 'production';
+              if (isProduction) {
+                console.warn('⚠️  ADVERTENCIA: Modo sync habilitado en producción puede causar SIGSEGV');
+              }
+              
+              setTimeout(async () => {
+                try {
+                  await apiHealthMonitor.start();
+                  logMilestone('API Health Monitor started (sync mode)');
+                } catch (healthError: any) {
+                  console.warn('⚠️  Warning: Could not start API Health Monitor:', healthError.message);
+                }
+              }, 10000);
+            }
+          } else {
+            logMilestone('API Health Monitor disabled');
+          }
+          
+          logMilestone('Starting AliExpress Auth Monitor');
+          aliExpressAuthMonitor.start();
+          
+          // ✅ FASE 5: Inicializar Workflow Scheduler (non-blocking)
+          try {
+            logMilestone('Initializing Workflow Scheduler');
+            const { workflowSchedulerService } = await import('./services/workflow-scheduler.service');
+            await workflowSchedulerService.initialize();
+            logMilestone('Workflow Scheduler initialized');
+          } catch (error: any) {
+            console.warn('⚠️  Warning: Could not initialize workflow scheduler:', error.message);
+          }
+          
+          const totalInitTime = Date.now() - startTime;
+          logMilestone(`Server fully initialized (total: ${totalInitTime}ms)`);
+          console.log('');
+        } catch (initError: any) {
+          console.error('⚠️  Warning: Error during background initialization:', initError.message);
+          // Server is already listening, so continue running
         }
+      })();
+    });
+    
+    // ✅ FASE 1: Error handling for listen()
+    httpServer.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} is already in use`);
+        process.exit(1);
+      } else {
+        console.error('❌ HTTP Server error:', error);
+        process.exit(1);
       }
-      console.log('');
-      
-      aliExpressAuthMonitor.start();
-      
-      // ✅ FASE 5: Inicializar Workflow Scheduler
-      try {
-        const { workflowSchedulerService } = await import('./services/workflow-scheduler.service');
-        await workflowSchedulerService.initialize();
-        console.log('✅ Workflow Scheduler initialized');
-        console.log('  - Personal workflows will run according to their schedules');
-      } catch (error: any) {
-        console.warn('⚠️  Warning: Could not initialize workflow scheduler:', error.message);
-      }
-      console.log('');
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);

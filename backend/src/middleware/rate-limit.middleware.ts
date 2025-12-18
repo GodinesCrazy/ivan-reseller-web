@@ -1,22 +1,30 @@
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import { Request } from 'express';
+import { Request, Response, NextFunction } from 'express';
+import { env } from '../config/env';
 
 /**
- * Rate limiting middleware para APIs de marketplace
+ * ✅ FASE 8: Rate limiting middleware para APIs de marketplace
  * Previene abuse y respeta límites de APIs externas
- * Límites uniformes para todos los usuarios (ADMIN tiene límites más altos)
+ * Límites configurables vía variables de entorno
  */
 
-// Límites de rate limiting
-const DEFAULT_LIMIT = 200; // requests por 15 minutos para usuarios normales
-const ADMIN_LIMIT = 1000; // requests por 15 minutos para ADMIN
+// ✅ FASE 8: Límites de rate limiting configurables
+const DEFAULT_LIMIT = env.RATE_LIMIT_DEFAULT ?? 200; // requests por 15 minutos para usuarios normales
+const ADMIN_LIMIT = env.RATE_LIMIT_ADMIN ?? 1000; // requests por 15 minutos para ADMIN
+const LOGIN_LIMIT = env.RATE_LIMIT_LOGIN ?? 5; // intentos de login por 15 minutos
+const WINDOW_MS = env.RATE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000; // ventana de tiempo en ms
 
 /**
- * Rate limit basado en rol del usuario
+ * ✅ FASE 8: Rate limit basado en rol del usuario (configurable)
  */
 export const createRoleBasedRateLimit = () => {
+  // ✅ FASE 8: Si rate limiting está deshabilitado, retornar middleware no-op
+  if (!env.RATE_LIMIT_ENABLED) {
+    return (req: Request, res: Response, next: NextFunction) => next();
+  }
+  
   return rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutos
+    windowMs: WINDOW_MS,
     max: async (req: Request) => {
       const user = (req as any).user;
       const userRole = user?.role?.toUpperCase();
@@ -120,12 +128,11 @@ export const createUserRateLimit = (maxRequests: number = 50, windowMs: number =
 };
 
 /**
- * Rate limit específico para login - Previene brute force attacks
- * 5 intentos por 15 minutos por IP
+ * ✅ FASE 8: Rate limit específico para login - Previene brute force attacks (configurable)
  */
 export const loginRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5, // 5 intentos de login por 15 minutos
+  windowMs: WINDOW_MS,
+  max: LOGIN_LIMIT, // Configurable vía RATE_LIMIT_LOGIN
   message: {
     success: false,
     error: 'Too many login attempts. Please try again after 15 minutes.',

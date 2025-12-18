@@ -6,7 +6,7 @@ import { notificationService } from './notification.service';
 import { UserSettingsService } from './user-settings.service';
 import { toNumber } from '../utils/decimal.utils';
 import type { AutomatedOrder } from './automation.service';
-import { AutomatedOrder } from './automation.service';
+// ✅ FIX: Eliminar import duplicado (type import ya incluye el tipo)
 
 const prisma = new PrismaClient();
 
@@ -132,7 +132,10 @@ export class SaleService {
     // ✅ COMISIÓN DEL ADMIN: 20% de la utilidad bruta (gross profit)
     // El commissionRate del usuario ES la comisión que el admin cobra
     const { roundMoney } = require('../utils/money.utils');
-    const adminCommission = roundMoney(grossProfit * user.commissionRate, saleCurrency); // Ej: 0.20 = 20%
+    const { toNumber } = require('../utils/decimal.utils');
+    const grossProfitNum = toNumber(grossProfit);
+    const commissionRateNum = toNumber(user.commissionRate);
+    const adminCommission = roundMoney(grossProfitNum * commissionRateNum, saleCurrency); // Ej: 0.20 = 20%
     const adminId = user.createdBy || null; // Admin que creó el usuario (si aplica)
     
     // Ganancia neta del USUARIO después de comisiones y fees
@@ -468,7 +471,7 @@ export class SaleService {
         );
         
         await notificationService.sendAlert({
-          type: 'USER_ACTION', // ✅ FIX: sendAlert usa misma interfaz que sendToUser
+          type: 'action_required', // ✅ FIX: 'USER_ACTION' no existe, usar 'action_required'
           title: 'Compra guiada - Confirmación requerida',
           message: `Venta ${sale.orderId} por $${sale.salePrice.toFixed(2)} lista para compra automática. ¿Deseas proceder ahora? (Se ejecutará automáticamente en 5 minutos si no respondes)`,
           priority: 'HIGH',
@@ -498,8 +501,8 @@ export class SaleService {
               action: 'cancel_purchase_guided', 
               variant: 'danger' 
             }
-          ],
-          expiresAt: new Date(Date.now() + 5 * 60 * 1000) // 5 minutos timeout
+          ]
+          // ✅ FIX: expiresAt no está en el tipo de sendAlert, se maneja internamente
         });
 
         logger.info('Guided purchase flow initiated - waiting for user confirmation', { 

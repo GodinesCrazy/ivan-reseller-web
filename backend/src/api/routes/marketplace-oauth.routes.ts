@@ -372,7 +372,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       const { APIAvailabilityService } = await import('../../services/api-availability.service');
       const apiAvailabilityService = new APIAvailabilityService();
       // Invalidar cache de status para forzar re-verificación
-      await apiAvailabilityService.checkMercadoLibreAPI(userId, environment, true).catch((err) => {
+      await apiAvailabilityService.checkMercadoLibreAPI(userId, environment).catch((err) => {
         logger.warn('[OAuth Callback] Error forcing MercadoLibre API status refresh', {
           error: err?.message || String(err),
           userId,

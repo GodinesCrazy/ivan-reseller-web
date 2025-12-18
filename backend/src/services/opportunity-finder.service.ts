@@ -12,6 +12,10 @@ import { workflowConfigService } from './workflow-config.service';
 import { logger } from '../config/logger';
 import taxCalculatorService from './tax-calculator.service'; // ✅ MEJORADO: Servicio de impuestos
 import { getGoogleTrendsService, type TrendData } from './google-trends.service'; // ✅ NUEVO: Google Trends para validar demanda real
+// ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
+import { scrapingHttpClient } from '../config/http-client';
+// ✅ PRODUCTION READY: Retry logic para operaciones de scraping
+import { retryWithBackoff, isRetryableError } from '../utils/retry';
 import {
   DEFAULT_COMPARATOR_MARKETPLACES,
   OPTIONAL_MARKETPLACES,
@@ -755,6 +759,12 @@ class OpportunityFinderService {
           nativeProductsFound: 0,
           reason: nativeErrorForLogs ? 'Error en scraping nativo' : 'Scraping nativo retornó vacío (posible bloqueo)'
         });
+        // ✅ FASE 2: Verificar que el bridge esté disponible antes de usarlo
+        const isBridgeAvailable = await scraperBridge.isAvailable().catch(() => false);
+        if (!isBridgeAvailable) {
+          throw new Error('Scraper bridge not available');
+        }
+        
         const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
         logger.info('Bridge Python completado', {
           service: 'opportunity-finder',
@@ -856,14 +866,32 @@ class OpportunityFinderService {
       } catch (bridgeError: any) {
         const msg = String(bridgeError?.message || '').toLowerCase();
         const isCaptchaError = bridgeError?.code === 'CAPTCHA_REQUIRED' || msg.includes('captcha');
+        const isBridgeDisabled = bridgeError?.code === 'BRIDGE_DISABLED' || msg.includes('disabled');
+        const isBridgeUnavailable = msg.includes('not available') || msg.includes('timeout') || msg.includes('econnrefused');
 
-        logger.error('Bridge Python falló', {
-          service: 'opportunity-finder',
-          userId,
-          query,
-          error: bridgeError.message,
-          isCaptchaError
-        });
+        // ✅ FASE 2: Log diferenciado según tipo de error
+        if (isBridgeDisabled) {
+          logger.info('Bridge Python deshabilitado, usando fallback', {
+            service: 'opportunity-finder',
+            userId,
+            query,
+          });
+        } else if (isBridgeUnavailable) {
+          logger.warn('Bridge Python no disponible, usando fallback', {
+            service: 'opportunity-finder',
+            userId,
+            query,
+            error: bridgeError.message,
+          });
+        } else {
+          logger.error('Bridge Python falló', {
+            service: 'opportunity-finder',
+            userId,
+            query,
+            error: bridgeError.message,
+            isCaptchaError,
+          });
+        }
 
         // Solo intentar resolver CAPTCHA si ambos métodos fallaron Y es un error de CAPTCHA
         if (isCaptchaError && !manualAuthPending) {
@@ -1224,13 +1252,13 @@ class OpportunityFinderService {
         const googleTrends = getGoogleTrendsService(userId);
         logger.debug('[OPPORTUNITY-FINDER] Validando demanda real con Google Trends', {
           productTitle: product.title.substring(0, 60),
-          category: product.category || 'general',
+          category: (product as any).category || 'general',
           userId
         });
         
         trendsValidation = await googleTrends.validateProductViability(
           product.title,
-          product.category || 'general',
+          (product as any).category || 'general',
           undefined // Keywords se extraen automáticamente del título
         );
         
@@ -1676,16 +1704,33 @@ class OpportunityFinderService {
     shippingCost?: number;
   }>> {
     try {
-      const axios = (await import('axios')).default;
+      // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout y logging
       const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`;
       const scraperApiUrl = `http://api.scraperapi.com/?api_key=${apiKey}&url=${encodeURIComponent(searchUrl)}&render=true`;
 
-      const response = await axios.get(scraperApiUrl, {
-        timeout: 30000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      // ✅ PRODUCTION READY: Retry logic para operaciones de scraping
+      const response = await retryWithBackoff(
+        async () => {
+          const resp = await scrapingHttpClient.get(scraperApiUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+          });
+          
+          // ✅ Validar respuesta
+          if (!resp.data) {
+            throw new Error('Empty response from ScraperAPI');
+          }
+          
+          return resp;
+        },
+        {
+          maxAttempts: 3,
+          initialDelay: 1000,
+          maxDelay: 10000,
+          retryable: isRetryableError,
         }
-      });
+      );
 
       // Parsear HTML usando cheerio
       const cheerio = (await import('cheerio')).default;
@@ -1764,16 +1809,33 @@ class OpportunityFinderService {
     shippingCost?: number;
   }>> {
     try {
-      const axios = (await import('axios')).default;
+      // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con retry logic
       const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`;
       const zenRowsUrl = `https://api.zenrows.com/v1/?apikey=${apiKey}&url=${encodeURIComponent(searchUrl)}&js_render=true&premium_proxy=true`;
 
-      const response = await axios.get(zenRowsUrl, {
-        timeout: 30000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      // ✅ PRODUCTION READY: Retry logic para operaciones de scraping
+      const response = await retryWithBackoff(
+        async () => {
+          const resp = await scrapingHttpClient.get(zenRowsUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+          });
+          
+          // ✅ Validar respuesta
+          if (!resp.data) {
+            throw new Error('Empty response from ZenRows');
+          }
+          
+          return resp;
+        },
+        {
+          maxAttempts: 3,
+          initialDelay: 1000,
+          maxDelay: 10000,
+          retryable: isRetryableError,
         }
-      });
+      );
 
       // Parsear HTML usando cheerio
       const cheerio = (await import('cheerio')).default;

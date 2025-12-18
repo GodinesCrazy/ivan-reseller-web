@@ -248,6 +248,41 @@ const envSchema = z.object({
   PAYPAL_ENVIRONMENT: z.enum(['sandbox', 'production']).default('sandbox'),
   GROQ_API_KEY: z.string().optional(),
   SCRAPERAPI_KEY: z.string().optional(),
+  
+  // ✅ FASE 1: API Health Check Feature Flags
+  API_HEALTHCHECK_ENABLED: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
+  API_HEALTHCHECK_MODE: z.enum(['sync', 'async']).default('async'),
+  API_HEALTHCHECK_INTERVAL_MS: z.string().optional().transform(val => val ? parseInt(val, 10) : 15 * 60 * 1000), // 15 min default
+  
+  // ✅ FASE 2: Scraper Bridge Configuration
+  SCRAPER_BRIDGE_URL: z.string().url().optional(),
+  SCRAPER_BRIDGE_ENABLED: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
+  SCRAPER_FALLBACK_TO_STEALTH: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
+  
+  // ✅ FASE 3: Webhook Signature Validation
+  WEBHOOK_VERIFY_SIGNATURE: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
+  WEBHOOK_VERIFY_SIGNATURE_EBAY: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
+  WEBHOOK_VERIFY_SIGNATURE_MERCADOLIBRE: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
+  WEBHOOK_VERIFY_SIGNATURE_AMAZON: z.enum(['true', 'false']).optional().transform(val => val === 'true'),
+  WEBHOOK_SECRET_EBAY: z.string().optional(),
+  WEBHOOK_SECRET_MERCADOLIBRE: z.string().optional(),
+  WEBHOOK_SECRET_AMAZON: z.string().optional(),
+  WEBHOOK_ALLOW_INVALID_SIGNATURE: z.enum(['true', 'false']).default('false').transform(val => val === 'true'), // Solo dev
+  
+  // ✅ FASE 4: Auto-Purchase Guardrails
+  AUTO_PURCHASE_ENABLED: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
+  AUTO_PURCHASE_MODE: z.enum(['sandbox', 'production']).default('sandbox'),
+  AUTO_PURCHASE_DRY_RUN: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
+  AUTO_PURCHASE_DAILY_LIMIT: z.string().optional().transform(val => val ? parseFloat(val) : 1000), // $1000 por defecto
+  AUTO_PURCHASE_MONTHLY_LIMIT: z.string().optional().transform(val => val ? parseFloat(val) : 10000), // $10k por defecto
+  AUTO_PURCHASE_MAX_PER_ORDER: z.string().optional().transform(val => val ? parseFloat(val) : 500), // $500 por orden
+  
+  // ✅ FASE 8: Rate Limiting Configurable
+  RATE_LIMIT_ENABLED: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
+  RATE_LIMIT_DEFAULT: z.string().optional().transform(val => val ? parseInt(val, 10) : 200), // requests por 15 min
+  RATE_LIMIT_ADMIN: z.string().optional().transform(val => val ? parseInt(val, 10) : 1000),
+  RATE_LIMIT_LOGIN: z.string().optional().transform(val => val ? parseInt(val, 10) : 5), // intentos por 15 min
+  RATE_LIMIT_WINDOW_MS: z.string().optional().transform(val => val ? parseInt(val, 10) : 15 * 60 * 1000), // 15 minutos
 });
 
 // Asegurar que DATABASE_URL esté en process.env
@@ -261,6 +296,59 @@ if (!process.env.DATABASE_URL && databaseUrl) {
 if (!process.env.REDIS_URL && redisUrl && redisUrl !== 'redis://localhost:6379') {
   process.env.REDIS_URL = redisUrl;
   console.log('✅ REDIS_URL configurada desde variable alternativa');
+}
+
+/**
+ * ✅ PRODUCTION READY: Validar ENCRYPTION_KEY explícitamente
+ * Esta validación es crítica para la seguridad de credenciales
+ */
+// ✅ FASE 3: Cambiar process.exit() a throw Error (no bloquear en módulos importables)
+function validateEncryptionKey(): void {
+  let encryptionKey = process.env.ENCRYPTION_KEY?.trim();
+  const jwtSecret = process.env.JWT_SECRET?.trim();
+  
+  // Si no hay ENCRYPTION_KEY pero hay JWT_SECRET válido, usarlo como fallback
+  if (!encryptionKey || encryptionKey.length < 32) {
+    if (jwtSecret && jwtSecret.length >= 32) {
+      encryptionKey = jwtSecret;
+      process.env.ENCRYPTION_KEY = jwtSecret;
+      console.log('✅ ENCRYPTION_KEY configurada desde JWT_SECRET');
+    } else {
+      const errorMsg = 'ERROR CRÍTICO DE SEGURIDAD: ENCRYPTION_KEY no válida\n' +
+        '   ENCRYPTION_KEY o JWT_SECRET debe estar configurado y tener al menos 32 caracteres\n' +
+        '   Sin una clave válida, las credenciales no pueden encriptarse correctamente';
+      console.error('❌', errorMsg);
+      console.error('');
+      console.error('🔧 SOLUCIÓN:');
+      console.error('   1. Genera una clave segura:');
+      console.error('      node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+      console.error('   2. Agrega ENCRYPTION_KEY en tus variables de entorno');
+      console.error('   3. Reinicia la aplicación');
+      console.error('');
+      // ✅ FASE 3: Throw en lugar de process.exit() para que el entrypoint maneje
+      throw new Error(errorMsg);
+    }
+  }
+  
+  if (encryptionKey.length < 32) {
+    const errorMsg = `ENCRYPTION_KEY debe tener al menos 32 caracteres (longitud actual: ${encryptionKey.length})`;
+    console.error('❌ ERROR:', errorMsg);
+    // ✅ FASE 3: Throw en lugar de process.exit()
+    throw new Error(errorMsg);
+  }
+  
+  console.log('✅ ENCRYPTION_KEY validada (longitud: ' + encryptionKey.length + ' caracteres)');
+}
+
+// ✅ FASE 3: Solo validar ENCRYPTION_KEY en runtime, no al importar módulo (evita bloquear tests)
+// La validación se hace explícitamente en server.ts (entrypoint)
+if (process.env.NODE_ENV !== 'test' && !process.env.SKIP_ENCRYPTION_KEY_VALIDATION) {
+  try {
+    validateEncryptionKey();
+  } catch (error: any) {
+    // En módulo importable, solo loggear - el entrypoint manejará el error
+    console.error('⚠️  Warning: ENCRYPTION_KEY validation failed:', error.message);
+  }
 }
 
 // Validar DATABASE_URL antes de parsear todo el schema

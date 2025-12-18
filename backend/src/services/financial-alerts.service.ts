@@ -36,11 +36,12 @@ export class FinancialAlertsService {
         }
       });
 
+      const { toNumber } = require('../utils/decimal.utils');
       const usersWithNegativeBalance = users.map(user => ({
         userId: user.id,
         username: user.username,
         email: user.email,
-        balance: user.balance
+        balance: toNumber(user.balance)
       }));
 
       // Enviar alertas a admin
@@ -135,7 +136,8 @@ export class FinancialAlertsService {
             pendingCommissions: 0
           };
         }
-        acc[userId].pendingCommissions += commission.amount;
+        const { toNumber } = require('../utils/decimal.utils');
+        acc[userId].pendingCommissions += toNumber(commission.amount);
         return acc;
       }, {} as Record<number, { userId: number; username: string; email: string; pendingCommissions: number }>);
 
@@ -257,12 +259,13 @@ export class FinancialAlertsService {
             }
           });
 
+          const { toNumber } = require('../utils/decimal.utils');
           const pendingCost = pendingOrders.reduce((sum, order) => 
-            sum + (order.aliexpressCost || 0), 0
+            sum + toNumber(order.aliexpressCost || 0), 0
           );
 
           const approvedCost = approvedProducts.reduce((sum, product) => 
-            sum + (product.aliexpressPrice || 0), 0
+            sum + toNumber(product.aliexpressPrice || 0), 0
           );
 
           const committedCapital = pendingCost + approvedCost;

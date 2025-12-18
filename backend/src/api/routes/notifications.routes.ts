@@ -300,7 +300,13 @@ router.post('/test', async (req: Request, res: Response) => {
  *       403:
  *         description: Insufficient permissions
  */
-router.post('/system/alert', async (req: Request, res: Response) => {
+// ✅ PRODUCTION READY: Validación para system alert
+const systemAlertSchema = z.object({
+  message: z.string().min(1).max(1000),
+  priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).default('NORMAL'),
+});
+
+router.post('/system/alert', async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (req.user!.role !== 'ADMIN') {
       return res.status(403).json({
@@ -309,14 +315,9 @@ router.post('/system/alert', async (req: Request, res: Response) => {
       });
     }
 
-    const { message, priority = 'NORMAL' } = req.body;
-
-    if (!message) {
-      return res.status(400).json({
-        success: false,
-        error: 'Message is required'
-      });
-    }
+    // ✅ PRODUCTION READY: Validar body con Zod
+    const validatedBody = systemAlertSchema.parse(req.body);
+    const { message, priority } = validatedBody;
 
     notificationService.notifySystemAlert(message, priority);
 
@@ -325,10 +326,7 @@ router.post('/system/alert', async (req: Request, res: Response) => {
       message: 'System alert sent to admins'
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Failed to send system alert'
-    });
+    next(error); // ✅ PRODUCTION READY: Usar error handler centralizado
   }
 });
 
@@ -360,16 +358,16 @@ router.post('/system/alert', async (req: Request, res: Response) => {
  *                 online:
  *                   type: boolean
  */
-router.get('/user/:userId/online', async (req: Request, res: Response) => {
+// ✅ PRODUCTION READY: Validación de parámetros de ruta
+const getUserOnlineParamsSchema = z.object({
+  userId: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)),
+});
+
+router.get('/user/:userId/online', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = parseInt(req.params.userId);
-    
-    if (isNaN(userId)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid user ID'
-      });
-    }
+    // ✅ PRODUCTION READY: Validar parámetros con Zod
+    const validatedParams = getUserOnlineParamsSchema.parse(req.params);
+    const userId = validatedParams.userId;
 
     const isOnline = notificationService.isUserOnline(userId);
 
@@ -378,10 +376,7 @@ router.get('/user/:userId/online', async (req: Request, res: Response) => {
       online: isOnline
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Failed to check user online status'
-    });
+    next(error); // ✅ PRODUCTION READY: Usar error handler centralizado
   }
 });
 

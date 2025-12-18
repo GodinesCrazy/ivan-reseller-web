@@ -421,7 +421,7 @@ export class ProductService {
     return product;
   }
 
-  async getProducts(userId?: number, status?: string) {
+  async getProducts(userId?: number, status?: string, pagination?: { page?: number; limit?: number }) {
     const where: any = {};
     
     if (userId) {
@@ -432,40 +432,63 @@ export class ProductService {
       where.status = status;
     }
 
-    return prisma.product.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            id: true,
-            username: true,
-            email: true,
+    // ✅ PRODUCTION READY: Paginación por defecto para prevenir cargas excesivas
+    const page = pagination?.page || 1;
+    const limit = Math.min(pagination?.limit || 50, 100); // Máximo 100 items por página
+    const skip = (page - 1) * limit;
+
+    // Obtener total para metadata de paginación
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              email: true,
+            },
+          },
+          sales: {
+            select: {
+              id: true,
+              orderId: true,
+              status: true,
+            },
+          },
+          marketplaceListings: {
+            select: {
+              id: true,
+              marketplace: true,
+              listingId: true,
+              listingUrl: true,
+              publishedAt: true,
+            },
+            orderBy: {
+              publishedAt: 'desc',
+            },
           },
         },
-        sales: {
-          select: {
-            id: true,
-            orderId: true,
-            status: true,
-          },
+        orderBy: {
+          createdAt: 'desc',
         },
-        marketplaceListings: {
-          select: {
-            id: true,
-            marketplace: true,
-            listingId: true,
-            listingUrl: true,
-            publishedAt: true,
-          },
-          orderBy: {
-            publishedAt: 'desc',
-          },
-        },
+      }),
+      prisma.product.count({ where }),
+    ]);
+
+    return {
+      products,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNextPage: page < Math.ceil(total / limit),
+        hasPreviousPage: page > 1,
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    };
   }
 
   /**

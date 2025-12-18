@@ -330,7 +330,7 @@ router.post('/handle-guided-action', async (req: Request, res: Response, next) =
       // Confirmar compra guided usando tracker
       const { guidedActionTracker } = await import('../../services/guided-action-tracker.service');
       
-      const confirmed = await guidedActionTracker.confirmAction(actionId);
+      const confirmed = await guidedActionTracker.confirmAction(userId, actionId);
       
       if (!confirmed) {
         return res.status(404).json({ 
@@ -349,7 +349,7 @@ router.post('/handle-guided-action', async (req: Request, res: Response, next) =
       // Cancelar compra guided usando tracker
       const { guidedActionTracker } = await import('../../services/guided-action-tracker.service');
       
-      const cancelled = await guidedActionTracker.cancelAction(actionId);
+      const cancelled = await guidedActionTracker.cancelAction(userId, actionId);
       
       if (!cancelled) {
         return res.status(404).json({ 

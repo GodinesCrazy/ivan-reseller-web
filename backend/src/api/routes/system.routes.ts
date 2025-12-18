@@ -9,6 +9,8 @@ import { AppError } from '../../middleware/error.middleware';
 import { z } from 'zod';
 import { logger } from '../../config/logger';
 import { ApiHealthService } from '../../services/api-health.service';
+import { errorTracker } from '../../utils/error-tracker';
+import { performanceTracker } from '../../utils/performance-tracker';
 
 const router = Router();
 
@@ -231,6 +233,79 @@ router.post('/test-apis', authenticate, async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: 'Failed to test APIs'
+    });
+  }
+});
+
+/**
+ * GET /api/system/error-stats
+ * Get error tracking statistics (admin only)
+ */
+router.get('/error-stats', authenticate, async (req: Request, res: Response) => {
+  try {
+    // Solo admins pueden ver estadísticas de errores
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({
+        success: false,
+        message: 'Insufficient permissions'
+      });
+    }
+
+    const stats = errorTracker.getErrorStats();
+    
+    res.json({
+      success: true,
+      data: {
+        errorCounts: stats,
+        totalUniqueErrors: Object.keys(stats).length,
+      }
+    });
+  } catch (error: any) {
+    logger.error('Error in /api/system/error-stats', {
+      error: error.message,
+      stack: error.stack,
+    });
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get error stats'
+    });
+  }
+});
+
+/**
+ * GET /api/system/performance-stats
+ * Get performance statistics (admin only)
+ */
+router.get('/performance-stats', authenticate, async (req: Request, res: Response) => {
+  try {
+    // Solo admins pueden ver estadísticas de performance
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({
+        success: false,
+        message: 'Insufficient permissions'
+      });
+    }
+
+    const operation = req.query.operation as string | undefined;
+    const stats = performanceTracker.getStats(operation);
+    
+    res.json({
+      success: true,
+      data: {
+        stats,
+        ...(operation && { operation }),
+      }
+    });
+  } catch (error: any) {
+    logger.error('Error in /api/system/performance-stats', {
+      error: error.message,
+      stack: error.stack,
+    });
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get performance stats'
     });
   }
 });
