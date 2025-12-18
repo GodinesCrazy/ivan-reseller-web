@@ -1,5 +1,6 @@
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
+import { toNumber } from '../utils/decimal.utils';
 
 /**
  * Cost Optimization Service
@@ -46,7 +47,7 @@ export class CostOptimizationService {
       const totalCosts = infrastructureCosts + apiCosts + storageCosts;
 
       // Ingresos del usuario (comisiones del admin)
-      const { toNumber } = require('../utils/decimal.utils');
+      // ✅ FIX: Convert Decimal to number for arithmetic operations
       const revenue = user.sales.reduce((sum, sale) => sum + toNumber(sale.commissionAmount || 0), 0);
 
       // Calcular métricas
