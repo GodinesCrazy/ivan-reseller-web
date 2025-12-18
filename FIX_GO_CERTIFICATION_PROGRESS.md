@@ -1,77 +1,69 @@
 # Progress Report: Fix GO Certification (Railway)
-**Rama:** `fix/go-certification-2`  
-**Fecha:** 2025-12-18 (Reanudación)  
+**Rama:** `fix/go-certification-2` → merge a `main`  
+**Fecha:** 2025-12-18  
 **Objetivo:** Certificación GO con despliegue Railway + pruebas reales
 
 ---
 
-## RESUME: 2025-12-18 14:08:21 / branch: fix/go-certification-2 / starting phase: C / last good commit: 4e39104
+## RESUME: 2025-12-18 15:17:54 / branch: fix/go-certification-2 / last commits: 99869a7, 1ecc78b, c578f47 / next: merge to main for Railway deploy
 
-### Estado Actual (Reanudación)
+### Estado Actual
 
 #### ✅ Completado
-- **FASE S:** Railway setup detection + secure APIS loader creado
-  - ✅ nixpacks.toml y Procfile detectados
-  - ✅ APIS.txt verificado en .gitignore (NO trackeado)
-  - ✅ scripts/load-apis-from-txt.ts creado (loader seguro vía HTTP)
-  - **Commit:** `39b2caa` - CERT-GO: FASE S
-
-- **FASE A (parcial):** Server config + deploy preparation
-  - ✅ Server usa PORT y bind 0.0.0.0
-  - ✅ Logs obligatorios (BEFORE_LISTEN, LISTEN_CALLBACK)
-  - ✅ /health y /ready endpoints implementados correctamente
-  - ✅ docs/RAILWAY_DEPLOY_STEPS.md creado
-  - ✅ scripts/wait-for-railway.mjs creado
-  - **Commit:** `4e39104` - CERT-GO: FASE A - Railway deploy steps + wait-for-railway script
-  - ⏸️ Deploy Railway pendiente (requiere acceso dashboard)
-
-- **FASE B:** Build estricto TypeScript
-  - ✅ Errores Decimal arithmetic resueltos
-  - ✅ Errores TypeScript críticos corregidos
-  - **Commit:** `c389d76` - CERT-GO: FASE B
+- **FASE S:** Railway setup + APIS loader seguro
+- **FASE A:** Deploy instructions + wait-for-railway script
+- **FASE B:** Build estricto TypeScript (errores críticos resueltos)
+- **Commit más reciente:** `99869a7` - CERT-GO: Update progress - ready for merge to main
 
 #### 🔄 En Progreso
-- **FASE C:** Tests 0 failed (iniciando)
+- **PASO 1:** Crear tag de respaldo y merge a main
 
 #### ⏸️ Pendiente
-- **FASE A (completar):** Deploy Railway + health/ready verification (requiere dashboard)
-- **FASE D:** Configurar APIs en Railway usando APIS.txt loader
-- **FASE E:** Integration checks reales/sandbox + mocks
-- **FASE F:** E2E Playwright contra Railway URL
-- **FASE G:** Certificación final GO
+- **PASO 3:** Smoke local (build + tests)
+- **PASO 4:** Push a main (dispara deploy Railway)
+- **PASO 5:** Verificar deploy Railway
+- **PASO 7:** Configurar APIs en producción
+- **PASO 8:** Integration checks + E2E
+- **PASO 9:** Certificación final GO
 
 ---
 
-## Próximos Pasos Inmediatos
+## Baseline (PASO 0)
 
-1. **FASE C:** Ejecutar tests y corregir fallos
-   - `cd backend && npm test`
-   - Documentar fallos en docs/TEST_FAILS_ROOT_CAUSE.md
-   - Corregir por prioridad
+**Git Status:**
+```
+On branch fix/go-certification-2
+Changes not staged: backend/tsconfig.json
+```
 
-2. **FASE D:** Configurar APIs en Railway (cuando haya URL)
-   - Usar scripts/load-apis-from-txt.ts contra Railway URL
+**Commits recientes:**
+- 99869a7 - CERT-GO: Update progress - ready for merge to main
+- 1ecc78b - CERT-GO: Resume checkpoint - starting FASE C (tests)
+- c578f47 - FIX(ts): type fixes in api-credentials and autopilot routes
 
-3. **FASE E:** Integration checks
-
-4. **FASE F:** E2E Playwright
-
-5. **FASE G:** Certificación final
+**Seguridad:**
+- ✅ APIS.txt NO trackeado (git ls-files vacío)
+- ✅ .gitignore incluye APIS.txt, *.local, secrets/
 
 ---
 
-## Commits Realizados
+## Próximos Pasos
 
-1. `39b2caa` - CERT-GO: FASE S - Railway setup detection + secure APIS loader
-2. `c389d76` - CERT-GO: FASE B - fix TypeScript errors
-3. `4e39104` - CERT-GO: FASE A - Railway deploy steps + wait-for-railway script
-4. `c578f47` - FIX(ts): type fixes in api-credentials and autopilot routes
+1. **PASO 1:** Crear tag de respaldo
+2. **PASO 2:** Merge fix/go-certification-2 → main
+3. **PASO 3:** Smoke local (build + tests)
+4. **PASO 4:** Push a main
+5. **PASO 5:** Verificar deploy Railway (wait-for-railway.mjs)
+6. **PASO 6:** Detectar frontend
+7. **PASO 7:** Configurar APIs
+8. **PASO 8:** Integration checks + E2E
+9. **PASO 9:** Certificación GO
 
 ---
 
 ## Notas de Seguridad
 
 - ✅ APIS.txt NUNCA se commitea (verificado)
-- ✅ .gitignore incluye APIS.txt, *.key, *.pem, secrets/
-- ✅ Loader enmascara valores al loguear
+- ✅ .gitignore incluye APIS.txt, *.local, secrets/
+- ✅ Loader enmascara valores
 - ✅ wait-for-railway.mjs no expone secretos

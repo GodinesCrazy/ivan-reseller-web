@@ -66,6 +66,8 @@
     "**/__tests__/**",
     "**/*.old.ts",
     "src/autopilot-init.ts",
-    "src/routes/settings.routes.old.ts"
+    "src/routes/settings.routes.old.ts",
+    "src/scripts/test-*.ts",
+    "src/scripts/*-test.ts"
   ]
 }
