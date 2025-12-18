@@ -9,60 +9,76 @@
 
 ### Estado Actual (Reanudación)
 
-#### ✅ Completado Previamente
-- **FASE B (Parcial):** Errores Decimal arithmetic resueltos en commission.service.ts y cost-optimization.service.ts
-- **Commit:** `ffd40df` - FIX(ts): resolve remaining Decimal arithmetic errors
-- **APIS.txt:** Verificado en .gitignore, NO trackeado en git ✅
-- **Server config:** Ya usa PORT y bind 0.0.0.0 ✅
+#### ✅ Completado
+- **FASE S:** Railway setup detection + secure APIS loader creado
+  - ✅ nixpacks.toml y Procfile detectados
+  - ✅ APIS.txt verificado en .gitignore (NO trackeado)
+  - ✅ scripts/load-apis-from-txt.ts creado (loader seguro vía HTTP)
+  - **Commit:** `39b2caa` - CERT-GO: FASE S
 
-#### ⏸️ En Progreso / Pendiente
-- **FASE S:** Setup Railway + APIS loader seguro (INICIANDO)
-- **FASE A:** Railway startup verification
-- **FASE B:** Build estricto TypeScript (completar)
+- **FASE A:** Server config verificado
+  - ✅ Server usa PORT y bind 0.0.0.0
+  - ✅ Logs obligatorios (BEFORE_LISTEN, LISTEN_CALLBACK)
+  - ✅ /health y /ready endpoints implementados correctamente
+  - ⏸️ Deploy Railway pendiente (requiere acceso a Railway dashboard)
+
+- **FASE B:** Build estricto TypeScript
+  - ✅ Errores Decimal arithmetic resueltos (commission.service.ts, cost-optimization.service.ts)
+  - ✅ Errores TypeScript críticos corregidos:
+    - listing-lifetime.routes.ts: authorize(['ADMIN']) → authorize('ADMIN')
+    - webhooks.routes.ts: type 'info' → 'SYSTEM_ALERT', sourceUrl removido
+    - publisher.routes.ts: items.map → products.map
+    - workflow-config.routes.ts: confirmAction/cancelAction con userId
+    - request-logger.middleware.ts: return Response
+    - response-time.middleware.ts: return Response
+  - **Commit:** `c389d76` - CERT-GO: FASE B
+  - ⚠️ Errores restantes solo en scripts de test (no críticos para build)
+
+#### ⏸️ Pendiente
+- **FASE A:** Deploy Railway y verificar health/ready (requiere acceso Railway)
 - **FASE C:** Tests 0 failed
-- **FASE D:** Configurar APIs en Railway
-- **FASE E:** Integration checks
-- **FASE F:** E2E Playwright contra Railway
+- **FASE D:** Configurar APIs en Railway usando APIS.txt loader
+- **FASE E:** Integration checks reales/sandbox + mocks
+- **FASE F:** E2E Playwright contra Railway URL
 - **FASE G:** Certificación final GO
-
----
-
-## FASE S: SETUP RAILWAY + APIS LOADER SEGURO
-
-### S1: Arquitectura Railway Detectada
-**Estado:** ✅ Detectado
-- **nixpacks.toml:** Presente en backend/
-- **Procfile:** `web: npm run start:with-migrations`
-- **Arquitectura:** Backend como servicio único (Railway detecta Procfile)
-- **Start command:** `sh ./start.sh` (según nixpacks.toml)
-
-### S2: APIS.txt Security
-**Estado:** ✅ Verificado
-- **APIS.txt:** Existe localmente, NO trackeado en git
-- **.gitignore:** Incluye APIS.txt (línea 59) ✅
-- **Verificación:** `git ls-files APIS.txt` → vacío ✅
-
-### S3: Loader Seguro para APIS.txt
-**Estado:** 🔄 Creando scripts/load-apis-from-txt.ts
 
 ---
 
 ## Próximos Pasos Inmediatos
 
-1. **Crear loader seguro APIS.txt** (scripts/load-apis-from-txt.ts)
-2. **Verificar server.ts usa PORT y 0.0.0.0** (ya verificado ✅)
-3. **Deploy Railway y verificar /health y /ready**
-4. **Completar build estricto TypeScript**
-5. **Ejecutar tests y corregir fallos**
-6. **Configurar APIs en Railway usando loader**
-7. **E2E Playwright contra Railway URL**
-8. **Certificación final GO**
+1. **FASE A (completar):** Deploy Railway
+   - Push rama a origin
+   - Deploy en Railway dashboard
+   - Verificar /health y /ready endpoints
+   - Capturar logs de arranque (sin secretos)
+
+2. **FASE C:** Ejecutar tests y corregir fallos
+   - `cd backend && npm test`
+   - Documentar fallos en docs/TEST_FAILS_ROOT_CAUSE.md
+   - Corregir por prioridad
+
+3. **FASE D:** Configurar APIs en Railway
+   - Usar scripts/load-apis-from-txt.ts contra Railway URL
+   - Verificar en UI (API Settings)
+
+4. **FASE E:** Integration checks
+   - Implementar npm run integration:check
+   - Clasificar: PROBADA REAL / PROBADA CON MOCK
+
+5. **FASE F:** E2E Playwright
+   - Configurar Playwright con Railway URL
+   - Crear 5 tests mínimos
+
+6. **FASE G:** Certificación final
+   - npm run certify:railway
+   - Actualizar CERTIFICATION_GO_NO_GO.md a GO
 
 ---
 
 ## Commits Realizados (Esta Sesión)
 
-1. `ffd40df` - FIX(ts): resolve remaining Decimal arithmetic errors (commission/cost optimization)
+1. `39b2caa` - CERT-GO: FASE S - Railway setup detection + secure APIS loader + gitignore hardening
+2. `c389d76` - CERT-GO: FASE B - fix TypeScript errors (authorize, NotificationType, sourceUrl, guidedActionTracker, middleware)
 
 ---
 
@@ -70,5 +86,12 @@
 
 - ✅ APIS.txt NUNCA se commitea (verificado)
 - ✅ .gitignore incluye APIS.txt, *.key, *.pem, secrets/
-- ⚠️ Loader debe enmascarar valores al loguear (solo 4 primeros + 4 últimos caracteres)
-- ⚠️ Loader debe poder configurar APIs vía HTTP endpoint (sin exponer valores)
+- ✅ Loader enmascara valores al loguear (solo keys detectadas)
+- ✅ Loader usa HTTP endpoint (no acceso directo a DB)
+
+---
+
+## Evidencia Build
+
+**Comando:** `cd backend && npm run build`
+**Resultado:** Build pasa (errores restantes solo en scripts de test, no críticos)
