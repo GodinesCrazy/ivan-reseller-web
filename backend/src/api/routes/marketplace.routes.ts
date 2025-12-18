@@ -900,7 +900,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
     } else if (marketplace === 'aliexpress-dropshipping' || marketplace === 'aliexpress_dropshipping') {
       // ✅ FIX: Definir variables necesarias para AliExpress Dropshipping
       // Obtener credenciales primero para determinar el ambiente
-      const credTemp = await marketplaceService.getCredentials(userId, 'aliexpress-dropshipping');
+      const credTemp = await marketplaceService.getCredentials(userId, 'aliexpress-dropshipping' as any);
       
       // Resolver ambiente
       const { resolveEnvironment } = await import('../../utils/environment-resolver');

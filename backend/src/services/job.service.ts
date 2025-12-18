@@ -413,9 +413,10 @@ class JobService {
           } else {
             // Realizar pago real con PayPal
             try {
+              const { toNumber } = require('../utils/decimal.utils');
               const payoutResult = await paypalService.sendPayout({
                 recipientEmail: commission.user.email,
-                amount: commission.amount,
+                amount: toNumber(commission.amount),
                 currency: 'USD', // Commission siempre en USD
                 note: `Comisión por venta - Commission ID: ${commission.id}`,
                 senderItemId: `commission_${commission.id}`

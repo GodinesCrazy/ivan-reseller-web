@@ -25,7 +25,7 @@ describe('AI Opportunity Finder', () => {
         data: {
           email: 'test@ivanreseller.com',
           password: 'test123',
-          name: 'Test User'
+          username: 'testuser'
         }
       });
       testUserId = newUser.id;

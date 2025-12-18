@@ -41,63 +41,66 @@ if (isRedisAvailable && bullMQRedis && apiHealthCheckQueue) {
       });
 
       try {
+        // ✅ FASE 1: Ejecutar health check con timeout estricto
         const apiAvailability = new APIAvailabilityService();
-        let status;
 
-        // Ejecutar el health check apropiado según el nombre de la API
-        switch (apiName.toLowerCase()) {
+        // ✅ FASE 1: Wrapper con timeout para prevenir bloqueos
+        const healthCheckPromise = (async () => {
+          // Ejecutar el health check apropiado según el nombre de la API
+          switch (apiName.toLowerCase()) {
           case 'serpapi':
-            status = await apiAvailability.checkSerpAPI(userId);
-            break;
+            return await apiAvailability.checkSerpAPI(userId);
           case 'ebay':
-            status = await apiAvailability.checkEbayAPI(userId, environment);
-            break;
+            return await apiAvailability.checkEbayAPI(userId, environment);
           case 'amazon':
-            status = await apiAvailability.checkAmazonAPI(userId, environment);
-            break;
+            return await apiAvailability.checkAmazonAPI(userId, environment);
           case 'mercadolibre':
-            status = await apiAvailability.checkMercadoLibreAPI(userId, environment);
-            break;
+            return await apiAvailability.checkMercadoLibreAPI(userId, environment);
           case 'paypal':
-            status = await apiAvailability.checkPayPalAPI(userId, environment);
-            break;
+            return await apiAvailability.checkPayPalAPI(userId, environment);
           case 'groq':
-            status = await apiAvailability.checkGroqAPI(userId);
-            break;
+            return await apiAvailability.checkGroqAPI(userId);
           case 'scraperapi':
-            status = await apiAvailability.checkScraperAPI(userId);
-            break;
+            return await apiAvailability.checkScraperAPI(userId);
           case 'zenrows':
-            status = await apiAvailability.checkZenRowsAPI(userId);
-            break;
+            return await apiAvailability.checkZenRowsAPI(userId);
           case '2captcha':
-            status = await apiAvailability.check2CaptchaAPI(userId);
-            break;
+            return await apiAvailability.check2CaptchaAPI(userId);
           case 'aliexpress':
-            status = await apiAvailability.checkAliExpressAPI(userId);
-            break;
+            return await apiAvailability.checkAliExpressAPI(userId);
           case 'email':
-            status = await apiAvailability.checkEmailAPI(userId);
-            break;
+            return await apiAvailability.checkEmailAPI(userId);
           case 'twilio':
-            status = await apiAvailability.checkTwilioAPI(userId);
-            break;
+            return await apiAvailability.checkTwilioAPI(userId);
           case 'slack':
-            status = await apiAvailability.checkSlackAPI(userId);
-            break;
+            return await apiAvailability.checkSlackAPI(userId);
           case 'openai':
-            status = await apiAvailability.checkOpenAIAPI(userId);
-            break;
+            return await apiAvailability.checkOpenAIAPI(userId);
           default:
             logger.warn('[APIHealthCheckQueue] Unknown API name', { apiName });
             throw new Error(`Unknown API: ${apiName}`);
-        }
+          }
+        })();
+
+        // ✅ FASE 1: Timeout estricto de 25 segundos (menos que el timeout del worker)
+        const status = await Promise.race([
+          healthCheckPromise,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Health check timeout after 25s')), 25000)
+          ),
+        ]);
 
         // Emitir actualización de estado vía WebSocket
         const frontendApiName = resolveToFrontend(apiName);
+        // ✅ FIX: emitAPIStatusUpdate requiere status obligatorio, asegurar que esté presente
+        const statusValue = status.status || (status.isAvailable ? 'healthy' : 'unhealthy');
         notificationService.emitAPIStatusUpdate(userId, {
-          ...status,
-          apiName: frontendApiName, // Mapear a nombre de frontend
+          apiName: frontendApiName,
+          status: statusValue as 'healthy' | 'degraded' | 'unhealthy' | 'unknown',
+          isConfigured: status.isConfigured,
+          isAvailable: status.isAvailable,
+          message: status.message,
+          environment: status.environment,
         });
 
         logger.info('[APIHealthCheckQueue] Health check completed', {
@@ -114,12 +117,17 @@ if (isRedisAvailable && bullMQRedis && apiHealthCheckQueue) {
           status,
         };
       } catch (error: any) {
-        logger.error('[APIHealthCheckQueue] Health check failed', {
+        // ✅ FASE 1: Distinguir entre timeout y otros errores
+        const isTimeout = error instanceof Error && error.message.includes('timeout');
+        const logLevel = isTimeout ? 'warn' : 'error';
+        
+        logger[logLevel]('[APIHealthCheckQueue] Health check failed', {
           jobId: job.id,
           userId,
           apiName,
           error: error.message,
-          stack: error.stack
+          isTimeout,
+          ...(logLevel === 'error' && { stack: error.stack }),
         });
 
         // Emitir estado de error vía WebSocket
@@ -145,14 +153,15 @@ if (isRedisAvailable && bullMQRedis && apiHealthCheckQueue) {
     },
     {
       connection: bullMQRedis as any,
-      concurrency: 3, // Procesar hasta 3 health checks en paralelo
+      concurrency: 2, // ✅ FASE 1: Reducir concurrencia para prevenir SIGSEGV (2 en lugar de 3)
       removeOnComplete: {
         age: 3600, // Mantener jobs completados por 1 hora
         count: 100, // Mantener máximo 100 jobs completados
       },
       removeOnFail: {
         age: 86400, // Mantener jobs fallidos por 24 horas
-      },
+      }
+      // ✅ FIX: timeout no existe en WorkerOptions de BullMQ, se maneja en el job handler
     }
   );
 

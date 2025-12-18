@@ -1,6 +1,8 @@
-import axios from 'axios';
+// ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
+import { scrapingHttpClient } from '../config/http-client';
 import * as cheerio from 'cheerio';
 import { HttpsProxyAgent } from 'https-proxy-agent';
+import axios from 'axios'; // Solo para configurar proxy agent si es necesario
 
 /**
  * Sistema de scraping REAL para encontrar oportunidades de negocio
@@ -137,6 +139,7 @@ class RealMarketplaceScraper {
     const userAgent = this.userAgents[Math.floor(Math.random() * this.userAgents.length)];
     const proxy = this.config.useProxies ? this.proxies[Math.floor(Math.random() * this.proxies.length)] : undefined;
     
+    // ✅ PRODUCTION READY: Usar cliente HTTP centralizado, pero permitir proxy agent si es necesario
     const config: any = {
       headers: {
         'User-Agent': userAgent,
@@ -150,12 +153,22 @@ class RealMarketplaceScraper {
         'Sec-Fetch-Site': 'none',
         'Cache-Control': 'max-age=0'
       },
-      timeout: 15000,
       maxRedirects: 5
+      // timeout ya está en scrapingHttpClient (60s)
     };
 
+    // Si hay proxy, necesitamos usar axios directamente con el agent
+    // porque scrapingHttpClient no soporta httpsAgent personalizado
     if (proxy) {
       config.httpsAgent = new HttpsProxyAgent(proxy);
+      // Usar axios directamente cuando hay proxy (caso especial)
+      const axiosInstance = axios.create({
+        timeout: 60000, // Mismo timeout que scrapingHttpClient
+        maxRedirects: 5,
+        ...config
+      });
+      const response = await axiosInstance.get(url);
+      return response.data;
     }
 
     // Delay aleatorio para parecer humano
@@ -163,7 +176,10 @@ class RealMarketplaceScraper {
       await this.randomDelay();
     }
 
-    const response = await axios.get(url, config);
+    // ✅ PRODUCTION READY: Usar cliente HTTP centralizado cuando no hay proxy
+    const response = await scrapingHttpClient.get(url, {
+      headers: config.headers
+    });
     return response.data;
   }
 

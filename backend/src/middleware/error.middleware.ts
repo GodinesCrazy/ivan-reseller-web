@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../config/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { errorTracker, ErrorCategory } from '../utils/error-tracker';
 
 // Error codes para diferentes tipos de errores
 export enum ErrorCode {
@@ -110,9 +111,13 @@ export const errorHandler = (
     details = { validationErrors: (err as any).errors };
   }
 
+  // ✅ PRODUCTION READY: Incluir correlation ID en logs
+  const correlationId = (req as any).correlationId || 'unknown';
+
   // Logging estructurado
   const logContext = {
     errorId,
+    correlationId, // ✅ Agregar correlation ID
     errorCode,
     statusCode,
     message: err.message,
@@ -126,11 +131,37 @@ export const errorHandler = (
     isOperational,
   };
 
+  // ✅ PRODUCTION READY: Categorizar y trackear errores
+  let errorCategory = ErrorCategory.UNKNOWN;
+  if (err.name === 'PrismaClientKnownRequestError' || err.name === 'PrismaClientUnknownRequestError') {
+    errorCategory = ErrorCategory.DATABASE;
+  } else if (statusCode >= 500 && (err.message.includes('API') || err.message.includes('timeout'))) {
+    errorCategory = ErrorCategory.EXTERNAL_API;
+  } else if (statusCode === 401 || statusCode === 403) {
+    errorCategory = ErrorCategory.AUTHENTICATION;
+  } else if (statusCode === 400) {
+    errorCategory = ErrorCategory.VALIDATION;
+  }
+
+  // Trackear error
+  errorTracker.track(err as Error, errorCategory, {
+    userId: (req as any).user?.userId,
+    correlationId,
+    requestPath: req.path,
+    requestMethod: req.method,
+    userAgent: req.get('user-agent'),
+    ip: req.ip,
+    statusCode,
+    errorCode,
+  });
+
   if (statusCode >= 500) {
     logger.error('Internal server error', logContext);
   } else if (statusCode >= 400) {
     logger.warn('Client error', logContext);
   }
+
+  // ✅ PRODUCTION READY: Incluir correlation ID en respuesta (reutilizar variable ya declarada)
 
   // Respuesta al cliente
   const response: any = {
@@ -138,6 +169,7 @@ export const errorHandler = (
     error: message,
     errorCode,
     errorId,
+    correlationId, // ✅ Agregar correlation ID
     timestamp: new Date().toISOString(),
   };
 

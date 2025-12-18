@@ -8,9 +8,11 @@
  * @see instalarAPi.txt - Documentación técnica de la API
  */
 
-import axios, { AxiosInstance } from 'axios';
 import crypto from 'crypto';
 import logger from '../config/logger';
+import axios, { type AxiosInstance } from 'axios';
+// ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
+import { httpClient } from '../config/http-client';
 import type { AliExpressDropshippingCredentials } from '../types/api-credentials.types';
 
 // Tipos de datos de la API
@@ -103,6 +105,7 @@ export class AliExpressDropshippingAPIService {
   private endpoint: string = this.ENDPOINT_LEGACY;
 
   constructor() {
+    // ✅ FIX: Usar axios directamente (ya importado)
     this.client = axios.create({
       timeout: 30000,
       headers: {
@@ -526,11 +529,11 @@ export class AliExpressDropshippingAPIService {
         redirectUri: payload.redirect_uri,
       });
 
-      const response = await axios.post(tokenUrl, payload, {
+      // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
+      const response = await httpClient.post(tokenUrl, payload, {
         headers: {
           'Content-Type': 'application/json',
         },
-        timeout: 30000,
       });
 
       if (!response.data || !response.data.access_token) {
@@ -616,11 +619,11 @@ export class AliExpressDropshippingAPIService {
         client_secret: appSecret,
       };
 
-      const response = await axios.post(tokenUrl, payload, {
+      // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
+      const response = await httpClient.post(tokenUrl, payload, {
         headers: {
           'Content-Type': 'application/json',
         },
-        timeout: 30000,
       });
 
       if (!response.data || !response.data.access_token) {

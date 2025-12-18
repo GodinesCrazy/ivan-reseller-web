@@ -279,9 +279,8 @@ export class WorkflowSchedulerService {
           // No lanzar error para que el scheduler continúe con otros workflows
         }
       }, {
-        scheduled: true,
         timezone: 'America/New_York' // FUTURE: Usar timezone del usuario desde UserSettings
-      }); // ✅ node-cron acepta estas opciones directamente
+      }); // ✅ FIX: Removido 'scheduled' y tipo ScheduleOptions que no existe
 
       // Guardar tarea programada
       this.scheduledTasks.set(workflowId, {

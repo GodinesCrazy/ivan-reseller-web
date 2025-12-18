@@ -1,6 +1,6 @@
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
-import { AppError } from '../middleware/error.middleware';
+import { AppError, ErrorCode } from '../middleware/error.middleware';
 
 /**
  * Servicio para gestionar el límite de productos pendientes
@@ -18,31 +18,31 @@ export class PendingProductsLimitService {
   async getMaxPendingProducts(): Promise<number> {
     try {
       // ✅ Validar que CONFIG_KEY esté definido
-      if (!this.CONFIG_KEY || typeof this.CONFIG_KEY !== 'string' || this.CONFIG_KEY.trim().length === 0) {
+      if (!PendingProductsLimitService.CONFIG_KEY || typeof PendingProductsLimitService.CONFIG_KEY !== 'string' || PendingProductsLimitService.CONFIG_KEY.trim().length === 0) {
         logger.warn('PendingProductsLimitService: CONFIG_KEY no válido, usando valor por defecto');
-        return this.DEFAULT_LIMIT;
+        return PendingProductsLimitService.DEFAULT_LIMIT;
       }
       
       const config = await prisma.systemConfig.findUnique({
-        where: { key: this.CONFIG_KEY }
+        where: { key: PendingProductsLimitService.CONFIG_KEY }
       });
 
       if (config?.value) {
         const limit = parseInt(String(config.value), 10);
-        if (!isNaN(limit) && limit >= this.MIN_LIMIT && limit <= this.MAX_LIMIT) {
+        if (!isNaN(limit) && limit >= PendingProductsLimitService.MIN_LIMIT && limit <= PendingProductsLimitService.MAX_LIMIT) {
           return limit;
         }
       }
 
       // Si no hay configuración o es inválida, retornar valor por defecto
-      return this.DEFAULT_LIMIT;
+      return PendingProductsLimitService.DEFAULT_LIMIT;
     } catch (error: any) {
       logger.error('Error getting max pending products limit', { 
         error: error?.message || error,
         errorCode: error?.code,
-        configKey: this.CONFIG_KEY
+        configKey: PendingProductsLimitService.CONFIG_KEY
       });
-      return this.DEFAULT_LIMIT;
+      return PendingProductsLimitService.DEFAULT_LIMIT;
     }
   }
 
@@ -52,22 +52,22 @@ export class PendingProductsLimitService {
    * @throws AppError si el límite está fuera del rango válido
    */
   async setMaxPendingProducts(limit: number): Promise<void> {
-    if (limit < this.MIN_LIMIT || limit > this.MAX_LIMIT) {
+    if (limit < PendingProductsLimitService.MIN_LIMIT || limit > PendingProductsLimitService.MAX_LIMIT) {
       throw new AppError(
-        `El límite debe estar entre ${this.MIN_LIMIT} y ${this.MAX_LIMIT}`,
+        `El límite debe estar entre ${PendingProductsLimitService.MIN_LIMIT} y ${PendingProductsLimitService.MAX_LIMIT}`,
         400
       );
     }
 
     try {
       await prisma.systemConfig.upsert({
-        where: { key: this.CONFIG_KEY },
+        where: { key: PendingProductsLimitService.CONFIG_KEY },
         update: {
           value: String(limit),
           updatedAt: new Date()
         },
         create: {
-          key: this.CONFIG_KEY,
+          key: PendingProductsLimitService.CONFIG_KEY,
           value: String(limit)
         }
       });
@@ -115,7 +115,7 @@ export class PendingProductsLimitService {
       throw new AppError(
         `Has alcanzado el límite de productos pendientes de publicación (${maxLimit}). Publica o elimina algunos productos antes de agregar nuevos.`,
         429, // 429 Too Many Requests
-        'PENDING_PRODUCTS_LIMIT_EXCEEDED'
+        ErrorCode.VALIDATION_ERROR // ✅ FIX: ErrorCode enum
       );
     }
 

@@ -18,14 +18,24 @@ const createSaleSchema = z.object({
   shippingAddress: z.string().optional(),
 });
 
+// ✅ PRODUCTION READY: Validación de query parameters
+const getSalesQuerySchema = z.object({
+  status: z.enum(['PENDING', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED', 'REFUNDED', 'DELIVERED', 'RETURNED']).optional(),
+  page: z.string().optional().transform(val => val ? parseInt(val, 10) : 1).pipe(z.number().int().min(1).max(1000)),
+  limit: z.string().optional().transform(val => val ? parseInt(val, 10) : 50).pipe(z.number().int().min(1).max(100)),
+});
+
 // GET /api/sales - Listar ventas
 router.get('/', async (req: Request, res: Response, next) => {
   try {
+    // ✅ PRODUCTION READY: Validar query parameters
+    const validatedQuery = getSalesQuerySchema.parse(req.query);
+    
     // Normalizar rol a mayúsculas para comparación case-insensitive
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
     const userId = isAdmin ? undefined : String(req.user?.userId || '');
-    const status = req.query.status as string | undefined;
+    const status = validatedQuery.status;
     const sales = await saleService.getSales(userId, status as any);
     
     // ✅ Mapear datos del backend al formato esperado por el frontend
@@ -54,14 +64,22 @@ router.get('/', async (req: Request, res: Response, next) => {
   }
 });
 
+// ✅ PRODUCTION READY: Validación de query parameters para stats
+const getSalesStatsQuerySchema = z.object({
+  days: z.string().optional().transform(val => val ? parseInt(val, 10) : 30).pipe(z.number().int().min(1).max(365)),
+});
+
 // GET /api/sales/stats - Estadísticas
 router.get('/stats', async (req: Request, res: Response, next) => {
   try {
+    // ✅ PRODUCTION READY: Validar query parameters
+    const validatedQuery = getSalesStatsQuerySchema.parse(req.query);
+    
     // Normalizar rol a mayúsculas para comparación case-insensitive
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
     const userId = isAdmin ? undefined : (req.user?.userId ? String(req.user.userId) : undefined);
-    const days = parseInt(req.query.days as string) || 30;
+    const days = validatedQuery.days;
     const stats = await saleService.getSalesStats(userId);
     
     // Calcular promedio de orden y cambios
@@ -86,15 +104,23 @@ router.get('/stats', async (req: Request, res: Response, next) => {
   }
 });
 
+// ✅ PRODUCTION READY: Validación de parámetros de ruta
+const getSaleByIdParamsSchema = z.object({
+  id: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)),
+});
+
 // GET /api/sales/:id - Obtener por ID
 router.get('/:id', async (req: Request, res: Response, next) => {
   try {
+    // ✅ PRODUCTION READY: Validar parámetros de ruta
+    const validatedParams = getSaleByIdParamsSchema.parse(req.params);
+    
     // ✅ C2: Validar ownership - pasar userId y isAdmin
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
     const userId = req.user?.userId;
     
-    const sale = await saleService.getSaleById(Number(req.params.id), userId, isAdmin);
+    const sale = await saleService.getSaleById(validatedParams.id, userId, isAdmin);
     res.json(sale);
   } catch (error) {
     next(error);
@@ -191,9 +217,9 @@ router.get('/pending-purchases', async (req: Request, res: Response, next) => {
         marketplace: sale.marketplace,
         salePrice: toNumber(sale.salePrice),
         aliexpressCost: toNumber(sale.aliexpressCost || 0),
-        buyerName: sale.buyerName || undefined,
-        buyerEmail: sale.buyerEmail || undefined,
-        shippingAddress: sale.shippingAddress || undefined,
+        buyerName: (sale as any).buyerName || undefined,
+        buyerEmail: (sale as any).buyerEmail || undefined,
+        shippingAddress: (sale as any).shippingAddress || undefined,
         createdAt: sale.createdAt.toISOString(),
         availableCapital: availableCapital,
         requiredCapital: requiredCapital,
@@ -207,15 +233,24 @@ router.get('/pending-purchases', async (req: Request, res: Response, next) => {
   }
 });
 
+// ✅ PRODUCTION READY: Validación de body y parámetros para actualizar estado
+const updateSaleStatusParamsSchema = z.object({
+  id: z.string().regex(/^\d+$/).transform(val => parseInt(val, 10)),
+});
+
+const updateSaleStatusBodySchema = z.object({
+  status: z.enum(['PENDING', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED', 'REFUNDED', 'DELIVERED', 'RETURNED']),
+});
+
 // PATCH /api/sales/:id/status - Actualizar estado (admin)
 router.patch('/:id/status', authorize('ADMIN'), async (req: Request, res: Response, next) => {
   try {
-    const { status } = req.body;
-    if (!['PENDING', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED', 'REFUNDED'].includes(status)) {
-      return res.status(400).json({ error: 'Estado inválido' });
-    }
+    // ✅ PRODUCTION READY: Validar parámetros y body
+    const validatedParams = updateSaleStatusParamsSchema.parse(req.params);
+    const validatedBody = updateSaleStatusBodySchema.parse(req.body);
+    
     // ✅ C2: Admin puede actualizar cualquier venta
-    const sale = await saleService.updateSaleStatus(Number(req.params.id), status as 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'COMPLETED' | 'RETURNED', req.user!.userId, true);
+    const sale = await saleService.updateSaleStatus(validatedParams.id, validatedBody.status, req.user!.userId, true);
     res.json(sale);
   } catch (error) {
     next(error);

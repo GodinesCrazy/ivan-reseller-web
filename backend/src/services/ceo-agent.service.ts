@@ -4,6 +4,7 @@ import { logger } from '../config/logger';
 import { aiLearningSystem } from './ai-learning.service';
 import { prisma } from '../config/database';
 import env from '../config/env';
+import { toNumber } from '../utils/decimal.utils';
 
 /**
  * CEO Agent Configuration
@@ -226,11 +227,13 @@ export class CEOAgent extends EventEmitter {
       });
 
       // Calculate metrics
-      const totalProfit = sales.reduce((sum, sale) => sum + sale.netProfit, 0);
+      const totalProfit = sales.reduce((sum, sale) => sum + toNumber(sale.netProfit || 0), 0);
       const averageProfit = sales.length > 0 ? totalProfit / sales.length : 0;
 
       const totalROI = sales.reduce((sum, sale) => {
-        const roi = (sale.netProfit / sale.aliexpressCost) * 100;
+        const netProfitNum = toNumber(sale.netProfit || 0);
+        const costNum = toNumber(sale.aliexpressCost || 0);
+        const roi = costNum > 0 ? (netProfitNum / costNum) * 100 : 0;
         return sum + roi;
       }, 0);
       const averageROI = sales.length > 0 ? totalROI / sales.length : 0;
@@ -244,7 +247,7 @@ export class CEOAgent extends EventEmitter {
           categoryStats[category] = { sales: 0, profit: 0 };
         }
         categoryStats[category].sales++;
-        categoryStats[category].profit += sale.netProfit;
+        categoryStats[category].profit += toNumber(sale.netProfit || 0);
       }
 
       const bestCategory = Object.keys(categoryStats).reduce((a, b) =>
@@ -307,7 +310,7 @@ export class CEOAgent extends EventEmitter {
 
       // Calculate average cost
       const avgCost = sales.reduce((sum, sale) => 
-        sum + sale.aliexpressCost, 0
+        sum + toNumber(sale.aliexpressCost || 0), 0
       ) / sales.length;
 
       // Calculate average sales per day

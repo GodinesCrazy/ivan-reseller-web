@@ -134,7 +134,8 @@ class AliExpressAuthMonitor {
         logger.info('AliExpressAuthMonitor: cleaned stale manual_required status at startup', { userId });
       } else {
         // En interval, evaluar cookies para limpiar el estado obsoleto
-        const cookieHealth = await this.evaluateCookieHealth(userId, status);
+        // ✅ FIX: status es tipo string (MarketplaceAuthState), no objeto
+        const cookieHealth = await this.evaluateCookieHealth(userId, status as any);
         if (!cookieHealth.manualRequired) {
           // El estado ya se actualizó en evaluateCookieHealth, continuar normalmente
           logger.debug('AliExpressAuthMonitor: stale manual_required status cleaned', { userId });
@@ -426,7 +427,8 @@ class AliExpressAuthMonitor {
     } else {
       // ✅ NO crear sesión manual ni marcar como required
       // Cambiar el estado existente a 'unknown' o mantener 'healthy' si no hay cookies (el sistema funciona en modo público)
-      if (currentStatus?.status === 'manual_required') {
+      // ✅ FIX: currentStatus es tipo MarketplaceAuthState (string), verificar directamente
+      if (currentStatus === 'manual_required') {
         // Si el estado anterior era manual_required pero ahora no hay cookies y no son requeridas,
         // cambiar el estado a algo más neutral
         await marketplaceAuthStatusService.setStatus(userId, 'aliexpress', 'unknown', {

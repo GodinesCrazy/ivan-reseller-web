@@ -7,6 +7,8 @@ import { env } from './config/env';
 import { errorHandler } from './middleware/error.middleware';
 import { setupSwagger } from './config/swagger';
 import { logger } from './config/logger';
+// ✅ PRODUCTION READY: Correlation ID middleware
+import { correlationMiddleware } from './middleware/correlation.middleware';
 
 // Import routes
 import authRoutes from './api/routes/auth.routes';
@@ -151,7 +153,7 @@ const corsOptions: CorsOptions = {
     logger.warn('CORS: origin not allowed', { origin, allowedOrigins });
     return callback(new Error('Not allowed by CORS policy'), false);
   },
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-Correlation-ID'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   preflightContinue: false,
   optionsSuccessStatus: 204,
@@ -162,6 +164,21 @@ app.use(cors(corsOptions));
 // Cookie parser (debe ir antes de las rutas)
 app.use(cookieParser());
 
+// ✅ PRODUCTION READY: Correlation ID middleware (después de cookie parser, antes de rutas)
+app.use(correlationMiddleware);
+
+// ✅ PRODUCTION READY: Security headers adicionales
+import { securityHeadersMiddleware } from './middleware/security-headers.middleware';
+app.use(securityHeadersMiddleware);
+
+// ✅ PRODUCTION READY: Response time headers
+import { responseTimeMiddleware } from './middleware/response-time.middleware';
+app.use(responseTimeMiddleware);
+
+// ✅ PRODUCTION READY: Rate limiting global para todas las rutas API
+import { createRoleBasedRateLimit } from './middleware/rate-limit.middleware';
+app.use('/api', createRoleBasedRateLimit());
+
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -169,53 +186,133 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Compression
 app.use(compression());
 
-// Request logging (development)
-if (env.NODE_ENV === 'development') {
-  app.use((req: Request, _res: Response, next: NextFunction) => {
-    logger.debug('HTTP Request', { method: req.method, path: req.path });
-    next();
-  });
-}
+// ✅ PRODUCTION READY: Request logging estructurado (todos los ambientes)
+import { requestLoggerMiddleware } from './middleware/request-logger.middleware';
+app.use(requestLoggerMiddleware);
 
 // ====================================
 // ROUTES
 // ====================================
 
-// Health check básico
+/**
+ * ✅ PRODUCTION READY: Health Check Endpoints
+ * 
+ * /health - Liveness probe (is the app running?)
+ * /ready - Readiness probe (can the app serve traffic?)
+ */
+
+// Liveness probe: Verifica que la aplicación está corriendo
 app.get('/health', async (_req: Request, res: Response) => {
-  const checks: Record<string, any> = {
-    status: 'ok',
+  // ✅ PRODUCTION READY: Health check simple y rápido - solo verifica que el proceso está vivo
+  const { getMemoryStatsFormatted, checkMemoryHealth } = await import('./utils/memory-monitor');
+  const memoryStats = getMemoryStatsFormatted();
+  const memoryHealth = checkMemoryHealth();
+  
+  res.status(200).json({
+    status: 'healthy',
     timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    service: 'ivan-reseller-backend',
+    version: process.env.npm_package_version || '1.0.0',
     environment: env.NODE_ENV,
+    memory: memoryStats,
+    memoryHealthy: memoryHealth.healthy,
+    ...(memoryHealth.warning && { memoryWarning: memoryHealth.warning }),
+  });
+});
+
+// ✅ FASE A: Readiness state variables (imported from server.ts)
+// These are set during bootstrap
+declare global {
+  // eslint-disable-next-line no-var
+  var __isDatabaseReady: boolean | undefined;
+  // eslint-disable-next-line no-var
+  var __isRedisReady: boolean | undefined;
+  // eslint-disable-next-line no-var
+  var __isServerReady: boolean | undefined;
+}
+
+// Readiness probe: Verifica que la aplicación puede servir tráfico
+app.get('/ready', async (_req: Request, res: Response) => {
+  const checks: Record<string, any> = {
+    timestamp: new Date().toISOString(),
+    service: 'ivan-reseller-backend',
+    environment: env.NODE_ENV
   };
 
-  // Verificar conexión a base de datos
-  try {
-    const { prisma } = await import('./config/database');
-    await prisma.$queryRaw`SELECT 1`;
-    checks.database = { status: 'healthy', connected: true };
-  } catch (error: any) {
-    checks.database = { status: 'unhealthy', connected: false, error: error.message };
-  }
+  // ✅ FASE A: Use global state if available (set during bootstrap)
+  const isDBReady = (global as any).__isDatabaseReady ?? false;
+  const isRedisReady = (global as any).__isRedisReady ?? false;
+  const isServerReady = (global as any).__isServerReady ?? false;
 
-  // Verificar conexión a Redis (si está configurado)
-  try {
-    const redisModule = await import('./config/redis');
-    if (redisModule.isRedisAvailable) {
-      await redisModule.redis.ping();
-      checks.redis = { status: 'healthy', connected: true };
-    } else {
-      checks.redis = { status: 'not_configured', connected: false };
+  // ✅ FASE A: Verificar conexión a base de datos (crítico) con timeout corto
+  // Si el estado global indica que está listo, usar ese. Si no, verificar directamente.
+  if (isDBReady) {
+    checks.database = { status: 'healthy', connected: true, source: 'bootstrap_state' };
+  } else {
+    try {
+      const { prisma } = await import('./config/database');
+      // Timeout de 2 segundos para no bloquear
+      const dbCheck = Promise.race([
+        prisma.$queryRaw`SELECT 1`,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Database timeout')), 2000))
+      ]);
+      await dbCheck;
+      checks.database = { status: 'healthy', connected: true, source: 'live_check' };
+    } catch (error: any) {
+      checks.database = { 
+        status: 'unhealthy', 
+        connected: false, 
+        error: error.message || 'Database connection failed',
+        source: 'live_check'
+      };
     }
-  } catch (error: any) {
-    checks.redis = { status: 'unhealthy', connected: false, error: error.message };
   }
 
-  // Determinar estado general
-  const isHealthy = checks.database?.status === 'healthy' && 
-                    (checks.redis?.status === 'healthy' || checks.redis?.status === 'not_configured');
+  // Verificar conexión a Redis (opcional pero recomendado)
+  if ((global as any).__isRedisReady === true || (global as any).__isRedisReady === false) {
+    // Bootstrap state available
+    checks.redis = { 
+      status: isRedisReady ? 'healthy' : 'not_configured_or_unavailable', 
+      connected: isRedisReady,
+      source: 'bootstrap_state'
+    };
+  } else {
+    // Check live
+    try {
+      const redisModule = await import('./config/redis');
+      if (redisModule.isRedisAvailable) {
+        // Timeout de 1 segundo para Redis
+        const redisCheck = Promise.race([
+          redisModule.redis.ping(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Redis timeout')), 1000))
+        ]);
+        await redisCheck;
+        checks.redis = { status: 'healthy', connected: true, source: 'live_check' };
+      } else {
+        checks.redis = { status: 'not_configured', connected: false, source: 'live_check' };
+      }
+    } catch (error: any) {
+      checks.redis = { 
+        status: 'unhealthy', 
+        connected: false, 
+        error: error.message || 'Redis connection failed',
+        source: 'live_check'
+      };
+    }
+  }
+
+  // ✅ FASE A: Determinar estado general
+  // CRÍTICO: DB debe estar healthy. Redis es opcional.
+  const dbHealthy = checks.database?.status === 'healthy';
+  const isServiceReady = dbHealthy && isServerReady;
   
-  res.status(isHealthy ? 200 : 503).json(checks);
+  // ✅ FASE A: Devolver 503 si no está listo, 200 si está listo
+  res.status(isServiceReady ? 200 : 503).json({
+    ready: isServiceReady,
+    checks,
+    uptime: process.uptime()
+  });
 });
 
 // API routes

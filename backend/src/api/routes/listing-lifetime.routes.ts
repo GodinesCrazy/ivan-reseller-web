@@ -10,12 +10,12 @@ router.use(authenticate);
  * GET /api/listing-lifetime/config
  * Obtener configuración del optimizador de tiempo de publicación
  */
-router.get('/config', authorize(['ADMIN']), async (req: Request, res: Response) => {
+router.get('/config', authorize('ADMIN'), async (req: Request, res: Response) => {
   try {
     const config = await listingLifetimeService.getConfig();
     res.json({
       success: true,
-      data: config
+      data: Array.isArray(config) ? config[0] : config // ✅ FIX: getConfig puede retornar array o objeto
     });
   } catch (error: any) {
     logger.error('Error getting listing lifetime config', {
@@ -34,9 +34,9 @@ router.get('/config', authorize(['ADMIN']), async (req: Request, res: Response) 
  * POST /api/listing-lifetime/config
  * Actualizar configuración del optimizador de tiempo de publicación
  */
-router.post('/config', authorize(['ADMIN']), async (req: Request, res: Response) => {
+router.post('/config', authorize('ADMIN'), async (req: Request, res: Response) => {
   try {
-    const config = req.body as Partial<ListingLifetimeConfig>;
+    const config = Array.isArray(req.body) ? req.body[0] : req.body as Partial<ListingLifetimeConfig>; // ✅ FIX: puede venir como array
     
     // Validar campos
     if (config.mode && !['automatic', 'manual'].includes(config.mode)) {
