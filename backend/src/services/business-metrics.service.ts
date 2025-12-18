@@ -28,7 +28,7 @@ export class BusinessMetricsService {
         }
       });
 
-      const fixedCosts = activeUsers.reduce((sum, user) => sum + user.fixedMonthlyCost, 0);
+      const fixedCosts = activeUsers.reduce((sum, user) => sum + toNumber(user.fixedMonthlyCost || 0), 0);
 
       // Estimar comisiones basadas en promedio histórico
       // Esto se puede mejorar con datos reales
