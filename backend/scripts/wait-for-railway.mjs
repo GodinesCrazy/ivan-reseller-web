@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ? CERT-GO: Script para verificar que Railway está listo
+ * ? CERT-GO: Script para verificar que Railway estï¿½ listo
  * 
  * Polls /health y /ready endpoints hasta que respondan correctamente
  * 
@@ -15,11 +15,33 @@ const DEFAULT_TIMEOUT = 10 * 60 * 1000; // 10 minutos
 const POLL_INTERVAL = 5000; // 5 segundos
 const HEALTH_TIMEOUT = 5 * 60 * 1000; // 5 minutos para /health
 
-function parseArgs() {
+async function parseArgs() {
   const args = process.argv.slice(2);
   let url = null;
   let timeout = DEFAULT_TIMEOUT;
   
+  // Primero intentar desde archivo local
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+    const localFile = path.join(process.cwd(), '../../docs/RAILWAY_URL.local');
+    if (fs.existsSync(localFile)) {
+      const content = fs.readFileSync(localFile, 'utf-8').trim();
+      const match = content.match(/RAILWAY_URL=(.+)/);
+      if (match) {
+        url = match[1].trim();
+      }
+    }
+  } catch (e) {
+    // Ignorar si no existe
+  }
+  
+  // Luego desde env
+  if (!url) {
+    url = process.env.RAILWAY_URL || null;
+  }
+  
+  // Finalmente desde args
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--url' && i + 1 < args.length) {
       url = args[i + 1];
@@ -94,7 +116,7 @@ async function waitForHealth(url, timeout) {
     await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
   }
   
-  console.error(`? /health timeout después de ${attempts} intentos`);
+  console.error(`? /health timeout despuï¿½s de ${attempts} intentos`);
   return false;
 }
 
@@ -126,12 +148,12 @@ async function waitForReady(url, timeout) {
     await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
   }
   
-  console.error(`? /ready timeout después de ${attempts} intentos`);
+  console.error(`? /ready timeout despuï¿½s de ${attempts} intentos`);
   return false;
 }
 
 async function main() {
-  const { url, timeout } = parseArgs();
+  const { url, timeout } = await parseArgs();
   
   if (!url) {
     console.error('? Uso: node scripts/wait-for-railway.mjs --url <RAILWAY_URL> [--timeout <ms>]');
