@@ -27,9 +27,9 @@
 - [ ] Commit + push FASE 1
 
 ### FASE 2 - Verify Railway Deployment
-- [ ] Create docs/RAILWAY_DEPLOY_VERIFY.md
-- [ ] Verify /version returns correct git SHA
-- [ ] Verify Railway dashboard shows correct commit
+- [x] Create docs/RAILWAY_DEPLOY_VERIFY.md
+- [ ] Verify /version returns correct git SHA (requires Railway deploy)
+- [ ] Verify Railway dashboard shows correct commit (requires human verification)
 - [ ] Commit + push FASE 2
 
 ### FASE 3 - Smoke Test Against Railway
