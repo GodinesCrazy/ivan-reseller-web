@@ -13,6 +13,7 @@ import { notificationService } from './services/notification.service';
 import scheduledReportsService from './services/scheduled-reports.service';
 import bcrypt from 'bcryptjs';
 import { resolveChromiumExecutable } from './utils/chromium';
+import { initBuildInfo } from './middleware/version-header.middleware';
 
 const execAsync = promisify(exec);
 const PORT = parseInt(env.PORT, 10);
@@ -347,6 +348,9 @@ async function startServer() {
     
     const { env } = await import('./config/env');
     logMilestone(`Environment: ${env.NODE_ENV}, Port: ${PORT}`);
+    
+    // ✅ FASE 0: Initialize build info (for /version endpoint and X-App-Commit header)
+    initBuildInfo();
     
     // ✅ FASE A CRÍTICO: Create HTTP server FIRST (NO awaits before this)
     logMilestone('Creating HTTP server (BEFORE any DB/Redis/migrations)');

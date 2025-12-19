@@ -167,6 +167,11 @@ app.use(cookieParser());
 // ✅ PRODUCTION READY: Correlation ID middleware (después de cookie parser, antes de rutas)
 app.use(correlationMiddleware);
 
+// ✅ FASE 0: Version header middleware (adds X-App-Commit to all responses)
+import { versionHeaderMiddleware, initBuildInfo, getBuildInfo } from './middleware/version-header.middleware';
+// Initialize build info (will be called from server.ts on startup)
+app.use(versionHeaderMiddleware);
+
 // ====================================
 // EARLY ROUTES (antes de middlewares pesados)
 // ====================================
@@ -193,6 +198,19 @@ declare global {
  * IMPORTANTE: Estas rutas están ANTES de compression y otros middlewares
  * para garantizar respuesta rápida y sin interferencias
  */
+
+// ✅ FASE 0: Version endpoint (for deployment verification)
+app.get('/version', (_req: Request, res: Response) => {
+  const buildInfo = getBuildInfo();
+  res.status(200).json({
+    gitSha: buildInfo.gitSha,
+    buildTime: buildInfo.buildTime,
+    node: buildInfo.nodeVersion,
+    env: env.NODE_ENV,
+    serviceName: 'ivan-reseller-backend',
+    uptime: process.uptime(),
+  });
+});
 
 // Liveness probe: Verifica que la aplicación está corriendo
 app.get('/health', async (_req: Request, res: Response) => {
