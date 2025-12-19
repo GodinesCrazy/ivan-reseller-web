@@ -1,6 +1,6 @@
 # Live QA Railway Runbook - Ivan Reseller Web
 **Fecha:** 2025-12-18  
-**Objetivo:** Diagnóstico y pruebas end-to-end en producción (Railway)  
+**Objetivo:** Diagnï¿½stico y pruebas end-to-end en producciï¿½n (Railway)  
 **URL Backend:** https://ivan-reseller-web-production.up.railway.app  
 **URL Frontend:** https://www.ivanreseller.com
 
@@ -12,7 +12,7 @@
 2. [Tabla de Endpoints Reales](#2-tabla-de-endpoints-reales)
 3. [Variables de Entorno + Feature Flags](#3-variables-de-entorno--feature-flags)
 4. [Checklist de Prueba Manual E2E](#4-checklist-de-prueba-manual-e2e)
-5. [Diagnóstico del Timeout /health](#5-diagnóstico-del-timeout-health)
+5. [Diagnï¿½stico del Timeout /health](#5-diagnï¿½stico-del-timeout-health)
 6. [Evidencia y Comandos Exactos](#6-evidencia-y-comandos-exactos)
 7. [Resumen para el Usuario](#7-resumen-para-el-usuario)
 
@@ -27,14 +27,14 @@
 **Flujo de arranque:**
 1. Importa `app` desde `backend/src/app.ts`
 2. Crea `httpServer = http.createServer(app)`
-3. **CRÍTICO:** `httpServer.listen(PORT, '0.0.0.0', callback)` se ejecuta **ANTES** de inicializaciones pesadas
-4. PORT se obtiene de `env.PORT` (Railway lo define automáticamente)
+3. **CRï¿½TICO:** `httpServer.listen(PORT, '0.0.0.0', callback)` se ejecuta **ANTES** de inicializaciones pesadas
+4. PORT se obtiene de `env.PORT` (Railway lo define automï¿½ticamente)
 5. Bind a `0.0.0.0` permite conexiones externas
 
-**Orden de inicialización (server.ts):**
+**Orden de inicializaciï¿½n (server.ts):**
 ```
-1. validateEncryptionKey() - SÍNCRONO, puede hacer process.exit(1)
-2. httpServer.listen() - INMEDIATO (línea 355)
+1. validateEncryptionKey() - Sï¿½NCRONO, puede hacer process.exit(1)
+2. httpServer.listen() - INMEDIATO (lï¿½nea 355)
 3. Bootstrap en background (async):
    - runMigrations()
    - connectWithRetry() (DB)
@@ -44,21 +44,21 @@
 ```
 
 **Archivo de rutas:** `backend/src/app.ts`
-- Express app se crea en línea 66
-- Middlewares se configuran (líneas 75-191)
-- **Health endpoints ANTES de rutas API** (líneas 205-316)
-- Rutas API se registran después (líneas 319-371)
+- Express app se crea en lï¿½nea 66
+- Middlewares se configuran (lï¿½neas 75-191)
+- **Health endpoints ANTES de rutas API** (lï¿½neas 205-316)
+- Rutas API se registran despuï¿½s (lï¿½neas 319-371)
 
 ### 1.2 Frontend Configuration
 
-**Archivo de configuración API:** `frontend/src/services/api.ts`
+**Archivo de configuraciï¿½n API:** `frontend/src/services/api.ts`
 - `VITE_API_URL` (env var) o default `http://localhost:3000`
 - Base URL se limpia de trailing slashes
 - `withCredentials: true` para cookies httpOnly
 
 **Vite config:** `frontend/vite.config.ts`
 - Dev server proxy: `/api` ? `http://localhost:3000`
-- Build: estático, sin proxy (usa `VITE_API_URL`)
+- Build: estï¿½tico, sin proxy (usa `VITE_API_URL`)
 
 **Estrategia de deploy:**
 - **Frontend:** Servicio separado en Railway (root `/frontend`)
@@ -67,17 +67,17 @@
 
 ### 1.3 Railway Configuration
 
-**Root Directory:** `/backend` (según configuración Railway)
+**Root Directory:** `/backend` (segï¿½n configuraciï¿½n Railway)
 
-**Build Command:** `npm run build` (según nixpacks.toml)
+**Build Command:** `npm run build` (segï¿½n nixpacks.toml)
 - Ejecuta: `tsc --skipLibCheck && npx prisma generate`
 
-**Start Command:** `sh ./start.sh` (según nixpacks.toml) o `npm run start:with-migrations` (según Procfile)
+**Start Command:** `sh ./start.sh` (segï¿½n nixpacks.toml) o `npm run start:with-migrations` (segï¿½n Procfile)
 - `start:with-migrations`: `npx prisma migrate deploy && node dist/server.js`
 
-**PORT:** Railway asigna automáticamente (variable `PORT`)
+**PORT:** Railway asigna automï¿½ticamente (variable `PORT`)
 
-**Variables críticas en Railway:**
+**Variables crï¿½ticas en Railway:**
 - `DATABASE_URL` - Debe venir del servicio PostgreSQL
 - `JWT_SECRET` - >= 32 caracteres
 - `ENCRYPTION_KEY` - >= 32 caracteres (o usa JWT_SECRET como fallback)
@@ -87,18 +87,18 @@
 
 ## 2. Tabla de Endpoints Reales
 
-### Endpoints de Health (CRÍTICOS)
+### Endpoints de Health (CRï¿½TICOS)
 
-| Método | Ruta | Archivo | Middleware | Qué hace | Dependencias | Riesgos |
+| Mï¿½todo | Ruta | Archivo | Middleware | Quï¿½ hace | Dependencias | Riesgos |
 |--------|------|---------|------------|-----------|--------------|---------|
-| GET | `/health` | `app.ts:205` | Ninguno (antes de auth) | Liveness probe - proceso vivo | Ninguna (solo memory stats) | **BAJO** - import dinámico de memory-monitor |
-| GET | `/ready` | `app.ts:236` | Ninguno (antes de auth) | Readiness probe - puede servir tráfico | DB (timeout 2s), Redis (timeout 1s, opcional) | **MEDIO** - puede colgarse si DB timeout no funciona |
+| GET | `/health` | `app.ts:205` | Ninguno (antes de auth) | Liveness probe - proceso vivo | Ninguna (solo memory stats) | **BAJO** - import dinï¿½mico de memory-monitor |
+| GET | `/ready` | `app.ts:236` | Ninguno (antes de auth) | Readiness probe - puede servir trï¿½fico | DB (timeout 2s), Redis (timeout 1s, opcional) | **MEDIO** - puede colgarse si DB timeout no funciona |
 
-### Endpoints de Autenticación
+### Endpoints de Autenticaciï¿½n
 
-| Método | Ruta | Archivo | Middleware | Qué hace | Dependencias | Riesgos |
+| Mï¿½todo | Ruta | Archivo | Middleware | Quï¿½ hace | Dependencias | Riesgos |
 |--------|------|---------|------------|-----------|--------------|---------|
-| POST | `/api/auth/register` | `auth.routes.ts:26` | Rate limit (login) | Registro público (deshabilitado) | DB (crear user) | **BAJO** |
+| POST | `/api/auth/register` | `auth.routes.ts:26` | Rate limit (login) | Registro pï¿½blico (deshabilitado) | DB (crear user) | **BAJO** |
 | POST | `/api/auth/login` | `auth.routes.ts:38` | Rate limit (5 req/15min) | Login con username/password | DB (buscar user, bcrypt) | **BAJO** |
 | GET | `/api/auth/me` | `auth.routes.ts:186` | `authenticate` | Obtener usuario actual | DB (buscar user) | **BAJO** |
 | POST | `/api/auth/refresh` | `auth.routes.ts:234` | Ninguno | Refresh token | JWT verify | **BAJO** |
@@ -106,16 +106,16 @@
 
 ### Endpoints de API Credentials
 
-| Método | Ruta | Archivo | Middleware | Qué hace | Dependencias | Riesgos |
+| Mï¿½todo | Ruta | Archivo | Middleware | Quï¿½ hace | Dependencias | Riesgos |
 |--------|------|---------|-----------|-----------|--------------|---------|
 | GET | `/api/credentials/status` | `api-credentials.routes.ts:102` | `authenticate` | Estado de todas las APIs | DB (credentials), Redis (cache) | **MEDIO** - puede llamar a servicios externos |
 | GET | `/api/credentials/:apiName` | `api-credentials.routes.ts:395` | `authenticate` | Obtener credenciales de API | DB (credentials cifradas) | **BAJO** |
-| POST | `/api/credentials` | `api-credentials.routes.ts:478` | `authenticate` | Guardar/actualizar credenciales | DB (guardar cifrado), validación | **BAJO** |
-| POST | `/api/credentials/:apiName/test` | `api-credentials.routes.ts:1063` | `authenticate` | Probar conexión de API | APIs externas (eBay/Amazon/ML) | **ALTO** - puede colgarse si API externa no responde |
+| POST | `/api/credentials` | `api-credentials.routes.ts:478` | `authenticate` | Guardar/actualizar credenciales | DB (guardar cifrado), validaciï¿½n | **BAJO** |
+| POST | `/api/credentials/:apiName/test` | `api-credentials.routes.ts:1063` | `authenticate` | Probar conexiï¿½n de API | APIs externas (eBay/Amazon/ML) | **ALTO** - puede colgarse si API externa no responde |
 
 ### Endpoints de Productos
 
-| Método | Ruta | Archivo | Middleware | Qué hace | Dependencias | Riesgos |
+| Mï¿½todo | Ruta | Archivo | Middleware | Quï¿½ hace | Dependencias | Riesgos |
 |--------|------|---------|-----------|-----------|--------------|---------|
 | GET | `/api/products` | `products.routes.ts` | `authenticate` | Listar productos | DB | **BAJO** |
 | POST | `/api/products` | `products.routes.ts` | `authenticate` | Crear producto | DB, scraping (opcional) | **MEDIO** - scraping puede colgarse |
@@ -123,33 +123,33 @@
 
 ### Endpoints de Oportunidades
 
-| Método | Ruta | Archivo | Middleware | Qué hace | Dependencias | Riesgos |
+| Mï¿½todo | Ruta | Archivo | Middleware | Quï¿½ hace | Dependencias | Riesgos |
 |--------|------|---------|-----------|-----------|--------------|---------|
-| GET | `/api/opportunities` | `opportunities.routes.ts` | `authenticate` | Buscar oportunidades | DB, scraping, APIs externas | **ALTO** - operación pesada |
+| GET | `/api/opportunities` | `opportunities.routes.ts` | `authenticate` | Buscar oportunidades | DB, scraping, APIs externas | **ALTO** - operaciï¿½n pesada |
 | POST | `/api/opportunities/analyze` | `opportunities.routes.ts` | `authenticate` | Analizar oportunidad | AI (Groq), scraping | **ALTO** - puede colgarse |
 
 ### Endpoints de Marketplace
 
-| Método | Ruta | Archivo | Middleware | Qué hace | Dependencias | Riesgos |
+| Mï¿½todo | Ruta | Archivo | Middleware | Quï¿½ hace | Dependencias | Riesgos |
 |--------|------|---------|-----------|-----------|--------------|---------|
 | POST | `/api/marketplace/publish` | `marketplace.routes.ts` | `authenticate` | Publicar producto | APIs externas (eBay/Amazon/ML) | **ALTO** - puede colgarse |
 | GET | `/api/marketplace/listings` | `marketplace.routes.ts` | `authenticate` | Listar publicaciones | DB, APIs externas | **MEDIO** |
 
 ### Endpoints de Webhooks
 
-| Método | Ruta | Archivo | Middleware | Qué hace | Dependencias | Riesgos |
+| Mï¿½todo | Ruta | Archivo | Middleware | Quï¿½ hace | Dependencias | Riesgos |
 |--------|------|---------|-----------|-----------|--------------|---------|
-| POST | `/api/webhooks/ebay` | `webhooks.routes.ts` | `webhookSignature` (HMAC) | Webhook eBay | DB (crear Sale), validación firma | **BAJO** |
+| POST | `/api/webhooks/ebay` | `webhooks.routes.ts` | `webhookSignature` (HMAC) | Webhook eBay | DB (crear Sale), validaciï¿½n firma | **BAJO** |
 | POST | `/api/webhooks/mercadolibre` | `webhooks.routes.ts` | `webhookSignature` (HMAC) | Webhook MercadoLibre | DB (crear Sale) | **BAJO** |
 | POST | `/api/webhooks/amazon` | `webhooks.routes.ts` | `webhookSignature` (HMAC) | Webhook Amazon | DB (crear Sale) | **BAJO** |
 
 ### Endpoints de Sistema
 
-| Método | Ruta | Archivo | Middleware | Qué hace | Dependencias | Riesgos |
+| Mï¿½todo | Ruta | Archivo | Middleware | Quï¿½ hace | Dependencias | Riesgos |
 |--------|------|---------|-----------|-----------|--------------|---------|
 | GET | `/api/system/health/detailed` | `system.routes.ts:22` | `authenticate` | Health detallado | DB, scraper bridge | **MEDIO** - puede colgarse si scraper no responde |
 
-### Side-Effects al Importar Módulos
+### Side-Effects al Importar Mï¿½dulos
 
 **Servicios que inician timers/requests en constructor:**
 
@@ -170,58 +170,58 @@
 
 **Instanciaciones en top-level:**
 - `fxService` - ? Corregido (lazy Proxy)
-- `secureCredentialManager` - ?? Verificar dónde se instancia
-- `automatedBusinessSystem` - ?? Verificar dónde se instancia
+- `secureCredentialManager` - ?? Verificar dï¿½nde se instancia
+- `automatedBusinessSystem` - ?? Verificar dï¿½nde se instancia
 
 ---
 
 ## 3. Variables de Entorno + Feature Flags
 
-### 3.1 Variables Críticas (Requeridas)
+### 3.1 Variables Crï¿½ticas (Requeridas)
 
-| Variable | Requerido | Default | En Test | En Prod | Impacto si falta | Dónde se usa |
+| Variable | Requerido | Default | En Test | En Prod | Impacto si falta | Dï¿½nde se usa |
 |----------|-----------|---------|---------|---------|-------------------|--------------|
-| `DATABASE_URL` | ? SÍ | - | Test DB o mock | Railway Postgres | **CRÍTICO** - server no arranca | `env.ts:232`, Prisma |
-| `JWT_SECRET` | ? SÍ | - | `test-jwt-secret-key-32-chars-minimum-required` | >= 32 chars | **CRÍTICO** - auth no funciona | `env.ts:234`, auth middleware |
-| `ENCRYPTION_KEY` | ? SÍ* | JWT_SECRET fallback | `test-encryption-key-32-chars-minimum-required` | >= 32 chars | **CRÍTICO** - credenciales no se cifran | `env.ts:307`, credentials-manager |
-| `PORT` | ? SÍ | `3000` | `3000` | Railway asigna | Server no escucha | `env.ts:230`, server.ts:18 |
-| `NODE_ENV` | ?? Recomendado | `development` | `test` | `production` | Comportamiento incorrecto | Todo el código |
+| `DATABASE_URL` | ? Sï¿½ | - | Test DB o mock | Railway Postgres | **CRï¿½TICO** - server no arranca | `env.ts:232`, Prisma |
+| `JWT_SECRET` | ? Sï¿½ | - | `test-jwt-secret-key-32-chars-minimum-required` | >= 32 chars | **CRï¿½TICO** - auth no funciona | `env.ts:234`, auth middleware |
+| `ENCRYPTION_KEY` | ? Sï¿½* | JWT_SECRET fallback | `test-encryption-key-32-chars-minimum-required` | >= 32 chars | **CRï¿½TICO** - credenciales no se cifran | `env.ts:307`, credentials-manager |
+| `PORT` | ? Sï¿½ | `3000` | `3000` | Railway asigna | Server no escucha | `env.ts:230`, server.ts:18 |
+| `NODE_ENV` | ?? Recomendado | `development` | `test` | `production` | Comportamiento incorrecto | Todo el cï¿½digo |
 | `CORS_ORIGIN` | ?? Recomendado | `http://localhost:5173` | `http://localhost:5173` | Frontend URL | CORS bloquea requests | `env.ts:237`, app.ts:94 |
 
 *ENCRYPTION_KEY: Si no existe, usa JWT_SECRET como fallback (env.ts:314)
 
 ### 3.2 Variables Opcionales (con defaults)
 
-| Variable | Default | En Test | En Prod | Impacto | Dónde se usa |
+| Variable | Default | En Test | En Prod | Impacto | Dï¿½nde se usa |
 |----------|---------|---------|---------|---------|--------------|
 | `REDIS_URL` | `redis://localhost:6379` | Mock/deshabilitado | Railway Redis | Cache distribuido deshabilitado | `env.ts:226`, redis config |
-| `JWT_EXPIRES_IN` | `7d` | `7d` | `7d` | Tokens expiran más rápido/lento | `env.ts:235` |
-| `LOG_LEVEL` | `info` | `info` | `info` | Más/menos logs | `env.ts:238`, logger |
+| `JWT_EXPIRES_IN` | `7d` | `7d` | `7d` | Tokens expiran mï¿½s rï¿½pido/lento | `env.ts:235` |
+| `LOG_LEVEL` | `info` | `info` | `info` | Mï¿½s/menos logs | `env.ts:238`, logger |
 | `API_URL` | `http://localhost:3000` | `http://localhost:3000` | Backend URL | Frontend no conecta | `env.ts:231` |
 
 ### 3.3 Feature Flags (Test vs Prod)
 
-| Flag | Default Prod | Default Test | Impacto | Dónde se usa |
+| Flag | Default Prod | Default Test | Impacto | Dï¿½nde se usa |
 |------|--------------|-------------|---------|--------------|
-| `FX_AUTO_REFRESH_ENABLED` | `true` | `false` | FX no refresca tasas automáticamente | `fx.service.ts:32` |
+| `FX_AUTO_REFRESH_ENABLED` | `true` | `false` | FX no refresca tasas automï¿½ticamente | `fx.service.ts:32` |
 | `USAGE_TRACKING_ENABLED` | `true` | `false` | No trackea uso de credenciales | `security.service.ts:89` |
-| `AUTOMATION_ENGINE_ENABLED` | `true` | `false` | Motor de automatización no inicia | `automated-business.service.ts:113` |
+| `AUTOMATION_ENGINE_ENABLED` | `true` | `false` | Motor de automatizaciï¿½n no inicia | `automated-business.service.ts:113` |
 | `API_HEALTHCHECK_ENABLED` | `false` | `false` | Health checks de APIs externas deshabilitados | `api-health-monitor.service.ts` |
 | `API_HEALTHCHECK_MODE` | `async` | `async` | Modo async previene SIGSEGV | `api-health-monitor.service.ts` |
 | `SCRAPER_BRIDGE_ENABLED` | `true` | `false` | Scraper bridge no se usa | `scraper-bridge.service.ts` |
 | `AUTO_PURCHASE_ENABLED` | `false` | `false` | Auto-compra deshabilitada | `auto-purchase-guardrails.service.ts` |
-| `WEBHOOK_VERIFY_SIGNATURE` | `true` | `true` | Webhooks requieren firma válida | `webhook-signature.middleware.ts` |
+| `WEBHOOK_VERIFY_SIGNATURE` | `true` | `true` | Webhooks requieren firma vï¿½lida | `webhook-signature.middleware.ts` |
 | `RATE_LIMIT_ENABLED` | `true` | `true` | Rate limiting activo | `rate-limit.middleware.ts` |
 
 ### 3.4 Railway Recommended Environment Variables
 
-**CRÍTICAS (obligatorias):**
+**CRï¿½TICAS (obligatorias):**
 ```
 DATABASE_URL=<valor desde PostgreSQL service>
 JWT_SECRET=<string >= 32 caracteres>
-ENCRYPTION_KEY=<string >= 32 caracteres, o dejar vacío para usar JWT_SECRET>
+ENCRYPTION_KEY=<string >= 32 caracteres, o dejar vacï¿½o para usar JWT_SECRET>
 NODE_ENV=production
-PORT=<Railway asigna automáticamente>
+PORT=<Railway asigna automï¿½ticamente>
 ```
 
 **IMPORTANTES:**
@@ -232,7 +232,7 @@ LOG_LEVEL=info
 
 **OPCIONALES (con defaults seguros):**
 ```
-REDIS_URL=<valor desde Redis service, o dejar vacío>
+REDIS_URL=<valor desde Redis service, o dejar vacï¿½o>
 API_HEALTHCHECK_ENABLED=false
 API_HEALTHCHECK_MODE=async
 SCRAPER_BRIDGE_URL=<si aplica>
@@ -242,7 +242,7 @@ WEBHOOK_VERIFY_SIGNATURE=true
 RATE_LIMIT_ENABLED=true
 ```
 
-**NOTA:** NO incluir valores aquí. Configurar en Railway Dashboard ? Variables.
+**NOTA:** NO incluir valores aquï¿½. Configurar en Railway Dashboard ? Variables.
 
 ---
 
@@ -281,21 +281,21 @@ curl.exe --max-time 5 https://ivan-reseller-web-production.up.railway.app/health
 curl.exe --max-time 5 https://ivan-reseller-web-production.up.railway.app/ready
 ```
 
-**Qué debería pasar:**
+**Quï¿½ deberï¿½a pasar:**
 - `/health` ? 200 OK, JSON con `status: "healthy"`
 - `/ready` ? 200 OK si DB conectada, 503 si no
 
-**Qué medir:**
+**Quï¿½ medir:**
 - Tiempo de respuesta (< 2s para /health, < 3s para /ready)
 - Status code
 - Contenido JSON
 
-**Qué copiar:**
+**Quï¿½ copiar:**
 - Status code
 - Tiempo de respuesta
 - JSON response (sin secretos)
 
-**Cómo reproducir fallos:**
+**Cï¿½mo reproducir fallos:**
 - Si timeout: verificar Railway logs (Deployments ? View logs)
 - Si 503 en /ready: verificar DATABASE_URL en Railway Variables
 
@@ -310,26 +310,26 @@ curl.exe --max-time 5 https://ivan-reseller-web-production.up.railway.app/ready
 4. Navegar a https://www.ivanreseller.com/login
 5. Esperar carga completa
 
-**Qué debería pasar:**
-- Página carga sin errores fatales
+**Quï¿½ deberï¿½a pasar:**
+- Pï¿½gina carga sin errores fatales
 - No hay errores 404 de assets
 - No hay errores CORS
 - Console muestra logs normales (no errors rojos)
 
-**Qué medir:**
+**Quï¿½ medir:**
 - Tiempo de carga inicial
 - Errores en Console
 - Errores en Network tab (4xx, 5xx)
 
-**Qué copiar:**
+**Quï¿½ copiar:**
 - Screenshot de Console (solo errores, sin secretos)
 - Network requests fallidos (status code + URL)
 
-**Cómo reproducir fallos:**
+**Cï¿½mo reproducir fallos:**
 - Si CORS error: verificar `CORS_ORIGIN` en Railway incluye `https://www.ivanreseller.com`
-- Si 404 assets: verificar que frontend está desplegado correctamente
+- Si 404 assets: verificar que frontend estï¿½ desplegado correctamente
 
-### C) Auth Register/Login + Validación JWT
+### C) Auth Register/Login + Validaciï¿½n JWT
 
 **Paso C1: Intentar Register (debe fallar - deshabilitado)**
 ```powershell
@@ -346,7 +346,7 @@ Invoke-WebRequest -Uri "https://ivan-reseller-web-production.up.railway.app/api/
     -UseBasicParsing
 ```
 
-**Qué debería pasar:**
+**Quï¿½ deberï¿½a pasar:**
 - Status 403
 - Message: "Public registration is disabled"
 
@@ -368,7 +368,7 @@ $r = Invoke-WebRequest -Uri "https://ivan-reseller-web-production.up.railway.app
 $token = $r.Content | ConvertFrom-Json | Select-Object -ExpandProperty token
 ```
 
-**Qué debería pasar:**
+**Quï¿½ deberï¿½a pasar:**
 - Status 200
 - Response con `success: true`, `user`, `token`
 - Cookie `token` establecida (httpOnly)
@@ -381,16 +381,16 @@ Invoke-WebRequest -Uri "https://ivan-reseller-web-production.up.railway.app/api/
     -WebSession $session
 ```
 
-**Qué debería pasar:**
+**Quï¿½ deberï¿½a pasar:**
 - Status 200
 - Response con datos del usuario
 
-**Qué medir:**
+**Quï¿½ medir:**
 - Tiempo de login (< 1s)
-- Token válido
+- Token vï¿½lido
 - Cookie establecida
 
-**Qué copiar:**
+**Quï¿½ copiar:**
 - Status codes
 - Response times
 - Errores (sin tokens completos)
@@ -412,7 +412,7 @@ $status = $r.Content | ConvertFrom-Json
 $status.data.apis | Select-Object apiName, isConfigured, isAvailable, status
 ```
 
-**Qué debería pasar:**
+**Quï¿½ deberï¿½a pasar:**
 - Status 200
 - Array de APIs con estados coherentes
 - `isConfigured: false` si no hay credenciales (correcto)
@@ -437,17 +437,17 @@ Invoke-WebRequest -Uri "https://ivan-reseller-web-production.up.railway.app/api/
     -WebSession $session
 ```
 
-**Qué debería pasar:**
+**Quï¿½ deberï¿½a pasar:**
 - Status 200/201
 - Credenciales guardadas cifradas en DB
 
-**Qué medir:**
-- Estado antes/después de guardar
+**Quï¿½ medir:**
+- Estado antes/despuï¿½s de guardar
 - Coherencia de estados
 
-**Qué copiar:**
+**Quï¿½ copiar:**
 - Lista de APIs y estados (sin valores de credenciales)
-- Errores de validación (si aplica)
+- Errores de validaciï¿½n (si aplica)
 
 ### E) Crear Producto (Modo Mock/Sandbox)
 
@@ -471,15 +471,15 @@ Invoke-WebRequest -Uri "https://ivan-reseller-web-production.up.railway.app/api/
     -WebSession $session
 ```
 
-**Qué debería pasar:**
+**Quï¿½ deberï¿½a pasar:**
 - Status 201
 - Producto creado con estado `PENDING`
 
-**Qué medir:**
-- Tiempo de creación
+**Quï¿½ medir:**
+- Tiempo de creaciï¿½n
 - Estado del producto
 
-### F) Oportunidades + Análisis
+### F) Oportunidades + Anï¿½lisis
 
 **Paso F1: Buscar oportunidades**
 ```powershell
@@ -495,15 +495,15 @@ Invoke-WebRequest -Uri "https://ivan-reseller-web-production.up.railway.app/api/
     -WebSession $session
 ```
 
-**Qué debería pasar:**
+**Quï¿½ deberï¿½a pasar:**
 - Status 200
-- Array de oportunidades (puede estar vacío si no hay scraping configurado)
+- Array de oportunidades (puede estar vacï¿½o si no hay scraping configurado)
 
-**Qué medir:**
+**Quï¿½ medir:**
 - Tiempo de respuesta (puede ser lento si hace scraping real)
 - Cantidad de resultados
 
-### G) Publicación Marketplace (Sandbox si existe)
+### G) Publicaciï¿½n Marketplace (Sandbox si existe)
 
 **Paso G1: Publicar producto (requiere credenciales)**
 ```powershell
@@ -522,12 +522,12 @@ Invoke-WebRequest -Uri "https://ivan-reseller-web-production.up.railway.app/api/
     -WebSession $session
 ```
 
-**Qué debería pasar:**
+**Quï¿½ deberï¿½a pasar:**
 - Si hay credenciales: Status 201, listing creado
 - Si NO hay credenciales: Status 400/401, error claro
 
-**Qué medir:**
-- Tiempo de publicación
+**Quï¿½ medir:**
+- Tiempo de publicaciï¿½n
 - Estado del listing
 
 ### H) Simular Webhook Firmado
@@ -546,11 +546,11 @@ Invoke-WebRequest -Uri "https://ivan-reseller-web-production.up.railway.app/api/
     -UseBasicParsing
 ```
 
-**Qué debería pasar:**
+**Quï¿½ deberï¿½a pasar:**
 - Status 401/403
 - Message: "Invalid signature" o similar
 
-**Paso H2: Webhook con firma válida (requiere WEBHOOK_SECRET_EBAY)**
+**Paso H2: Webhook con firma vï¿½lida (requiere WEBHOOK_SECRET_EBAY)**
 ```powershell
 # Calcular HMAC SHA256
 $secret = "<WEBHOOK_SECRET_EBAY>"
@@ -573,13 +573,13 @@ Invoke-WebRequest -Uri "https://ivan-reseller-web-production.up.railway.app/api/
     -UseBasicParsing
 ```
 
-**Qué debería pasar:**
+**Quï¿½ deberï¿½a pasar:**
 - Status 200/201
 - Sale creado en DB
-- Comisión calculada
+- Comisiï¿½n calculada
 
-**Qué medir:**
-- Validación de firma funciona
+**Quï¿½ medir:**
+- Validaciï¿½n de firma funciona
 - Sale creado correctamente
 
 ### I) Ventas + Comisiones
@@ -600,35 +600,35 @@ Invoke-WebRequest -Uri "https://ivan-reseller-web-production.up.railway.app/api/
     -WebSession $session
 ```
 
-**Qué debería pasar:**
+**Quï¿½ deberï¿½a pasar:**
 - Status 200
 - Array de ventas/comisiones
 
-### J) Socket.IO Reconexión
+### J) Socket.IO Reconexiï¿½n
 
 **Paso J1: Conectar WebSocket**
 - Abrir frontend en navegador
 - Abrir DevTools ? Network ? WS
-- Verificar conexión Socket.IO establecida
+- Verificar conexiï¿½n Socket.IO establecida
 
-**Paso J2: Simular desconexión**
+**Paso J2: Simular desconexiï¿½n**
 - Cerrar pesta?a
 - Reabrir
-- Verificar reconexión automática
+- Verificar reconexiï¿½n automï¿½tica
 
-**Qué debería pasar:**
-- Conexión establecida
-- Reconexión automática después de desconexión
+**Quï¿½ deberï¿½a pasar:**
+- Conexiï¿½n establecida
+- Reconexiï¿½n automï¿½tica despuï¿½s de desconexiï¿½n
 
 ---
 
-## 5. Diagnóstico del Timeout /health
+## 5. Diagnï¿½stico del Timeout /health
 
-### 5.1 Análisis del Endpoint /health
+### 5.1 Anï¿½lisis del Endpoint /health
 
-**Ubicación:** `backend/src/app.ts:205-222`
+**Ubicaciï¿½n:** `backend/src/app.ts:205-222`
 
-**Código actual:**
+**Cï¿½digo actual:**
 ```typescript
 app.get('/health', async (_req: Request, res: Response) => {
   const { getMemoryStatsFormatted, checkMemoryHealth } = await import('./utils/memory-monitor');
@@ -640,16 +640,16 @@ app.get('/health', async (_req: Request, res: Response) => {
 ```
 
 **Posibles bloqueos:**
-1. **Import dinámico de memory-monitor** - Puede colgarse si el módulo tiene side-effects
-2. **Orden de registro** - `/health` está ANTES de middlewares pesados (? correcto)
+1. **Import dinï¿½mico de memory-monitor** - Puede colgarse si el mï¿½dulo tiene side-effects
+2. **Orden de registro** - `/health` estï¿½ ANTES de middlewares pesados (? correcto)
 3. **No hay await bloqueante** - ? Correcto
 
-### 5.2 Análisis del Orden de Inicialización
+### 5.2 Anï¿½lisis del Orden de Inicializaciï¿½n
 
 **server.ts - Orden real:**
 ```
-1. validateEncryptionKey() - SÍNCRONO, puede exit(1)
-2. httpServer.listen() - INMEDIATO (línea 355)
+1. validateEncryptionKey() - Sï¿½NCRONO, puede exit(1)
+2. httpServer.listen() - INMEDIATO (lï¿½nea 355)
 3. Bootstrap async (background):
    - runMigrations() - puede colgarse
    - connectWithRetry() - puede colgarse si DB no responde
@@ -659,6 +659,18 @@ app.get('/health', async (_req: Request, res: Response) => {
 **Problema potencial:**
 - Si `validateEncryptionKey()` hace `process.exit(1)`, el server nunca llega a `listen()`
 - Si hay un `await` bloqueante ANTES de `listen()`, el server no escucha
+
+**Anï¿½lisis del cï¿½digo:**
+- Lï¿½nea 337: `validateEncryptionKey()` - Sï¿½NCRONO, puede hacer `process.exit(1)` si falta ENCRYPTION_KEY
+- Lï¿½nea 339: `await import('./config/env')` - ?? **HAY UN AWAIT ANTES DE LISTEN**
+- Lï¿½nea 344: `http.createServer(app)` - Sï¿½ncrono
+- Lï¿½nea 348: `notificationService.initialize(httpServer)` - Sï¿½ncrono
+- Lï¿½nea 355: `httpServer.listen()` - Sï¿½ncrono
+
+**?? PROBLEMA DETECTADO:**
+- Lï¿½nea 339: `await import('./config/env')` estï¿½ ANTES de `listen()`
+- Si `env.ts` tiene side-effects pesados o se cuelga, el server nunca llega a `listen()`
+- **Soluciï¿½n recomendada:** Mover el import de env.ts al top-level (fuera de startServer) o hacerlo sï¿½ncrono
 
 ### 5.3 Side-Effects al Importar app.ts
 
@@ -671,7 +683,7 @@ app.ts
         ? singletons pueden hacer HTTP/DB en constructor
 ```
 
-**Servicios problemáticos (ya corregidos):**
+**Servicios problemï¿½ticos (ya corregidos):**
 - ? FXService - Lazy init
 - ? SecureCredentialManager - Gateado por flag
 - ? AutomatedBusinessService - Gateado por flag
@@ -680,37 +692,37 @@ app.ts
 - ?Hay otros servicios que se instancian en top-level?
 - ?Hay imports que hacen DB/HTTP en top-level?
 
-### 5.4 Plan de Aislamiento (Sin Romper Producción)
+### 5.4 Plan de Aislamiento (Sin Romper Producciï¿½n)
 
-**Opción 1: Health Ultra-Rápido (Sin Dependencias)**
+**Opciï¿½n 1: Health Ultra-Rï¿½pido (Sin Dependencias)**
 - Crear `/health` que solo retorne `{ status: "ok" }` sin imports pesados
 - Mover health detallado a `/health/detailed` (requiere auth)
 
 **Cambios necesarios:**
 - `app.ts:205` - Simplificar `/health` a respuesta inmediata
-- `app.ts` - Agregar `/health/detailed` con lógica actual
+- `app.ts` - Agregar `/health/detailed` con lï¿½gica actual
 
-**Opción 2: Mover Inicializaciones Post-Listen**
-- Ya implementado: bootstrap corre en background después de `listen()`
+**Opciï¿½n 2: Mover Inicializaciones Post-Listen**
+- Ya implementado: bootstrap corre en background despuï¿½s de `listen()`
 - Verificar que no hay `await` bloqueante antes de `listen()`
 
 **Cambios necesarios:**
-- Verificar `server.ts:350` - NO debe haber `await` antes de línea 355
+- Verificar `server.ts:350` - NO debe haber `await` antes de lï¿½nea 355
 
-**Opción 3: Instrumentación con Logs**
+**Opciï¿½n 3: Instrumentaciï¿½n con Logs**
 - Agregar logs con timestamps en cada milestone
-- Leer logs en Railway para identificar dónde se cuelga
+- Leer logs en Railway para identificar dï¿½nde se cuelga
 
 **Logs actuales:**
 - `logMilestone()` ya existe en server.ts
 - Verificar que se ejecutan correctamente
 
-### 5.5 Cómo Leer Logs en Railway
+### 5.5 Cï¿½mo Leer Logs en Railway
 
 **Pasos:**
 1. Railway Dashboard ? Proyecto `ivan-reseller-web`
 2. Service `ivan-reseller-web` ? Deployments
-3. Click en deployment más reciente
+3. Click en deployment mï¿½s reciente
 4. Click en "View logs" o "Logs"
 5. Buscar milestones:
    - `BEFORE_LISTEN`
@@ -718,12 +730,12 @@ app.ts
    - `Bootstrap: Running database migrations`
    - `Bootstrap: Connecting to database`
 
-**Qué buscar:**
-- Si `BEFORE_LISTEN` aparece pero no `LISTEN_CALLBACK` ? server no está escuchando
+**Quï¿½ buscar:**
+- Si `BEFORE_LISTEN` aparece pero no `LISTEN_CALLBACK` ? server no estï¿½ escuchando
 - Si `LISTEN_CALLBACK` aparece pero `/health` no responde ? problema de routing/middleware
-- Si hay errores de DB/Redis antes de `LISTEN_CALLBACK` ? inicialización bloqueante
+- Si hay errores de DB/Redis antes de `LISTEN_CALLBACK` ? inicializaciï¿½n bloqueante
 
-### 5.6 Comandos de Diagnóstico
+### 5.6 Comandos de Diagnï¿½stico
 
 **Desde local (si Railway CLI disponible):**
 ```bash
@@ -782,7 +794,7 @@ npm test                  # Ejecutar tests
 ```bash
 cd frontend
 npm ci                    # Instalar dependencias
-npm run build             # Build producción
+npm run build             # Build producciï¿½n
 npm run preview           # Preview build local
 ```
 
@@ -808,7 +820,7 @@ npm run preview           # Preview build local
 3. Verificar:
    - `DATABASE_URL` (debe empezar con `postgresql://`)
    - `JWT_SECRET` (>= 32 caracteres)
-   - `ENCRYPTION_KEY` (>= 32 caracteres, o vacío para usar JWT_SECRET)
+   - `ENCRYPTION_KEY` (>= 32 caracteres, o vacï¿½o para usar JWT_SECRET)
    - `CORS_ORIGIN` (debe incluir frontend URL)
 
 ---
@@ -825,41 +837,41 @@ npm run preview           # Preview build local
 
 2. **Console (Browser DevTools)**
    - Errores JavaScript
-   - Errores de conexión API
+   - Errores de conexiï¿½n API
    - Warnings
 
 3. **Railway Logs**
-   - Últimos 300 líneas del deployment
+   - ï¿½ltimos 300 lï¿½neas del deployment
    - Buscar: "BEFORE_LISTEN", "LISTEN_CALLBACK", errores
    - Timestamps de cada milestone
 
 4. **Status Codes**
    - `/health` ? debe ser 200
    - `/ready` ? 200 (listo) o 503 (no listo)
-   - `/api/auth/login` ? 200 (éxito) o 401 (fallo)
+   - `/api/auth/login` ? 200 (ï¿½xito) o 401 (fallo)
 
 5. **Tiempos**
    - Tiempo hasta `LISTEN_CALLBACK` (debe ser < 5s)
    - Tiempo de respuesta `/health` (debe ser < 2s)
    - Tiempo de respuesta `/ready` (debe ser < 3s)
 
-### 7.2 Checklist Rápido de Diagnóstico
+### 7.2 Checklist Rï¿½pido de Diagnï¿½stico
 
 **Si /health no responde:**
 - [ ] Verificar Railway logs - ?llega a `LISTEN_CALLBACK`?
-- [ ] Verificar que PORT está configurado
+- [ ] Verificar que PORT estï¿½ configurado
 - [ ] Verificar que no hay `process.exit()` antes de listen
 - [ ] Verificar DNS: `nslookup ivan-reseller-web-production.up.railway.app`
 - [ ] Verificar puerto: `Test-NetConnection -Port 443`
 
 **Si /ready retorna 503:**
 - [ ] Verificar DATABASE_URL en Railway Variables
-- [ ] Verificar que PostgreSQL service está activo
-- [ ] Verificar logs de conexión DB
+- [ ] Verificar que PostgreSQL service estï¿½ activo
+- [ ] Verificar logs de conexiï¿½n DB
 - [ ] Verificar que migraciones se ejecutaron
 
 **Si frontend no carga:**
-- [ ] Verificar que frontend está desplegado (servicio separado)
+- [ ] Verificar que frontend estï¿½ desplegado (servicio separado)
 - [ ] Verificar CORS_ORIGIN incluye frontend URL
 - [ ] Verificar Console para errores CORS
 - [ ] Verificar Network tab para requests fallidos
@@ -867,13 +879,13 @@ npm run preview           # Preview build local
 ### 7.3 Archivos Clave para Revisar
 
 **Backend:**
-- `backend/src/server.ts` - Entry point, orden de inicialización
+- `backend/src/server.ts` - Entry point, orden de inicializaciï¿½n
 - `backend/src/app.ts` - Rutas y middlewares
 - `backend/src/config/env.ts` - Variables de entorno
-- `backend/src/__tests__/setup.ts` - Configuración de tests
+- `backend/src/__tests__/setup.ts` - Configuraciï¿½n de tests
 
 **Frontend:**
-- `frontend/src/services/api.ts` - Configuración API base URL
+- `frontend/src/services/api.ts` - Configuraciï¿½n API base URL
 - `frontend/vite.config.ts` - Build y proxy config
 
 **Railway:**
@@ -882,13 +894,13 @@ npm run preview           # Preview build local
 
 ---
 
-## 8. Próximos Pasos de Diagnóstico
+## 8. Prï¿½ximos Pasos de Diagnï¿½stico
 
 ### 8.1 Si /health Timeout Persiste
 
 1. **Verificar que server.ts no tiene await antes de listen:**
-   - Buscar en `server.ts` líneas 1-354
-   - NO debe haber `await` antes de línea 355
+   - Buscar en `server.ts` lï¿½neas 1-354
+   - NO debe haber `await` antes de lï¿½nea 355
 
 2. **Verificar que app.ts se carga sin bloquear:**
    - Agregar log al inicio de `app.ts`: `console.log('app.ts loaded')`
@@ -896,32 +908,32 @@ npm run preview           # Preview build local
 
 3. **Simplificar /health temporalmente:**
    - Cambiar a respuesta inmediata sin imports
-   - Si funciona ? problema está en `memory-monitor` import
-   - Si no funciona ? problema está en routing/middleware
+   - Si funciona ? problema estï¿½ en `memory-monitor` import
+   - Si no funciona ? problema estï¿½ en routing/middleware
 
 4. **Verificar middlewares no bloquean:**
    - Comentar middlewares pesados temporalmente
    - Probar /health
    - Ir agregando middlewares uno por uno
 
-### 8.2 Cambios Recomendados (Sin Implementar Aún)
+### 8.2 Cambios Recomendados (Sin Implementar Aï¿½n)
 
-**Cambio 1: Health Ultra-Rápido**
+**Cambio 1: Health Ultra-Rï¿½pido**
 - Archivo: `backend/src/app.ts:205`
-- Cambio: Remover import dinámico, respuesta inmediata
+- Cambio: Remover import dinï¿½mico, respuesta inmediata
 - Riesgo: Bajo (solo afecta endpoint de health)
 
 **Cambio 2: Verificar No Hay Awaits Antes de Listen**
 - Archivo: `backend/src/server.ts:328-354`
-- Verificar: NO hay `await` antes de línea 355
-- Riesgo: Bajo (solo verificación)
+- Verificar: NO hay `await` antes de lï¿½nea 355
+- Riesgo: Bajo (solo verificaciï¿½n)
 
-**Cambio 3: Instrumentación Adicional**
+**Cambio 3: Instrumentaciï¿½n Adicional**
 - Archivo: `backend/src/server.ts`
-- Cambio: Agregar más `logMilestone()` calls
+- Cambio: Agregar mï¿½s `logMilestone()` calls
 - Riesgo: Bajo (solo logging)
 
 ---
 
 **Documento generado:** 2025-12-18  
-**Última actualización:** Basado en análisis de código real del repo
+**ï¿½ltima actualizaciï¿½n:** Basado en anï¿½lisis de cï¿½digo real del repo
