@@ -188,19 +188,32 @@ export const errorHandler = (
     response.message = 'Ha ocurrido un error interno. Por favor, intenta nuevamente. Si el problema persiste, contacta soporte con el código de error.';
   }
 
-  // ✅ FIX: NO intentar responder si headers ya fueron enviados
-  // Esto previene ERR_HTTP_HEADERS_SENT
+  // ✅ HOTFIX: NO intentar responder si headers ya fueron enviados
+  // Esto previene ERR_HTTP_HEADERS_SENT y doble respuesta
   if (res.headersSent) {
     // Headers ya enviados, solo loggear (no podemos responder)
+    // CRITICAL: Do NOT call res.status/res.json/res.send after this point
     logger.warn('Error handler: headers already sent, cannot send error response', {
       errorId,
       correlationId,
       statusCode,
       path: req.path,
       method: req.method,
+      errorMessage: err.message,
     });
-    return;
+    return; // ✅ CRITICAL: Return immediately, do NOT call next()
   }
 
-  res.status(statusCode).json(response);
+  // ✅ HOTFIX: Wrap in try/catch to prevent uncaught exceptions
+  try {
+    res.status(statusCode).json(response);
+  } catch (sendError) {
+    // If sending response fails (e.g., connection closed), just log
+    logger.error('Error handler: failed to send error response', {
+      errorId,
+      correlationId,
+      sendError: sendError instanceof Error ? sendError.message : String(sendError),
+      originalError: err.message,
+    });
+  }
 };

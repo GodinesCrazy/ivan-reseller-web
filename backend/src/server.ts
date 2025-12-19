@@ -583,8 +583,15 @@ async function startServer() {
             logMilestone('API Health Monitor disabled');
           }
           
-          logMilestone('Starting AliExpress Auth Monitor');
-          aliExpressAuthMonitor.start();
+          // ✅ HOTFIX: AliExpress Auth Monitor solo si está habilitado
+          const { env } = await import('./config/env');
+          if (env.ALIEXPRESS_AUTH_MONITOR_ENABLED) {
+            logMilestone('Starting AliExpress Auth Monitor');
+            aliExpressAuthMonitor.start();
+          } else {
+            logMilestone('AliExpress Auth Monitor disabled (ALIEXPRESS_AUTH_MONITOR_ENABLED=false)');
+            logger.info('AliExpress Auth Monitor: Disabled by feature flag. System will work in API-first mode without cookie monitoring.');
+          }
           
           // ✅ FASE 5: Inicializar Workflow Scheduler (non-blocking)
           try {

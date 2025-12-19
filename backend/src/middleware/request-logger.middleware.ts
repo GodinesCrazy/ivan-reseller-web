@@ -27,44 +27,54 @@ export const requestLoggerMiddleware = (
     userId: (req as any).user?.userId,
   });
 
-  // ✅ FIX: Use 'finish' event instead of intercepting res.end to avoid ERR_HTTP_HEADERS_SENT
+  // ✅ HOTFIX: Use 'finish' event instead of intercepting res.end to avoid ERR_HTTP_HEADERS_SENT
   // This ensures logging happens after response is fully sent, without interfering with headers
+  // CRITICAL: NEVER call res.setHeader/res.status/res.json in these callbacks
   res.once('finish', () => {
-    const duration = Date.now() - startTime;
-    
-    // Log response (safe to do after finish, no header manipulation)
-    logger.info('HTTP Response', {
-      correlationId,
-      method: req.method,
-      path: req.path,
-      statusCode: res.statusCode,
-      duration: `${duration}ms`,
-      userId: (req as any).user?.userId,
-    });
-
-    // Log warning para requests lentos (> 1 segundo)
-    if (duration > 1000) {
-      logger.warn('Slow Request', {
+    try {
+      const duration = Date.now() - startTime;
+      
+      // Log response (safe to do after finish, NO header manipulation - only read statusCode)
+      logger.info('HTTP Response', {
         correlationId,
         method: req.method,
         path: req.path,
+        statusCode: res.statusCode, // ✅ READ ONLY - never modify
         duration: `${duration}ms`,
-        threshold: '1000ms',
+        userId: (req as any).user?.userId,
       });
+
+      // Log warning para requests lentos (> 1 segundo)
+      if (duration > 1000) {
+        logger.warn('Slow Request', {
+          correlationId,
+          method: req.method,
+          path: req.path,
+          duration: `${duration}ms`,
+          threshold: '1000ms',
+        });
+      }
+    } catch (error) {
+      // Silently ignore logging errors to prevent crashes
+      // This should never happen, but defensive programming
     }
   });
 
-  // ✅ FIX: Also handle 'close' event for cases where connection closes before finish
+  // ✅ HOTFIX: Also handle 'close' event for cases where connection closes before finish
   res.once('close', () => {
-    // Only log if finish event didn't fire (connection closed early)
-    if (!res.writableEnded) {
-      const duration = Date.now() - startTime;
-      logger.warn('HTTP Request Closed Early', {
-        correlationId,
-        method: req.method,
-        path: req.path,
-        duration: `${duration}ms`,
-      });
+    try {
+      // Only log if finish event didn't fire (connection closed early)
+      if (!res.writableEnded) {
+        const duration = Date.now() - startTime;
+        logger.warn('HTTP Request Closed Early', {
+          correlationId,
+          method: req.method,
+          path: req.path,
+          duration: `${duration}ms`,
+        });
+      }
+    } catch (error) {
+      // Silently ignore logging errors
     }
   });
 
