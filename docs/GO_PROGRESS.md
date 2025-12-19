@@ -43,7 +43,8 @@
 - [x] Commit evidence to docs/CERT_EVIDENCE_SMOKE.md
 
 ### FASE 4 - Tests (0 failed, 0 open handles)
-- [ ] Run jest with --detectOpenHandles
+- [x] TypeScript compiles without errors
+- [ ] Run jest with --detectOpenHandles (pending: requires DB setup)
 - [ ] Fix any open handles
 - [ ] Ensure 0 tests failing
 - [ ] Commit + push FASE 4
@@ -62,8 +63,15 @@
 
 ## Current Status
 
-**Last Action:** FASE 0 - Created version endpoint and smoke script  
-**Next:** Complete FASE 0 commit, then FASE 1 audit
+**Last Action:** HOTFIX HTTP stability + AliExpress API-first (PRIORIDAD 1 y 2)  
+**Commits:**
+- `a2efec2` - FASE 0: /version endpoint + smoke script
+- `92b77d5` - FASE 1: Complete audit - eliminate ERR_HTTP_HEADERS_SENT
+- `6f0c53e` - FASE 2: Railway deploy verification guide
+- `9f79510` - FASE 3: Smoke test evidence (all endpoints PASS)
+- `e6286b5` - HOTFIX: HTTP stability + AliExpress API-first
+
+**Next:** FASE 4 (tests), FASE 5 (E2E), FASE 6 (final certification)
 
 ---
 
