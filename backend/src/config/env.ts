@@ -283,6 +283,11 @@ const envSchema = z.object({
   RATE_LIMIT_ADMIN: z.string().optional().transform(val => val ? parseInt(val, 10) : 1000),
   RATE_LIMIT_LOGIN: z.string().optional().transform(val => val ? parseInt(val, 10) : 5), // intentos por 15 min
   RATE_LIMIT_WINDOW_MS: z.string().optional().transform(val => val ? parseInt(val, 10) : 15 * 60 * 1000), // 15 minutos
+  
+  // ✅ HOTFIX: AliExpress API-First Configuration
+  ALIEXPRESS_DATA_SOURCE: z.enum(['api', 'scrape']).default('api').transform(val => val as 'api' | 'scrape'),
+  ALIEXPRESS_AUTH_MONITOR_ENABLED: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
+  ALLOW_BROWSER_AUTOMATION: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
 });
 
 // Asegurar que DATABASE_URL esté en process.env

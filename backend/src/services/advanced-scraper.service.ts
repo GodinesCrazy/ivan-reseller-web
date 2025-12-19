@@ -11,6 +11,7 @@ import type { AliExpressCredentials } from '../types/api-credentials.types';
 import ManualAuthService from './manual-auth.service';
 import ManualAuthRequiredError from '../errors/manual-auth-required.error';
 import { marketplaceAuthStatusService } from './marketplace-auth-status.service';
+import { AppError, ErrorCode } from '../middleware/error.middleware';
 import { resolvePrice, resolvePriceRange, parseLocalizedNumber } from '../utils/currency.utils';
 import fxService from './fx.service';
 import logger from '../config/logger';
@@ -1072,11 +1073,58 @@ export class AdvancedMarketplaceScraper {
       // Continuar con scraping nativo si hay error
     }
     
-    // ✅ FALLBACK: Continuar con scraping nativo (solo si API falló o no está disponible)
+    // ✅ HOTFIX: Verificar si browser automation está permitido
+    const { env } = await import('../config/env');
+    const allowBrowserAutomation = env.ALLOW_BROWSER_AUTOMATION;
+    const dataSource = env.ALIEXPRESS_DATA_SOURCE;
+    
+    // Si dataSource es 'api' y no hay credenciales, NO hacer scraping
+    if (dataSource === 'api' && !affiliateCreds) {
+      logger.warn('[ALIEXPRESS-API-FIRST] API credentials required but not configured. Scraping disabled by ALIEXPRESS_DATA_SOURCE=api', {
+        userId,
+        query,
+        dataSource,
+        allowBrowserAutomation,
+      });
+      throw new AppError(
+        'AliExpress API credentials required. Please configure AliExpress Affiliate API in Settings → API Settings. Scraping is disabled in API-first mode.',
+        400,
+        ErrorCode.CREDENTIALS_ERROR,
+        {
+          authRequired: true,
+          dataSource: 'api',
+          message: 'AUTH_REQUIRED: Configure AliExpress Affiliate API credentials to use this feature.',
+        }
+      );
+    }
+    
+    // Si browser automation está deshabilitado, NO hacer scraping
+    if (!allowBrowserAutomation) {
+      logger.warn('[ALIEXPRESS-API-FIRST] Browser automation disabled. Scraping not allowed.', {
+        userId,
+        query,
+        allowBrowserAutomation,
+        dataSource,
+      });
+      throw new AppError(
+        'Browser automation is disabled. Please configure AliExpress Affiliate API credentials in Settings → API Settings.',
+        400,
+        ErrorCode.CREDENTIALS_ERROR,
+        {
+          authRequired: true,
+          allowBrowserAutomation: false,
+          message: 'AUTH_REQUIRED: Browser automation disabled. Configure API credentials to use this feature.',
+        }
+      );
+    }
+    
+    // ✅ FALLBACK: Continuar con scraping nativo (solo si API falló o no está disponible Y automation está permitido)
     logger.info('[ALIEXPRESS-FALLBACK] Proceeding with native scraping', { 
       query, 
       userId,
       source: 'native-scraping',
+      allowBrowserAutomation,
+      dataSource,
       reason: 'api_unavailable_or_failed'
     });
     
