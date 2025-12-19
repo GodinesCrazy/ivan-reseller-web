@@ -110,7 +110,12 @@ export class AutomatedBusinessService {
     
     this.initializeDefaultConfig();
     this.setupAutomationRules();
-    this.startAutomationEngine();
+    
+    // ✅ TEST FIX: No start engine in test environment
+    const automationEngineEnabled = (process.env.AUTOMATION_ENGINE_ENABLED ?? 'true') === 'true';
+    if (automationEngineEnabled) {
+      this.startAutomationEngine();
+    }
   }
 
   /**

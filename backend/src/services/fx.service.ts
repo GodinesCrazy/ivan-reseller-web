@@ -29,10 +29,14 @@ class FXService {
   private conversionCache: Map<string, { value: number; timestamp: number }> = new Map();
   private readonly CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
 
-  constructor() {
+  constructor(options?: { autoStart?: boolean }) {
     this.seedRates();
 
-    if (this.providerEnabled) {
+    // ✅ TEST FIX: No auto-refresh in test environment or if disabled
+    const autoRefreshEnabled = (process.env.FX_AUTO_REFRESH_ENABLED ?? 'true') === 'true';
+    const shouldAutoStart = options?.autoStart !== false && autoRefreshEnabled && this.providerEnabled;
+    
+    if (shouldAutoStart) {
       void this.refreshRates().catch((error: any) => {
         logger.warn('FXService: initial refresh failed', {
           error: error?.message || String(error),
@@ -416,6 +420,29 @@ class FXService {
   }
 }
 
-const fxService = new FXService();
+// ✅ TEST FIX: Lazy initialization to prevent side-effects in tests
+let fxServiceSingleton: FXService | null = null;
+
+export function getFXService(): FXService {
+  if (!fxServiceSingleton) {
+    const autoRefreshEnabled = (process.env.FX_AUTO_REFRESH_ENABLED ?? 'true') === 'true';
+    fxServiceSingleton = new FXService({ autoStart: autoRefreshEnabled });
+  }
+  return fxServiceSingleton;
+}
+
+// Default export for backward compatibility (lazy - no side effects on import)
+const fxService = new Proxy({} as FXService, {
+  get(_target, prop) {
+    const service = getFXService();
+    const value = service[prop as keyof FXService];
+    // Bind methods to maintain 'this' context
+    if (typeof value === 'function') {
+      return value.bind(service);
+    }
+    return value;
+  }
+});
+
 export default fxService;
 

@@ -86,7 +86,12 @@ export class SecureCredentialManager {
     this.initializeConfig();
     this.initializeEncryption();
     this.loadCredentials();
-    this.startUsageTracking();
+    
+    // ✅ TEST FIX: No start tracking in test environment
+    const usageTrackingEnabled = (process.env.USAGE_TRACKING_ENABLED ?? 'true') === 'true';
+    if (usageTrackingEnabled) {
+      this.startUsageTracking();
+    }
   }
 
   /**
