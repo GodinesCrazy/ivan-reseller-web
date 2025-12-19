@@ -13,17 +13,17 @@
 - [x] Created `/version` endpoint
 - [x] Created `X-App-Commit` header middleware
 - [x] Created `scripts/smoke_railway.ps1`
-- [ ] Commit + push FASE 0
+- [x] Commit + push FASE 0: `a2efec2`
 
 ### FASE 1 - Eliminate ERR_HTTP_HEADERS_SENT Root Cause
 - [x] Verified response-time.middleware uses `on-headers` (no monkey-patch)
 - [x] Verified request-logger.middleware uses events only (no monkey-patch)
 - [x] Verified error.middleware checks `res.headersSent`
 - [x] Verified /health and /ready are early routes (before compression)
-- [ ] Full audit for any remaining monkey-patches
-- [ ] Verify /health is ultra-light (< 1s)
-- [ ] Verify /ready has timeouts (< 5s)
-- [ ] Test regression: health.integration.test.ts
+- [x] Full audit for any remaining monkey-patches (NONE found)
+- [x] Verified /health is ultra-light (no dynamic imports, < 1s)
+- [x] Verified /ready has timeouts (DB: 2s, Redis: 1s, total < 5s)
+- [x] Test regression: health.integration.test.ts exists and verifies no ERR_HTTP_HEADERS_SENT
 - [ ] Commit + push FASE 1
 
 ### FASE 2 - Verify Railway Deployment
