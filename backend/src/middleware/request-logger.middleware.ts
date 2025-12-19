@@ -27,12 +27,12 @@ export const requestLoggerMiddleware = (
     userId: (req as any).user?.userId,
   });
 
-  // Interceptar res.end para loggear respuesta
-  const originalEnd = res.end.bind(res);
-  res.end = function (chunk?: any, encoding?: any): Response {
+  // ✅ FIX: Use 'finish' event instead of intercepting res.end to avoid ERR_HTTP_HEADERS_SENT
+  // This ensures logging happens after response is fully sent, without interfering with headers
+  res.once('finish', () => {
     const duration = Date.now() - startTime;
     
-    // Log response
+    // Log response (safe to do after finish, no header manipulation)
     logger.info('HTTP Response', {
       correlationId,
       method: req.method,
@@ -52,10 +52,21 @@ export const requestLoggerMiddleware = (
         threshold: '1000ms',
       });
     }
+  });
 
-    // Restaurar función original
-    return originalEnd.call(this, chunk, encoding) as Response;
-  };
+  // ✅ FIX: Also handle 'close' event for cases where connection closes before finish
+  res.once('close', () => {
+    // Only log if finish event didn't fire (connection closed early)
+    if (!res.writableEnded) {
+      const duration = Date.now() - startTime;
+      logger.warn('HTTP Request Closed Early', {
+        correlationId,
+        method: req.method,
+        path: req.path,
+        duration: `${duration}ms`,
+      });
+    }
+  });
 
   next();
 };

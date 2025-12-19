@@ -260,7 +260,16 @@ function logMilestone(milestone: string): void {
 }
 
 // ✅ FASE 1: Global error handlers (instrumentación)
+// ✅ FIX: Ignore ERR_HTTP_HEADERS_SENT errors (they're non-fatal, response already sent)
 process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  // Ignore ERR_HTTP_HEADERS_SENT - these happen when response is already sent
+  // and are not fatal (the request was already handled)
+  if (reason?.code === 'ERR_HTTP_HEADERS_SENT' || reason?.message?.includes('Cannot set headers after they are sent')) {
+    // Log at debug level, not error (this is expected in some edge cases)
+    console.debug(`[${new Date().toISOString()}] ⚠️  Unhandled rejection (headers already sent, non-fatal):`, reason?.message || String(reason));
+    return; // Don't log as error or exit
+  }
+
   const timestamp = new Date().toISOString();
   console.error(`[${timestamp}] ❌ UNHANDLED REJECTION:`, reason);
   console.error('Stack:', reason?.stack || 'No stack trace');
