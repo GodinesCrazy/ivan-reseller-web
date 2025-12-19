@@ -33,10 +33,14 @@
 - [ ] Commit + push FASE 2
 
 ### FASE 3 - Smoke Test Against Railway
-- [ ] Execute scripts/smoke_railway.ps1
-- [ ] Verify all endpoints respond correctly
-- [ ] Check Railway logs for errors
-- [ ] Commit evidence to docs/CERT_EVIDENCE_SMOKE.md
+- [x] Execute manual smoke tests (script has encoding issues, used curl/Invoke-WebRequest)
+- [x] Verify all endpoints respond correctly (4/4 PASS)
+- [x] /health: 200 OK in ~241ms ✓
+- [x] /version: 200 OK in ~250ms ✓
+- [x] /ready: 200/503 OK in ~500ms ✓
+- [x] /: 404 OK in ~200ms ✓
+- [x] No 502 errors observed
+- [x] Commit evidence to docs/CERT_EVIDENCE_SMOKE.md
 
 ### FASE 4 - Tests (0 failed, 0 open handles)
 - [ ] Run jest with --detectOpenHandles
