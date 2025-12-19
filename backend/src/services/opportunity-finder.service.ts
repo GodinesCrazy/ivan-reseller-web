@@ -2,6 +2,7 @@ import scraperBridge from './scraper-bridge.service';
 import notificationService from './notification.service';
 import { AdvancedMarketplaceScraper } from './advanced-scraper.service';
 import ManualAuthRequiredError from '../errors/manual-auth-required.error';
+import { AppError } from '../middleware/error.middleware';
 import competitorAnalyzer from './competitor-analyzer.service';
 import costCalculator from './cost-calculator.service';
 import opportunityPersistence from './opportunity.service';
@@ -476,15 +477,22 @@ class OpportunityFinderService {
 
     try {
       logger.info('[OPPORTUNITY-FINDER] Starting search', { query, userId, environment });
+      // ✅ HOTFIX: Verificar feature flags antes de intentar scraping
+      const { env } = await import('../config/env');
+      const allowBrowserAutomation = env.ALLOW_BROWSER_AUTOMATION;
+      const dataSource = env.ALIEXPRESS_DATA_SOURCE;
+      
       logger.info('[OPPORTUNITY-FINDER] scrapeAliExpress will attempt: 1) AliExpress Affiliate API → 2) Native scraping (Puppeteer)', { 
         query,
         userId,
         environment,
-        baseCurrency
+        baseCurrency,
+        dataSource,
+        allowBrowserAutomation
       });
 
-      // ✅ Inicializar scraper explícitamente antes de usar
-      if (!scraper['browser']) {
+      // ✅ Inicializar scraper explícitamente antes de usar (solo si automation está permitido)
+      if (!scraper['browser'] && allowBrowserAutomation) {
         logger.debug('[OPPORTUNITY-FINDER] Initializing browser');
         try {
           await scraper['init']();
@@ -693,6 +701,21 @@ class OpportunityFinderService {
     } catch (nativeError: any) {
       nativeErrorForLogs = nativeError;
       const errorMsg = nativeError?.message || String(nativeError);
+
+      // ✅ HOTFIX: Si es error AUTH_REQUIRED (API credentials missing + scraping disabled), NO intentar fallbacks
+      // Lanzar el error inmediatamente para que el frontend muestre mensaje claro
+      if (nativeError?.details?.authRequired === true || nativeError?.errorCode === 'CREDENTIALS_ERROR') {
+        logger.warn('[OPPORTUNITY-FINDER] AUTH_REQUIRED: API credentials missing and scraping disabled', {
+          service: 'opportunity-finder',
+          userId,
+          query,
+          error: errorMsg,
+          dataSource: nativeError?.details?.dataSource,
+          allowBrowserAutomation: nativeError?.details?.allowBrowserAutomation,
+        });
+        // Re-throw para que el frontend reciba el error con mensaje claro
+        throw nativeError;
+      }
 
       // ✅ SOLUCIÓN CORRECTA: Si es error de autenticación manual (CAPTCHA), NO intentar fallbacks
       // Lanzar el error inmediatamente para que el frontend active el sistema de resolución de CAPTCHA
