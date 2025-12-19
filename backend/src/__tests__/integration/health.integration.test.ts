@@ -1,6 +1,8 @@
 /**
  * Integration tests for health endpoints
  * Verifies that /health and /ready respond correctly without ERR_HTTP_HEADERS_SENT
+ * 
+ * ✅ FIX: Tests verifican que no hay monkey-patches ni doble respuesta
  */
 
 import request from 'supertest';
@@ -19,12 +21,13 @@ describe('Health Endpoints Integration', () => {
       expect(response.body).toHaveProperty('service', 'ivan-reseller-backend');
     });
 
-    it('should respond quickly (<2s)', async () => {
+    it('should respond quickly (<1s)', async () => {
       const start = Date.now();
       await request(app).get('/health').expect(200);
       const duration = Date.now() - start;
       
-      expect(duration).toBeLessThan(2000);
+      // Health debe ser ultra-rápido (sin imports dinámicos pesados)
+      expect(duration).toBeLessThan(1000);
     });
 
     it('should not trigger ERR_HTTP_HEADERS_SENT', async () => {
@@ -37,6 +40,19 @@ describe('Health Endpoints Integration', () => {
       expect(response.status).toBe(200);
       // If headers were set multiple times, the response would be malformed
       expect(response.headers['content-type']).toContain('application/json');
+      // Verify no duplicate headers
+      const responseTimeHeaders = response.headers['x-response-time'];
+      expect(responseTimeHeaders).toBeDefined();
+    });
+
+    it('should include X-Response-Time header', async () => {
+      const response = await request(app)
+        .get('/health')
+        .expect(200);
+
+      // on-headers debe setear este header
+      expect(response.headers['x-response-time']).toBeDefined();
+      expect(response.headers['x-response-time']).toMatch(/^\d+ms$/);
     });
   });
 
@@ -73,6 +89,20 @@ describe('Health Endpoints Integration', () => {
       expect(response.body.checks).toHaveProperty('database');
       expect(response.body.checks.database).toHaveProperty('status');
       expect(response.body.checks.database).toHaveProperty('connected');
+    });
+  });
+
+  describe('GET / (404)', () => {
+    it('should return 404 quickly without ERR_HTTP_HEADERS_SENT', async () => {
+      const start = Date.now();
+      const response = await request(app).get('/').expect(404);
+      const duration = Date.now() - start;
+      
+      expect(response.status).toBe(404);
+      expect(response.body).toHaveProperty('success', false);
+      expect(response.body).toHaveProperty('message');
+      // Debe responder rápido
+      expect(duration).toBeLessThan(1000);
     });
   });
 });

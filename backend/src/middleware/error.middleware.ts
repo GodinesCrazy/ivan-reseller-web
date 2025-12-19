@@ -188,5 +188,19 @@ export const errorHandler = (
     response.message = 'Ha ocurrido un error interno. Por favor, intenta nuevamente. Si el problema persiste, contacta soporte con el código de error.';
   }
 
+  // ✅ FIX: NO intentar responder si headers ya fueron enviados
+  // Esto previene ERR_HTTP_HEADERS_SENT
+  if (res.headersSent) {
+    // Headers ya enviados, solo loggear (no podemos responder)
+    logger.warn('Error handler: headers already sent, cannot send error response', {
+      errorId,
+      correlationId,
+      statusCode,
+      path: req.path,
+      method: req.method,
+    });
+    return;
+  }
+
   res.status(statusCode).json(response);
 };

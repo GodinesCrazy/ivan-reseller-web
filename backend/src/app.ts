@@ -167,59 +167,11 @@ app.use(cookieParser());
 // ✅ PRODUCTION READY: Correlation ID middleware (después de cookie parser, antes de rutas)
 app.use(correlationMiddleware);
 
-// ✅ PRODUCTION READY: Security headers adicionales
-import { securityHeadersMiddleware } from './middleware/security-headers.middleware';
-app.use(securityHeadersMiddleware);
-
-// ✅ PRODUCTION READY: Response time headers
-import { responseTimeMiddleware } from './middleware/response-time.middleware';
-app.use(responseTimeMiddleware);
-
-// ✅ PRODUCTION READY: Rate limiting global para todas las rutas API
-import { createRoleBasedRateLimit } from './middleware/rate-limit.middleware';
-app.use('/api', createRoleBasedRateLimit());
-
-// Body parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Compression
-app.use(compression());
-
-// ✅ PRODUCTION READY: Request logging estructurado (todos los ambientes)
-import { requestLoggerMiddleware } from './middleware/request-logger.middleware';
-app.use(requestLoggerMiddleware);
-
 // ====================================
-// ROUTES
+// EARLY ROUTES (antes de middlewares pesados)
 // ====================================
-
-/**
- * ✅ PRODUCTION READY: Health Check Endpoints
- * 
- * /health - Liveness probe (is the app running?)
- * /ready - Readiness probe (can the app serve traffic?)
- */
-
-// Liveness probe: Verifica que la aplicación está corriendo
-app.get('/health', async (_req: Request, res: Response) => {
-  // ✅ PRODUCTION READY: Health check simple y rápido - solo verifica que el proceso está vivo
-  const { getMemoryStatsFormatted, checkMemoryHealth } = await import('./utils/memory-monitor');
-  const memoryStats = getMemoryStatsFormatted();
-  const memoryHealth = checkMemoryHealth();
-  
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    service: 'ivan-reseller-backend',
-    version: process.env.npm_package_version || '1.0.0',
-    environment: env.NODE_ENV,
-    memory: memoryStats,
-    memoryHealthy: memoryHealth.healthy,
-    ...(memoryHealth.warning && { memoryWarning: memoryHealth.warning }),
-  });
-});
+// ✅ FIX: Health endpoints ANTES de compression, body parsing, y otros middlewares pesados
+// Esto asegura que /health y /ready respondan rápido sin interferencias
 
 // ✅ FASE A: Readiness state variables (imported from server.ts)
 // These are set during bootstrap
@@ -231,6 +183,46 @@ declare global {
   // eslint-disable-next-line no-var
   var __isServerReady: boolean | undefined;
 }
+
+/**
+ * ✅ PRODUCTION READY: Health Check Endpoints (EARLY)
+ * 
+ * /health - Liveness probe (is the app running?)
+ * /ready - Readiness probe (can the app serve traffic?)
+ * 
+ * IMPORTANTE: Estas rutas están ANTES de compression y otros middlewares
+ * para garantizar respuesta rápida y sin interferencias
+ */
+
+// Liveness probe: Verifica que la aplicación está corriendo
+app.get('/health', async (_req: Request, res: Response) => {
+  // ✅ FIX: Health check ultra-rápido, sin imports dinámicos pesados
+  // Solo información básica del proceso
+  try {
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      service: 'ivan-reseller-backend',
+      version: process.env.npm_package_version || '1.0.0',
+      environment: env.NODE_ENV,
+      // Memory info básico (sin import dinámico)
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+        unit: 'MB'
+      }
+    });
+  } catch (error) {
+    // Si algo falla, responder 200 de todas formas (proceso está vivo)
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      service: 'ivan-reseller-backend'
+    });
+  }
+});
 
 // Readiness probe: Verifica que la aplicación puede servir tráfico
 app.get('/ready', async (_req: Request, res: Response) => {
@@ -314,6 +306,37 @@ app.get('/ready', async (_req: Request, res: Response) => {
     uptime: process.uptime()
   });
 });
+
+// ====================================
+// MIDDLEWARE (después de health endpoints)
+// ====================================
+
+// ✅ PRODUCTION READY: Security headers adicionales
+import { securityHeadersMiddleware } from './middleware/security-headers.middleware';
+app.use(securityHeadersMiddleware);
+
+// ✅ PRODUCTION READY: Response time headers
+import { responseTimeMiddleware } from './middleware/response-time.middleware';
+app.use(responseTimeMiddleware);
+
+// ✅ PRODUCTION READY: Rate limiting global para todas las rutas API
+import { createRoleBasedRateLimit } from './middleware/rate-limit.middleware';
+app.use('/api', createRoleBasedRateLimit());
+
+// Body parsing
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Compression
+app.use(compression());
+
+// ✅ PRODUCTION READY: Request logging estructurado (todos los ambientes)
+import { requestLoggerMiddleware } from './middleware/request-logger.middleware';
+app.use(requestLoggerMiddleware);
+
+// ====================================
+// API ROUTES
+// ====================================
 
 // API routes
 app.use('/api/auth', authRoutes);
