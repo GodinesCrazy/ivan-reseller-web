@@ -84,7 +84,9 @@ export default function Login() {
             </label>
             <input
               {...register('username')}
+              id="username"
               type="text"
+              autoComplete="username"
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
             />
             {errors.username && (
@@ -98,7 +100,9 @@ export default function Login() {
             </label>
             <input
               {...register('password')}
+              id="password"
               type="password"
+              autoComplete="current-password"
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
             />
             {errors.password && (
