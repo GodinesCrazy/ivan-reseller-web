@@ -901,6 +901,7 @@ app.use('/api/auth-status', authStatusRoutes);
 app.use('/api/config-audit', configAuditRoutes);
 app.use('/api/listing-lifetime', listingLifetimeRoutes);
 app.use('/api/meeting-room', meetingRoomRoutes);
+app.use('/api/help', helpRoutes);
 app.use('/debug', debugRoutes);
 
 // Swagger API Documentation
