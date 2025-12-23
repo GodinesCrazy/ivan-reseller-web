@@ -90,10 +90,71 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false, // Deshabilitar para compatibilidad con APIs externas
 }));
 
-// CORS
-const allowedOrigins = env.CORS_ORIGIN.split(',')
-  .map((origin) => origin.trim())
-  .filter((origin) => origin.length > 0);
+// ✅ PRODUCTION FIX: Validar y parsear CORS_ORIGIN con fallback de producción
+let allowedOrigins: string[] = [];
+try {
+  // Función helper para normalizar URLs (eliminar trailing slash)
+  const normalizeOrigin = (origin: string): string => {
+    return origin.trim().replace(/\/+$/, '');
+  };
+
+  // Prioridad 1: CORS_ORIGIN desde ENV
+  if (env.CORS_ORIGIN && typeof env.CORS_ORIGIN === 'string') {
+    allowedOrigins = env.CORS_ORIGIN.split(',')
+      .map(normalizeOrigin)
+      .filter((origin) => origin.length > 0);
+  }
+
+  // Prioridad 2: Si CORS_ORIGIN está vacío pero FRONTEND_URL existe, usarlo
+  if (allowedOrigins.length === 0 && env.FRONTEND_URL) {
+    const normalizedFrontend = normalizeOrigin(env.FRONTEND_URL);
+    if (normalizedFrontend) {
+      allowedOrigins = [normalizedFrontend];
+      // También agregar versión sin www si tiene www, y viceversa
+      try {
+        const url = new URL(normalizedFrontend);
+        if (url.hostname.startsWith('www.')) {
+          allowedOrigins.push(normalizedFrontend.replace('www.', ''));
+        } else {
+          allowedOrigins.push(normalizedFrontend.replace(url.hostname, `www.${url.hostname}`));
+        }
+      } catch {
+        // Ignorar si no se puede parsear
+      }
+    }
+  }
+
+  // Prioridad 3: Fallback de producción
+  if (allowedOrigins.length === 0) {
+    if (env.NODE_ENV === 'production') {
+      console.warn('⚠️  CORS_ORIGIN no configurada en producción, usando fallback de producción');
+      allowedOrigins = [
+        'https://www.ivanreseller.com',
+        'https://ivanreseller.com'
+      ];
+    } else {
+      console.warn('⚠️  CORS_ORIGIN no configurada, usando default de desarrollo');
+      allowedOrigins = ['http://localhost:5173'];
+    }
+  }
+
+  // Log final de origins configuradas
+  console.log(`✅ CORS Origins configuradas (${allowedOrigins.length}):`);
+  allowedOrigins.forEach((origin, idx) => {
+    console.log(`   ${idx + 1}. ${origin}`);
+  });
+} catch (error) {
+  console.error('❌ ERROR parseando CORS_ORIGIN:', error);
+  // Fallback seguro de producción
+  if (env.NODE_ENV === 'production') {
+    allowedOrigins = [
+      'https://www.ivanreseller.com',
+      'https://ivanreseller.com'
+    ];
+  } else {
+    allowedOrigins = ['http://localhost:5173'];
+  }
+}
 
 const dynamicOriginMatchers = [
   /\.aliexpress\.[a-z]+$/i,
@@ -109,57 +170,74 @@ const normalizeDomain = (url: string): string => {
   }
 };
 
+// ✅ PRODUCTION FIX: CORS robusto con manejo correcto de preflight
 const corsOptions: CorsOptions = {
-  credentials: true,
+  credentials: true, // ✅ Se usa cookies/httpOnly tokens, mantener true
   origin: (origin, callback) => {
-    // Logging para debug
-    if (origin) {
-      logger.info('CORS: Checking origin', { origin, allowedOrigins });
-    }
-    
+    // Si no viene Origin (curl, health checks, server-to-server), permitir
     if (!origin) {
       return callback(null, true);
     }
 
-    // Permitir si está en la lista exacta
-    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-      logger.info('CORS: Origin allowed (exact match)', { origin });
+    // Normalizar origin (eliminar trailing slash)
+    const normalizedOrigin = origin.replace(/\/+$/, '');
+
+    // Permitir si está en la lista exacta (después de normalizar)
+    if (allowedOrigins.includes('*')) {
+      // ⚠️ NO usar * con credentials=true, pero si está configurado, permitirlo
+      logger.warn('CORS: Using wildcard * with credentials=true (not recommended)');
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(normalizedOrigin)) {
+      logger.debug('CORS: Origin allowed (exact match)', { origin: normalizedOrigin });
       return callback(null, true);
     }
 
     // Normalizar y comparar dominios (www y sin www)
     try {
-      const originDomain = normalizeDomain(origin);
+      const originDomain = normalizeDomain(normalizedOrigin);
       const isAllowed = allowedOrigins.some(allowedOrigin => {
         const normalizedAllowed = normalizeDomain(allowedOrigin);
         return originDomain === normalizedAllowed;
       });
 
       if (isAllowed) {
-        logger.info('CORS: Origin allowed (normalized match)', { origin, originDomain });
+        logger.debug('CORS: Origin allowed (normalized match)', { origin: normalizedOrigin, originDomain });
         return callback(null, true);
       }
 
       // Verificar patrones dinámicos (AliExpress, etc.)
-      const hostname = new URL(origin).hostname;
+      const hostname = new URL(normalizedOrigin).hostname;
       if (dynamicOriginMatchers.some((pattern) => pattern.test(hostname))) {
-        logger.info('CORS: Origin allowed (pattern match)', { origin, hostname });
+        logger.debug('CORS: Origin allowed (pattern match)', { origin: normalizedOrigin, hostname });
         return callback(null, true);
       }
     } catch (error) {
-      logger.warn('CORS: invalid origin received', { origin, error });
+      logger.warn('CORS: invalid origin received', { origin: normalizedOrigin, error });
     }
 
-    logger.warn('CORS: origin not allowed', { origin, allowedOrigins });
+    // Origin no permitido
+    logger.warn('CORS: origin not allowed', { 
+      origin: normalizedOrigin, 
+      allowedOrigins: allowedOrigins.slice(0, 3) // Solo mostrar primeros 3 para no saturar logs
+    });
     return callback(new Error('Not allowed by CORS policy'), false);
   },
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-Correlation-ID'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204,
+  preflightContinue: false, // ✅ No continuar al siguiente middleware en preflight
+  optionsSuccessStatus: 204, // ✅ Responder 204 para OPTIONS
+  exposedHeaders: ['Set-Cookie'], // Exponer Set-Cookie si se usa
 };
 
+// ✅ PRODUCTION FIX: Aplicar CORS antes de cualquier otra cosa
 app.use(cors(corsOptions));
+
+// ✅ PRODUCTION FIX: Manejar preflight OPTIONS explícitamente para todas las rutas /api/*
+// Esto asegura que OPTIONS siempre responda correctamente, incluso si alguna ruta no lo maneja
+app.options('/api/*', cors(corsOptions));
+app.options('*', cors(corsOptions)); // Fallback para cualquier ruta
 
 // Cookie parser (debe ir antes de las rutas)
 app.use(cookieParser());
@@ -210,6 +288,96 @@ app.get('/version', (_req: Request, res: Response) => {
     serviceName: 'ivan-reseller-backend',
     uptime: process.uptime(),
   });
+});
+
+// ✅ GO-LIVE: Config endpoint (diagnóstico seguro, sin secretos)
+app.get('/config', (_req: Request, res: Response) => {
+  try {
+    // Parsear CORS origins
+    const corsOrigins = env.CORS_ORIGIN
+      ? env.CORS_ORIGIN.split(',')
+          .map((o: string) => o.trim())
+          .filter((o: string) => o.length > 0)
+      : [];
+    
+    // Extraer información segura de DATABASE_URL (sin credenciales)
+    let databaseHost = 'not configured';
+    let hasDbUrl = false;
+    if (env.DATABASE_URL) {
+      hasDbUrl = true;
+      try {
+        const dbUrl = new URL(env.DATABASE_URL);
+        databaseHost = dbUrl.hostname; // Solo hostname, sin user/pass/dbname
+      } catch {
+        databaseHost = 'invalid format';
+      }
+    }
+    
+    // Extraer información segura de REDIS_URL (sin credenciales)
+    let redisHost = 'not configured';
+    let hasRedisUrl = false;
+    if (env.REDIS_URL && env.REDIS_URL !== 'redis://localhost:6379') {
+      hasRedisUrl = true;
+      try {
+        const redisUrl = new URL(env.REDIS_URL);
+        redisHost = redisUrl.hostname; // Solo hostname
+      } catch {
+        redisHost = 'invalid format';
+      }
+    }
+    
+    // Extraer información segura de API_URL y FRONTEND_URL
+    let apiUrlHost = 'not configured';
+    if (env.API_URL) {
+      try {
+        const apiUrl = new URL(env.API_URL);
+        apiUrlHost = apiUrl.hostname;
+      } catch {
+        apiUrlHost = 'invalid format';
+      }
+    }
+    
+    let frontendUrlHost = 'not configured';
+    if (env.FRONTEND_URL) {
+      try {
+        const frontendUrl = new URL(env.FRONTEND_URL);
+        frontendUrlHost = frontendUrl.hostname;
+      } catch {
+        frontendUrlHost = 'invalid format';
+      }
+    }
+    
+    res.status(200).json({
+      env: env.NODE_ENV,
+      corsOriginCount: corsOrigins.length,
+      corsOriginsSample: corsOrigins.length > 0 
+        ? corsOrigins.slice(0, 3).map((o: string) => {
+            try {
+              const url = new URL(o);
+              return url.hostname; // Solo hostname para seguridad
+            } catch {
+              return o;
+            }
+          })
+        : [],
+      apiUrl: apiUrlHost,
+      frontendUrl: frontendUrlHost,
+      hasDbUrl,
+      databaseHost,
+      hasRedisUrl,
+      redisHost,
+      // Flags de feature
+      scraperBridgeEnabled: env.SCRAPER_BRIDGE_ENABLED ?? false,
+      allowBrowserAutomation: env.ALLOW_BROWSER_AUTOMATION ?? false,
+      aliExpressDataSource: env.ALIEXPRESS_DATA_SOURCE || 'api',
+    });
+  } catch (error: any) {
+    logger.error('Error generating config endpoint', { error: error.message });
+    res.status(500).json({
+      error: 'Failed to generate config',
+      message: error.message,
+    });
+  }
 });
 
 // Liveness probe: Verifica que la aplicación está corriendo
