@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   BookOpen, 
   HelpCircle, 
@@ -421,9 +422,70 @@ function APIsCredenciales() {
         </ol>
       </div>
 
+      {/* Documentación Técnica */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-2xl font-bold text-gray-900">📚 Documentación Técnica</h3>
+          <Link
+            to="/help/docs"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+          >
+            <FileText className="w-4 h-4" />
+            Ver toda la documentación
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <Link to="/help/docs/setup-local" className="block">
+            <div className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
+              <h4 className="font-semibold text-gray-900 mb-2">🚀 Setup Local</h4>
+              <p className="text-sm text-gray-600">Configurar entorno de desarrollo</p>
+            </div>
+          </Link>
+          <Link to="/help/docs/deployment-railway" className="block">
+            <div className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
+              <h4 className="font-semibold text-gray-900 mb-2">🚀 Deployment Railway</h4>
+              <p className="text-sm text-gray-600">Desplegar en producción</p>
+            </div>
+          </Link>
+          <Link to="/help/docs/security" className="block">
+            <div className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
+              <h4 className="font-semibold text-gray-900 mb-2">🔐 Security Guide</h4>
+              <p className="text-sm text-gray-600">Seguridad y mejores prácticas</p>
+            </div>
+          </Link>
+          <Link to="/help/docs/user-guide" className="block">
+            <div className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
+              <h4 className="font-semibold text-gray-900 mb-2">📘 User Guide</h4>
+              <p className="text-sm text-gray-600">Guía para usuarios finales</p>
+            </div>
+          </Link>
+          <Link to="/help/docs/admin-guide" className="block">
+            <div className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
+              <h4 className="font-semibold text-gray-900 mb-2">👨‍💼 Admin Guide</h4>
+              <p className="text-sm text-gray-600">Guía para administradores</p>
+            </div>
+          </Link>
+          <Link to="/help/docs/troubleshooting" className="block">
+            <div className="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow">
+              <h4 className="font-semibold text-gray-900 mb-2">🔧 Troubleshooting</h4>
+              <p className="text-sm text-gray-600">Solución de problemas</p>
+            </div>
+          </Link>
+        </div>
+      </div>
+
       {/* APIs Disponibles */}
       <div>
-        <h3 className="text-2xl font-bold text-gray-900 mb-4">🌐 APIs Disponibles</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-2xl font-bold text-gray-900">🌐 APIs Disponibles</h3>
+          <Link
+            to="/help/apis"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+          >
+            <FileText className="w-4 h-4" />
+            Ver todas las guías de APIs
+          </Link>
+        </div>
           <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 text-sm mb-4">
           <p className="font-semibold mb-1">Resumen rápido</p>
           <ul className="space-y-1">

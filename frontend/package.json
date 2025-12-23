@@ -4,9 +4,10 @@
   "description": "Ivan Reseller Frontend - React + TypeScript + Vite",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "npm run sync-docs && vite",
+    "build": "npm run sync-docs && vite build",
     "preview": "vite preview",
+    "sync-docs": "node ../scripts/sync_help_docs.mjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "type-check": "tsc --noEmit",
     "test": "vitest",
@@ -26,8 +27,10 @@
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.49.2",
     "react-hot-toast": "^2.4.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^6.20.1",
     "recharts": "^2.10.3",
+    "remark-gfm": "^4.0.1",
     "socket.io-client": "^4.8.1",
     "sonner": "^1.2.0",
     "tailwind-merge": "^2.2.0",
@@ -36,13 +39,15 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.1.5",
+    "@testing-library/react": "^14.1.2",
+    "@testing-library/user-event": "^14.5.1",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@typescript-eslint/eslint-plugin": "^6.14.0",
     "@typescript-eslint/parser": "^6.14.0",
-    "@testing-library/react": "^14.1.2",
-    "@testing-library/jest-dom": "^6.1.5",
-    "@testing-library/user-event": "^14.5.1",
+    "@vitest/coverage-v8": "^1.1.0",
+    "@vitest/ui": "^1.1.0",
     "autoprefixer": "^10.4.16",
     "eslint": "^8.55.0",
     "eslint-plugin-react-hooks": "^4.6.0",
@@ -51,8 +56,6 @@
     "postcss": "^8.4.32",
     "tailwindcss": "^3.3.6",
     "typescript": "^5.2.2",
-    "vitest": "^1.1.0",
-    "@vitest/ui": "^1.1.0",
-    "@vitest/coverage-v8": "^1.1.0"
+    "vitest": "^1.1.0"
   }
 }

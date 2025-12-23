@@ -135,10 +135,21 @@ npm run dev
 
 ### Documentos Principales
 
-- **Guía de Usuario:** `docs/GUIDE_MOD_GUIDED_USUARIOS.md`
+- **Setup Local:** [docs/SETUP_LOCAL.md](docs/SETUP_LOCAL.md)
+- **Deployment Railway:** [docs/DEPLOYMENT_RAILWAY.md](docs/DEPLOYMENT_RAILWAY.md)
+- **Security Guide:** [docs/SECURITY.md](docs/SECURITY.md)
+- **Troubleshooting:** [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
+- **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **User Guide:** [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+- **Admin Guide:** [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md)
+- **Changelog:** [docs/CHANGELOG.md](docs/CHANGELOG.md)
+
+### Documentos Adicionales
+
+- **Guía de Usuario (Detallada):** `docs/GUIDE_MOD_GUIDED_USUARIOS.md`
 - **Estado Funcional:** `docs/ESTADO_FUNCIONAL_WORKFLOW_SISTEMA.md`
 - **Auditoría Completa:** `docs/AUDITORIA_COMPLETA_FLUJO_DROPSHIPPING.md`
-- **Changelog:** `docs/CHANGELOG_WORKFLOW_2025_01_26.md`
+- **CORS Troubleshooting:** `docs/CORS_TROUBLESHOOTING.md`
 
 ### Estructura del Proyecto
 

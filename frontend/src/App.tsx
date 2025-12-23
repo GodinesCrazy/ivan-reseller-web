@@ -29,13 +29,19 @@ const APIKeys = lazy(() => import('@pages/APIKeys'));
 const OtherCredentials = lazy(() => import('@pages/OtherCredentials'));
 const AdminPanel = lazy(() => import('@pages/AdminPanel'));
 const HelpCenter = lazy(() => import('@pages/HelpCenter'));
+const APIDocViewer = lazy(() => import('@pages/APIDocViewer'));
+const APIDocsList = lazy(() => import('@pages/APIDocsList'));
+const DocsList = lazy(() => import('@pages/DocsList'));
+const DocViewer = lazy(() => import('@pages/DocViewer'));
 const WorkflowConfig = lazy(() => import('@pages/WorkflowConfig'));
 const ManualLogin = lazy(() => import('@pages/ManualLogin'));
 const ResolveCaptcha = lazy(() => import('@pages/ResolveCaptcha'));
 const RequestAccess = lazy(() => import('@pages/RequestAccess'));
 const MeetingRoom = lazy(() => import('@pages/MeetingRoom'));
 const PendingPurchases = lazy(() => import('@pages/PendingPurchases'));
+const Diagnostics = lazy(() => import('@pages/Diagnostics'));
 import Layout from '@components/layout/Layout';
+import { ErrorBanner } from '@components/ErrorBanner';
 
 function AppContent() {
   const location = useLocation();
@@ -205,14 +211,25 @@ function AppContent() {
         
         {/* Help */}
         <Route path="help" element={<HelpCenter />} />
+        <Route path="help/apis" element={<APIDocsList />} />
+        <Route path="help/apis/:slug" element={<APIDocViewer />} />
+        <Route path="help/docs" element={<DocsList />} />
+        <Route path="help/docs/:slug" element={<DocViewer />} />
         
         {/* Meeting Room */}
         <Route path="meeting-room" element={<MeetingRoom />} />
+        
+        {/* Diagnostics (public, no requiere auth) */}
+        <Route path="diagnostics" element={<Diagnostics />} />
       </Route>
+      
+      {/* Public diagnostics route (accessible without auth) */}
+      <Route path="/diagnostics" element={<Diagnostics />} />
 
       {/* 404 */}
       <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+      <ErrorBanner message="VITE_API_URL no está configurada" />
       <Toaster />
     </Suspense>
   );
