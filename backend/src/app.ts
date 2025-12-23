@@ -62,9 +62,288 @@ import accessRequestsRoutes from './api/routes/access-requests.routes';
 import listingLifetimeRoutes from './api/routes/listing-lifetime.routes';
 import meetingRoomRoutes from './api/routes/meeting-room.routes';
 import debugRoutes from './api/routes/debug.routes';
+import helpRoutes from './api/routes/help.routes';
 
 const app: Application = express();
 app.set('trust proxy', 1);
+
+// ✅ PRODUCTION FIX DEFINITIVO: Deshabilitar ETag para /api/* para evitar 304 sin CORS
+// Express por defecto puede devolver 304 (Not Modified) sin pasar por middlewares CORS
+app.set('etag', false); // Deshabilitar ETag globalmente (más seguro para APIs)
+
+// ====================================
+// CORS ORIGINS CONFIGURATION (LEER PRIMERO)
+// ====================================
+
+// ✅ PRODUCTION FIX DEFINITIVO: Parser SUPER ROBUSTO para leer CORS origins
+// Maneja casos edge: CORS_ORIGIN= incrustado, comillas, espacios, etc.
+function readCorsOrigins(): string[] {
+  // Normalizar origin: trim, remover trailing slash
+  const normalizeOrigin = (origin: string): string => {
+    return origin.trim().replace(/\/+$/, '');
+  };
+
+  // Limpiar un token individual: remover prefijos incrustados, comillas, etc.
+  const cleanToken = (token: string): string => {
+    let cleaned = token.trim();
+    
+    // Remover comillas simples/dobles alrededor
+    cleaned = cleaned.replace(/^["']|["']$/g, '');
+    
+    // Remover prefijos incrustados SOLO si están al inicio (case-insensitive)
+    // Patrón: ^\s*(CORS_ORIGINS?|FRONTEND_URL)\s*=\s*
+    const prefixPattern = /^\s*(CORS_ORIGINS?|FRONTEND_URL)\s*=\s*/i;
+    if (prefixPattern.test(cleaned)) {
+      cleaned = cleaned.replace(prefixPattern, '');
+      // Si después del = hay OTRO prefijo, limpiar también (caso anidado)
+      if (prefixPattern.test(cleaned)) {
+        cleaned = cleaned.replace(prefixPattern, '');
+      }
+    }
+    
+    // Remover trailing slash
+    cleaned = cleaned.replace(/\/+$/, '');
+    
+    return cleaned.trim();
+  };
+
+  // Parsear un valor (string con múltiples origins separados por coma)
+  const parseOrigins = (value: string | undefined): string[] => {
+    if (!value || typeof value !== 'string') return [];
+    
+    return value
+      .split(',')
+      .map(cleanToken)
+      .filter((token) => {
+        // Validar que sea una URL válida (http:// o https://)
+        return token.length > 0 && 
+               (token.startsWith('http://') || token.startsWith('https://')) &&
+               !token.includes('CORS_ORIGIN=') && // Rechazar si aún tiene prefijo
+               !token.includes('CORS_ORIGINS=');
+      })
+      .map(normalizeOrigin);
+  };
+
+  let origins: string[] = [];
+
+  // Prioridad 1: CORS_ORIGINS (plural) - preferir plural si existe
+  if (process.env.CORS_ORIGINS) {
+    origins = parseOrigins(process.env.CORS_ORIGINS);
+  }
+
+  // Prioridad 2: CORS_ORIGIN (singular) - solo si plural no dio resultados
+  if (origins.length === 0 && process.env.CORS_ORIGIN) {
+    origins = parseOrigins(process.env.CORS_ORIGIN);
+  }
+
+  // Prioridad 3: FRONTEND_URL como fallback
+  if (origins.length === 0 && env.FRONTEND_URL) {
+    const normalized = normalizeOrigin(env.FRONTEND_URL);
+    if (normalized && (normalized.startsWith('http://') || normalized.startsWith('https://'))) {
+      origins = [normalized];
+      // Agregar versión www y sin www automáticamente
+      try {
+        const url = new URL(normalized);
+        if (url.hostname.startsWith('www.')) {
+          origins.push(normalized.replace('www.', ''));
+        } else {
+          origins.push(normalized.replace(url.hostname, `www.${url.hostname}`));
+        }
+      } catch {
+        // Ignorar si no se puede parsear
+      }
+    }
+  }
+
+  // ✅ CRÍTICO: SIEMPRE agregar fallback de producción (incluso si ya hay origins)
+  // Esto garantiza que https://www.ivanreseller.com y https://ivanreseller.com SIEMPRE funcionen
+  const productionFallbacks = [
+    'https://www.ivanreseller.com',
+    'https://ivanreseller.com'
+  ];
+  
+  // Agregar fallbacks si no están ya presentes
+  for (const fallback of productionFallbacks) {
+    if (!origins.includes(fallback)) {
+      origins.push(fallback);
+    }
+  }
+
+  // Deduplicar (case-insensitive para hostname)
+  const uniqueOrigins: string[] = [];
+  const seenHostnames = new Set<string>();
+  
+  for (const origin of origins) {
+    try {
+      const url = new URL(origin);
+      const hostnameKey = url.hostname.toLowerCase();
+      if (!seenHostnames.has(hostnameKey)) {
+        seenHostnames.add(hostnameKey);
+        uniqueOrigins.push(origin);
+      }
+    } catch {
+      // Si no se puede parsear como URL, rechazar (no agregar)
+      console.warn(`⚠️  CORS: Origin inválido rechazado: ${origin}`);
+    }
+  }
+
+  return uniqueOrigins;
+}
+
+// ✅ PRODUCTION FIX DEFINITIVO: Leer CORS origins con función robusta
+let allowedOrigins: string[] = [];
+let allowedHostNoWww: Set<string> = new Set(); // Set para matching eficiente www vs no-www
+
+try {
+  allowedOrigins = readCorsOrigins();
+  
+  // Construir Set de hostnames sin www para matching eficiente
+  for (const origin of allowedOrigins) {
+    try {
+      const url = new URL(origin);
+      const hostNoWww = url.hostname.toLowerCase().replace(/^www\./, '');
+      allowedHostNoWww.add(hostNoWww);
+    } catch {
+      // Ignorar origins inválidos
+    }
+  }
+  
+  // Log final de origins configuradas (solo en startup)
+  console.log(`✅ CORS Origins configuradas (${allowedOrigins.length}):`);
+  allowedOrigins.forEach((origin, idx) => {
+    console.log(`   ${idx + 1}. ${origin}`);
+  });
+  console.log(`✅ CORS Hosts permitidos (sin www): ${Array.from(allowedHostNoWww).join(', ')}`);
+} catch (error) {
+  console.error('❌ ERROR parseando CORS origins:', error);
+  // Fallback seguro de producción
+  allowedOrigins = [
+    'https://www.ivanreseller.com',
+    'https://ivanreseller.com'
+  ];
+  allowedHostNoWww = new Set(['ivanreseller.com']);
+}
+
+// ====================================
+// CORS HARDENED MIDDLEWARE (PRIMERO - ANTES DE TODO)
+// ====================================
+
+// ✅ PRODUCTION FIX DEFINITIVO: Middleware CORS hardened manual
+// Se ejecuta ANTES de todo para garantizar headers CORS en TODAS las respuestas
+function createCorsHardenedMiddleware(allowedOriginsList: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const origin = req.headers.origin;
+    const method = req.method;
+    const path = req.path;
+    
+    // Normalizar origin
+    const normalizeOrigin = (o: string): string => {
+      return o.trim().replace(/\/+$/, '').toLowerCase();
+    };
+    
+    const normalizeDomain = (url: string): string => {
+      try {
+        const urlObj = new URL(url);
+        return urlObj.hostname.toLowerCase().replace(/^www\./, '');
+      } catch {
+        return url.toLowerCase();
+      }
+    };
+    
+    // Determinar si el origin está permitido
+    let isAllowed = false;
+    let matchedOrigin: string | null = null;
+    let matchedRule = 'none';
+    
+    if (!origin) {
+      // Sin Origin (curl, health checks) - permitir pero no setear CORS headers
+      isAllowed = true;
+      matchedRule = 'no-origin';
+    } else {
+      const normalizedOrigin = normalizeOrigin(origin);
+      
+      // Match exacto (case-insensitive)
+      const exactMatch = allowedOriginsList.find(allowed => normalizeOrigin(allowed) === normalizedOrigin);
+      if (exactMatch) {
+        isAllowed = true;
+        matchedOrigin = exactMatch; // Usar el de la lista (preserva case)
+        matchedRule = 'exact-match';
+      } else {
+        // Match por dominio (www vs sin www)
+        const originDomain = normalizeDomain(origin);
+        const domainMatch = allowedOriginsList.find(allowed => {
+          const normalizedAllowed = normalizeDomain(allowed);
+          return originDomain === normalizedAllowed;
+        });
+        
+        if (domainMatch) {
+          isAllowed = true;
+          matchedOrigin = domainMatch;
+          matchedRule = 'domain-match';
+        }
+      }
+    }
+    
+    // Logging (solo una línea por request, evitar spam)
+    if (origin && (env.LOG_LEVEL === 'debug' || !isAllowed)) {
+      logger.info('CORS', {
+        origin,
+        allowed: isAllowed,
+        matchedRule,
+        path,
+        method
+      });
+    }
+    
+    // Si es OPTIONS (preflight), responder inmediatamente
+    if (method === 'OPTIONS') {
+      if (isAllowed && matchedOrigin) {
+        res.setHeader('Access-Control-Allow-Origin', matchedOrigin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Vary', 'Origin');
+        
+        // Métodos permitidos
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+        
+        // Headers permitidos (usar el request si existe, si no default)
+        const requestedHeaders = req.headers['access-control-request-headers'];
+        if (requestedHeaders) {
+          res.setHeader('Access-Control-Allow-Headers', requestedHeaders);
+        } else {
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Correlation-ID');
+        }
+        
+        res.setHeader('Access-Control-Expose-Headers', 'Set-Cookie');
+        res.setHeader('Access-Control-Max-Age', '86400'); // 24 horas
+        
+        return res.status(204).end();
+      } else {
+        // Origin no permitido en preflight
+        return res.status(403).json({ error: 'CORS policy: origin not allowed' });
+      }
+    }
+    
+    // Para requests normales, establecer headers CORS si el origin está permitido
+    if (isAllowed && matchedOrigin && origin) {
+      res.setHeader('Access-Control-Allow-Origin', matchedOrigin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Expose-Headers', 'Set-Cookie');
+    }
+    
+    // Cache-Control: no-store para /api/* (evitar 304)
+    if (path.startsWith('/api/')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+    
+    next();
+  };
+}
+
+// ✅ PRODUCTION FIX DEFINITIVO: Aplicar CORS hardened ANTES de todo
+app.use(createCorsHardenedMiddleware(allowedOrigins));
 
 // ====================================
 // MIDDLEWARE
@@ -90,97 +369,27 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false, // Deshabilitar para compatibilidad con APIs externas
 }));
 
-// ✅ PRODUCTION FIX: Validar y parsear CORS_ORIGIN con fallback de producción
-let allowedOrigins: string[] = [];
-try {
-  // Función helper para normalizar URLs (eliminar trailing slash)
-  const normalizeOrigin = (origin: string): string => {
-    return origin.trim().replace(/\/+$/, '');
-  };
-
-  // Prioridad 1: CORS_ORIGIN desde ENV
-  if (env.CORS_ORIGIN && typeof env.CORS_ORIGIN === 'string') {
-    allowedOrigins = env.CORS_ORIGIN.split(',')
-      .map(normalizeOrigin)
-      .filter((origin) => origin.length > 0);
-  }
-
-  // Prioridad 2: Si CORS_ORIGIN está vacío pero FRONTEND_URL existe, usarlo
-  if (allowedOrigins.length === 0 && env.FRONTEND_URL) {
-    const normalizedFrontend = normalizeOrigin(env.FRONTEND_URL);
-    if (normalizedFrontend) {
-      allowedOrigins = [normalizedFrontend];
-      // También agregar versión sin www si tiene www, y viceversa
-      try {
-        const url = new URL(normalizedFrontend);
-        if (url.hostname.startsWith('www.')) {
-          allowedOrigins.push(normalizedFrontend.replace('www.', ''));
-        } else {
-          allowedOrigins.push(normalizedFrontend.replace(url.hostname, `www.${url.hostname}`));
-        }
-      } catch {
-        // Ignorar si no se puede parsear
-      }
-    }
-  }
-
-  // Prioridad 3: Fallback de producción
-  if (allowedOrigins.length === 0) {
-    if (env.NODE_ENV === 'production') {
-      console.warn('⚠️  CORS_ORIGIN no configurada en producción, usando fallback de producción');
-      allowedOrigins = [
-        'https://www.ivanreseller.com',
-        'https://ivanreseller.com'
-      ];
-    } else {
-      console.warn('⚠️  CORS_ORIGIN no configurada, usando default de desarrollo');
-      allowedOrigins = ['http://localhost:5173'];
-    }
-  }
-
-  // Log final de origins configuradas
-  console.log(`✅ CORS Origins configuradas (${allowedOrigins.length}):`);
-  allowedOrigins.forEach((origin, idx) => {
-    console.log(`   ${idx + 1}. ${origin}`);
-  });
-} catch (error) {
-  console.error('❌ ERROR parseando CORS_ORIGIN:', error);
-  // Fallback seguro de producción
-  if (env.NODE_ENV === 'production') {
-    allowedOrigins = [
-      'https://www.ivanreseller.com',
-      'https://ivanreseller.com'
-    ];
-  } else {
-    allowedOrigins = ['http://localhost:5173'];
-  }
-}
+// ✅ ELIMINADO: Función readCorsOrigins() duplicada (ya definida arriba antes de helmet)
+// ✅ ELIMINADO: allowedOrigins duplicado (ya definido arriba)
+// ✅ ELIMINADO: normalizeDomain duplicado (ya definido en el middleware hardened)
 
 const dynamicOriginMatchers = [
   /\.aliexpress\.[a-z]+$/i,
 ];
 
-// Función para normalizar dominios (www y sin www)
-const normalizeDomain = (url: string): string => {
-  try {
-    const urlObj = new URL(url);
-    return urlObj.hostname.replace(/^www\./, ''); // Remover www para comparación
-  } catch {
-    return url;
-  }
-};
-
-// ✅ PRODUCTION FIX: CORS robusto con manejo correcto de preflight
+// ✅ PRODUCTION FIX DEFINITIVO: CORS robusto con manejo correcto de preflight
+// CRÍTICO: Con credentials:true, el callback debe devolver el origin EXACTO, no true
 const corsOptions: CorsOptions = {
   credentials: true, // ✅ Se usa cookies/httpOnly tokens, mantener true
   origin: (origin, callback) => {
     // Si no viene Origin (curl, health checks, server-to-server), permitir
+    // Esto permite health checks y herramientas de monitoreo
     if (!origin) {
       return callback(null, true);
     }
 
-    // Normalizar origin (eliminar trailing slash)
-    const normalizedOrigin = origin.replace(/\/+$/, '');
+    // Normalizar origin (eliminar trailing slash, lower-case)
+    const normalizedOrigin = origin.replace(/\/+$/, '').toLowerCase();
 
     // Permitir si está en la lista exacta (después de normalizar)
     if (allowedOrigins.includes('*')) {
@@ -189,40 +398,61 @@ const corsOptions: CorsOptions = {
       return callback(null, true);
     }
 
-    if (allowedOrigins.includes(normalizedOrigin)) {
-      logger.debug('CORS: Origin allowed (exact match)', { origin: normalizedOrigin });
-      return callback(null, true);
+    // ✅ CRÍTICO: Si hay match exacto (case-insensitive), devolver el origin de la lista
+    const exactMatch = allowedOrigins.find(allowed => allowed.toLowerCase() === normalizedOrigin);
+    if (exactMatch) {
+      logger.debug('CORS: Origin allowed (exact match)', { origin, matched: exactMatch });
+      return callback(null, exactMatch); // ✅ Devolver origin de la lista (preserva case original)
     }
 
-    // Normalizar y comparar dominios (www y sin www)
+    // ✅ PRODUCTION FIX: Matching por hostname sin www (más eficiente con Set)
     try {
-      const originDomain = normalizeDomain(normalizedOrigin);
-      const isAllowed = allowedOrigins.some(allowedOrigin => {
-        const normalizedAllowed = normalizeDomain(allowedOrigin);
-        return originDomain === normalizedAllowed;
-      });
-
-      if (isAllowed) {
-        logger.debug('CORS: Origin allowed (normalized match)', { origin: normalizedOrigin, originDomain });
-        return callback(null, true);
+      const url = new URL(origin);
+      const hostNoWww = url.hostname.toLowerCase().replace(/^www\./, '');
+      const protocol = url.protocol;
+      
+      // Verificar si el hostname (sin www) está permitido
+      if (allowedHostNoWww.has(hostNoWww)) {
+        // En producción, exigir HTTPS (excepto localhost en dev)
+        if (env.NODE_ENV === 'production' && protocol !== 'https:' && !hostNoWww.includes('localhost')) {
+          logger.warn('CORS: Rejecting HTTP in production', { origin, protocol });
+          return callback(new Error(`CORS blocked: HTTP not allowed in production`), false);
+        }
+        
+        // Encontrar el origin de la lista que corresponde (puede tener www o no)
+        const matchedOrigin = allowedOrigins.find(allowed => {
+          try {
+            const allowedUrl = new URL(allowed);
+            const allowedHostNoWww = allowedUrl.hostname.toLowerCase().replace(/^www\./, '');
+            return allowedHostNoWww === hostNoWww;
+          } catch {
+            return false;
+          }
+        });
+        
+        if (matchedOrigin) {
+          logger.debug('CORS: Origin allowed (hostname match)', { origin, hostNoWww, matchedOrigin });
+          return callback(null, matchedOrigin); // ✅ Devolver origin de la lista
+        }
       }
 
       // Verificar patrones dinámicos (AliExpress, etc.)
-      const hostname = new URL(normalizedOrigin).hostname;
+      const hostname = url.hostname.toLowerCase();
       if (dynamicOriginMatchers.some((pattern) => pattern.test(hostname))) {
-        logger.debug('CORS: Origin allowed (pattern match)', { origin: normalizedOrigin, hostname });
-        return callback(null, true);
+        logger.debug('CORS: Origin allowed (pattern match)', { origin, hostname });
+        return callback(null, origin); // ✅ Devolver origin original
       }
     } catch (error) {
-      logger.warn('CORS: invalid origin received', { origin: normalizedOrigin, error });
+      logger.warn('CORS: invalid origin received', { origin, error });
     }
 
     // Origin no permitido
-    logger.warn('CORS: origin not allowed', { 
-      origin: normalizedOrigin, 
-      allowedOrigins: allowedOrigins.slice(0, 3) // Solo mostrar primeros 3 para no saturar logs
+    logger.warn('CORS REJECT', { 
+      receivedOrigin: origin, 
+      allowedOrigins: allowedOrigins.slice(0, 5), // Mostrar primeros 5
+      allowedHostNoWww: Array.from(allowedHostNoWww).slice(0, 5)
     });
-    return callback(new Error('Not allowed by CORS policy'), false);
+    return callback(new Error(`CORS blocked: ${origin} not in allowlist`), false);
   },
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-Correlation-ID'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -231,11 +461,12 @@ const corsOptions: CorsOptions = {
   exposedHeaders: ['Set-Cookie'], // Exponer Set-Cookie si se usa
 };
 
-// ✅ PRODUCTION FIX: Aplicar CORS antes de cualquier otra cosa
+// ✅ PRODUCTION FIX: Aplicar cors() del paquete como backup (después del middleware hardened)
+// El middleware hardened ya estableció los headers, pero cors() puede agregar validaciones adicionales
 app.use(cors(corsOptions));
 
-// ✅ PRODUCTION FIX: Manejar preflight OPTIONS explícitamente para todas las rutas /api/*
-// Esto asegura que OPTIONS siempre responda correctamente, incluso si alguna ruta no lo maneja
+// ✅ PRODUCTION FIX DEFINITIVO: Manejar preflight OPTIONS explícitamente (backup)
+// El middleware hardened ya maneja OPTIONS, pero esto es un backup adicional
 app.options('/api/*', cors(corsOptions));
 app.options('*', cors(corsOptions)); // Fallback para cualquier ruta
 
@@ -276,6 +507,97 @@ declare global {
  * IMPORTANTE: Estas rutas están ANTES de compression y otros middlewares
  * para garantizar respuesta rápida y sin interferencias
  */
+
+// ✅ PRODUCTION FIX DEFINITIVO: Endpoint de debug CORS mejorado
+app.get('/api/cors-debug', (req: Request, res: Response) => {
+  const receivedOrigin = req.headers.origin || null;
+  
+  // Determinar matched rule (misma lógica que el callback de CORS)
+  let matched = false;
+  let matchedRule = 'none';
+  let matchedOrigin: string | null = null;
+  
+  if (!receivedOrigin) {
+    matchedRule = 'no-origin';
+  } else {
+    const normalizedOrigin = receivedOrigin.replace(/\/+$/, '').toLowerCase();
+    
+    // Match exacto
+    const exactMatch = allowedOrigins.find(allowed => allowed.toLowerCase() === normalizedOrigin);
+    if (exactMatch) {
+      matched = true;
+      matchedRule = 'exact-match';
+      matchedOrigin = exactMatch;
+    } else {
+      // Match por hostname sin www
+      try {
+        const url = new URL(receivedOrigin);
+        const hostNoWww = url.hostname.toLowerCase().replace(/^www\./, '');
+        
+        if (allowedHostNoWww.has(hostNoWww)) {
+          matched = true;
+          matchedRule = 'hostname-match';
+          // Encontrar el origin de la lista
+          matchedOrigin = allowedOrigins.find(allowed => {
+            try {
+              const allowedUrl = new URL(allowed);
+              const allowedHostNoWww = allowedUrl.hostname.toLowerCase().replace(/^www\./, '');
+              return allowedHostNoWww === hostNoWww;
+            } catch {
+              return false;
+            }
+          }) || null;
+        }
+      } catch {
+        matchedRule = 'invalid-origin';
+      }
+    }
+  }
+  
+  res.status(200).json({
+    ok: true,
+    receivedOrigin,
+    matched,
+    matchedRule,
+    matchedOrigin,
+    allowedOriginsParsed: allowedOrigins,
+    allowedHostNoWww: Array.from(allowedHostNoWww),
+    envCorsOriginRaw: process.env.CORS_ORIGIN || null,
+    envCorsOriginsRaw: process.env.CORS_ORIGINS || null,
+    envFrontendUrlRaw: env.FRONTEND_URL || null,
+    'access-control-allow-origin': res.getHeader('Access-Control-Allow-Origin') || null,
+    'access-control-allow-credentials': res.getHeader('Access-Control-Allow-Credentials') || null,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// ✅ PRODUCTION FIX DEFINITIVO: Alias /api/health para consistencia (sin romper /health existente)
+// Este endpoint se define aquí (después de CORS) para que tenga headers CORS
+app.get('/api/health', async (_req: Request, res: Response) => {
+  // Usar el mismo handler que /health
+  try {
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      service: 'ivan-reseller-backend',
+      version: process.env.npm_package_version || '1.0.0',
+      environment: env.NODE_ENV,
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+        unit: 'MB'
+      }
+    });
+  } catch (error) {
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      service: 'ivan-reseller-backend'
+    });
+  }
+});
 
 // ✅ FASE 0: Version endpoint (for deployment verification)
 app.get('/version', (_req: Request, res: Response) => {
@@ -379,6 +701,8 @@ app.get('/config', (_req: Request, res: Response) => {
     });
   }
 });
+
+// ✅ ELIMINADO: Duplicado de /api/health (ya definido arriba después de CORS en línea 358)
 
 // Liveness probe: Verifica que la aplicación está corriendo
 app.get('/health', async (_req: Request, res: Response) => {
