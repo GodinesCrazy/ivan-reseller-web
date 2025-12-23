@@ -85,14 +85,17 @@ Cada documento incluye:
 **Implementación:**
 - Los documentos de inversionistas están en `docs/investors/`
 - **NO** están incluidos en el `DocsRegistry` del frontend
-- Acceso solo mediante:
+- Endpoint backend protegido: `GET /api/help/investors/:slug` (solo admin)
+- Endpoint backend para lista: `GET /api/help/investors` (solo admin)
+- Frontend solicita docs solo si:
   - Feature flag: `VITE_ENABLE_INVESTOR_DOCS=true`
-  - Verificación de rol admin (si se implementa endpoint backend)
-  - Por ahora: acceso directo a archivos (requiere conocimiento de ruta)
-
-**Recomendación futura:**
-- Implementar endpoint backend protegido: `GET /api/help/investors/:slug` (solo admin)
-- Frontend solicita docs solo si feature flag + admin
+  - Usuario es ADMIN (verificado en backend también)
+- Componentes frontend:
+  - `InvestorDocsRegistry.ts` - Registry y funciones de carga
+  - `InvestorDocsList.tsx` - Lista de documentos (protegida)
+  - `InvestorDocViewer.tsx` - Visualizador de documentos (protegido)
+- Rutas protegidas: `/help/investors` y `/help/investors/:slug`
+- Sección en HelpCenter solo visible si admin + feature flag
 
 ---
 
@@ -120,8 +123,9 @@ Cada documento incluye:
 ### Archivos Modificados
 
 - `README.md` - Actualizado con enlaces a nueva documentación
-- `frontend/src/App.tsx` - Agregadas rutas para `/help/docs`
-- `frontend/src/pages/HelpCenter.tsx` - Agregada sección "Documentación Técnica"
+- `frontend/src/App.tsx` - Agregadas rutas para `/help/docs` y `/help/investors`
+- `frontend/src/pages/HelpCenter.tsx` - Agregada sección "Documentación Técnica" y "Documentos para Inversionistas" (condicional)
+- `backend/src/app.ts` - Agregada ruta `/api/help`
 
 ---
 

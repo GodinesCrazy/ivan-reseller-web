@@ -25,6 +25,9 @@ import {
 
 export default function HelpCenter() {
   const [activeSection, setActiveSection] = useState('inicio');
+  const { user } = useAuthStore();
+  const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
+  const investorDocsEnabled = isInvestorDocsEnabled();
 
   const sections = [
     { id: 'inicio', label: 'Inicio Rápido', icon: Rocket },
