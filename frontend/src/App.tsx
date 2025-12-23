@@ -33,6 +33,8 @@ const APIDocViewer = lazy(() => import('@pages/APIDocViewer'));
 const APIDocsList = lazy(() => import('@pages/APIDocsList'));
 const DocsList = lazy(() => import('@pages/DocsList'));
 const DocViewer = lazy(() => import('@pages/DocViewer'));
+const InvestorDocsList = lazy(() => import('@pages/InvestorDocsList'));
+const InvestorDocViewer = lazy(() => import('@pages/InvestorDocViewer'));
 const WorkflowConfig = lazy(() => import('@pages/WorkflowConfig'));
 const ManualLogin = lazy(() => import('@pages/ManualLogin'));
 const ResolveCaptcha = lazy(() => import('@pages/ResolveCaptcha'));
@@ -215,6 +217,8 @@ function AppContent() {
         <Route path="help/apis/:slug" element={<APIDocViewer />} />
         <Route path="help/docs" element={<DocsList />} />
         <Route path="help/docs/:slug" element={<DocViewer />} />
+        <Route path="help/investors" element={<InvestorDocsList />} />
+        <Route path="help/investors/:slug" element={<InvestorDocViewer />} />
         
         {/* Meeting Room */}
         <Route path="meeting-room" element={<MeetingRoom />} />
