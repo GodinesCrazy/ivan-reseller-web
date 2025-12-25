@@ -43,7 +43,7 @@ const MeetingRoom = lazy(() => import('@pages/MeetingRoom'));
 const PendingPurchases = lazy(() => import('@pages/PendingPurchases'));
 const Diagnostics = lazy(() => import('@pages/Diagnostics'));
 import Layout from '@components/layout/Layout';
-import { ErrorBanner } from './components/ErrorBanner';
+import { ErrorBanner } from '@components/ErrorBanner';
 
 function AppContent() {
   const location = useLocation();
