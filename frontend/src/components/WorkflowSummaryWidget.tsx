@@ -36,7 +36,16 @@ export default function WorkflowSummaryWidget() {
   const loadSummary = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/products');
+      // ✅ FIX: Manejo robusto de errores - degradación suave
+      const response = await api.get('/api/products').catch((err) => {
+        // Si es error de red/CORS, no mostrar error rojo, solo degradar
+        if (!err.response) {
+          console.warn('⚠️  No se pudo cargar resumen de workflows (error de conexión). Mostrando datos vacíos.');
+        }
+        // Retornar estructura vacía para degradación suave
+        return { data: { data: { products: [] }, products: [] } };
+      });
+      
       const products = response.data?.data?.products || response.data?.products || response.data || [];
       
       // Calcular resumen básico (simplificado)
@@ -60,7 +69,14 @@ export default function WorkflowSummaryWidget() {
 
       setSummary(summary);
     } catch (error) {
-      console.error('Error loading workflow summary:', error);
+      // ✅ FIX: Degradación suave - no mostrar error rojo, solo loggear
+      console.warn('⚠️  Error loading workflow summary (degradación suave):', error);
+      // Establecer resumen vacío en lugar de null para que el componente no desaparezca
+      setSummary({
+        totalProducts: 0,
+        byStage: { scrape: 0, analyze: 0, publish: 0, purchase: 0, fulfillment: 0, customerService: 0 },
+        byStatus: { completed: 0, in_progress: 0, pending: 0, failed: 0 }
+      });
     } finally {
       setLoading(false);
     }
