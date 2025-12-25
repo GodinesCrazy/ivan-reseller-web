@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@stores/authStore';
 import { Toaster } from 'react-hot-toast';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { log } from '@/utils/logger';
 import { useTheme } from '@/hooks/useTheme';
 const Login = lazy(() => import('@pages/Login'));
@@ -235,6 +236,7 @@ function AppContent() {
       </Routes>
       <ErrorBanner message="VITE_API_URL no está configurada" />
       <Toaster />
+      <SpeedInsights />
     </Suspense>
   );
 }
