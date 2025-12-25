@@ -4,6 +4,7 @@ import { useAuthStore } from '@stores/authStore';
 import { Toaster } from 'react-hot-toast';
 import { log } from '@/utils/logger';
 import { useTheme } from '@/hooks/useTheme';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 const Login = lazy(() => import('@pages/Login'));
 const Dashboard = lazy(() => import('@pages/Dashboard'));
 const Opportunities = lazy(() => import('@pages/Opportunities'));
@@ -240,7 +241,12 @@ function AppContent() {
 }
 
 function App() {
-  return <AppContent />;
+  return (
+    <>
+      <AppContent />
+      <SpeedInsights />
+    </>
+  );
 }
 
 export default App;
