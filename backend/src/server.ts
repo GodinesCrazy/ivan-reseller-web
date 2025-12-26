@@ -16,7 +16,63 @@ import { resolveChromiumExecutable } from './utils/chromium';
 import { initBuildInfo } from './middleware/version-header.middleware';
 
 const execAsync = promisify(exec);
+
+// ✅ FIX 502: Validar PORT antes de iniciar servidor
 const PORT = parseInt(env.PORT, 10);
+if (isNaN(PORT) || PORT <= 0) {
+  console.error('❌ ERROR CRÍTICO: PORT no está configurado o es inválido');
+  console.error(`   Valor recibido: ${env.PORT || 'undefined'}`);
+  console.error('   Railway inyecta PORT automáticamente. Si no está disponible, verifica la configuración del servicio.');
+  process.exit(1);
+}
+
+/**
+ * ✅ GO-LIVE: Log configuración sanitizada (sin exponer secretos)
+ */
+function logConfiguration(env: any): void {
+  const allowedOrigins = env.CORS_ORIGIN?.split(',')
+    .map((o: string) => o.trim())
+    .filter((o: string) => o.length > 0) || [];
+  
+  console.log('📋 Configuración del Sistema (sanitizada):');
+  console.log(`   NODE_ENV: ${env.NODE_ENV}`);
+  console.log(`   PORT: ${env.PORT}`);
+  console.log(`   API_URL: ${env.API_URL || '❌ NO CONFIGURADA'}`);
+  console.log(`   FRONTEND_URL: ${env.FRONTEND_URL || '⚠️  No configurada (opcional)'}`);
+  console.log(`   CORS_ORIGIN: ${allowedOrigins.length} origen(es) configurado(s)`);
+  allowedOrigins.forEach((origin: string, idx: number) => {
+    try {
+      const url = new URL(origin);
+      console.log(`     ${idx + 1}. ${url.hostname} (${url.protocol}//${url.hostname})`);
+    } catch {
+      console.log(`     ${idx + 1}. ${origin}`);
+    }
+  });
+  console.log(`   DATABASE_URL: ${env.DATABASE_URL ? '✅ Configurada' : '❌ FALTA'}`);
+  if (env.DATABASE_URL) {
+    try {
+      const dbUrl = new URL(env.DATABASE_URL);
+      console.log(`     Host: ${dbUrl.hostname}`);
+    } catch {
+      // Ignorar si no se puede parsear
+    }
+  }
+  console.log(`   REDIS_URL: ${env.REDIS_URL && env.REDIS_URL !== 'redis://localhost:6379' ? '✅ Configurada' : '⚠️  Usando default (localhost)'}`);
+  if (env.REDIS_URL && env.REDIS_URL !== 'redis://localhost:6379') {
+    try {
+      const redisUrl = new URL(env.REDIS_URL);
+      console.log(`     Host: ${redisUrl.hostname}`);
+    } catch {
+      // Ignorar si no se puede parsear
+    }
+  }
+  console.log(`   JWT_SECRET: ${env.JWT_SECRET ? `✅ Configurada (${env.JWT_SECRET.length} caracteres)` : '❌ FALTA'}`);
+  console.log(`   ENCRYPTION_KEY: ${process.env.ENCRYPTION_KEY ? `✅ Configurada (${process.env.ENCRYPTION_KEY.length} caracteres)` : '⚠️  Usando JWT_SECRET como fallback'}`);
+  console.log(`   ALIEXPRESS_DATA_SOURCE: ${env.ALIEXPRESS_DATA_SOURCE || 'api (default)'}`);
+  console.log(`   ALLOW_BROWSER_AUTOMATION: ${env.ALLOW_BROWSER_AUTOMATION ? 'true' : 'false'}`);
+  console.log(`   SCRAPER_BRIDGE_ENABLED: ${env.SCRAPER_BRIDGE_ENABLED ? 'true' : 'false'}`);
+  console.log('');
+}
 
 /**
  * ✅ A3: Validar ENCRYPTION_KEY al inicio del servidor
@@ -289,7 +345,7 @@ process.on('uncaughtException', (error: Error) => {
 async function ensureChromiumLazyLoad(): Promise<void> {
   // Solo intentar resolver Chromium si realmente se va a usar scraping
   // Esto se llama cuando se necesita, no durante boot
-  const { env } = await import('./config/env');
+  // ✅ FIX: Usar env ya importado estáticamente (no import dinámico)
   const scraperBridgeEnabled = env.SCRAPER_BRIDGE_ENABLED ?? true;
   
   // Si Scraper Bridge está habilitado y disponible, no necesitamos Chromium
@@ -346,8 +402,12 @@ async function startServer() {
     logMilestone('Validating encryption key');
     validateEncryptionKey();
     
-    const { env } = await import('./config/env');
+    // ✅ FIX: Usar env ya importado estáticamente (no import dinámico)
+    // El env ya está disponible desde la línea 3: import { env } from './config/env';
     logMilestone(`Environment: ${env.NODE_ENV}, Port: ${PORT}`);
+    
+    // ✅ GO-LIVE: Log configuración sanitizada (sin secretos)
+    logConfiguration(env);
     
     // ✅ FASE 0: Initialize build info (for /version endpoint and X-App-Commit header)
     initBuildInfo();
@@ -583,13 +643,14 @@ async function startServer() {
             logMilestone('API Health Monitor disabled');
           }
           
-          // ✅ HOTFIX: AliExpress Auth Monitor solo si está habilitado
-          const { env } = await import('./config/env');
+          // ✅ FIX: Usar env ya importado estáticamente (no import dinámico que causa "before initialization")
+          // El env ya está disponible desde la línea 3: import { env } from './config/env';
           if (env.ALIEXPRESS_AUTH_MONITOR_ENABLED) {
             logMilestone('Starting AliExpress Auth Monitor');
             aliExpressAuthMonitor.start();
           } else {
             logMilestone('AliExpress Auth Monitor disabled (ALIEXPRESS_AUTH_MONITOR_ENABLED=false)');
+            const { logger } = await import('./config/logger');
             logger.info('AliExpress Auth Monitor: Disabled by feature flag. System will work in API-first mode without cookie monitoring.');
           }
           
