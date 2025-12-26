@@ -11,7 +11,7 @@ const isDevelopment = import.meta.env.DEV;
 /**
  * Obtiene y normaliza la URL base de la API
  * - Elimina trailing slashes
- * - Valida que esté presente en producción
+ * - En producción sin VITE_API_URL: usa "/api" (proxy de Vercel)
  * - Proporciona fallback seguro en desarrollo
  */
 export function getApiBaseUrl(): string {
@@ -23,23 +23,31 @@ export function getApiBaseUrl(): string {
     return 'http://localhost:3000';
   }
   
-  // En producción, VITE_API_URL es obligatoria
+  // En producción sin VITE_API_URL: usar "/api" (proxy de Vercel)
   if (!rawUrl && isProduction) {
-    const error = '❌ CRITICAL: VITE_API_URL no está configurada en producción';
-    console.error(error);
-    // Mostrar error visible en UI (se manejará en el componente de error)
+    console.warn('⚠️  VITE_API_URL no configurada, usando fallback: /api (proxy de Vercel)');
+    // Mostrar warning informativo (no error crítico)
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('api-config-error', { 
-        detail: { message: 'VITE_API_URL no configurada' } 
+      window.dispatchEvent(new CustomEvent('api-config-warning', { 
+        detail: { 
+          message: 'VITE_API_URL no configurada',
+          usingFallback: true,
+          fallbackUrl: '/api'
+        } 
       }));
     }
-    throw new Error(error);
+    return '/api';
   }
   
   // Normalizar: eliminar trailing slashes
   const normalized = rawUrl!.replace(/\/+$/, '');
   
-  // Validar formato básico
+  // Si es una ruta relativa (empieza con /), usarla directamente (proxy)
+  if (normalized.startsWith('/')) {
+    return normalized;
+  }
+  
+  // Validar formato básico para URLs absolutas
   if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
     const error = `❌ CRITICAL: VITE_API_URL tiene formato inválido: ${normalized}`;
     console.error(error);
