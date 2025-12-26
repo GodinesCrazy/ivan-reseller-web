@@ -10,33 +10,31 @@ const isDevelopment = import.meta.env.DEV;
 
 /**
  * Obtiene y normaliza la URL base de la API
+ * - En producción: SIEMPRE usa "/api" (proxy de Vercel) para evitar CORS
+ * - En desarrollo: permite VITE_API_URL o fallback a localhost
  * - Elimina trailing slashes
- * - En producción sin VITE_API_URL: usa "/api" (proxy de Vercel)
- * - Proporciona fallback seguro en desarrollo
  */
 export function getApiBaseUrl(): string {
+  // ✅ PRODUCTION FIX: En producción, SIEMPRE usar /api (proxy de Vercel)
+  // Esto evita problemas de CORS y asegura que todas las requests pasen por el proxy
+  if (isProduction) {
+    // Si VITE_API_URL está configurada pero no es una ruta relativa, ignorarla y usar /api
+    const rawUrl = import.meta.env.VITE_API_URL?.trim();
+    if (rawUrl && rawUrl.startsWith('/')) {
+      // Si es una ruta relativa, usarla (ej: /api)
+      return rawUrl.replace(/\/+$/, '');
+    }
+    // En producción, forzar uso de /api (proxy de Vercel)
+    console.info('ℹ️  Producción: usando /api (proxy de Vercel) para evitar CORS');
+    return '/api';
+  }
+  
+  // En desarrollo, permitir VITE_API_URL o fallback a localhost
   const rawUrl = import.meta.env.VITE_API_URL?.trim();
   
-  // En desarrollo, permitir fallback a localhost
   if (!rawUrl && isDevelopment) {
     console.warn('⚠️  VITE_API_URL no configurada, usando fallback: http://localhost:3000');
     return 'http://localhost:3000';
-  }
-  
-  // En producción sin VITE_API_URL: usar "/api" (proxy de Vercel)
-  if (!rawUrl && isProduction) {
-    console.warn('⚠️  VITE_API_URL no configurada, usando fallback: /api (proxy de Vercel)');
-    // Mostrar warning informativo (no error crítico)
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('api-config-warning', { 
-        detail: { 
-          message: 'VITE_API_URL no configurada',
-          usingFallback: true,
-          fallbackUrl: '/api'
-        } 
-      }));
-    }
-    return '/api';
   }
   
   // Normalizar: eliminar trailing slashes
@@ -47,7 +45,7 @@ export function getApiBaseUrl(): string {
     return normalized;
   }
   
-  // Validar formato básico para URLs absolutas
+  // Validar formato básico para URLs absolutas (solo en desarrollo)
   if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
     const error = `❌ CRITICAL: VITE_API_URL tiene formato inválido: ${normalized}`;
     console.error(error);
