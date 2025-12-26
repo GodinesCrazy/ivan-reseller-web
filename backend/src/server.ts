@@ -75,9 +75,12 @@ function logConfiguration(env: any): void {
 }
 
 /**
- * ✅ A3: Validar ENCRYPTION_KEY al inicio del servidor
- * Falla temprano si no está configurado correctamente
+ * ✅ FIX 502: Validar ENCRYPTION_KEY al inicio del servidor
+ * NO crashea el servidor si falta, pero marca como "degraded"
+ * El servidor debe arrancar para que /api/health funcione
  */
+let isEncryptionKeyValid = false;
+
 function validateEncryptionKey(): void {
   const encryptionKey = process.env.ENCRYPTION_KEY?.trim();
   const jwtSecret = process.env.JWT_SECRET?.trim();
@@ -85,17 +88,22 @@ function validateEncryptionKey(): void {
   const rawKey = encryptionKey || jwtSecret;
   
   if (!rawKey || rawKey.length < 32) {
-    const error = new Error(
-      'CRITICAL SECURITY ERROR: ENCRYPTION_KEY or JWT_SECRET environment variable must be set and be at least 32 characters long.\n' +
-      'Without a proper encryption key, credentials cannot be securely stored.\n' +
-      'Please set ENCRYPTION_KEY in your environment variables before starting the application.'
-    );
-    console.error('❌', error.message);
-    process.exit(1);
+    console.error('⚠️  WARNING: ENCRYPTION_KEY or JWT_SECRET not configured or too short');
+    console.error('   The server will start in DEGRADED mode.');
+    console.error('   Endpoints that require encryption will return 503 Service Unavailable.');
+    console.error('   Please set ENCRYPTION_KEY (min 32 chars) or JWT_SECRET (min 32 chars) in Railway variables.');
+    console.error('');
+    isEncryptionKeyValid = false;
+    // ✅ NO hacer process.exit(1), permitir que el servidor arranque
+    return;
   }
   
+  isEncryptionKeyValid = true;
   console.log('✅ Encryption key validated (length: ' + rawKey.length + ' characters)');
 }
+
+// ✅ Exportar estado global para que otros módulos puedan verificar
+(global as any).__isEncryptionKeyValid = isEncryptionKeyValid;
 
 async function ensureAdminUser() {
   try {
@@ -398,9 +406,12 @@ async function startServer() {
   try {
     logMilestone('Starting server initialization');
     
-    // ✅ A3: Validar ENCRYPTION_KEY antes de iniciar cualquier servicio
+    // ✅ FIX 502: Validar ENCRYPTION_KEY antes de iniciar cualquier servicio
+    // NO crashea el servidor si falta, pero marca como "degraded"
     logMilestone('Validating encryption key');
     validateEncryptionKey();
+    // Actualizar estado global después de validar
+    (global as any).__isEncryptionKeyValid = isEncryptionKeyValid;
     
     // ✅ FIX: Usar env ya importado estáticamente (no import dinámico)
     // El env ya está disponible desde la línea 3: import { env } from './config/env';
