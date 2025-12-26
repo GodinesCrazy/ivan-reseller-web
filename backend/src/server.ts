@@ -447,10 +447,13 @@ async function startServer() {
       console.log('🚀 Ivan Reseller API Server');
       console.log('================================');
       console.log(`✅ LISTEN_CALLBACK - HTTP SERVER LISTENING on ${addressStr} (listen took ${listenTime}ms)`);
+      console.log(`   Host: 0.0.0.0`);
+      console.log(`   Port: ${PORT}`);
       console.log(`   Total time to listen: ${Date.now() - startTime}ms`);
       console.log(`Environment: ${env.NODE_ENV}`);
       console.log(`Server: http://localhost:${PORT}`);
       console.log(`Health: http://localhost:${PORT}/health`);
+      console.log(`Health API: http://localhost:${PORT}/api/health`);
       console.log(`Ready: http://localhost:${PORT}/ready`);
       console.log('================================');
       console.log('');
