@@ -573,16 +573,21 @@ app.get('/api/cors-debug', (req: Request, res: Response) => {
 
 // ✅ PRODUCTION FIX DEFINITIVO: Alias /api/health para consistencia (sin romper /health existente)
 // Este endpoint se define aquí (después de CORS) para que tenga headers CORS
+// ✅ FIX 502: Siempre responde 200 OK, incluso si falta ENCRYPTION_KEY (modo degraded)
 app.get('/api/health', async (_req: Request, res: Response) => {
-  // Usar el mismo handler que /health
   try {
+    // ✅ Verificar estado de ENCRYPTION_KEY (puede no estar configurado)
+    const isEncryptionKeyValid = (global as any).__isEncryptionKeyValid ?? true;
+    
     res.status(200).json({
-      status: 'healthy',
+      status: isEncryptionKeyValid ? 'healthy' : 'degraded',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       service: 'ivan-reseller-backend',
       version: process.env.npm_package_version || '1.0.0',
       environment: env.NODE_ENV,
+      degraded: !isEncryptionKeyValid,
+      degradedReason: !isEncryptionKeyValid ? 'ENCRYPTION_KEY or JWT_SECRET not configured' : undefined,
       memory: {
         used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
         total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
@@ -590,6 +595,7 @@ app.get('/api/health', async (_req: Request, res: Response) => {
       }
     });
   } catch (error) {
+    // Si algo falla, responder 200 de todas formas (proceso está vivo)
     res.status(200).json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
