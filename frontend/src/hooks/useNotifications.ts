@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../stores/authStore';
 import { log } from '@/utils/logger';
+import { API_BASE_URL } from '../config/runtime';
+import api from '@/services/api';
 
 export interface NotificationPayload {
   id: string;
@@ -48,7 +50,7 @@ export const useNotifications = (): UseNotificationsReturn => {
 
     log.info('🔌 Initializing Socket.IO connection...');
 
-    const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
+    const newSocket = io(API_BASE_URL, {
       auth: {
         token: token
       },
@@ -148,19 +150,14 @@ export const useNotifications = (): UseNotificationsReturn => {
   }, []);
 
   // Send test notification
+  // ✅ FIX: Usa cliente api centralizado para forzar proxy /api en producción
   const sendTestNotification = useCallback(async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/notifications/test`, {
-        method: 'POST',
+      await api.post('/api/notifications/test', {}, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
         }
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to send test notification');
-      }
 
       log.info('✅ Test notification sent');
     } catch (error) {

@@ -13,19 +13,35 @@ export const isDevelopment = import.meta.env.DEV;
  * - En producción: SIEMPRE usa "/api" (proxy de Vercel) para evitar CORS
  * - En desarrollo: permite VITE_API_URL o fallback a localhost
  * - Elimina trailing slashes
+ * 
+ * ✅ FIX DEFINITIVO: En producción, IGNORA cualquier VITE_API_URL absoluta
+ * y SIEMPRE usa "/api" para forzar el proxy de Vercel (same-origin).
  */
 export function getApiBaseUrl(): string {
-  // ✅ PRODUCTION FIX: En producción, SIEMPRE usar /api (proxy de Vercel)
-  // Esto evita problemas de CORS y asegura que todas las requests pasen por el proxy
+  // ✅ FIX DEFINITIVO: En producción, SIEMPRE usar /api (proxy de Vercel)
+  // IGNORAR cualquier VITE_API_URL absoluta para evitar CORS
   if (isProduction) {
-    // Si VITE_API_URL está configurada pero no es una ruta relativa, ignorarla y usar /api
     const rawUrl = import.meta.env.VITE_API_URL?.trim();
+    
+    // Si VITE_API_URL está configurada y es una ruta relativa (ej: /api), usarla
     if (rawUrl && rawUrl.startsWith('/')) {
-      // Si es una ruta relativa, usarla (ej: /api)
       return rawUrl.replace(/\/+$/, '');
     }
-    // En producción, forzar uso de /api (proxy de Vercel)
-    console.info('ℹ️  Producción: usando /api (proxy de Vercel) para evitar CORS');
+    
+    // Si VITE_API_URL está configurada pero es absoluta (https://...), IGNORARLA
+    if (rawUrl && (rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
+      // ✅ Loguear UNA sola vez un warning (usando flag en window para evitar spam)
+      if (typeof window !== 'undefined' && !(window as any).__vite_api_url_warned) {
+        console.warn(
+          '⚠️  VITE_API_URL ignorada en producción (URL absoluta detectada); usando /api proxy para evitar CORS.\n' +
+          '   Para producción, NO configures VITE_API_URL o configúrala como "/api".\n' +
+          '   Elimina VITE_API_URL en Vercel Dashboard → Settings → Environment Variables si está configurada con URL absoluta.'
+        );
+        (window as any).__vite_api_url_warned = true;
+      }
+    }
+    
+    // En producción, SIEMPRE usar /api (proxy de Vercel)
     return '/api';
   }
   

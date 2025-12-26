@@ -3,7 +3,7 @@
  * Solo accesible con feature flag + admin role
  */
 
-import { API_BASE_URL } from '@/config/runtime';
+import api from '@/services/api';
 
 export interface InvestorDocEntry {
   slug: string;
@@ -33,28 +33,21 @@ export function isInvestorDocsEnabled(): boolean {
 
 /**
  * Cargar documento de inversionista desde backend (protegido)
+ * ✅ FIX: Usa cliente api centralizado para forzar proxy /api en producción
  */
 export async function loadInvestorDoc(slug: string, token: string): Promise<string> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/help/investors/${slug}`, {
-      method: 'GET',
+    const response = await api.get(`/api/help/investors/${slug}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
       },
-      credentials: 'include',
     });
 
-    if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('No tienes permisos para acceder a este documento');
-      }
-      throw new Error(`Error al cargar documento: ${response.statusText}`);
+    return response.data?.content || '';
+  } catch (error: any) {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      throw new Error('No tienes permisos para acceder a este documento');
     }
-
-    const data = await response.json();
-    return data.content || '';
-  } catch (error) {
     console.error(`Error loading investor doc for ${slug}:`, error);
     throw error;
   }
@@ -62,28 +55,21 @@ export async function loadInvestorDoc(slug: string, token: string): Promise<stri
 
 /**
  * Obtener lista de documentos de inversionistas desde backend (protegido)
+ * ✅ FIX: Usa cliente api centralizado para forzar proxy /api en producción
  */
 export async function getInvestorDocsList(token: string): Promise<InvestorDocEntry[]> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/help/investors`, {
-      method: 'GET',
+    const response = await api.get('/api/help/investors', {
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
       },
-      credentials: 'include',
     });
 
-    if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('No tienes permisos para acceder a estos documentos');
-      }
-      throw new Error(`Error al cargar lista: ${response.statusText}`);
+    return response.data?.docs || [];
+  } catch (error: any) {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      throw new Error('No tienes permisos para acceder a estos documentos');
     }
-
-    const data = await response.json();
-    return data.docs || [];
-  } catch (error) {
     console.error('Error loading investor docs list:', error);
     throw error;
   }

@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { CheckCircle2, XCircle, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
-import { API_BASE_URL, getDiagnosticsInfo } from '@/config/runtime';
+import { getDiagnosticsInfo } from '@/config/runtime';
 import api from '@/services/api';
 
 interface DiagnosticResult {
@@ -38,15 +38,14 @@ export default function Diagnostics() {
     });
 
     // 2. Test /health
+    // ✅ FIX: Usa cliente api centralizado para forzar proxy /api en producción
     try {
-      const healthResponse = await fetch(`${API_BASE_URL}/health`);
-      const healthData = await healthResponse.json();
+      const healthResponse = await api.get('/health');
+      const healthData = healthResponse.data;
       newResults.push({
         name: 'Health Check (/health)',
-        status: healthResponse.ok ? 'success' : 'error',
-        message: healthResponse.ok 
-          ? `Status: ${healthData.status || 'ok'}` 
-          : `Error: ${healthResponse.status} ${healthResponse.statusText}`,
+        status: 'success',
+        message: `Status: ${healthData?.status || 'ok'}`,
         data: healthData,
       });
     } catch (error: any) {

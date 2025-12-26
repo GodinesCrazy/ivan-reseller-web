@@ -54,28 +54,46 @@ Vercel debería detectar automáticamente Vite, pero verifica:
 
 ## 🔐 Paso 3: Configurar Variables de Entorno
 
-### Opción A: Con VITE_API_URL (Recomendado)
+### ⚠️ IMPORTANTE: VITE_API_URL en Producción
 
-1. En Vercel Dashboard → Tu Proyecto → **Settings** → **Environment Variables**
-2. Agrega las siguientes variables:
+**✅ RECOMENDADO: NO configurar VITE_API_URL en Production/Preview**
+
+En producción, el sistema **SIEMPRE** usa `/api` como proxy (ruta relativa) para evitar CORS. Si configuras `VITE_API_URL` con una URL absoluta (ej: `https://backend.railway.app`), será **ignorada** y el sistema usará `/api` de todas formas.
+
+**Para producción:**
+- **NO configures** `VITE_API_URL` en Production/Preview, O
+- Configúrala como `/api` (ruta relativa) si quieres ser explícito
+
+**Si ya tienes `VITE_API_URL` configurada con URL absoluta:**
+1. Ve a Vercel Dashboard → Tu Proyecto → **Settings** → **Environment Variables**
+2. Elimina `VITE_API_URL` de Production/Preview, O
+3. Cámbiala a `/api` (ruta relativa)
+4. Redeploy sin cache si es necesario
+
+### Opción A: Con VITE_API_URL (Solo para Development)
+
+**Solo configurar en Development scope:**
 
 ```env
-VITE_API_URL=https://ivan-reseller-web-production.up.railway.app
+VITE_API_URL=http://localhost:3000
 ```
 
 **Importante:**
-- Reemplaza `ivan-reseller-web-production.up.railway.app` con tu URL real de Railway
-- **NO** incluyas trailing slash (`/`) al final
-- Selecciona los scopes: **Production**, **Preview**, y **Development**
+- Solo configurar en **Development** scope
+- **NO** configurar en Production/Preview (se ignorará si es URL absoluta)
 
-### Opción B: Sin VITE_API_URL (Usando Proxy) - **RECOMENDADO**
+### Opción B: Sin VITE_API_URL (Usando Proxy) - **✅ RECOMENDADO PARA PRODUCCIÓN**
 
 Si no configuras `VITE_API_URL`, el frontend usará `/api` como fallback y Vercel lo redirigirá al backend mediante `vercel.json`.
 
-**Ventaja:** No necesitas configurar variables de entorno, evita problemas de CORS  
+**Ventaja:** 
+- No necesitas configurar variables de entorno
+- Evita problemas de CORS completamente
+- Todas las requests son same-origin (pasando por proxy de Vercel)
+
 **Desventaja:** Depende de que `vercel.json` tenga la URL correcta del backend
 
-**Nota:** En producción, el sistema usa automáticamente `/api` como proxy, por lo que no necesitas configurar `VITE_API_URL` a menos que quieras usar una URL absoluta específica.
+**Nota:** En producción, el sistema **fuerza** el uso de `/api` (proxy de Vercel) incluso si `VITE_API_URL` está configurada con URL absoluta. Esto garantiza que no haya errores CORS.
 
 ### Variables Opcionales
 
@@ -140,8 +158,12 @@ El archivo `vercel.json` en la raíz del proyecto debe tener:
 ### 2. Verificar conexión con backend
 
 - Abre DevTools → Network
-- Intenta hacer login
-- Verifica que las peticiones a `/api/*` funcionen
+- Filtra por "api"
+- Intenta hacer login o navegar al Dashboard
+- **Verifica que las peticiones sean same-origin:**
+  - ✅ Correcto: `https://www.ivanreseller.com/api/...` (mismo dominio)
+  - ❌ Incorrecto: `https://backend.railway.app/api/...` (cross-origin, causaría CORS)
+- Verifica que no haya errores CORS en la consola
 
 ### 3. Verificar ErrorBanner
 
@@ -220,12 +242,14 @@ CORS_ORIGIN=https://tu-proyecto.vercel.app,https://www.ivanreseller.com
 
 - [ ] Proyecto importado en Vercel
 - [ ] Build settings configurados correctamente
-- [ ] Variables de entorno configuradas (si aplica)
+- [ ] **VITE_API_URL NO configurada en Production/Preview** (o configurada como `/api`)
 - [ ] `vercel.json` actualizado con URL del backend
 - [ ] Deploy exitoso
 - [ ] Sitio carga correctamente
+- [ ] **DevTools → Network: requests a `/api/*` son same-origin** (no cross-origin)
+- [ ] **Cero errores CORS en consola del navegador**
 - [ ] Conexión con backend funciona
-- [ ] CORS configurado en Railway
+- [ ] CORS configurado en Railway (opcional, ya que usamos proxy)
 - [ ] Banner de error no bloquea la UI (o está cerrado)
 
 ---
