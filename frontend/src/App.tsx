@@ -233,7 +233,7 @@ function AppContent() {
       {/* 404 */}
       <Route path="*" element={<Navigate to="/" />} />
       </Routes>
-      <ErrorBanner message="VITE_API_URL no está configurada" />
+      <ErrorBanner />
       <Toaster />
     </Suspense>
   );
