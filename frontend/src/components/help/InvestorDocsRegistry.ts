@@ -3,6 +3,8 @@
  * Solo accesible con feature flag + admin role
  */
 
+import { API_BASE_URL } from '@/config/runtime';
+
 export interface InvestorDocEntry {
   slug: string;
   title: string;
@@ -34,7 +36,7 @@ export function isInvestorDocsEnabled(): boolean {
  */
 export async function loadInvestorDoc(slug: string, token: string): Promise<string> {
   try {
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/help/investors/${slug}`, {
+    const response = await fetch(`${API_BASE_URL}/api/help/investors/${slug}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -63,7 +65,7 @@ export async function loadInvestorDoc(slug: string, token: string): Promise<stri
  */
 export async function getInvestorDocsList(token: string): Promise<InvestorDocEntry[]> {
   try {
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/help/investors`, {
+    const response = await fetch(`${API_BASE_URL}/api/help/investors`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
