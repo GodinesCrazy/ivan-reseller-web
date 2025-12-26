@@ -26,6 +26,7 @@ interface WorkflowSummary {
 export default function WorkflowSummaryWidget() {
   const [summary, setSummary] = useState<WorkflowSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     // Por ahora, cargar desde productos y calcular resumen básico
@@ -36,17 +37,26 @@ export default function WorkflowSummaryWidget() {
   const loadSummary = async () => {
     try {
       setLoading(true);
-      // ✅ FIX: Manejo robusto de errores - degradación suave
+      setHasError(false);
+      // ✅ FIX-004: Manejo robusto de errores - ocultar widget si falla
       const response = await api.get('/api/products').catch((err) => {
-        // Si es error de red/CORS, no mostrar error rojo, solo degradar
+        // Si es error de red/CORS, marcar como error y ocultar widget
+        setHasError(true);
         if (!err.response) {
-          console.warn('⚠️  No se pudo cargar resumen de workflows (error de conexión). Mostrando datos vacíos.');
+          console.warn('⚠️  No se pudo cargar resumen de workflows (error de conexión).');
         }
-        // Retornar estructura vacía para degradación suave
+        // Retornar estructura vacía
         return { data: { data: { products: [] }, products: [] } };
       });
       
       const products = response.data?.data?.products || response.data?.products || response.data || [];
+      
+      // ✅ FIX-004: Si no hay productos y hubo error, ocultar widget
+      if (products.length === 0 && hasError) {
+        setHasError(true);
+        setLoading(false);
+        return;
+      }
       
       // Calcular resumen básico (simplificado)
       const summary: WorkflowSummary = {
@@ -69,18 +79,18 @@ export default function WorkflowSummaryWidget() {
 
       setSummary(summary);
     } catch (error) {
-      // ✅ FIX: Degradación suave - no mostrar error rojo, solo loggear
-      console.warn('⚠️  Error loading workflow summary (degradación suave):', error);
-      // Establecer resumen vacío en lugar de null para que el componente no desaparezca
-      setSummary({
-        totalProducts: 0,
-        byStage: { scrape: 0, analyze: 0, publish: 0, purchase: 0, fulfillment: 0, customerService: 0 },
-        byStatus: { completed: 0, in_progress: 0, pending: 0, failed: 0 }
-      });
+      // ✅ FIX-004: Marcar error y ocultar widget
+      setHasError(true);
+      console.warn('⚠️  Error loading workflow summary:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // ✅ FIX-004: Ocultar widget si hay error o no hay datos
+  if (hasError || (!loading && (!summary || summary.totalProducts === 0))) {
+    return null;
+  }
 
   if (loading) {
     return (

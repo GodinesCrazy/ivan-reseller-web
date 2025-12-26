@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   Search, 
   TrendingUp, 
@@ -52,6 +53,7 @@ export default function Dashboard() {
     automationRules: 0
   });
   const [loading, setLoading] = useState(true);
+  const [dataLoadError, setDataLoadError] = useState(false);
 
   const [recentActivity, setRecentActivity] = useState<Array<{
     id: string;
@@ -70,31 +72,63 @@ export default function Dashboard() {
     try {
       setLoading(true);
       // ✅ B6: CARGAR DATOS REALES DE LA API (completado)
+      // ✅ FIX-002: Degradación suave - rastrear errores para mostrar mensaje informativo
+      let hasErrors = false;
       const [statsRes, activityRes, opportunitiesRes, aiSuggestionsRes, automationRes] = await Promise.all([
         api.get('/api/dashboard/stats').catch(err => {
-          log.warn('Error loading stats:', err);
+          hasErrors = true;
+          // Solo loggear si es error HTTP real (no CORS/red)
+          if (err.response) {
+            log.warn('⚠️  Error loading stats (HTTP):', err.response.status);
+          } else {
+            log.warn('⚠️  Error loading stats (red/CORS):', err.message);
+          }
           return { data: {} };
         }),
         api.get('/api/dashboard/recent-activity?limit=10').catch(err => {
-          log.warn('Error loading activity:', err);
+          hasErrors = true;
+          if (err.response) {
+            log.warn('⚠️  Error loading activity (HTTP):', err.response.status);
+          } else {
+            log.warn('⚠️  Error loading activity (red/CORS):', err.message);
+          }
           return { data: { activities: [] } };
         }),
         // ✅ B6: Cargar count de oportunidades desde API
         api.get('/api/opportunities/list', { params: { page: 1, limit: 1 } }).catch(err => {
-          log.warn('Error loading opportunities count:', err);
+          hasErrors = true;
+          if (err.response) {
+            log.warn('⚠️  Error loading opportunities count (HTTP):', err.response.status);
+          } else {
+            log.warn('⚠️  Error loading opportunities count (red/CORS):', err.message);
+          }
           return { data: { count: 0 } };
         }),
         // ✅ B6: Cargar sugerencias IA desde API
         api.get('/api/ai-suggestions', { params: { limit: 1 } }).catch(err => {
-          log.warn('Error loading AI suggestions:', err);
+          hasErrors = true;
+          if (err.response) {
+            log.warn('⚠️  Error loading AI suggestions (HTTP):', err.response.status);
+          } else {
+            log.warn('⚠️  Error loading AI suggestions (red/CORS):', err.message);
+          }
           return { data: { suggestions: [], count: 0 } };
         }),
         // ✅ B6: Cargar configuración de automatización para contar workflows
         api.get('/api/automation/config').catch(err => {
-          log.warn('Error loading automation config:', err);
+          hasErrors = true;
+          if (err.response) {
+            log.warn('⚠️  Error loading automation config (HTTP):', err.response.status);
+          } else {
+            log.warn('⚠️  Error loading automation config (red/CORS):', err.message);
+          }
           return { data: { workflows: [] } };
         })
       ]);
+
+      // ✅ FIX-002: Si hay errores y no hay datos reales, mostrar mensaje informativo
+      const hasRealData = statsRes.data && Object.keys(statsRes.data).length > 0;
+      setDataLoadError(hasErrors && !hasRealData);
 
       const stats = statsRes.data || {};
       const activities = activityRes.data?.activities || [];
@@ -156,7 +190,8 @@ export default function Dashboard() {
       setRecentActivity(formattedActivities);
     } catch (error: any) {
       log.error('Error loading dashboard data:', error);
-      toast.error('Error al cargar datos del dashboard');
+      // ✅ FIX-002: No mostrar toast automático, solo marcar error
+      setDataLoadError(true);
     } finally {
       setLoading(false);
     }

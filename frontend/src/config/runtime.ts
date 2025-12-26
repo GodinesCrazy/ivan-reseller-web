@@ -5,8 +5,8 @@
  * Valida variables de entorno críticas y proporciona valores normalizados.
  */
 
-const isProduction = import.meta.env.PROD;
-const isDevelopment = import.meta.env.DEV;
+export const isProduction = import.meta.env.PROD;
+export const isDevelopment = import.meta.env.DEV;
 
 /**
  * Obtiene y normaliza la URL base de la API

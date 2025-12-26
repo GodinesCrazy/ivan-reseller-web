@@ -68,12 +68,30 @@ VITE_API_URL=https://ivan-reseller-web-production.up.railway.app
 - **NO** incluyas trailing slash (`/`) al final
 - Selecciona los scopes: **Production**, **Preview**, y **Development**
 
-### Opción B: Sin VITE_API_URL (Usando Proxy)
+### Opción B: Sin VITE_API_URL (Usando Proxy) - **RECOMENDADO**
 
 Si no configuras `VITE_API_URL`, el frontend usará `/api` como fallback y Vercel lo redirigirá al backend mediante `vercel.json`.
 
-**Ventaja:** No necesitas configurar variables de entorno  
+**Ventaja:** No necesitas configurar variables de entorno, evita problemas de CORS  
 **Desventaja:** Depende de que `vercel.json` tenga la URL correcta del backend
+
+**Nota:** En producción, el sistema usa automáticamente `/api` como proxy, por lo que no necesitas configurar `VITE_API_URL` a menos que quieras usar una URL absoluta específica.
+
+### Variables Opcionales
+
+#### VITE_ENABLE_INVESTOR_DOCS
+- **Tipo:** Boolean (string: `'true'` o `'false'`)
+- **Default:** `'false'`
+- **Descripción:** Habilita documentación para inversionistas (solo accesible para administradores)
+- **Cuándo usar:** Solo si necesitas mostrar documentación de inversionistas en `/help/investors`
+- **Ejemplo:** `VITE_ENABLE_INVESTOR_DOCS=true`
+
+#### VITE_LOG_LEVEL
+- **Tipo:** String
+- **Default:** `'warn'`
+- **Descripción:** Nivel de logging del frontend (controla qué mensajes aparecen en consola)
+- **Valores:** `'error'`, `'warn'`, `'info'`, `'debug'`
+- **Ejemplo:** `VITE_LOG_LEVEL=warn`
 
 ---
 
@@ -127,8 +145,9 @@ El archivo `vercel.json` en la raíz del proyecto debe tener:
 
 ### 3. Verificar ErrorBanner
 
-- Si no configuraste `VITE_API_URL`, deberías ver un banner amarillo informativo
-- El banner debe ser cerrable y no bloquear la UI
+- **En producción:** El banner NO debería aparecer si usas el proxy `/api` (comportamiento esperado)
+- El banner solo aparece si hay un error real de configuración
+- El banner es cerrable y no bloquea la UI
 
 ---
 
@@ -183,9 +202,9 @@ CORS_ORIGIN=https://tu-proyecto.vercel.app,https://www.ivanreseller.com
 ### Banner de error siempre visible
 
 **Solución:**
-- El banner es informativo si usas fallback `/api`
-- Si configuraste `VITE_API_URL`, el banner no debería aparecer
-- Puedes cerrar el banner haciendo click en la X
+- En producción, el banner NO aparece cuando usas `/api` (es el comportamiento esperado)
+- El banner solo aparece si hay un error real de configuración
+- Si el banner aparece, verifica que no haya errores en la configuración de `VITE_API_URL`
 
 ---
 

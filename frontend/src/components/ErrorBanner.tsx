@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { AlertCircle, X, ExternalLink } from 'lucide-react';
-import { API_BASE_URL } from '@/config/runtime';
+import { API_BASE_URL, isProduction } from '@/config/runtime';
 
 interface ErrorBannerProps {
   message?: string;
@@ -42,8 +42,11 @@ export function ErrorBanner({ message, onDismiss }: ErrorBannerProps) {
     window.addEventListener('api-config-warning', handleConfigWarning as EventListener);
     window.addEventListener('api-config-error', handleConfigError as EventListener);
     
-    // Verificar si estamos usando fallback al montar
-    if (API_BASE_URL === '/api' && typeof window !== 'undefined') {
+    // ✅ FIX-001: En producción, /api es el comportamiento esperado (proxy de Vercel)
+    // No mostrar banner si es fallback intencional en producción
+    // Solo mostrar si hay un error real o si es en desarrollo
+    if (API_BASE_URL === '/api' && typeof window !== 'undefined' && !isProduction) {
+      // En desarrollo, mostrar warning si usa /api (puede ser intencional para testing)
       setWarningInfo({
         message: 'VITE_API_URL no configurada',
         usingFallback: true,
@@ -51,6 +54,7 @@ export function ErrorBanner({ message, onDismiss }: ErrorBannerProps) {
       });
       setIsVisible(true);
     }
+    // En producción, no mostrar banner para /api (es el comportamiento correcto)
 
     return () => {
       window.removeEventListener('api-config-warning', handleConfigWarning as EventListener);

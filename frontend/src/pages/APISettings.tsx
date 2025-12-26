@@ -19,14 +19,17 @@ import {
   Clock,
   Sparkles,
   CheckCircle2,
-  Wand2
+  Wand2,
+  HelpCircle
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuthStatusStore } from '@stores/authStatusStore';
 import { useAuthStore } from '@stores/authStore';
 import toast from 'react-hot-toast';
 import { log } from '../utils/logger';
 import { io, Socket } from 'socket.io-client';
+import { API_BASE_URL } from '../config/runtime';
 import APIConfigurationWizard, { WizardData } from '../components/api-configuration/APIConfigurationWizard';
 import FieldTooltip from '../components/api-configuration/FieldTooltip';
 import ValidationIndicator from '../components/api-configuration/ValidationIndicator';
@@ -351,6 +354,8 @@ export default function APISettings() {
   } | null>(null);
   const [apiTesting, setApiTesting] = useState(false);
   const [showApiTestResults, setShowApiTestResults] = useState(false);
+  // ✅ FIX-003: Estado para rastrear si el usuario está interactuando (evitar toasts automáticos)
+  const [userInteracting, setUserInteracting] = useState(false);
   // ✅ Estado para APIs mínimas de dropshipping
   const [minimumDropshippingAPIs, setMinimumDropshippingAPIs] = useState<{
     apis: Array<{
@@ -431,7 +436,7 @@ export default function APISettings() {
   useEffect(() => {
     if (!token || !user) return;
 
-    const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
+    const socket = io(API_BASE_URL, {
       auth: { token },
       transports: ['websocket', 'polling'],
       timeout: 20000,
@@ -465,16 +470,20 @@ export default function APISettings() {
         },
       }));
 
-      // Mostrar notificación si el estado cambió significativamente
-      if (statusUpdate.isConfigured && statusUpdate.isAvailable) {
-        toast.success(`✅ ${statusUpdate.name || statusUpdate.apiName} está configurada y funcionando`, {
-          duration: 3000,
-        });
-      } else if (statusUpdate.error) {
-        toast.error(`❌ Error en ${statusUpdate.name || statusUpdate.apiName}: ${statusUpdate.message || statusUpdate.error}`, {
-          duration: 5000,
-        });
+      // ✅ FIX-003: Solo mostrar toasts si el usuario está interactuando (test, guardar, etc.)
+      // Esto evita spam de toasts al cargar la página
+      if (userInteracting) {
+        if (statusUpdate.isConfigured && statusUpdate.isAvailable) {
+          toast.success(`✅ ${statusUpdate.name || statusUpdate.apiName} está configurada y funcionando`, {
+            duration: 3000,
+          });
+        } else if (statusUpdate.error) {
+          toast.error(`❌ Error en ${statusUpdate.name || statusUpdate.apiName}: ${statusUpdate.message || statusUpdate.error}`, {
+            duration: 5000,
+          });
+        }
       }
+      // Si no está interactuando, solo actualizar el estado silenciosamente (sin toasts)
     });
 
     socket.on('disconnect', (reason) => {
@@ -1217,6 +1226,8 @@ export default function APISettings() {
   };
 
   const handleSave = async (apiName: string) => {
+    // ✅ FIX-003: Activar flag de interacción del usuario
+    setUserInteracting(true);
     setSaving(apiName);
     setError(null);
     try {
@@ -1884,10 +1895,14 @@ export default function APISettings() {
       }
     } finally {
       setSaving(null);
+      // ✅ FIX-003: Desactivar flag después de un delay (para que los toasts de socket lleguen)
+      setTimeout(() => setUserInteracting(false), 2000);
     }
   };
 
   const handleTest = async (apiName: string, environment: string) => {
+    // ✅ FIX-003: Activar flag de interacción del usuario
+    setUserInteracting(true);
     setTesting(apiName);
     setError(null);
     try {
@@ -2076,6 +2091,8 @@ export default function APISettings() {
       toast.error(errorMsg);
     } finally {
       setTesting(null);
+      // ✅ FIX-003: Desactivar flag después de un delay (para que los toasts de socket lleguen)
+      setTimeout(() => setUserInteracting(false), 2000);
     }
   };
 
@@ -3480,13 +3497,26 @@ export default function APISettings() {
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                       {displayName}
+                      {/* Botón de ayuda contextual */}
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          navigate(`/help/apis/${apiDef.name}`);
+                        }}
+                        className="text-blue-600 hover:text-blue-800 transition-colors"
+                        title="Ver guía de configuración"
+                      >
+                        <HelpCircle className="w-4 h-4" />
+                      </button>
                       {apiDef.docsUrl && (
                         <a
                           href={apiDef.docsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800"
-                          title="Ver documentación"
+                          className="text-gray-500 hover:text-gray-700"
+                          title="Ver documentación oficial"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           <Info className="w-4 h-4" />
                         </a>
