@@ -731,18 +731,12 @@ export class SaleService {
   }
 
   async getSalesStats(userId?: string | number) {
+    const { queryWithTimeout } = await import('../utils/queryWithTimeout');
     // Convertir userId a number si es string (Prisma espera number)
     const userIdNumber = userId ? (typeof userId === 'string' ? parseInt(userId, 10) : userId) : undefined;
     const where = userIdNumber ? { userId: userIdNumber } : {};
 
-    const [
-      totalSales,
-      pendingSales,
-      completedSales,
-      cancelledSales,
-      totalRevenue,
-      totalCommissions,
-    ] = await Promise.all([
+    const queriesPromise = Promise.all([
       prisma.sale.count({ where }),
       prisma.sale.count({ where: { ...where, status: 'PENDING' } }),
       prisma.sale.count({ where: { ...where, status: 'COMPLETED' } }),
@@ -756,6 +750,16 @@ export class SaleService {
         _sum: { commissionAmount: true },
       }),
     ]);
+
+    // ✅ FIX: Agregar timeout de 20 segundos a las queries
+    const [
+      totalSales,
+      pendingSales,
+      completedSales,
+      cancelledSales,
+      totalRevenue,
+      totalCommissions,
+    ] = await queryWithTimeout(queriesPromise, 20000);
 
     return {
       totalSales,

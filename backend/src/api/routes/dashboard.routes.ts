@@ -6,6 +6,7 @@ import { commissionService } from '../../services/commission.service';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { logger } from '../../config/logger';
+import { queryWithTimeout } from '../../utils/queryWithTimeout';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -19,6 +20,7 @@ const queryParamsSchema = z.object({
 
 // GET /api/dashboard/stats - Estadísticas del dashboard
 router.get('/stats', async (req: Request, res: Response, next) => {
+  const startTime = Date.now();
   try {
     // Normalizar rol a mayúsculas para comparación case-insensitive
     const userRole = req.user?.role?.toUpperCase();
@@ -28,18 +30,50 @@ router.get('/stats', async (req: Request, res: Response, next) => {
     // Convertir userId a string para servicios que lo requieren
     const userIdString = userId ? String(userId) : undefined;
     
-    const [productStats, salesStats, commissionStats] = await Promise.all([
+    // ✅ FIX: Agregar timeout de 25 segundos para evitar 502 de Vercel (timeout 30s)
+    const timeoutMs = 25000;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Request timeout: Database queries exceeded 25 seconds')), timeoutMs);
+    });
+    
+    const queriesPromise = Promise.all([
       productService.getProductStats(userId),
       saleService.getSalesStats(userIdString),
       commissionService.getCommissionStats(userIdString),
     ]);
+    
+    const [productStats, salesStats, commissionStats] = await Promise.race([
+      queriesPromise,
+      timeoutPromise,
+    ]) as [any, any, any];
+    
+    const duration = Date.now() - startTime;
     res.json({ products: productStats, sales: salesStats, commissions: commissionStats });
   } catch (error: any) {
+    const duration = Date.now() - startTime;
+    
+    // ✅ FIX: Si es timeout, devolver 504 Gateway Timeout (no 500)
+    if (error.message?.includes('timeout') || error.message?.includes('Database query timeout')) {
+      logger.error('Timeout in /api/dashboard/stats', {
+        error: error.message,
+        userId: req.user?.userId,
+        duration,
+      });
+      
+      return res.status(504).json({
+        success: false,
+        error: 'Request timeout: Database queries took too long',
+        errorCode: 'TIMEOUT',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    
     // ✅ A8: Mejor manejo de errores con logger
     logger.error('Error in /api/dashboard/stats', {
       error: error.message,
       stack: error.stack,
-      userId: req.user?.userId
+      userId: req.user?.userId,
+      duration,
     });
     next(error);
   }
@@ -47,6 +81,7 @@ router.get('/stats', async (req: Request, res: Response, next) => {
 
 // GET /api/dashboard/recent-activity - Actividad reciente
 router.get('/recent-activity', async (req: Request, res: Response, next) => {
+  const startTime = Date.now();
   try {
     // ✅ A7: Validar query parameters
     const queryParams = queryParamsSchema.parse(req.query);
@@ -57,18 +92,43 @@ router.get('/recent-activity', async (req: Request, res: Response, next) => {
     const userId = isAdmin ? undefined : req.user?.userId;
     
     const limit = queryParams.limit || 10;
-    const activities = await prisma.activity.findMany({
+    
+    // ✅ FIX: Agregar timeout de 10 segundos para queries simples
+    const timeoutMs = 10000;
+    const queryPromise = prisma.activity.findMany({
       where: userId ? { userId } : undefined,
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: { user: { select: { id: true, username: true, email: true } } },
     });
+    
+    const activities = await queryWithTimeout(queryPromise, timeoutMs);
+    
     res.json({ activities });
   } catch (error: any) {
+    const duration = Date.now() - startTime;
+    
+    // ✅ FIX: Si es timeout, devolver 504 Gateway Timeout
+    if (error.message?.includes('timeout') || error.message?.includes('Database query timeout')) {
+      logger.error('Timeout in /api/dashboard/recent-activity', {
+        error: error.message,
+        userId: req.user?.userId,
+        duration,
+      });
+      
+      return res.status(504).json({
+        success: false,
+        error: 'Request timeout',
+        errorCode: 'TIMEOUT',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    
     logger.error('Error in /api/dashboard/recent-activity', {
       error: error.message,
       stack: error.stack,
-      userId: req.user?.userId
+      userId: req.user?.userId,
+      duration,
     });
     next(error);
   }
@@ -134,6 +194,68 @@ router.get('/charts/products', async (req: Request, res: Response, next) => {
       error: error.message,
       stack: error.stack,
       userId: req.user?.userId
+    });
+    next(error);
+  }
+});
+
+// ✅ FIX: Agregar endpoint /summary como alias de /stats para compatibilidad
+// GET /api/dashboard/summary - Alias de /stats para compatibilidad
+router.get('/summary', async (req: Request, res: Response, next) => {
+  const startTime = Date.now();
+  try {
+    // Normalizar rol a mayúsculas para comparación case-insensitive
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? undefined : req.user?.userId;
+    
+    // Convertir userId a string para servicios que lo requieren
+    const userIdString = userId ? String(userId) : undefined;
+    
+    // ✅ FIX: Agregar timeout de 25 segundos (mismo que /stats)
+    const timeoutMs = 25000;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Request timeout: Database queries exceeded 25 seconds')), timeoutMs);
+    });
+    
+    const queriesPromise = Promise.all([
+      productService.getProductStats(userId),
+      saleService.getSalesStats(userIdString),
+      commissionService.getCommissionStats(userIdString),
+    ]);
+    
+    const [productStats, salesStats, commissionStats] = await Promise.race([
+      queriesPromise,
+      timeoutPromise,
+    ]) as [any, any, any];
+    
+    const duration = Date.now() - startTime;
+    // Retornar formato consistente con /stats
+    res.json({ products: productStats, sales: salesStats, commissions: commissionStats });
+  } catch (error: any) {
+    const duration = Date.now() - startTime;
+    
+    // ✅ FIX: Si es timeout, devolver 504 Gateway Timeout
+    if (error.message?.includes('timeout') || error.message?.includes('Database query timeout')) {
+      logger.error('Timeout in /api/dashboard/summary', {
+        error: error.message,
+        userId: req.user?.userId,
+        duration,
+      });
+      
+      return res.status(504).json({
+        success: false,
+        error: 'Request timeout: Database queries took too long',
+        errorCode: 'TIMEOUT',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    
+    logger.error('Error in /api/dashboard/summary', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.userId,
+      duration,
     });
     next(error);
   }

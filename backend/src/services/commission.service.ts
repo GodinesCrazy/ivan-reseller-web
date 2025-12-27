@@ -222,18 +222,12 @@ export class CommissionService {
   }
 
   async getCommissionStats(userId?: string | number) {
+    const { queryWithTimeout } = await import('../utils/queryWithTimeout');
     // Convertir userId a number si es string (Prisma espera number)
     const userIdNumber = userId ? (typeof userId === 'string' ? parseInt(userId, 10) : userId) : undefined;
     const where = userIdNumber ? { userId: userIdNumber } : {};
 
-    const [
-      total,
-      pending,
-      scheduled,
-      paid,
-      totalAmount,
-      pendingAmount,
-    ] = await Promise.all([
+    const queriesPromise = Promise.all([
       prisma.commission.count({ where }),
       prisma.commission.count({ where: { ...where, status: 'PENDING' } }),
       prisma.commission.count({ where: { ...where, status: 'SCHEDULED' } }),
@@ -247,6 +241,16 @@ export class CommissionService {
         _sum: { amount: true },
       }),
     ]);
+
+    // ✅ FIX: Agregar timeout de 20 segundos a las queries
+    const [
+      total,
+      pending,
+      scheduled,
+      paid,
+      totalAmount,
+      pendingAmount,
+    ] = await queryWithTimeout(queriesPromise, 20000);
 
     // ✅ FIX: Convert Decimal to number for arithmetic operations
     const totalAmountNum = toNumber(totalAmount._sum.amount || 0);
