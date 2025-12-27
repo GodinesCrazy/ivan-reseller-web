@@ -1007,15 +1007,19 @@ export class ProductService {
   }
 
   async getProductStats(userId?: number) {
+    const { queryWithTimeout } = await import('../utils/queryWithTimeout');
     const where = userId ? { userId } : {};
 
-    const [total, pending, approved, rejected, published] = await Promise.all([
+    const queriesPromise = Promise.all([
       prisma.product.count({ where }),
       prisma.product.count({ where: { ...where, status: 'PENDING' } }),
       prisma.product.count({ where: { ...where, status: 'APPROVED' } }),
       prisma.product.count({ where: { ...where, status: 'REJECTED' } }),
       prisma.product.count({ where: { ...where, status: 'PUBLISHED' } }),
     ]);
+
+    // ✅ FIX: Agregar timeout de 20 segundos a las queries
+    const [total, pending, approved, rejected, published] = await queryWithTimeout(queriesPromise, 20000);
 
     return {
       total,
