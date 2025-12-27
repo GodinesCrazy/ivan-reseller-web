@@ -191,6 +191,9 @@ model Commission {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
+  @@index([userId, createdAt])
+  @@index([userId, status])
+  @@index([status, createdAt])
   @@map("commissions")
 }
 
