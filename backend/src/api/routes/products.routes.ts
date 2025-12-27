@@ -6,6 +6,7 @@ import { logger } from '../../config/logger';
 import { toNumber } from '../../utils/decimal.utils';
 import { MarketplaceService } from '../../services/marketplace.service';
 import { productWorkflowStatusService } from '../../services/product-workflow-status.service';
+import { queryWithTimeout } from '../../utils/queryWithTimeout';
 
 const router = Router();
 router.use(authenticate);
@@ -43,6 +44,7 @@ const getProductsQuerySchema = z.object({
 
 // GET /api/products - Listar productos
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+  const startTime = Date.now();
   try {
     // ✅ PRODUCTION READY: Validar query parameters
     const validatedQuery = getProductsQuerySchema.parse(req.query);
@@ -53,11 +55,14 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const userId = isAdmin ? undefined : req.user?.userId;
     const status = validatedQuery.status;
     
-    // ✅ PRODUCTION READY: Usar paginación
-    const result = await productService.getProducts(userId, status, {
+    // ✅ PRODUCTION READY: Usar paginación con timeout de 25 segundos
+    const timeoutMs = 25000;
+    const queryPromise = productService.getProducts(userId, status, {
       page: validatedQuery.page,
       limit: validatedQuery.limit,
     });
+    
+    const result = await queryWithTimeout(queryPromise, timeoutMs);
     
     // ✅ Función helper para extraer imageUrl del campo images (JSON)
     const extractImageUrl = (imagesString: string | null | undefined): string | null => {
@@ -109,8 +114,33 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       count: mappedProducts.length,
       pagination: result.pagination, // ✅ PRODUCTION READY: Incluir metadata de paginación
     });
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    const duration = Date.now() - startTime;
+    
+    // ✅ FIX: Si es timeout, devolver 504 Gateway Timeout
+    if (error.message?.includes('timeout') || error.message?.includes('Database query timeout')) {
+      logger.error('Timeout in /api/products', {
+        error: error.message,
+        userId: req.user?.userId,
+        duration,
+      });
+      
+      return res.status(504).json({
+        success: false,
+        error: 'Request timeout: Database query took too long',
+        errorCode: 'TIMEOUT',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    
+    // ✅ FIX: Loggear error antes de pasar al error handler (que ya tiene CORS)
+    logger.error('Error in /api/products', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.userId,
+      duration,
+    });
+    next(error); // El error handler ya tiene CORS headers garantizados
   }
 });
 
