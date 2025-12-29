@@ -65,22 +65,416 @@ function parseState(state: string) {
 
 // ✅ ALIEXPRESS CALLBACK DIRECTO: Endpoint específico para AliExpress según documentación
 // https://ivanreseller.com/aliexpress/callback
-router.get('/aliexpress/callback', async (req: Request, res: Response) => {
-  // Redirigir al callback estándar con marketplace=aliexpress-dropshipping
-  const { code, state, error } = req.query;
+// ✅ FIX: Maneja directamente el flujo completo sin redirect para evitar que Vercel sirva SPA
+// NOTA: La ruta se registra como '/callback' porque app.use('/aliexpress', ...) ya agrega el prefijo
+router.get('/callback', async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  const correlationId = (req as any).correlationId || 'unknown';
   
-  logger.info('[OAuth Callback] Direct AliExpress callback received', {
-    hasCode: !!code,
-    hasState: !!state,
-    hasError: !!error,
-  });
+  // ✅ OBSERVABILIDAD: Headers de identificación
+  res.setHeader('X-OAuth-Callback', 'aliexpress');
+  res.setHeader('X-Correlation-ID', correlationId);
+  
+  try {
+    const { code, state, error: errorParam } = req.query;
+    const codeStr = String(code || '');
+    const stateStr = String(state || '');
+    const errorStr = String(errorParam || '');
+    const marketplace = 'aliexpress-dropshipping';
+    
+    // ✅ LOGGING: Registrar inicio del callback (sin secretos)
+    logger.info('[OAuth Callback] Direct AliExpress callback received', {
+      service: 'marketplace-oauth',
+      marketplace,
+      correlationId,
+      hasCode: !!code,
+      codeLength: codeStr.length,
+      hasState: !!state,
+      stateLength: stateStr.length,
+      hasError: !!errorParam,
+      error: errorStr || undefined,
+      queryParams: Object.keys(req.query)
+    });
+    
+    // ✅ SMOKE TEST MODE: Si code=test y state=test, responder inmediatamente
+    if (codeStr === 'test' && stateStr === 'test') {
+      logger.info('[OAuth Callback] Smoke test mode detected', {
+        service: 'marketplace-oauth',
+        marketplace,
+        correlationId
+      });
+      return res.status(200).json({
+        success: true,
+        mode: 'smoke_test',
+        message: 'callback reached backend',
+        correlationId
+      });
+    }
+    
+    // Validar que no haya error en los parámetros de query
+    if (errorStr) {
+      logger.error('[OAuth Callback] OAuth error from provider', {
+        service: 'marketplace-oauth',
+        marketplace,
+        correlationId,
+        error: errorStr,
+        errorDescription: req.query.error_description || 'No description'
+      });
+      return res.status(400).json({
+        success: false,
+        error: errorStr,
+        message: `Authorization error: ${errorStr}`,
+        correlationId
+      });
+    }
+    
+    // Validar que el código no esté vacío
+    if (!codeStr || codeStr.trim().length === 0) {
+      logger.error('[OAuth Callback] Missing authorization code', {
+        service: 'marketplace-oauth',
+        marketplace,
+        correlationId,
+        hasState: !!state
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Missing authorization code',
+        correlationId
+      });
+    }
+    
+    // Validar que el state no esté vacío (para flujo real)
+    if (!stateStr || stateStr.trim().length === 0) {
+      logger.error('[OAuth Callback] Missing state parameter', {
+        service: 'marketplace-oauth',
+        marketplace,
+        correlationId,
+        hasCode: !!code
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Missing state parameter',
+        correlationId
+      });
+    }
+    
+    // Parsear y validar el state
+    const parsed = parseState(stateStr);
+    if (!parsed.ok) {
+      let errorMessage = 'Invalid or expired authorization state';
+      if (parsed.reason === 'expired') {
+        errorMessage = 'Authorization state has expired. Please try again.';
+      } else if (parsed.reason === 'invalid_signature') {
+        errorMessage = 'Invalid authorization state signature';
+      }
+      
+      logger.error('[OAuth Callback] Invalid state', {
+        service: 'marketplace-oauth',
+        marketplace,
+        correlationId,
+        reason: parsed.reason,
+        stateLength: stateStr.length
+      });
+      
+      return res.status(400).json({
+        success: false,
+        message: errorMessage,
+        correlationId
+      });
+    }
+    
+    const { userId, redirectUri, environment } = parsed as any;
+    
+    logger.info('[OAuth Callback] State parsed successfully', {
+      service: 'marketplace-oauth',
+      marketplace,
+      correlationId,
+      userId,
+      environment,
+      redirectUriLength: redirectUri?.length || 0,
+      redirectUriPreview: redirectUri ? redirectUri.substring(0, 50) + '...' : 'N/A'
+    });
 
-  // Si el state es simple (como "ivanreseller"), necesitamos manejarlo de forma especial
-  // Por ahora, redirigimos al callback estándar
-  const marketplace = 'aliexpress-dropshipping';
-  const redirectUrl = `/api/marketplace-oauth/oauth/callback/${marketplace}?${new URLSearchParams(req.query as any).toString()}`;
-  
-  return res.redirect(redirectUrl);
+    // ✅ REUTILIZAR LÓGICA EXISTENTE: Procesar AliExpress Dropshipping OAuth
+    logger.info('[OAuth Callback] Processing AliExpress Dropshipping OAuth', {
+      service: 'marketplace-oauth',
+      correlationId,
+      userId,
+      environment,
+      codeLength: codeStr.length
+    });
+
+    const { aliexpressDropshippingAPIService } = await import('../../services/aliexpress-dropshipping-api.service');
+    const { CredentialsManager } = await import('../../services/credentials-manager.service');
+    
+    // Obtener credenciales base (appKey y appSecret)
+    const cred = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', environment);
+    
+    if (!cred) {
+      logger.error('[OAuth Callback] AliExpress Dropshipping credentials not found', {
+        service: 'marketplace-oauth',
+        correlationId,
+        userId,
+        environment,
+      });
+      return res.status(400).send(`
+        <html>
+          <body>
+            <h2>Credenciales no encontradas</h2>
+            <p>Por favor configura App Key y App Secret antes de autorizar.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    const { appKey, appSecret } = cred as any;
+    
+    if (!appKey || !appSecret) {
+      logger.error('[OAuth Callback] Missing AliExpress Dropshipping base credentials', {
+        service: 'marketplace-oauth',
+        correlationId,
+        userId,
+        environment,
+        hasAppKey: !!appKey,
+        hasAppSecret: !!appSecret,
+      });
+      return res.status(400).send(`
+        <html>
+          <body>
+            <h2>Credenciales incompletas</h2>
+            <p>Por favor configura App Key (Client ID) y App Secret antes de autorizar.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    logger.info('[OAuth Callback] Exchanging code for AliExpress Dropshipping tokens', {
+      service: 'marketplace-oauth',
+      correlationId,
+      userId,
+      environment,
+      codeLength: codeStr.length,
+      redirectUriLength: redirectUri?.length || 0,
+    });
+
+    try {
+      // Intercambiar code por tokens
+      const webBaseUrl = process.env.WEB_BASE_URL || 
+                        (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
+      const defaultCallbackUrl = `${webBaseUrl}/aliexpress/callback`;
+      
+      const tokens = await aliexpressDropshippingAPIService.exchangeCodeForToken(
+        codeStr,
+        redirectUri || defaultCallbackUrl,
+        appKey,
+        appSecret
+      );
+
+      logger.info('[OAuth Callback] AliExpress Dropshipping token exchange successful', {
+        service: 'marketplace-oauth',
+        correlationId,
+        userId,
+        environment,
+        hasAccessToken: !!tokens.accessToken,
+        accessTokenLength: tokens.accessToken?.length || 0,
+        hasRefreshToken: !!tokens.refreshToken,
+        refreshTokenLength: tokens.refreshToken?.length || 0,
+        expiresIn: tokens.expiresIn,
+        refreshExpiresIn: tokens.refreshExpiresIn,
+      });
+
+      // Guardar tokens en base de datos
+      const updatedCreds: any = {
+        ...cred,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        accessTokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
+        refreshTokenExpiresAt: new Date(Date.now() + tokens.refreshExpiresIn * 1000).toISOString(),
+        sandbox: environment === 'sandbox'
+      };
+
+      logger.info('[OAuth Callback] Saving AliExpress Dropshipping credentials', {
+        service: 'marketplace-oauth',
+        correlationId,
+        userId,
+        environment,
+        sandbox: updatedCreds.sandbox,
+        credentialKeys: Object.keys(updatedCreds),
+        hasAccessToken: !!updatedCreds.accessToken,
+        hasRefreshToken: !!updatedCreds.refreshToken,
+      });
+
+      await CredentialsManager.saveCredentials(userId, 'aliexpress-dropshipping', updatedCreds, environment);
+
+      // Limpiar cache de credenciales
+      const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
+      clearCredentialsCache(userId, 'aliexpress-dropshipping', environment);
+      clearCredentialsCache(userId, 'aliexpress-dropshipping', environment === 'sandbox' ? 'production' : 'sandbox');
+      
+      // Limpiar cache de API availability para forzar re-verificación
+      const { APIAvailabilityService } = await import('../../services/api-availability.service');
+      const apiAvailabilityService = new APIAvailabilityService();
+      await apiAvailabilityService.checkAliExpressDropshippingAPI(userId, environment, true).catch((err) => {
+        logger.warn('[OAuth Callback] Error forcing AliExpress Dropshipping API status refresh', {
+          error: err?.message || String(err),
+          correlationId,
+          userId,
+          environment
+        });
+      });
+
+      logger.info('[OAuth Callback] AliExpress Dropshipping credentials saved successfully', {
+        service: 'marketplace-oauth',
+        correlationId,
+        userId,
+        environment,
+        duration: Date.now() - startTime,
+        cacheCleared: true,
+        apiStatusRefreshed: true
+      });
+
+      // Opcional: Verificar que el token funciona
+      try {
+        aliexpressDropshippingAPIService.setCredentials(updatedCreds);
+        await aliexpressDropshippingAPIService.getAccountInfo();
+        logger.info('[OAuth Callback] Account info verification successful', {
+          service: 'marketplace-oauth',
+          correlationId,
+          userId,
+          environment,
+        });
+      } catch (verifyError: any) {
+        logger.warn('[OAuth Callback] Account info verification failed (non-critical)', {
+          service: 'marketplace-oauth',
+          correlationId,
+          userId,
+          environment,
+          error: verifyError?.message || String(verifyError),
+        });
+      }
+
+      // ✅ REDIRIGIR A PÁGINA DE ÉXITO (mismo comportamiento que el handler estándar)
+      res.send(`
+        <html>
+          <head>
+            <title>Autorización completada</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+              .success { color: green; font-size: 18px; margin: 20px 0; }
+              .info { color: #666; font-size: 14px; margin-top: 20px; }
+            </style>
+          </head>
+          <body>
+            <div class="success">✅ Autorización completada exitosamente</div>
+            <div class="info">Puedes cerrar esta ventana y regresar a la aplicación.</div>
+            <script>
+              const sendMessage = () => {
+                if (window.opener && !window.opener.closed) {
+                  try {
+                    window.opener.postMessage({ 
+                      type: 'oauth_success', 
+                      marketplace: 'aliexpress-dropshipping',
+                      timestamp: Date.now()
+                    }, '*');
+                    console.log('[OAuth Callback] Success message sent to opener');
+                  } catch (e) {
+                    console.error('[OAuth Callback] Error sending message to opener:', e);
+                  }
+                } else {
+                  console.warn('[OAuth Callback] No opener window found or opener is closed');
+                }
+              };
+              
+              sendMessage();
+              setTimeout(sendMessage, 500);
+              setTimeout(sendMessage, 1000);
+              setTimeout(sendMessage, 2000);
+            </script>
+          </body>
+        </html>
+      `);
+
+    } catch (tokenError: any) {
+      logger.error('[OAuth Callback] AliExpress Dropshipping token exchange failed', {
+        service: 'marketplace-oauth',
+        correlationId,
+        userId,
+        environment,
+        error: tokenError?.message || String(tokenError),
+        responseData: tokenError?.response?.data,
+        status: tokenError?.response?.status,
+      });
+      
+      // ✅ ERROR HANDLING: Responder con error sin exponer secretos
+      res.status(500).send(`
+        <html>
+          <head>
+            <title>Error de autorización</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+              .error { color: red; font-size: 18px; margin: 20px 0; }
+              .details { color: #666; font-size: 12px; margin-top: 10px; }
+            </style>
+          </head>
+          <body>
+            <div class="error">❌ Error al completar la autorización OAuth</div>
+            <div class="details">Error técnico: ${tokenError?.message || 'Unknown error'}</div>
+            <div style="text-align: center; margin-top: 30px;">
+              <button onclick="window.close()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
+                Cerrar ventana
+              </button>
+            </div>
+            <script>
+              if (window.opener) {
+                window.opener.postMessage({ 
+                  type: 'oauth_error', 
+                  marketplace: 'aliexpress-dropshipping',
+                  error: '${(tokenError?.message || 'Unknown error').replace(/'/g, "\\'")}'
+                }, '*');
+              }
+            </script>
+          </body>
+        </html>
+      `);
+    }
+    
+  } catch (e: any) {
+    const errorMessage = e?.message || 'Unknown error';
+    const errorResponse = e?.response?.data || {};
+    const errorStatus = e?.response?.status || 500;
+    
+    logger.error('[OAuth Callback] Error processing AliExpress callback', {
+      service: 'marketplace-oauth',
+      correlationId,
+      error: errorMessage,
+      errorStatus,
+      errorResponse,
+      stack: e?.stack,
+      duration: Date.now() - startTime
+    });
+    
+    res.status(500).send(`
+      <html>
+        <head>
+          <title>Error de autorización</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+            .error { color: red; font-size: 18px; margin: 20px 0; }
+            .details { color: #666; font-size: 12px; margin-top: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="error">❌ Error al completar la autorización OAuth</div>
+          <div class="details">Error técnico: ${errorMessage}</div>
+          <div style="text-align: center; margin-top: 30px;">
+            <button onclick="window.close()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
+              Cerrar ventana
+            </button>
+          </div>
+        </body>
+      </html>
+    `);
+  }
 });
 
 // Public callback (no auth) to complete OAuth
