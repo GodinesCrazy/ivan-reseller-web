@@ -54,10 +54,19 @@ npm run smoke:prod
 
 **Revisar el reporte FILLED para ver el análisis detallado y la recomendación (GO/HOLD/NO-GO).**
 
+**Significado de GO vs HOLD vs NO-GO:**
+- ✅ **GO**: Todo funciona correctamente. Puedes proceder con validación OAuth completa.
+- ⚠️ **HOLD**: Problemas menores detectados. Necesita fix antes de proceder con validación completa.
+- ❌ **NO-GO**: Problemas críticos detectados. NO proceder hasta resolver (ej: 502 en endpoints críticos, callback devolviendo SPA).
+
 **Nota sobre redirects:**
 - El smoke test ahora sigue redirects automáticamente (ej: ivanreseller.com → www.ivanreseller.com)
 - Evalúa el resultado FINAL después de redirects
 - Muestra la cadena de redirects en los logs y en el reporte JSON
+
+**Exit code:**
+- `0` = Todos los tests pasaron (PASS)
+- `1` = Al menos un test crítico falló (FAIL)
 
 ### Resultados Esperados:
 

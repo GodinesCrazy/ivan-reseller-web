@@ -210,7 +210,9 @@ function isSPAResponse(response) {
   }
   
   // Check for typical SPA patterns
+  // ✅ HARDENED: Detectar SPA por <!doctype html> (requisito específico)
   const spaPatterns = [
+    /<!doctype\s+html>/i, // Requisito específico: detectar por doctype
     /<div[^>]*id=["']root["']/i,
     /id=["']root["']/i,
     /<script[^>]*type=["']module["']/i,
