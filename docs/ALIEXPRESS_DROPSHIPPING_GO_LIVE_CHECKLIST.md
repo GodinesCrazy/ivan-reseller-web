@@ -24,9 +24,14 @@
   - [ ] vercel.json incluye el rewrite para `/aliexpress/callback`
 
 - [ ] **Configuración de AliExpress App Console:**
-  - [ ] Callback URL configurado: `https://ivanreseller.com/aliexpress/callback`
+  - [ ] Callback URL configurado: `https://www.ivanreseller.com/aliexpress/callback` (⚠️ usar www, no sin www)
   - [ ] App Key (Client ID) obtenido
   - [ ] App Secret obtenido
+
+- [ ] **Confirmar dominio canónico (www):**
+  - [ ] El callback URL en AliExpress App Console usa `www.ivanreseller.com` (no `ivanreseller.com`)
+  - [ ] Variable `WEB_BASE_URL` en Railway está configurada como `https://www.ivanreseller.com` (o sin configurar para usar default)
+  - [ ] Esto previene saltos de dominio que pueden causar pérdida de cookies/state durante OAuth
 
 - [ ] **Credenciales guardadas en el sistema:**
   - [ ] Ir a `https://ivanreseller.com/api-settings`
@@ -48,6 +53,11 @@ npm run smoke:prod
 - `docs/ALIEXPRESS_DROPSHIPPING_OAUTH_PROD_VALIDATION_REPORT.FILLED.md` - Reporte de validación auto-completado
 
 **Revisar el reporte FILLED para ver el análisis detallado y la recomendación (GO/HOLD/NO-GO).**
+
+**Nota sobre redirects:**
+- El smoke test ahora sigue redirects automáticamente (ej: ivanreseller.com → www.ivanreseller.com)
+- Evalúa el resultado FINAL después de redirects
+- Muestra la cadena de redirects en los logs y en el reporte JSON
 
 ### Resultados Esperados:
 

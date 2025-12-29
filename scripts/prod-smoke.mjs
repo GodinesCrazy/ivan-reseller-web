@@ -91,6 +91,88 @@ function makeRequest(url, options = {}) {
   });
 }
 
+/**
+ * Realiza una request siguiendo redirects automáticamente
+ * 
+ * @param {string} url - URL inicial
+ * @param {Object} options - Opciones de request
+ * @param {number} maxRedirects - Máximo de redirects a seguir (default: 5)
+ * @returns {Promise<Object>} - Response final con redirectChain y finalUrl
+ */
+async function requestWithRedirects(url, options = {}, maxRedirects = 5) {
+  const redirectChain = [];
+  let currentUrl = url;
+  let totalDuration = 0;
+  
+  for (let i = 0; i <= maxRedirects; i++) {
+    if (i > 0) {
+      // Small delay between redirects
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    const startTime = Date.now();
+    try {
+      const response = await makeRequest(currentUrl, options);
+      const duration = Date.now() - startTime;
+      totalDuration += duration;
+      
+      const status = response.status;
+      const location = response.headers['location'] || response.headers['Location'];
+      
+      // Check if it's a redirect
+      if ((status === 301 || status === 302 || status === 303 || status === 307 || status === 308) && location) {
+        // Resolve relative URLs against current URL
+        let nextUrl;
+        try {
+          nextUrl = new URL(location, currentUrl).href;
+        } catch (e) {
+          // If URL resolution fails, use location as-is (shouldn't happen)
+          nextUrl = location;
+        }
+        
+        redirectChain.push({
+          from: currentUrl,
+          to: nextUrl,
+          status: status,
+        });
+        
+        currentUrl = nextUrl;
+        
+        // Continue following redirects
+        continue;
+      }
+      
+      // Not a redirect, return final response
+      return {
+        finalUrl: currentUrl,
+        status: status,
+        headers: response.headers,
+        body: response.body,
+        durationMs: totalDuration,
+        redirectChain: redirectChain,
+      };
+    } catch (error) {
+      // If request fails, return error with current redirect chain
+      return {
+        finalUrl: currentUrl,
+        status: null,
+        error: error.message,
+        durationMs: totalDuration,
+        redirectChain: redirectChain,
+      };
+    }
+  }
+  
+  // Max redirects exceeded
+  return {
+    finalUrl: currentUrl,
+    status: null,
+    error: `Max redirects (${maxRedirects}) exceeded`,
+    durationMs: totalDuration,
+    redirectChain: redirectChain,
+  };
+}
+
 function truncate(str, maxLength = 200) {
   if (!str || str.length <= maxLength) return str;
   return str.substring(0, maxLength) + '...';
@@ -147,96 +229,103 @@ function isSPAResponse(response) {
 }
 
 /**
- * Valida endpoint según criterios endurecidos
+ * Valida endpoint según criterios endurecidos (usa resultado FINAL después de redirects)
  */
-function validateEndpoint(name, url, response, testConfig) {
+function validateEndpoint(name, url, finalResponse, testConfig) {
+  const finalStatus = finalResponse.status;
+  const finalBody = finalResponse.body || '';
+  
   const result = {
     name,
     url,
-    status: response.status,
-    duration: response.duration,
+    finalUrl: finalResponse.finalUrl || url,
+    status: finalStatus,
+    finalStatus: finalStatus,
+    duration: finalResponse.durationMs || 0,
     pass: false,
     failReason: null,
-    is502: response.status === 502,
-    is404: response.status === 404,
+    is502: finalStatus === 502,
+    is404: finalStatus === 404,
     isSPA: false,
-    headers: formatHeaders(response.headers),
-    bodyPreview: truncate(response.body, 200),
+    redirectChain: finalResponse.redirectChain || [],
+    headers: formatHeaders(finalResponse.headers || {}),
+    bodyPreview: truncate(finalBody, 200),
   };
   
-  // Health Check: debe ser 200
+  // Health Check: debe ser 200 (FINAL status después de redirects)
   if (name === 'Health Check') {
-    if (response.status === 200) {
+    if (finalStatus === 200) {
       result.pass = true;
     } else {
       result.pass = false;
-      result.failReason = `Health check must return 200, got ${response.status}`;
+      result.failReason = `Health check must return 200 (final), got ${finalStatus}`;
     }
     return result;
   }
   
-  // Callback: NO 502, NO 404, NO SPA
+  // Callback: NO 502, NO 404, NO SPA (FINAL después de redirects)
   if (name.includes('AliExpress Callback')) {
-    if (response.status === 502) {
+    if (finalStatus === 502) {
       result.pass = false;
-      result.failReason = 'Callback returns 502 - NOT reaching backend';
+      result.failReason = 'Callback returns 502 (final) - NOT reaching backend';
       return result;
     }
     
-    if (response.status === 404) {
+    if (finalStatus === 404) {
       result.pass = false;
-      result.failReason = 'Callback returns 404 - route not found or rewrite not working';
+      result.failReason = 'Callback returns 404 (final) - route not found or rewrite not working';
       return result;
     }
     
-    result.isSPA = isSPAResponse(response);
+    // Check for SPA in final response body
+    result.isSPA = isSPAResponse({ headers: finalResponse.headers || {}, body: finalBody });
     if (result.isSPA) {
       result.pass = false;
-      result.failReason = 'Callback returns SPA React (index.html) - rewrite not working, callback not reaching backend';
+      result.failReason = 'Callback returns SPA React (index.html) in final response - rewrite not working, callback not reaching backend';
       return result;
     }
     
     // 3xx or 4xx (but NOT 404) and NOT SPA → OK (reached backend)
-    if ((response.status >= 300 && response.status < 500) || response.status >= 200) {
+    if ((finalStatus >= 300 && finalStatus < 500) || finalStatus >= 200) {
       result.pass = true;
       return result;
     }
     
     result.pass = false;
-    result.failReason = `Unexpected status ${response.status}`;
+    result.failReason = `Unexpected final status ${finalStatus}`;
     return result;
   }
   
-  // API endpoints: 200/401/403 OK, 404/502 FAIL
+  // API endpoints: 200/401/403 OK, 404/502 FAIL (FINAL después de redirects)
   if (name.includes('Auth Status') || name.includes('Dashboard Stats') || name.includes('Products')) {
-    if (response.status === 404) {
+    if (finalStatus === 404) {
       result.pass = false;
-      result.failReason = `Returns 404 - route broken or rewrite issue`;
+      result.failReason = `Returns 404 (final) - route broken or rewrite issue`;
       return result;
     }
     
-    if (response.status === 502) {
+    if (finalStatus === 502) {
       result.pass = false;
-      result.failReason = 'Returns 502 - backend not reachable';
+      result.failReason = 'Returns 502 (final) - backend not reachable';
       return result;
     }
     
-    if (response.status === 200 || response.status === 401 || response.status === 403) {
+    if (finalStatus === 200 || finalStatus === 401 || finalStatus === 403) {
       result.pass = true;
       return result;
     }
     
     result.pass = false;
-    result.failReason = `Unexpected status ${response.status}, expected 200/401/403`;
+    result.failReason = `Unexpected final status ${finalStatus}, expected 200/401/403`;
     return result;
   }
   
-  // Default: accept if not error
-  if (response.status && response.status < 500 && response.status !== 404) {
+  // Default: accept if not error (FINAL)
+  if (finalStatus && finalStatus < 500 && finalStatus !== 404) {
     result.pass = true;
   } else {
     result.pass = false;
-    result.failReason = `Status ${response.status} not acceptable`;
+    result.failReason = `Final status ${finalStatus} not acceptable`;
   }
   
   return result;
@@ -249,23 +338,51 @@ async function testEndpoint(name, url, testConfig = {}) {
   log(`${'='.repeat(80)}`, 'cyan');
   
   try {
-    const startTime = Date.now();
-    const response = await makeRequest(url);
-    const duration = Date.now() - startTime;
+    const finalResponse = await requestWithRedirects(url);
     
-    const validation = validateEndpoint(name, url, { ...response, duration }, testConfig);
+    if (finalResponse.error) {
+      log(`❌ ERROR: ${finalResponse.error}`, 'red');
+      return {
+        name,
+        url,
+        finalUrl: finalResponse.finalUrl || url,
+        status: null,
+        finalStatus: null,
+        duration: finalResponse.durationMs || 0,
+        pass: false,
+        failReason: `Request failed: ${finalResponse.error}`,
+        is502: false,
+        is404: false,
+        isSPA: false,
+        redirectChain: finalResponse.redirectChain || [],
+        error: finalResponse.error,
+        headers: {},
+        bodyPreview: '',
+      };
+    }
+    
+    const validation = validateEndpoint(name, url, finalResponse, testConfig);
     
     const statusColor = validation.pass ? 'green' :
                        validation.is502 ? 'red' :
                        validation.is404 ? 'red' :
-                       (response.status >= 400 && response.status < 500) ? 'yellow' :
-                       response.status >= 500 ? 'red' : 'reset';
+                       (validation.finalStatus >= 400 && validation.finalStatus < 500) ? 'yellow' :
+                       validation.finalStatus >= 500 ? 'red' : 'reset';
     
-    log(`Status: ${response.status}`, statusColor);
-    log(`Duration: ${duration}ms`, 'cyan');
+    // Show redirect chain if exists
+    if (validation.redirectChain && validation.redirectChain.length > 0) {
+      log(`\n↪️  Redirects (${validation.redirectChain.length}):`, 'cyan');
+      validation.redirectChain.forEach((redirect, idx) => {
+        log(`   ${idx + 1}. ${redirect.from} → ${redirect.to} (${redirect.status})`, 'cyan');
+      });
+      log(`   Final URL: ${validation.finalUrl}`, 'cyan');
+    }
+    
+    log(`\nStatus (final): ${validation.finalStatus}`, statusColor);
+    log(`Duration: ${validation.duration}ms`, 'cyan');
     
     if (validation.isSPA) {
-      log(`⚠️  DETECTED: Response is SPA React (index.html)`, 'red');
+      log(`⚠️  DETECTED: Final response is SPA React (index.html)`, 'red');
     }
     
     if (validation.pass) {
@@ -286,13 +403,16 @@ async function testEndpoint(name, url, testConfig = {}) {
     return {
       name,
       url,
+      finalUrl: url,
       status: null,
+      finalStatus: null,
       duration: 0,
       pass: false,
       failReason: `Request failed: ${error.message}`,
       is502: false,
       is404: false,
       isSPA: false,
+      redirectChain: [],
       error: error.message,
       headers: {},
       bodyPreview: '',
@@ -318,12 +438,16 @@ function generateJSONReport(results, timestamp) {
   let callbackExplanation = '';
   
   if (callbackTest) {
-    if (callbackTest.status === 502 || callbackTest.status === 404 || callbackTest.isSPA) {
+    const finalStatus = callbackTest.finalStatus || callbackTest.status;
+    if (finalStatus === 502 || finalStatus === 404 || callbackTest.isSPA) {
       callbackReachesBackend = false;
-      callbackExplanation = callbackTest.failReason;
-    } else if (callbackTest.status >= 200 && callbackTest.status < 500) {
+      callbackExplanation = callbackTest.failReason || `Callback failed with final status ${finalStatus}`;
+    } else if (finalStatus >= 200 && finalStatus < 500) {
       callbackReachesBackend = true;
-      callbackExplanation = `Callback reaches backend (status ${callbackTest.status})`;
+      const redirectNote = callbackTest.redirectChain && callbackTest.redirectChain.length > 0 
+        ? ` (after ${callbackTest.redirectChain.length} redirect${callbackTest.redirectChain.length > 1 ? 's' : ''})`
+        : '';
+      callbackExplanation = `Callback reaches backend (final status ${finalStatus}${redirectNote})`;
     } else {
       callbackReachesBackend = null;
       callbackExplanation = 'Inconclusive - needs investigation';
@@ -370,14 +494,17 @@ function generateJSONReport(results, timestamp) {
     results: results.map(r => ({
       name: r.name,
       url: r.url,
+      finalUrl: r.finalUrl || r.url,
       source: r.source || 'production',
       status: r.status,
+      finalStatus: r.finalStatus || r.status,
       duration: r.duration,
       pass: r.pass,
       failReason: r.failReason || null,
       is502: r.is502 || false,
       is404: r.is404 || false,
       isSPA: r.isSPA || false,
+      redirectChain: r.redirectChain || [],
     })),
     analysis: {
       callbackReachesBackend,
@@ -428,9 +555,12 @@ function generateFilledReport(jsonReport, templatePath) {
   for (const endpoint of endpointOrder) {
     const result = productionResults.find(r => r.name === endpoint.name);
     if (result) {
-      const status = result.status !== null && result.status !== undefined ? result.status.toString() : 'ERROR';
-      const notes = result.pass ? '✅ OK' : `❌ ${result.failReason || 'Failed'}`;
-      resultsTable += `| ${endpoint.display} | \`${result.url}\` | ${status} | ${notes} |\n`;
+      const status = result.finalStatus !== null && result.finalStatus !== undefined ? result.finalStatus.toString() : (result.status?.toString() || 'ERROR');
+      let notes = result.pass ? '✅ OK' : `❌ ${result.failReason || 'Failed'}`;
+      if (result.redirectChain && result.redirectChain.length > 0) {
+        notes += ` (${result.redirectChain.length} redirect${result.redirectChain.length > 1 ? 's' : ''})`;
+      }
+      resultsTable += `| ${endpoint.display} | \`${result.finalUrl || result.url}\` | ${status} | ${notes} |\n`;
     }
   }
   
@@ -451,8 +581,10 @@ function generateFilledReport(jsonReport, templatePath) {
     const railwayHealth = jsonReport.comparison.railwayHealthCheck;
     const railwayCallback = jsonReport.comparison.railwayCallback;
     
-    const railwayTable = `| Railway Health Check | \`https://${RAILWAY_URL}/api/health\` | ${railwayHealth?.status || 'N/A'} | ${railwayHealth?.pass ? '✅ OK' : '❌ ' + (railwayHealth?.failReason || 'FAIL')} |
-| Railway AliExpress Callback | \`https://${RAILWAY_URL}/aliexpress/callback?code=test&state=test\` | ${railwayCallback?.status || 'N/A'} | ${railwayCallback?.pass ? '✅ OK' : '❌ ' + (railwayCallback?.failReason || 'FAIL')} |`;
+    const railwayHealthStatus = railwayHealth?.finalStatus?.toString() || railwayHealth?.status?.toString() || 'N/A';
+  const railwayCallbackStatus = railwayCallback?.finalStatus?.toString() || railwayCallback?.status?.toString() || 'N/A';
+  const railwayTable = `| Railway Health Check | \`https://${RAILWAY_URL}/api/health\` | ${railwayHealthStatus} | ${railwayHealth?.pass ? '✅ OK' : '❌ ' + (railwayHealth?.failReason || 'FAIL')} |
+| Railway AliExpress Callback | \`https://${RAILWAY_URL}/aliexpress/callback?code=test&state=test\` | ${railwayCallbackStatus} | ${railwayCallback?.pass ? '✅ OK' : '❌ ' + (railwayCallback?.failReason || 'FAIL')} |`;
     
     const railwayPattern = /\| Railway Health Check \| `[^`]+` \| \[STATUS\] \| \[NOTAS\] \|[\s\S]*?\| Railway AliExpress Callback \| `[^`]+` \| \[STATUS\] \| \[NOTAS\] \|/;
     filled = filled.replace(railwayPattern, railwayTable);
@@ -479,20 +611,24 @@ function generateFilledReport(jsonReport, templatePath) {
   );
   
   // Replace callback evidence (multiple replacements for same placeholder)
-  const callbackStatusCode = callbackResult?.status?.toString() || 'N/A';
+  const callbackStatusCode = callbackResult?.finalStatus?.toString() || callbackResult?.status?.toString() || 'N/A';
   const callbackBodyPreview = (callbackResult?.bodyPreview || '').substring(0, 100).replace(/\n/g, ' ') || 'N/A';
+  const callbackRedirectNote = callbackResult?.redirectChain && callbackResult.redirectChain.length > 0
+    ? `\n- Redirect chain: ${callbackResult.redirectChain.map(r => `${r.from} → ${r.to}`).join(', ')}`
+    : '';
   
   // Replace all instances of [STATUS] in callback section carefully
   filled = filled.replace(
     /- Status code del callback via ivanreseller\.com: \[STATUS\]/,
-    `- Status code del callback via ivanreseller.com: ${callbackStatusCode}`
+    `- Status code del callback via ivanreseller.com (final): ${callbackStatusCode}${callbackRedirectNote}`
   );
   
   const railwayCallbackResult = jsonReport.comparison?.railwayCallback;
   if (railwayCallbackResult) {
+    const railwayCallbackStatus = railwayCallbackResult.finalStatus?.toString() || railwayCallbackResult.status?.toString() || 'N/A';
     filled = filled.replace(
       /- Status code del callback directo a Railway: \[STATUS\]/,
-      `- Status code del callback directo a Railway: ${railwayCallbackResult.status || 'N/A'}`
+      `- Status code del callback directo a Railway (final): ${railwayCallbackStatus}`
     );
   } else {
     filled = filled.replace(

@@ -229,6 +229,8 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().default('3000'),
   API_URL: z.string().url().default('http://localhost:3000'),
+  FRONTEND_URL: z.string().url().optional(),
+  WEB_BASE_URL: z.string().url().optional(), // Base URL for OAuth callbacks (defaults to www.ivanreseller.com in production)
   DATABASE_URL: databaseUrlSchema,
   REDIS_URL: redisUrlSchema,
   JWT_SECRET: z.string().min(32),
