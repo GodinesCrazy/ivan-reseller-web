@@ -912,9 +912,16 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       });
       
       // Definir callbackUrl y state
+      // ✅ CANONICAL DOMAIN: Usar WEB_BASE_URL para evitar saltos de dominio (ivanreseller.com -> www.ivanreseller.com)
+      // Esto previene pérdida de cookies/state durante OAuth
+      const webBaseUrl = process.env.WEB_BASE_URL || 
+                        (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
+      
+      const defaultCallbackUrl = `${webBaseUrl}/aliexpress/callback`;
+      
       const callbackUrl = typeof redirect_uri === 'string' && redirect_uri.length > 0
         ? redirect_uri
-        : credTemp?.credentials?.redirectUri || process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI || '';
+        : credTemp?.credentials?.redirectUri || process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI || defaultCallbackUrl;
       
       if (!callbackUrl) {
         return res.status(400).json({ success: false, message: 'Missing AliExpress Dropshipping Redirect URI' });

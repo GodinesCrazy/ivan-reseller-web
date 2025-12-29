@@ -438,9 +438,14 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
 
       try {
         // 🔥 PASO 4: Intercambiar code por tokens
+        // ✅ CANONICAL DOMAIN: Usar WEB_BASE_URL para mantener consistencia con el redirect_uri usado en getAuthUrl
+        const webBaseUrl = process.env.WEB_BASE_URL || 
+                          (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
+        const defaultCallbackUrl = `${webBaseUrl}/aliexpress/callback`;
+        
         const tokens = await aliexpressDropshippingAPIService.exchangeCodeForToken(
           code,
-          redirectUri || 'https://ivanreseller.com/aliexpress/callback',
+          redirectUri || defaultCallbackUrl,
           appKey,
           appSecret
         );
@@ -665,6 +670,77 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         </body>
       </html>
     `);
+  }
+});
+
+// ✅ DIAGNÓSTICO: Endpoint para verificar estado del OAuth de AliExpress (sin información sensible)
+router.get('/aliexpress/oauth/debug', async (req: Request, res: Response) => {
+  try {
+    // Verificar que el callback es accesible (simulando que llegamos aquí)
+    const callbackReachable = true;
+    
+    // Obtener información del usuario si está autenticado
+    // Nota: Este endpoint es público para permitir debugging, pero verifica autenticación opcional
+    const userId = req.user?.userId;
+    
+    if (!userId) {
+      return res.json({
+        callbackReachable: true,
+        hasTokens: false,
+        environment: 'unknown',
+        lastError: null,
+        lastAuthAt: null,
+        status: 'not_authenticated',
+        message: 'User not authenticated. This endpoint works, but authentication is required to check token status.'
+      });
+    }
+    
+    // Obtener credenciales de AliExpress Dropshipping
+    const { CredentialsManager } = await import('../../services/credentials-manager.service');
+    
+    // Intentar obtener credenciales de producción y sandbox
+    const credProd = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', 'production');
+    const credSandbox = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', 'sandbox');
+    
+    const hasTokensProd = !!(credProd?.accessToken || credProd?.token);
+    const hasTokensSandbox = !!(credSandbox?.accessToken || credSandbox?.token);
+    
+    const environment = hasTokensProd ? 'production' : (hasTokensSandbox ? 'sandbox' : 'none');
+    const lastAuthAt = credProd?.updatedAt || credSandbox?.updatedAt || null;
+    
+    logger.info('[AliExpress OAuth Debug] Status check', {
+      userId,
+      hasTokensProd,
+      hasTokensSandbox,
+      environment
+    });
+    
+    return res.json({
+      callbackReachable: true,
+      hasTokens: hasTokensProd || hasTokensSandbox,
+      hasTokensProduction: hasTokensProd,
+      hasTokensSandbox: hasTokensSandbox,
+      environment,
+      lastError: null, // Se puede extender para loggear últimos errores
+      lastAuthAt,
+      status: (hasTokensProd || hasTokensSandbox) ? 'authorized' : 'not_authorized',
+      message: 'Endpoint working correctly. Use /api/auth-status for detailed status.'
+    });
+  } catch (error: any) {
+    logger.error('[AliExpress OAuth Debug] Error', {
+      error: error.message,
+      stack: error.stack
+    });
+    
+    return res.status(500).json({
+      callbackReachable: true,
+      hasTokens: false,
+      environment: 'unknown',
+      lastError: error.message,
+      lastAuthAt: null,
+      status: 'error',
+      message: 'Error checking OAuth status'
+    });
   }
 });
 
