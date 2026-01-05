@@ -550,7 +550,7 @@ function generateFilledReport(jsonReport, templatePath) {
     { name: 'Auth Status', display: 'Auth Status' },
     { name: 'Dashboard Stats', display: 'Dashboard Stats' },
     { name: 'Products', display: 'Products' },
-    { name: 'AliExpress Callback (via Vercel rewrite)', display: 'AliExpress Callback' },
+    { name: 'AliExpress Callback (via Vercel serverless function)', display: 'AliExpress Callback' },
     { name: 'AliExpress OAuth Debug', display: 'OAuth Debug' },
   ];
   
@@ -748,8 +748,8 @@ async function main() {
       url: `https://${PRODUCTION_DOMAIN}/api/products`,
     },
     {
-      name: 'AliExpress Callback (via Vercel rewrite)',
-      url: `https://${PRODUCTION_DOMAIN}/aliexpress/callback?code=test&state=test`,
+      name: 'AliExpress Callback (via Vercel serverless function)',
+      url: `https://${PRODUCTION_DOMAIN}/api/aliexpress/callback?code=test&state=test`,
     },
     {
       name: 'AliExpress OAuth Debug',
