@@ -48,16 +48,23 @@ El archivo `setup-status.routes.ts` existe en el código fuente, pero el import 
 
 ## ✅ FIX APLICADO
 
-### 1. Import de setup-status.routes Descomentado (FIX PRINCIPAL)
+### 1. Import de setup-status.routes Descomentado y Archivo Agregado a Git (FIX PRINCIPAL)
 
-**Archivo:** `backend/src/app.ts`
+**Archivos modificados:**
+- `backend/src/app.ts`
+- `backend/src/api/routes/setup-status.routes.ts` (agregado a git)
 
 **Cambios:**
-- Descomentado: `import setupStatusRoutes from './api/routes/setup-status.routes';` (línea 59)
-- Descomentado: `app.use('/api/setup-status', setupStatusRoutes);` (línea 911)
+1. Descomentado: `import setupStatusRoutes from './api/routes/setup-status.routes';` (línea 59)
+2. Descomentado: `app.use('/api/setup-status', setupStatusRoutes);` (línea 911)
+3. Agregado archivo `setup-status.routes.ts` a git (estaba como untracked)
 
 **Razón:**
-El archivo `setup-status.routes.ts` existe y tiene `export default router`, pero estaba comentado en `app.ts`. El código compilado intentaba importarlo pero fallaba porque estaba comentado, causando un crash inmediato al arrancar el servidor.
+El archivo `setup-status.routes.ts` existía localmente pero NO estaba en git, por lo que Railway no podía compilarlo. El código compilado intentaba importarlo pero fallaba porque el archivo no estaba disponible en el repositorio, causando un crash inmediato al arrancar el servidor con el error `Cannot find module './api/routes/setup-status.routes'`.
+
+**Commits:**
+- `ee3eb63` - fix: agregar archivo setup-status.routes.ts a git para Railway deployment
+- `1407041` - docs: actualizar RAILWAY_DEPLOY_FIX_REPORT con fix de setup-status.routes MODULE_NOT_FOUND
 
 ### 2. Railway Config Actualizada
 
