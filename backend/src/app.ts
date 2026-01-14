@@ -56,6 +56,7 @@ import regionalRoutes from './api/routes/regional.routes';
 import aiSuggestionsRoutes from './api/routes/ai-suggestions.routes';
 import manualAuthRoutes from './api/routes/manual-auth.routes';
 import authStatusRoutes from './api/routes/auth-status.routes';
+import setupStatusRoutes from './api/routes/setup-status.routes';
 import configAuditRoutes from './api/routes/config-audit.routes';
 import manualCaptchaRoutes from './api/routes/manual-captcha.routes';
 import accessRequestsRoutes from './api/routes/access-requests.routes';
@@ -63,6 +64,7 @@ import listingLifetimeRoutes from './api/routes/listing-lifetime.routes';
 import meetingRoomRoutes from './api/routes/meeting-room.routes';
 import debugRoutes from './api/routes/debug.routes';
 import helpRoutes from './api/routes/help.routes';
+import aliExpressRoutes from './modules/aliexpress/aliexpress.routes';
 
 const app: Application = express();
 app.set('trust proxy', 1);
@@ -873,6 +875,8 @@ app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/marketplace-oauth', marketplaceOauthRoutes);
 // ✅ AliExpress callback directo (según documentación: https://ivanreseller.com/aliexpress/callback)
 app.use('/aliexpress', marketplaceOauthRoutes);
+// ✅ AliExpress Affiliate API routes
+app.use('/api/aliexpress', aliExpressRoutes);
 app.use('/api/amazon', amazonRoutes);
 app.use('/api/jobs', jobsRoutes);
 app.use('/api/reports', reportsRoutes);
@@ -904,11 +908,21 @@ app.use('/api/dropshipping', dropshippingRoutes);
 app.use('/api/regional', regionalRoutes);
 app.use('/api/manual-auth', manualAuthRoutes);
 app.use('/api/auth-status', authStatusRoutes);
+app.use('/api/setup-status', setupStatusRoutes);
 app.use('/api/config-audit', configAuditRoutes);
 app.use('/api/listing-lifetime', listingLifetimeRoutes);
 app.use('/api/meeting-room', meetingRoomRoutes);
 app.use('/api/help', helpRoutes);
 app.use('/debug', debugRoutes);
+
+// ✅ DEBUG: Log routers mounted
+console.log('✅ Mounted routers:');
+console.log('   - /api/aliexpress (aliExpressRoutes)');
+if (aliExpressRoutes) {
+  console.log('   ✅ AliExpress router loaded successfully');
+} else {
+  console.log('   ❌ AliExpress router is null/undefined');
+}
 
 // Swagger API Documentation
 if (env.NODE_ENV !== 'production' || process.env.ENABLE_SWAGGER === 'true') {
