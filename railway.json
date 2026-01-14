@@ -2,8 +2,8 @@
   "$schema": "https://railway.app/railway.schema.json",
   "$service": {
     "rootDirectory": "backend",
-    "buildCommand": "npm install && npx prisma generate && npm run build",
-    "startCommand": "npm run start:with-migrations"
+    "buildCommand": "npm ci && npx prisma generate && npm run build",
+    "startCommand": "npm run start:prod"
   }
 }
 
