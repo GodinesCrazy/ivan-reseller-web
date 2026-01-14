@@ -17,9 +17,11 @@ Railway estaba fallando en el deployment con los siguientes síntomas:
 
 ### Causa Raíz (ACTUALIZADA - 2025-01-14)
 
-**Problema Principal:**
-El servidor crasheaba al arrancar debido a un error de módulo faltante:
+**Problema Principal - Archivos Sin Rastrear en Git:**
 
+El servidor crasheaba al arrancar debido a archivos críticos que NO estaban en git (untracked):
+
+1. **Primer Error:**
 ```
 Error: Cannot find module './api/routes/setup-status.routes'
 Require stack:
@@ -27,7 +29,16 @@ Require stack:
 - /app/dist/server.js:40
 ```
 
-El archivo `setup-status.routes.ts` existe en el código fuente, pero el import estaba comentado en `app.ts`. Sin embargo, el código compilado en Railway todavía intentaba importarlo, causando un crash inmediato antes de que el healthcheck pudiera responder.
+2. **Segundo Error (después de fix inicial):**
+```
+Error: Cannot find module './modules/aliexpress/aliexpress.routes'
+Require stack:
+- /app/dist/app.js:103:45
+- /app/dist/server.js:40:31
+```
+
+**Root Cause Real:**
+Los archivos existían localmente pero NO estaban en git, por lo que Railway no podía compilarlos. El código compilado intentaba importarlos pero fallaba porque los archivos no estaban disponibles en el repositorio remoto, causando un crash inmediato antes de que el healthcheck pudiera responder.
 
 **Problemas Adicionales Identificados Anteriormente:**
 
@@ -48,7 +59,12 @@ El archivo `setup-status.routes.ts` existe en el código fuente, pero el import 
 
 ## ✅ FIX APLICADO
 
-### 1. Import de setup-status.routes Descomentado y Archivo Agregado a Git (FIX PRINCIPAL)
+### 1. Archivos Críticos Agregados a Git (FIX PRINCIPAL)
+
+**Problema Identificado:**
+Varios archivos críticos estaban sin rastrear en git, causando errores de MODULE_NOT_FOUND en Railway.
+
+#### Fix 1.1: setup-status.routes.ts
 
 **Archivos modificados:**
 - `backend/src/app.ts`
@@ -59,12 +75,22 @@ El archivo `setup-status.routes.ts` existe en el código fuente, pero el import 
 2. Descomentado: `app.use('/api/setup-status', setupStatusRoutes);` (línea 911)
 3. Agregado archivo `setup-status.routes.ts` a git (estaba como untracked)
 
-**Razón:**
-El archivo `setup-status.routes.ts` existía localmente pero NO estaba en git, por lo que Railway no podía compilarlo. El código compilado intentaba importarlo pero fallaba porque el archivo no estaba disponible en el repositorio, causando un crash inmediato al arrancar el servidor con el error `Cannot find module './api/routes/setup-status.routes'`.
-
 **Commits:**
 - `ee3eb63` - fix: agregar archivo setup-status.routes.ts a git para Railway deployment
-- `1407041` - docs: actualizar RAILWAY_DEPLOY_FIX_REPORT con fix de setup-status.routes MODULE_NOT_FOUND
+
+#### Fix 1.2: Módulo Aliexpress Completo
+
+**Archivos agregados a git:**
+- `backend/src/modules/aliexpress/aliexpress.routes.ts` (estaba como untracked)
+- `backend/src/modules/aliexpress/aliexpress.controller.ts` (estaba como untracked)
+- `backend/src/modules/aliexpress/aliexpress.service.ts` (estaba como untracked)
+- `backend/src/modules/aliexpress/aliexpress.types.ts` (estaba como untracked)
+
+**Razón:**
+El módulo completo de Aliexpress NO estaba en git, pero `app.ts` intentaba importar `aliExpressRoutes` desde `./modules/aliexpress/aliexpress.routes`. Railway no podía compilarlo porque los archivos no existían en el repositorio remoto, causando el error `Cannot find module './modules/aliexpress/aliexpress.routes'`.
+
+**Commits:**
+- `6820dc4` - fix: agregar archivos del modulo aliexpress a git para Railway deployment
 
 ### 2. Railway Config Actualizada
 
