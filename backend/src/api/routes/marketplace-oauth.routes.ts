@@ -261,7 +261,8 @@ router.get('/callback', async (req: Request, res: Response) => {
       // Intercambiar code por tokens
       const webBaseUrl = process.env.WEB_BASE_URL || 
                         (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
-      const defaultCallbackUrl = `${webBaseUrl}/aliexpress/callback`;
+      // ✅ CORRECCIÓN: Callback debe incluir /api porque el serverless function está en /api/aliexpress/callback
+      const defaultCallbackUrl = `${webBaseUrl}/api/aliexpress/callback`;
       
       const tokens = await aliexpressDropshippingAPIService.exchangeCodeForToken(
         codeStr,
@@ -835,7 +836,8 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         // ✅ CANONICAL DOMAIN: Usar WEB_BASE_URL para mantener consistencia con el redirect_uri usado en getAuthUrl
         const webBaseUrl = process.env.WEB_BASE_URL || 
                           (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
-        const defaultCallbackUrl = `${webBaseUrl}/aliexpress/callback`;
+        // ✅ CORRECCIÓN: Callback debe incluir /api porque el serverless function está en /api/aliexpress/callback
+        const defaultCallbackUrl = `${webBaseUrl}/api/aliexpress/callback`;
         
         const tokens = await aliexpressDropshippingAPIService.exchangeCodeForToken(
           code,
@@ -1096,11 +1098,11 @@ router.get('/aliexpress/oauth/debug', async (req: Request, res: Response) => {
     const credProd = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', 'production');
     const credSandbox = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', 'sandbox');
     
-    const hasTokensProd = !!(credProd?.accessToken || credProd?.token);
-    const hasTokensSandbox = !!(credSandbox?.accessToken || credSandbox?.token);
+    const hasTokensProd = !!(credProd?.accessToken);
+    const hasTokensSandbox = !!(credSandbox?.accessToken);
     
     const environment = hasTokensProd ? 'production' : (hasTokensSandbox ? 'sandbox' : 'none');
-    const lastAuthAt = credProd?.updatedAt || credSandbox?.updatedAt || null;
+    const lastAuthAt = null; // updatedAt no está disponible en el tipo de credenciales
     
     logger.info('[AliExpress OAuth Debug] Status check', {
       userId,
