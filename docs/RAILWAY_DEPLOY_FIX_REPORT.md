@@ -15,7 +15,21 @@ Railway estaba fallando en el deployment con los siguientes síntomas:
 - **Logs:** "Attempt failed with service unavailable", "1/1 replicas never became healthy!", "Healthcheck failed!"
 - **Consecuencia:** Backend productivo sigue corriendo un commit antiguo y `/api/aliexpress/token-status` devuelve 404
 
-### Causa Raíz
+### Causa Raíz (ACTUALIZADA - 2025-01-14)
+
+**Problema Principal:**
+El servidor crasheaba al arrancar debido a un error de módulo faltante:
+
+```
+Error: Cannot find module './api/routes/setup-status.routes'
+Require stack:
+- /app/dist/app.js:95
+- /app/dist/server.js:40
+```
+
+El archivo `setup-status.routes.ts` existe en el código fuente, pero el import estaba comentado en `app.ts`. Sin embargo, el código compilado en Railway todavía intentaba importarlo, causando un crash inmediato antes de que el healthcheck pudiera responder.
+
+**Problemas Adicionales Identificados Anteriormente:**
 
 1. **Railway config usaba `start:with-migrations`:**
    - `start:with-migrations` ejecuta `npx prisma migrate deploy && node dist/server.js`
@@ -27,15 +41,25 @@ Railway estaba fallando en el deployment con los siguientes síntomas:
    - `npm install` es menos confiable en producción (puede instalar versiones diferentes)
    - `npm ci` es más seguro porque usa package-lock.json exacto
 
-3. **El servidor ya ejecuta migraciones en background:**
-   - `server.ts` ya ejecuta migraciones en background (línea 472)
-   - Ejecutar migraciones dos veces (una en `start:with-migrations` y otra en `server.ts`) puede causar problemas
+3. **Errores de TypeScript:**
+   - Errores en `marketplace-oauth.routes.ts` (acceso a propiedades inexistentes)
 
 ---
 
 ## ✅ FIX APLICADO
 
-### 1. Railway Config Actualizada
+### 1. Import de setup-status.routes Descomentado (FIX PRINCIPAL)
+
+**Archivo:** `backend/src/app.ts`
+
+**Cambios:**
+- Descomentado: `import setupStatusRoutes from './api/routes/setup-status.routes';` (línea 59)
+- Descomentado: `app.use('/api/setup-status', setupStatusRoutes);` (línea 911)
+
+**Razón:**
+El archivo `setup-status.routes.ts` existe y tiene `export default router`, pero estaba comentado en `app.ts`. El código compilado intentaba importarlo pero fallaba porque estaba comentado, causando un crash inmediato al arrancar el servidor.
+
+### 2. Railway Config Actualizada
 
 **Archivo:** `railway.json`
 
@@ -51,11 +75,32 @@ Railway estaba fallando en el deployment con los siguientes síntomas:
 }
 ```
 
+**Configuración actual:**
+```json
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "$service": {
+    "rootDirectory": "backend",
+    "buildCommand": "npm ci && npx prisma generate && npm run build",
+    "startCommand": "npm start"
+  }
+}
+```
+
 **Diferencias:**
-- `buildCommand`: `npm install` → `npm ci` (más seguro en producción)
+- `buildCommand`: `npm install` → `npm ci && npx prisma generate && npm run build` (más seguro en producción)
 - `startCommand`: `npm run start:with-migrations` → `npm start` (servidor arranca rápidamente, migraciones en background)
 
-### 2. Package.json Scripts
+### 3. Errores de TypeScript Corregidos
+
+**Archivo:** `backend/src/api/routes/marketplace-oauth.routes.ts`
+
+**Cambios:**
+- Eliminado acceso a propiedad `token` (no existe, usar `accessToken`)
+- Eliminado acceso a propiedad `updatedAt` (no está en el tipo de credenciales desencriptadas)
+- Código ahora usa solo `accessToken`, que es la propiedad correcta
+
+### 4. Package.json Scripts
 
 **Archivo:** `backend/package.json`
 
@@ -73,7 +118,7 @@ Railway estaba fallando en el deployment con los siguientes síntomas:
 
 **Nota:** `start:prod` y `start:with-migrations` son equivalentes actualmente, pero el cambio de Railway config asegura que usamos el script correcto.
 
-### 3. Server.ts Migraciones en Background
+### 5. Server.ts Migraciones en Background
 
 **Archivo:** `backend/src/server.ts`
 
