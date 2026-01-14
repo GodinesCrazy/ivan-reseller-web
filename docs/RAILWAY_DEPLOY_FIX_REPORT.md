@@ -53,7 +53,7 @@ Railway estaba fallando en el deployment con los siguientes síntomas:
 
 **Diferencias:**
 - `buildCommand`: `npm install` → `npm ci` (más seguro en producción)
-- `startCommand`: `npm run start:with-migrations` → `npm run start:prod` (ejecuta migraciones en background)
+- `startCommand`: `npm run start:with-migrations` → `npm start` (servidor arranca rápidamente, migraciones en background)
 
 ### 2. Package.json Scripts
 
@@ -105,10 +105,10 @@ try {
 ### Después del Fix
 
 1. Railway ejecuta: `npm ci && npx prisma generate && npm run build`
-2. Railway ejecuta: `npm run start:prod`
-3. `start:prod` ejecuta: `prisma migrate deploy && node dist/server.js`
-4. Migraciones se ejecutan rápidamente (o fallan de manera controlada)
-5. Servidor arranca y ejecuta migraciones adicionales en background si es necesario
+2. Railway ejecuta: `npm start`
+3. `start` ejecuta: `node dist/server.js`
+4. Servidor arranca INMEDIATAMENTE (sin esperar migraciones)
+5. Migraciones se ejecutan en background (no-bloqueante)
 6. Railway healthcheck pasa → Deployment exitoso
 
 ---
