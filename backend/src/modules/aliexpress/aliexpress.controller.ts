@@ -4,8 +4,8 @@
 
 import { Request, Response } from 'express';
 import aliExpressService from './aliexpress.service';
-import logger from '@/config/logger';
-import env from '@/config/env';
+import logger from '../../config/logger';
+import env from '../../config/env';
 
 /**
  * Endpoint OAuth callback - Recibe el código de autorización de AliExpress

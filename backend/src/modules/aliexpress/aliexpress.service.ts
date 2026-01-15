@@ -4,10 +4,10 @@
 
 import crypto from 'crypto';
 import axios, { AxiosInstance } from 'axios';
-import env from '@/config/env';
-import logger from '@/config/logger';
-import prisma from '@/config/database';
-import { encrypt, decrypt } from '@/utils/encryption';
+import env from '../../config/env';
+import logger from '../../config/logger';
+import prisma from '../../config/database';
+import { encrypt, decrypt } from '../../utils/encryption';
 import type {
   AliExpressOAuthTokenResponse,
   AliExpressTokenData,
