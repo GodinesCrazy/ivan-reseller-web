@@ -125,9 +125,10 @@ export const initiateOAuth = async (req: Request, res: Response) => {
         rawAppKeyPresent: !!rawAppKey,
         envAppKeyPresent: !!env.ALIEXPRESS_APP_KEY,
       });
-      return res.status(500).json({
+      return res.status(400).json({
         success: false,
         error: 'ALIEXPRESS_APP_KEY no configurado',
+        message: 'Las variables de entorno de AliExpress no están configuradas',
         correlationId,
       });
     }
