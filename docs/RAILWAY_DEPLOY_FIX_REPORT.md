@@ -92,6 +92,43 @@ El módulo completo de Aliexpress NO estaba en git, pero `app.ts` intentaba impo
 **Commits:**
 - `6820dc4` - fix: agregar archivos del modulo aliexpress a git para Railway deployment
 
+#### Fix 1.3: Path Aliases Reemplazados por Rutas Relativas
+
+**Problema Identificado:**
+Después de agregar los archivos a git, Railway podía compilarlos pero el servidor crasheaba al arrancar con:
+```
+Error: Cannot find module '@/config/env'
+Require stack:
+- /app/dist/modules/aliexpress/aliexpress.service.js:11:31
+- /app/dist/modules/aliexpress/aliexpress.controller.js:10:46
+```
+
+**Root Cause:**
+Los archivos del módulo Aliexpress usaban path aliases de TypeScript (`@/config/env`, `@/config/logger`, etc.) que TypeScript resuelve durante la compilación, pero Node.js **NO** puede resolverlos en tiempo de ejecución sin configuración adicional.
+
+**Archivos modificados:**
+- `backend/src/modules/aliexpress/aliexpress.service.ts`
+- `backend/src/modules/aliexpress/aliexpress.controller.ts`
+
+**Cambios aplicados:**
+- `@/config/env` → `../../config/env`
+- `@/config/logger` → `../../config/logger`
+- `@/config/database` → `../../config/database`
+- `@/utils/encryption` → `../../utils/encryption`
+
+**Razón:**
+Node.js requiere rutas relativas o absolutas en los imports. Los path aliases de TypeScript (`@/*`) solo funcionan durante la compilación si hay un runtime resolver (como `tsconfig-paths`), pero no está configurado en Railway. Las rutas relativas funcionan directamente sin configuración adicional.
+
+**Verificación:**
+El build pasa correctamente y el código compilado ahora usa rutas relativas:
+```javascript
+const env_1 = __importDefault(require("../../config/env"));
+const logger_1 = __importDefault(require("../../config/logger"));
+```
+
+**Commits:**
+- `5f93a2f` - fix: reemplazar path aliases por rutas relativas en modulo aliexpress para Railway deployment
+
 ### 2. Railway Config Actualizada
 
 **Archivo:** `railway.json`
