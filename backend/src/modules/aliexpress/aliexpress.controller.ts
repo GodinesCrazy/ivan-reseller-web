@@ -85,11 +85,25 @@ export const initiateOAuth = async (req: Request, res: Response) => {
                        `oauth-${Date.now()}-${Math.random().toString(36).substring(7)}`;
   
   try {
-    // Log safe debug info (no secrets)
-    const hasAppKey = !!env.ALIEXPRESS_APP_KEY;
-    const hasAppSecret = !!env.ALIEXPRESS_APP_SECRET;
-    const callbackUrl = env.ALIEXPRESS_CALLBACK_URL || 'https://www.ivanreseller.com/api/aliexpress/callback';
+    // Check process.env directly (before Zod parsing)
+    const rawAppKey = process.env.ALIEXPRESS_APP_KEY;
+    const rawAppSecret = process.env.ALIEXPRESS_APP_SECRET;
+    const rawCallbackUrl = process.env.ALIEXPRESS_CALLBACK_URL;
+    
+    // Log direct process.env presence (safe - no values)
+    console.log('[AliExpress] ALIEXPRESS_APP_KEY present:', !!rawAppKey);
+    console.log('[AliExpress] ALIEXPRESS_APP_SECRET present:', !!rawAppSecret);
+    console.log('[AliExpress] ALIEXPRESS_CALLBACK_URL present:', !!rawCallbackUrl);
+    
+    // Use process.env directly if env object doesn't have it
+    const appKey = env.ALIEXPRESS_APP_KEY || rawAppKey || '';
+    const appSecret = env.ALIEXPRESS_APP_SECRET || rawAppSecret || '';
+    const callbackUrl = env.ALIEXPRESS_CALLBACK_URL || rawCallbackUrl || 'https://www.ivanreseller.com/api/aliexpress/callback';
     const baseUrl = req.protocol + '://' + req.get('host');
+    
+    // Log safe debug info (no secrets)
+    const hasAppKey = !!appKey && appKey.trim().length > 0;
+    const hasAppSecret = !!appSecret && appSecret.trim().length > 0;
     
     logger.info('[AliExpress] OAuth initiation request', {
       correlationId,
@@ -98,14 +112,18 @@ export const initiateOAuth = async (req: Request, res: Response) => {
       callbackUrl,
       baseUrl,
       queryParams: Object.keys(req.query),
+      appKeyLength: appKey ? appKey.length : 0,
+      appSecretLength: appSecret ? appSecret.length : 0,
     });
 
-    // Validate required environment variables
-    if (!env.ALIEXPRESS_APP_KEY) {
+    // Validate required environment variables (check both env object and process.env)
+    if (!hasAppKey) {
       logger.error('[AliExpress] OAuth initiation failed: missing APP_KEY', {
         correlationId,
         hasAppKey: false,
         hasAppSecret,
+        rawAppKeyPresent: !!rawAppKey,
+        envAppKeyPresent: !!env.ALIEXPRESS_APP_KEY,
       });
       return res.status(500).json({
         success: false,
@@ -120,7 +138,7 @@ export const initiateOAuth = async (req: Request, res: Response) => {
     // Build AliExpress authorization URL
     const authUrl = new URL('https://oauth.aliexpress.com/authorize');
     authUrl.searchParams.append('response_type', 'code');
-    authUrl.searchParams.append('client_id', env.ALIEXPRESS_APP_KEY);
+    authUrl.searchParams.append('client_id', appKey);
     authUrl.searchParams.append('redirect_uri', encodeURIComponent(callbackUrl));
     authUrl.searchParams.append('state', state);
     authUrl.searchParams.append('scope', 'api'); // Required scope by AliExpress
@@ -214,10 +232,22 @@ export const testAffiliateLink = async (req: Request, res: Response) => {
   try {
     const { productId } = req.query;
 
-    // Log safe debug info
-    const hasAppKey = !!env.ALIEXPRESS_APP_KEY;
-    const hasAppSecret = !!env.ALIEXPRESS_APP_SECRET;
+    // Check process.env directly (before Zod parsing)
+    const rawAppKey = process.env.ALIEXPRESS_APP_KEY;
+    const rawAppSecret = process.env.ALIEXPRESS_APP_SECRET;
+    
+    // Log direct process.env presence (safe - no values)
+    console.log('[AliExpress] Test link - ALIEXPRESS_APP_KEY present:', !!rawAppKey);
+    console.log('[AliExpress] Test link - ALIEXPRESS_APP_SECRET present:', !!rawAppSecret);
+    
+    // Use process.env directly if env object doesn't have it
+    const appKey = env.ALIEXPRESS_APP_KEY || rawAppKey || '';
+    const appSecret = env.ALIEXPRESS_APP_SECRET || rawAppSecret || '';
     const baseUrl = req.protocol + '://' + req.get('host');
+    
+    // Log safe debug info
+    const hasAppKey = !!appKey && appKey.trim().length > 0;
+    const hasAppSecret = !!appSecret && appSecret.trim().length > 0;
     
     logger.info('[AliExpress] Test link request', {
       correlationId,
@@ -226,6 +256,8 @@ export const testAffiliateLink = async (req: Request, res: Response) => {
       hasAppSecret,
       baseUrl,
       queryParams: Object.keys(req.query),
+      appKeyLength: appKey ? appKey.length : 0,
+      appSecretLength: appSecret ? appSecret.length : 0,
     });
 
     // Validate productId
@@ -239,11 +271,15 @@ export const testAffiliateLink = async (req: Request, res: Response) => {
     }
 
     // Validate environment variables before attempting to create link
-    if (!env.ALIEXPRESS_APP_KEY || !env.ALIEXPRESS_APP_SECRET) {
+    if (!hasAppKey || !hasAppSecret) {
       logger.error('[AliExpress] Test link failed: missing env vars', {
         correlationId,
         hasAppKey,
         hasAppSecret,
+        rawAppKeyPresent: !!rawAppKey,
+        rawAppSecretPresent: !!rawAppSecret,
+        envAppKeyPresent: !!env.ALIEXPRESS_APP_KEY,
+        envAppSecretPresent: !!env.ALIEXPRESS_APP_SECRET,
       });
       return res.status(400).json({
         success: false,

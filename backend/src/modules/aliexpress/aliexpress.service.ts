@@ -27,12 +27,18 @@ class AliExpressService {
   private axiosInstance: AxiosInstance;
 
   constructor() {
-    this.appKey = env.ALIEXPRESS_APP_KEY || '';
-    this.appSecret = env.ALIEXPRESS_APP_SECRET || '';
-    this.callbackUrl = env.ALIEXPRESS_CALLBACK_URL || 'https://www.ivanreseller.com/api/aliexpress/callback';
-    this.trackingId = env.ALIEXPRESS_TRACKING_ID || 'ivanreseller';
-    this.apiBaseUrl = env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync';
-    this.environment = env.ALIEXPRESS_ENV || 'production';
+    // Use process.env directly as fallback if env object doesn't have it
+    // This ensures we read from Railway environment variables correctly
+    this.appKey = env.ALIEXPRESS_APP_KEY || process.env.ALIEXPRESS_APP_KEY || '';
+    this.appSecret = env.ALIEXPRESS_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET || '';
+    this.callbackUrl = env.ALIEXPRESS_CALLBACK_URL || process.env.ALIEXPRESS_CALLBACK_URL || 'https://www.ivanreseller.com/api/aliexpress/callback';
+    this.trackingId = env.ALIEXPRESS_TRACKING_ID || process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller';
+    this.apiBaseUrl = env.ALIEXPRESS_API_BASE_URL || process.env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync';
+    this.environment = (env.ALIEXPRESS_ENV || process.env.ALIEXPRESS_ENV || 'production') as 'production' | 'test';
+    
+    // Log presence (safe - no values)
+    console.log('[AliExpress Service] ALIEXPRESS_APP_KEY present:', !!this.appKey && this.appKey.trim().length > 0);
+    console.log('[AliExpress Service] ALIEXPRESS_APP_SECRET present:', !!this.appSecret && this.appSecret.trim().length > 0);
 
     this.axiosInstance = axios.create({
       baseURL: this.apiBaseUrl,
