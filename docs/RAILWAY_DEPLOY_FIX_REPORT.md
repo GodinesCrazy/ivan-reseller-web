@@ -92,7 +92,19 @@ El módulo completo de Aliexpress NO estaba en git, pero `app.ts` intentaba impo
 **Commits:**
 - `6820dc4` - fix: agregar archivos del modulo aliexpress a git para Railway deployment
 
-#### Fix 1.3: Path Aliases Reemplazados por Rutas Relativas
+#### Fix 1.3: Archivos Utils Agregados a Git
+
+**Archivos agregados a git:**
+- `backend/src/utils/encryption.ts` (estaba como untracked)
+- `backend/src/utils/setup-check.ts` (estaba como untracked)
+
+**Razón:**
+El módulo de Aliexpress intentaba importar `../../utils/encryption` pero el archivo NO estaba en git, causando el error `Cannot find module '../../utils/encryption'` al arrancar el servidor.
+
+**Commits:**
+- `3f1fdf5` - fix: agregar archivos utils/encryption.ts y setup-check.ts a git para Railway deployment
+
+#### Fix 1.4: Path Aliases Reemplazados por Rutas Relativas
 
 **Problema Identificado:**
 Después de agregar los archivos a git, Railway podía compilarlos pero el servidor crasheaba al arrancar con:
