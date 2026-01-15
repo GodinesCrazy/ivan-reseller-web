@@ -109,7 +109,8 @@ try {
 # 4. Test /api/aliexpress/test-link
 Write-Step "Testing /api/aliexpress/test-link endpoint"
 try {
-    $testLinkResponse = Invoke-WebRequest -Uri "https://${PRODUCTION_DOMAIN}/api/aliexpress/test-link?productId=1005001234567890" -Method GET -UseBasicParsing -ErrorAction Stop
+    $testLinkUrl = "https://${PRODUCTION_DOMAIN}/api/aliexpress/test-link?productId=1005001234567890"
+    $testLinkResponse = Invoke-WebRequest -Uri $testLinkUrl -Method GET -UseBasicParsing -ErrorAction Stop
     if ($testLinkResponse.StatusCode -eq 200) {
         Write-Success "/api/aliexpress/test-link responded with 200"
         $body = $testLinkResponse.Content
@@ -159,10 +160,12 @@ if ($script:HasErrors) {
     Write-Host "Production wiring is correct. ✅" -ForegroundColor Green
     Write-Host ""
     Write-Host "Test URLs:" -ForegroundColor Cyan
-    Write-Host "  - Health: https://${PRODUCTION_DOMAIN}/health"
-    Write-Host "  - Token Status: https://${PRODUCTION_DOMAIN}/api/aliexpress/token-status"
-    Write-Host "  - OAuth Auth: https://${PRODUCTION_DOMAIN}/api/aliexpress/auth"
-    Write-Host "  - Test Link: https://${PRODUCTION_DOMAIN}/api/aliexpress/test-link?productId=1005001234567890"
+    $baseUrl = "https://$PRODUCTION_DOMAIN"
+    Write-Host "  - Health: $baseUrl/health"
+    Write-Host "  - Token Status: $baseUrl/api/aliexpress/token-status"
+    Write-Host "  - OAuth Auth: $baseUrl/api/aliexpress/auth"
+    $testLinkParam = "productId=1005001234567890"
+    Write-Host "  - Test Link: $baseUrl/api/aliexpress/test-link?$testLinkParam"
     exit 0
 }
 
