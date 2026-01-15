@@ -80,46 +80,72 @@ export const handleOAuthCallback = async (req: Request, res: Response) => {
  * GET /api/aliexpress/auth
  */
 export const initiateOAuth = async (req: Request, res: Response) => {
+  // Generate correlation ID for debugging
+  const correlationId = req.headers['x-correlation-id'] as string || 
+                       `oauth-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  
   try {
+    // Log safe debug info (no secrets)
+    const hasAppKey = !!env.ALIEXPRESS_APP_KEY;
+    const hasAppSecret = !!env.ALIEXPRESS_APP_SECRET;
+    const callbackUrl = env.ALIEXPRESS_CALLBACK_URL || 'https://www.ivanreseller.com/api/aliexpress/callback';
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
+    logger.info('[AliExpress] OAuth initiation request', {
+      correlationId,
+      hasAppKey,
+      hasAppSecret,
+      callbackUrl,
+      baseUrl,
+      queryParams: Object.keys(req.query),
+    });
+
+    // Validate required environment variables
     if (!env.ALIEXPRESS_APP_KEY) {
+      logger.error('[AliExpress] OAuth initiation failed: missing APP_KEY', {
+        correlationId,
+        hasAppKey: false,
+        hasAppSecret,
+      });
       return res.status(500).json({
         success: false,
         error: 'ALIEXPRESS_APP_KEY no configurado',
+        correlationId,
       });
     }
 
-    // Generar state para protección CSRF
+    // Generate state for CSRF protection
     const state = aliExpressService.generateOAuthState();
 
-    // Construir URL de autorización de AliExpress
+    // Build AliExpress authorization URL
     const authUrl = new URL('https://oauth.aliexpress.com/authorize');
     authUrl.searchParams.append('response_type', 'code');
     authUrl.searchParams.append('client_id', env.ALIEXPRESS_APP_KEY);
-    authUrl.searchParams.append('redirect_uri', env.ALIEXPRESS_CALLBACK_URL || 'https://www.ivanreseller.com/api/aliexpress/callback');
+    authUrl.searchParams.append('redirect_uri', encodeURIComponent(callbackUrl));
     authUrl.searchParams.append('state', state);
-    authUrl.searchParams.append('scope', 'api'); // Scope requerido por AliExpress
+    authUrl.searchParams.append('scope', 'api'); // Required scope by AliExpress
 
-    logger.info('[AliExpress] Iniciando flujo OAuth', {
-      authUrl: authUrl.toString().substring(0, 100) + '...',
+    logger.info('[AliExpress] OAuth URL generated, redirecting', {
+      correlationId,
+      authUrlLength: authUrl.toString().length,
+      hasState: !!state,
+      callbackUrl,
     });
 
-    return res.status(200).json({
-      success: true,
-      data: {
-        authUrl: authUrl.toString(),
-        state,
-        message: 'Redirige al usuario a authUrl para autorizar la aplicación',
-      },
-    });
+    // Redirect to AliExpress OAuth (302)
+    return res.redirect(302, authUrl.toString());
   } catch (error: any) {
     logger.error('[AliExpress] Error al iniciar OAuth', {
+      correlationId,
       error: error.message,
+      stack: error.stack,
     });
 
     return res.status(500).json({
       success: false,
       error: 'Error al iniciar flujo OAuth',
       message: error.message,
+      correlationId,
     });
   }
 };
@@ -181,35 +207,94 @@ export const generateAffiliateLink = async (req: Request, res: Response) => {
  * GET /api/aliexpress/test-link?productId=xxx
  */
 export const testAffiliateLink = async (req: Request, res: Response) => {
+  // Generate correlation ID for debugging
+  const correlationId = req.headers['x-correlation-id'] as string || 
+                       `test-link-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  
   try {
     const { productId } = req.query;
 
+    // Log safe debug info
+    const hasAppKey = !!env.ALIEXPRESS_APP_KEY;
+    const hasAppSecret = !!env.ALIEXPRESS_APP_SECRET;
+    const baseUrl = req.protocol + '://' + req.get('host');
+    
+    logger.info('[AliExpress] Test link request', {
+      correlationId,
+      productId,
+      hasAppKey,
+      hasAppSecret,
+      baseUrl,
+      queryParams: Object.keys(req.query),
+    });
+
+    // Validate productId
     if (!productId || typeof productId !== 'string') {
       return res.status(400).json({
         success: false,
         error: 'productId es requerido como query parameter',
         example: '/api/aliexpress/test-link?productId=1005001234567890',
+        correlationId,
+      });
+    }
+
+    // Validate environment variables before attempting to create link
+    if (!env.ALIEXPRESS_APP_KEY || !env.ALIEXPRESS_APP_SECRET) {
+      logger.error('[AliExpress] Test link failed: missing env vars', {
+        correlationId,
+        hasAppKey,
+        hasAppSecret,
+      });
+      return res.status(400).json({
+        success: false,
+        error: 'AliExpress env missing',
+        message: 'ALIEXPRESS_APP_KEY y ALIEXPRESS_APP_SECRET deben estar configurados',
+        correlationId,
       });
     }
 
     logger.info('[AliExpress] Test: Generando link afiliado', {
+      correlationId,
       productId,
       trackingId: env.ALIEXPRESS_TRACKING_ID || 'ivanreseller',
     });
 
+    // Try to create affiliate link
+    // This may fail if no token is available, which is expected
     const result = await aliExpressService.createAffiliateLink({
       productId,
       trackingId: env.ALIEXPRESS_TRACKING_ID || 'ivanreseller',
     });
 
-    // Log sanitizado (sin exponer secretos)
+    // Log sanitized result (no secrets)
     logger.info('[AliExpress] Test: Resultado', {
+      correlationId,
       success: result.success,
       trackingId: result.trackingId,
       productId: result.productId,
       hasPromotionUrl: !!result.promotionUrl,
-      errorMessage: result.errorMessage,
+      hasErrorMessage: !!result.errorMessage,
     });
+
+    // If link generation failed, check if it's due to missing token
+    if (!result.success && result.errorMessage) {
+      const isTokenError = result.errorMessage.toLowerCase().includes('token') || 
+                          result.errorMessage.toLowerCase().includes('oauth') ||
+                          result.errorMessage.toLowerCase().includes('autenticación');
+      
+      if (isTokenError) {
+        logger.warn('[AliExpress] Test link failed: token required', {
+          correlationId,
+          errorMessage: result.errorMessage,
+        });
+        return res.status(401).json({
+          success: false,
+          error: 'No token',
+          message: 'Se requiere autenticación OAuth. Use /api/aliexpress/auth para autenticar.',
+          correlationId,
+        });
+      }
+    }
 
     return res.status(200).json({
       success: result.success,
@@ -222,17 +307,49 @@ export const testAffiliateLink = async (req: Request, res: Response) => {
           : 'Error al generar link afiliado',
         errorMessage: result.errorMessage,
       },
+      correlationId,
     });
   } catch (error: any) {
     logger.error('[AliExpress] Test: Error al generar link', {
+      correlationId,
       error: error.message,
-      // NO loguear stack completo en producción
+      stack: error.stack,
     });
+
+    // Check if error is due to missing token
+    const errorMessage = error.message || '';
+    const isTokenError = errorMessage.toLowerCase().includes('token') || 
+                        errorMessage.toLowerCase().includes('oauth') ||
+                        errorMessage.toLowerCase().includes('autenticación');
+
+    if (isTokenError) {
+      return res.status(401).json({
+        success: false,
+        error: 'No token',
+        message: 'Se requiere autenticación OAuth. Use /api/aliexpress/auth para autenticar.',
+        correlationId,
+      });
+    }
+
+    // Check if error is due to missing env vars
+    const isEnvError = errorMessage.toLowerCase().includes('configurado') ||
+                      errorMessage.toLowerCase().includes('missing') ||
+                      errorMessage.toLowerCase().includes('env');
+
+    if (isEnvError) {
+      return res.status(400).json({
+        success: false,
+        error: 'AliExpress env missing',
+        message: error.message,
+        correlationId,
+      });
+    }
 
     return res.status(500).json({
       success: false,
       error: 'Error al generar link de prueba',
       message: error.message,
+      correlationId,
     });
   }
 };

@@ -264,7 +264,14 @@ class AliExpressService {
     if (!tokenData || tokenData.expiresAt < new Date()) {
       if (tokenData?.refreshToken) {
         logger.info('[AliExpress] Token expirado, refrescando...');
-        tokenData = await this.refreshToken();
+        try {
+          tokenData = await this.refreshToken();
+        } catch (refreshError: any) {
+          logger.error('[AliExpress] Error al refrescar token', {
+            error: refreshError.message,
+          });
+          throw new Error('No hay token válido disponible. Se requiere autenticación OAuth.');
+        }
       } else {
         throw new Error('No hay token válido disponible. Se requiere autenticación OAuth.');
       }
