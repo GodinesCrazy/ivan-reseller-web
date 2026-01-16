@@ -137,12 +137,17 @@ export const initiateOAuth = async (req: Request, res: Response) => {
     const state = aliExpressService.generateOAuthState();
 
     // Build AliExpress authorization URL
-    const authUrl = new URL('https://oauth.aliexpress.com/authorize');
-    authUrl.searchParams.append('response_type', 'code');
+    const oauthBaseUrl = 'https://oauth.aliexpress.com';
+    const oauthHost = 'oauth.aliexpress.com';
+    const authUrl = new URL(`${oauthBaseUrl}/authorize`);
+    const responseType = 'code';
+    const scope = 'api';
+    
+    authUrl.searchParams.append('response_type', responseType);
     authUrl.searchParams.append('client_id', appKey);
     authUrl.searchParams.append('redirect_uri', encodeURIComponent(callbackUrl));
     authUrl.searchParams.append('state', state);
-    authUrl.searchParams.append('scope', 'api'); // Required scope by AliExpress
+    authUrl.searchParams.append('scope', scope); // Required scope by AliExpress
 
     // Sanitize URL for logging (remove secrets)
     const sanitizedUrl = authUrl.toString()
@@ -156,14 +161,19 @@ export const initiateOAuth = async (req: Request, res: Response) => {
       ? `${appKey.substring(0, 4)}**${appKey.substring(appKey.length - 2)}`
       : '******';
 
+    // Log complete OAuth configuration (SECURE - NO SECRETS)
     logger.info('[AliExpress OAuth] Redirect URL generated', {
       correlationId,
-      appKeyMasked,
-      appKeyLength: appKey.length,
-      callbackUrl,
+      oauthBaseUrl,
+      oauthHost,
+      clientId: appKeyMasked,
+      clientIdLength: appKey.length,
+      redirectUri: callbackUrl,
+      scope,
+      responseType,
+      state: state.substring(0, 8) + '...', // Show first 8 chars only
       baseUrl,
       authUrlSanitized: sanitizedUrl,
-      hasState: !!state,
       envSource: env.ALIEXPRESS_APP_KEY ? 'env.ts' : 'process.env',
     });
 
@@ -237,7 +247,9 @@ export const oauthDebug = async (req: Request, res: Response) => {
       : '******';
 
     // Build sanitized OAuth URL
-    const authUrl = new URL('https://oauth.aliexpress.com/authorize');
+    const oauthBaseUrl = 'https://oauth.aliexpress.com';
+    const oauthHost = 'oauth.aliexpress.com';
+    const authUrl = new URL(`${oauthBaseUrl}/authorize`);
     authUrl.searchParams.append('response_type', 'code');
     authUrl.searchParams.append('client_id', appKey);
     authUrl.searchParams.append('redirect_uri', encodeURIComponent(callbackUrl));
@@ -257,6 +269,7 @@ export const oauthDebug = async (req: Request, res: Response) => {
       hasAppSecret: !!appSecret && appSecret.trim().length > 0,
       appKeyLength: appKey ? appKey.length : 0,
       envSource: env.ALIEXPRESS_APP_KEY ? 'env.ts' : 'process.env',
+      oauthHost,
     });
 
     return res.status(200).json({
@@ -268,6 +281,8 @@ export const oauthDebug = async (req: Request, res: Response) => {
         hasAppSecret: !!appSecret && appSecret.trim().length > 0,
         callbackUrl,
         envSource: env.ALIEXPRESS_APP_KEY ? 'env.ts' : 'process.env',
+        oauthBaseUrl,
+        oauthHost,
         oauthAuthorizeUrlSanitized: sanitizedUrl,
         environment: env.NODE_ENV,
       },

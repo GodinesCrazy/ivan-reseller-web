@@ -4,8 +4,14 @@
 $ErrorActionPreference = "Stop"
 
 # Configuración
-$PROD_URL = "https://www.ivanreseller.com"
-$DEBUG_KEY = $env:DEBUG_KEY  # Debe estar configurado en Railway
+# Puede usar URL local o producción según variable de entorno
+$BASE_URL = if ($env:OAUTH_PROBE_URL) { 
+    $env:OAUTH_PROBE_URL 
+} else { 
+    "http://localhost:3000"  # Default local
+}
+$PROD_URL = "https://www.ivanreseller.com"  # Para referencia
+$DEBUG_KEY = $env:DEBUG_KEY  # Debe estar configurado en Railway o localmente
 
 # Crear directorio de reportes si no existe
 $REPORT_DIR = "docs"
@@ -17,8 +23,10 @@ $TIMESTAMP = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 $REPORT_FILE = "$REPORT_DIR/PROD_OAUTH_DEBUG.md"
 
 Write-Host "================================================" -ForegroundColor Cyan
-Write-Host "AliExpress OAuth Debug Probe - Production" -ForegroundColor Cyan
+Write-Host "AliExpress OAuth Debug Probe" -ForegroundColor Cyan
 Write-Host "Timestamp: $TIMESTAMP" -ForegroundColor Cyan
+Write-Host "Base URL: $BASE_URL" -ForegroundColor Cyan
+Write-Host "Debug Key: $(if ($DEBUG_KEY) { "✅ Configurado" } else { "❌ No configurado" })" -ForegroundColor $(if ($DEBUG_KEY) { "Green" } else { "Yellow" })
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -89,7 +97,7 @@ if ($DEBUG_KEY) {
     Write-Host "   WARNING: DEBUG_KEY not set in environment" -ForegroundColor Yellow
 }
 
-$debugResponse = Invoke-ApiRequest -Method "GET" -Url "$PROD_URL/api/aliexpress/oauth-debug" -Headers $debugHeaders
+$debugResponse = Invoke-ApiRequest -Method "GET" -Url "$BASE_URL/api/aliexpress/oauth-debug" -Headers $debugHeaders
 
 Write-Host "   Status: $($debugResponse.StatusCode)" -ForegroundColor $(if ($debugResponse.Success) { "Green" } else { "Red" })
 
@@ -105,10 +113,58 @@ if ($debugResponse.Success -and $debugResponse.Content) {
     try {
         $debugData = $debugResponse.Content | ConvertFrom-Json
         $debugResult.Data = $debugData
+        
         Write-Host "   AppKey Masked: $($debugData.data.appKeyMasked)" -ForegroundColor Cyan
         Write-Host "   AppKey Length: $($debugData.data.appKeyLength)" -ForegroundColor Cyan
         Write-Host "   Callback URL: $($debugData.data.callbackUrl)" -ForegroundColor Cyan
         Write-Host "   Env Source: $($debugData.data.envSource)" -ForegroundColor Cyan
+        
+        # Extract oauthHost from oauthAuthorizeUrlSanitized
+        if ($debugData.data.oauthHost) {
+            $debugResult.OAuthHost = $debugData.data.oauthHost
+            Write-Host "   OAuth Host: $($debugData.data.oauthHost)" -ForegroundColor Cyan
+        }
+        
+        # Extract client_id from oauthAuthorizeUrlSanitized
+        if ($debugData.data.oauthAuthorizeUrlSanitized) {
+            try {
+                $sanitizedUrl = $debugData.data.oauthAuthorizeUrlSanitized
+                $uri = [System.Uri]$sanitizedUrl
+                
+                # Parse query string (compatible with PowerShell Core and Windows PowerShell)
+                $queryParams = @{}
+                if ($uri.Query) {
+                    $queryString = $uri.Query.TrimStart('?')
+                    $pairs = $queryString -split '&'
+                    foreach ($pair in $pairs) {
+                        if ($pair -match '^([^=]+)=(.*)$') {
+                            $key = [System.Web.HttpUtility]::UrlDecode($matches[1])
+                            $value = [System.Web.HttpUtility]::UrlDecode($matches[2])
+                            $queryParams[$key] = $value
+                        }
+                    }
+                }
+                
+                $clientId = $queryParams["client_id"]
+                
+                if ($clientId) {
+                    $clientIdMasked = if ($clientId.Length -ge 6) {
+                        "$($clientId.Substring(0, 4))**$($clientId.Substring($clientId.Length - 2))"
+                    } else {
+                        "******"
+                    }
+                    $debugResult.ClientIdFromUrl = $clientIdMasked
+                    $debugResult.ClientIdLength = $clientId.Length
+                    $debugResult.ClientIdReal = $clientId  # Store real value for comparison
+                    Write-Host "   Client ID from URL: $clientIdMasked (length: $($clientId.Length))" -ForegroundColor Cyan
+                } else {
+                    Write-Host "   Warning: No client_id found in OAuth URL" -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "   Warning: Could not parse OAuth URL: $_" -ForegroundColor Yellow
+                $debugResult.ParseError = $_.Exception.Message
+            }
+        }
     } catch {
         Write-Host "   Error parsing JSON: $_" -ForegroundColor Red
         $debugResult.ParseError = $_.Exception.Message
@@ -125,7 +181,7 @@ Write-Host ""
 # ============================================
 Write-Host "[2/2] Testing /api/aliexpress/auth (capturing redirect)..." -ForegroundColor Yellow
 
-$authResponse = Invoke-ApiRequest -Method "GET" -Url "$PROD_URL/api/aliexpress/auth" -FollowRedirects
+$authResponse = Invoke-ApiRequest -Method "GET" -Url "$BASE_URL/api/aliexpress/auth" -FollowRedirects
 
 $authResult = @{
     Timestamp = $TIMESTAMP
@@ -142,7 +198,21 @@ if ($authResponse.IsRedirect -and $authResponse.Location) {
     # Parse redirect URL to extract app_key
     try {
         $uri = [System.Uri]$redirectUrl
-        $queryParams = [System.Web.HttpUtility]::ParseQueryString($uri.Query)
+        
+        # Parse query string (compatible with PowerShell Core and Windows PowerShell)
+        $queryParams = @{}
+        if ($uri.Query) {
+            $queryString = $uri.Query.TrimStart('?')
+            $pairs = $queryString -split '&'
+            foreach ($pair in $pairs) {
+                if ($pair -match '^([^=]+)=(.*)$') {
+                    $key = [System.Web.HttpUtility]::UrlDecode($matches[1])
+                    $value = [System.Web.HttpUtility]::UrlDecode($matches[2])
+                    $queryParams[$key] = $value
+                }
+            }
+        }
+        
         $appKey = $queryParams["client_id"]
         
         if ($appKey) {
@@ -154,12 +224,16 @@ if ($authResponse.IsRedirect -and $authResponse.Location) {
             
             $authResult.AppKeyFromRedirect = $appKeyMasked
             $authResult.AppKeyLength = $appKey.Length
+            $authResult.AppKeyReal = $appKey  # Store real value for comparison
             $authResult.CallbackFromRedirect = $queryParams["redirect_uri"]
+            $authResult.ScopeFromRedirect = $queryParams["scope"]
+            $authResult.ResponseTypeFromRedirect = $queryParams["response_type"]
             
             Write-Host "   Status: $($authResponse.StatusCode) (Redirect)" -ForegroundColor Green
-            Write-Host "   AppKey in redirect: $appKeyMasked" -ForegroundColor Cyan
-            Write-Host "   AppKey length: $($appKey.Length)" -ForegroundColor Cyan
+            Write-Host "   AppKey in redirect: $appKeyMasked (length: $($appKey.Length))" -ForegroundColor Cyan
             Write-Host "   Callback in redirect: $($queryParams['redirect_uri'])" -ForegroundColor Cyan
+            Write-Host "   Scope in redirect: $($queryParams['scope'])" -ForegroundColor Cyan
+            Write-Host "   Response Type in redirect: $($queryParams['response_type'])" -ForegroundColor Cyan
             
             # Sanitize redirect URL for logging
             $sanitizedRedirect = $redirectUrl -replace '(client_secret|secret|sign|token)=[^&]*', '$1=***'
@@ -190,20 +264,20 @@ $reportContent = @"
 # AliExpress OAuth Debug Report
 
 **Fecha/Hora:** $TIMESTAMP  
-**Probe Script:** \`scripts/prod_oauth_debug_probe.ps1\`
+**Probe Script:** ``scripts/prod_oauth_debug_probe.ps1``
 
 ---
 
 ## Resumen Ejecutivo
 
 ### Test 1: OAuth Debug Endpoint
-- **Endpoint:** \`/api/aliexpress/oauth-debug\`
+- **Endpoint:** ``/api/aliexpress/oauth-debug``
 - **Status:** $($debugResult.StatusCode)
 - **Éxito:** $(if ($debugResult.Success) { "✅ SÍ" } else { "❌ NO" })
 - **Debug Key Configurado:** $(if ($debugResult.HasDebugKey) { "✅ SÍ" } else { "❌ NO" })
 
 ### Test 2: OAuth Initiate Endpoint
-- **Endpoint:** \`/api/aliexpress/auth\`
+- **Endpoint:** ``/api/aliexpress/auth``
 - **Status:** $($authResult.StatusCode)
 - **Éxito:** $(if ($authResult.Success) { "✅ SÍ" } else { "❌ NO" })
 - **Redirect Detectado:** $(if ($authResult.IsRedirect) { "✅ SÍ" } else { "❌ NO" })
@@ -214,16 +288,20 @@ $reportContent = @"
 
 ### 1. OAuth Debug Endpoint Response
 
-\`\`\`json
+```json
 $(if ($debugResult.Data) { $debugResult.Data | ConvertTo-Json -Depth 10 } else { "No data available" })
-\`\`\`
+```
 
 **Interpretación:**
 $(if ($debugResult.Data) {
-"- AppKey usado: \`$($debugResult.Data.data.appKeyMasked)\`
-- Longitud AppKey: \`$($debugResult.Data.data.appKeyLength)\`
-- Callback URL: \`$($debugResult.Data.data.callbackUrl)\`
-- Fuente de configuración: \`$($debugResult.Data.data.envSource)\`"
+$clientIdDisplay = if ($debugResult.ClientIdFromUrl) { $debugResult.ClientIdFromUrl } else { "N/A" }
+"- AppKey usado: ``$($debugResult.Data.data.appKeyMasked)``
+- Longitud AppKey: ``$($debugResult.Data.data.appKeyLength)``
+- OAuth Host: ``$($debugResult.Data.data.oauthHost)``
+- OAuth Base URL: ``$($debugResult.Data.data.oauthBaseUrl)``
+- Callback URL: ``$($debugResult.Data.data.callbackUrl)``
+- Fuente de configuración: ``$($debugResult.Data.data.envSource)``
+- Client ID extraído de URL: ``$clientIdDisplay``"
 } else {
 "- ❌ No se pudo obtener información del endpoint debug"
 })
@@ -231,21 +309,37 @@ $(if ($debugResult.Data) {
 ### 2. OAuth Redirect Analysis
 
 **Location Header (sanitizado):**
-\`\`\`
+```
 $(if ($authResult.RedirectLocation) {
     $authResult.RedirectLocation -replace '(client_secret|secret|sign|token)=[^&]*', '$1=***'
 } else {
     "No redirect location found"
 })
-\`\`\`
+```
 
 **Parámetros Extraídos:**
 $(if ($authResult.AppKeyFromRedirect) {
-"- AppKey en redirect: \`$($authResult.AppKeyFromRedirect)\`
-- Longitud AppKey: \`$($authResult.AppKeyLength)\`
-- Callback en redirect: \`$($authResult.CallbackFromRedirect)\`"
+$appKeyRealDisplay = if ($authResult.AppKeyReal) { $authResult.AppKeyReal } else { "N/A" }
+"- AppKey en redirect: ``$($authResult.AppKeyFromRedirect)``
+- Longitud AppKey: ``$($authResult.AppKeyLength)``
+- Callback en redirect: ``$($authResult.CallbackFromRedirect)``
+- Scope en redirect: ``$($authResult.ScopeFromRedirect)``
+- Response Type en redirect: ``$($authResult.ResponseTypeFromRedirect)``
+- Client ID Real: ``$appKeyRealDisplay``"
 } else {
 "- ❌ No se pudo extraer AppKey del redirect URL"
+})
+
+**OAuth Host y Configuración:**
+$(if ($debugResult.OAuthHost) {
+$clientIdRealDisplay = if ($debugResult.ClientIdReal) { $debugResult.ClientIdReal } else { "N/A" }
+$clientIdMaskedDisplay = if ($debugResult.ClientIdFromUrl) { $debugResult.ClientIdFromUrl } else { "N/A" }
+"- OAuth Host: ``$($debugResult.OAuthHost)``
+- OAuth Base URL: ``$($debugResult.Data.data.oauthBaseUrl)``
+- Client ID Real extraído de URL: ``$clientIdRealDisplay``
+- Client ID Masked: ``$clientIdMaskedDisplay``"
+} else {
+"- ⚠️ No se detectó OAuth Host en el endpoint debug"
 })
 
 ---
@@ -254,16 +348,16 @@ $(if ($authResult.AppKeyFromRedirect) {
 
 ### Validación de AppKey
 
-**AppKey Esperado (Railway):** \`524880\` (AliExpress Affiliates)
+**AppKey Esperado (Railway):** ``524880`` (AliExpress Affiliates)
 
 **AppKey Detectado:**
 $(if ($debugResult.Data -and $debugResult.Data.data.appKeyMasked) {
     $detected = $debugResult.Data.data.appKeyMasked
     $expected = "5248**80"
     if ($detected -eq $expected) {
-        "- ✅ **CORRECTO:** AppKey coincide con esperado (\`$detected\` = \`$expected\`)"
+        "- ✅ **CORRECTO:** AppKey coincide con esperado (``$detected`` = ``$expected``)"
     } else {
-        "- ❌ **INCORRECTO:** AppKey NO coincide (\`$detected\` ≠ \`$expected\`)"
+        "- ❌ **INCORRECTO:** AppKey NO coincide (``$detected`` ≠ ``$expected``)"
     }
 } else {
     "- ⚠️ **NO DETERMINADO:** No se pudo obtener AppKey del endpoint debug"
@@ -273,9 +367,9 @@ $(if ($authResult.AppKeyFromRedirect) {
     $detectedFromRedirect = $authResult.AppKeyFromRedirect
     $expectedFromRedirect = "5248**80"
     if ($detectedFromRedirect -eq $expectedFromRedirect) {
-        "- ✅ **CONFIRMADO EN REDIRECT:** AppKey en redirect coincide (\`$detectedFromRedirect\` = \`$expectedFromRedirect\`)"
+        "- ✅ **CONFIRMADO EN REDIRECT:** AppKey en redirect coincide (``$detectedFromRedirect`` = ``$expectedFromRedirect``)"
     } else {
-        "- ❌ **MISMATCH EN REDIRECT:** AppKey en redirect NO coincide (\`$detectedFromRedirect\` ≠ \`$expectedFromRedirect\`)"
+        "- ❌ **MISMATCH EN REDIRECT:** AppKey en redirect NO coincide (``$detectedFromRedirect`` ≠ ``$expectedFromRedirect``)"
     }
 })
 
@@ -290,17 +384,17 @@ $(if ($debugResult.Data -and $authResult.AppKeyFromRedirect) {
         @"
 **✅ AppKey CORRECTO en ambos endpoints**
 
-El backend está enviando el AppKey correcto (\`524880\`) en el redirect OAuth.
+El backend está enviando el AppKey correcto (``524880``) en el redirect OAuth.
 
 **PROBLEMA ES EXTERNO (AliExpress):**
-- El error \`param-appkey.not.exists\` / \`appkey不存在\` indica que:
-  1. La AppKey \`524880\` NO está activada en AliExpress Affiliate Program
+- El error ``param-appkey.not.exists`` / ``appkey不存在`` indica que:
+  1. La AppKey ``524880`` NO está activada en AliExpress Affiliate Program
   2. El proceso "Apply Online" en AliExpress no ha sido completado
   3. Los permisos OAuth no han sido concedidos para esta AppKey
   4. El segmento OAuth no está habilitado para esta aplicación
 
 **PRÓXIMOS PASOS MANUALES:**
-1. Verificar en [AliExpress Affiliate Program](https://portals.aliexpress.com/) que la AppKey \`524880\` esté registrada
+1. Verificar en [AliExpress Affiliate Program](https://portals.aliexpress.com/) que la AppKey ``524880`` esté registrada
 2. Completar el proceso "Apply Online" si está pendiente
 3. Verificar que los permisos OAuth estén habilitados
 4. Contactar soporte de AliExpress si la AppKey está activa pero OAuth falla
@@ -312,16 +406,16 @@ El backend está enviando el AppKey correcto (\`524880\`) en el redirect OAuth.
 El backend está enviando un AppKey diferente al esperado.
 
 **PROBLEMA ES INTERNO (Backend):**
-- Debug endpoint muestra: \`$debugAppKey\`
-- Redirect muestra: \`$redirectAppKey\`
-- Esperado: \`$expected\`
+- Debug endpoint muestra: ``$debugAppKey``
+- Redirect muestra: ``$redirectAppKey``
+- Esperado: ``$expected``
 
 **POSIBLE CAUSA:**
-- Variable \`ALIEXPRESS_APP_KEY\` en Railway no está configurada correctamente
-- Está usando una AppKey antigua (DropShipping: \`522578\`) en lugar de Affiliates (\`524880\`)
+- Variable ``ALIEXPRESS_APP_KEY`` en Railway no está configurada correctamente
+- Está usando una AppKey antigua (DropShipping: ``522578``) en lugar de Affiliates (``524880``)
 
 **PRÓXIMOS PASOS:**
-1. Verificar en Railway Dashboard → Variables → \`ALIEXPRESS_APP_KEY\` = \`524880\`
+1. Verificar en Railway Dashboard → Variables → ``ALIEXPRESS_APP_KEY`` = ``524880``
 2. Reiniciar servicio después de cambiar variable
 3. Re-ejecutar este probe para validar fix
 "@
@@ -333,7 +427,7 @@ El backend está enviando un AppKey diferente al esperado.
 No se pudo obtener suficiente información para determinar el root cause.
 
 **PRÓXIMOS PASOS:**
-1. Verificar que \`DEBUG_KEY\` esté configurado en Railway
+1. Verificar que ``DEBUG_KEY`` esté configurado en Railway
 2. Re-ejecutar este probe
 3. Revisar logs del backend en Railway
 "@
@@ -349,7 +443,7 @@ No se pudo obtener suficiente información para determinar el root cause.
    - Verificar permisos OAuth
 
 2. **Si AppKey es incorrecto:**
-   - Actualizar \`ALIEXPRESS_APP_KEY\` en Railway a \`524880\`
+   - Actualizar ``ALIEXPRESS_APP_KEY`` en Railway a ``524880``
    - Reiniciar servicio
    - Re-validar con este probe
 
@@ -362,9 +456,10 @@ No se pudo obtener suficiente información para determinar el root cause.
 
 ## Metadata
 
-- **Probe Script:** \`scripts/prod_oauth_debug_probe.ps1\`
+- **Probe Script:** ``scripts/prod_oauth_debug_probe.ps1``
 - **Timestamp:** $TIMESTAMP
-- **Production URL:** $PROD_URL
+- **Base URL:** ``$BASE_URL``
+- **Production URL (reference):** ``$PROD_URL``
 - **Debug Key Configurado:** $(if ($DEBUG_KEY) { "✅ SÍ" } else { "❌ NO" })
 
 ---
