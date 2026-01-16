@@ -95,15 +95,32 @@ export const initiateOAuth = async (req: Request, res: Response) => {
     console.log('[AliExpress] ALIEXPRESS_APP_SECRET present:', !!rawAppSecret);
     console.log('[AliExpress] ALIEXPRESS_CALLBACK_URL present:', !!rawCallbackUrl);
     
-    // Use process.env directly if env object doesn't have it
-    const appKey = env.ALIEXPRESS_APP_KEY || rawAppKey || '';
-    const appSecret = env.ALIEXPRESS_APP_SECRET || rawAppSecret || '';
-    const callbackUrl = env.ALIEXPRESS_CALLBACK_URL || rawCallbackUrl || 'https://www.ivanreseller.com/api/aliexpress/callback';
+    // ✅ FASE 2: Forzar uso de ALIEXPRESS_APP_KEY (Affiliate) y validar
+    // NO usar ALIEXPRESS_DROPSHIPPING_APP_KEY por error
+    let appKey = (env.ALIEXPRESS_APP_KEY || rawAppKey || '').trim();
+    const appSecret = (env.ALIEXPRESS_APP_SECRET || rawAppSecret || '').trim();
+    const callbackUrl = (env.ALIEXPRESS_CALLBACK_URL || rawCallbackUrl || 'https://www.ivanreseller.com/api/aliexpress/callback').trim();
     const baseUrl = req.protocol + '://' + req.get('host');
     
+    // ✅ FASE 2: Validar que no se use la key de Dropshipping por error
+    const dropshippingKey = (process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY || '').trim();
+    if (dropshippingKey && appKey === dropshippingKey) {
+      logger.error('[AliExpress] OAuth initiation failed: using Dropshipping key instead of Affiliate key', {
+        correlationId,
+        detectedKey: dropshippingKey.substring(0, 4) + '**' + dropshippingKey.substring(dropshippingKey.length - 2),
+        expectedKey: '524880 (Affiliate)',
+      });
+      return res.status(400).json({
+        success: false,
+        error: 'ALIEXPRESS_APP_KEY incorrecto',
+        message: 'Se detectó uso de ALIEXPRESS_DROPSHIPPING_APP_KEY. Use ALIEXPRESS_APP_KEY (Affiliate: 524880)',
+        correlationId,
+      });
+    }
+    
     // Log safe debug info (no secrets)
-    const hasAppKey = !!appKey && appKey.trim().length > 0;
-    const hasAppSecret = !!appSecret && appSecret.trim().length > 0;
+    const hasAppKey = !!appKey && appKey.length > 0;
+    const hasAppSecret = !!appSecret && appSecret.length > 0;
     
     logger.info('[AliExpress] OAuth initiation request', {
       correlationId,
@@ -161,9 +178,11 @@ export const initiateOAuth = async (req: Request, res: Response) => {
       ? `${appKey.substring(0, 4)}**${appKey.substring(appKey.length - 2)}`
       : '******';
 
-    // Log complete OAuth configuration (SECURE - NO SECRETS)
+    // ✅ FASE 1: Log completo con todos los campos requeridos (SECURE - NO SECRETS)
     logger.info('[AliExpress OAuth] Redirect URL generated', {
       correlationId,
+      appKeyMasked,
+      callbackUrl,
       oauthBaseUrl,
       oauthHost,
       clientId: appKeyMasked,
@@ -236,12 +255,12 @@ export const oauthDebug = async (req: Request, res: Response) => {
     const rawAppSecret = process.env.ALIEXPRESS_APP_SECRET;
     const rawCallbackUrl = process.env.ALIEXPRESS_CALLBACK_URL;
     
-    // Use process.env directly if env object doesn't have it
-    const appKey = env.ALIEXPRESS_APP_KEY || rawAppKey || '';
-    const appSecret = env.ALIEXPRESS_APP_SECRET || rawAppSecret || '';
-    const callbackUrl = env.ALIEXPRESS_CALLBACK_URL || rawCallbackUrl || 'https://www.ivanreseller.com/api/aliexpress/callback';
+    // ✅ FASE 1: Use process.env directly if env object doesn't have it, with trim
+    const appKey = (env.ALIEXPRESS_APP_KEY || rawAppKey || '').trim();
+    const appSecret = (env.ALIEXPRESS_APP_SECRET || rawAppSecret || '').trim();
+    const callbackUrl = (env.ALIEXPRESS_CALLBACK_URL || rawCallbackUrl || 'https://www.ivanreseller.com/api/aliexpress/callback').trim();
     
-    // Mask appKey for response (show first 4 and last 2 digits)
+    // ✅ FASE 1: Mask appKey for response (show first 4 and last 2 digits)
     const appKeyMasked = appKey.length >= 6 
       ? `${appKey.substring(0, 4)}**${appKey.substring(appKey.length - 2)}`
       : '******';
@@ -296,6 +315,101 @@ export const oauthDebug = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Error al obtener información de debug OAuth',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Endpoint protegido para obtener información de la URL de OAuth redirect
+ * GET /api/aliexpress/oauth-redirect-url
+ * 
+ * Requiere header X-Debug-Key si NODE_ENV === 'production'
+ * Retorna información de la URL de OAuth sin revelar secretos
+ */
+export const getOAuthRedirectUrl = async (req: Request, res: Response) => {
+  try {
+    const isProduction = env.NODE_ENV === 'production';
+    const debugKey = req.headers['x-debug-key'] as string;
+    const expectedDebugKey = env.DEBUG_KEY || process.env.DEBUG_KEY;
+
+    // En producción, verificar debug key
+    if (isProduction) {
+      if (!expectedDebugKey) {
+        logger.warn('[AliExpress] OAuth redirect URL endpoint accessed in production but DEBUG_KEY not configured');
+        return res.status(403).json({
+          success: false,
+          error: 'Debug endpoint disabled',
+          message: 'DEBUG_KEY no está configurado en producción',
+        });
+      }
+
+      if (!debugKey || debugKey !== expectedDebugKey) {
+        logger.warn('[AliExpress] OAuth redirect URL endpoint accessed with invalid key', {
+          hasKey: !!debugKey,
+          keyLength: debugKey?.length || 0,
+        });
+        return res.status(403).json({
+          success: false,
+          error: 'Unauthorized',
+          message: 'Header X-Debug-Key requerido y válido en producción',
+        });
+      }
+    }
+
+    // Check process.env directly (before Zod parsing)
+    const rawAppKey = process.env.ALIEXPRESS_APP_KEY;
+    const rawCallbackUrl = process.env.ALIEXPRESS_CALLBACK_URL;
+    
+    // Use process.env directly if env object doesn't have it, with trim
+    const appKey = (env.ALIEXPRESS_APP_KEY || rawAppKey || '').trim();
+    const callbackUrl = (env.ALIEXPRESS_CALLBACK_URL || rawCallbackUrl || 'https://www.ivanreseller.com/api/aliexpress/callback').trim();
+    
+    // Build OAuth URL info
+    const oauthBaseUrl = 'https://oauth.aliexpress.com';
+    const scope = 'api';
+    
+    // Mask appKey for response (show first 4 and last 2 digits)
+    const appKeyMasked = appKey.length >= 6 
+      ? `${appKey.substring(0, 4)}**${appKey.substring(appKey.length - 2)}`
+      : '******';
+    
+    // Extract last 4 digits for validation
+    const clientIdTail = appKey.length >= 4 
+      ? appKey.substring(appKey.length - 4)
+      : '****';
+
+    // Generate a sample state to show length
+    const sampleState = aliExpressService.generateOAuthState();
+    const stateLength = sampleState.length;
+
+    logger.info('[AliExpress] OAuth redirect URL endpoint accessed', {
+      isProduction,
+      hasAppKey: !!appKey && appKey.trim().length > 0,
+      appKeyLength: appKey ? appKey.length : 0,
+      envSource: env.ALIEXPRESS_APP_KEY ? 'env.ts' : 'process.env',
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        oauthBaseUrl,
+        clientIdMasked: appKeyMasked,
+        clientIdTail,
+        redirectUri: callbackUrl,
+        scope,
+        stateLength,
+      },
+    });
+  } catch (error: any) {
+    logger.error('[AliExpress] Error en OAuth redirect URL endpoint', {
+      error: error.message,
+      stack: error.stack,
+    });
+
+    return res.status(500).json({
+      success: false,
+      error: 'Error al obtener información de OAuth redirect URL',
       message: error.message,
     });
   }

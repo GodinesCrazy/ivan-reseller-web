@@ -7,6 +7,7 @@ import {
   handleOAuthCallback,
   initiateOAuth,
   oauthDebug,
+  getOAuthRedirectUrl,
   generateAffiliateLink,
   testAffiliateLink,
   searchProducts,
@@ -92,6 +93,51 @@ router.get('/auth', initiateOAuth);
  *         description: Error del servidor
  */
 router.get('/oauth-debug', oauthDebug);
+
+/**
+ * @swagger
+ * /api/aliexpress/oauth-redirect-url:
+ *   get:
+ *     summary: Obtener información de la URL de OAuth redirect (protegido, requiere X-Debug-Key en producción)
+ *     tags: [AliExpress]
+ *     parameters:
+ *       - in: header
+ *         name: X-Debug-Key
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Debug key requerido en producción
+ *     responses:
+ *       200:
+ *         description: Información de OAuth redirect URL (sin secretos)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     oauthBaseUrl:
+ *                       type: string
+ *                     clientIdMasked:
+ *                       type: string
+ *                     clientIdTail:
+ *                       type: string
+ *                     redirectUri:
+ *                       type: string
+ *                     scope:
+ *                       type: string
+ *                     stateLength:
+ *                       type: number
+ *       403:
+ *         description: No autorizado (en producción requiere X-Debug-Key válido)
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/oauth-redirect-url', getOAuthRedirectUrl);
 
 /**
  * @swagger
