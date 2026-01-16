@@ -29,16 +29,10 @@ export function getApiBaseUrl(): string {
     }
     
     // Si VITE_API_URL está configurada pero es absoluta (https://...), IGNORARLA
+    // ✅ FIX: Eliminar warning en producción (ya está manejado correctamente)
+    // No mostrar warning para evitar confusión - el sistema funciona correctamente con /api
     if (rawUrl && (rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
-      // ✅ Loguear UNA sola vez un warning (usando flag en window para evitar spam)
-      if (typeof window !== 'undefined' && !(window as any).__vite_api_url_warned) {
-        console.warn(
-          '⚠️  VITE_API_URL ignorada en producción (URL absoluta detectada); usando /api proxy para evitar CORS.\n' +
-          '   Para producción, NO configures VITE_API_URL o configúrala como "/api".\n' +
-          '   Elimina VITE_API_URL en Vercel Dashboard → Settings → Environment Variables si está configurada con URL absoluta.'
-        );
-        (window as any).__vite_api_url_warned = true;
-      }
+      // Silenciosamente ignorar - no mostrar warning
     }
     
     // En producción, SIEMPRE usar /api (proxy de Vercel)

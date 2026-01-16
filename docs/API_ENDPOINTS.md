@@ -1,5 +1,5 @@
 # API Endpoints Reference - Ivan Reseller Web
-**Última actualización:** 2025-12-18  
+**ï¿½ltima actualizaciï¿½n:** 2025-12-18  
 **Base URL:** `https://ivan-reseller-web-production.up.railway.app`
 
 ---
@@ -22,7 +22,7 @@
 ## 1. Health Checks
 
 ### GET /health
-**Descripción:** Liveness probe - verifica que la aplicación está corriendo  
+**Descripciï¿½n:** Liveness probe - verifica que la aplicaciï¿½n estï¿½ corriendo  
 **Auth:** No requerida  
 **Rate Limit:** No aplica
 
@@ -48,7 +48,7 @@ curl.exe --max-time 10 https://ivan-reseller-web-production.up.railway.app/healt
 ---
 
 ### GET /ready
-**Descripción:** Readiness probe - verifica que la aplicación puede servir tráfico  
+**Descripciï¿½n:** Readiness probe - verifica que la aplicaciï¿½n puede servir trï¿½fico  
 **Auth:** No requerida  
 **Rate Limit:** No aplica
 
@@ -87,7 +87,7 @@ curl.exe --max-time 10 https://ivan-reseller-web-production.up.railway.app/ready
 ## 2. Authentication
 
 ### POST /api/auth/login
-**Descripción:** Login de usuario  
+**Descripciï¿½n:** Login de usuario  
 **Auth:** No requerida  
 **Rate Limit:** 5 intentos por 15 minutos (por IP)
 
@@ -119,7 +119,7 @@ curl.exe --max-time 10 https://ivan-reseller-web-production.up.railway.app/ready
 
 **Cookies (httpOnly):**
 - `token` - JWT token (1 hora)
-- `refreshToken` - Refresh token (30 días)
+- `refreshToken` - Refresh token (30 dï¿½as)
 
 **Comando PowerShell:**
 ```powershell
@@ -131,7 +131,7 @@ curl.exe -X POST https://ivan-reseller-web-production.up.railway.app/api/auth/lo
 ---
 
 ### POST /api/auth/register
-**Descripción:** Registro público (DESHABILITADO)  
+**Descripciï¿½n:** Registro pï¿½blico (DESHABILITADO)  
 **Auth:** No requerida  
 **Rate Limit:** No aplica
 
@@ -149,7 +149,7 @@ curl.exe -X POST https://ivan-reseller-web-production.up.railway.app/api/auth/lo
 ---
 
 ### GET /api/auth/me
-**Descripción:** Obtener información del usuario autenticado  
+**Descripciï¿½n:** Obtener informaciï¿½n del usuario autenticado  
 **Auth:** Requerida (Bearer token o cookie)  
 **Rate Limit:** 200 req/15min
 
@@ -176,7 +176,7 @@ curl.exe https://ivan-reseller-web-production.up.railway.app/api/auth/me `
 ---
 
 ### POST /api/auth/refresh
-**Descripción:** Refrescar token JWT  
+**Descripciï¿½n:** Refrescar token JWT  
 **Auth:** No requerida (usa refreshToken)  
 **Rate Limit:** 200 req/15min
 
@@ -201,7 +201,7 @@ curl.exe https://ivan-reseller-web-production.up.railway.app/api/auth/me `
 ---
 
 ### POST /api/auth/logout
-**Descripción:** Cerrar sesión  
+**Descripciï¿½n:** Cerrar sesiï¿½n  
 **Auth:** Requerida  
 **Rate Limit:** 200 req/15min
 
@@ -218,7 +218,7 @@ curl.exe https://ivan-reseller-web-production.up.railway.app/api/auth/me `
 ## 3. Users
 
 ### GET /api/users
-**Descripción:** Listar usuarios (solo ADMIN)  
+**Descripciï¿½n:** Listar usuarios (solo ADMIN)  
 **Auth:** Requerida (ADMIN)  
 **Rate Limit:** 200 req/15min
 
@@ -240,7 +240,7 @@ curl.exe https://ivan-reseller-web-production.up.railway.app/api/auth/me `
 ---
 
 ### GET /api/users/:id
-**Descripción:** Obtener usuario por ID  
+**Descripciï¿½n:** Obtener usuario por ID  
 **Auth:** Requerida (ADMIN o mismo usuario)  
 **Rate Limit:** 200 req/15min
 
@@ -249,7 +249,7 @@ curl.exe https://ivan-reseller-web-production.up.railway.app/api/auth/me `
 ## 4. Products
 
 ### GET /api/products
-**Descripción:** Listar productos  
+**Descripciï¿½n:** Listar productos  
 **Auth:** Requerida  
 **Rate Limit:** 200 req/15min
 
@@ -278,7 +278,7 @@ curl.exe https://ivan-reseller-web-production.up.railway.app/api/auth/me `
 ---
 
 ### POST /api/products
-**Descripción:** Crear producto  
+**Descripciï¿½n:** Crear producto  
 **Auth:** Requerida  
 **Rate Limit:** 200 req/15min
 
@@ -298,7 +298,7 @@ curl.exe https://ivan-reseller-web-production.up.railway.app/api/auth/me `
 ## 5. Sales
 
 ### GET /api/sales
-**Descripción:** Listar ventas  
+**Descripciï¿½n:** Listar ventas  
 **Auth:** Requerida  
 **Rate Limit:** 200 req/15min
 
@@ -312,7 +312,7 @@ curl.exe https://ivan-reseller-web-production.up.railway.app/api/auth/me `
 ---
 
 ### POST /api/sales
-**Descripción:** Crear venta  
+**Descripciï¿½n:** Crear venta  
 **Auth:** Requerida  
 **Rate Limit:** 200 req/15min
 
@@ -321,7 +321,7 @@ curl.exe https://ivan-reseller-web-production.up.railway.app/api/auth/me `
 ## 6. Marketplace
 
 ### POST /api/marketplace/publish
-**Descripción:** Publicar producto en marketplace  
+**Descripciï¿½n:** Publicar producto en marketplace  
 **Auth:** Requerida  
 **Rate Limit:** 200 req/15min
 
@@ -339,7 +339,7 @@ curl.exe https://ivan-reseller-web-production.up.railway.app/api/auth/me `
 ---
 
 ### GET /api/marketplace/listings
-**Descripción:** Listar publicaciones activas  
+**Descripciï¿½n:** Listar publicaciones activas  
 **Auth:** Requerida  
 **Rate Limit:** 200 req/15min
 
@@ -348,7 +348,7 @@ curl.exe https://ivan-reseller-web-production.up.railway.app/api/auth/me `
 ## 7. Webhooks
 
 ### POST /api/webhooks/ebay
-**Descripción:** Webhook de eBay  
+**Descripciï¿½n:** Webhook de eBay  
 **Auth:** Firma HMAC (header `X-Ebay-Signature`)  
 **Rate Limit:** No aplica
 
@@ -375,14 +375,14 @@ curl.exe -X POST https://ivan-reseller-web-production.up.railway.app/api/webhook
 ---
 
 ### POST /api/webhooks/mercadolibre
-**Descripción:** Webhook de MercadoLibre  
+**Descripciï¿½n:** Webhook de MercadoLibre  
 **Auth:** Firma HMAC  
 **Rate Limit:** No aplica
 
 ---
 
 ### POST /api/webhooks/amazon
-**Descripción:** Webhook de Amazon  
+**Descripciï¿½n:** Webhook de Amazon  
 **Auth:** Firma HMAC  
 **Rate Limit:** No aplica
 
@@ -391,7 +391,7 @@ curl.exe -X POST https://ivan-reseller-web-production.up.railway.app/api/webhook
 ## 8. Admin
 
 ### GET /api/admin/users
-**Descripción:** Dashboard de usuarios (solo ADMIN)  
+**Descripciï¿½n:** Dashboard de usuarios (solo ADMIN)  
 **Auth:** Requerida (ADMIN)  
 **Rate Limit:** 1000 req/15min (ADMIN)
 
@@ -411,7 +411,7 @@ curl.exe -X POST https://ivan-reseller-web-production.up.railway.app/api/webhook
 ---
 
 ### POST /api/admin/users
-**Descripción:** Crear usuario (solo ADMIN)  
+**Descripciï¿½n:** Crear usuario (solo ADMIN)  
 **Auth:** Requerida (ADMIN)  
 **Rate Limit:** 1000 req/15min
 
@@ -429,14 +429,14 @@ curl.exe -X POST https://ivan-reseller-web-production.up.railway.app/api/webhook
 ---
 
 ### PUT /api/admin/users/:id
-**Descripción:** Actualizar usuario (solo ADMIN)  
+**Descripciï¿½n:** Actualizar usuario (solo ADMIN)  
 **Auth:** Requerida (ADMIN)  
 **Rate Limit:** 1000 req/15min
 
 ---
 
 ### DELETE /api/admin/users/:id
-**Descripción:** Eliminar usuario (solo ADMIN)  
+**Descripciï¿½n:** Eliminar usuario (solo ADMIN)  
 **Auth:** Requerida (ADMIN)  
 **Rate Limit:** 1000 req/15min
 
@@ -445,7 +445,7 @@ curl.exe -X POST https://ivan-reseller-web-production.up.railway.app/api/webhook
 ## 9. Reports
 
 ### GET /api/reports/sales
-**Descripción:** Reporte de ventas  
+**Descripciï¿½n:** Reporte de ventas  
 **Auth:** Requerida  
 **Rate Limit:** 200 req/15min
 
@@ -479,14 +479,14 @@ curl.exe -X POST https://ivan-reseller-web-production.up.railway.app/api/webhook
 ---
 
 ### GET /api/reports/products
-**Descripción:** Reporte de productos  
+**Descripciï¿½n:** Reporte de productos  
 **Auth:** Requerida  
 **Rate Limit:** 200 req/15min
 
 ---
 
 ### GET /api/reports/executive
-**Descripción:** Reporte ejecutivo (solo ADMIN)  
+**Descripciï¿½n:** Reporte ejecutivo (solo ADMIN)  
 **Auth:** Requerida (ADMIN)  
 **Rate Limit:** 200 req/15min
 
@@ -495,7 +495,7 @@ curl.exe -X POST https://ivan-reseller-web-production.up.railway.app/api/webhook
 ## 10. System
 
 ### GET /api/system/health/detailed
-**Descripción:** Health check detallado (DB, Scraper)  
+**Descripciï¿½n:** Health check detallado (DB, Scraper)  
 **Auth:** Requerida  
 **Rate Limit:** 200 req/15min
 
@@ -517,7 +517,7 @@ curl.exe -X POST https://ivan-reseller-web-production.up.railway.app/api/webhook
 ---
 
 ### POST /api/system/refresh-api-cache
-**Descripción:** Refrescar cache de APIs (solo ADMIN)  
+**Descripciï¿½n:** Refrescar cache de APIs (solo ADMIN)  
 **Auth:** Requerida (ADMIN)  
 **Rate Limit:** 1000 req/15min
 
@@ -530,27 +530,27 @@ curl.exe -X POST https://ivan-reseller-web-production.up.railway.app/api/webhook
 
 ---
 
-## Autenticación
+## Autenticaciï¿½n
 
-### Método 1: Bearer Token (Header)
+### Mï¿½todo 1: Bearer Token (Header)
 ```
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-### Método 2: Cookie (httpOnly)
-- Cookie `token` se envía automáticamente si el request viene del mismo dominio o con `credentials: 'include'`
+### Mï¿½todo 2: Cookie (httpOnly)
+- Cookie `token` se envï¿½a automï¿½ticamente si el request viene del mismo dominio o con `credentials: 'include'`
 
 ---
 
 ## Rate Limiting
 
-**Límites por defecto:**
+**Lï¿½mites por defecto:**
 - **Usuario normal:** 200 requests por 15 minutos
 - **Admin:** 1000 requests por 15 minutos
 - **Login:** 5 intentos por 15 minutos (por IP)
 
 **Headers de respuesta:**
-- `X-RateLimit-Limit` - Límite total
+- `X-RateLimit-Limit` - Lï¿½mite total
 - `X-RateLimit-Remaining` - Requests restantes
 - `X-RateLimit-Reset` - Timestamp de reset
 
@@ -612,5 +612,5 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ---
 
-**Última revisión:** 2025-12-18  
+**ï¿½ltima revisiï¿½n:** 2025-12-18  
 **Mantenido por:** Backend Team

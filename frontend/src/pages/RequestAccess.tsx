@@ -153,6 +153,7 @@ export default function RequestAccess() {
               <Input
                 id="username"
                 type="text"
+                autoComplete="username"
                 value={formData.username}
                 onChange={(e) => handleChange('username', e.target.value)}
                 placeholder="Enter your username"
@@ -175,6 +176,7 @@ export default function RequestAccess() {
               <Input
                 id="email"
                 type="email"
+                autoComplete="email"
                 value={formData.email}
                 onChange={(e) => handleChange('email', e.target.value)}
                 placeholder="Enter your email"
@@ -195,6 +197,7 @@ export default function RequestAccess() {
               <Input
                 id="fullName"
                 type="text"
+                autoComplete="name"
                 value={formData.fullName}
                 onChange={(e) => handleChange('fullName', e.target.value)}
                 placeholder="Enter your full name (optional)"
@@ -210,6 +213,7 @@ export default function RequestAccess() {
               <Input
                 id="company"
                 type="text"
+                autoComplete="organization"
                 value={formData.company}
                 onChange={(e) => handleChange('company', e.target.value)}
                 placeholder="Enter your company name (optional)"

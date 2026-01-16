@@ -1,0 +1,150 @@
+﻿{
+    "auditReportVersion":  2,
+    "vulnerabilities":  {
+                            "js-yaml":  {
+                                            "name":  "js-yaml",
+                                            "severity":  "moderate",
+                                            "isDirect":  false,
+                                            "via":  [
+                                                        {
+                                                            "source":  1109801,
+                                                            "name":  "js-yaml",
+                                                            "dependency":  "js-yaml",
+                                                            "title":  "js-yaml has prototype pollution in merge (\u003c\u003c)",
+                                                            "url":  "https://github.com/advisories/GHSA-mh29-5h37-fv8m",
+                                                            "severity":  "moderate",
+                                                            "cwe":  [
+                                                                        "CWE-1321"
+                                                                    ],
+                                                            "cvss":  {
+                                                                         "score":  5.3,
+                                                                         "vectorString":  "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+                                                                     },
+                                                            "range":  "\u003c3.14.2"
+                                                        },
+                                                        {
+                                                            "source":  1109802,
+                                                            "name":  "js-yaml",
+                                                            "dependency":  "js-yaml",
+                                                            "title":  "js-yaml has prototype pollution in merge (\u003c\u003c)",
+                                                            "url":  "https://github.com/advisories/GHSA-mh29-5h37-fv8m",
+                                                            "severity":  "moderate",
+                                                            "cwe":  [
+                                                                        "CWE-1321"
+                                                                    ],
+                                                            "cvss":  {
+                                                                         "score":  5.3,
+                                                                         "vectorString":  "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
+                                                                     },
+                                                            "range":  "\u003e=4.0.0 \u003c4.1.1"
+                                                        }
+                                                    ],
+                                            "effects":  [
+
+                                                        ],
+                                            "range":  "\u003c3.14.2 || \u003e=4.0.0 \u003c4.1.1",
+                                            "nodes":  [
+                                                          "node_modules/@istanbuljs/load-nyc-config/node_modules/js-yaml",
+                                                          "node_modules/js-yaml"
+                                                      ],
+                                            "fixAvailable":  true
+                                        },
+                            "jws":  {
+                                        "name":  "jws",
+                                        "severity":  "high",
+                                        "isDirect":  false,
+                                        "via":  [
+                                                    {
+                                                        "source":  1111244,
+                                                        "name":  "jws",
+                                                        "dependency":  "jws",
+                                                        "title":  "auth0/node-jws Improperly Verifies HMAC Signature",
+                                                        "url":  "https://github.com/advisories/GHSA-869p-cjfg-cm3x",
+                                                        "severity":  "high",
+                                                        "cwe":  [
+                                                                    "CWE-347"
+                                                                ],
+                                                        "cvss":  {
+                                                                     "score":  7.5,
+                                                                     "vectorString":  "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+                                                                 },
+                                                        "range":  "\u003c3.2.3"
+                                                    }
+                                                ],
+                                        "effects":  [
+
+                                                    ],
+                                        "range":  "\u003c3.2.3",
+                                        "nodes":  [
+                                                      "node_modules/jws"
+                                                  ],
+                                        "fixAvailable":  true
+                                    },
+                            "nodemailer":  {
+                                               "name":  "nodemailer",
+                                               "severity":  "moderate",
+                                               "isDirect":  true,
+                                               "via":  [
+                                                           {
+                                                               "source":  1111074,
+                                                               "name":  "nodemailer",
+                                                               "dependency":  "nodemailer",
+                                                               "title":  "NodemailerÔÇÖs addressparser is vulnerable to DoS caused by recursive calls",
+                                                               "url":  "https://github.com/advisories/GHSA-rcmh-qjqh-p98v",
+                                                               "severity":  "low",
+                                                               "cwe":  [
+                                                                           "CWE-703"
+                                                                       ],
+                                                               "cvss":  {
+                                                                            "score":  0,
+                                                                            "vectorString":  null
+                                                                        },
+                                                               "range":  "\u003c=7.0.10"
+                                                           },
+                                                           {
+                                                               "source":  1111548,
+                                                               "name":  "nodemailer",
+                                                               "dependency":  "nodemailer",
+                                                               "title":  "Nodemailer is vulnerable to DoS through Uncontrolled Recursion",
+                                                               "url":  "https://github.com/advisories/GHSA-46j5-6fg5-4gv3",
+                                                               "severity":  "moderate",
+                                                               "cwe":  [
+                                                                           "CWE-674",
+                                                                           "CWE-703"
+                                                                       ],
+                                                               "cvss":  {
+                                                                            "score":  5.3,
+                                                                            "vectorString":  "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+                                                                        },
+                                                               "range":  "\u003c7.0.11"
+                                                           }
+                                                       ],
+                                               "effects":  [
+
+                                                           ],
+                                               "range":  "\u003c=7.0.10",
+                                               "nodes":  [
+                                                             "node_modules/nodemailer"
+                                                         ],
+                                               "fixAvailable":  true
+                                           }
+                        },
+    "metadata":  {
+                     "vulnerabilities":  {
+                                             "info":  0,
+                                             "low":  0,
+                                             "moderate":  2,
+                                             "high":  1,
+                                             "critical":  0,
+                                             "total":  3
+                                         },
+                     "dependencies":  {
+                                          "prod":  544,
+                                          "dev":  343,
+                                          "optional":  43,
+                                          "peer":  1,
+                                          "peerOptional":  0,
+                                          "total":  929
+                                      }
+                 }
+}

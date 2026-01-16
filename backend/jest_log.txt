@@ -1,0 +1,331 @@
+  console.log
+    🔍 DATABASE_URL encontrada:
+
+      at getDatabaseUrl (src/config/env.ts:98:21)
+
+  console.log
+       Variable: DATABASE_URL
+
+      at getDatabaseUrl (src/config/env.ts:99:21)
+
+  console.log
+       postgresql://postgres:pzXS***xwiO@yamabiko.proxy.rlwy.net:35731/railway
+
+      at getDatabaseUrl (src/config/env.ts:100:21)
+
+  console.log
+       Host: yamabiko.proxy.rlwy.net
+
+      at getDatabaseUrl (src/config/env.ts:101:21)
+
+  console.log
+       Port: 35731
+
+      at getDatabaseUrl (src/config/env.ts:102:21)
+
+  console.log
+       Database: railway
+
+      at getDatabaseUrl (src/config/env.ts:103:21)
+
+  console.log
+       User: postgres
+
+      at getDatabaseUrl (src/config/env.ts:104:21)
+
+  console.log
+       ⚠️  Tipo: URL PÚBLICA (para conexiones externas)
+
+      at getDatabaseUrl (src/config/env.ts:110:25)
+
+  console.log
+       💡 Si estás en Railway, considera usar DATABASE_URL con postgres.railway.internal
+
+      at getDatabaseUrl (src/config/env.ts:111:25)
+
+  console.log
+       💡 La URL pública funciona pero puede ser más lenta
+
+      at getDatabaseUrl (src/config/env.ts:112:25)
+
+  console.warn
+    ⚠️  REDIS_URL no encontrada - usando valor por defecto (redis://localhost:6379)
+
+    [0m [90m 190 |[39m       [36mconst[39m isPublicUrl [33m=[39m redisUrl[33m.[39mincludes([32m'proxy.rlwy.net'[39m) [33m||[39m redisUrl[33m.[39mincludes([32m'railway.app'[39m)[33m;[39m
+     [90m 191 |[39m
+    [31m[1m>[22m[39m[90m 192 |[39m       console[33m.[39mlog([32m'🔍 REDIS_URL encontrada:'[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 193 |[39m       console[33m.[39mlog([32m`   Variable: ${foundName}`[39m)[33m;[39m
+     [90m 194 |[39m       console[33m.[39mlog([32m`   ${redisUrl.replace(/:[^:@]+@/, ':****@')}`[39m)[33m;[39m [90m// Ocultar contraseña[39m
+     [90m 195 |[39m       [0m
+
+      at getRedisUrl (src/config/env.ts:192:17)
+      at Object.<anonymous> (src/config/env.ts:197:18)
+      at Object.<anonymous> (src/app.ts:44:15)
+      at Object.<anonymous> (src/__tests__/integration/auth.integration.test.ts:8:31)
+
+  console.warn
+       El sistema funcionará pero sin cache distribuido
+
+    [0m [90m 191 |[39m
+     [90m 192 |[39m       console[33m.[39mlog([32m'🔍 REDIS_URL encontrada:'[39m)[33m;[39m
+    [31m[1m>[22m[39m[90m 193 |[39m       console[33m.[39mlog([32m`   Variable: ${foundName}`[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 194 |[39m       console[33m.[39mlog([32m`   ${redisUrl.replace(/:[^:@]+@/, ':****@')}`[39m)[33m;[39m [90m// Ocultar contraseña[39m
+     [90m 195 |[39m       
+     [90m 196 |[39m       [36mif[39m (isInternalUrl) {[0m
+
+      at getRedisUrl (src/config/env.ts:193:17)
+      at Object.<anonymous> (src/config/env.ts:197:18)
+      at Object.<anonymous> (src/app.ts:44:15)
+      at Object.<anonymous> (src/__tests__/integration/auth.integration.test.ts:8:31)
+
+  console.log
+    ⚠️  Redis not configured - using mock client
+
+      at Object.<anonymous> (src/config/redis.ts:65:13)
+
+  console.log
+    📊 Sistema de tracking de uso iniciado
+
+      at SecureCredentialManager.startUsageTracking (src/services/security.service.ts:387:17)
+
+  console.log
+    📊 Sistema de tracking de uso iniciado
+
+      at SecureCredentialManager.startUsageTracking (src/services/security.service.ts:387:17)
+
+2025-12-18 23:03:24 [[32minfo[39m]: Loaded 13 selector patterns {"service":"ivan-reseller-backend"}
+2025-12-18 23:03:24 [[32minfo[39m]: StealthScrapingService initialized with config: {"service":"ivan-reseller-backend","useResidentialProxies":true,"proxyRotationInterval":5,"humanDelayRange":[1,3],"mouseMovementSimulation":true,"scrollBehavior":true,"captchaSolving":true,"fingerprintRotation":true,"sessionDuration":30,"maxRetries":3,"timeout":30000}
+2025-12-18 23:03:24 [[32minfo[39m]: 🤖 Iniciando motor de automatización... {"service":"ivan-reseller-backend"}
+2025-12-18 23:03:28 [[33mwarn[39m]: Scheduled Reports: Redis not available - scheduled reports disabled {"service":"ivan-reseller-backend"}
+2025-12-18 23:03:30 [[31merror[39m]: Autopilot: Error loading persisted data {"service":"ivan-reseller-backend","error":{}}
+2025-12-18 23:03:35 [[32minfo[39m]: HTTP Request {"service":"ivan-reseller-backend","correlationId":"163fd7a5-702a-4465-8530-e62208e31085","method":"POST","path":"/api/auth/login","query":{},"ip":"::ffff:127.0.0.1"}
+2025-12-18 23:03:35 [[31merror[39m]: Error Tracked {"service":"ivan-reseller-backend","category":"UNKNOWN","errorName":"TypeError","errorMessage":"Cannot read properties of undefined (reading 'findUnique')","errorStack":"TypeError: Cannot read properties of undefined (reading 'findUnique')\n    at AuthService.login (C:\\Ivan_Reseller_Web\\backend\\src\\services\\auth.service.ts:64:49)\n    at C:\\Ivan_Reseller_Web\\backend\\src\\api\\routes\\auth.routes.ts:74:57\n    at Layer.handle [as handle_request] (C:\\Ivan_Reseller_Web\\backend\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at next (C:\\Ivan_Reseller_Web\\backend\\node_modules\\express\\lib\\router\\route.js:149:13)\n    at C:\\Ivan_Reseller_Web\\backend\\node_modules\\express-rate-limit\\dist\\index.cjs:942:7\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at C:\\Ivan_Reseller_Web\\backend\\node_modules\\express-rate-limit\\dist\\index.cjs:825:5","count":1,"correlationId":"163fd7a5-702a-4465-8530-e62208e31085","requestPath":"/api/auth/login","requestMethod":"POST","ip":"::ffff:127.0.0.1","statusCode":500,"errorCode":"UNKNOWN_ERROR"}
+2025-12-18 23:03:35 [[31merror[39m]: Cannot read properties of undefined (reading 'findUnique') {"service":"ivan-reseller-backend","errorId":"ERR-1766109815754-GGHQGP2JP","correlationId":"163fd7a5-702a-4465-8530-e62208e31085","errorCode":"UNKNOWN_ERROR","statusCode":500,"stack":"TypeError: Cannot read properties of undefined (reading 'findUnique')\n    at AuthService.login (C:\\Ivan_Reseller_Web\\backend\\src\\services\\auth.service.ts:64:49)\n    at C:\\Ivan_Reseller_Web\\backend\\src\\api\\routes\\auth.routes.ts:74:57\n    at Layer.handle [as handle_request] (C:\\Ivan_Reseller_Web\\backend\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at next (C:\\Ivan_Reseller_Web\\backend\\node_modules\\express\\lib\\router\\route.js:149:13)\n    at C:\\Ivan_Reseller_Web\\backend\\node_modules\\express-rate-limit\\dist\\index.cjs:942:7\n    at processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at C:\\Ivan_Reseller_Web\\backend\\node_modules\\express-rate-limit\\dist\\index.cjs:825:5","path":"/api/auth/login","method":"POST","ip":"::ffff:127.0.0.1","isOperational":false}
+2025-12-18 23:03:35 [[32minfo[39m]: HTTP Response {"service":"ivan-reseller-backend","correlationId":"163fd7a5-702a-4465-8530-e62208e31085","method":"POST","path":"/api/auth/login","statusCode":500,"duration":"36ms"}
+FAIL src/__tests__/integration/auth.integration.test.ts (45.539 s)
+  Authentication Integration Tests
+    POST /api/auth/login
+      × should login successfully with correct credentials (2 ms)
+      × should reject login with incorrect password (1 ms)
+      × should reject login with non-existent user
+    POST /api/auth/register
+      × should reject public registration (disabled)
+    Protected Routes
+      × should access protected route with valid token
+      × should reject access without token
+
+  ● Authentication Integration Tests › POST /api/auth/login › should login successfully with correct credentials
+
+    TypeError: Cannot read properties of undefined (reading 'deleteMany')
+
+    [0m [90m 18 |[39m       where[33m:[39m {
+     [90m 19 |[39m         [33mOR[39m[33m:[39m [
+    [31m[1m>[22m[39m[90m 20 |[39m           { username[33m:[39m testUser[33m.[39musername }[33m,[39m
+     [90m    |[39m                                      [31m[1m^[22m[39m
+     [90m 21 |[39m           { email[33m:[39m testUser[33m.[39memail }[33m,[39m
+     [90m 22 |[39m         ][33m,[39m
+     [90m 23 |[39m       }[33m,[39m[0m
+
+      at Object.<anonymous> (src/__tests__/integration/auth.integration.test.ts:20:38)
+
+  ● Authentication Integration Tests › POST /api/auth/login › should reject login with incorrect password
+
+    TypeError: Cannot read properties of undefined (reading 'deleteMany')
+
+    [0m [90m 18 |[39m       where[33m:[39m {
+     [90m 19 |[39m         [33mOR[39m[33m:[39m [
+    [31m[1m>[22m[39m[90m 20 |[39m           { username[33m:[39m testUser[33m.[39musername }[33m,[39m
+     [90m    |[39m                                      [31m[1m^[22m[39m
+     [90m 21 |[39m           { email[33m:[39m testUser[33m.[39memail }[33m,[39m
+     [90m 22 |[39m         ][33m,[39m
+     [90m 23 |[39m       }[33m,[39m[0m
+
+      at Object.<anonymous> (src/__tests__/integration/auth.integration.test.ts:20:38)
+
+  ● Authentication Integration Tests › POST /api/auth/login › should reject login with non-existent user
+
+    TypeError: Cannot read properties of undefined (reading 'deleteMany')
+
+    [0m [90m 18 |[39m       where[33m:[39m {
+     [90m 19 |[39m         [33mOR[39m[33m:[39m [
+    [31m[1m>[22m[39m[90m 20 |[39m           { username[33m:[39m testUser[33m.[39musername }[33m,[39m
+     [90m    |[39m                                      [31m[1m^[22m[39m
+     [90m 21 |[39m           { email[33m:[39m testUser[33m.[39memail }[33m,[39m
+     [90m 22 |[39m         ][33m,[39m
+     [90m 23 |[39m       }[33m,[39m[0m
+
+      at Object.<anonymous> (src/__tests__/integration/auth.integration.test.ts:20:38)
+
+  ● Authentication Integration Tests › POST /api/auth/register › should reject public registration (disabled)
+
+    TypeError: Cannot read properties of undefined (reading 'deleteMany')
+
+    [0m [90m 18 |[39m       where[33m:[39m {
+     [90m 19 |[39m         [33mOR[39m[33m:[39m [
+    [31m[1m>[22m[39m[90m 20 |[39m           { username[33m:[39m testUser[33m.[39musername }[33m,[39m
+     [90m    |[39m                                      [31m[1m^[22m[39m
+     [90m 21 |[39m           { email[33m:[39m testUser[33m.[39memail }[33m,[39m
+     [90m 22 |[39m         ][33m,[39m
+     [90m 23 |[39m       }[33m,[39m[0m
+
+      at Object.<anonymous> (src/__tests__/integration/auth.integration.test.ts:20:38)
+
+  ● Authentication Integration Tests › Protected Routes › should access protected route with valid token
+
+    TypeError: Cannot read properties of undefined (reading 'deleteMany')
+
+    [0m [90m 18 |[39m       where[33m:[39m {
+     [90m 19 |[39m         [33mOR[39m[33m:[39m [
+    [31m[1m>[22m[39m[90m 20 |[39m           { username[33m:[39m testUser[33m.[39musername }[33m,[39m
+     [90m    |[39m                                      [31m[1m^[22m[39m
+     [90m 21 |[39m           { email[33m:[39m testUser[33m.[39memail }[33m,[39m
+     [90m 22 |[39m         ][33m,[39m
+     [90m 23 |[39m       }[33m,[39m[0m
+
+      at Object.<anonymous> (src/__tests__/integration/auth.integration.test.ts:20:38)
+
+  ● Authentication Integration Tests › Protected Routes › should access protected route with valid token
+
+    socket hang up
+
+
+
+  ● Authentication Integration Tests › Protected Routes › should reject access without token
+
+    TypeError: Cannot read properties of undefined (reading 'deleteMany')
+
+    [0m [90m 18 |[39m       where[33m:[39m {
+     [90m 19 |[39m         [33mOR[39m[33m:[39m [
+    [31m[1m>[22m[39m[90m 20 |[39m           { username[33m:[39m testUser[33m.[39musername }[33m,[39m
+     [90m    |[39m                                      [31m[1m^[22m[39m
+     [90m 21 |[39m           { email[33m:[39m testUser[33m.[39memail }[33m,[39m
+     [90m 22 |[39m         ][33m,[39m
+     [90m 23 |[39m       }[33m,[39m[0m
+
+      at Object.<anonymous> (src/__tests__/integration/auth.integration.test.ts:20:38)
+
+  ● Authentication Integration Tests › Protected Routes › should reject access without token
+
+    socket hang up
+
+
+
+Test Suites: 1 failed, 1 total
+Tests:       6 failed, 6 total
+Snapshots:   0 total
+Time:        46.12 s, estimated 129 s
+Ran all test suites matching /src\\__tests__\\integration\\auth.integration.test.ts/i.
+
+Jest has detected the following 5 open handles potentially keeping Jest from exiting:
+
+  ●  TLSWRAP
+
+    [0m [90m 156 |[39m         [36mconst[39m separator [33m=[39m [36mthis[39m[33m.[39mproviderUrl[33m.[39mincludes([32m'?'[39m) [33m?[39m [32m'&'[39m [33m:[39m [32m'?'[39m[33m;[39m
+     [90m 157 |[39m         [36mconst[39m symbolsParam [33m=[39m [36mthis[39m[33m.[39mproviderSymbols [33m?[39m [32m`&symbols=${encodeURIComponent(this.providerSymbols)}`[39m [33m:[39m [32m''[39m[33m;[39m
+    [31m[1m>[22m[39m[90m 158 |[39m         [36mconst[39m apiKeyParam [33m=[39m [36mthis[39m[33m.[39mproviderApiKey [33m?[39m [32m`&apikey=${encodeURIComponent(this.providerApiKey)}`[39m [33m:[39m [32m''[39m[33m;[39m
+     [90m     |[39m                                                                 [31m[1m^[22m[39m
+     [90m 159 |[39m         url [33m=[39m [32m`${this.providerUrl}${separator}base=${base}${symbolsParam}${apiKeyParam}`[39m[33m;[39m
+     [90m 160 |[39m       }
+     [90m 161 |[39m     }[0m
+
+      at RedirectableRequest.Object.<anonymous>.RedirectableRequest._performRequest (node_modules/follow-redirects/index.js:337:24)
+      at new RedirectableRequest (node_modules/follow-redirects/index.js:111:8)
+      at Object.request (node_modules/follow-redirects/index.js:543:14)
+      at dispatchHttpRequest (node_modules/axios/lib/adapters/http.js:660:21)
+      at node_modules/axios/lib/adapters/http.js:255:5
+      at wrapAsync (node_modules/axios/lib/adapters/http.js:235:10)
+      at http (node_modules/axios/lib/adapters/http.js:313:10)
+      at Axios.dispatchRequest (node_modules/axios/lib/core/dispatchRequest.js:51:10)
+      at Axios._request (node_modules/axios/lib/core/Axios.js:185:33)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:40:25)
+      at Axios.<computed> [as get] (node_modules/axios/lib/core/Axios.js:211:17)
+      at Function.wrap [as get] (node_modules/axios/lib/helpers/bind.js:12:15)
+      at src/services/fx.service.ts:158:65
+      at FXService.refreshRates (src/services/fx.service.ts:219:11)
+      at new FXService (src/services/fx.service.ts:24:23)
+      at Object.<anonymous> (src/services/fx.service.ts:379:19)
+      at Object.<anonymous> (src/services/sale.service.ts:43:38)
+      at Object.<anonymous> (src/api/routes/sales.routes.ts:38:24)
+      at Object.<anonymous> (src/app.ts:54:40)
+      at Object.<anonymous> (src/__tests__/integration/auth.integration.test.ts:8:31)
+
+
+  ●  Timeout
+
+    [0m [90m 377 |[39m       usage[33m.[39mrequestsThisMinute[33m++[39m[33m;[39m
+     [90m 378 |[39m       usage[33m.[39mrequestsThisHour[33m++[39m[33m;[39m
+    [31m[1m>[22m[39m[90m 379 |[39m       usage[33m.[39mrequestsToday[33m++[39m[33m;[39m
+     [90m     |[39m         [31m[1m^[22m[39m
+     [90m 380 |[39m       [36mthis[39m[33m.[39msaveCredentials()[33m;[39m
+     [90m 381 |[39m     }
+     [90m 382 |[39m[0m
+
+      at SecureCredentialManager.startUsageTracking (src/services/security.service.ts:379:9)
+      at new SecureCredentialManager (src/services/security.service.ts:20:14)
+      at Object.<anonymous> (src/services/security.service.ts:525:35)
+      at Object.<anonymous> (src/services/admin.service.ts:42:28)
+      at Object.<anonymous> (src/api/routes/admin.routes.ts:7:25)
+      at Object.<anonymous> (src/app.ts:57:40)
+      at Object.<anonymous> (src/__tests__/integration/auth.integration.test.ts:8:31)
+
+
+  ●  Timeout
+
+    [0m [90m 377 |[39m       usage[33m.[39mrequestsThisMinute[33m++[39m[33m;[39m
+     [90m 378 |[39m       usage[33m.[39mrequestsThisHour[33m++[39m[33m;[39m
+    [31m[1m>[22m[39m[90m 379 |[39m       usage[33m.[39mrequestsToday[33m++[39m[33m;[39m
+     [90m     |[39m         [31m[1m^[22m[39m
+     [90m 380 |[39m       [36mthis[39m[33m.[39msaveCredentials()[33m;[39m
+     [90m 381 |[39m     }
+     [90m 382 |[39m[0m
+
+      at SecureCredentialManager.startUsageTracking (src/services/security.service.ts:379:9)
+      at new SecureCredentialManager (src/services/security.service.ts:20:14)
+      at new AdminService (src/services/admin.service.ts:47:34)
+      at Object.<anonymous> (src/api/routes/admin.routes.ts:16:22)
+      at Object.<anonymous> (src/app.ts:57:40)
+      at Object.<anonymous> (src/__tests__/integration/auth.integration.test.ts:8:31)
+
+
+  ●  Timeout
+
+    [0m [90m 141 |[39m         name[33m:[39m [32m'Ajuste automático de precios competitivos'[39m[33m,[39m
+     [90m 142 |[39m         type[33m:[39m [32m'pricing'[39m[33m,[39m
+    [31m[1m>[22m[39m[90m 143 |[39m         condition[33m:[39m [32m'competitor_price_change > 5%'[39m[33m,[39m
+     [90m     |[39m         [31m[1m^[22m[39m
+     [90m 144 |[39m         action[33m:[39m [32m'match_price_with_margin'[39m[33m,[39m
+     [90m 145 |[39m         active[33m:[39m [36mtrue[39m[33m,[39m
+     [90m 146 |[39m         parameters[33m:[39m { minMargin[33m:[39m [35m15[39m[33m,[39m maxAdjustment[33m:[39m [35m20[39m }[33m,[39m[0m
+
+      at AutomatedBusinessService.startAutomationEngine (src/services/automated-business.service.ts:143:9)
+      at new AutomatedBusinessService (src/services/automated-business.service.ts:64:14)
+      at Object.<anonymous> (src/services/automated-business.service.ts:896:35)
+      at Object.<anonymous> (src/controllers/automation.controller.ts:4:38)
+      at Object.<anonymous> (src/routes/automation.routes.ts:8:33)
+      at Object.<anonymous> (src/app.ts:60:29)
+      at Object.<anonymous> (src/__tests__/integration/auth.integration.test.ts:8:31)
+
+
+  ●  Timeout
+
+    [0m [90m 147 |[39m         executionCount[33m:[39m [35m0[39m[33m,[39m
+     [90m 148 |[39m         successRate[33m:[39m [35m0[39m
+    [31m[1m>[22m[39m[90m 149 |[39m       }[33m,[39m
+     [90m     |[39m         [31m[1m^[22m[39m
+     [90m 150 |[39m       {
+     [90m 151 |[39m         id[33m:[39m [32m'auto-purchase'[39m[33m,[39m
+     [90m 152 |[39m         name[33m:[39m [32m'Compra automática al recibir orden'[39m[33m,[39m[0m
+
+      at AutomatedBusinessService.startAutomationEngine (src/services/automated-business.service.ts:149:9)
+      at new AutomatedBusinessService (src/services/automated-business.service.ts:64:14)
+      at Object.<anonymous> (src/services/automated-business.service.ts:896:35)
+      at Object.<anonymous> (src/controllers/automation.controller.ts:4:38)
+      at Object.<anonymous> (src/routes/automation.routes.ts:8:33)
+      at Object.<anonymous> (src/app.ts:60:29)
+      at Object.<anonymous> (src/__tests__/integration/auth.integration.test.ts:8:31)
+
+2025-12-18 23:03:36 [[32minfo[39m]: FXService: rates refreshed from provider {"service":"ivan-reseller-backend","base":"USD","providerUrl":"https://open.er-api.com/v6/latest/{base}","lastUpdated":"2025-12-19T00:02:31.000Z"}
+�Desea terminar el trabajo por lotes (S/N)? 
+^C

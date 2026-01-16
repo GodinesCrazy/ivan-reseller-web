@@ -290,6 +290,18 @@ const envSchema = z.object({
   ALIEXPRESS_DATA_SOURCE: z.enum(['api', 'scrape']).default('api').transform(val => val as 'api' | 'scrape'),
   ALIEXPRESS_AUTH_MONITOR_ENABLED: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
   ALLOW_BROWSER_AUTOMATION: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
+  
+  // ✅ AliExpress Affiliate API - REQUERIDO para generación de links afiliados
+  ALIEXPRESS_APP_KEY: z.string().optional(),
+  ALIEXPRESS_APP_SECRET: z.string().optional(),
+  ALIEXPRESS_CALLBACK_URL: z.string().url().optional(),
+  ALIEXPRESS_TRACKING_ID: z.string().default('ivanreseller'),
+  ALIEXPRESS_OAUTH_REDIRECT_URL: z.string().url().optional(),
+  ALIEXPRESS_ENV: z.enum(['production', 'test']).default('production'),
+  ALIEXPRESS_API_BASE_URL: z.string().url().default('https://api-sg.aliexpress.com/sync'),
+  
+  // ✅ DEBUG: Debug key for protected debug endpoints
+  DEBUG_KEY: z.string().optional(),
 });
 
 // Asegurar que DATABASE_URL esté en process.env

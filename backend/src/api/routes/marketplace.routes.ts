@@ -917,7 +917,8 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const webBaseUrl = process.env.WEB_BASE_URL || 
                         (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
       
-      const defaultCallbackUrl = `${webBaseUrl}/aliexpress/callback`;
+      // ✅ CORRECCIÓN: Callback debe incluir /api porque el serverless function está en /api/aliexpress/callback
+      const defaultCallbackUrl = `${webBaseUrl}/api/aliexpress/callback`;
       
       const callbackUrl = typeof redirect_uri === 'string' && redirect_uri.length > 0
         ? redirect_uri

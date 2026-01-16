@@ -1,0 +1,27 @@
+﻿# npm audit report
+
+js-yaml  <3.14.2 || >=4.0.0 <4.1.1
+Severity: moderate
+js-yaml has prototype pollution in merge (<<) - https://github.com/advisories/GHSA-mh29-5h37-fv8m
+js-yaml has prototype pollution in merge (<<) - https://github.com/advisories/GHSA-mh29-5h37-fv8m
+fix available via `npm audit fix`
+node_modules/@istanbuljs/load-nyc-config/node_modules/js-yaml
+node_modules/js-yaml
+
+jws  <3.2.3
+Severity: high
+auth0/node-jws Improperly Verifies HMAC Signature - https://github.com/advisories/GHSA-869p-cjfg-cm3x
+fix available via `npm audit fix`
+node_modules/jws
+
+nodemailer  <=7.0.10
+Severity: moderate
+NodemailerÔÇÖs addressparser is vulnerable to DoS caused by recursive calls - https://github.com/advisories/GHSA-rcmh-qjqh-p98v
+Nodemailer is vulnerable to DoS through Uncontrolled Recursion - https://github.com/advisories/GHSA-46j5-6fg5-4gv3
+fix available via `npm audit fix`
+node_modules/nodemailer
+
+3 vulnerabilities (2 moderate, 1 high)
+
+To address all issues, run:
+  npm audit fix

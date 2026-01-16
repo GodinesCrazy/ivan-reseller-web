@@ -1,0 +1,131 @@
+PS C:\Ivan_Reseller_Web> curl.exe -i https://ivan-reseller-web-production.up.railway.app/
+HTTP/1.1 404 Not Found
+Access-Control-Allow-Credentials: true
+Access-Control-Expose-Headers: Set-Cookie
+Content-Length: 45
+Content-Security-Policy: default-src 'self';style-src 'self' 'unsafe-inline';script-src 'self';img-src 'self' data: https:;connect-src 'self' https://api.ebay.com https://api.sandbox.ebay.com https://api.mercadolibre.com https://sellingpartnerapi-na.amazon.com;font-src 'self' data:;object-src 'none';media-src 'self';frame-src 'self' https://meet.jit.si https://*.jit.si;upgrade-insecure-requests;base-uri 'self';form-action 'self';frame-ancestors 'self';script-src-attr 'none'
+Content-Type: application/json; charset=utf-8
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Date: Wed, 14 Jan 2026 22:17:37 GMT
+Origin-Agent-Cluster: ?1
+Permissions-Policy: geolocation=(), microphone=(), camera=(), fullscreen=(self), payment=(self)
+Referrer-Policy: strict-origin-when-cross-origin
+Server: railway-edge
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+Vary: Origin, Accept-Encoding
+X-App-Build-Time: 2026-01-14T21:52:05.831Z
+X-App-Commit: dfc6a16
+X-App-Node: v20.20.0
+X-Content-Type-Options: nosniff
+X-Correlation-Id: 59a2ced7-86c7-4931-8547-d3e900ccf01e
+X-Dns-Prefetch-Control: off
+X-Download-Options: noopen
+X-Frame-Options: DENY
+X-Permitted-Cross-Domain-Policies: none
+X-Process-Time: 0.001s
+X-Railway-Edge: railway/us-east4-eqdc4a
+X-Railway-Request-Id: IhtSxqNJQK2CNOevozsQ6Q
+X-Response-Time: 1ms
+X-Xss-Protection: 1; mode=block
+
+{"success":false,"message":"Route not found"}
+PS C:\Ivan_Reseller_Web> curl.exe -i https://ivan-reseller-web-production.up.railway.app/api
+
+HTTP/1.1 404 Not Found
+Access-Control-Allow-Credentials: true
+Access-Control-Expose-Headers: Set-Cookie
+Content-Length: 45
+Content-Security-Policy: default-src 'self';style-src 'self' 'unsafe-inline';script-src 'self';img-src 'self' data: https:;connect-src 'self' https://api.ebay.com https://api.sandbox.ebay.com https://api.mercadolibre.com https://sellingpartnerapi-na.amazon.com;font-src 'self' data:;object-src 'none';media-src 'self';frame-src 'self' https://meet.jit.si https://*.jit.si;upgrade-insecure-requests;base-uri 'self';form-action 'self';frame-ancestors 'self';script-src-attr 'none'
+Content-Type: application/json; charset=utf-8
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Date: Wed, 14 Jan 2026 22:17:49 GMT
+Origin-Agent-Cluster: ?1
+Permissions-Policy: geolocation=(), microphone=(), camera=(), fullscreen=(self), payment=(self)
+Ratelimit-Limit: 200
+Ratelimit-Policy: 200;w=900
+Ratelimit-Remaining: 196
+Ratelimit-Reset: 16
+Referrer-Policy: strict-origin-when-cross-origin
+Server: railway-edge
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+Vary: Origin, Accept-Encoding
+X-App-Build-Time: 2026-01-14T21:52:05.831Z
+X-App-Commit: dfc6a16
+X-App-Node: v20.20.0
+X-Content-Type-Options: nosniff
+X-Correlation-Id: 037df51e-feeb-424e-b328-0626c004e4ab
+X-Dns-Prefetch-Control: off
+X-Download-Options: noopen
+X-Frame-Options: DENY
+X-Permitted-Cross-Domain-Policies: none
+X-Process-Time: 0.003s
+X-Railway-Edge: railway/us-east4-eqdc4a
+X-Railway-Request-Id: PlvdUOdfTIWNeFiuBhdwDg
+X-Response-Time: 3ms
+X-Xss-Protection: 1; mode=block
+
+{"success":false,"message":"Route not found"}
+PS C:\Ivan_Reseller_Web> curl.exe -i https://ivan-reseller-web-production.up.railway.app/health
+HTTP/1.1 200 OK
+Access-Control-Allow-Credentials: true
+Access-Control-Expose-Headers: Set-Cookie
+Content-Length: 205
+Content-Security-Policy: default-src 'self';style-src 'self' 'unsafe-inline';script-src 'self';img-src 'self' data: https:;connect-src 'self' https://api.ebay.com https://api.sandbox.ebay.com https://api.mercadolibre.com https://sellingpartnerapi-na.amazon.com;font-src 'self' data:;object-src 'none';media-src 'self';frame-src 'self' https://meet.jit.si https://*.jit.si;upgrade-insecure-requests;base-uri 'self';form-action 'self';frame-ancestors 'self';script-src-attr 'none'
+Content-Type: application/json; charset=utf-8
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Date: Wed, 14 Jan 2026 22:17:58 GMT
+Origin-Agent-Cluster: ?1
+Referrer-Policy: no-referrer
+Server: railway-edge
+Strict-Transport-Security: max-age=15552000; includeSubDomains
+Vary: Origin
+X-App-Build-Time: 2026-01-14T21:52:05.831Z
+X-App-Commit: dfc6a16
+X-App-Node: v20.20.0
+X-Content-Type-Options: nosniff
+X-Correlation-Id: 0e77816c-4f4a-48b3-bcba-f17f9320e252
+X-Dns-Prefetch-Control: off
+X-Download-Options: noopen
+X-Frame-Options: SAMEORIGIN
+X-Permitted-Cross-Domain-Policies: none
+X-Railway-Edge: railway/us-east4-eqdc4a
+X-Railway-Request-Id: _3e8wVMYRsK4e7e9g4a9AQ
+X-Xss-Protection: 0
+
+{"status":"healthy","timestamp":"2026-01-14T22:17:58.813Z","uptime":1554.47948065,"service":"ivan-reseller-backend","version":"1.0.0","environment":"production","memory":{"used":47,"total":49,"unit":"MB"}}
+PS C:\Ivan_Reseller_Web> curl.exe -i https://ivan-reseller-web-production.up.railway.app/api/health
+HTTP/1.1 200 OK
+Access-Control-Allow-Credentials: true
+Access-Control-Expose-Headers: Set-Cookie
+Cache-Control: no-store, no-cache, must-revalidate, private
+Content-Length: 223
+Content-Security-Policy: default-src 'self';style-src 'self' 'unsafe-inline';script-src 'self';img-src 'self' data: https:;connect-src 'self' https://api.ebay.com https://api.sandbox.ebay.com https://api.mercadolibre.com https://sellingpartnerapi-na.amazon.com;font-src 'self' data:;object-src 'none';media-src 'self';frame-src 'self' https://meet.jit.si https://*.jit.si;upgrade-insecure-requests;base-uri 'self';form-action 'self';frame-ancestors 'self';script-src-attr 'none'
+Content-Type: application/json; charset=utf-8
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Date: Wed, 14 Jan 2026 22:18:08 GMT
+Expires: 0
+Origin-Agent-Cluster: ?1
+Pragma: no-cache
+Referrer-Policy: no-referrer
+Server: railway-edge
+Strict-Transport-Security: max-age=15552000; includeSubDomains
+Vary: Origin
+X-App-Build-Time: 2026-01-14T21:52:05.831Z
+X-App-Commit: dfc6a16
+X-App-Node: v20.20.0
+X-Content-Type-Options: nosniff
+X-Correlation-Id: ed725b07-8a63-4c39-9167-ad207801d852
+X-Dns-Prefetch-Control: off
+X-Download-Options: noopen
+X-Frame-Options: SAMEORIGIN
+X-Permitted-Cross-Domain-Policies: none
+X-Railway-Edge: railway/us-east4-eqdc4a
+X-Railway-Request-Id: DF8eGhh4SNquEcafwoOzXw
+X-Xss-Protection: 0
+
+{"status":"healthy","timestamp":"2026-01-14T22:18:08.238Z","uptime":1563.904139013,"service":"ivan-reseller-backend","version":"1.0.0","environment":"production","degraded":false,"memory":{"used":47,"total":49,"unit":"MB"}}
+PS C:\Ivan_Reseller_Web>

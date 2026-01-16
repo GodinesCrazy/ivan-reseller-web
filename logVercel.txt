@@ -1,0 +1,56 @@
+19:44:46.042 Running build in Washington, D.C., USA (East) – iad1
+19:44:46.043 Build machine configuration: 2 cores, 8 GB
+19:44:46.182 Cloning github.com/GodinesCrazy/ivan-reseller-web (Branch: main, Commit: cb757e3)
+19:44:47.854 Cloning completed: 1.672s
+19:44:48.181 Restored build cache from previous deployment (9SSQWPnUVvPHSAqZ1ra1auKFMvbN)
+19:44:48.820 Running "vercel build"
+19:44:49.283 Vercel CLI 50.1.3
+19:44:49.887 Running "install" command: `cd frontend && npm ci --include=dev`...
+19:44:53.597 npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
+19:44:54.708 npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+19:44:54.710 npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported
+19:44:55.696 npm warn deprecated @humanwhocodes/object-schema@2.0.3: Use @eslint/object-schema instead
+19:44:55.733 npm warn deprecated @humanwhocodes/config-array@0.13.0: Use @eslint/config-array instead
+19:44:58.560 npm warn deprecated eslint@8.57.1: This version is no longer supported. Please see https://eslint.org/version-support for other options.
+19:45:03.637 
+19:45:03.637 added 613 packages, and audited 614 packages in 14s
+19:45:03.638 
+19:45:03.638 223 packages are looking for funding
+19:45:03.639   run `npm fund` for details
+19:45:03.667 
+19:45:03.667 6 moderate severity vulnerabilities
+19:45:03.667 
+19:45:03.667 To address all issues (including breaking changes), run:
+19:45:03.667   npm audit fix --force
+19:45:03.667 
+19:45:03.667 Run `npm audit` for details.
+19:45:03.933 
+19:45:03.936 > ivan-reseller-frontend@1.0.0 build
+19:45:03.936 > npm run sync-docs && vite build
+19:45:03.936 
+19:45:04.051 
+19:45:04.051 > ivan-reseller-frontend@1.0.0 sync-docs
+19:45:04.051 > node ../scripts/sync_help_docs.mjs
+19:45:04.051 
+19:45:04.093 ✅ Sincronizado: SETUP_LOCAL.md
+19:45:04.094 ✅ Sincronizado: DEPLOYMENT_RAILWAY.md
+19:45:04.094 ✅ Sincronizado: SECURITY.md
+19:45:04.095 ✅ Sincronizado: TROUBLESHOOTING.md
+19:45:04.095 ✅ Sincronizado: ARCHITECTURE.md
+19:45:04.095 ✅ Sincronizado: USER_GUIDE.md
+19:45:04.096 ✅ Sincronizado: ADMIN_GUIDE.md
+19:45:04.096 
+19:45:04.096 📊 Resumen: 7 archivos sincronizados, 0 errores
+19:45:04.373 [36mvite v5.4.21 [32mbuilding for production...[36m[39m
+19:45:04.426 transforming...
+19:45:06.377 [32m✓[39m 65 modules transformed.
+19:45:06.383 [31mx[39m Build failed in 1.98s
+19:45:06.383 [31merror during build:
+19:45:06.384 [31m[vite:load-fallback] Could not load /vercel/path0/frontend/src/components/ErrorBanner (imported by src/App.tsx): ENOENT: no such file or directory, open '/vercel/path0/frontend/src/components/ErrorBanner'[31m
+19:45:06.384     at async open (node:internal/fs/promises:641:25)
+19:45:06.384     at async Object.readFile (node:internal/fs/promises:1245:14)
+19:45:06.384     at async Object.load (file:///vercel/path0/frontend/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65357:25)
+19:45:06.384     at async PluginDriver.hookFirstAndGetPlugin (file:///vercel/path0/frontend/node_modules/rollup/dist/es/shared/node-entry.js:22404:28)
+19:45:06.385     at async file:///vercel/path0/frontend/node_modules/rollup/dist/es/shared/node-entry.js:21404:33
+19:45:06.385     at async Queue.work (file:///vercel/path0/frontend/node_modules/rollup/dist/es/shared/node-entry.js:22632:32)[39m
+19:45:06.406 Error: Command "cd frontend && npm run build" exited with 1

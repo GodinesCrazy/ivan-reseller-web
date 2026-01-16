@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Pause, Play, Trash2, Search } from 'lucide-react';
 import { DatePicker } from '@/components/ui/date-picker';
+import { API_BASE_URL } from '../config/runtime';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'trace' | 'all';
 
@@ -29,7 +30,7 @@ export default function SystemLogs() {
 
   useEffect(() => {
     try {
-      const base = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000';
+      const base = API_BASE_URL;
       const es = new EventSource(`${base}/api/logs/stream`, { withCredentials: true } as any);
       esRef.current = es;
       es.onopen = () => { setConnected(true); setError(null); };

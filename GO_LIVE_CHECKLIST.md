@@ -17,6 +17,33 @@
 
 ---
 
+## 0. VALIDACIÓN LOCAL (OPCIONAL PERO RECOMENDADO)
+
+Antes de desplegar, valida que todo compile correctamente:
+
+### Windows (PowerShell):
+```powershell
+.\scripts\go_live_check.ps1
+```
+
+### Linux/Mac:
+```bash
+chmod +x scripts/go_live_check.sh
+./scripts/go_live_check.sh
+```
+
+O con backend URL personalizada:
+```bash
+BACKEND_URL=https://your-backend-url.up.railway.app ./scripts/go_live_check.sh
+```
+
+**Este script valida:**
+- ✅ Backend compila correctamente
+- ✅ Frontend compila correctamente
+- ✅ Endpoints /health y /ready responden (si el backend está corriendo)
+
+---
+
 ## 1. PRE-REQUISITOS
 
 Antes de empezar, asegúrate de tener:

@@ -16,14 +16,18 @@ export class AutomationController {
       const credentialsList = secureCredentialManager.listCredentials();
       const metrics = automatedBusinessSystem.getMetrics();
       
+      // ✅ FIX: Agregar campo 'workflows' para compatibilidad con frontend Dashboard
+      // El frontend espera automationRes.data?.workflows para contar workflows activos
       res.json({
         success: true,
         data: {
           config,
           credentials: credentialsList,
           metrics,
-          systemStatus: 'operational'
-        }
+          systemStatus: 'operational',
+          workflows: [] // Array vacío por ahora (workflows reales se pueden implementar después)
+        },
+        workflows: [] // También en nivel raíz para acceso directo (automationRes.data.workflows)
       });
     } catch (error) {
       console.error('Error getting system config:', error);

@@ -127,6 +127,12 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
     
+    // ✅ FIX: Detectar setup_required antes de mostrar error 502
+    if (error.response?.data?.setupRequired === true || error.response?.data?.error === 'setup_required') {
+      // No mostrar toast, el componente SetupRequired se encargará
+      return Promise.reject(error);
+    }
+
     // ✅ FIX DEFINITIVO: 502/503/504 - Backend caído o no disponible
     // Mostrar UN solo toast informativo
     if (status === 502 || status === 503 || status === 504) {

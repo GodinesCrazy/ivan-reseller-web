@@ -7,18 +7,18 @@
 ## Problemas Resueltos
 
 ### 1. ERR_HTTP_HEADERS_SENT (PRIORIDAD 1)
-**Síntomas:**
-- Railway devolvía 502 "Application failed to respond"
+**Sï¿½ntomas:**
+- Railway devolvï¿½a 502 "Application failed to respond"
 - Logs mostraban `ERR_HTTP_HEADERS_SENT` en `request-logger.middleware.js` y `error.middleware.js`
 
-**Causa Raíz:**
-- `request-logger.middleware.ts`: Callbacks `finish`/`close` podían lanzar excepciones no capturadas
-- `error.middleware.ts`: No tenía try/catch al enviar respuesta, podía fallar si conexión cerrada
+**Causa Raï¿½z:**
+- `request-logger.middleware.ts`: Callbacks `finish`/`close` podï¿½an lanzar excepciones no capturadas
+- `error.middleware.ts`: No tenï¿½a try/catch al enviar respuesta, podï¿½a fallar si conexiï¿½n cerrada
 
 **Fixes Aplicados:**
 - ? `request-logger.middleware.ts`: Wrap `finish`/`close` callbacks en try/catch
 - ? `error.middleware.ts`: Wrap `res.status().json()` en try/catch, verificar `res.headersSent` antes de responder
-- ? `404 handler`: Ya correcto (no llama `next()` después de responder)
+- ? `404 handler`: Ya correcto (no llama `next()` despuï¿½s de responder)
 
 **Evidencia:**
 - Tests: `http-stability.integration.test.ts` verifica que no hay ERR_HTTP_HEADERS_SENT
@@ -27,20 +27,20 @@
 ---
 
 ### 2. Pantallas en Blanco por AliExpressAuthMonitor (PRIORIDAD 2)
-**Síntomas:**
+**Sï¿½ntomas:**
 - AliExpressAuthMonitor activaba notificaciones "manual intervention required" cuando faltaban cookies
 - Flujos quedaban esperando infinitamente, generando pantallas en blanco
 
-**Causa Raíz:**
-- AliExpressAuthMonitor se iniciaba siempre en producción
-- Sistema intentaba scraping cuando no había credenciales API configuradas
-- No había feature flags para deshabilitar browser automation
+**Causa Raï¿½z:**
+- AliExpressAuthMonitor se iniciaba siempre en producciï¿½n
+- Sistema intentaba scraping cuando no habï¿½a credenciales API configuradas
+- No habï¿½a feature flags para deshabilitar browser automation
 
 **Fixes Aplicados:**
 - ? Feature flags agregados:
-  - `ALIEXPRESS_DATA_SOURCE=api` (default: api en producción)
-  - `ALIEXPRESS_AUTH_MONITOR_ENABLED=false` (default: false en producción)
-  - `ALLOW_BROWSER_AUTOMATION=false` (default: false en producción)
+  - `ALIEXPRESS_DATA_SOURCE=api` (default: api en producciï¿½n)
+  - `ALIEXPRESS_AUTH_MONITOR_ENABLED=false` (default: false en producciï¿½n)
+  - `ALLOW_BROWSER_AUTOMATION=false` (default: false en producciï¿½n)
 - ? `server.ts`: Solo inicia AliExpressAuthMonitor si `ALIEXPRESS_AUTH_MONITOR_ENABLED=true`
 - ? `advanced-scraper.service.ts`: Verifica flags antes de hacer scraping
   - Si `ALIEXPRESS_DATA_SOURCE=api` y no hay credenciales ? throw `AUTH_REQUIRED` error
@@ -56,29 +56,29 @@
 
 ## Feature Flags (Railway Variables)
 
-**Recomendado para Producción:**
+**Recomendado para Producciï¿½n:**
 ```
 ALIEXPRESS_DATA_SOURCE=api
 ALIEXPRESS_AUTH_MONITOR_ENABLED=false
 ALLOW_BROWSER_AUTOMATION=false
 ```
 
-**Explicación:**
-- `ALIEXPRESS_DATA_SOURCE=api`: Prioriza API oficial, scraping solo como fallback si está permitido
+**Explicaciï¿½n:**
+- `ALIEXPRESS_DATA_SOURCE=api`: Prioriza API oficial, scraping solo como fallback si estï¿½ permitido
 - `ALIEXPRESS_AUTH_MONITOR_ENABLED=false`: Deshabilita monitoreo de cookies (evita pantallas en blanco)
-- `ALLOW_BROWSER_AUTOMATION=false`: Deshabilita scraping con Puppeteer (más seguro, menos recursos)
+- `ALLOW_BROWSER_AUTOMATION=false`: Deshabilita scraping con Puppeteer (mï¿½s seguro, menos recursos)
 
 **Si se necesita scraping:**
 - Configurar `ALIEXPRESS_AFFILIATE_API` credentials en Settings ? API Settings
-- O cambiar `ALLOW_BROWSER_AUTOMATION=true` (no recomendado en producción)
+- O cambiar `ALLOW_BROWSER_AUTOMATION=true` (no recomendado en producciï¿½n)
 
 ---
 
-## Cambios en Código
+## Cambios en Cï¿½digo
 
 ### Archivos Modificados:
 1. `backend/src/middleware/request-logger.middleware.ts` - Try/catch en callbacks
-2. `backend/src/middleware/error.middleware.ts` - Try/catch y verificación headersSent
+2. `backend/src/middleware/error.middleware.ts` - Try/catch y verificaciï¿½n headersSent
 3. `backend/src/config/env.ts` - Feature flags agregados
 4. `backend/src/server.ts` - Conditional AliExpressAuthMonitor start
 5. `backend/src/services/advanced-scraper.service.ts` - API-first checks
@@ -90,7 +90,7 @@ ALLOW_BROWSER_AUTOMATION=false
 
 ---
 
-## Verificación
+## Verificaciï¿½n
 
 **Smoke Tests (FASE 3):**
 - ? `/health`: 200 OK en ~241ms
@@ -107,31 +107,31 @@ ALLOW_BROWSER_AUTOMATION=false
 
 ---
 
-## Próximos Pasos
+## Prï¿½ximos Pasos
 
 1. **Railway Deployment:**
-   - Los cambios están en `main`, Railway debería desplegar automáticamente
-   - Verificar que feature flags estén configurados en Railway Variables
+   - Los cambios estï¿½n en `main`, Railway deberï¿½a desplegar automï¿½ticamente
+   - Verificar que feature flags estï¿½n configurados en Railway Variables
 
-2. **Verificación Post-Deploy:**
+2. **Verificaciï¿½n Post-Deploy:**
    - Ejecutar smoke tests: `.\scripts\smoke_railway.ps1`
    - Verificar logs de Railway: no debe aparecer `ERR_HTTP_HEADERS_SENT`
    - Verificar que `/health` responde consistentemente
 
 3. **FASE 4-6:**
    - Ejecutar tests completos
-   - E2E mínimo (si aplica)
-   - Certificación final GO/NO-GO
+   - E2E mï¿½nimo (si aplica)
+   - Certificaciï¿½n final GO/NO-GO
 
 ---
 
 ## Notas de Seguridad
 
-- ? `APIS.txt` está en `.gitignore` (verificado)
+- ? `APIS.txt` estï¿½ en `.gitignore` (verificado)
 - ? Secretos deben ir a Railway Variables, no al repo
 - ? Scripts `load-apis-from-txt.ts` funcionan pero no commitean secretos
 
 ---
 
-**Última actualización:** 2025-12-19  
-**Estado:** HOTFIX aplicado, pendiente verificación en Railway
+**ï¿½ltima actualizaciï¿½n:** 2025-12-19  
+**Estado:** HOTFIX aplicado, pendiente verificaciï¿½n en Railway

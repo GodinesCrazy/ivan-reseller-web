@@ -56,17 +56,29 @@ export default function Products() {
   const { formatMoney } = useCurrency();
 
   useEffect(() => {
-    fetchProducts();
+    // ✅ FIX: Pequeño delay para permitir que useSetupCheck verifique primero
+    const timer = setTimeout(() => {
+      fetchProducts();
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   const fetchProducts = async () => {
     try {
       setLoading(true);
       const response = await api.get('/api/products');
+      // ✅ FIX: Si es setup_required, no procesar (se manejará en App.tsx)
+      if (response.data?.setupRequired === true || response.data?.error === 'setup_required') {
+        return; // El hook useSetupCheck redirigirá
+      }
       // El backend devuelve: { success: true, data: { products: [...] }, count: ... }
       const productsData = response.data?.data?.products || response.data?.products || response.data || [];
       setProducts(Array.isArray(productsData) ? productsData : []);
     } catch (error: any) {
+      // ✅ FIX: Si es setup_required, no mostrar error
+      if (error.response?.data?.setupRequired === true || error.response?.data?.error === 'setup_required') {
+        return; // El hook useSetupCheck redirigirá
+      }
       console.error('Error fetching products:', error);
       const errorMessage = error?.response?.data?.error || error?.response?.data?.message || 'Error al cargar productos';
       toast.error(errorMessage);

@@ -150,14 +150,14 @@ model Sale {
   trackingNumber   String?
   isCompleteCycle  Boolean   @default(false) // Si completó ciclo completo sin devoluciones
   completedAt      DateTime? // Fecha de completado del ciclo
-  
+
   // ✅ MEJORADO: Información del comprador
-  buyerEmail       String? // Email del comprador (si está disponible)
-  buyerName        String? // Nombre del comprador
-  shippingAddress  String? // Dirección completa de envío (JSON string o texto)
-  
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  buyerEmail      String? // Email del comprador (si está disponible)
+  buyerName       String? // Nombre del comprador
+  shippingAddress String? // Dirección completa de envío (JSON string o texto)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -690,49 +690,65 @@ model MeetingRoom {
 
 // ✅ LOGS DE COMPRAS AUTOMÁTICAS (Purchase Log)
 model PurchaseLog {
-  id              Int       @id @default(autoincrement())
-  userId          Int
-  saleId          Int? // ID de la venta relacionada (opcional)
-  orderId         String? // ID de la orden en el marketplace
-  productId       Int? // ID del producto
-  
+  id        Int     @id @default(autoincrement())
+  userId    Int
+  saleId    Int? // ID de la venta relacionada (opcional)
+  orderId   String? // ID de la orden en el marketplace
+  productId Int? // ID del producto
+
   // Información de la compra
-  supplierUrl     String // URL del proveedor (AliExpress, etc.)
-  purchaseAmount  Decimal   @db.Decimal(18, 2) // Monto de la compra
-  currency        String    @default("USD")
-  quantity        Int       @default(1)
-  
+  supplierUrl    String // URL del proveedor (AliExpress, etc.)
+  purchaseAmount Decimal @db.Decimal(18, 2) // Monto de la compra
+  currency       String  @default("USD")
+  quantity       Int     @default(1)
+
   // Resultado de la compra
-  status          String    @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED
-  success         Boolean   @default(false)
-  errorMessage    String? // Mensaje de error si falló
-  
+  status       String  @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED
+  success      Boolean @default(false)
+  errorMessage String? // Mensaje de error si falló
+
   // Información del proveedor
   supplierOrderId String? // ID de la orden en el proveedor
   trackingNumber  String? // Número de tracking
-  
+
   // Validaciones realizadas
   capitalValidated Boolean  @default(false) // Si se validó capital antes de comprar
   capitalAvailable Decimal? @db.Decimal(18, 2) // Capital disponible al momento de la compra
   paypalValidated  Boolean  @default(false) // Si se validó saldo PayPal
-  
+
   // Retry information
-  retryAttempt    Int       @default(0) // Número de intento
-  maxRetries      Int       @default(3)
-  
+  retryAttempt Int @default(0) // Número de intento
+  maxRetries   Int @default(3)
+
   // Timestamps
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  completedAt     DateTime? // Cuando se completó (éxito o fallo final)
-  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime? // Cuando se completó (éxito o fallo final)
+
   // Relations
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sale  Sale? @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sale    Sale?    @relation(fields: [saleId], references: [id], onDelete: SetNull)
   product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  
+
   @@index([userId, status])
   @@index([saleId])
   @@index([status, createdAt])
   @@index([createdAt])
   @@map("purchase_logs")
+}
+
+// Modelo para almacenar tokens OAuth de AliExpress Affiliate API
+model AliExpressToken {
+  id           String   @id @default(cuid())
+  accessToken  String // Token de acceso (encriptado)
+  refreshToken String? // Refresh token (encriptado, si existe)
+  expiresAt    DateTime // Fecha de expiración del access token
+  tokenType    String   @default("Bearer")
+  scope        String? // Scope del token
+  state        String? // State usado en OAuth (para validación CSRF)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@map("aliexpress_tokens")
 }

@@ -42,6 +42,7 @@ const RequestAccess = lazy(() => import('@pages/RequestAccess'));
 const MeetingRoom = lazy(() => import('@pages/MeetingRoom'));
 const PendingPurchases = lazy(() => import('@pages/PendingPurchases'));
 const Diagnostics = lazy(() => import('@pages/Diagnostics'));
+const SetupRequired = lazy(() => import('@pages/SetupRequired'));
 import Layout from '@components/layout/Layout';
 import { ErrorBanner } from '@/components/ErrorBanner';
 
@@ -160,6 +161,7 @@ function AppContent() {
       <Route path="/request-access" element={<RequestAccess />} />
       <Route path="/manual-login/:token" element={<ManualLogin />} />
       <Route path="/resolve-captcha/:token" element={<ResolveCaptcha />} />
+      <Route path="/setup-required" element={<SetupRequired />} />
 
       {/* Protected routes */}
       <Route

@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { logger } from '../../config/logger';
 import { queryWithTimeout } from '../../utils/queryWithTimeout';
+import { handleSetupCheck } from '../../utils/setup-check';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -26,6 +27,14 @@ router.get('/stats', async (req: Request, res: Response, next) => {
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
     const userId = isAdmin ? undefined : req.user?.userId;
+    
+    // ✅ Verificar setup antes de continuar (solo para usuarios no-admin)
+    if (!isAdmin && userId) {
+      const shouldStop = await handleSetupCheck(userId, res);
+      if (shouldStop) {
+        return; // Ya se envió respuesta de setup_required
+      }
+    }
     
     // Convertir userId a string para servicios que lo requieren
     const userIdString = userId ? String(userId) : undefined;

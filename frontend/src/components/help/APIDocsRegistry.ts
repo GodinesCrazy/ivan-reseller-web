@@ -93,14 +93,38 @@ export const API_DOCS_REGISTRY: APIDocEntry[] = [
 ];
 
 /**
+ * ✅ FIX: Cargar todos los archivos Markdown usando import.meta.glob (solución Vite-oficial)
+ * Esto permite que Vite resuelva todos los imports en build time
+ * La ruta debe ser relativa desde el archivo actual
+ */
+const apiDocsModules = import.meta.glob('../../../docs/help/apis/*.md?raw', { 
+  eager: false,
+  import: 'default'
+}) as Record<string, () => Promise<string>>;
+
+/**
  * Función helper para cargar el contenido Markdown de una API
- * Usa import dinámico con ?raw para cargar el archivo como string
+ * Usa import.meta.glob para cargar archivos de forma estática (Vite-oficial)
  */
 export async function loadAPIDoc(slug: string): Promise<string> {
   try {
-    // Intentar cargar el archivo MD correspondiente
-    const module = await import(`../../../docs/help/apis/${slug}.md?raw`);
-    return module.default || '';
+    // Buscar el archivo correspondiente al slug en el objeto de módulos
+    // import.meta.glob devuelve rutas absolutas desde la raíz del proyecto
+    const filePath = `../../../docs/help/apis/${slug}.md?raw`;
+    
+    // Buscar el loader que coincida con el slug
+    const loader = Object.entries(apiDocsModules).find(([path]) => {
+      // Extraer el nombre del archivo de la ruta
+      const fileName = path.split('/').pop()?.replace('.md?raw', '');
+      return fileName === slug;
+    })?.[1];
+    
+    if (!loader) {
+      throw new Error(`No loader found for slug: ${slug}`);
+    }
+
+    const content = await loader();
+    return content || '';
   } catch (error) {
     console.error(`Error loading API doc for ${slug}:`, error);
     return `# Documentación no disponible\n\nLa documentación para "${slug}" no está disponible en este momento.`;

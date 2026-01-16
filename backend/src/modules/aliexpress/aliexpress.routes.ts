@@ -6,6 +6,7 @@ import { Router } from 'express';
 import {
   handleOAuthCallback,
   initiateOAuth,
+  oauthDebug,
   generateAffiliateLink,
   testAffiliateLink,
   searchProducts,
@@ -68,6 +69,29 @@ router.get('/callback', handleOAuthCallback);
  *                       type: string
  */
 router.get('/auth', initiateOAuth);
+
+/**
+ * @swagger
+ * /api/aliexpress/oauth-debug:
+ *   get:
+ *     summary: Debug endpoint para verificar configuración OAuth (solo admin en producción)
+ *     tags: [AliExpress]
+ *     parameters:
+ *       - in: header
+ *         name: X-Debug-Key
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Debug key requerido en producción
+ *     responses:
+ *       200:
+ *         description: Información de debug OAuth (sin secretos)
+ *       403:
+ *         description: No autorizado (en producción requiere X-Debug-Key válido)
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/oauth-debug', oauthDebug);
 
 /**
  * @swagger

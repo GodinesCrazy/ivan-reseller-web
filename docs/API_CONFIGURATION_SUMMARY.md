@@ -1,95 +1,131 @@
-# Resumen de Configuración de APIs desde APIS.txt
+# 📋 RESUMEN EJECUTIVO: CONFIGURACIÓN DE APIs
 
-## ✅ Script de Configuración Automática
+**Fecha:** 2025-01-26  
+**Versión:** v1.0.0
 
-**Script:** `backend/scripts/configure-and-test-apis.ts`
+---
 
-**Comando:**
-```bash
-cd backend && npm run configure-and-test
-```
+## 🎯 ESTADO ACTUAL DEL SISTEMA
 
-## 📋 APIs Configuradas Exitosamente
+### ✅ APIs Configuradas (9)
+- AliExpress Dropshipping API (requiere actualizar callback URL)
+- eBay Trading API (Sandbox y Producción)
+- GROQ AI API
+- ScraperAPI
+- ZenRows API
+- SerpAPI (Google Trends)
+- PayPal Payouts
+- SendGrid/Twilio
+- Stripe (test keys)
 
-### ✅ 8 APIs configuradas:
+### ⚠️ APIs Incompletas (1)
+- **AliExpress Affiliate API** - Solo tiene Tracking ID, faltan App Key y App Secret
 
-1. **Groq** (production) ✅
-2. **OpenAI** (production) ✅
-3. **Gemini** (production) ✅
-4. **eBay** (sandbox) ✅
-5. **eBay** (production) ✅
-6. **ScraperAPI** (production) ✅
-7. **ZenRows** (production) ✅
-8. **AliExpress Dropshipping** (sandbox) ✅
+### ❌ APIs No Configuradas (4)
+- MercadoLibre API
+- Amazon SP-API
+- 2Captcha API
+- Stripe Production Keys
 
-### ⚠️ APIs pendientes:
+---
 
-- **PayPal** (sandbox/production) - Requiere mejor parsing del archivo APIS.txt
-- **AliExpress Affiliate** - Se configura automáticamente desde Dropshipping credentials
+## 🔴 QUÉ FALTA EXACTAMENTE PARA ESTAR 100% OPERATIVO
 
-## 🧪 Pruebas Realizadas
+### CRÍTICO (Sistema no funciona sin estas)
+1. **AliExpress Affiliate API:**
+   - ❌ App Key: **FALTA**
+   - ❌ App Secret: **FALTA**
+   - ✅ Tracking ID: Presente
 
-### ✅ Pruebas Exitosas:
+2. **AliExpress Dropshipping Callback URL:**
+   - ⚠️ Actual: `https://ivanreseller.com/aliexpress/callback`
+   - ✅ Debe ser: `https://www.ivanreseller.com/api/aliexpress/callback`
 
-1. **eBay API**: Credenciales válidas, URL de OAuth generada correctamente
-2. **Groq API**: Llamada exitosa a la API
+### IMPORTANTE (Funcionalidad limitada sin estas)
+3. **MercadoLibre API:**
+   - ❌ Client ID: **FALTA**
+   - ❌ Client Secret: **FALTA**
 
-### ⚠️ Errores Esperados (Problemas de Red Local):
+4. **Amazon SP-API:**
+   - ❌ Client ID (LWA): **FALTA**
+   - ❌ Client Secret: **FALTA**
+   - ❌ Refresh Token: **FALTA**
+   - ❌ AWS Access Key ID: **FALTA**
+   - ❌ AWS Secret Access Key: **FALTA**
+   - ❌ Region: **FALTA**
+   - ❌ Marketplace ID: **FALTA**
 
-1. **AliExpress Affiliate API**: `ETIMEDOUT` - Problema de conectividad local
-   - **Causa**: Firewall/proxy local bloqueando conexiones a `47.246.177.246:443`
-   - **En Railway**: Debería funcionar correctamente
-   - **Evidencia**: Los logs muestran que la llamada HTTP se realizó correctamente:
-     ```
-     [ALIEXPRESS-AFFILIATE-API] Request →
-     ```
+### OPCIONAL (Mejoran funcionalidad)
+5. **2Captcha API:**
+   - ❌ API Key: **FALTA**
 
-2. **Flujo de Búsqueda**: CAPTCHA detectado
-   - **Causa**: AliExpress bloqueó el scraping nativo (fallback)
-   - **Esperado**: El sistema detectó el CAPTCHA y activó el sistema de resolución manual
+---
 
-## 🎯 Verificación del Flujo
+## 📝 CHECKLIST FINAL PARA SISTEMA LISTO
 
-### Flujo Correcto Observado:
+### Paso 1: Configurar AliExpress Affiliate API (CRÍTICO)
+- [ ] Ir a https://open.aliexpress.com/
+- [ ] Crear app tipo "Affiliate API"
+- [ ] Copiar App Key
+- [ ] Copiar App Secret
+- [ ] Ir a `/api-settings` en el sistema
+- [ ] Configurar AliExpress Affiliate API
+- [ ] Validar que búsqueda de productos funciona
 
-```
-1. [OPPORTUNITY-FINDER] ✅ AliExpress Affiliate API credentials found
-   ↓
-2. [ALIEXPRESS-API] ✅ PRIORIDAD 1: Attempting official AliExpress Affiliate API first
-   ↓
-3. [ALIEXPRESS-API] ✅ PREPARANDO LLAMADA HTTP
-   ↓
-4. [ALIEXPRESS-API] ✅ EJECUTANDO LLAMADA HTTP
-   ↓
-5. [ALIEXPRESS-AFFILIATE-API] Request →  ✅ LLAMADA HTTP REAL
-   ↓
-6. [ALIEXPRESS-AFFILIATE-API] Error ← (timeout de red)
-   ↓
-7. [ALIEXPRESS-FALLBACK] API failed - using native scraper ✅
-   ↓
-8. [SCRAPER] Fallback a scraping nativo
-```
+### Paso 2: Actualizar Callback URL (CRÍTICO)
+- [ ] Ir a https://open.aliexpress.com/
+- [ ] Editar app de Dropshipping
+- [ ] Cambiar Callback URL a `https://www.ivanreseller.com/api/aliexpress/callback`
+- [ ] Guardar cambios
+- [ ] Validar que OAuth funciona
 
-## ✅ Confirmación
+### Paso 3: Configurar MercadoLibre (IMPORTANTE)
+- [ ] Ir a https://developers.mercadolibre.com/
+- [ ] Crear aplicación
+- [ ] Copiar Client ID y Client Secret
+- [ ] Configurar en `/api-settings`
+- [ ] Completar OAuth
+- [ ] Validar que publicación funciona
 
-**El sistema está funcionando correctamente:**
+### Paso 4: Configurar Amazon SP-API (OPCIONAL)
+- [ ] Seguir guía completa en `docs/API_CONFIGURATION_GUIDE.md`
+- [ ] Configurar en `/api-settings`
+- [ ] Validar que publicación funciona
 
-1. ✅ **Intenta usar la API primero** (como se diseñó)
-2. ✅ **Hace llamadas HTTP reales** a AliExpress
-3. ✅ **Hace fallback automático** cuando la API falla
-4. ✅ **Detecta CAPTCHA** correctamente en el fallback
-5. ✅ **Logs detallados** muestran cada paso del proceso
+### Paso 5: Validación Final
+- [ ] Búsqueda de productos funciona
+- [ ] OAuth de AliExpress funciona
+- [ ] Publicación en marketplace funciona
+- [ ] Dashboard carga correctamente
+- [ ] No hay errores 502
 
-## 📝 Notas
+---
 
-- El timeout de AliExpress es un problema de **conectividad local**, no del código
-- En Railway, donde la conectividad es mejor, la API debería funcionar correctamente
-- El fallback a scraping funciona correctamente cuando es necesario
-- Todas las credenciales están configuradas y listas para usar
+## 🎯 CUÁNDO QUEDARÁ 100% FUNCIONAL
 
-## 🚀 Próximos Pasos
+### Mínimo Funcional (Búsqueda)
+**Después de:**
+- ✅ Configurar AliExpress Affiliate API (App Key + App Secret)
+- ✅ Actualizar Callback URL de AliExpress Dropshipping
 
-1. Desplegar en Railway para probar la API de AliExpress con mejor conectividad
-2. Completar OAuth de eBay para habilitar compras automáticas
-3. Configurar PayPal si es necesario (mejorar parser del archivo APIS.txt)
+**Tiempo estimado:** 15-30 minutos
 
+### Funcionalidad Completa (Búsqueda + Publicación)
+**Después de:**
+- ✅ Todo lo anterior +
+- ✅ Configurar al menos un marketplace (MercadoLibre o Amazon)
+
+**Tiempo estimado:** 1-2 horas (depende de complejidad de Amazon SP-API)
+
+---
+
+## 📚 DOCUMENTACIÓN RELACIONADA
+
+- `docs/API_CONFIGURATION_DIAGNOSIS.md` - Diagnóstico detallado
+- `docs/API_CONFIGURATION_GUIDE.md` - Guía paso a paso
+- `docs/GO_LIVE_CHECKLIST.md` - Checklist general de go-live
+
+---
+
+**Fecha de creación:** 2025-01-26  
+**Versión:** v1.0.0

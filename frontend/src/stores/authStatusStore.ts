@@ -39,6 +39,11 @@ export const useAuthStatusStore = create<AuthStatusState>((set, get) => ({
     try {
       set({ loading: true });
       const response = await api.get('/api/auth-status');
+      // ✅ FIX: Si es setup_required, no procesar (se manejará en App.tsx)
+      if (response.data?.setupRequired === true || response.data?.error === 'setup_required') {
+        set({ loading: false });
+        return; // El hook useSetupCheck redirigirá
+      }
       const statuses = response.data?.data?.statuses || {};
 
       const currentState = get();

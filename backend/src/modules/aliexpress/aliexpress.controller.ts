@@ -144,11 +144,27 @@ export const initiateOAuth = async (req: Request, res: Response) => {
     authUrl.searchParams.append('state', state);
     authUrl.searchParams.append('scope', 'api'); // Required scope by AliExpress
 
-    logger.info('[AliExpress] OAuth URL generated, redirecting', {
+    // Sanitize URL for logging (remove secrets)
+    const sanitizedUrl = authUrl.toString()
+      .replace(/client_secret=[^&]*/gi, 'client_secret=***')
+      .replace(/secret=[^&]*/gi, 'secret=***')
+      .replace(/sign=[^&]*/gi, 'sign=***')
+      .replace(/token=[^&]*/gi, 'token=***');
+
+    // Mask appKey for logging (show first 4 and last 2 digits)
+    const appKeyMasked = appKey.length >= 6 
+      ? `${appKey.substring(0, 4)}**${appKey.substring(appKey.length - 2)}`
+      : '******';
+
+    logger.info('[AliExpress OAuth] Redirect URL generated', {
       correlationId,
-      authUrlLength: authUrl.toString().length,
-      hasState: !!state,
+      appKeyMasked,
+      appKeyLength: appKey.length,
       callbackUrl,
+      baseUrl,
+      authUrlSanitized: sanitizedUrl,
+      hasState: !!state,
+      envSource: env.ALIEXPRESS_APP_KEY ? 'env.ts' : 'process.env',
     });
 
     // Redirect to AliExpress OAuth (302)
@@ -165,6 +181,107 @@ export const initiateOAuth = async (req: Request, res: Response) => {
       error: 'Error al iniciar flujo OAuth',
       message: error.message,
       correlationId,
+    });
+  }
+};
+
+/**
+ * Endpoint DEBUG para verificar configuración OAuth (solo admin en producción)
+ * GET /api/aliexpress/oauth-debug
+ * 
+ * Requiere header X-Debug-Key si NODE_ENV === 'production'
+ */
+export const oauthDebug = async (req: Request, res: Response) => {
+  try {
+    const isProduction = env.NODE_ENV === 'production';
+    const debugKey = req.headers['x-debug-key'] as string;
+    const expectedDebugKey = env.DEBUG_KEY || process.env.DEBUG_KEY;
+
+    // En producción, verificar debug key
+    if (isProduction) {
+      if (!expectedDebugKey) {
+        logger.warn('[AliExpress] OAuth debug endpoint accessed in production but DEBUG_KEY not configured');
+        return res.status(403).json({
+          success: false,
+          error: 'Debug endpoint disabled',
+          message: 'DEBUG_KEY no está configurado en producción',
+        });
+      }
+
+      if (!debugKey || debugKey !== expectedDebugKey) {
+        logger.warn('[AliExpress] OAuth debug endpoint accessed with invalid key', {
+          hasKey: !!debugKey,
+          keyLength: debugKey?.length || 0,
+        });
+        return res.status(403).json({
+          success: false,
+          error: 'Unauthorized',
+          message: 'Header X-Debug-Key requerido y válido en producción',
+        });
+      }
+    }
+
+    // Check process.env directly (before Zod parsing)
+    const rawAppKey = process.env.ALIEXPRESS_APP_KEY;
+    const rawAppSecret = process.env.ALIEXPRESS_APP_SECRET;
+    const rawCallbackUrl = process.env.ALIEXPRESS_CALLBACK_URL;
+    
+    // Use process.env directly if env object doesn't have it
+    const appKey = env.ALIEXPRESS_APP_KEY || rawAppKey || '';
+    const appSecret = env.ALIEXPRESS_APP_SECRET || rawAppSecret || '';
+    const callbackUrl = env.ALIEXPRESS_CALLBACK_URL || rawCallbackUrl || 'https://www.ivanreseller.com/api/aliexpress/callback';
+    
+    // Mask appKey for response (show first 4 and last 2 digits)
+    const appKeyMasked = appKey.length >= 6 
+      ? `${appKey.substring(0, 4)}**${appKey.substring(appKey.length - 2)}`
+      : '******';
+
+    // Build sanitized OAuth URL
+    const authUrl = new URL('https://oauth.aliexpress.com/authorize');
+    authUrl.searchParams.append('response_type', 'code');
+    authUrl.searchParams.append('client_id', appKey);
+    authUrl.searchParams.append('redirect_uri', encodeURIComponent(callbackUrl));
+    authUrl.searchParams.append('state', 'debug-state');
+    authUrl.searchParams.append('scope', 'api');
+
+    // Sanitize URL (remove sensitive data)
+    const sanitizedUrl = authUrl.toString()
+      .replace(/client_secret=[^&]*/gi, 'client_secret=***')
+      .replace(/secret=[^&]*/gi, 'secret=***')
+      .replace(/sign=[^&]*/gi, 'sign=***')
+      .replace(/token=[^&]*/gi, 'token=***');
+
+    logger.info('[AliExpress] OAuth debug endpoint accessed', {
+      isProduction,
+      hasAppKey: !!appKey && appKey.trim().length > 0,
+      hasAppSecret: !!appSecret && appSecret.trim().length > 0,
+      appKeyLength: appKey ? appKey.length : 0,
+      envSource: env.ALIEXPRESS_APP_KEY ? 'env.ts' : 'process.env',
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        appKeyMasked,
+        appKeyLength: appKey ? appKey.length : 0,
+        hasAppKey: !!appKey && appKey.trim().length > 0,
+        hasAppSecret: !!appSecret && appSecret.trim().length > 0,
+        callbackUrl,
+        envSource: env.ALIEXPRESS_APP_KEY ? 'env.ts' : 'process.env',
+        oauthAuthorizeUrlSanitized: sanitizedUrl,
+        environment: env.NODE_ENV,
+      },
+    });
+  } catch (error: any) {
+    logger.error('[AliExpress] Error en OAuth debug endpoint', {
+      error: error.message,
+      stack: error.stack,
+    });
+
+    return res.status(500).json({
+      success: false,
+      error: 'Error al obtener información de debug OAuth',
+      message: error.message,
     });
   }
 };

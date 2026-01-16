@@ -604,6 +604,11 @@ export class AdvancedMarketplaceScraper {
     // - Solución: Eliminada referencia a variable no definida
     // ============================================================================
     
+    // ✅ HOTFIX: Declarar affiliateCreds FUERA del try para usarlo después del catch
+    let affiliateCreds: any = null;
+    let resolvedEnv: 'sandbox' | 'production' | null = null;
+    let credentialsCheckError: any = null;
+    
     try {
       const { CredentialsManager } = await import('./credentials-manager.service');
       const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
@@ -623,10 +628,6 @@ export class AdvancedMarketplaceScraper {
       // Buscar credenciales en ambos ambientes (solo es distinción organizacional, no funcional)
       const environmentsToTry: Array<'sandbox' | 'production'> = [preferredEnvironment];
       environmentsToTry.push(preferredEnvironment === 'production' ? 'sandbox' : 'production');
-      
-      let affiliateCreds: any = null;
-      let resolvedEnv: 'sandbox' | 'production' | null = null;
-      let credentialsCheckError: any = null;
       
       // Buscar credenciales en ambos ambientes (distinción organizacional, no funcional - mismo endpoint)
       logger.info('[ALIEXPRESS-API] Buscando credenciales de AliExpress Affiliate API', {
@@ -1071,15 +1072,20 @@ export class AdvancedMarketplaceScraper {
         fallbackSource: 'native-scraping'
       });
       // Continuar con scraping nativo si hay error
+      // En caso de error, affiliateCreds queda como null
     }
     
     // ✅ HOTFIX: Verificar si browser automation está permitido
+    // affiliateCreds se declara arriba (línea 627), puede ser null si no hay credenciales
     const { env } = await import('../config/env');
     const allowBrowserAutomation = env.ALLOW_BROWSER_AUTOMATION;
     const dataSource = env.ALIEXPRESS_DATA_SOURCE;
     
     // Si dataSource es 'api' y no hay credenciales, NO hacer scraping
-    if (dataSource === 'api' && !affiliateCreds) {
+    // affiliateCreds se declara en línea 628 dentro del try, pero puede no estar en scope aquí
+    // Verificar si existe usando typeof para evitar error de referencia
+    const hasAffiliateCreds = (typeof affiliateCreds !== 'undefined') && affiliateCreds !== null;
+    if (dataSource === 'api' && !hasAffiliateCreds) {
       logger.warn('[ALIEXPRESS-API-FIRST] API credentials required but not configured. Scraping disabled by ALIEXPRESS_DATA_SOURCE=api', {
         userId,
         query,

@@ -1,7 +1,7 @@
 # System Reference - Ivan Reseller Web
-**Última actualización:** 2025-12-18  
-**Versión:** 1.0.0  
-**Estado:** Producción (Railway)
+**ï¿½ltima actualizaciï¿½n:** 2025-12-18  
+**Versiï¿½n:** 1.0.0  
+**Estado:** Producciï¿½n (Railway)
 
 ---
 
@@ -22,7 +22,7 @@
 ### 1.1 Componentes Principales
 
 **Backend (Node.js + Express + TypeScript)**
-- **Ubicación:** `backend/`
+- **Ubicaciï¿½n:** `backend/`
 - **Entry Point:** `backend/src/server.ts`
 - **Framework:** Express.js
 - **ORM:** Prisma (PostgreSQL)
@@ -31,7 +31,7 @@
 - **WebSocket:** Socket.IO (notificaciones realtime)
 
 **Frontend (React + TypeScript + Vite)**
-- **Ubicación:** `frontend/`
+- **Ubicaciï¿½n:** `frontend/`
 - **Framework:** React 18
 - **Build Tool:** Vite
 - **Estado:** Context API + React Query
@@ -41,18 +41,18 @@
 - **Tipo:** PostgreSQL
 - **ORM:** Prisma
 - **Migrations:** Prisma Migrate
-- **Ubicación:** Railway PostgreSQL service
+- **Ubicaciï¿½n:** Railway PostgreSQL service
 
 **Cache/Queue**
 - **Redis:** Opcional, para cache distribuido y queues
-- **BullMQ:** Colas de trabajos asíncronos
+- **BullMQ:** Colas de trabajos asï¿½ncronos
 
 ### 1.2 Flujo de Arranque (Backend)
 
 ```
 1. server.ts importa app.ts
-2. validateEncryptionKey() - SÍNCRONO (puede throw Error)
-3. httpServer.listen(PORT, '0.0.0.0') - INMEDIATO (línea 355)
+2. validateEncryptionKey() - Sï¿½NCRONO (puede throw Error)
+3. httpServer.listen(PORT, '0.0.0.0') - INMEDIATO (lï¿½nea 355)
 4. Bootstrap en background (async):
    - runMigrations() (con retry)
    - connectWithRetry() (DB)
@@ -78,29 +78,29 @@
 
 ## 2. Entry Points y URLs
 
-### 2.1 Producción (Railway)
+### 2.1 Producciï¿½n (Railway)
 
 **Backend:**
-- **URL Pública:** https://ivan-reseller-web-production.up.railway.app
+- **URL Pï¿½blica:** https://ivan-reseller-web-production.up.railway.app
 - **URL Privada (internal):** ivan-reseller-web.railway.internal
 - **Puerto:** 3000 (asignado por Railway via `PORT` env var)
 - **Root Directory:** `/backend`
 
 **Frontend:**
-- **URL Pública:** https://www.ivanreseller.com
+- **URL Pï¿½blica:** https://www.ivanreseller.com
 - **Deployment:** Servicio separado (ver docs/FRONTEND_RAILWAY_DEPLOY_TODO_HUMAN.md)
 
-### 2.2 Endpoints Críticos
+### 2.2 Endpoints Crï¿½ticos
 
 **Health Checks:**
-- `GET /health` - Liveness probe (siempre 200, rápido)
+- `GET /health` - Liveness probe (siempre 200, rï¿½pido)
 - `GET /ready` - Readiness probe (200 si DB ready, 503 si no)
 
 **API Base:**
-- `GET /api/*` - Todas las rutas API requieren autenticación (excepto /api/auth/login)
+- `GET /api/*` - Todas las rutas API requieren autenticaciï¿½n (excepto /api/auth/login)
 
 **Swagger (solo dev o si ENABLE_SWAGGER=true):**
-- `GET /api-docs` - Documentación Swagger UI
+- `GET /api-docs` - Documentaciï¿½n Swagger UI
 
 ---
 
@@ -108,16 +108,16 @@
 
 ### 3.1 Servicio Backend
 
-**Configuración:**
+**Configuraciï¿½n:**
 - **Service Name:** `ivan-reseller-web`
 - **Repository:** GitHub `GodinesCrazy/ivan-reseller-web`
-- **Branch:** `main` (producción)
+- **Branch:** `main` (producciï¿½n)
 - **Root Directory:** `/backend`
-- **Build Command:** `npm run build` (según nixpacks.toml)
+- **Build Command:** `npm run build` (segï¿½n nixpacks.toml)
 - **Start Command:** `sh ./start.sh` (nixpacks) o `npm run start:with-migrations` (Procfile)
 
 **Nixpacks (backend/nixpacks.toml):**
-- Detecta automáticamente Node.js 20
+- Detecta automï¿½ticamente Node.js 20
 - Instala dependencias: `npm install`
 - Genera Prisma Client: `npx prisma generate`
 - Descarga Chromium para Puppeteer
@@ -129,11 +129,11 @@
 
 ### 3.2 Health Checks en Railway
 
-Railway usa automáticamente:
+Railway usa automï¿½ticamente:
 - **Liveness:** `GET /health` (debe responder 200)
 - **Readiness:** `GET /ready` (debe responder 200 cuando listo)
 
-**Configuración recomendada:**
+**Configuraciï¿½n recomendada:**
 - Health check path: `/health`
 - Timeout: 10s
 - Interval: 30s
@@ -148,10 +148,10 @@ Railway usa automáticamente:
 **Importantes:**
 - `CORS_ORIGIN` - Origen permitido (ej: `https://www.ivanreseller.com`)
 - `NODE_ENV` - `production`
-- `PORT` - Railway lo asigna automáticamente (NO configurar manualmente)
+- `PORT` - Railway lo asigna automï¿½ticamente (NO configurar manualmente)
 
 **Opcionales (con defaults):**
-- Ver sección 4 (Variables de Entorno)
+- Ver secciï¿½n 4 (Variables de Entorno)
 
 ---
 
@@ -159,7 +159,7 @@ Railway usa automáticamente:
 
 ### 4.1 Obligatorias
 
-| Variable | Tipo | Default | Descripción |
+| Variable | Tipo | Default | Descripciï¿½n |
 |----------|------|---------|-------------|
 | `DATABASE_URL` | string | - | URL completa PostgreSQL (formato: `postgresql://user:pass@host:port/db`) |
 | `JWT_SECRET` | string (>=32) | - | Secret para firmar tokens JWT |
@@ -167,29 +167,29 @@ Railway usa automáticamente:
 
 ### 4.2 Importantes
 
-| Variable | Tipo | Default | Descripción |
+| Variable | Tipo | Default | Descripciï¿½n |
 |----------|------|---------|-------------|
 | `NODE_ENV` | enum | `development` | `development`, `production`, `test` |
 | `PORT` | number | `3000` | Puerto del servidor (Railway lo asigna) |
-| `CORS_ORIGIN` | string | `http://localhost:5173` | Origen permitido (separar múltiples con coma) |
+| `CORS_ORIGIN` | string | `http://localhost:5173` | Origen permitido (separar mï¿½ltiples con coma) |
 | `API_URL` | URL | `http://localhost:3000` | URL base de la API (usado por frontend) |
 | `LOG_LEVEL` | enum | `info` | `error`, `warn`, `info`, `debug` |
 
 ### 4.3 Base de Datos y Cache
 
-| Variable | Tipo | Default | Descripción |
+| Variable | Tipo | Default | Descripciï¿½n |
 |----------|------|---------|-------------|
-| `DATABASE_URL` | string | - | URL PostgreSQL (Railway genera automáticamente) |
-| `DATABASE_PUBLIC_URL` | string | - | URL pública PostgreSQL (alternativa) |
+| `DATABASE_URL` | string | - | URL PostgreSQL (Railway genera automï¿½ticamente) |
+| `DATABASE_PUBLIC_URL` | string | - | URL pï¿½blica PostgreSQL (alternativa) |
 | `REDIS_URL` | string | `redis://localhost:6379` | URL Redis (opcional) |
 
 ### 4.4 Feature Flags (Test/Production)
 
-| Variable | Tipo | Default (Prod) | Default (Test) | Descripción |
+| Variable | Tipo | Default (Prod) | Default (Test) | Descripciï¿½n |
 |----------|------|----------------|----------------|-------------|
 | `FX_AUTO_REFRESH_ENABLED` | boolean | `true` | `false` | Auto-refresh de tasas FX en constructor |
 | `USAGE_TRACKING_ENABLED` | boolean | `true` | `false` | Tracking de uso de credenciales |
-| `AUTOMATION_ENGINE_ENABLED` | boolean | `true` | `false` | Motor de automatización |
+| `AUTOMATION_ENGINE_ENABLED` | boolean | `true` | `false` | Motor de automatizaciï¿½n |
 | `API_HEALTHCHECK_ENABLED` | boolean | `false` | `false` | Health checks de APIs externas |
 | `API_HEALTHCHECK_MODE` | enum | `async` | - | `sync` o `async` (async previene SIGSEGV) |
 | `API_HEALTHCHECK_INTERVAL_MS` | number | `900000` (15min) | - | Intervalo entre health checks |
@@ -199,7 +199,7 @@ Railway usa automáticamente:
 | `WEBHOOK_VERIFY_SIGNATURE_EBAY` | boolean | - | - | Override para eBay |
 | `WEBHOOK_VERIFY_SIGNATURE_MERCADOLIBRE` | boolean | - | - | Override para MercadoLibre |
 | `WEBHOOK_VERIFY_SIGNATURE_AMAZON` | boolean | - | - | Override para Amazon |
-| `AUTO_PURCHASE_ENABLED` | boolean | `false` | `false` | Habilitar compras automáticas |
+| `AUTO_PURCHASE_ENABLED` | boolean | `false` | `false` | Habilitar compras automï¿½ticas |
 | `AUTO_PURCHASE_DRY_RUN` | boolean | `false` | - | Modo dry-run (no ejecuta compras reales) |
 | `AUTO_PURCHASE_MODE` | enum | `sandbox` | - | `sandbox` o `production` |
 | `RATE_LIMIT_ENABLED` | boolean | `true` | - | Habilitar rate limiting |
@@ -217,7 +217,7 @@ Railway usa automáticamente:
 - `MERCADOLIBRE_PRODUCTION_CLIENT_ID`, `MERCADOLIBRE_PRODUCTION_CLIENT_SECRET`
 
 **Amazon:**
-- Configurado vía API Credentials en DB (no env vars)
+- Configurado vï¿½a API Credentials en DB (no env vars)
 
 **PayPal:**
 - `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_ENVIRONMENT` (legacy)
@@ -250,7 +250,7 @@ Railway usa automáticamente:
 
 ### 5.1 Flags de Test (deshabilitan side-effects)
 
-Estas flags se setean automáticamente a `false` cuando `NODE_ENV=test`:
+Estas flags se setean automï¿½ticamente a `false` cuando `NODE_ENV=test`:
 
 - `FX_AUTO_REFRESH_ENABLED=false` - Previene HTTP requests en constructor de FXService
 - `USAGE_TRACKING_ENABLED=false` - Previene setInterval en SecureCredentialManager
@@ -258,7 +258,7 @@ Estas flags se setean automáticamente a `false` cuando `NODE_ENV=test`:
 
 **Uso:** Se setean en `backend/src/__tests__/setup.ts` ANTES de cualquier import.
 
-### 5.2 Flags de Producción
+### 5.2 Flags de Producciï¿½n
 
 **API Health Checks:**
 - `API_HEALTHCHECK_ENABLED=false` (default) - Deshabilitado por defecto para evitar SIGSEGV
@@ -266,7 +266,7 @@ Estas flags se setean automáticamente a `false` cuando `NODE_ENV=test`:
 - `API_HEALTHCHECK_INTERVAL_MS=900000` (15 min default)
 
 **Scraper:**
-- `SCRAPER_BRIDGE_ENABLED=true` (default) - Usar Scraper Bridge si está disponible
+- `SCRAPER_BRIDGE_ENABLED=true` (default) - Usar Scraper Bridge si estï¿½ disponible
 - `SCRAPER_BRIDGE_URL` - URL del servicio Scraper Bridge
 - `SCRAPER_FALLBACK_TO_STEALTH=true` (default) - Fallback a Puppeteer si bridge falla
 
@@ -275,11 +275,11 @@ Estas flags se setean automáticamente a `false` cuando `NODE_ENV=test`:
 - `WEBHOOK_ALLOW_INVALID_SIGNATURE=false` (default) - Solo dev, permite webhooks sin firma
 
 **Auto-Purchase:**
-- `AUTO_PURCHASE_ENABLED=false` (default) - **CRÍTICO: debe estar OFF por defecto**
+- `AUTO_PURCHASE_ENABLED=false` (default) - **CRï¿½TICO: debe estar OFF por defecto**
 - `AUTO_PURCHASE_DRY_RUN=false` (default) - Modo dry-run
-- `AUTO_PURCHASE_DAILY_LIMIT=1000` (default) - Límite diario $1000
-- `AUTO_PURCHASE_MONTHLY_LIMIT=10000` (default) - Límite mensual $10k
-- `AUTO_PURCHASE_MAX_PER_ORDER=500` (default) - Máximo por orden $500
+- `AUTO_PURCHASE_DAILY_LIMIT=1000` (default) - Lï¿½mite diario $1000
+- `AUTO_PURCHASE_MONTHLY_LIMIT=10000` (default) - Lï¿½mite mensual $10k
+- `AUTO_PURCHASE_MAX_PER_ORDER=500` (default) - Mï¿½ximo por orden $500
 
 **Rate Limiting:**
 - `RATE_LIMIT_ENABLED=true` (default)
@@ -296,21 +296,21 @@ Estas flags se setean automáticamente a `false` cuando `NODE_ENV=test`:
 
 **eBay:**
 - **Tipo:** OAuth 2.0 + REST API
-- **Riesgo:** ALTO (requiere OAuth token válido)
+- **Riesgo:** ALTO (requiere OAuth token vï¿½lido)
 - **Sandbox:** Disponible
-- **Endpoints críticos:** `/api/marketplace/publish`, `/api/webhooks/ebay`
+- **Endpoints crï¿½ticos:** `/api/marketplace/publish`, `/api/webhooks/ebay`
 
 **MercadoLibre:**
 - **Tipo:** OAuth 2.0 + REST API
-- **Riesgo:** ALTO (requiere OAuth token válido)
+- **Riesgo:** ALTO (requiere OAuth token vï¿½lido)
 - **Sandbox:** Disponible
-- **Endpoints críticos:** `/api/marketplace/publish`, `/api/webhooks/mercadolibre`
+- **Endpoints crï¿½ticos:** `/api/marketplace/publish`, `/api/webhooks/mercadolibre`
 
 **Amazon SP-API:**
 - **Tipo:** LWA (Login with Amazon) + SP-API
-- **Riesgo:** ALTO (requiere refresh token válido)
+- **Riesgo:** ALTO (requiere refresh token vï¿½lido)
 - **Sandbox:** Disponible
-- **Endpoints críticos:** `/api/amazon/*`, `/api/webhooks/amazon`
+- **Endpoints crï¿½ticos:** `/api/amazon/*`, `/api/webhooks/amazon`
 
 ### 6.2 APIs de Scraping
 
@@ -328,13 +328,13 @@ Estas flags se setean automáticamente a `false` cuando `NODE_ENV=test`:
 **Puppeteer (fallback):**
 - **Tipo:** Headless Chrome
 - **Riesgo:** MEDIO (puede fallar por CAPTCHA)
-- **Uso:** Scraping directo cuando bridge no está disponible
+- **Uso:** Scraping directo cuando bridge no estï¿½ disponible
 
 ### 6.3 APIs de Pago
 
 **PayPal:**
 - **Tipo:** REST API con OAuth
-- **Riesgo:** ALTO (requiere credenciales válidas)
+- **Riesgo:** ALTO (requiere credenciales vï¿½lidas)
 - **Sandbox:** Disponible
 - **Uso:** Payouts de comisiones
 
@@ -343,14 +343,14 @@ Estas flags se setean automáticamente a `false` cuando `NODE_ENV=test`:
 **Groq:**
 - **Tipo:** HTTP API con API key
 - **Riesgo:** BAJO (opcional, solo para sugerencias AI)
-- **Uso:** Análisis de oportunidades y mejoras de productos
+- **Uso:** Anï¿½lisis de oportunidades y mejoras de productos
 
 ### 6.5 FX (Exchange Rates)
 
 **open.er-api.com (default):**
-- **Tipo:** HTTP API pública (sin auth)
+- **Tipo:** HTTP API pï¿½blica (sin auth)
 - **Riesgo:** BAJO (fallback a rates seed si falla)
-- **Límite:** Rate limiting implícito
+- **Lï¿½mite:** Rate limiting implï¿½cito
 
 **exchangerate-api.com (con API key):**
 - **Tipo:** HTTP API con API key
@@ -363,73 +363,73 @@ Estas flags se setean automáticamente a `false` cuando `NODE_ENV=test`:
 
 ### 7.1 502 "Application failed to respond" en /health
 
-**Síntomas:**
+**Sï¿½ntomas:**
 - Railway Edge responde 502
 - Logs muestran "ERR_HTTP_HEADERS_SENT"
 - Stack trace apunta a `response-time.middleware.js` o `request-logger.middleware.js`
 
-**Causa Raíz:**
-- Middlewares intentan setear headers después de que `res.end()` ya fue llamado
-- Múltiples wrappers de `res.end` causan doble finalización
+**Causa Raï¿½z:**
+- Middlewares intentan setear headers despuï¿½s de que `res.end()` ya fue llamado
+- Mï¿½ltiples wrappers de `res.end` causan doble finalizaciï¿½n
 
 **Fix Aplicado:**
 1. `response-time.middleware.ts`: Usa eventos `finish` y setea headers ANTES del primer write
 2. `request-logger.middleware.ts`: Usa eventos `finish` y `close` (no intercepta res.end)
 3. `server.ts`: Handler de `unhandledRejection` ignora `ERR_HTTP_HEADERS_SENT` (no fatal)
 
-**Verificación:**
+**Verificaciï¿½n:**
 ```powershell
 # Desde local
 curl.exe --max-time 10 https://ivan-reseller-web-production.up.railway.app/health
 # Debe retornar 200 con JSON
 
 curl.exe --max-time 10 https://ivan-reseller-web-production.up.railway.app/ready
-# Debe retornar 200 (si DB ready) o 503 (si no), pero siempre responde rápido
+# Debe retornar 200 (si DB ready) o 503 (si no), pero siempre responde rï¿½pido
 ```
 
-**Qué mirar en Railway Dashboard:**
-1. Deployments ? Último deploy ? View logs
+**Quï¿½ mirar en Railway Dashboard:**
+1. Deployments ? ï¿½ltimo deploy ? View logs
 2. Buscar "ERR_HTTP_HEADERS_SENT" (no debe aparecer)
 3. Buscar "UNHANDLED REJECTION" (solo debe aparecer para errores reales, no headers)
 4. Verificar que /health responde en <2s
 
 ### 7.2 Timeout en /ready
 
-**Síntomas:**
+**Sï¿½ntomas:**
 - /ready tarda >10s o timeout
 - Railway marca servicio como unhealthy
 
 **Causas posibles:**
 1. DB connection timeout (migraciones colgadas)
-2. Redis ping timeout (si Redis no está disponible)
-3. Lógica pesada en /ready (prohibido)
+2. Redis ping timeout (si Redis no estï¿½ disponible)
+3. Lï¿½gica pesada en /ready (prohibido)
 
 **Fix:**
-- /ready tiene timeouts explícitos:
+- /ready tiene timeouts explï¿½citos:
   - DB check: 2s max
   - Redis check: 1s max
-- Usa estado global (`__isDatabaseReady`) cuando está disponible (más rápido)
+- Usa estado global (`__isDatabaseReady`) cuando estï¿½ disponible (mï¿½s rï¿½pido)
 
-**Verificación:**
+**Verificaciï¿½n:**
 ```powershell
-# Debe responder rápido (<2s) incluso si DB está caída
+# Debe responder rï¿½pido (<2s) incluso si DB estï¿½ caï¿½da
 curl.exe --max-time 5 https://ivan-reseller-web-production.up.railway.app/ready
 ```
 
 ### 7.3 Backend no arranca
 
-**Síntomas:**
+**Sï¿½ntomas:**
 - Railway muestra "Application failed to respond"
 - No hay logs de arranque
 
 **Checklist:**
-1. Verificar `DATABASE_URL` está configurada (Railway Dashboard ? Variables)
+1. Verificar `DATABASE_URL` estï¿½ configurada (Railway Dashboard ? Variables)
 2. Verificar `JWT_SECRET` y `ENCRYPTION_KEY` >= 32 caracteres
 3. Verificar logs de arranque (Deployments ? View logs)
-4. Buscar errores de migración (Prisma)
-5. Verificar que `PORT` no esté hardcodeado (Railway lo asigna)
+4. Buscar errores de migraciï¿½n (Prisma)
+5. Verificar que `PORT` no estï¿½ hardcodeado (Railway lo asigna)
 
-**Comandos de diagnóstico:**
+**Comandos de diagnï¿½stico:**
 ```powershell
 # Verificar que Railway tiene las variables
 # (requiere Railway CLI o dashboard manual)
@@ -437,12 +437,12 @@ curl.exe --max-time 5 https://ivan-reseller-web-production.up.railway.app/ready
 # Verificar build local
 cd backend
 npm run build
-# Debe pasar sin errores TypeScript críticos
+# Debe pasar sin errores TypeScript crï¿½ticos
 ```
 
 ### 7.4 Tests colgados (open handles)
 
-**Síntomas:**
+**Sï¿½ntomas:**
 - `npm test` no termina
 - Jest muestra "Jest has detected the following X open handles"
 
@@ -455,7 +455,7 @@ npm run build
 - Flags `FX_AUTO_REFRESH_ENABLED=false`, `USAGE_TRACKING_ENABLED=false`, `AUTOMATION_ENGINE_ENABLED=false` en test env
 - Lazy initialization de servicios
 
-**Verificación:**
+**Verificaciï¿½n:**
 ```powershell
 cd backend
 npx jest --runInBand --detectOpenHandles --testTimeout=30000
@@ -464,7 +464,7 @@ npx jest --runInBand --detectOpenHandles --testTimeout=30000
 
 ---
 
-## 8. Comandos Útiles
+## 8. Comandos ï¿½tiles
 
 ### 8.1 Local Development
 
@@ -492,7 +492,7 @@ npm test -- --runInBand
 npm test -- --testPathPattern=integration
 ```
 
-### 8.3 Producción (Railway)
+### 8.3 Producciï¿½n (Railway)
 
 ```powershell
 # Verificar health
@@ -509,11 +509,11 @@ curl.exe -X POST https://ivan-reseller-web-production.up.railway.app/api/auth/lo
 
 ---
 
-## 9. Troubleshooting Común
+## 9. Troubleshooting Comï¿½n
 
 ### 9.1 "Cannot set headers after they are sent"
 
-**Causa:** Middleware intenta modificar headers después de `res.end()`
+**Causa:** Middleware intenta modificar headers despuï¿½s de `res.end()`
 
 **Fix:** Usar eventos `finish` en lugar de interceptar `res.end`
 
@@ -523,7 +523,7 @@ curl.exe -X POST https://ivan-reseller-web-production.up.railway.app/api/auth/lo
 
 ### 9.2 Prisma EPERM en Windows
 
-**Causa:** Múltiples procesos intentan regenerar Prisma Client concurrentemente
+**Causa:** Mï¿½ltiples procesos intentan regenerar Prisma Client concurrentemente
 
 **Fix:**
 ```powershell
@@ -546,9 +546,9 @@ npx prisma generate
 
 ## 10. Contacto y Soporte
 
-**Documentación adicional:**
+**Documentaciï¿½n adicional:**
 - `docs/API_ENDPOINTS.md` - Inventario completo de endpoints
-- `docs/LIVE_QA_RAILWAY_RUNBOOK.md` - Runbook de QA en producción
+- `docs/LIVE_QA_RAILWAY_RUNBOOK.md` - Runbook de QA en producciï¿½n
 - `docs/RAILWAY_DEPLOY_STEPS.md` - Pasos de deploy
 
 **Logs:**
@@ -557,5 +557,5 @@ npx prisma generate
 
 ---
 
-**Última revisión:** 2025-12-18  
+**ï¿½ltima revisiï¿½n:** 2025-12-18  
 **Mantenido por:** SRE Team

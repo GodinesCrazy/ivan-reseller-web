@@ -1,0 +1,147 @@
+{
+  "timestamp": "2026-01-05T20:59:28.087Z",
+  "overallStatus": "PASS",
+  "overallPass": true,
+  "summary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0
+  },
+  "results": [
+    {
+      "name": "Health Check",
+      "url": "https://ivanreseller.com/api/health",
+      "finalUrl": "https://www.ivanreseller.com/api/health",
+      "source": "production",
+      "status": 200,
+      "finalStatus": 200,
+      "duration": 1667,
+      "pass": true,
+      "failReason": null,
+      "is502": false,
+      "is404": false,
+      "isSPA": false,
+      "redirectChain": [
+        {
+          "from": "https://ivanreseller.com/api/health",
+          "to": "https://www.ivanreseller.com/api/health",
+          "status": 307
+        }
+      ]
+    },
+    {
+      "name": "Auth Status",
+      "url": "https://ivanreseller.com/api/auth-status",
+      "finalUrl": "https://www.ivanreseller.com/api/auth-status",
+      "source": "production",
+      "status": 401,
+      "finalStatus": 401,
+      "duration": 625,
+      "pass": true,
+      "failReason": null,
+      "is502": false,
+      "is404": false,
+      "isSPA": false,
+      "redirectChain": [
+        {
+          "from": "https://ivanreseller.com/api/auth-status",
+          "to": "https://www.ivanreseller.com/api/auth-status",
+          "status": 307
+        }
+      ]
+    },
+    {
+      "name": "Dashboard Stats",
+      "url": "https://ivanreseller.com/api/dashboard/stats",
+      "finalUrl": "https://www.ivanreseller.com/api/dashboard/stats",
+      "source": "production",
+      "status": 401,
+      "finalStatus": 401,
+      "duration": 683,
+      "pass": true,
+      "failReason": null,
+      "is502": false,
+      "is404": false,
+      "isSPA": false,
+      "redirectChain": [
+        {
+          "from": "https://ivanreseller.com/api/dashboard/stats",
+          "to": "https://www.ivanreseller.com/api/dashboard/stats",
+          "status": 307
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "url": "https://ivanreseller.com/api/products",
+      "finalUrl": "https://www.ivanreseller.com/api/products",
+      "source": "production",
+      "status": 401,
+      "finalStatus": 401,
+      "duration": 438,
+      "pass": true,
+      "failReason": null,
+      "is502": false,
+      "is404": false,
+      "isSPA": false,
+      "redirectChain": [
+        {
+          "from": "https://ivanreseller.com/api/products",
+          "to": "https://www.ivanreseller.com/api/products",
+          "status": 307
+        }
+      ]
+    },
+    {
+      "name": "AliExpress Callback (via Vercel serverless function)",
+      "url": "https://ivanreseller.com/api/aliexpress/callback?code=test&state=test",
+      "finalUrl": "https://www.ivanreseller.com/api/aliexpress/callback?code=test&state=test",
+      "source": "production",
+      "status": 200,
+      "finalStatus": 200,
+      "duration": 292,
+      "pass": true,
+      "failReason": null,
+      "is502": false,
+      "is404": false,
+      "isSPA": false,
+      "redirectChain": [
+        {
+          "from": "https://ivanreseller.com/api/aliexpress/callback?code=test&state=test",
+          "to": "https://www.ivanreseller.com/api/aliexpress/callback?code=test&state=test",
+          "status": 307
+        }
+      ]
+    },
+    {
+      "name": "AliExpress OAuth Debug",
+      "url": "https://ivanreseller.com/api/marketplace-oauth/aliexpress/oauth/debug",
+      "finalUrl": "https://www.ivanreseller.com/api/marketplace-oauth/aliexpress/oauth/debug",
+      "source": "production",
+      "status": 200,
+      "finalStatus": 200,
+      "duration": 808,
+      "pass": true,
+      "failReason": null,
+      "is502": false,
+      "is404": false,
+      "isSPA": false,
+      "redirectChain": [
+        {
+          "from": "https://ivanreseller.com/api/marketplace-oauth/aliexpress/oauth/debug",
+          "to": "https://www.ivanreseller.com/api/marketplace-oauth/aliexpress/oauth/debug",
+          "status": 307
+        }
+      ]
+    }
+  ],
+  "analysis": {
+    "callbackReachesBackend": true,
+    "callbackExplanation": "Callback reaches backend (final status 200 (after 1 redirect))",
+    "apiEndpointsStatus": true,
+    "apiEndpointsExplanation": "All API endpoints respond correctly (200/401/403)",
+    "healthCheckPass": true
+  },
+  "comparison": null,
+  "recommendation": "GO"
+}

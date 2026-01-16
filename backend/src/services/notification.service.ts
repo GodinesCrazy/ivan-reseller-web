@@ -59,9 +59,14 @@ class NotificationService {
    * Initialize Socket.IO server
    */
   initialize(httpServer: HttpServer): void {
+    // ✅ GO-LIVE: Parse CORS_ORIGIN igual que en app.ts para consistencia
+    const allowedOrigins = env.CORS_ORIGIN.split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin.length > 0);
+
     this.io = new Server(httpServer, {
       cors: {
-        origin: env.CORS_ORIGIN,
+        origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins, // Socket.IO acepta string o array
         methods: ['GET', 'POST'],
         credentials: true
       },

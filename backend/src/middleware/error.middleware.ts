@@ -204,6 +204,10 @@ export const errorHandler = (
     return; // ✅ CRITICAL: Return immediately, do NOT call next()
   }
 
+  // ✅ PRODUCTION FIX: NO borrar headers CORS existentes
+  // El error handler NO debe hacer res.setHeader que sobrescriba CORS headers
+  // CORS middleware ya corrió antes, así que los headers están presentes
+  
   // ✅ HOTFIX: Wrap in try/catch to prevent uncaught exceptions
   try {
     res.status(statusCode).json(response);

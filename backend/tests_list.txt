@@ -1,0 +1,14 @@
+C:\Ivan_Reseller_Web\backend\src\services\__tests__\opportunity-finder.test.ts
+C:\Ivan_Reseller_Web\backend\src\__tests__\integration\auth.integration.test.ts
+C:\Ivan_Reseller_Web\backend\src\__tests__\integration\api-credentials.integration.test.ts
+C:\Ivan_Reseller_Web\backend\src\__tests__\services\sale.service.test.ts
+C:\Ivan_Reseller_Web\backend\src\__tests__\services\product.service.test.ts
+C:\Ivan_Reseller_Web\backend\src\services\__tests__\ai-suggestions.test.ts
+C:\Ivan_Reseller_Web\backend\src\__tests__\services\credentials-manager.test.ts
+C:\Ivan_Reseller_Web\backend\src\services\__tests__\marketplace-multi-image.test.ts
+C:\Ivan_Reseller_Web\backend\src\utils\__tests__\money.utils.test.ts
+C:\Ivan_Reseller_Web\backend\src\__tests__\services\opportunity.service.test.ts
+C:\Ivan_Reseller_Web\backend\src\__tests__\services\amazon.service.test.ts
+C:\Ivan_Reseller_Web\backend\src\services\__tests__\trend-suggestions.test.ts
+C:\Ivan_Reseller_Web\backend\src\services\__tests__\fx.service.test.ts
+C:\Ivan_Reseller_Web\backend\src\__tests__\setup.ts

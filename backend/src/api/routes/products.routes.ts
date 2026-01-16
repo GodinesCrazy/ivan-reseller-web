@@ -7,6 +7,7 @@ import { toNumber } from '../../utils/decimal.utils';
 import { MarketplaceService } from '../../services/marketplace.service';
 import { productWorkflowStatusService } from '../../services/product-workflow-status.service';
 import { queryWithTimeout } from '../../utils/queryWithTimeout';
+import { handleSetupCheck } from '../../utils/setup-check';
 
 const router = Router();
 router.use(authenticate);
@@ -53,6 +54,14 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
     const userId = isAdmin ? undefined : req.user?.userId;
+
+    // ✅ Verificar setup antes de continuar (solo para usuarios no-admin)
+    if (!isAdmin && userId) {
+      const shouldStop = await handleSetupCheck(userId, res);
+      if (shouldStop) {
+        return; // Ya se envió respuesta de setup_required
+      }
+    }
     const status = validatedQuery.status;
     
     // ✅ PRODUCTION READY: Usar paginación con timeout de 25 segundos

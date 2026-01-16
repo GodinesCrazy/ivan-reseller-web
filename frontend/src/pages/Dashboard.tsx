@@ -65,7 +65,12 @@ export default function Dashboard() {
   }>>([]);
 
   useEffect(() => {
-    loadDashboardData();
+    // ✅ FIX: Pequeño delay para permitir que useSetupCheck verifique primero
+    // Esto previene llamadas innecesarias si setup está incompleto
+    const timer = setTimeout(() => {
+      loadDashboardData();
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   const loadDashboardData = async () => {
@@ -76,6 +81,11 @@ export default function Dashboard() {
       let hasErrors = false;
       const [statsRes, activityRes, opportunitiesRes, aiSuggestionsRes, automationRes] = await Promise.all([
         api.get('/api/dashboard/stats').catch(err => {
+          // ✅ FIX: Si es setup_required, no marcar como error (se manejará en App.tsx)
+          if (err.response?.data?.setupRequired === true || err.response?.data?.error === 'setup_required') {
+            // Redirigir a setup (el hook useSetupCheck se encargará)
+            return { data: { setupRequired: true } };
+          }
           hasErrors = true;
           // Solo loggear si es error HTTP real (no CORS/red)
           if (err.response) {

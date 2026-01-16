@@ -3,6 +3,7 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { marketplaceAuthStatusService } from '../../services/marketplace-auth-status.service';
 import ManualAuthService from '../../services/manual-auth.service';
 import { aliExpressAuthMonitor } from '../../services/ali-auth-monitor.service';
+import { handleSetupCheck } from '../../utils/setup-check';
 
 const router = Router();
 
@@ -13,6 +14,12 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const userId = req.user?.userId;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    // ✅ Verificar setup antes de continuar
+    const shouldStop = await handleSetupCheck(userId, res);
+    if (shouldStop) {
+      return; // Ya se envió respuesta de setup_required
     }
 
     const statuses = await marketplaceAuthStatusService.listByUser(userId);
