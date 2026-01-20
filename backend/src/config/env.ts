@@ -317,6 +317,9 @@ const envSchema = z.object({
   
   // ✅ FIX SIGSEGV: Safe Dashboard Mode - desactiva scraping en endpoints del dashboard
   SAFE_DASHBOARD_MODE: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
+  
+  // ✅ FIX SIGSEGV: Safe Auth Status Mode - desactiva checks activos de marketplaces en /api/auth-status
+  SAFE_AUTH_STATUS_MODE: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
 });
 
 // Asegurar que DATABASE_URL esté en process.env

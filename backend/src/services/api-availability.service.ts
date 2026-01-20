@@ -487,36 +487,119 @@ export class APIAvailabilityService {
     environment: 'sandbox' | 'production',
     credentials: Record<string, string>
   ): Promise<{ success: boolean; error?: string; latency?: number }> {
+    const correlationId = `ebay-health-${Date.now()}`;
+    const memoryStart = {
+      heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+      heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+      rss: Math.round(process.memoryUsage().rss / 1024 / 1024),
+      unit: 'MB'
+    };
+    
+    // ✅ FIX SIGSEGV: Circuit breaker con timeout estricto de 1500ms
     const breaker = circuitBreakerManager.getBreaker(`ebay-${environment}`, {
       failureThreshold: 3,
-      timeout: 60000,
+      timeout: 1500, // ✅ FIX: Timeout estricto de 1500ms (antes 60000ms)
     });
 
     try {
+      // ✅ FIX SIGSEGV: Log inicio con memoria
+      logger.info('[performEbayHealthCheck] Starting health check', {
+        correlationId,
+        userId,
+        environment,
+        memory: memoryStart
+      });
+      
       return await breaker.execute(async () => {
-        const { MarketplaceService } = await import('./marketplace.service');
-        const marketplaceService = new MarketplaceService();
+        const checkStartTime = Date.now();
         
-        const startTime = Date.now();
-        const result = await retryWithBackoff(
-          async () => {
-            return await marketplaceService.testConnection(userId, 'ebay', environment);
-          },
-          {
-            maxAttempts: 2,
-            initialDelay: 1000,
-            retryable: isRetryableError,
-          }
-        );
-        const latency = Date.now() - startTime;
+        // ✅ FIX SIGSEGV: Timeout estricto de 1500ms con Promise.race
+        const healthCheckPromise = (async () => {
+          const { MarketplaceService } = await import('./marketplace.service');
+          const marketplaceService = new MarketplaceService();
+          
+          const result = await retryWithBackoff(
+            async () => {
+              return await marketplaceService.testConnection(userId, 'ebay', environment);
+            },
+            {
+              maxAttempts: 2,
+              initialDelay: 1000,
+              retryable: isRetryableError,
+            }
+          );
+          const latency = Date.now() - checkStartTime;
 
-        return {
-          success: result.success,
-          error: result.success ? undefined : result.message,
-          latency,
+          return {
+            success: result.success,
+            error: result.success ? undefined : result.message,
+            latency,
+          };
+        })();
+        
+        // ✅ FIX SIGSEGV: Timeout de 1500ms - si excede, retornar degraded
+        const timeoutPromise = new Promise<{ success: boolean; error?: string; latency?: number }>((resolve) => {
+          setTimeout(() => {
+            resolve({
+              success: false,
+              error: 'Health check timeout (1500ms)',
+              latency: 1500
+            });
+          }, 1500);
+        });
+        
+        const result = await Promise.race([healthCheckPromise, timeoutPromise]);
+        
+        const memoryEnd = {
+          heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+          heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+          rss: Math.round(process.memoryUsage().rss / 1024 / 1024),
+          unit: 'MB'
         };
+        
+        // ✅ FIX SIGSEGV: Log fin con memoria
+        logger.info('[performEbayHealthCheck] Health check completed', {
+          correlationId,
+          userId,
+          environment,
+          success: result.success,
+          latency: result.latency,
+          memory: {
+            start: memoryStart,
+            end: memoryEnd,
+            delta: {
+              heapUsed: memoryEnd.heapUsed - memoryStart.heapUsed,
+              heapTotal: memoryEnd.heapTotal - memoryStart.heapTotal,
+              rss: memoryEnd.rss - memoryStart.rss,
+              unit: 'MB'
+            }
+          }
+        });
+        
+        return result;
       });
     } catch (error: any) {
+      const memoryEnd = {
+        heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+        rss: Math.round(process.memoryUsage().rss / 1024 / 1024),
+        unit: 'MB'
+      };
+      
+      // ✅ FIX SIGSEGV: Log error con memoria
+      logger.error('[performEbayHealthCheck] Health check failed', {
+        correlationId,
+        userId,
+        environment,
+        error: error?.message || String(error),
+        stack: error?.stack,
+        memory: {
+          start: memoryStart,
+          end: memoryEnd
+        }
+      });
+      
+      // ✅ FIX SIGSEGV: NUNCA throw - siempre retornar status degraded
       if (error.message?.includes('Circuit breaker')) {
         // Circuit is open, return cached degraded status
         return { success: false, error: 'Service temporarily unavailable (circuit open)' };
@@ -623,7 +706,8 @@ export class APIAvailabilityService {
         missing: validation.missing,
       });
 
-      // Level 2: Real health check (only if fields are valid and not recently checked)
+      // ✅ FIX SIGSEGV: Level 2: Real health check (only if fields are valid and not recently checked)
+      // NO ejecutar health checks activos si SAFE_AUTH_STATUS_MODE está activo
       let healthCheckResult: { success: boolean; error?: string } | null = null;
       const lastHealthCheck = await this.getCached(healthCheckKey);
       // 🚀 PERFORMANCE: Usar TTL dinámico según criticidad
@@ -632,8 +716,13 @@ export class APIAvailabilityService {
         forceHealthCheck || 
         !lastHealthCheck || 
         Date.now() - lastHealthCheck.lastChecked.getTime() >= healthCheckTTL;
+      
+      // ✅ FIX SIGSEGV: Verificar SAFE_AUTH_STATUS_MODE antes de ejecutar health check activo
+      const { env } = await import('../config/env');
+      const safeAuthStatusMode = env.SAFE_AUTH_STATUS_MODE ?? true;
 
-      if (validation.valid && shouldPerformHealthCheck) {
+      if (validation.valid && shouldPerformHealthCheck && !safeAuthStatusMode) {
+        // ✅ FIX SIGSEGV: Solo ejecutar health check si SAFE_AUTH_STATUS_MODE está desactivado
         try {
           healthCheckResult = await this.performEbayHealthCheck(userId, environment, normalizedCreds);
           // Cache health check result
@@ -656,6 +745,16 @@ export class APIAvailabilityService {
         healthCheckResult = {
           success: lastHealthCheck.isAvailable,
           error: lastHealthCheck.error,
+        };
+      } else if (safeAuthStatusMode && validation.valid) {
+        // ✅ FIX SIGSEGV: En SAFE_AUTH_STATUS_MODE, usar status "degraded" sin hacer health check activo
+        logger.info('[checkEbayAPI] SAFE_AUTH_STATUS_MODE enabled - skipping active health check', {
+          userId,
+          environment
+        });
+        healthCheckResult = {
+          success: false, // Asumir degraded hasta que se haga check activo
+          error: 'Health check skipped (SAFE_AUTH_STATUS_MODE)'
         };
       }
 

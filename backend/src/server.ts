@@ -600,10 +600,19 @@ async function startServer() {
             console.warn('⚠️  Warning: No se pudo verificar/crear usuario admin:', error.message);
           });
           
-          // ✅ FASE 1: Lazy-load Chromium (no bloquea boot)
-          // Solo si Scraper Bridge no está disponible
+          // ✅ FIX SIGSEGV: Lazy-load Chromium (no bloquea boot)
+          // Solo si Scraper Bridge no está disponible Y SAFE_AUTH_STATUS_MODE no está activo
           const scraperBridgeEnabled = env.SCRAPER_BRIDGE_ENABLED ?? true;
-          if (!scraperBridgeEnabled || !env.SCRAPER_BRIDGE_URL) {
+          const safeAuthStatusMode = env.SAFE_AUTH_STATUS_MODE ?? true;
+          
+          // ✅ FIX SIGSEGV: Deshabilitar Chromium lazy-load en producción si SAFE_AUTH_STATUS_MODE=true
+          // Esto previene crashes SIGSEGV por inicialización de Chromium durante requests
+          if (safeAuthStatusMode && env.NODE_ENV === 'production') {
+            logMilestone('SAFE_AUTH_STATUS_MODE enabled in production - skipping Chromium lazy-load');
+            console.log('⚠️  Chromium lazy-load disabled in production (SAFE_AUTH_STATUS_MODE=true)');
+            console.log('   - Esto previene crashes SIGSEGV por inicialización de Chromium');
+            console.log('   - Scraping seguirá funcionando si Scraper Bridge está disponible');
+          } else if (!scraperBridgeEnabled || !env.SCRAPER_BRIDGE_URL) {
             logMilestone('Lazy-loading Chromium (background)');
             ensureChromiumLazyLoad().catch((error) => {
               console.warn('⚠️  Chromium lazy-load failed (non-critical):', error.message);
