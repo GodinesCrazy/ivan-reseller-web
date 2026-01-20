@@ -273,7 +273,7 @@ router.get('/', async (req, res) => {
     
     const statusCode = isClientError ? 400 : 500;
     
-    // ✅ FIX: Include correlationId for tracking
+    // ✅ FIX: Include correlationId for tracking (single declaration)
     const correlationId = (req as any).correlationId || 'unknown';
     logger.error('Error in /api/opportunities', { 
       correlationId,
@@ -299,8 +299,7 @@ router.get('/', async (req, res) => {
       }
     } catch {}
     
-    // ✅ FIX: Retornar error controlado, nunca 500 genérico
-    const correlationId = (req as any).correlationId || 'unknown';
+    // ✅ FIX: Retornar error controlado, nunca 500 genérico (reuse correlationId from above)
     return res.status(statusCode).json({ 
       success: false, 
       error: isClientError ? 'invalid_request' : 'internal_error',
