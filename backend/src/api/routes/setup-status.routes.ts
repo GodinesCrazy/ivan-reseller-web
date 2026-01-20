@@ -133,10 +133,22 @@ router.get('/', async (req: Request, res: Response) => {
       stack: error?.stack
     });
     
-    return res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      setupRequired: false
+    // ✅ FIX: Siempre retornar 200 OK con success:true, nunca 500
+    // El endpoint debe ser resiliente y retornar defaults seguros
+    return res.status(200).json({
+      success: true,
+      setupRequired: false,
+      configuredCount: 0,
+      totalCount: 0,
+      hasMarketplace: false,
+      hasSearchAPI: false,
+      missingRequirements: {
+        marketplace: true,
+        searchAPI: true
+      },
+      configuredAPIs: [],
+      message: 'No se pudo verificar el estado de las APIs',
+      warnings: ['Error al verificar estado de APIs. Algunas funcionalidades pueden estar limitadas.']
     });
   }
 });

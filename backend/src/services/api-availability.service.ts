@@ -2341,65 +2341,115 @@ export class APIAvailabilityService {
       openai
     ];
 
-    if (supportsEnvironments('ebay')) {
-      const index = statuses.findIndex((status) => status.apiName === 'ebay');
-      const sandboxStatus = await this.checkEbayAPI(userId, 'sandbox');
-      if (index >= 0) {
-        statuses.splice(index + 1, 0, sandboxStatus);
-      } else {
-        statuses.unshift(sandboxStatus);
+    // ✅ FIX: Agregar sandbox statuses con validación
+    try {
+      if (supportsEnvironments('ebay')) {
+        const index = statuses.findIndex((status) => status && status.apiName === 'ebay');
+        if (index >= 0) {
+          try {
+            const sandboxStatus = await this.checkEbayAPI(userId, 'sandbox');
+            if (sandboxStatus && sandboxStatus.apiName) {
+              statuses.splice(index + 1, 0, sandboxStatus);
+            }
+          } catch (error: any) {
+            logger.warn('[getAllAPIStatus] Failed to get eBay sandbox status', { userId, error: error?.message });
+          }
+        }
       }
-    }
-    if (supportsEnvironments('amazon')) {
-      const index = statuses.findIndex((status) => status.apiName === 'amazon');
-      const sandboxStatus = await this.checkAmazonAPI(userId, 'sandbox');
-      if (index >= 0) {
-        statuses.splice(index + 1, 0, sandboxStatus);
-      } else {
-        statuses.push(sandboxStatus);
+      if (supportsEnvironments('amazon')) {
+        const index = statuses.findIndex((status) => status && status.apiName === 'amazon');
+        if (index >= 0) {
+          try {
+            const sandboxStatus = await this.checkAmazonAPI(userId, 'sandbox');
+            if (sandboxStatus && sandboxStatus.apiName) {
+              statuses.splice(index + 1, 0, sandboxStatus);
+            }
+          } catch (error: any) {
+            logger.warn('[getAllAPIStatus] Failed to get Amazon sandbox status', { userId, error: error?.message });
+          }
+        }
       }
-    }
-    if (supportsEnvironments('mercadolibre')) {
-      const index = statuses.findIndex((status) => status.apiName === 'mercadolibre');
-      const sandboxStatus = await this.checkMercadoLibreAPI(userId, 'sandbox');
-      if (index >= 0) {
-        statuses.splice(index + 1, 0, sandboxStatus);
-      } else {
-        statuses.push(sandboxStatus);
+      if (supportsEnvironments('mercadolibre')) {
+        const index = statuses.findIndex((status) => status && status.apiName === 'mercadolibre');
+        if (index >= 0) {
+          try {
+            const sandboxStatus = await this.checkMercadoLibreAPI(userId, 'sandbox');
+            if (sandboxStatus && sandboxStatus.apiName) {
+              statuses.splice(index + 1, 0, sandboxStatus);
+            }
+          } catch (error: any) {
+            logger.warn('[getAllAPIStatus] Failed to get MercadoLibre sandbox status', { userId, error: error?.message });
+          }
+        }
       }
-    }
-    
-    // ✅ CORRECCIÓN ALIEXPRESS AFFILIATE: Agregar sandbox si aplica
-    // Nota: Aunque AliExpress Affiliate usa el mismo endpoint, mantenemos la distinción por consistencia
-    const aliexpressAffiliateIndex = statuses.findIndex((status) => status.apiName === 'aliexpress-affiliate');
-    if (aliexpressAffiliateIndex >= 0) {
-      const sandboxStatus = await this.checkAliExpressAffiliateAPI(userId, 'sandbox');
-      statuses.splice(aliexpressAffiliateIndex + 1, 0, sandboxStatus);
-    }
-    
-    // ✅ CORRECCIÓN PAYPAL: Agregar sandbox si aplica
-    if (supportsEnvironments('paypal')) {
-      const index = statuses.findIndex((status) => status.apiName === 'paypal');
-      const sandboxStatus = await this.checkPayPalAPI(userId, 'sandbox');
-      if (index >= 0) {
-        statuses.splice(index + 1, 0, sandboxStatus);
-      } else {
-        statuses.push(sandboxStatus);
+      
+      // ✅ CORRECCIÓN ALIEXPRESS AFFILIATE: Agregar sandbox si aplica
+      const aliexpressAffiliateIndex = statuses.findIndex((status) => status && status.apiName === 'aliexpress-affiliate');
+      if (aliexpressAffiliateIndex >= 0) {
+        try {
+          const sandboxStatus = await this.checkAliExpressAffiliateAPI(userId, 'sandbox');
+          if (sandboxStatus && sandboxStatus.apiName) {
+            statuses.splice(aliexpressAffiliateIndex + 1, 0, sandboxStatus);
+          }
+        } catch (error: any) {
+          logger.warn('[getAllAPIStatus] Failed to get AliExpress Affiliate sandbox status', { userId, error: error?.message });
+        }
       }
-    }
-    
-    // ✅ CORRECCIÓN ALIEXPRESS DROPSHIPPING: Agregar sandbox si aplica
-    if (supportsEnvironments('aliexpress-dropshipping')) {
-      const index = statuses.findIndex((status) => status.apiName === 'aliexpress-dropshipping');
-      const sandboxStatus = await this.checkAliExpressDropshippingAPI(userId, 'sandbox');
-      if (index >= 0) {
-        statuses.splice(index + 1, 0, sandboxStatus);
-      } else {
-        statuses.push(sandboxStatus);
+      
+      // ✅ CORRECCIÓN PAYPAL: Agregar sandbox si aplica
+      if (supportsEnvironments('paypal')) {
+        const index = statuses.findIndex((status) => status && status.apiName === 'paypal');
+        if (index >= 0) {
+          try {
+            const sandboxStatus = await this.checkPayPalAPI(userId, 'sandbox');
+            if (sandboxStatus && sandboxStatus.apiName) {
+              statuses.splice(index + 1, 0, sandboxStatus);
+            }
+          } catch (error: any) {
+            logger.warn('[getAllAPIStatus] Failed to get PayPal sandbox status', { userId, error: error?.message });
+          }
+        }
       }
+      
+      // ✅ CORRECCIÓN ALIEXPRESS DROPSHIPPING: Agregar sandbox si aplica
+      if (supportsEnvironments('aliexpress-dropshipping')) {
+        const index = statuses.findIndex((status) => status && status.apiName === 'aliexpress-dropshipping');
+        if (index >= 0) {
+          try {
+            const sandboxStatus = await this.checkAliExpressDropshippingAPI(userId, 'sandbox');
+            if (sandboxStatus && sandboxStatus.apiName) {
+              statuses.splice(index + 1, 0, sandboxStatus);
+            }
+          } catch (error: any) {
+            logger.warn('[getAllAPIStatus] Failed to get AliExpress Dropshipping sandbox status', { userId, error: error?.message });
+          }
+        }
+      }
+    } catch (error: any) {
+      logger.warn('[getAllAPIStatus] Error adding sandbox statuses', { userId, error: error?.message });
+      // Continuar con los statuses que ya tenemos
     }
 
-    return statuses;
+    // ✅ FIX: Sanitizar antes de retornar - NUNCA retornar entries undefined/null
+    const sanitizedStatuses = statuses.filter((status, index) => {
+      if (!status) {
+        logger.warn('[getAllAPIStatus] Filtering out undefined/null status entry', { userId, index, totalStatuses: statuses.length });
+        return false;
+      }
+      if (!status.apiName || typeof status.apiName !== 'string' || status.apiName.trim().length === 0) {
+        logger.warn('[getAllAPIStatus] Filtering out status entry without valid apiName', {
+          userId,
+          index,
+          status: status,
+          apiNameType: typeof status.apiName,
+          apiNameValue: status.apiName
+        });
+        return false;
+      }
+      return true;
+    });
+
+    return sanitizedStatuses;
   }
 
   /**
@@ -2407,7 +2457,28 @@ export class APIAvailabilityService {
    */
   async getCapabilities(userId: number): Promise<APICapabilities> {
     const statuses = await this.getAllAPIStatus(userId);
-    const byApi = (api: string) => statuses.filter((status) => status.apiName === api);
+    
+    // ✅ FIX: Validar que statuses es array válido
+    if (!Array.isArray(statuses)) {
+      logger.warn('[getCapabilities] getAllAPIStatus returned non-array', { userId, type: typeof statuses });
+      return {
+        canPublishToEbay: false,
+        canPublishToAmazon: false,
+        canPublishToMercadoLibre: false,
+        canScrapeAliExpress: false,
+        canUseAI: false,
+        canSolveCaptchas: false,
+        canPayCommissions: false,
+        canAutoPurchaseAliExpress: false
+      };
+    }
+    
+    // ✅ FIX: Filtrar entradas inválidas antes de procesar
+    const validStatuses = statuses.filter((status) => {
+      return status && status.apiName && typeof status.apiName === 'string';
+    });
+    
+    const byApi = (api: string) => validStatuses.filter((status) => status.apiName === api);
 
     const ebayStatuses = byApi('ebay');
     const amazonStatuses = byApi('amazon');
@@ -2420,9 +2491,9 @@ export class APIAvailabilityService {
     const aliexpress = byApi('aliexpress')[0];
 
     return {
-      canPublishToEbay: ebayStatuses.some((status) => status.isAvailable),
-      canPublishToAmazon: amazonStatuses.some((status) => status.isAvailable),
-      canPublishToMercadoLibre: mercadolibreStatuses.some((status) => status.isAvailable),
+      canPublishToEbay: ebayStatuses.some((status) => status && status.isAvailable === true),
+      canPublishToAmazon: amazonStatuses.some((status) => status && status.isAvailable === true),
+      canPublishToMercadoLibre: mercadolibreStatuses.some((status) => status && status.isAvailable === true),
       canScrapeAliExpress: Boolean(scraperapi?.isAvailable || zenrows?.isAvailable),
       canUseAI: Boolean(groq?.isAvailable),
       canSolveCaptchas: Boolean(captcha?.isAvailable),

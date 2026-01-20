@@ -128,7 +128,38 @@ router.get('/', async (req, res) => {
         });
       }
       
-      // Si es otro error, lanzarlo normalmente
+      // ✅ FIX: Manejar errores de credenciales faltantes con 400/422, no 500
+      const errorMessage = error?.message || String(error);
+      const isCredentialsError = 
+        errorMessage.includes('credentials') ||
+        errorMessage.includes('CREDENTIALS_ERROR') ||
+        errorMessage.includes('AUTH_REQUIRED') ||
+        error?.errorCode === 'CREDENTIALS_ERROR' ||
+        error?.details?.authRequired === true;
+      
+      if (isCredentialsError) {
+        logger.warn('[OPPORTUNITIES-API] Missing credentials error', {
+          userId,
+          query,
+          error: errorMessage,
+          errorCode: error?.errorCode
+        });
+        
+        return res.status(422).json({
+          success: false,
+          error: 'missing_credentials',
+          message: 'Se requieren credenciales de API para buscar oportunidades. Por favor, configura al menos una API de búsqueda (AliExpress Affiliate, ScraperAPI, o ZenRows) en Settings → API Settings.',
+          missingCredentials: true,
+          query,
+          suggestions: [
+            'Configura AliExpress Affiliate API en Settings → API Settings',
+            'O configura ScraperAPI o ZenRows como alternativa',
+            'Revisa que las credenciales estén activas y correctamente configuradas'
+          ]
+        });
+      }
+      
+      // Si es otro error, lanzarlo normalmente (será manejado por el catch general)
       throw error;
     }
 
@@ -231,11 +262,25 @@ router.get('/', async (req, res) => {
       });
     }
 
+    // ✅ FIX: Determinar código de estado apropiado según el tipo de error
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const isClientError = 
+      errorMessage.includes('credentials') ||
+      errorMessage.includes('missing') ||
+      errorMessage.includes('required') ||
+      errorMessage.includes('invalid') ||
+      errorMessage.includes('validation');
+    
+    const statusCode = isClientError ? 400 : 500;
+    
     logger.error('Error in /api/opportunities', { 
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage,
       stack: error instanceof Error ? error.stack : undefined,
-      userId: req.user?.userId
+      userId: req.user?.userId,
+      statusCode,
+      isClientError
     });
+    
     try {
       const userId = req.user?.userId;
       if (userId) {
@@ -244,13 +289,22 @@ router.get('/', async (req, res) => {
         notificationService.sendToUser(userId, {
           type: 'JOB_FAILED',
           title: 'Error en búsqueda de oportunidades',
-          message: error instanceof Error ? error.message : 'Error desconocido',
+          message: errorMessage,
           priority: 'HIGH',
           category: 'JOB'
-        } as any);
+        } as any).catch(() => {}); // Ignorar errores de notificación
       }
     } catch {}
-    return res.status(500).json({ success: false, error: 'Error processing opportunities' });
+    
+    // ✅ FIX: Retornar error controlado, nunca 500 genérico
+    return res.status(statusCode).json({ 
+      success: false, 
+      error: isClientError ? 'invalid_request' : 'internal_error',
+      message: isClientError 
+        ? errorMessage 
+        : 'Error procesando oportunidades. Por favor, intenta de nuevo más tarde.',
+      query: req.query.query || ''
+    });
   }
 });
 
