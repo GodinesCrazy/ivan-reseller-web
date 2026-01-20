@@ -21,17 +21,32 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     unit: 'MB'
   };
   
+  // ✅ FIX AUTH: Detectar presencia de cookies
+  const hasCookies = !!req.headers.cookie;
+  const cookieHeader = req.headers.cookie ? 'cookie_present' : 'cookie_missing';
+  const cookieCount = req.headers.cookie ? req.headers.cookie.split(';').length : 0;
+  
   try {
-    // ✅ FIX SIGSEGV: Log inicio con memoria
+    // ✅ FIX SIGSEGV + AUTH: Log inicio con memoria y cookies
     logger.info('[Auth Status] Request start', {
       correlationId,
       userId: req.user?.userId,
       memory: memoryStart,
-      safeMode: env.SAFE_AUTH_STATUS_MODE
+      safeMode: env.SAFE_AUTH_STATUS_MODE,
+      cookieStatus: cookieHeader,
+      cookieCount,
+      hasCookies,
+      origin: req.headers.origin,
+      referer: req.headers.referer,
     });
     
     const userId = req.user?.userId;
     if (!userId) {
+      logger.warn('[Auth Status] No userId - unauthenticated request', {
+        correlationId,
+        cookieStatus: cookieHeader,
+        hasCookies,
+      });
       return res.status(401).json({ success: false, error: 'Authentication required', correlationId });
     }
 

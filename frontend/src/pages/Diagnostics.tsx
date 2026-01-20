@@ -58,7 +58,9 @@ export default function Diagnostics() {
 
     // 3. Test /ready
     try {
-      const readyResponse = await fetch(`${API_BASE_URL}/ready`);
+      const readyResponse = await fetch(`${API_BASE_URL}/ready`, {
+        credentials: 'include', // ✅ FIX AUTH: Incluir cookies
+      });
       const readyData = await readyResponse.json();
       newResults.push({
         name: 'Readiness Check (/ready)',
@@ -78,7 +80,9 @@ export default function Diagnostics() {
 
     // 4. Test /version
     try {
-      const versionResponse = await fetch(`${API_BASE_URL}/version`);
+      const versionResponse = await fetch(`${API_BASE_URL}/version`, {
+        credentials: 'include', // ✅ FIX AUTH: Incluir cookies
+      });
       const versionData = await versionResponse.json();
       newResults.push({
         name: 'Version Info (/version)',
@@ -98,7 +102,9 @@ export default function Diagnostics() {
 
     // 5. Test /config
     try {
-      const configResponse = await fetch(`${API_BASE_URL}/config`);
+      const configResponse = await fetch(`${API_BASE_URL}/config`, {
+        credentials: 'include', // ✅ FIX AUTH: Incluir cookies
+      });
       const configData = await configResponse.json();
       newResults.push({
         name: 'Config Info (/config)',
@@ -120,6 +126,7 @@ export default function Diagnostics() {
     try {
       const corsResponse = await fetch(`${API_BASE_URL}/health`, {
         method: 'OPTIONS',
+        credentials: 'include', // ✅ FIX AUTH: Incluir cookies
         headers: {
           'Origin': window.location.origin,
         },

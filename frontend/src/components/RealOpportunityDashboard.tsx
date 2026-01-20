@@ -58,7 +58,9 @@ export default function RealOpportunityDashboard() {
   const fetchOpportunities = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/dashboard');
+      const response = await fetch('/api/dashboard', {
+        credentials: 'include', // ✅ FIX AUTH: Incluir cookies
+      });
       const data = await response.json();
       setOpportunities(data.opportunities || []);
     } catch (error) {

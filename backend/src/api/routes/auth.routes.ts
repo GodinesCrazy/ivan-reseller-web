@@ -92,19 +92,23 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
       cookieDomain = undefined;
     }
     
-    // Configurar cookies
+    // ✅ FIX AUTH: Configurar cookies para producción (cross-domain Vercel -> Railway)
+    // CRÍTICO: En producción, backend está en Railway y frontend en Vercel (dominios diferentes)
+    // Por lo tanto, SIEMPRE usar sameSite: 'none' y secure: true en producción
+    const isProduction = process.env.NODE_ENV === 'production';
     const cookieOptions: any = {
       httpOnly: true, // No accesible desde JavaScript (previene XSS)
-      secure: isHttps, // Enviar sobre HTTPS si la petición es HTTPS o el frontend usa HTTPS
-      sameSite: 'none' as const, // 'none' es necesario para cookies cross-domain (backend en Railway, frontend en otro dominio)
+      secure: isProduction ? true : isHttps, // ✅ CRÍTICO: En producción SIEMPRE true para sameSite: 'none'
+      sameSite: (isProduction || !cookieDomain) ? 'none' as const : 'lax' as const, // ✅ CRÍTICO: 'none' para cross-domain en producción
       maxAge: 60 * 60 * 1000, // 1 hora (debe coincidir con JWT_EXPIRES_IN)
       path: '/', // Disponible en toda la aplicación
     };
     
     // Establecer domain solo si backend y frontend están en el mismo dominio base
-    if (cookieDomain) {
+    // ✅ FIX AUTH: En producción (Railway vs Vercel), NO establecer domain para permitir cross-domain
+    if (cookieDomain && !isProduction) {
       cookieOptions.domain = cookieDomain;
-      // Si están en el mismo dominio, podemos usar 'lax'
+      // Si están en el mismo dominio y NO es producción, podemos usar 'lax'
       cookieOptions.sameSite = 'lax' as const;
     }
     // Si NO establecemos domain (dominios diferentes), sameSite debe ser 'none' y secure debe ser true
@@ -275,10 +279,12 @@ router.post('/refresh', async (req: Request, res: Response, next: NextFunction) 
       cookieDomain = undefined;
     }
     
+    // ✅ FIX AUTH: En producción, usar sameSite: 'none' y secure: true siempre
+    const isProduction = process.env.NODE_ENV === 'production';
     const cookieOptions: any = {
       httpOnly: true,
-      secure: isHttps,
-      sameSite: cookieDomain ? 'lax' : 'none',
+      secure: isProduction ? true : isHttps, // ✅ CRÍTICO: En producción SIEMPRE true
+      sameSite: (isProduction || !cookieDomain) ? 'none' as const : 'lax' as const, // ✅ CRÍTICO: 'none' para cross-domain
       maxAge: 60 * 60 * 1000, // 1 hora
       path: '/',
     };
@@ -415,10 +421,12 @@ router.post('/logout', authenticate, async (req: Request, res: Response, next: N
       cookieDomain = undefined;
     }
     
+    // ✅ FIX AUTH: En producción, usar sameSite: 'none' y secure: true siempre
+    const isProduction = process.env.NODE_ENV === 'production';
     const clearCookieOptions: any = {
       httpOnly: true,
-      secure: isHttps,
-      sameSite: cookieDomain ? 'lax' : 'none', // 'none' para cross-domain, 'lax' para mismo dominio
+      secure: isProduction ? true : isHttps, // ✅ CRÍTICO: En producción SIEMPRE true
+      sameSite: (isProduction || !cookieDomain) ? 'none' as const : 'lax' as const, // ✅ CRÍTICO: 'none' para cross-domain
       path: '/',
     };
     

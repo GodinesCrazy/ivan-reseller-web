@@ -79,14 +79,17 @@ export const authenticate = async (
             cookieDomain = undefined;
           }
           
+          // ✅ FIX AUTH: En producción, usar sameSite: 'none' y secure: true siempre
+          const isProduction = process.env.NODE_ENV === 'production';
           const cookieOptions: any = {
             httpOnly: true,
-            secure: isHttps,
-            sameSite: cookieDomain ? 'lax' : 'none',
+            secure: isProduction ? true : isHttps, // ✅ CRÍTICO: En producción SIEMPRE true
+            sameSite: (isProduction || !cookieDomain) ? 'none' as const : 'lax' as const, // ✅ CRÍTICO: 'none' para cross-domain
             maxAge: 60 * 60 * 1000, // 1 hora
           };
           
-          if (cookieDomain) {
+          if (cookieDomain && !isProduction) {
+            // ✅ FIX AUTH: En producción NO establecer domain para permitir cross-domain
             cookieOptions.domain = cookieDomain;
           }
           

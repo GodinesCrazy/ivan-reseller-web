@@ -167,6 +167,7 @@ export default function Reports() {
     try {
       setLoading(true);
       const response = await fetch('/api/reports/executive', {
+        credentials: 'include', // ✅ FIX AUTH: Incluir cookies
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
