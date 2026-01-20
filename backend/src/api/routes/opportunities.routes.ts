@@ -273,7 +273,10 @@ router.get('/', async (req, res) => {
     
     const statusCode = isClientError ? 400 : 500;
     
+    // ✅ FIX: Include correlationId for tracking
+    const correlationId = (req as any).correlationId || 'unknown';
     logger.error('Error in /api/opportunities', { 
+      correlationId,
       error: errorMessage,
       stack: error instanceof Error ? error.stack : undefined,
       userId: req.user?.userId,
@@ -297,13 +300,15 @@ router.get('/', async (req, res) => {
     } catch {}
     
     // ✅ FIX: Retornar error controlado, nunca 500 genérico
+    const correlationId = (req as any).correlationId || 'unknown';
     return res.status(statusCode).json({ 
       success: false, 
       error: isClientError ? 'invalid_request' : 'internal_error',
       message: isClientError 
         ? errorMessage 
         : 'Error procesando oportunidades. Por favor, intenta de nuevo más tarde.',
-      query: req.query.query || ''
+      query: req.query.query || '',
+      correlationId // ✅ FIX: Include correlationId for client tracking
     });
   }
 });

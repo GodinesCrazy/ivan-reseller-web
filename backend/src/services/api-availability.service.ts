@@ -354,6 +354,12 @@ export class APIAvailabilityService {
     previousStatus?: APIStatus
   ): Promise<void> {
     try {
+      // ✅ FIX: Guard - validate status and apiName before accessing
+      if (!status || !status.apiName || typeof status.apiName !== 'string') {
+        logger.warn('[persistStatus] Skipping invalid status entry', { userId, status });
+        return;
+      }
+      
       const apiName = status.apiName;
       const environment = status.environment || 'production';
       const healthStatus = status.status || (status.isAvailable ? 'healthy' : 'unhealthy');
@@ -448,6 +454,12 @@ export class APIAvailabilityService {
         return null; // Too old, don't use
       }
 
+      // ✅ FIX: Guard - validate snapshot before accessing apiName
+      if (!snapshot || !snapshot.apiName || typeof snapshot.apiName !== 'string') {
+        logger.warn('[loadPersistedStatus] Invalid snapshot entry', { userId, apiName, snapshot });
+        return null;
+      }
+      
       return {
         apiName: snapshot.apiName,
         name: snapshot.apiName, // Will be set by caller

@@ -71,10 +71,13 @@ router.get('/', async (req: Request, res: Response, next) => {
     
     // ✅ FIX: Mapear 'serpapi' a 'googletrends' para el frontend
     // El backend usa 'serpapi' internamente pero el frontend espera 'googletrends'
-    const mappedApis = apis.map(api => ({
-      ...api,
-      apiName: api.apiName === 'serpapi' ? 'googletrends' : api.apiName
-    }));
+    // ✅ FIX: Filter invalid entries and add guards
+    const mappedApis = apis
+      .filter(api => api && api.apiName && typeof api.apiName === 'string')
+      .map(api => ({
+        ...api,
+        apiName: api.apiName === 'serpapi' ? 'googletrends' : api.apiName
+      }));
     
     const personalCount = mappedApis.filter(
       (api) => api.scope === 'user' && api.owner?.id === userId
@@ -110,11 +113,14 @@ router.get('/status', async (req: Request, res: Response, next) => {
     try {
       statuses = await apiAvailability.getAllAPIStatus(userId);
       // ✅ FIX: Mapear 'serpapi' a 'googletrends' para el frontend
-      statuses = statuses.map(status => ({
-        ...status,
-        apiName: status.apiName === 'serpapi' ? 'googletrends' : status.apiName,
-        name: status.name === 'SerpAPI (Google Trends)' ? 'Google Trends API (SerpAPI)' : status.name
-      }));
+      // ✅ FIX: Filter invalid entries and add guards before mapping
+      statuses = statuses
+        .filter(status => status && status.apiName && typeof status.apiName === 'string')
+        .map(status => ({
+          ...status,
+          apiName: status.apiName === 'serpapi' ? 'googletrends' : status.apiName,
+          name: status.name === 'SerpAPI (Google Trends)' ? 'Google Trends API (SerpAPI)' : status.name
+        }));
     } catch (statusError: any) {
       logger.error('Error getting API statuses', {
         error: statusError?.message || String(statusError),
@@ -268,7 +274,8 @@ router.get('/minimum-dropshipping', async (req: Request, res: Response, next) =>
         };
       } else {
         // Para otras APIs, buscar directamente en allStatuses
-        const status = allStatuses.find(s => s.apiName === minAPI.apiName);
+        // ✅ FIX: Guard before accessing apiName
+        const status = allStatuses.find(s => s && s.apiName && typeof s.apiName === 'string' && s.apiName === minAPI.apiName);
         return {
           apiName: minAPI.apiName,
           name: minAPI.name,

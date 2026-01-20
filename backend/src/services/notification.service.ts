@@ -221,8 +221,8 @@ class NotificationService {
 
     logger.debug('[NotificationService] API status update emitted', {
       userIds,
-      apiName: apiStatus.apiName,
-      status: apiStatus.status,
+      apiName: apiStatus?.apiName || 'unknown',
+      status: apiStatus?.status || 'unknown',
     });
   }
 

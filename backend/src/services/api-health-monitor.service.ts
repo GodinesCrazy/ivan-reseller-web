@@ -193,15 +193,21 @@ export class APIHealthMonitorService extends EventEmitter {
         return; // Skip this user if we can't get statuses
       }
 
-      // Filter APIs to monitor if configured
+      // ✅ FIX: Filter APIs to monitor if configured - with guards
       const apisToCheck = this.config.apisToMonitor.length > 0
-        ? statuses.filter(s => this.config.apisToMonitor.includes(s.apiName))
-        : statuses;
+        ? statuses.filter(s => s && s.apiName && typeof s.apiName === 'string' && this.config.apisToMonitor.includes(s.apiName))
+        : statuses.filter(s => s && s.apiName); // ✅ FIX: Filter invalid entries even if no filter configured
 
       // ✅ FASE 1: Check each API that is configured
       // Si está en modo async, encolar en BullMQ (previene SIGSEGV)
       // Si está en modo sync, ejecutar directamente (solo desarrollo)
       for (const status of apisToCheck) {
+        // ✅ FIX: Guard - skip invalid entries
+        if (!status || !status.apiName || typeof status.apiName !== 'string') {
+          logger.warn('[API Health Monitor] Skipping invalid status entry', { userId, status });
+          continue;
+        }
+        
         if (!status.isConfigured) {
           continue; // Skip unconfigured APIs
         }
@@ -238,7 +244,9 @@ export class APIHealthMonitorService extends EventEmitter {
             // NO forzar health checks reales durante monitor automático (solo validar credenciales)
             let newStatus;
             
-            switch (status.apiName) {
+            // ✅ FIX: Guard before switch
+            const apiName = status.apiName;
+            switch (apiName) {
               case 'ebay':
                 newStatus = await apiAvailability.checkEbayAPI(
                   userId,

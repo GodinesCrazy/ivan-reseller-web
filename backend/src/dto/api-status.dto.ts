@@ -39,9 +39,25 @@ export function createUnifiedAPIStatusDTO(
   apiStatus: any,
   displayName?: string
 ): UnifiedAPIStatusDTO {
+  // ✅ FIX: Validate apiStatus before accessing properties
+  if (!apiStatus) {
+    return {
+      apiName: 'unknown',
+      displayName: displayName || 'Unknown API',
+      isConfigured: false,
+      hasValidCredentials: false,
+      isAvailable: false,
+      status: 'unknown',
+      available: false,
+      name: displayName || 'Unknown API',
+    };
+  }
+  
+  const apiName = (apiStatus.apiName && typeof apiStatus.apiName === 'string') ? apiStatus.apiName : 'unknown';
+  
   return {
-    apiName: apiStatus.apiName || '',
-    displayName: displayName || apiStatus.name || apiStatus.apiName || '',
+    apiName,
+    displayName: displayName || apiStatus.name || apiName || 'Unknown API',
     isConfigured: apiStatus.isConfigured ?? false,
     hasValidCredentials: apiStatus.isConfigured && !apiStatus.error,
     isAvailable: apiStatus.isAvailable ?? apiStatus.available ?? false,
