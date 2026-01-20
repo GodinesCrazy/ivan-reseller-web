@@ -293,7 +293,7 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
     fields: [
       { key: 'appKey', label: 'App Key', required: true, type: 'text', placeholder: '12345678', helpText: 'App Key obtenida de AliExpress Open Platform (console.aliexpress.com)' },
       { key: 'appSecret', label: 'App Secret', required: true, type: 'password', placeholder: 'Tu App Secret', helpText: 'App Secret para calcular la firma de las peticiones' },
-      { key: 'accessToken', label: 'Access Token', required: true, type: 'password', placeholder: 'Tu Access Token', helpText: 'Token OAuth obtenido después de autorizar la aplicación (requiere flujo OAuth)' },
+      { key: 'accessToken', label: 'Access Token', required: false, type: 'password', placeholder: 'Tu Access Token', helpText: 'Token OAuth obtenido después de autorizar la aplicación. Se obtiene automáticamente mediante el botón "Autorizar OAuth" después de guardar App Key/Secret.' },
       { key: 'refreshToken', label: 'Refresh Token (Opcional)', required: false, type: 'password', placeholder: 'Tu Refresh Token', helpText: 'Token para renovar automáticamente el Access Token cuando expire' },
       { key: 'sandbox', label: 'Sandbox', required: true, type: 'text', placeholder: 'false', helpText: 'Marca "true" para ambiente de pruebas, "false" para producción' },
     ],
@@ -1044,7 +1044,11 @@ export default function APISettings() {
       let isValid = true;
       let errorMessage: string | undefined;
 
-      if (field.required && !value.trim()) {
+      // ✅ FIX: Para aliexpress-dropshipping, accessToken NO es requerido (se obtiene vía OAuth)
+      const isAccessTokenForDropshipping = apiName === 'aliexpress-dropshipping' && fieldKey === 'accessToken';
+      const shouldSkipRequiredCheck = isAccessTokenForDropshipping;
+      
+      if (field.required && !shouldSkipRequiredCheck && !value.trim()) {
         isValid = false;
         errorMessage = `${field.label} es requerido`;
       }
@@ -1116,22 +1120,39 @@ export default function APISettings() {
   } => {
     // Para APIs que requieren OAuth (eBay, MercadoLibre, AliExpress Dropshipping)
     if (['ebay', 'mercadolibre', 'aliexpress-dropshipping'].includes(apiName)) {
-      // ✅ CORRECCIÓN: Verificar credenciales básicas usando diag/issues (no existe credential.credentials)
-      const hasBasicCredsIssue = diag?.issues?.some(issue => 
-        issue.toLowerCase().includes('faltan credenciales') || 
-        issue.toLowerCase().includes('missing credentials')
-      );
-      const hasBasicCreds = credential && !hasBasicCredsIssue;
+      // ✅ FIX: Verificar credenciales básicas - si hay credential guardada, asumir que tiene credenciales básicas
+      // Las credenciales reales (appKey, appSecret, etc.) se obtienen del backend cuando se carga el formulario
+      // Si credential existe, significa que se guardaron credenciales básicas
+      const hasBasicCreds: boolean = !!(credential && credential.id > 0);
       
-      // ✅ CORRECCIÓN: Verificar tokens usando statusInfo (statusInfo puede ser MarketplaceAuthStatus o APIStatus)
+      // ✅ FIX: Verificar tokens usando statusInfo (statusInfo puede ser MarketplaceAuthStatus o APIStatus)
+      // Para aliexpress-dropshipping: verificar también en formData si está disponible
+      const currentEnvironment = selectedEnvironment[apiName] || 'production';
+      const formKey = `${apiName}::${currentEnvironment}`;
+      const formCreds = formData[formKey] || {};
+      
+      // ✅ FIX: Declarar status antes de usarlo
       const status = statusInfo && 'status' in statusInfo ? statusInfo.status : undefined;
-      const hasToken = credential && (status === 'healthy' || status === 'refreshing');
+      
+      let hasToken: boolean = false;
+      if (apiName === 'aliexpress-dropshipping') {
+        // Verificar en formData primero (si el usuario acaba de ingresar el token)
+        hasToken = !!(formCreds.accessToken || formCreds.refreshToken);
+        if (!hasToken) {
+          // Si no está en formData, verificar statusInfo
+          hasToken = status === 'healthy' || status === 'refreshing';
+        }
+      } else {
+        hasToken = !!(credential && (status === 'healthy' || status === 'refreshing'));
+      }
       
       if (!hasBasicCreds) {
         return {
           status: 'not_configured',
           message: 'No configurado',
-          actionMessage: 'Ingresa las credenciales básicas y guárdalas.',
+          actionMessage: apiName === 'aliexpress-dropshipping' 
+            ? 'Ingresa App Key y App Secret, luego guárdalas.'
+            : 'Ingresa las credenciales básicas y guárdalas.',
         };
       }
       
@@ -1139,7 +1160,9 @@ export default function APISettings() {
         return {
           status: 'partially_configured',
           message: 'Paso 1/2 completado',
-          actionMessage: 'Credenciales básicas guardadas. Completa la autorización OAuth.',
+          actionMessage: apiName === 'aliexpress-dropshipping'
+            ? 'App Key y App Secret guardados. Falta completar OAuth para obtener Access Token.'
+            : 'Credenciales básicas guardadas. Completa la autorización OAuth.',
           actionButton: {
             label: 'Autorizar OAuth',
             onClick: () => handleOAuth(apiName, selectedEnvironment[apiName] || 'production'),
@@ -1147,6 +1170,7 @@ export default function APISettings() {
         };
       }
       
+      // ✅ FIX: status ya está declarado arriba
       if (hasToken && status === 'healthy') {
         return {
           status: 'configured',
@@ -1167,13 +1191,13 @@ export default function APISettings() {
     
     // Para otras APIs
     // ✅ FIX: Si no hay credential local, verificar statusInfo primero (puede ser credenciales globales)
-    const status = statusInfo && 'status' in statusInfo ? statusInfo.status : undefined;
+    const otherStatus = statusInfo && 'status' in statusInfo ? statusInfo.status : undefined;
     const isAvailable = statusInfo && 'isAvailable' in statusInfo ? statusInfo.isAvailable : undefined;
     const isConfigured = statusInfo && 'isConfigured' in statusInfo ? statusInfo.isConfigured : undefined;
     
     // Si no hay credential pero status indica que está configurado (credenciales globales), mostrar como configurado
     if (!credential) {
-      if (status === 'healthy' || isAvailable || isConfigured) {
+      if (otherStatus === 'healthy' || isAvailable || isConfigured) {
         return {
           status: 'configured',
           message: statusInfo && 'message' in statusInfo && statusInfo.message 
@@ -1189,14 +1213,14 @@ export default function APISettings() {
       };
     }
     
-    if (status === 'healthy' || isAvailable) {
+    if (otherStatus === 'healthy' || isAvailable) {
       return {
         status: 'configured',
         message: 'Configurado y funcionando',
       };
     }
     
-    if (status === 'degraded' || diag?.warnings?.length) {
+    if (otherStatus === 'degraded' || diag?.warnings?.length) {
       const message = statusInfo && 'message' in statusInfo ? (statusInfo.message || undefined) : undefined;
       return {
         status: 'partially_configured',
@@ -1205,7 +1229,7 @@ export default function APISettings() {
       };
     }
     
-    if (status === 'unhealthy' || diag?.issues?.length) {
+    if (otherStatus === 'unhealthy' || diag?.issues?.length) {
       const message = statusInfo && 'message' in statusInfo ? (statusInfo.message || undefined) : undefined;
       const error = statusInfo && 'error' in statusInfo ? statusInfo.error : undefined;
       return {
@@ -1538,7 +1562,11 @@ export default function APISettings() {
 
         // ✅ FIX: Validar campo requerido: debe tener un valor no vacío después de trim
         // Si el campo es requerido y el valor está vacío después de trim, lanzar error
-        if (fieldRequired) {
+        // ✅ FIX: Para aliexpress-dropshipping, accessToken NO es requerido (se obtiene vía OAuth)
+        const isAccessTokenForDropshipping = apiName === 'aliexpress-dropshipping' && fieldKey === 'accessToken';
+        const shouldSkipRequiredCheck = isAccessTokenForDropshipping; // Access Token se obtiene vía OAuth
+        
+        if (fieldRequired && !shouldSkipRequiredCheck) {
           let trimmedValue = value.toString().trim();
           
           // ✅ FIX: Si el valor está vacío, intentar leer del DOM una vez más antes de fallar
@@ -1619,7 +1647,13 @@ export default function APISettings() {
                   value: (el as HTMLInputElement).value?.substring(0, 20)
                 }))
               });
-              throw new Error(`El campo "${fieldLabel}" es requerido`);
+              // ✅ FIX: Para aliexpress-dropshipping, accessToken NO es requerido (se obtiene vía OAuth)
+              if (!isAccessTokenForDropshipping) {
+                throw new Error(`El campo "${fieldLabel}" es requerido`);
+              } else {
+                // Para accessToken de aliexpress-dropshipping, solo loggear warning, no error
+                log.info(`[APISettings] Access Token no proporcionado para ${apiName} - se obtendrá vía OAuth`);
+              }
             }
           }
         }
@@ -1694,9 +1728,15 @@ export default function APISettings() {
         }
         // trackingId es opcional, no validar
       } else if (apiName === 'aliexpress-dropshipping') {
-        // AliExpress Dropshipping API: validar campos requeridos
-        if (!credentials.appKey || !credentials.appSecret || !credentials.accessToken) {
-          throw new Error('App Key, App Secret y Access Token son requeridos para AliExpress Dropshipping API');
+        // ✅ FIX: AliExpress Dropshipping API: App Key y App Secret son requeridos, Access Token NO
+        // Access Token se obtiene vía OAuth después de guardar credenciales base
+        if (!credentials.appKey || !credentials.appSecret) {
+          throw new Error('App Key y App Secret son requeridos para AliExpress Dropshipping API. El Access Token se obtendrá mediante OAuth después de guardar.');
+        }
+        // ✅ FIX: Access Token es opcional - se obtiene vía OAuth
+        // Mostrar warning si falta pero permitir guardar
+        if (!credentials.accessToken) {
+          log.info('[APISettings] Guardando AliExpress Dropshipping sin Access Token - se obtendrá vía OAuth');
         }
         // Asegurar que sandbox sea boolean (false por defecto)
         if (credentials.sandbox === undefined) {

@@ -76,9 +76,24 @@ if (isRedisAvailable && bullMQRedis && apiHealthCheckQueue) {
             return await apiAvailability.checkSlackAPI(userId);
           case 'openai':
             return await apiAvailability.checkOpenAIAPI(userId);
+          case 'aliexpress-affiliate':
+            return await apiAvailability.checkAliExpressAffiliateAPI(userId, environment);
+          case 'aliexpress-dropshipping':
+            return await apiAvailability.checkAliExpressDropshippingAPI(userId, environment);
           default:
             logger.warn('[APIHealthCheckQueue] Unknown API name', { apiName });
-            throw new Error(`Unknown API: ${apiName}`);
+            // ✅ FIX: No hacer throw - solo loggear y retornar status degraded
+            // Esto previene que APIs no soportadas crasheen el sistema
+            return {
+              apiName,
+              name: `${apiName} API`,
+              isConfigured: false,
+              isAvailable: false,
+              lastChecked: new Date(),
+              error: `Health check not implemented for ${apiName}`,
+              message: `Health check no implementado para ${apiName}`,
+              environment,
+            } as any;
           }
         })();
 
