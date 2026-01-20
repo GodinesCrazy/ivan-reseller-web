@@ -159,11 +159,15 @@ async function runMigrations(maxRetries = 3): Promise<void> {
       console.log(`🔄 Running database migrations... (attempt ${attempt + 1}/${actualRetries})`);
       console.log(`   DATABASE_URL: ${env.DATABASE_URL ? '✅ Configurada' : '❌ No configurada'}`);
       
-      // ✅ FASE 9: En producción, validar DATABASE_URL antes de intentar
-      if (isProduction && !env.DATABASE_URL) {
-        console.error('❌ ERROR CRÍTICO: DATABASE_URL no configurada en producción');
-        console.error('   El servidor no puede iniciar sin una base de datos.');
-        process.exit(1);
+      // ✅ FIX 502: NO crashear si DATABASE_URL falta - el servidor debe arrancar
+      // Las migraciones fallarán pero el servidor seguirá corriendo en modo degradado
+      if (isProduction && (!env.DATABASE_URL || env.DATABASE_URL.trim().length === 0)) {
+        console.error('⚠️  WARNING: DATABASE_URL no configurada en producción');
+        console.error('   El servidor arrancará en modo degradado (sin base de datos)');
+        console.error('   /api/health responderá 200 pero /ready devolverá 503');
+        console.error('   Las migraciones se omitirán hasta que DATABASE_URL esté configurada');
+        // NO hacer process.exit(1) - permitir que el servidor arranque
+        return; // Salir de la función de migraciones sin error
       }
       
       const migrateResult = await execAsync('npx prisma migrate deploy', {
@@ -404,6 +408,9 @@ async function startServer() {
   bootstrapStartTime = startTime;
   
   try {
+    console.log('');
+    console.log('🚀 Booting backend server...');
+    console.log('================================');
     logMilestone('Starting server initialization');
     
     // ✅ FIX 502: Validar ENCRYPTION_KEY antes de iniciar cualquier servicio
@@ -444,18 +451,21 @@ async function startServer() {
         : address ? `${address.address}:${address.port}` : 'unknown';
       
       console.log('');
-      console.log('🚀 Ivan Reseller API Server');
+      console.log('✅ HTTP SERVER LISTENING');
       console.log('================================');
-      console.log(`✅ LISTEN_CALLBACK - HTTP SERVER LISTENING on ${addressStr} (listen took ${listenTime}ms)`);
+      console.log(`   Listening on PORT=${PORT}`);
       console.log(`   Host: 0.0.0.0`);
-      console.log(`   Port: ${PORT}`);
-      console.log(`   Total time to listen: ${Date.now() - startTime}ms`);
-      console.log(`Environment: ${env.NODE_ENV}`);
-      console.log(`Server: http://localhost:${PORT}`);
-      console.log(`Health: http://localhost:${PORT}/health`);
-      console.log(`Health API: http://localhost:${PORT}/api/health`);
-      console.log(`Ready: http://localhost:${PORT}/ready`);
+      console.log(`   Address: ${addressStr}`);
+      console.log(`   Listen time: ${listenTime}ms`);
+      console.log(`   Total boot time: ${Date.now() - startTime}ms`);
+      console.log(`   Environment: ${env.NODE_ENV}`);
+      console.log('');
+      console.log('📡 Endpoints available:');
+      console.log(`   Health: http://0.0.0.0:${PORT}/health`);
+      console.log(`   Health API: http://0.0.0.0:${PORT}/api/health`);
+      console.log(`   Ready: http://0.0.0.0:${PORT}/ready`);
       console.log('================================');
+      console.log('✅ Health endpoint ready - server accepting connections');
       console.log('');
       
       isServerReady = true;

@@ -149,15 +149,27 @@ function getDatabaseUrl(): string {
 
 const databaseUrl = getDatabaseUrl();
 
-// Validación mejorada de DATABASE_URL con mejor mensaje de error
-const databaseUrlSchema = z.string().min(1, 'DATABASE_URL no puede estar vacía')
-  .url('DATABASE_URL debe ser una URL válida')
+// ✅ FIX 502: Hacer DATABASE_URL opcional para permitir arranque en modo degradado
+// El servidor debe poder arrancar incluso sin DB para que /api/health responda
+const databaseUrlSchema = z.string()
   .refine(
-    (url) => url.startsWith('postgresql://') || url.startsWith('postgres://'),
+    (url) => {
+      // Si está vacía, es válida (modo degradado)
+      if (!url || url.trim().length === 0) return true;
+      // Si tiene contenido, debe ser URL válida y empezar con postgresql:// o postgres://
+      try {
+        new URL(url);
+        return url.startsWith('postgresql://') || url.startsWith('postgres://');
+      } catch {
+        return false;
+      }
+    },
     { 
-      message: 'DATABASE_URL debe empezar con postgresql:// o postgres://',
+      message: 'DATABASE_URL debe estar vacía o ser una URL válida que empiece con postgresql:// o postgres://',
     }
-  );
+  )
+  .optional()
+  .default(''); // Default vacío para permitir arranque sin DB
 
 // Función para obtener y validar REDIS_URL
 function getRedisUrl(): string {
@@ -370,43 +382,91 @@ if (process.env.NODE_ENV !== 'test' && !process.env.SKIP_ENCRYPTION_KEY_VALIDATI
   }
 }
 
-// Validar DATABASE_URL antes de parsear todo el schema
+// ✅ FIX 502: Validar DATABASE_URL pero NO crashear el servidor
+// El servidor debe arrancar para que /api/health responda, incluso sin DB
+// La conexión DB se intentará en background después de que el servidor escuche
+let databaseUrlValid = false;
 if (process.env.DATABASE_URL) {
   const dbUrlValue = process.env.DATABASE_URL.trim();
   if (dbUrlValue.length === 0) {
-    console.error('❌ ERROR: DATABASE_URL está vacía');
+    console.error('⚠️  WARNING: DATABASE_URL está vacía');
+    console.error('   El servidor arrancará en modo degradado (sin base de datos)');
     console.error('   Ve a Railway Dashboard → ivan-reseller-web → Variables');
     console.error('   Verifica que DATABASE_URL tenga un valor válido');
-    process.exit(1);
-  }
-  if (!dbUrlValue.startsWith('postgresql://') && !dbUrlValue.startsWith('postgres://')) {
-    console.error('❌ ERROR: DATABASE_URL tiene formato inválido');
+    console.error('   /api/health responderá 200 pero /ready devolverá 503 hasta que DB esté configurada');
+  } else if (!dbUrlValue.startsWith('postgresql://') && !dbUrlValue.startsWith('postgres://')) {
+    console.error('⚠️  WARNING: DATABASE_URL tiene formato inválido');
     console.error(`   Valor actual: ${dbUrlValue.substring(0, 50)}...`);
     console.error('   Debe empezar con: postgresql:// o postgres://');
     console.error('   Ve a Railway Dashboard → Postgres → Variables → DATABASE_URL');
     console.error('   Copia el valor completo y pégalo en ivan-reseller-web → Variables → DATABASE_URL');
-    process.exit(1);
+    console.error('   El servidor arrancará en modo degradado');
+  } else {
+    databaseUrlValid = true;
   }
 } else {
-  console.error('❌ ERROR: DATABASE_URL no está configurada');
+  console.error('⚠️  WARNING: DATABASE_URL no está configurada');
+  console.error('   El servidor arrancará en modo degradado (sin base de datos)');
   console.error('   Ve a Railway Dashboard → ivan-reseller-web → Variables');
   console.error('   Agrega DATABASE_URL con el valor de Postgres → Variables → DATABASE_URL');
-  process.exit(1);
+  console.error('   /api/health responderá 200 pero /ready devolverá 503 hasta que DB esté configurada');
 }
 
-// Si aún no tenemos DATABASE_URL, el schema de Zod fallará con un mensaje claro
+// ✅ FIX 502: Parsear schema pero NO crashear si DATABASE_URL falta
+// Solo PORT y JWT_SECRET son críticos para arranque básico
 let env: z.infer<typeof envSchema>;
 try {
   env = envSchema.parse(process.env);
+  
+  // ✅ FIX 502: Si DATABASE_URL está vacía después del parse, usar valor por defecto
+  if (!env.DATABASE_URL || env.DATABASE_URL.trim().length === 0) {
+    env.DATABASE_URL = '';
+    console.log('⚠️  DATABASE_URL no configurada - servidor en modo degradado');
+  }
 } catch (error: any) {
   if (error.name === 'ZodError') {
     console.error('❌ ERROR DE VALIDACIÓN DE VARIABLES DE ENTORNO:');
+    const criticalErrors: string[] = [];
+    const nonCriticalErrors: string[] = [];
+    
     error.errors.forEach((err: any) => {
-      console.error(`   - ${err.path.join('.')}: ${err.message}`);
+      const path = err.path.join('.');
+      const isCritical = path === 'PORT' || path === 'JWT_SECRET';
+      const errorMsg = `   - ${path}: ${err.message}`;
+      
+      if (isCritical) {
+        criticalErrors.push(errorMsg);
+      } else {
+        nonCriticalErrors.push(errorMsg);
+      }
     });
-    process.exit(1);
+    
+    if (criticalErrors.length > 0) {
+      console.error('❌ ERRORES CRÍTICOS (el servidor no puede arrancar):');
+      criticalErrors.forEach(msg => console.error(msg));
+      process.exit(1);
+    }
+    
+    if (nonCriticalErrors.length > 0) {
+      console.error('⚠️  ADVERTENCIAS (el servidor arrancará en modo degradado):');
+      nonCriticalErrors.forEach(msg => console.error(msg));
+      // Intentar parsear con valores por defecto para campos no críticos
+      const fallbackEnv = { ...process.env };
+      if (!fallbackEnv.DATABASE_URL) fallbackEnv.DATABASE_URL = '';
+      try {
+        env = envSchema.parse(fallbackEnv);
+      } catch (fallbackError: any) {
+        // Si aún falla, solo crashear si es PORT o JWT_SECRET
+        if (fallbackError.errors?.some((e: any) => e.path.includes('PORT') || e.path.includes('JWT_SECRET'))) {
+          throw fallbackError;
+        }
+        // Para otros errores, usar defaults
+        env = envSchema.parse({ ...process.env, DATABASE_URL: '' });
+      }
+    }
+  } else {
+    throw error;
   }
-  throw error;
 }
 
 export { env };
