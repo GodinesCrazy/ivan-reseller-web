@@ -328,29 +328,65 @@ function logMilestone(milestone: string): void {
   console.log(`[${timestamp}] 🎯 MILESTONE: ${milestone}`);
 }
 
-// ✅ FASE 1: Global error handlers (instrumentación)
+// ✅ FIX SIGSEGV: Global error handlers mejorados con correlationId y sin process.exit
 // ✅ FIX: Ignore ERR_HTTP_HEADERS_SENT errors (they're non-fatal, response already sent)
 process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  const timestamp = new Date().toISOString();
+  const correlationId = 'unhandled-rejection-' + Date.now();
+  
   // Ignore ERR_HTTP_HEADERS_SENT - these happen when response is already sent
   // and are not fatal (the request was already handled)
-  if (reason?.code === 'ERR_HTTP_HEADERS_SENT' || reason?.message?.includes('Cannot set headers after they are sent')) {
+  if (reason?.code === 'ERR_HTTP_HEADERS_SENT' || reason?.message?.includes("Cannot set headers after they are sent")) {
     // Log at debug level, not error (this is expected in some edge cases)
-    console.debug(`[${new Date().toISOString()}] ⚠️  Unhandled rejection (headers already sent, non-fatal):`, reason?.message || String(reason));
+    console.debug(`[${timestamp}] [${correlationId}] ⚠️  Unhandled rejection (headers already sent, non-fatal):`, reason?.message || String(reason));
     return; // Don't log as error or exit
   }
 
-  const timestamp = new Date().toISOString();
-  console.error(`[${timestamp}] ❌ UNHANDLED REJECTION:`, reason);
-  console.error('Stack:', reason?.stack || 'No stack trace');
-  // Don't exit immediately - let the server try to recover
-  // process.exit(1) will be handled by the catch block in startServer
+  // ✅ FIX SIGSEGV: Log detallado con correlationId y memoria
+  const memory = process.memoryUsage();
+  console.error(`[${timestamp}] [${correlationId}] ❌ UNHANDLED REJECTION:`, reason);
+  console.error(`[${timestamp}] [${correlationId}] Stack:`, reason?.stack || 'No stack trace');
+  console.error(`[${timestamp}] [${correlationId}] Memory:`, {
+    heapUsed: Math.round(memory.heapUsed / 1024 / 1024) + 'MB',
+    heapTotal: Math.round(memory.heapTotal / 1024 / 1024) + 'MB',
+    rss: Math.round(memory.rss / 1024 / 1024) + 'MB'
+  });
+  
+  // ✅ FIX SIGSEGV: NO hacer process.exit(1) - solo loggear
+  // El servidor debe continuar funcionando para que otros requests puedan procesarse
+  // process.exit(1) solo en casos críticos de memoria o corrupción de estado
 });
 
 process.on('uncaughtException', (error: Error) => {
   const timestamp = new Date().toISOString();
-  console.error(`[${timestamp}] ❌ UNCAUGHT EXCEPTION:`, error);
-  console.error('Stack:', error.stack);
-  process.exit(1);
+  const correlationId = 'uncaught-exception-' + Date.now();
+  const memory = process.memoryUsage();
+  
+  // ✅ FIX SIGSEGV: Log detallado con correlationId y memoria
+  console.error(`[${timestamp}] [${correlationId}] ❌ UNCAUGHT EXCEPTION:`, error);
+  console.error(`[${timestamp}] [${correlationId}] Stack:`, error.stack);
+  console.error(`[${timestamp}] [${correlationId}] Memory:`, {
+    heapUsed: Math.round(memory.heapUsed / 1024 / 1024) + 'MB',
+    heapTotal: Math.round(memory.heapTotal / 1024 / 1024) + 'MB',
+    rss: Math.round(memory.rss / 1024 / 1024) + 'MB'
+  });
+  
+  // ✅ FIX SIGSEGV: Solo hacer process.exit(1) si es un error crítico de memoria o corrupción
+  // Para errores normales, solo loggear y continuar
+  // Esto previene que un error en un request crashee todo el servidor
+  const isCriticalError = 
+    error.message?.includes('FATAL') ||
+    error.message?.includes('corruption') ||
+    error.message?.includes('out of memory') ||
+    error.name === 'RangeError' && error.message?.includes('Maximum call stack');
+  
+  if (isCriticalError) {
+    console.error(`[${timestamp}] [${correlationId}] ❌ CRITICAL ERROR - Exiting process`);
+    process.exit(1);
+  } else {
+    console.error(`[${timestamp}] [${correlationId}] ⚠️  Non-critical error - Server will continue`);
+    // NO hacer process.exit(1) - permitir que el servidor continúe
+  }
 });
 
 // ✅ FASE 1: Lazy-load Chromium (no al boot)

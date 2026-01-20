@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { logger } from '../../config/logger';
 import { queryWithTimeout } from '../../utils/queryWithTimeout';
 import { handleSetupCheck } from '../../utils/setup-check';
+import { env } from '../../config/env';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -22,7 +23,43 @@ const queryParamsSchema = z.object({
 // GET /api/dashboard/stats - Estadísticas del dashboard
 router.get('/stats', async (req: Request, res: Response, next) => {
   const startTime = Date.now();
+  const correlationId = (req as any).correlationId || 'unknown';
+  
   try {
+    // ✅ FIX SIGSEGV: Safe Dashboard Mode - responder defaults rápidos sin scraping ni DB pesada
+    if (env.SAFE_DASHBOARD_MODE) {
+      logger.info('[Dashboard Stats] SAFE_DASHBOARD_MODE enabled - returning defaults', {
+        correlationId,
+        userId: req.user?.userId
+      });
+      
+      return res.json({
+        products: {
+          total: 0,
+          pending: 0,
+          approved: 0,
+          published: 0,
+          rejected: 0
+        },
+        sales: {
+          totalSales: 0,
+          pendingSales: 0,
+          completedSales: 0,
+          cancelledSales: 0,
+          totalRevenue: 0,
+          totalCommissions: 0
+        },
+        commissions: {
+          totalEarned: 0,
+          pendingPayout: 0,
+          totalCommissions: 0,
+          thisMonthEarnings: 0
+        },
+        _safeMode: true,
+        _timestamp: new Date().toISOString()
+      });
+    }
+    
     // Normalizar rol a mayúsculas para comparación case-insensitive
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
@@ -64,6 +101,7 @@ router.get('/stats', async (req: Request, res: Response, next) => {
     // ✅ FIX: Si es timeout, devolver 504 Gateway Timeout (no 500)
     if (error.message?.includes('timeout') || error.message?.includes('Database query timeout')) {
       logger.error('Timeout in /api/dashboard/stats', {
+        correlationId,
         error: error.message,
         userId: req.user?.userId,
         duration,
@@ -79,6 +117,7 @@ router.get('/stats', async (req: Request, res: Response, next) => {
     
     // ✅ A8: Mejor manejo de errores con logger
     logger.error('Error in /api/dashboard/stats', {
+      correlationId,
       error: error.message,
       stack: error.stack,
       userId: req.user?.userId,
@@ -91,7 +130,23 @@ router.get('/stats', async (req: Request, res: Response, next) => {
 // GET /api/dashboard/recent-activity - Actividad reciente
 router.get('/recent-activity', async (req: Request, res: Response, next) => {
   const startTime = Date.now();
+  const correlationId = (req as any).correlationId || 'unknown';
+  
   try {
+    // ✅ FIX SIGSEGV: Safe Dashboard Mode - responder array vacío sin DB
+    if (env.SAFE_DASHBOARD_MODE) {
+      logger.info('[Dashboard Recent Activity] SAFE_DASHBOARD_MODE enabled - returning empty array', {
+        correlationId,
+        userId: req.user?.userId
+      });
+      
+      return res.json({
+        activities: [],
+        _safeMode: true,
+        _timestamp: new Date().toISOString()
+      });
+    }
+    
     // ✅ A7: Validar query parameters
     const queryParams = queryParamsSchema.parse(req.query);
     
@@ -120,6 +175,7 @@ router.get('/recent-activity', async (req: Request, res: Response, next) => {
     // ✅ FIX: Si es timeout, devolver 504 Gateway Timeout
     if (error.message?.includes('timeout') || error.message?.includes('Database query timeout')) {
       logger.error('Timeout in /api/dashboard/recent-activity', {
+        correlationId,
         error: error.message,
         userId: req.user?.userId,
         duration,
@@ -134,6 +190,7 @@ router.get('/recent-activity', async (req: Request, res: Response, next) => {
     }
     
     logger.error('Error in /api/dashboard/recent-activity', {
+      correlationId,
       error: error.message,
       stack: error.stack,
       userId: req.user?.userId,

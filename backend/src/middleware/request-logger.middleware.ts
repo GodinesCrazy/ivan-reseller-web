@@ -2,11 +2,27 @@
  * ✅ PRODUCTION READY: Request Logger Middleware
  * 
  * Middleware para logging estructurado de requests
- * Incluye correlation ID y métricas de performance
+ * Incluye correlation ID, métricas de performance y memoria
+ * 
+ * ✅ FIX SIGSEGV: Agregado tracing robusto con memoria y duración
  */
 
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../config/logger';
+
+/**
+ * Helper para obtener memoria en MB
+ */
+function getMemoryUsage() {
+  const usage = process.memoryUsage();
+  return {
+    heapUsed: Math.round(usage.heapUsed / 1024 / 1024),
+    heapTotal: Math.round(usage.heapTotal / 1024 / 1024),
+    rss: Math.round(usage.rss / 1024 / 1024),
+    external: Math.round(usage.external / 1024 / 1024),
+    unit: 'MB'
+  };
+}
 
 export const requestLoggerMiddleware = (
   req: Request,
@@ -15,9 +31,10 @@ export const requestLoggerMiddleware = (
 ): void => {
   const startTime = Date.now();
   const correlationId = (req as any).correlationId || 'unknown';
+  const memoryStart = getMemoryUsage();
 
-  // Log request inicio
-  logger.info('HTTP Request', {
+  // ✅ FIX SIGSEGV: Log request inicio con memoria
+  logger.info('HTTP Request Start', {
     correlationId,
     method: req.method,
     path: req.path,
@@ -25,6 +42,7 @@ export const requestLoggerMiddleware = (
     ip: req.ip,
     userAgent: req.get('user-agent'),
     userId: (req as any).user?.userId,
+    memory: memoryStart,
   });
 
   // ✅ HOTFIX: Use 'finish' event instead of intercepting res.end to avoid ERR_HTTP_HEADERS_SENT
@@ -33,25 +51,45 @@ export const requestLoggerMiddleware = (
   res.once('finish', () => {
     try {
       const duration = Date.now() - startTime;
+      const memoryEnd = getMemoryUsage();
+      const memoryDelta = {
+        heapUsed: memoryEnd.heapUsed - memoryStart.heapUsed,
+        heapTotal: memoryEnd.heapTotal - memoryStart.heapTotal,
+        rss: memoryEnd.rss - memoryStart.rss,
+        unit: 'MB'
+      };
       
-      // Log response (safe to do after finish, NO header manipulation - only read statusCode)
+      // ✅ FIX SIGSEGV: Log response con memoria y duración
       logger.info('HTTP Response', {
         correlationId,
         method: req.method,
         path: req.path,
         statusCode: res.statusCode, // ✅ READ ONLY - never modify
         duration: `${duration}ms`,
+        durationMs: duration,
         userId: (req as any).user?.userId,
+        memory: {
+          start: memoryStart,
+          end: memoryEnd,
+          delta: memoryDelta
+        }
       });
 
-      // Log warning para requests lentos (> 1 segundo)
-      if (duration > 1000) {
-        logger.warn('Slow Request', {
+      // ✅ FIX SIGSEGV: Log warning para requests lentos (> 2 segundos) con memoria
+      if (duration > 2000) {
+        logger.warn('Slow Request (>2s)', {
           correlationId,
           method: req.method,
           path: req.path,
           duration: `${duration}ms`,
-          threshold: '1000ms',
+          durationMs: duration,
+          threshold: '2000ms',
+          memory: {
+            start: memoryStart,
+            end: memoryEnd,
+            delta: memoryDelta
+          },
+          userId: (req as any).user?.userId,
         });
       }
     } catch (error) {
@@ -66,11 +104,16 @@ export const requestLoggerMiddleware = (
       // Only log if finish event didn't fire (connection closed early)
       if (!res.writableEnded) {
         const duration = Date.now() - startTime;
+        const memoryEnd = getMemoryUsage();
         logger.warn('HTTP Request Closed Early', {
           correlationId,
           method: req.method,
           path: req.path,
           duration: `${duration}ms`,
+          memory: {
+            start: memoryStart,
+            end: memoryEnd
+          }
         });
       }
     } catch (error) {

@@ -4,6 +4,8 @@ import { automatedBusinessSystem } from '../services/automated-business.service'
 import { aiOpportunityEngine } from '../services/ai-opportunity.service';
 import { notificationService } from '../services/notification.service';
 import { secureCredentialManager } from '../services/security.service';
+import { env } from '../config/env';
+import { logger } from '../config/logger';
 
 export class AutomationController {
   
@@ -11,7 +13,49 @@ export class AutomationController {
    * Obtener configuración actual del sistema
    */
   async getSystemConfig(req: Request, res: Response) {
+    const correlationId = (req as any).correlationId || 'unknown';
+    
     try {
+      // ✅ FIX SIGSEGV: Safe Dashboard Mode - responder defaults sin scraping ni tareas en background
+      if (env.SAFE_DASHBOARD_MODE) {
+        logger.info('[Automation Config] SAFE_DASHBOARD_MODE enabled - returning safe defaults', {
+          correlationId,
+          userId: req.user?.userId
+        });
+        
+        return res.json({
+          success: true,
+          data: {
+            config: {
+              mode: 'manual',
+              environment: 'sandbox',
+              enabled: false,
+              thresholds: {
+                minProfitMargin: 15,
+                maxInvestment: 500,
+                minConfidence: 75,
+                maxRiskLevel: 3
+              }
+            },
+            credentials: [],
+            metrics: {
+              totalTransactions: 0,
+              completedTransactions: 0,
+              totalRevenue: 0,
+              totalProfit: 0,
+              automationRate: 0,
+              averageProcessingTime: 0,
+              activeRules: 0
+            },
+            systemStatus: 'operational',
+            workflows: []
+          },
+          workflows: [],
+          _safeMode: true,
+          _timestamp: new Date().toISOString()
+        });
+      }
+      
       const config = automatedBusinessSystem.getConfig();
       const credentialsList = secureCredentialManager.listCredentials();
       const metrics = automatedBusinessSystem.getMetrics();
@@ -30,7 +74,12 @@ export class AutomationController {
         workflows: [] // También en nivel raíz para acceso directo (automationRes.data.workflows)
       });
     } catch (error) {
-      console.error('Error getting system config:', error);
+      logger.error('Error getting system config', {
+        correlationId,
+        error: error?.message || String(error),
+        stack: error?.stack,
+        userId: req.user?.userId
+      });
       res.status(500).json({
         success: false,
         error: 'Error obteniendo configuración del sistema'

@@ -314,6 +314,9 @@ const envSchema = z.object({
   
   // ✅ DEBUG: Debug key for protected debug endpoints
   DEBUG_KEY: z.string().optional(),
+  
+  // ✅ FIX SIGSEGV: Safe Dashboard Mode - desactiva scraping en endpoints del dashboard
+  SAFE_DASHBOARD_MODE: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
 });
 
 // Asegurar que DATABASE_URL esté en process.env
