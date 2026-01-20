@@ -2234,7 +2234,23 @@ export class APIAvailabilityService {
             setTimeout(() => reject(new Error('Check timeout')), 10000)
           )
         ]);
-        criticalResults.push(result);
+        // ✅ FIX: Validar que result existe y tiene apiName válido antes de agregar
+        if (!result || !result.apiName || typeof result.apiName !== 'string') {
+          logger.warn(`Critical API check returned invalid result for user ${userId}`, { 
+            check: checkName,
+            result: result
+          });
+          criticalResults.push({
+            apiName: checkName,
+            name: `${checkName} API`,
+            isConfigured: false,
+            isAvailable: false,
+            lastChecked: new Date(),
+            error: 'Check returned invalid result',
+          } as APIStatus);
+        } else {
+          criticalResults.push(result);
+        }
       } catch (error: any) {
         logger.warn(`API check failed for user ${userId}`, { 
           error: error.message,
@@ -2315,7 +2331,24 @@ export class APIAvailabilityService {
       openai
     ] = simpleResults.map((result, index) => {
       if (result.status === 'fulfilled') {
-        return result.value;
+        // ✅ FIX: Validar que result.value existe y tiene apiName válido
+        const value = result.value;
+        if (!value || !value.apiName || typeof value.apiName !== 'string') {
+          const checkName = simpleCheckNames[index] || 'unknown';
+          logger.warn(`Simple API check returned invalid result for user ${userId}`, { 
+            check: checkName,
+            value: value
+          });
+          return {
+            apiName: checkName,
+            name: `${checkName} API`,
+            isConfigured: false,
+            isAvailable: false,
+            lastChecked: new Date(),
+            error: 'Check returned invalid result',
+          } as APIStatus;
+        }
+        return value;
       } else {
         const checkName = simpleCheckNames[index] || 'unknown';
         logger.warn(`Simple API check failed for user ${userId}`, { 
@@ -2353,14 +2386,14 @@ export class APIAvailabilityService {
       openai
     ];
 
-    // ✅ FIX: Agregar sandbox statuses con validación
+    // ✅ FIX: Agregar sandbox statuses con validación - MEJORADA con guards estrictos
     try {
       if (supportsEnvironments('ebay')) {
-        const index = statuses.findIndex((status) => status && status.apiName === 'ebay');
+        const index = statuses.findIndex((status) => status && typeof status.apiName === 'string' && status.apiName === 'ebay');
         if (index >= 0) {
           try {
             const sandboxStatus = await this.checkEbayAPI(userId, 'sandbox');
-            if (sandboxStatus && sandboxStatus.apiName) {
+            if (sandboxStatus && sandboxStatus.apiName && typeof sandboxStatus.apiName === 'string') {
               statuses.splice(index + 1, 0, sandboxStatus);
             }
           } catch (error: any) {
@@ -2369,11 +2402,11 @@ export class APIAvailabilityService {
         }
       }
       if (supportsEnvironments('amazon')) {
-        const index = statuses.findIndex((status) => status && status.apiName === 'amazon');
+        const index = statuses.findIndex((status) => status && typeof status.apiName === 'string' && status.apiName === 'amazon');
         if (index >= 0) {
           try {
             const sandboxStatus = await this.checkAmazonAPI(userId, 'sandbox');
-            if (sandboxStatus && sandboxStatus.apiName) {
+            if (sandboxStatus && sandboxStatus.apiName && typeof sandboxStatus.apiName === 'string') {
               statuses.splice(index + 1, 0, sandboxStatus);
             }
           } catch (error: any) {
@@ -2382,11 +2415,11 @@ export class APIAvailabilityService {
         }
       }
       if (supportsEnvironments('mercadolibre')) {
-        const index = statuses.findIndex((status) => status && status.apiName === 'mercadolibre');
+        const index = statuses.findIndex((status) => status && typeof status.apiName === 'string' && status.apiName === 'mercadolibre');
         if (index >= 0) {
           try {
             const sandboxStatus = await this.checkMercadoLibreAPI(userId, 'sandbox');
-            if (sandboxStatus && sandboxStatus.apiName) {
+            if (sandboxStatus && sandboxStatus.apiName && typeof sandboxStatus.apiName === 'string') {
               statuses.splice(index + 1, 0, sandboxStatus);
             }
           } catch (error: any) {
@@ -2396,11 +2429,11 @@ export class APIAvailabilityService {
       }
       
       // ✅ CORRECCIÓN ALIEXPRESS AFFILIATE: Agregar sandbox si aplica
-      const aliexpressAffiliateIndex = statuses.findIndex((status) => status && status.apiName === 'aliexpress-affiliate');
+      const aliexpressAffiliateIndex = statuses.findIndex((status) => status && typeof status.apiName === 'string' && status.apiName === 'aliexpress-affiliate');
       if (aliexpressAffiliateIndex >= 0) {
         try {
           const sandboxStatus = await this.checkAliExpressAffiliateAPI(userId, 'sandbox');
-          if (sandboxStatus && sandboxStatus.apiName) {
+          if (sandboxStatus && sandboxStatus.apiName && typeof sandboxStatus.apiName === 'string') {
             statuses.splice(aliexpressAffiliateIndex + 1, 0, sandboxStatus);
           }
         } catch (error: any) {
@@ -2410,11 +2443,11 @@ export class APIAvailabilityService {
       
       // ✅ CORRECCIÓN PAYPAL: Agregar sandbox si aplica
       if (supportsEnvironments('paypal')) {
-        const index = statuses.findIndex((status) => status && status.apiName === 'paypal');
+        const index = statuses.findIndex((status) => status && typeof status.apiName === 'string' && status.apiName === 'paypal');
         if (index >= 0) {
           try {
             const sandboxStatus = await this.checkPayPalAPI(userId, 'sandbox');
-            if (sandboxStatus && sandboxStatus.apiName) {
+            if (sandboxStatus && sandboxStatus.apiName && typeof sandboxStatus.apiName === 'string') {
               statuses.splice(index + 1, 0, sandboxStatus);
             }
           } catch (error: any) {
@@ -2425,11 +2458,11 @@ export class APIAvailabilityService {
       
       // ✅ CORRECCIÓN ALIEXPRESS DROPSHIPPING: Agregar sandbox si aplica
       if (supportsEnvironments('aliexpress-dropshipping')) {
-        const index = statuses.findIndex((status) => status && status.apiName === 'aliexpress-dropshipping');
+        const index = statuses.findIndex((status) => status && typeof status.apiName === 'string' && status.apiName === 'aliexpress-dropshipping');
         if (index >= 0) {
           try {
             const sandboxStatus = await this.checkAliExpressDropshippingAPI(userId, 'sandbox');
-            if (sandboxStatus && sandboxStatus.apiName) {
+            if (sandboxStatus && sandboxStatus.apiName && typeof sandboxStatus.apiName === 'string') {
               statuses.splice(index + 1, 0, sandboxStatus);
             }
           } catch (error: any) {

@@ -4,6 +4,7 @@ import { marketplaceAuthStatusService } from '../../services/marketplace-auth-st
 import ManualAuthService from '../../services/manual-auth.service';
 import { aliExpressAuthMonitor } from '../../services/ali-auth-monitor.service';
 import { handleSetupCheck } from '../../utils/setup-check';
+import { logger } from '../../config/logger';
 
 const router = Router();
 
