@@ -1,0 +1,12 @@
+# Railway ignore file - prevent Railway from detecting frontend
+frontend/
+*.md
+docs/
+scripts/
+nginx/
+reports/
+*.png
+*.jpg
+*.pdf
+*.docx
+*.mp4

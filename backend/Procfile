@@ -1,1 +1,1 @@
-web: npm run start:with-migrations
+web: npm run start:prod

@@ -31,5 +31,5 @@ cmds = [
 ]
 
 [start]
-command = "sh ./start.sh"
+command = "npm run start:prod"
 
