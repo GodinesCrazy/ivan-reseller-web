@@ -516,12 +516,47 @@ export default function APISettings() {
     setLoadingMinimumAPIs(true);
     try {
       const response = await api.get('/api/credentials/minimum-dropshipping');
+      // ✅ FIX: Proteger contra respuestas inválidas
       if (response.data?.success && response.data?.data) {
         setMinimumDropshippingAPIs(response.data.data);
+      } else {
+        // Fallback a defaults si la respuesta no tiene la estructura esperada
+        setMinimumDropshippingAPIs({
+          apis: [],
+          progress: {
+            configured: 0,
+            total: 4,
+            percentage: 0,
+            isComplete: false
+          },
+          overallStatus: 'incomplete',
+          summary: {
+            search: null,
+            publish: null,
+            payment: null,
+            purchase: null
+          }
+        });
       }
     } catch (error: any) {
       log.error('Error loading minimum dropshipping APIs:', error);
-      // No mostrar error al usuario, simplemente no mostrar la sección
+      // ✅ FIX: Fallback a defaults en caso de error
+      setMinimumDropshippingAPIs({
+        apis: [],
+        progress: {
+          configured: 0,
+          total: 4,
+          percentage: 0,
+          isComplete: false
+        },
+        overallStatus: 'incomplete',
+        summary: {
+          search: null,
+          publish: null,
+          payment: null,
+          purchase: null
+        }
+      });
     } finally {
       setLoadingMinimumAPIs(false);
     }
@@ -535,23 +570,40 @@ export default function APISettings() {
     setError(null);
     try {
       // Cargar lista de APIs disponibles desde /api/settings/apis
-      const apisResponse = await api.get('/api/settings/apis');
-      const apisData = apisResponse.data?.data || [];
+      let apisData: any[] = [];
+      try {
+        const apisResponse = await api.get('/api/settings/apis');
+        apisData = Array.isArray(apisResponse.data?.data) ? apisResponse.data.data : [];
+      } catch (apisError: any) {
+        log.error('Error loading API definitions:', apisError);
+        // Continuar con array vacío
+        apisData = [];
+      }
       
       // Crear un mapa de definiciones de APIs del backend (para usar campos correctos)
       const backendDefs: Record<string, BackendAPIDefinition> = {};
       apisData.forEach((api: BackendAPIDefinition) => {
-        if (api.apiName) {
+        if (api && api.apiName) {
           backendDefs[api.apiName] = api;
         }
       });
       setBackendApiDefinitions(backendDefs);
       
-      // Cargar credenciales configuradas desde /api/credentials
-      const credsResponse = await api.get('/api/credentials');
-      const configuredApisRaw: BackendCredentialRecord[] = Array.isArray(credsResponse.data?.data)
-        ? credsResponse.data.data
-        : [];
+      // ✅ FIX: Cargar credenciales configuradas desde /api/credentials con fallback
+      let configuredApisRaw: BackendCredentialRecord[] = [];
+      try {
+        const credsResponse = await api.get('/api/credentials');
+        // ✅ FIX: Proteger contra respuestas inválidas
+        configuredApisRaw = Array.isArray(credsResponse.data?.data)
+          ? credsResponse.data.data
+          : [];
+      } catch (credsError: any) {
+        log.error('Error loading credentials:', credsError);
+        // ✅ FIX: Fallback a array vacío en caso de error
+        configuredApisRaw = [];
+        // Mostrar error al usuario pero no crashear
+        setError('No se pudieron cargar las credenciales. Intenta nuevamente.');
+      }
       
       // ✅ FIX: Mapear 'serpapi' a 'googletrends' para el frontend
       // El backend guarda como 'serpapi' pero el frontend usa 'googletrends'
@@ -2415,13 +2467,14 @@ export default function APISettings() {
           // ✅ CORRECCIÓN: APICredential no tiene propiedad credentials, verificamos usando authStatuses
           const currentStatuses = authStatuses;
           const apiStatus = currentStatuses?.[apiName];
+          // ✅ FIX: Guard antes de acceder a status
           const hasToken = apiStatus?.status === 'healthy' || apiStatus?.status === 'refreshing';
           
           if (hasToken) {
             log.info('[APISettings] OAuth tokens detected after window close', {
               apiName,
               environment,
-              status: apiStatus?.status,
+              status: apiStatus?.status ?? 'unknown',
             });
             toast.success('✅ Autorización OAuth completada exitosamente');
             return true; // Tokens encontrados, detener polling
@@ -2927,8 +2980,8 @@ export default function APISettings() {
       return <AlertTriangle className="w-5 h-5 text-yellow-500" />;
     }
 
-    // Use new status field if available
-    if (status.status) {
+    // ✅ FIX: Use new status field if available (with guard)
+    if (status?.status) {
       switch (status.status) {
         case 'healthy':
           return <CheckCircle className="w-5 h-5 text-green-500" />;
@@ -2942,9 +2995,9 @@ export default function APISettings() {
       }
     }
 
-    // Fallback to old available field
-    if (!status.available) {
-      if (status.optional) {
+    // ✅ FIX: Fallback to old available field (with guard)
+    if (!status?.available) {
+      if (status?.optional) {
         return <AlertTriangle className="w-5 h-5 text-amber-500" />;
       }
       return <XCircle className="w-5 h-5 text-red-500" />;
@@ -2983,15 +3036,15 @@ export default function APISettings() {
     // puede ser porque las credenciales son globales o porque status viene del backend
     if (!credential) {
       if (status?.optional) {
-        // Si hay status y está disponible/configurado, mostrar estado positivo
-        if (status.status === 'healthy' || status.available) {
-          return status.message || 'Configurado y funcionando';
+        // ✅ FIX: Si hay status y está disponible/configurado, mostrar estado positivo (with guard)
+        if (status?.status === 'healthy' || status?.available) {
+          return status?.message || 'Configurado y funcionando';
         }
-        return status.message || 'Opcional (sin configurar)';
+        return status?.message || 'Opcional (sin configurar)';
       }
       // ✅ FIX: Si no hay credential pero status indica que está configurado (puede ser global o estado del backend)
       if (status?.status === 'healthy' || status?.available) {
-        return status.message || 'Configurado y funcionando';
+        return status?.message || 'Configurado y funcionando';
       }
       return 'No configurada';
     }
@@ -3015,16 +3068,16 @@ export default function APISettings() {
       return 'Configurado (verificando estado...)';
     }
     
-    // Use new status field if available
-    if (status.status) {
-      const latencyText = status.latency ? ` (${status.latency}ms)` : '';
-      const trustText = status.trustScore !== undefined ? ` [${Math.round(status.trustScore)}%]` : '';
+    // ✅ FIX: Use new status field if available (with guard)
+    if (status?.status) {
+      const latencyText = status?.latency ? ` (${status.latency}ms)` : '';
+      const trustText = status?.trustScore !== undefined ? ` [${Math.round(status.trustScore)}%]` : '';
       
       switch (status.status) {
         case 'healthy':
           return `Configurado y funcionando${latencyText}${trustText}`;
         case 'degraded':
-          return `Funcionando con problemas${latencyText}${trustText}${status.message ? `: ${status.message}` : ''}`;
+          return `Funcionando con problemas${latencyText}${trustText}${status?.message ? `: ${status.message}` : ''}`;
         case 'unhealthy':
           return `No disponible${status.message ? `: ${status.message}` : ''}${trustText}`;
         case 'unknown':
@@ -3385,14 +3438,36 @@ export default function APISettings() {
         </div>
       )}
 
-      {/* ✅ MEJORA UX: Error Global mejorado */}
+      {/* ✅ MEJORA UX: Error Global mejorado con botón reintentar */}
       {error && (
         <div className="mb-4">
-          <ErrorMessageWithSolution
-            error={error}
-            solution={getSolutionForError(error)}
-            onDismiss={() => setError(null)}
-          />
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-red-900 mb-1">Error al cargar credenciales</h3>
+                <p className="text-sm text-red-800 mb-3">{error}</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setError(null);
+                      loadCredentials();
+                    }}
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition flex items-center gap-2 text-sm"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Reintentar
+                  </button>
+                  <button
+                    onClick={() => setError(null)}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition text-sm"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -3502,7 +3577,7 @@ export default function APISettings() {
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          navigate(`/help/apis/${apiDef.name}`);
+                          window.location.href = `/help/apis/${apiDef.name}`;
                         }}
                         className="text-blue-600 hover:text-blue-800 transition-colors"
                         title="Ver guía de configuración"
@@ -3638,7 +3713,8 @@ export default function APISettings() {
                     {apiDef.name === 'aliexpress' ? (
                       <div className="flex flex-wrap items-center gap-2">
                         {/* ✅ SOLO mostrar botones si el estado es realmente 'manual_required' (por CAPTCHA/bloqueo), NO si solo faltan cookies */}
-                        {statusInfo.status === 'manual_required' && statusInfo.manualSession?.token ? (
+                        {/* ✅ FIX: Guard antes de acceder a statusInfo y manualSession */}
+                        {statusInfo?.status === 'manual_required' && (statusInfo as any)?.manualSession?.token ? (
                           <>
                             <button
                               onClick={async () => {
@@ -3655,11 +3731,11 @@ export default function APISettings() {
                             </button>
                             <a
                               href={
-                                statusInfo.manualSession.loginUrl?.startsWith('http')
-                                  ? statusInfo.manualSession.loginUrl
+                                (statusInfo as any)?.manualSession?.loginUrl?.startsWith('http')
+                                  ? (statusInfo as any).manualSession.loginUrl
                                   : `${window.location.origin}${
-                                      statusInfo.manualSession.loginUrl ||
-                                      `/manual-login/${statusInfo.manualSession.token}`
+                                      (statusInfo as any)?.manualSession?.loginUrl ||
+                                      `/manual-login/${(statusInfo as any)?.manualSession?.token}`
                                     }`
                               }
                               target="_blank"

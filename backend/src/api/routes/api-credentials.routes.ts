@@ -63,11 +63,45 @@ const normalizeScope = (value: any, actorRole: string, apiName?: string): Creden
 
 // GET /api/api-credentials - Listar APIs configuradas del usuario
 router.get('/', async (req: Request, res: Response, next) => {
+  const startTime = Date.now();
+  const correlationId = (req as any).correlationId || 'unknown';
+  
   try {
-    const userId = req.user!.userId;
+    // ✅ FIX: Verificar autenticación antes de continuar
+    if (!req.user || !req.user.userId) {
+      logger.warn('[API Credentials] Unauthenticated request', { correlationId });
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+        correlationId
+      });
+    }
     
-    // Usar CredentialsManager para listar APIs configuradas
-    const apis = await CredentialsManager.listConfiguredApis(userId);
+    const userId = req.user.userId;
+    
+    // ✅ FIX: Usar CredentialsManager con manejo de errores resiliente
+    let apis: any[] = [];
+    try {
+      apis = await CredentialsManager.listConfiguredApis(userId);
+      // ✅ FIX: Asegurar que apis es un array
+      if (!Array.isArray(apis)) {
+        logger.warn('[API Credentials] listConfiguredApis returned non-array', {
+          correlationId,
+          userId,
+          type: typeof apis
+        });
+        apis = [];
+      }
+    } catch (dbError: any) {
+      logger.error('[API Credentials] Error listing configured APIs', {
+        correlationId,
+        userId,
+        error: dbError?.message || String(dbError),
+        stack: dbError?.stack
+      });
+      // Continuar con array vacío en lugar de fallar
+      apis = [];
+    }
     
     // ✅ FIX: Mapear 'serpapi' a 'googletrends' para el frontend
     // El backend usa 'serpapi' internamente pero el frontend espera 'googletrends'
@@ -84,19 +118,50 @@ router.get('/', async (req: Request, res: Response, next) => {
     ).length;
     const sharedCount = mappedApis.filter((api) => api.scope === 'global').length;
 
+    const duration = Date.now() - startTime;
+    logger.info('[API Credentials] Listed credentials successfully', {
+      correlationId,
+      userId,
+      count: mappedApis.length,
+      duration: `${duration}ms`
+    });
+
     res.json({
       success: true,
       data: mappedApis,
       summary: {
-        total: apis.length,
+        total: mappedApis.length,
         personal: personalCount,
         shared: sharedCount,
-        active: apis.filter((a) => a.isActive).length,
-        inactive: apis.filter((a) => !a.isActive).length,
+        active: mappedApis.filter((a) => a.isActive).length,
+        inactive: mappedApis.filter((a) => !a.isActive).length,
       },
     });
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    const duration = Date.now() - startTime;
+    logger.error('[API Credentials] Unexpected error listing credentials', {
+      correlationId,
+      userId: req.user?.userId,
+      error: error?.message || String(error),
+      stack: error?.stack,
+      duration: `${duration}ms`
+    });
+    
+    // ✅ FIX: Responder 200 con array vacío en lugar de 500/502
+    // Esto previene crashes del frontend
+    res.status(200).json({
+      success: true,
+      data: [],
+      summary: {
+        total: 0,
+        personal: 0,
+        shared: 0,
+        active: 0,
+        inactive: 0,
+      },
+      error: 'No se pudieron cargar las credenciales. Intenta nuevamente.',
+      correlationId
+    });
   }
 });
 
@@ -187,17 +252,41 @@ router.get('/status', async (req: Request, res: Response, next) => {
 
 // GET /api/credentials/minimum-dropshipping - Estado de APIs mínimas necesarias para dropshipping completo
 router.get('/minimum-dropshipping', async (req: Request, res: Response, next) => {
+  const startTime = Date.now();
+  const correlationId = (req as any).correlationId || 'unknown';
+  
   try {
-    const userId = req.user!.userId;
+    // ✅ FIX: Verificar autenticación antes de continuar
+    if (!req.user || !req.user.userId) {
+      logger.warn('[API Credentials Minimum] Unauthenticated request', { correlationId });
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+        correlationId
+      });
+    }
+    
+    const userId = req.user.userId;
     
     // Obtener estados de todas las APIs
     let allStatuses: any[] = [];
     try {
       allStatuses = await apiAvailability.getAllAPIStatus(userId);
+      // ✅ FIX: Asegurar que allStatuses es un array
+      if (!Array.isArray(allStatuses)) {
+        logger.warn('[API Credentials Minimum] getAllAPIStatus returned non-array', {
+          correlationId,
+          userId,
+          type: typeof allStatuses
+        });
+        allStatuses = [];
+      }
     } catch (statusError: any) {
       logger.error('Error getting API statuses for minimum dropshipping check', {
+        correlationId,
         error: statusError?.message || String(statusError),
-        userId
+        userId,
+        stack: statusError?.stack
       });
       allStatuses = [];
     }
@@ -241,14 +330,15 @@ router.get('/minimum-dropshipping', async (req: Request, res: Response, next) =>
         // Para marketplace, verificar si al menos uno de los alternativos está configurado
         const marketplaceAPIs = ['mercadolibre', 'ebay', 'amazon'];
         const marketplaceStatuses = marketplaceAPIs.map(mpName => {
-          const status = allStatuses.find(s => s.apiName === mpName);
+          // ✅ FIX: Guard antes de acceder a propiedades
+          const status = allStatuses.find(s => s && s.apiName && typeof s.apiName === 'string' && s.apiName === mpName);
           return {
             apiName: mpName,
             name: mpName === 'mercadolibre' ? 'MercadoLibre API' : 
                   mpName === 'ebay' ? 'eBay API' : 'Amazon SP-API',
-            isConfigured: status?.isConfigured || false,
-            isAvailable: status?.isAvailable || false,
-            status: status?.status || 'unknown',
+            isConfigured: status?.isConfigured ?? false,
+            isAvailable: status?.isAvailable ?? false,
+            status: status?.status ?? 'unknown',
             message: status?.message,
             error: status?.error
           };
@@ -305,6 +395,15 @@ router.get('/minimum-dropshipping', async (req: Request, res: Response, next) =>
       overallStatus = 'partial';
     }
 
+    const duration = Date.now() - startTime;
+    logger.info('[API Credentials Minimum] Loaded minimum dropshipping APIs successfully', {
+      correlationId,
+      userId,
+      configuredCount,
+      totalCount,
+      duration: `${duration}ms`
+    });
+
     res.json({
       success: true,
       data: {
@@ -317,20 +416,25 @@ router.get('/minimum-dropshipping', async (req: Request, res: Response, next) =>
         },
         overallStatus,
         summary: {
-          search: apiStatuses.find(s => s.category === 'search'),
-          publish: apiStatuses.find(s => s.category === 'publish'),
-          payment: apiStatuses.find(s => s.category === 'payment'),
-          purchase: apiStatuses.find(s => s.category === 'purchase')
+          search: apiStatuses.find(s => s && s.category === 'search'),
+          publish: apiStatuses.find(s => s && s.category === 'publish'),
+          payment: apiStatuses.find(s => s && s.category === 'payment'),
+          purchase: apiStatuses.find(s => s && s.category === 'purchase')
         }
       }
     });
   } catch (error: any) {
+    const duration = Date.now() - startTime;
     logger.error('Error in /api/credentials/minimum-dropshipping', {
+      correlationId,
       error: error?.message || String(error),
       userId: req.user?.userId,
-      stack: error?.stack
+      stack: error?.stack,
+      duration: `${duration}ms`
     });
     
+    // ✅ FIX: Responder 200 con defaults en lugar de 500/502
+    // Esto previene crashes del frontend
     res.status(200).json({
       success: true,
       data: {
@@ -342,7 +446,14 @@ router.get('/minimum-dropshipping', async (req: Request, res: Response, next) =>
           isComplete: false
         },
         overallStatus: 'incomplete',
-        error: 'No se pudieron cargar los estados de las APIs mínimas.'
+        summary: {
+          search: null,
+          publish: null,
+          payment: null,
+          purchase: null
+        },
+        error: 'No se pudieron cargar los estados de las APIs mínimas.',
+        correlationId
       }
     });
   }
