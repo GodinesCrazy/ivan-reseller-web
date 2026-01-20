@@ -6,6 +6,14 @@
   "devCommand": "cd frontend && npm run dev",
   "rewrites": [
     {
+      "source": "/api/health",
+      "destination": "https://ivan-reseller-web-production.up.railway.app/api/health"
+    },
+    {
+      "source": "/api/auth-status",
+      "destination": "https://ivan-reseller-web-production.up.railway.app/api/auth-status"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://ivan-reseller-web-production.up.railway.app/api/:path*"
     },

@@ -73,6 +73,39 @@ app.set('trust proxy', 1);
 // Express por defecto puede devolver 304 (Not Modified) sin pasar por middlewares CORS
 app.set('etag', false); // Deshabilitar ETag globalmente (más seguro para APIs)
 
+// ✅ FIX 502: Middleware para detectar requests desde Vercel y logging detallado
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const isFromVercel = req.headers['x-vercel-id'] || 
+                       req.headers['x-forwarded-for']?.includes('vercel') ||
+                       req.headers['host']?.includes('vercel') ||
+                       req.headers['referer']?.includes('vercel') ||
+                       req.headers['referer']?.includes('ivanreseller.com');
+  
+  if (isFromVercel || req.path.startsWith('/api/')) {
+    const logData = {
+      timestamp: new Date().toISOString(),
+      method: req.method,
+      path: req.path,
+      query: req.query,
+      headers: {
+        host: req.headers.host,
+        'x-forwarded-for': req.headers['x-forwarded-for'],
+        'x-forwarded-proto': req.headers['x-forwarded-proto'],
+        'x-vercel-id': req.headers['x-vercel-id'],
+        'user-agent': req.headers['user-agent'],
+        origin: req.headers.origin,
+        referer: req.headers.referer,
+      },
+      ip: req.ip,
+      isFromVercel: !!isFromVercel,
+    };
+    
+    console.log(`[VERCEL-PROXY] ${req.method} ${req.path}`, JSON.stringify(logData, null, 2));
+  }
+  
+  next();
+});
+
 // ====================================
 // CORS ORIGINS CONFIGURATION (LEER PRIMERO)
 // ====================================
