@@ -441,20 +441,49 @@ router.get('/stats', async (req: Request, res: Response) => {
  * Get OAuth authorization URL for marketplace
  */
 router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  const correlationId = (req as any).correlationId || 'unknown';
+  const userId = req.user?.userId;
+  
   try {
     const { marketplace } = req.params;
     const { redirect_uri, environment: envParam } = req.query;
     const requestedEnv = typeof envParam === 'string' ? envParam.toLowerCase() : undefined;
     const environment = requestedEnv && ['sandbox', 'production'].includes(requestedEnv) ? requestedEnv : undefined;
 
-    if (!['ebay', 'mercadolibre'].includes(marketplace)) {
+    // ✅ FIX: Incluir aliexpress-dropshipping en marketplaces soportados
+    const supportedMarketplaces = ['ebay', 'mercadolibre', 'aliexpress-dropshipping', 'aliexpress_dropshipping'];
+    const normalizedMarketplace = marketplace.toLowerCase().replace('_', '-');
+    
+    if (!supportedMarketplaces.includes(normalizedMarketplace)) {
+      logger.warn('[Marketplace OAuth] Unsupported marketplace requested', {
+        correlationId,
+        marketplace,
+        normalizedMarketplace,
+        userId,
+        supportedMarketplaces,
+      });
       return res.status(400).json({
         success: false,
-        message: 'Invalid marketplace or OAuth not supported',
+        error: 'Invalid marketplace or OAuth not supported',
+        message: `Marketplace "${marketplace}" no es soportado para OAuth. Marketplaces soportados: ${supportedMarketplaces.filter(m => !m.includes('_')).join(', ')}`,
+        correlationId,
       });
     }
 
-    const userId = req.user!.userId;
+    if (!userId) {
+      logger.warn('[Marketplace OAuth] Unauthenticated request', {
+        correlationId,
+        marketplace: normalizedMarketplace,
+      });
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized',
+        message: 'Debes estar autenticado para iniciar OAuth',
+        correlationId,
+      });
+    }
+
     const ts = Date.now().toString();
     const nonce = crypto.randomBytes(8).toString('hex');
     const secret = process.env.ENCRYPTION_KEY || 'default-key';
@@ -897,89 +926,111 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const url = new URL(ml.getAuthUrl(String(callbackUrl)));
       url.searchParams.set('state', state);
       authUrl = url.toString();
-    } else if (marketplace === 'aliexpress-dropshipping' || marketplace === 'aliexpress_dropshipping') {
-      // ✅ FIX: Definir variables necesarias para AliExpress Dropshipping
-      // Obtener credenciales primero para determinar el ambiente
-      const credTemp = await marketplaceService.getCredentials(userId, 'aliexpress-dropshipping' as any);
-      
-      // Resolver ambiente
+    } else if (normalizedMarketplace === 'aliexpress-dropshipping') {
+      // ✅ FIX: Validación robusta para AliExpress Dropshipping OAuth
+      logger.info('[AliExpress Dropshipping OAuth] Starting authorization URL generation', {
+        correlationId,
+        userId,
+        environment: environment || 'production (default)',
+        hasRedirectUri: !!redirect_uri,
+      });
+
+      // Resolver ambiente con default seguro
       const { resolveEnvironment } = await import('../../utils/environment-resolver');
+      const credTemp = await marketplaceService.getCredentials(userId, 'aliexpress-dropshipping' as any);
       const resolvedEnv = await resolveEnvironment({
         explicit: environment as 'sandbox' | 'production' | undefined,
         fromCredentials: credTemp?.environment as 'sandbox' | 'production' | undefined,
         userId,
         default: 'production'
       });
-      
-      // Definir callbackUrl y state
-      // ✅ CANONICAL DOMAIN: Usar WEB_BASE_URL para evitar saltos de dominio (ivanreseller.com -> www.ivanreseller.com)
-      // Esto previene pérdida de cookies/state durante OAuth
+
+      // ✅ DEFAULT SEGURO: Callback URL con dominio público
       const webBaseUrl = process.env.WEB_BASE_URL || 
                         (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
-      
-      // ✅ CORRECCIÓN: Callback debe incluir /api porque el serverless function está en /api/aliexpress/callback
       const defaultCallbackUrl = `${webBaseUrl}/api/aliexpress/callback`;
       
       const callbackUrl = typeof redirect_uri === 'string' && redirect_uri.length > 0
-        ? redirect_uri
+        ? redirect_uri.trim()
         : credTemp?.credentials?.redirectUri || process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI || defaultCallbackUrl;
-      
-      if (!callbackUrl) {
-        return res.status(400).json({ success: false, message: 'Missing AliExpress Dropshipping Redirect URI' });
-      }
-      
-      const redirB64 = Buffer.from(String(callbackUrl)).toString('base64url');
-      const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv].join('|');
-      const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
-      const state = Buffer.from([payload, sig].join('|')).toString('base64url');
-      
-      logger.info('[AliExpress Dropshipping OAuth] Generating authorization URL', {
+
+      logger.debug('[AliExpress Dropshipping OAuth] Callback URL resolved', {
+        correlationId,
         userId,
-        environment: resolvedEnv,
-        callbackUrl,
+        callbackUrl: callbackUrl.substring(0, 50) + '...',
+        source: typeof redirect_uri === 'string' ? 'query_param' : 
+                credTemp?.credentials?.redirectUri ? 'credentials' :
+                process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI ? 'env_var' : 'default',
       });
 
-      const { aliexpressDropshippingAPIService } = await import('../../services/aliexpress-dropshipping-api.service');
-      const { CredentialsManager } = await import('../../services/credentials-manager.service');
-      
       // Obtener credenciales base (appKey y appSecret)
+      const { CredentialsManager } = await import('../../services/credentials-manager.service');
       const cred = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', resolvedEnv);
       
+      // ✅ VALIDACIÓN ROBUSTA: Verificar credenciales con mensajes claros
       if (!cred) {
-        logger.error('[AliExpress Dropshipping OAuth] Credentials not found', {
+        logger.warn('[AliExpress Dropshipping OAuth] Credentials not found in DB', {
+          correlationId,
           userId,
           environment: resolvedEnv,
         });
-        return res.status(400).json({
+        return res.status(422).json({
           success: false,
-          message: 'Credenciales no encontradas. Por favor configura App Key y App Secret antes de autorizar.',
+          error: 'Missing AliExpress Dropshipping credentials',
+          message: 'Credenciales no encontradas. Por favor configura App Key y App Secret antes de autorizar OAuth.',
+          missingFields: ['appKey', 'appSecret'],
+          correlationId,
         });
       }
 
-      const { appKey } = cred as any;
+      const { appKey, appSecret } = cred as any;
+      const missingFields: string[] = [];
       
-      if (!appKey) {
-        logger.error('[AliExpress Dropshipping OAuth] Missing App Key', {
+      if (!appKey || !String(appKey).trim()) {
+        missingFields.push('appKey');
+      }
+      if (!appSecret || !String(appSecret).trim()) {
+        missingFields.push('appSecret');
+      }
+
+      if (missingFields.length > 0) {
+        logger.warn('[AliExpress Dropshipping OAuth] Missing required credential fields', {
+          correlationId,
           userId,
           environment: resolvedEnv,
+          missingFields,
           hasAppKey: !!appKey,
+          hasAppSecret: !!appSecret,
         });
-        return res.status(400).json({
+        return res.status(422).json({
           success: false,
-          message: 'App Key (Client ID) no configurado. Por favor guarda las credenciales primero.',
+          error: 'Missing AliExpress Dropshipping credentials',
+          message: `Faltan campos requeridos: ${missingFields.join(', ')}. Por favor guarda las credenciales completas antes de autorizar OAuth.`,
+          missingFields,
+          correlationId,
         });
       }
 
-      // Generar URL de autorización con state personalizado
-      // AliExpress permite usar un state simple, pero usamos nuestro formato seguro para consistencia
-      const url = aliexpressDropshippingAPIService.getAuthUrl(String(callbackUrl), state, appKey);
+      // Generar state para CSRF protection
+      const redirB64 = Buffer.from(String(callbackUrl)).toString('base64url');
+      const payload = [userId, normalizedMarketplace, ts, nonce, redirB64, resolvedEnv].join('|');
+      const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+      const state = Buffer.from([payload, sig].join('|')).toString('base64url');
+
+      // Generar URL de autorización
+      const { aliexpressDropshippingAPIService } = await import('../../services/aliexpress-dropshipping-api.service');
+      const url = aliexpressDropshippingAPIService.getAuthUrl(String(callbackUrl), state, String(appKey));
       authUrl = url;
 
-      logger.info('[AliExpress Dropshipping OAuth] Authorization URL generated', {
+      logger.info('[AliExpress Dropshipping OAuth] Authorization URL generated successfully', {
+        correlationId,
         userId,
         environment: resolvedEnv,
         hasAuthUrl: !!authUrl,
         authUrlLength: authUrl.length,
+        callbackUrl: callbackUrl.substring(0, 50) + '...',
+        appKeyPreview: String(appKey).substring(0, 8) + '...',
+        duration: `${Date.now() - startTime}ms`,
       });
     }
 
@@ -1020,18 +1071,39 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       responseData.message = 'URL de autorización generada. Revisa la advertencia sobre el formato del App ID si el OAuth falla.';
     }
     
-    logger.info('[eBay OAuth] Returning auth URL response', {
+    const duration = Date.now() - startTime;
+    logger.info('[Marketplace OAuth] Returning auth URL response', {
+      correlationId,
+      marketplace: normalizedMarketplace,
+      userId,
       success: responseData.success,
       hasAuthUrl: !!responseData.data.authUrl,
       authUrlLength: responseData.data.authUrl?.length,
       hasWarning: !!responseData.warning,
+      duration: `${duration}ms`,
+      durationMs: duration,
     });
     
     res.json(responseData);
   } catch (error: any) {
-    res.status(500).json({
+    const duration = Date.now() - startTime;
+    logger.error('[Marketplace OAuth] Error generating auth URL', {
+      correlationId,
+      marketplace: req.params.marketplace,
+      userId,
+      error: error.message,
+      stack: error.stack,
+      duration: `${duration}ms`,
+      durationMs: duration,
+    });
+    
+    // ✅ RESILIENT ERROR HANDLING: Nunca devolver 500 genérico, siempre incluir correlationId
+    const statusCode = error.statusCode || error.status || 500;
+    res.status(statusCode).json({
       success: false,
-      message: error.message || 'Failed to get auth URL',
+      error: error.message || 'Failed to get auth URL',
+      message: error.message || 'Error al generar URL de autorización. Verifica los logs del servidor.',
+      correlationId,
     });
   }
 });
