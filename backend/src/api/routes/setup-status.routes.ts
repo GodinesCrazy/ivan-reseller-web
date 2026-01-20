@@ -27,13 +27,26 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     // Obtener estado de todas las APIs
-    let allStatuses;
+    let allStatuses: any[];
     try {
-      allStatuses = await apiAvailability.getAllAPIStatus(userId);
+      const rawStatuses = await apiAvailability.getAllAPIStatus(userId);
+      
+      // ✅ FIX: Validar que es un array válido
+      if (!Array.isArray(rawStatuses)) {
+        logger.warn('[Setup Status] getAllAPIStatus returned non-array', {
+          userId,
+          type: typeof rawStatuses,
+          value: rawStatuses
+        });
+        allStatuses = [];
+      } else {
+        allStatuses = rawStatuses;
+      }
     } catch (error: any) {
       logger.error('[Setup Status] Error getting API statuses', {
         userId,
-        error: error?.message || String(error)
+        error: error?.message || String(error),
+        stack: error?.stack
       });
       // Si falla obtener estados, asumir que setup está completo
       // (mejor mostrar dashboard con errores que bloquear completamente)
@@ -45,20 +58,48 @@ router.get('/', async (req: Request, res: Response) => {
       });
     }
 
-    // Contar APIs configuradas
-    const configuredAPIs = allStatuses.filter(s => s.isConfigured);
-    const totalAPIs = allStatuses.length;
+    // ✅ FIX: Filtrar entradas inválidas y loggear warnings
+    const validStatuses = allStatuses.filter((s, index) => {
+      if (!s) {
+        logger.warn('[Setup Status] Found undefined/null status entry', {
+          userId,
+          index,
+          totalStatuses: allStatuses.length
+        });
+        return false;
+      }
+      if (!s.apiName || typeof s.apiName !== 'string') {
+        logger.warn('[Setup Status] Found status entry without valid apiName', {
+          userId,
+          index,
+          status: s,
+          apiNameType: typeof s.apiName,
+          apiNameValue: s.apiName
+        });
+        return false;
+      }
+      return true;
+    });
+
+    // Contar APIs configuradas (solo válidas)
+    const configuredAPIs = validStatuses.filter(s => s.isConfigured === true);
+    const totalAPIs = validStatuses.length;
 
     // Definir APIs mínimas requeridas para considerar el setup "completo"
     // Para un SaaS funcional, necesitamos al menos:
     // - Una API de marketplace (eBay, Amazon, o MercadoLibre)
     // - Una API de búsqueda/scraping (AliExpress Affiliate o ScraperAPI)
-    const hasMarketplace = allStatuses.some(s => 
-      ['ebay', 'amazon', 'mercadolibre'].includes(s.apiName.toLowerCase()) && s.isConfigured
-    );
-    const hasSearchAPI = allStatuses.some(s => 
-      ['aliexpress-affiliate', 'scraperapi', 'zenrows'].includes(s.apiName.toLowerCase()) && s.isConfigured
-    );
+    const hasMarketplace = validStatuses.some(s => {
+      if (!s || !s.apiName) return false;
+      const apiNameLower = s.apiName.toLowerCase();
+      return ['ebay', 'amazon', 'mercadolibre'].includes(apiNameLower) && s.isConfigured === true;
+    });
+    
+    const hasSearchAPI = validStatuses.some(s => {
+      if (!s || !s.apiName) return false;
+      const apiNameLower = s.apiName.toLowerCase();
+      return ['aliexpress-affiliate', 'scraperapi', 'zenrows'].includes(apiNameLower) && s.isConfigured === true;
+    });
 
     // Setup requerido si no hay marketplace O no hay API de búsqueda
     const setupRequired = !hasMarketplace || !hasSearchAPI;
@@ -74,11 +115,13 @@ router.get('/', async (req: Request, res: Response) => {
         marketplace: !hasMarketplace,
         searchAPI: !hasSearchAPI
       },
-      configuredAPIs: configuredAPIs.map(s => ({
-        apiName: s.apiName,
-        name: s.name,
-        isAvailable: s.isAvailable
-      })),
+      configuredAPIs: configuredAPIs
+        .filter(s => s && s.apiName) // ✅ FIX: Filtrar entradas inválidas antes de mapear
+        .map(s => ({
+          apiName: s.apiName || 'unknown',
+          name: s.name || s.apiName || 'Unknown API',
+          isAvailable: s.isAvailable === true
+        })),
       message: setupRequired
         ? 'Configura al menos un marketplace y una API de búsqueda para comenzar'
         : 'Setup completo'

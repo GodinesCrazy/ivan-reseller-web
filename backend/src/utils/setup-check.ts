@@ -18,13 +18,56 @@ export async function checkSetupStatus(userId: number): Promise<SetupStatus> {
   try {
     const allStatuses = await apiAvailability.getAllAPIStatus(userId);
     
-    const hasMarketplace = allStatuses.some(s => 
-      ['ebay', 'amazon', 'mercadolibre'].includes(s.apiName.toLowerCase()) && s.isConfigured
-    );
+    // ✅ FIX: Validar que allStatuses es un array válido
+    if (!Array.isArray(allStatuses)) {
+      logger.warn('[Setup Check] getAllAPIStatus returned non-array', {
+        userId,
+        type: typeof allStatuses,
+        value: allStatuses
+      });
+      return {
+        setupRequired: false,
+        hasMarketplace: false,
+        hasSearchAPI: false,
+        reason: 'invalid_status_format'
+      };
+    }
     
-    const hasSearchAPI = allStatuses.some(s => 
-      ['aliexpress-affiliate', 'scraperapi', 'zenrows'].includes(s.apiName.toLowerCase()) && s.isConfigured
-    );
+    // ✅ FIX: Filtrar entradas inválidas y loggear warnings
+    const validStatuses = allStatuses.filter((s, index) => {
+      if (!s) {
+        logger.warn('[Setup Check] Found undefined/null status entry', {
+          userId,
+          index,
+          totalStatuses: allStatuses.length
+        });
+        return false;
+      }
+      if (!s.apiName || typeof s.apiName !== 'string') {
+        logger.warn('[Setup Check] Found status entry without valid apiName', {
+          userId,
+          index,
+          status: s,
+          apiNameType: typeof s.apiName,
+          apiNameValue: s.apiName
+        });
+        return false;
+      }
+      return true;
+    });
+    
+    // ✅ FIX: Validar con guards antes de acceder a propiedades
+    const hasMarketplace = validStatuses.some(s => {
+      if (!s || !s.apiName) return false;
+      const apiNameLower = s.apiName.toLowerCase();
+      return ['ebay', 'amazon', 'mercadolibre'].includes(apiNameLower) && s.isConfigured === true;
+    });
+    
+    const hasSearchAPI = validStatuses.some(s => {
+      if (!s || !s.apiName) return false;
+      const apiNameLower = s.apiName.toLowerCase();
+      return ['aliexpress-affiliate', 'scraperapi', 'zenrows'].includes(apiNameLower) && s.isConfigured === true;
+    });
     
     const setupRequired = !hasMarketplace || !hasSearchAPI;
     
@@ -39,13 +82,15 @@ export async function checkSetupStatus(userId: number): Promise<SetupStatus> {
   } catch (error: any) {
     logger.error('[Setup Check] Error checking setup status', {
       userId,
-      error: error?.message || String(error)
+      error: error?.message || String(error),
+      stack: error?.stack
     });
     // Si falla, asumir que setup está completo (mejor mostrar dashboard con errores)
     return {
       setupRequired: false,
       hasMarketplace: false,
-      hasSearchAPI: false
+      hasSearchAPI: false,
+      reason: 'error_checking_status'
     };
   }
 }
