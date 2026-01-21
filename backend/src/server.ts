@@ -362,7 +362,7 @@ process.on('uncaughtException', (error: Error) => {
   const correlationId = 'uncaught-exception-' + Date.now();
   const memory = process.memoryUsage();
   
-  // ✅ FIX SIGSEGV: Log detallado con correlationId y memoria
+  // ✅ FIX STABILITY: Log detallado con correlationId y memoria
   console.error(`[${timestamp}] [${correlationId}] ❌ UNCAUGHT EXCEPTION:`, error);
   console.error(`[${timestamp}] [${correlationId}] Stack:`, error.stack);
   console.error(`[${timestamp}] [${correlationId}] Memory:`, {
@@ -371,14 +371,16 @@ process.on('uncaughtException', (error: Error) => {
     rss: Math.round(memory.rss / 1024 / 1024) + 'MB'
   });
   
-  // ✅ FIX SIGSEGV: Solo hacer process.exit(1) si es un error crítico de memoria o corrupción
+  // ✅ FIX STABILITY: Solo hacer process.exit(1) si es un error crítico de memoria o corrupción
   // Para errores normales, solo loggear y continuar
   // Esto previene que un error en un request crashee todo el servidor
   const isCriticalError = 
     error.message?.includes('FATAL') ||
     error.message?.includes('corruption') ||
     error.message?.includes('out of memory') ||
-    error.name === 'RangeError' && error.message?.includes('Maximum call stack');
+    error.message?.includes('ENOMEM') ||
+    error.name === 'RangeError' && error.message?.includes('Maximum call stack') ||
+    error.name === 'RangeError' && error.message?.includes('Invalid array length');
   
   if (isCriticalError) {
     console.error(`[${timestamp}] [${correlationId}] ❌ CRITICAL ERROR - Exiting process`);
@@ -386,6 +388,7 @@ process.on('uncaughtException', (error: Error) => {
   } else {
     console.error(`[${timestamp}] [${correlationId}] ⚠️  Non-critical error - Server will continue`);
     // NO hacer process.exit(1) - permitir que el servidor continúe
+    // El watchdog permite que el servidor siga funcionando aunque haya errores no críticos
   }
 });
 

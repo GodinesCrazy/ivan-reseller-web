@@ -65,6 +65,11 @@ import meetingRoomRoutes from './api/routes/meeting-room.routes';
 import debugRoutes from './api/routes/debug.routes';
 import helpRoutes from './api/routes/help.routes';
 import aliExpressRoutes from './modules/aliexpress/aliexpress.routes';
+import diagRoutes from './api/routes/diag.routes';
+
+// ✅ FIX STABILITY: Import overload protection and timeout middlewares
+import { overloadProtectionMiddleware } from './middleware/overload-protection.middleware';
+import { timeoutMiddleware } from './middleware/timeout.middleware';
 
 const app: Application = express();
 app.set('trust proxy', 1);
@@ -885,6 +890,11 @@ app.use(compression());
 import { requestLoggerMiddleware } from './middleware/request-logger.middleware';
 app.use(requestLoggerMiddleware);
 
+// ✅ FIX STABILITY: Overload protection y timeout middlewares ANTES de las rutas API
+// Esto previene 502 cuando el sistema está sobrecargado
+app.use(overloadProtectionMiddleware());
+app.use(timeoutMiddleware());
+
 // ====================================
 // API ROUTES
 // ====================================
@@ -946,6 +956,7 @@ app.use('/api/config-audit', configAuditRoutes);
 app.use('/api/listing-lifetime', listingLifetimeRoutes);
 app.use('/api/meeting-room', meetingRoomRoutes);
 app.use('/api/help', helpRoutes);
+app.use('/api/diag', diagRoutes); // ✅ FIX STABILITY: Endpoint de diagnóstico /api/diag/ping
 app.use('/debug', debugRoutes);
 
 // ✅ DEBUG: Log routers mounted
