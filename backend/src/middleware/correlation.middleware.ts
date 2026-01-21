@@ -33,6 +33,9 @@ export const correlationMiddleware = (
 
   // Agregar al request para uso en handlers
   req.correlationId = correlationId;
+  
+  // ✅ FIX AUTH: También guardar en res.locals para acceso en middlewares de error
+  res.locals.correlationId = correlationId;
 
   // Agregar al header de respuesta para que el cliente pueda rastrear
   res.setHeader('X-Correlation-ID', correlationId);

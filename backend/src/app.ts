@@ -518,7 +518,7 @@ app.options('*', cors(corsOptions)); // Fallback para cualquier ruta
 // Cookie parser (debe ir antes de las rutas)
 app.use(cookieParser());
 
-// ✅ PRODUCTION READY: Correlation ID middleware (después de cookie parser, antes de rutas)
+// ✅ FIX AUTH: Correlation ID middleware PRIMERO (antes de body parser para tener correlationId disponible)
 app.use(correlationMiddleware);
 
 // ✅ FASE 0: Version header middleware (adds X-App-Commit to all responses)
@@ -887,6 +887,10 @@ app.use('/api', createRoleBasedRateLimit());
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ✅ FIX AUTH: Safe JSON error handler (captura SyntaxError del body parser)
+import { safeJsonErrorHandler } from './middleware/safe-json.middleware';
+app.use(safeJsonErrorHandler);
 
 // Compression
 app.use(compression());

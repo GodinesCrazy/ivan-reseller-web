@@ -36,7 +36,39 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
 
 // POST /api/auth/login - Con rate limiting para prevenir brute force
 router.post('/login', loginRateLimit, async (req: Request, res: Response, next: NextFunction) => {
+  const correlationId = (req as any).correlationId || 'unknown';
+  
   try {
+    // ✅ FIX AUTH: Validar que body existe y es objeto
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({
+        success: false,
+        error: 'Request body is required and must be a JSON object',
+        errorCode: 'INVALID_BODY',
+        correlationId,
+        hint: 'Ensure body is valid JSON e.g. {"username":"admin","password":"..."}',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    
+    // ✅ FIX AUTH: Validar campos requeridos antes de parsear con Zod
+    if (!req.body.username || !req.body.password) {
+      const missingFields: string[] = [];
+      if (!req.body.username) missingFields.push('username');
+      if (!req.body.password) missingFields.push('password');
+      
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields',
+        errorCode: 'MISSING_REQUIRED_FIELD',
+        correlationId,
+        missingFields,
+        hint: 'Both username and password are required',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    
+    // Parsear y validar con Zod (esto puede lanzar ZodError)
     const { username, password } = loginSchema.parse(req.body);
     const result = await authService.login(username, password);
 
@@ -181,7 +213,37 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
         refreshToken: result.refreshToken,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    // ✅ FIX AUTH: Manejar errores de validación de Zod con 400, no 500
+    if (error.name === 'ZodError' || error.issues) {
+      const zodError = error.issues || [];
+      const missingFields: string[] = [];
+      const invalidFields: string[] = [];
+      
+      zodError.forEach((issue: any) => {
+        if (issue.code === 'invalid_type' && issue.received === 'undefined') {
+          missingFields.push(issue.path.join('.'));
+        } else {
+          invalidFields.push(issue.path.join('.'));
+        }
+      });
+      
+      return res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        errorCode: 'VALIDATION_ERROR',
+        correlationId,
+        missingFields: missingFields.length > 0 ? missingFields : undefined,
+        invalidFields: invalidFields.length > 0 ? invalidFields : undefined,
+        hint: missingFields.length > 0 
+          ? `Missing required fields: ${missingFields.join(', ')}`
+          : 'Please check that all fields are valid',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    
+    // Si es un AppError, pasarlo al error handler (responderá correctamente)
+    // Si es otro error, pasarlo al error handler global
     next(error);
   }
 });

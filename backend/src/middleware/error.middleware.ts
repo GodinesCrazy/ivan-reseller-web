@@ -88,6 +88,11 @@ export const errorHandler = (
     errorCode = err.errorCode;
     errorId = err.errorId;
     details = err.details;
+  } else if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    // ✅ FIX AUTH: Capturar SyntaxError de JSON parser si no lo capturó safe-json middleware
+    statusCode = 400;
+    message = 'Invalid JSON body';
+    errorCode = ErrorCode.VALIDATION_ERROR;
   } else if (err.name === 'ValidationError') {
     statusCode = 400;
     message = err.message;
@@ -111,17 +116,17 @@ export const errorHandler = (
     details = { validationErrors: (err as any).errors };
   }
 
-  // ✅ PRODUCTION READY: Incluir correlation ID en logs
-  const correlationId = (req as any).correlationId || 'unknown';
+  // ✅ FIX AUTH: Incluir correlation ID en logs (debe estar disponible por correlationMiddleware)
+  const correlationId = (req as any).correlationId || res.locals?.correlationId || 'unknown';
 
-  // Logging estructurado
-  const logContext = {
+  // ✅ FIX AUTH: Logging estructurado con request info completo
+  const logContext: any = {
     errorId,
-    correlationId, // ✅ Agregar correlation ID
+    correlationId,
     errorCode,
     statusCode,
     message: err.message,
-    stack: err.stack,
+    stack: err.stack, // ✅ Incluir stack en logs (no se expone al cliente)
     userId: (req as any).user?.userId,
     path: req.path,
     method: req.method,
@@ -130,6 +135,12 @@ export const errorHandler = (
     details,
     isOperational,
   };
+  
+  // ✅ FIX AUTH: Agregar información adicional para errores de validación/JSON
+  if (err instanceof SyntaxError || err.name === 'SyntaxError') {
+    logContext.bodyType = typeof req.body;
+    logContext.bodyPreview = typeof req.body === 'string' ? req.body.substring(0, 200) : 'not a string';
+  }
 
   // ✅ PRODUCTION READY: Categorizar y trackear errores
   let errorCategory = ErrorCategory.UNKNOWN;
