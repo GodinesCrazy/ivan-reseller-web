@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { AppError } from './error.middleware';
 import { authService } from '../services/auth.service';
+import { getTokenFromRequest, parseCookiesFromHeader } from '../utils/cookie-parser';
 
 export interface JwtPayload {
   userId: number;
@@ -24,20 +25,14 @@ export const authenticate = async (
   next: NextFunction
 ) => {
   try {
-    // Prioridad 1: Token desde cookie (httpOnly, más seguro)
-    // Prioridad 2: Token desde header Authorization (para compatibilidad)
-    let token: string | undefined = req.cookies?.token;
-    
-    if (!token) {
-      const authHeader = req.headers.authorization;
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        token = authHeader.substring(7);
-      }
-    }
+    // ✅ FIX AUTH: Usar parser robusto que maneja req.cookies, req.headers.cookie y Authorization header
+    let token: string | undefined = getTokenFromRequest(req);
 
-    // ✅ MEJORA: Si no hay token pero hay refreshToken, intentar refrescar automáticamente
+    // ✅ FIX AUTH: Si no hay token pero hay refreshToken, intentar refrescar automáticamente
     if (!token) {
-      const refreshToken = req.cookies?.refreshToken;
+      // ✅ FIX AUTH: Obtener refreshToken desde múltiples fuentes
+      const refreshToken = req.cookies?.refreshToken || 
+                          (req.headers.cookie ? parseCookiesFromHeader(req.headers.cookie).refreshToken : undefined);
       
       // Si hay refreshToken, intentar refrescar el token automáticamente
       if (refreshToken && req.path !== '/api/auth/refresh' && req.path !== '/api/auth/logout') {
@@ -121,23 +116,20 @@ export const authenticate = async (
         }
       }
       
-      // Logging para debug cuando no hay token (siempre activo para diagnosticar)
+      // ✅ FIX AUTH: Logging mejorado para diagnosticar problemas de cookies
       if (!token) {
-        console.log('🔍 Auth debug - No token encontrado:', {
+        const logger = (await import('../config/logger')).default;
+        logger.debug('[Auth] No token encontrado', {
           hasCookies: !!req.cookies,
           cookieNames: req.cookies ? Object.keys(req.cookies) : [],
-          cookies: req.cookies, // Mostrar todas las cookies recibidas
+          hasCookieHeader: !!req.headers.cookie,
+          cookieHeaderPreview: req.headers.cookie ? req.headers.cookie.substring(0, 100) + '...' : null,
           hasAuthHeader: !!req.headers.authorization,
           hasRefreshToken: !!refreshToken,
           path: req.path,
           method: req.method,
           origin: req.headers.origin,
           referer: req.headers.referer,
-          'cookie-header': req.headers.cookie, // Header raw de cookies
-          'user-agent': req.headers['user-agent'],
-          'accept': req.headers.accept,
-          'accept-language': req.headers['accept-language'],
-          allHeaders: Object.keys(req.headers),
         });
       }
     }
@@ -153,13 +145,69 @@ export const authenticate = async (
     }
 
     try {
+      // ✅ FIX AUTH: Validar formato del token antes de verificar
+      if (!token || typeof token !== 'string' || token.trim().length === 0) {
+        throw new AppError('Token is empty or invalid format', 401);
+      }
+      
+      // ✅ FIX AUTH: Validar que JWT_SECRET existe y es válido
+      if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) {
+        const logger = (await import('../config/logger')).default;
+        logger.error('[Auth] JWT_SECRET is missing or too short', {
+          hasSecret: !!env.JWT_SECRET,
+          secretLength: env.JWT_SECRET?.length || 0,
+        });
+        throw new AppError('Server configuration error', 500);
+      }
+      
       const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+      
+      // ✅ FIX AUTH: Validar que el payload tiene los campos requeridos
+      if (!decoded.userId || !decoded.username || !decoded.role) {
+        const logger = (await import('../config/logger')).default;
+        logger.warn('[Auth] Token decoded but missing required fields', {
+          hasUserId: !!decoded.userId,
+          hasUsername: !!decoded.username,
+          hasRole: !!decoded.role,
+        });
+        throw new AppError('Invalid token payload', 401);
+      }
+      
       req.user = decoded;
       next();
     } catch (error) {
+      const logger = (await import('../config/logger')).default;
+      
+      if (error instanceof AppError) {
+        throw error;
+      }
+      
       if (error instanceof jwt.TokenExpiredError) {
+        logger.debug('[Auth] Token expired', {
+          path: req.path,
+          method: req.method,
+        });
         throw new AppError('Token expired', 401);
       }
+      
+      if (error instanceof jwt.JsonWebTokenError) {
+        logger.warn('[Auth] Invalid token', {
+          path: req.path,
+          method: req.method,
+          error: error.message,
+          tokenPreview: token ? `${token.substring(0, 20)}...` : 'null',
+          hasCookies: !!req.cookies,
+          cookieNames: req.cookies ? Object.keys(req.cookies) : [],
+          cookieHeader: req.headers.cookie ? 'present' : 'missing',
+        });
+        throw new AppError('Invalid token', 401);
+      }
+      
+      logger.error('[Auth] Unexpected error verifying token', {
+        path: req.path,
+        method: req.method,
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw new AppError('Invalid token', 401);
     }
   } catch (error) {

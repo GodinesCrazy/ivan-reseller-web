@@ -6,7 +6,7 @@ import { redis, isRedisAvailable } from './config/redis';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { scheduledTasksService } from './services/scheduled-tasks.service';
-import { aliExpressAuthMonitor } from './services/ali-auth-monitor.service';
+// ✅ FASE 3: Dynamic import para evitar SIGSEGV - NO importar aliExpressAuthMonitor al nivel superior
 import { apiHealthMonitor } from './services/api-health-monitor.service';
 import { apiAvailability } from './services/api-availability.service';
 import { notificationService } from './services/notification.service';
@@ -24,6 +24,34 @@ if (isNaN(PORT) || PORT <= 0) {
   console.error(`   Valor recibido: ${env.PORT || 'undefined'}`);
   console.error('   Railway inyecta PORT automáticamente. Si no está disponible, verifica la configuración del servicio.');
   process.exit(1);
+}
+
+/**
+ * ✅ FIX AUTH: Validar JWT_SECRET al iniciar para prevenir cambios accidentales
+ */
+function validateJwtSecret(): void {
+  const jwtSecret = env.JWT_SECRET;
+  
+  if (!jwtSecret || jwtSecret.length < 32) {
+    console.error('❌ ERROR CRÍTICO: JWT_SECRET no está configurado o es muy corto');
+    console.error(`   Longitud actual: ${jwtSecret?.length || 0} caracteres`);
+    console.error('   Mínimo requerido: 32 caracteres');
+    console.error('');
+    console.error('🔧 SOLUCIÓN:');
+    console.error('   1. Ve a Railway Dashboard → Variables');
+    console.error('   2. Verifica que JWT_SECRET existe y tiene al menos 32 caracteres');
+    console.error('   3. Si cambias JWT_SECRET, TODAS las cookies/tokens existentes se invalidarán');
+    console.error('   4. Los usuarios necesitarán hacer login nuevamente');
+    console.error('');
+    process.exit(1);
+  }
+  
+  // ✅ FIX AUTH: Calcular hash del JWT_SECRET para detectar cambios
+  const crypto = require('crypto');
+  const secretHash = crypto.createHash('sha256').update(jwtSecret).digest('hex').substring(0, 16);
+  
+  console.log(`✅ JWT_SECRET: Configurado (${jwtSecret.length} caracteres, hash: ${secretHash}...)`);
+  console.log('   ⚠️  ADVERTENCIA: Si cambias JWT_SECRET, todos los tokens existentes se invalidarán');
 }
 
 /**
@@ -464,6 +492,9 @@ async function startServer() {
     logMilestone(`Environment: ${env.NODE_ENV}, Port: ${PORT}`);
     
     // ✅ GO-LIVE: Log configuración sanitizada (sin secretos)
+    // ✅ FIX AUTH: Validar JWT_SECRET antes de iniciar servidor
+    validateJwtSecret();
+    
     logConfiguration(env);
     
     // ✅ FASE 0: Initialize build info (for /version endpoint and X-App-Commit header)
@@ -715,11 +746,23 @@ async function startServer() {
             logMilestone('API Health Monitor disabled');
           }
           
+          // ✅ FASE 3: Dynamic import de aliExpressAuthMonitor solo cuando se necesite
           // ✅ FIX: Usar env ya importado estáticamente (no import dinámico que causa "before initialization")
           // El env ya está disponible desde la línea 3: import { env } from './config/env';
           if (env.ALIEXPRESS_AUTH_MONITOR_ENABLED) {
-            logMilestone('Starting AliExpress Auth Monitor');
-            aliExpressAuthMonitor.start();
+            // Verificar flags de seguridad antes de cargar
+            const safeMode = env.SAFE_AUTH_STATUS_MODE ?? (process.env.NODE_ENV === 'production');
+            const disableBrowser = env.DISABLE_BROWSER_AUTOMATION ?? false;
+            
+            if (!safeMode && !disableBrowser) {
+              logMilestone('Starting AliExpress Auth Monitor');
+              const { aliExpressAuthMonitor } = await import('./services/ali-auth-monitor.service');
+              aliExpressAuthMonitor.start();
+            } else {
+              logMilestone('AliExpress Auth Monitor disabled (SAFE_AUTH_STATUS_MODE or DISABLE_BROWSER_AUTOMATION enabled)');
+              const { logger } = await import('./config/logger');
+              logger.info('AliExpress Auth Monitor: Disabled by safety flags. System will work in safe mode without browser automation.');
+            }
           } else {
             logMilestone('AliExpress Auth Monitor disabled (ALIEXPRESS_AUTH_MONITOR_ENABLED=false)');
             const { logger } = await import('./config/logger');
@@ -766,7 +809,13 @@ async function startServer() {
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
   apiHealthMonitor.stop();
-  aliExpressAuthMonitor.stop();
+  // ✅ FASE 3: Dynamic import para stop
+  try {
+    const { aliExpressAuthMonitor } = await import('./services/ali-auth-monitor.service');
+    aliExpressAuthMonitor.stop();
+  } catch (error) {
+    // Ignorar si el módulo no está cargado
+  }
   await scheduledTasksService.shutdown();
   
   // ✅ FASE 5: Detener Workflow Scheduler
@@ -787,7 +836,13 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down gracefully...');
   apiHealthMonitor.stop();
-  aliExpressAuthMonitor.stop();
+  // ✅ FASE 3: Dynamic import para stop
+  try {
+    const { aliExpressAuthMonitor } = await import('./services/ali-auth-monitor.service');
+    aliExpressAuthMonitor.stop();
+  } catch (error) {
+    // Ignorar si el módulo no está cargado
+  }
   await scheduledTasksService.shutdown();
   await prisma.$disconnect();
   if (isRedisAvailable) {
