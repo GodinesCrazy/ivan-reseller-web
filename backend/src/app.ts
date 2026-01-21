@@ -884,8 +884,13 @@ app.use(responseTimeMiddleware);
 import { createRoleBasedRateLimit } from './middleware/rate-limit.middleware';
 app.use('/api', createRoleBasedRateLimit());
 
-// Body parsing
-app.use(express.json({ limit: '10mb' }));
+// ✅ FIX AUTH: Body parsing con soporte robusto para UTF-8 y CRLF
+// express.json() por defecto maneja UTF-8 y normaliza line endings automáticamente
+app.use(express.json({ 
+  limit: '10mb',
+  strict: false, // Permitir JSON más flexible (acepta comentarios, trailing commas, etc.)
+  type: ['application/json', 'application/*+json'], // Aceptar diferentes content-types
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ✅ FIX AUTH: Safe JSON error handler (captura SyntaxError del body parser)

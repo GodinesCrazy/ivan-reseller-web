@@ -51,6 +51,72 @@ router.get('/auth-status-crash-safe', async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * ✅ FIX AUTH: GET /api/debug/login-smoke
+ * Endpoint temporal para probar login automático y verificar emisión de cookies
+ * NO requiere autenticación - hace login automático con admin/admin123
+ */
+router.get('/login-smoke', async (req: Request, res: Response) => {
+  try {
+    const { authService } = await import('../../services/auth.service');
+    const correlationId = (req as any).correlationId || 'unknown';
+    
+    // Hacer login automático
+    const result = await authService.login('admin', 'admin123');
+    
+    // Configurar cookies igual que en /api/auth/login
+    const isProduction = process.env.NODE_ENV === 'production';
+    const requestProtocol = req.protocol || (req.headers['x-forwarded-proto'] as string) || 'http';
+    const isHttps = requestProtocol === 'https';
+    
+    const cookieOptions: any = {
+      httpOnly: true,
+      secure: isProduction ? true : isHttps,
+      sameSite: isProduction ? 'none' as const : 'lax' as const,
+      maxAge: 60 * 60 * 1000,
+      path: '/',
+    };
+    
+    // NO establecer domain en producción (permite cross-domain)
+    
+    // Establecer cookies
+    res.cookie('token', result.token, cookieOptions);
+    res.cookie('refreshToken', result.refreshToken, {
+      ...cookieOptions,
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+    
+    // Obtener headers Set-Cookie
+    const setCookieHeaders = res.getHeader('Set-Cookie');
+    const cookieHeaderArray = Array.isArray(setCookieHeaders) ? setCookieHeaders : (setCookieHeaders ? [String(setCookieHeaders)] : []);
+    const tokenCookieHeader = cookieHeaderArray.find(h => h.includes('token='));
+    
+    res.json({
+      ok: true,
+      hasSetCookie: !!setCookieHeaders && cookieHeaderArray.length > 0,
+      cookiePreview: tokenCookieHeader ? tokenCookieHeader.substring(0, 100) + '...' : null,
+      cookieHeaders: cookieHeaderArray,
+      correlationId,
+      secure: cookieOptions.secure,
+      sameSite: cookieOptions.sameSite,
+      hasDomain: !!cookieOptions.domain,
+      isProduction,
+    });
+  } catch (error: any) {
+    const correlationId = (req as any).correlationId || 'unknown';
+    logger.error('[Debug Login Smoke] Error', {
+      correlationId,
+      error: error?.message || String(error),
+    });
+    
+    res.status(500).json({
+      ok: false,
+      error: error?.message || 'Login failed',
+      correlationId,
+    });
+  }
+});
+
 // Require authentication for other endpoints
 router.use(authenticate);
 

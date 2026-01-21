@@ -38,9 +38,34 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
 router.post('/login', loginRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   const correlationId = (req as any).correlationId || 'unknown';
   
+  // ✅ FIX AUTH: Logging robusto del raw body SOLO en modo debug para /api/auth/login
+  const isDebugMode = process.env.LOG_LEVEL === 'debug' || process.env.NODE_ENV !== 'production';
+  if (isDebugMode) {
+    logger.debug('[Login] Request received', {
+      correlationId,
+      contentType: req.headers['content-type'],
+      contentLength: req.headers['content-length'],
+      hasBody: !!req.body,
+      bodyType: typeof req.body,
+      bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body) : [],
+      bodyPreview: req.body ? JSON.stringify(req.body).substring(0, 200) : 'no body',
+      method: req.method,
+      path: req.path,
+    });
+  }
+  
   try {
     // ✅ FIX AUTH: Validar que body existe y es objeto
-    if (!req.body || typeof req.body !== 'object') {
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      if (isDebugMode) {
+        logger.warn('[Login] Invalid body type', {
+          correlationId,
+          bodyType: typeof req.body,
+          isArray: Array.isArray(req.body),
+          bodyValue: req.body,
+        });
+      }
+      
       return res.status(400).json({
         success: false,
         error: 'Request body is required and must be a JSON object',
@@ -127,7 +152,7 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
     }
     
     // ✅ FIX AUTH: Configurar cookies para producción (cross-domain Vercel -> Railway)
-    // Usar isProduction ya declarado arriba
+    // CRÍTICO: En producción (Vercel -> Railway), NO establecer domain y usar sameSite: 'none' + secure: true
     const cookieOptions: any = {
       httpOnly: true, // No accesible desde JavaScript (previene XSS)
       secure: isProduction ? true : isHttps, // ✅ CRÍTICO: En producción SIEMPRE true para sameSite: 'none'
@@ -136,14 +161,14 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
       path: '/', // Disponible en toda la aplicación
     };
     
-    // Establecer domain solo si backend y frontend están en el mismo dominio base
-    // ✅ FIX AUTH: En producción (Railway vs Vercel), NO establecer domain para permitir cross-domain
+    // ✅ FIX AUTH: En producción (Railway vs Vercel), NUNCA establecer domain para permitir cross-domain
+    // Solo establecer domain en desarrollo si backend y frontend están en el mismo dominio base
+    // NOTA: En producción, NO establecer domain permite que las cookies funcionen cross-domain
     if (cookieDomain && !isProduction) {
       cookieOptions.domain = cookieDomain;
-      // Si están en el mismo dominio y NO es producción, podemos usar 'lax'
       cookieOptions.sameSite = 'lax' as const;
     }
-    // Si NO establecemos domain (dominios diferentes), sameSite debe ser 'none' y secure debe ser true
+    // En producción: cookieOptions.domain queda undefined (permite cross-domain Railway -> Vercel)
 
     // Configurar cookie para refresh token (más largo)
     const refreshCookieOptions = {
