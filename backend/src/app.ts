@@ -957,7 +957,8 @@ app.use('/api/listing-lifetime', listingLifetimeRoutes);
 app.use('/api/meeting-room', meetingRoomRoutes);
 app.use('/api/help', helpRoutes);
 app.use('/api/diag', diagRoutes); // ✅ FIX STABILITY: Endpoint de diagnóstico /api/diag/ping
-app.use('/debug', debugRoutes);
+app.use('/api/debug', debugRoutes); // ✅ FIX STABILITY: Endpoint de debug /api/debug/auth-status-crash-safe
+app.use('/debug', debugRoutes); // Mantener ruta legacy
 
 // ✅ DEBUG: Log routers mounted
 console.log('✅ Mounted routers:');

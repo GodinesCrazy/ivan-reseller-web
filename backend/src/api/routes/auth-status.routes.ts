@@ -26,13 +26,19 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   const cookieHeader = req.headers.cookie ? 'cookie_present' : 'cookie_missing';
   const cookieCount = req.headers.cookie ? req.headers.cookie.split(';').length : 0;
   
+  // ✅ FIX STABILITY: Hard isolation - SIEMPRE usar modo seguro en producción
+  // Garantizar que SAFE_AUTH_STATUS_MODE=true por defecto en producción aunque env var falte
+  // Definir FUERA del try para que esté disponible en el catch
+  const isProduction = process.env.NODE_ENV === 'production';
+  const safeMode = env.SAFE_AUTH_STATUS_MODE ?? isProduction; // Default true en producción
+  
   try {
     // ✅ FIX SIGSEGV + AUTH: Log inicio con memoria y cookies
     logger.info('[Auth Status] Request start', {
       correlationId,
       userId: req.user?.userId,
       memory: memoryStart,
-      safeMode: env.SAFE_AUTH_STATUS_MODE,
+      safeMode,
       cookieStatus: cookieHeader,
       cookieCount,
       hasCookies,
@@ -66,16 +72,18 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       setupCheckPassed = false;
       // Continuar - el endpoint debe responder aunque el setup check falle
     }
-
-    // ✅ FIX SIGSEGV: Obtener statuses de forma resiliente - SOLO desde DB/cache, NO checks activos
+    
+    // ✅ FIX STABILITY: Obtener statuses de forma resiliente - SOLO desde DB/cache, NUNCA checks activos
     let statuses: any[] = [];
     try {
-      // ✅ FIX SIGSEGV: En SAFE_AUTH_STATUS_MODE, solo leer de DB/cache persistido
-      // NO ejecutar checks activos que puedan causar SIGSEGV
-      if (env.SAFE_AUTH_STATUS_MODE) {
-        logger.info('[Auth Status] SAFE_AUTH_STATUS_MODE enabled - reading from DB only', {
+      // ✅ FIX STABILITY: En modo seguro, solo leer de DB/cache persistido
+      // NO ejecutar checks activos que puedan causar SIGSEGV o llamadas externas
+      if (safeMode) {
+        logger.info('[Auth Status] SAFE_AUTH_STATUS_MODE enabled - reading from DB only (no active checks)', {
           correlationId,
-          userId
+          userId,
+          isProduction,
+          safeModeEnabled: true,
         });
         // Solo leer de DB - marketplaceAuthStatusService.listByUser solo lee de DB, no hace checks
         statuses = await marketplaceAuthStatusService.listByUser(userId);
@@ -88,7 +96,12 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
           statuses = [];
         }
       } else {
-        // Modo normal: leer de DB (pero aún no hacer checks activos desde este endpoint)
+        // Modo desarrollo: leer de DB (pero aún no hacer checks activos desde este endpoint)
+        logger.info('[Auth Status] Development mode - reading from DB only (no active checks)', {
+          correlationId,
+          userId,
+          safeModeEnabled: false,
+        });
         statuses = await marketplaceAuthStatusService.listByUser(userId);
         if (!Array.isArray(statuses)) {
           logger.warn('[Auth Status] listByUser returned non-array', {
@@ -100,13 +113,15 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         }
       }
     } catch (statusError: any) {
-      logger.warn('[Auth Status] Failed to get marketplace statuses', {
+      // ✅ FIX STABILITY: En caso de error, retornar 200 con degraded, NUNCA throw
+      logger.warn('[Auth Status] Failed to get marketplace statuses, returning degraded response', {
         correlationId,
         userId,
         error: statusError?.message || String(statusError),
         stack: statusError?.stack
       });
       statuses = [];
+      // NO hacer throw - continuar con lista vacía
     }
 
     // ✅ FIX: Obtener manual session de forma resiliente
@@ -183,14 +198,14 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       }
     });
     
-    // ✅ FIX: Siempre retornar 200 OK si hay sesión válida
+    // ✅ FIX STABILITY: Siempre retornar 200 OK si hay sesión válida, NUNCA 502
     return res.status(200).json({
       success: true,
       data: {
         statuses: payload,
       },
       warnings: setupCheckPassed ? undefined : ['Setup check failed, but auth status is available'],
-      _safeMode: env.SAFE_AUTH_STATUS_MODE,
+      _safeMode: safeMode,
       _timestamp: new Date().toISOString()
     });
   } catch (error: any) {
@@ -202,12 +217,12 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       unit: 'MB'
     };
     
-    // ✅ FIX SIGSEGV: Manejar errores de forma resiliente - nunca 500 si hay sesión válida
-    logger.error('[Auth Status] Unexpected error', {
+    // ✅ FIX STABILITY: Manejar errores de forma resiliente - NUNCA 500/502 si hay sesión válida
+    logger.error('[Auth Status] Unexpected error, returning degraded response', {
       correlationId,
       userId: req.user?.userId,
       error: error?.message || String(error),
-      stack: error?.stack,
+      stack: error?.stack?.substring(0, 500), // Limitar stack trace
       duration: `${duration}ms`,
       memory: {
         start: memoryStart,
@@ -215,7 +230,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       }
     });
     
-    // Si hay sesión válida, retornar respuesta parcial en lugar de 500
+    // ✅ FIX STABILITY: Si hay sesión válida, retornar 200 con degraded, NUNCA throw ni 500
     if (req.user?.userId) {
       return res.status(200).json({
         success: true,
@@ -223,12 +238,13 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
           statuses: {},
         },
         warnings: ['Error loading some status information'],
-        _safeMode: env.SAFE_AUTH_STATUS_MODE,
+        _degraded: true,
+        _safeMode: safeMode,
         _timestamp: new Date().toISOString()
       });
     }
     
-    // Solo retornar error si no hay sesión válida
+    // Solo retornar 401 si no hay sesión válida
     return res.status(401).json({
       success: false,
       error: 'Authentication required',

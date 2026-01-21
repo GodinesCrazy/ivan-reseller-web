@@ -487,6 +487,23 @@ export class APIAvailabilityService {
     environment: 'sandbox' | 'production',
     credentials: Record<string, string>
   ): Promise<{ success: boolean; error?: string; latency?: number }> {
+    // ✅ FIX STABILITY: Hard isolation - NO ejecutar checks activos si SAFE_AUTH_STATUS_MODE=true
+    const { env } = await import('../config/env');
+    const isProduction = process.env.NODE_ENV === 'production';
+    const safeAuthStatusMode = env.SAFE_AUTH_STATUS_MODE ?? isProduction;
+    
+    if (safeAuthStatusMode) {
+      logger.info('[performEbayHealthCheck] SAFE_AUTH_STATUS_MODE enabled - returning degraded status without active check', {
+        userId,
+        environment,
+      });
+      return {
+        success: false,
+        error: 'Health check disabled (SAFE_AUTH_STATUS_MODE)',
+        latency: 0,
+      };
+    }
+    
     const correlationId = `ebay-health-${Date.now()}`;
     const memoryStart = {
       heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
@@ -495,7 +512,7 @@ export class APIAvailabilityService {
       unit: 'MB'
     };
     
-    // ✅ FIX SIGSEGV: Circuit breaker con timeout estricto de 1500ms
+    // ✅ FIX STABILITY: Circuit breaker con timeout estricto de 1500ms
     const breaker = circuitBreakerManager.getBreaker(`ebay-${environment}`, {
       failureThreshold: 3,
       timeout: 1500, // ✅ FIX: Timeout estricto de 1500ms (antes 60000ms)

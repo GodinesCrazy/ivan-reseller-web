@@ -14,7 +14,44 @@ import logger from '../../config/logger';
 
 const router = Router();
 
-// Require authentication for all endpoints
+/**
+ * ✅ FIX STABILITY: GET /api/debug/auth-status-crash-safe
+ * Endpoint de diagnóstico que responde 200 siempre sin depender de nada más
+ * Útil para detectar si el backend está vivo aunque otros endpoints fallen
+ * NO requiere autenticación para poder usarse como healthcheck
+ */
+router.get('/auth-status-crash-safe', async (_req: Request, res: Response) => {
+  try {
+    const memory = process.memoryUsage();
+    const uptime = process.uptime();
+    
+    res.status(200).json({
+      ok: true,
+      pid: process.pid,
+      uptime: Math.round(uptime),
+      uptimeFormatted: `${Math.round(uptime / 60)}m ${Math.round(uptime % 60)}s`,
+      memory: {
+        heapUsed: Math.round(memory.heapUsed / 1024 / 1024),
+        heapTotal: Math.round(memory.heapTotal / 1024 / 1024),
+        rss: Math.round(memory.rss / 1024 / 1024),
+        external: Math.round(memory.external / 1024 / 1024),
+        unit: 'MB',
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    // ✅ FIX STABILITY: Incluso si hay error, responder 200 para indicar que el proceso está vivo
+    res.status(200).json({
+      ok: true,
+      pid: process.pid,
+      uptime: process.uptime(),
+      error: error?.message || 'Unknown error',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// Require authentication for other endpoints
 router.use(authenticate);
 
 /**
