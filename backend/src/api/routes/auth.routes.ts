@@ -40,7 +40,9 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
     const { username, password } = loginSchema.parse(req.body);
     const result = await authService.login(username, password);
 
-    // Configurar cookie httpOnly para el token (más seguro que localStorage)
+    // ✅ FIX AUTH: Configurar cookie httpOnly para el token (más seguro que localStorage)
+    // CRÍTICO: En producción, backend está en Railway y frontend en Vercel (dominios diferentes)
+    // Por lo tanto, SIEMPRE usar sameSite: 'none' y secure: true en producción
     const isProduction = process.env.NODE_ENV === 'production';
     
     // Obtener el dominio del frontend desde el origin de la petición (más confiable)
@@ -93,9 +95,7 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
     }
     
     // ✅ FIX AUTH: Configurar cookies para producción (cross-domain Vercel -> Railway)
-    // CRÍTICO: En producción, backend está en Railway y frontend en Vercel (dominios diferentes)
-    // Por lo tanto, SIEMPRE usar sameSite: 'none' y secure: true en producción
-    const isProduction = process.env.NODE_ENV === 'production';
+    // Usar isProduction ya declarado arriba
     const cookieOptions: any = {
       httpOnly: true, // No accesible desde JavaScript (previene XSS)
       secure: isProduction ? true : isHttps, // ✅ CRÍTICO: En producción SIEMPRE true para sameSite: 'none'
