@@ -1,7 +1,8 @@
 import { EventEmitter } from 'events';
 import axios from 'axios';
 import { logger } from '../config/logger';
-import { stealthScrapingService } from './stealth-scraping.service';
+// ✅ FIX SIGSEGV: NO importar stealthScrapingService al nivel superior - usar dynamic import
+// import { stealthScrapingService } from './stealth-scraping.service';
 import { autoRecoverySystem } from './auto-recovery.service';
 import { apiAvailability } from './api-availability.service';
 import { prisma } from '../config/database';
@@ -10,6 +11,7 @@ import { publicationOptimizerService } from './publication-optimizer.service';
 import MarketplaceService from './marketplace.service';
 import { AppError, ErrorCode } from '../middleware/error.middleware';
 import { toNumber } from '../utils/decimal.utils';
+import { env } from '../config/env';
 
 /**
  * Configuration for autopilot system

@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 /**
- * ? FIX STABILITY: Smoke test para estabilidad de endpoints críticos
- * Verifica que /api/auth-status y /api/debug/auth-status-crash-safe respondan correctamente
+ * ? FIX SIGSEGV: Smoke test para estabilidad de endpoints críticos
+ * Verifica que endpoints críticos NO crasheen con SIGSEGV
+ * 
+ * Endpoints probados:
+ * - /api/auth-status (debe responder 200/401, NUNCA 502)
+ * - /api/debug/auth-status-crash-safe (debe responder 200 siempre)
+ * - /api/marketplace/auth-url/aliexpress-dropshipping (debe responder 200/401/422, NUNCA 502)
+ * - /api/aliexpress/callback (debe responder 200/400, NUNCA 502)
  * 
  * Uso:
  *   node scripts/smoke-test-stability.js
@@ -20,6 +26,13 @@ let failCount = 0;
 let errorCount = 0;
 let unauthorizedCount = 0;
 
+const endpoints = [
+  '/api/auth-status',
+  '/api/debug/auth-status-crash-safe',
+  '/api/marketplace/auth-url/aliexpress-dropshipping?environment=production',
+  '/api/aliexpress/callback?code=test&state=test',
+];
+
 function makeRequest(endpoint, index) {
   return new Promise((resolve) => {
     const url = new URL(`${API_URL}${endpoint}`);
@@ -29,7 +42,7 @@ function makeRequest(endpoint, index) {
     const options = {
       hostname: url.hostname,
       port: url.port || (isHttps ? 443 : 80),
-      path: url.pathname,
+      path: url.pathname + (url.search || ''),
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -44,19 +57,19 @@ function makeRequest(endpoint, index) {
       res.on('end', () => {
         if (res.statusCode === 200) {
           successCount++;
-          console.log(`Request ${index + 1}/${TOTAL_REQUESTS} [${endpoint}]: ? 200 OK`);
+          console.log(`Request ${index + 1}/${TOTAL_REQUESTS * endpoints.length} [${endpoint}]: ? 200 OK`);
           resolve({ status: res.statusCode, success: true, endpoint });
         } else if (res.statusCode === 401) {
           unauthorizedCount++;
-          console.log(`Request ${index + 1}/${TOTAL_REQUESTS} [${endpoint}]: ?? 401 Unauthorized`);
+          console.log(`Request ${index + 1}/${TOTAL_REQUESTS * endpoints.length} [${endpoint}]: ?? 401 Unauthorized`);
           resolve({ status: res.statusCode, success: false, error: 'unauthorized', endpoint });
         } else if (res.statusCode === 502 || res.statusCode === 503 || res.statusCode === 504) {
           failCount++;
-          console.log(`Request ${index + 1}/${TOTAL_REQUESTS} [${endpoint}]: ? ${res.statusCode} (CRASH/BAD_GATEWAY)`);
+          console.log(`Request ${index + 1}/${TOTAL_REQUESTS * endpoints.length} [${endpoint}]: ? ${res.statusCode} (CRASH/BAD_GATEWAY)`);
           resolve({ status: res.statusCode, success: false, error: 'crash', endpoint });
         } else {
           errorCount++;
-          console.log(`Request ${index + 1}/${TOTAL_REQUESTS} [${endpoint}]: ??  ${res.statusCode}`);
+          console.log(`Request ${index + 1}/${TOTAL_REQUESTS * endpoints.length} [${endpoint}]: ??  ${res.statusCode}`);
           resolve({ status: res.statusCode, success: false, error: 'other', endpoint });
         }
       });
@@ -64,14 +77,14 @@ function makeRequest(endpoint, index) {
 
     req.on('error', (error) => {
       failCount++;
-      console.log(`Request ${index + 1}/${TOTAL_REQUESTS} [${endpoint}]: ? Connection failed: ${error.message}`);
+      console.log(`Request ${index + 1}/${TOTAL_REQUESTS * endpoints.length} [${endpoint}]: ? Connection failed: ${error.message}`);
       resolve({ status: 0, success: false, error: 'connection_failed', endpoint });
     });
 
     req.on('timeout', () => {
       req.destroy();
       failCount++;
-      console.log(`Request ${index + 1}/${TOTAL_REQUESTS} [${endpoint}]: ? Timeout`);
+      console.log(`Request ${index + 1}/${TOTAL_REQUESTS * endpoints.length} [${endpoint}]: ? Timeout`);
       resolve({ status: 0, success: false, error: 'timeout', endpoint });
     });
 
@@ -80,44 +93,42 @@ function makeRequest(endpoint, index) {
 }
 
 async function runSmokeTest() {
-  console.log('?? Smoke Test: Stability Endpoints');
-  console.log('===================================');
+  console.log('?? Smoke Test: Stability Endpoints (SIGSEGV Prevention)');
+  console.log('========================================================');
   console.log(`API_URL: ${API_URL}`);
   console.log(`Requests per endpoint: ${TOTAL_REQUESTS}`);
-  console.log(`Total requests: ${TOTAL_REQUESTS * 2}`);
+  console.log(`Total requests: ${TOTAL_REQUESTS * endpoints.length}`);
   console.log('');
-
-  const endpoints = [
-    '/api/auth-status',
-    '/api/debug/auth-status-crash-safe',
-  ];
 
   const requests = [];
   for (let i = 0; i < TOTAL_REQUESTS; i++) {
     for (const endpoint of endpoints) {
       requests.push(makeRequest(endpoint, i * endpoints.length + endpoints.indexOf(endpoint)));
-      // Peque?o delay entre requests (50ms)
+      // Pequeño delay entre requests (50ms)
       await new Promise(resolve => setTimeout(resolve, 50));
     }
   }
 
   await Promise.all(requests);
 
+  const totalRequests = TOTAL_REQUESTS * endpoints.length;
   console.log('');
   console.log('===================================');
   console.log('?? Resultados:');
-  console.log(`   ? Exitosos (200): ${successCount}/${TOTAL_REQUESTS * 2}`);
-  console.log(`   ?? No autorizados (401): ${unauthorizedCount}/${TOTAL_REQUESTS * 2}`);
-  console.log(`   ??  Otros errores: ${errorCount}/${TOTAL_REQUESTS * 2}`);
-  console.log(`   ? Fallos críticos (502/503/504/000): ${failCount}/${TOTAL_REQUESTS * 2}`);
+  console.log(`   ? Exitosos (200): ${successCount}/${totalRequests}`);
+  console.log(`   ?? No autorizados (401): ${unauthorizedCount}/${totalRequests}`);
+  console.log(`   ??  Otros errores: ${errorCount}/${totalRequests}`);
+  console.log(`   ? Fallos críticos (502/503/504/000): ${failCount}/${totalRequests}`);
   console.log('');
 
   if (failCount > 0) {
     console.log(`? FALLO: Se detectaron ${failCount} errores críticos (502/503/504 o connection failed)`);
     console.log('   El backend está crasheando o no está disponible - revisar logs');
+    console.log('   Posible causa: SIGSEGV por inicialización de Chromium/Puppeteer');
     process.exit(1);
-  } else if (successCount === TOTAL_REQUESTS * 2) {
+  } else if (successCount === totalRequests) {
     console.log('? ÉXITO: Todos los requests respondieron 200 OK');
+    console.log('   No se detectaron crashes SIGSEGV');
     process.exit(0);
   } else {
     console.log('??  ADVERTENCIA: Algunos requests fallaron pero no hay crashes');

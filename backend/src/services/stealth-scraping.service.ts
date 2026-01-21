@@ -1,7 +1,6 @@
 // @ts-nocheck
-import puppeteer, { Browser, Page, HTTPResponse } from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import AdblockerPlugin from 'puppeteer-extra-plugin-adblocker';
+// ✅ FIX SIGSEGV: Dynamic imports para evitar inicialización de Chromium al cargar el módulo
+// NO importar puppeteer al nivel superior - solo cuando realmente se necesite
 import axios from 'axios';
 import { AppError } from '../middleware/error.middleware';
 import { logger } from '../config/logger';
@@ -11,10 +10,12 @@ import { apiAvailability } from './api-availability.service';
 import { retryScrapingOperation } from '../utils/retry.util';
 import { getChromiumLaunchConfig } from '../utils/chromium';
 import { resolvePrice } from '../utils/currency.utils';
+import { env } from '../config/env';
+import { execSync } from 'child_process';
+import * as fs from 'fs';
 
-// Apply stealth plugin to make Puppeteer undetectable
-puppeteer.use(StealthPlugin());
-puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
+// ✅ FIX SIGSEGV: NO aplicar plugins al nivel superior - solo cuando se inicialice puppeteer
+// Los plugins se aplicarán dinámicamente cuando se cargue puppeteer
 
 /**
  * Configuration for stealth scraping
@@ -101,6 +102,12 @@ interface BrowserFingerprint {
 }
 
 /**
+ * ✅ FIX SIGSEGV: Type para puppeteer dinámico
+ */
+type PuppeteerBrowser = any;
+type PuppeteerPage = any;
+
+/**
  * Advanced Stealth Scraping Service for AliExpress
  * 
  * Features:
@@ -110,9 +117,11 @@ interface BrowserFingerprint {
  * - Proxy rotation and fingerprint management
  * - Adaptive selector system
  * - Automatic retry with exponential backoff
+ * 
+ * ✅ FIX SIGSEGV: Lazy initialization - NO inicializa Chromium hasta que se necesite
  */
 export class StealthScrapingService {
-  private browser: Browser | null = null;
+  private browser: PuppeteerBrowser | null = null;
   private config: StealthConfig;
   private currentProxy: ProxyConfig | null = null;
   private proxyList: ProxyConfig[] = [];
@@ -120,6 +129,7 @@ export class StealthScrapingService {
   private lastProxyRotation: Date = new Date();
   private requestCount = 0;
   private failedProxies: Set<string> = new Set();
+  private puppeteerModule: any = null; // Cache del módulo puppeteer cargado dinámicamente
   
   // Captcha solving APIs
   private readonly ANTI_CAPTCHA_KEY = process.env.ANTI_CAPTCHA_API_KEY;
@@ -144,7 +154,70 @@ export class StealthScrapingService {
     };
 
     this.loadProxies();
-    logger.info('StealthScrapingService initialized with config:', this.config);
+    // ✅ FIX SIGSEGV: NO inicializar browser aquí - solo cuando se necesite
+    logger.info('StealthScrapingService created (lazy initialization)', { config: this.config });
+  }
+
+  /**
+   * ✅ FIX SIGSEGV: Verificar si browser automation está deshabilitado
+   */
+  private isBrowserAutomationDisabled(): boolean {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const disableBrowserAutomation = env.DISABLE_BROWSER_AUTOMATION ?? isProduction;
+    const safeAuthStatusMode = env.SAFE_AUTH_STATUS_MODE ?? isProduction;
+    const safeDashboardMode = env.SAFE_DASHBOARD_MODE ?? false;
+    
+    // Si cualquiera de estos flags está activo, deshabilitar browser automation
+    if (disableBrowserAutomation || safeAuthStatusMode || safeDashboardMode) {
+      logger.warn('[StealthScrapingService] Browser automation disabled by feature flag', {
+        disableBrowserAutomation,
+        safeAuthStatusMode,
+        safeDashboardMode,
+        isProduction,
+      });
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * ✅ FIX SIGSEGV: Cargar puppeteer dinámicamente solo cuando se necesite
+   */
+  private async loadPuppeteer(): Promise<any> {
+    // Verificar flags antes de cargar
+    if (this.isBrowserAutomationDisabled()) {
+      throw new AppError('Browser automation is disabled (DISABLE_BROWSER_AUTOMATION=true or SAFE mode active)', 503);
+    }
+
+    // Si ya está cargado, retornar el módulo cacheado
+    if (this.puppeteerModule) {
+      return this.puppeteerModule;
+    }
+
+    try {
+      logger.info('[StealthScrapingService] Loading puppeteer dynamically...');
+      
+      // ✅ FIX SIGSEGV: Dynamic import de puppeteer-extra
+      const puppeteerExtra = await import('puppeteer-extra');
+      const StealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
+      const AdblockerPlugin = (await import('puppeteer-extra-plugin-adblocker')).default;
+      
+      const puppeteer = puppeteerExtra.default;
+      
+      // Aplicar plugins dinámicamente
+      puppeteer.use(StealthPlugin());
+      puppeteer.use(AdblockerPlugin({ blockTrackers: true }));
+      
+      // Cachear el módulo
+      this.puppeteerModule = puppeteer;
+      
+      logger.info('[StealthScrapingService] Puppeteer loaded successfully');
+      return puppeteer;
+    } catch (error: any) {
+      logger.error('[StealthScrapingService] Failed to load puppeteer:', error);
+      throw new AppError(`Failed to load browser automation: ${error.message}`, 503);
+    }
   }
 
   /**
@@ -180,7 +253,15 @@ export class StealthScrapingService {
   /**
    * Initialize browser with stealth configuration
    */
-  private async initializeBrowser(proxy?: ProxyConfig): Promise<Browser> {
+  private async initializeBrowser(proxy?: ProxyConfig): Promise<PuppeteerBrowser> {
+    // ✅ FIX SIGSEGV: Verificar flags antes de inicializar
+    if (this.isBrowserAutomationDisabled()) {
+      throw new AppError('Browser automation is disabled (DISABLE_BROWSER_AUTOMATION=true or SAFE mode active)', 503);
+    }
+
+    // ✅ FIX SIGSEGV: Cargar puppeteer dinámicamente
+    const puppeteer = await this.loadPuppeteer();
+
     let executablePath: string | undefined = process.env.PUPPETEER_EXECUTABLE_PATH;
 
     if (!executablePath) {
@@ -338,7 +419,7 @@ export class StealthScrapingService {
   /**
    * Apply fingerprint to page
    */
-  private async applyFingerprint(page: Page): Promise<void> {
+  private async applyFingerprint(page: PuppeteerPage): Promise<void> {
     if (!this.currentFingerprint) return;
 
     const { userAgent, viewport, platform, language, timezone, webgl, canvas } = this.currentFingerprint;
@@ -380,7 +461,7 @@ export class StealthScrapingService {
   /**
    * Simulate human-like behavior
    */
-  private async simulateHumanBehavior(page: Page): Promise<void> {
+  private async simulateHumanBehavior(page: PuppeteerPage): Promise<void> {
     if (!this.config.scrollBehavior && !this.config.mouseMovementSimulation) return;
 
     try {
@@ -434,7 +515,7 @@ export class StealthScrapingService {
   /**
    * Check for captcha and solve if present
    */
-  private async detectAndSolveCaptcha(page: Page): Promise<boolean> {
+  private async detectAndSolveCaptcha(page: PuppeteerPage): Promise<boolean> {
     if (!this.config.captchaSolving) return false;
 
     try {
@@ -471,7 +552,7 @@ export class StealthScrapingService {
   /**
    * Solve captcha using external service
    */
-  private async solveCaptcha(page: Page, selector: string): Promise<boolean> {
+  private async solveCaptcha(page: PuppeteerPage, selector: string): Promise<boolean> {
     // This would integrate with 2Captcha or Anti-Captcha service
     // For now, we'll implement a placeholder
     
@@ -545,6 +626,15 @@ export class StealthScrapingService {
    * Scrape AliExpress product with stealth mode
    */
   async scrapeAliExpressProduct(url: string, userId: number): Promise<EnhancedScrapedProduct> {
+    // ✅ FIX SIGSEGV: Verificar flags antes de intentar scraping
+    if (this.isBrowserAutomationDisabled()) {
+      logger.warn('[StealthScrapingService] Scraping disabled - returning degraded response', {
+        url,
+        userId,
+      });
+      throw new AppError('Browser automation is disabled (DISABLE_BROWSER_AUTOMATION=true or SAFE mode active). Scraping is not available.', 503);
+    }
+
     // ✅ Usar retry para scraping (puede fallar por bloqueos temporales)
     const result = await retryScrapingOperation(
       async () => {
@@ -688,7 +778,7 @@ export class StealthScrapingService {
   /**
    * Extract product data from page using adaptive selectors
    */
-  private async extractProductData(page: Page, url: string): Promise<EnhancedScrapedProduct> {
+  private async extractProductData(page: PuppeteerPage, url: string): Promise<EnhancedScrapedProduct> {
     logger.info('Extracting product data with adaptive selectors...');
 
     // Use adaptive selector system for robust element finding
@@ -869,6 +959,27 @@ export class StealthScrapingService {
   }
 }
 
-// Export singleton instance
-export const stealthScrapingService = new StealthScrapingService();
+// ✅ FIX SIGSEGV: Lazy singleton - NO inicializar hasta que se necesite
+let _stealthScrapingServiceInstance: StealthScrapingService | null = null;
+
+/**
+ * ✅ FIX SIGSEGV: Get singleton instance (lazy initialization)
+ * Solo se inicializa cuando realmente se necesita, y solo si los flags lo permiten
+ */
+export function getStealthScrapingService(): StealthScrapingService {
+  if (!_stealthScrapingServiceInstance) {
+    _stealthScrapingServiceInstance = new StealthScrapingService();
+  }
+  return _stealthScrapingServiceInstance;
+}
+
+// ✅ FIX SIGSEGV: Export getter function en lugar de instancia directa
+// Esto permite lazy initialization y verificación de flags antes de usar
+export const stealthScrapingService = new Proxy({} as StealthScrapingService, {
+  get(_target, prop) {
+    const instance = getStealthScrapingService();
+    return (instance as any)[prop];
+  },
+});
+
 export default stealthScrapingService;

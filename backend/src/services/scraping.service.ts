@@ -1,11 +1,13 @@
 // @ts-nocheck
 // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout y logging
+// ✅ FIX SIGSEGV: NO importar puppeteer ni stealthScrapingService al nivel superior
 import { scrapingHttpClient } from '../config/http-client';
-import puppeteer, { Browser, Page } from 'puppeteer-core';
+// import puppeteer, { Browser, Page } from 'puppeteer-core'; // ✅ FIX SIGSEGV: Dynamic import solo cuando se necesite
 import { AppError } from '../middleware/error.middleware';
-import { stealthScrapingService, EnhancedScrapedProduct } from './stealth-scraping.service';
+// import { stealthScrapingService, EnhancedScrapedProduct } from './stealth-scraping.service'; // ✅ FIX SIGSEGV: Dynamic import solo cuando se necesite
 import { logger } from '../config/logger';
 import { getChromiumLaunchConfig } from '../utils/chromium';
+import { env } from '../config/env';
 
 export interface ScrapedProduct {
   title: string;
@@ -91,9 +93,25 @@ export class AdvancedScrapingService {
         throw new AppError('Invalid AliExpress URL', 400);
       }
 
-      // Try stealth scraping first (more reliable)
+      // ✅ FIX SIGSEGV: Verificar flags antes de intentar scraping
+      const isProduction = process.env.NODE_ENV === 'production';
+      const disableBrowserAutomation = env.DISABLE_BROWSER_AUTOMATION ?? isProduction;
+      const safeAuthStatusMode = env.SAFE_AUTH_STATUS_MODE ?? isProduction;
+      const safeDashboardMode = env.SAFE_DASHBOARD_MODE ?? false;
+      
+      if (disableBrowserAutomation || safeAuthStatusMode || safeDashboardMode) {
+        logger.warn('[AdvancedScrapingService] Browser automation disabled - skipping stealth scraping', {
+          disableBrowserAutomation,
+          safeAuthStatusMode,
+          safeDashboardMode,
+        });
+        throw new AppError('Browser automation is disabled (DISABLE_BROWSER_AUTOMATION=true or SAFE mode active)', 503);
+      }
+
+      // ✅ FIX SIGSEGV: Dynamic import de stealthScrapingService solo cuando se necesite
       try {
         logger.info('Attempting stealth scraping for:', url);
+        const { stealthScrapingService } = await import('./stealth-scraping.service');
         const enhancedData = await stealthScrapingService.scrapeAliExpressProduct(url, userId);
         
         // Convert EnhancedScrapedProduct to ScrapedProduct
@@ -128,7 +146,7 @@ export class AdvancedScrapingService {
   /**
    * Convert EnhancedScrapedProduct to standard ScrapedProduct
    */
-  private convertEnhancedToStandard(enhanced: EnhancedScrapedProduct): ScrapedProduct {
+  private convertEnhancedToStandard(enhanced: any): ScrapedProduct { // ✅ FIX SIGSEGV: Usar any para evitar import estático
     return {
       title: enhanced.title,
       description: enhanced.description,

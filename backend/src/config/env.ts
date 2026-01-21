@@ -320,6 +320,17 @@ const envSchema = z.object({
   
   // ✅ FIX SIGSEGV: Safe Auth Status Mode - desactiva checks activos de marketplaces en /api/auth-status
   SAFE_AUTH_STATUS_MODE: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
+  
+  // ✅ FIX SIGSEGV: Disable Browser Automation - flag absoluto para deshabilitar Puppeteer/Chromium en producción
+  // Si está en true, NUNCA se inicializará Chromium/Puppeteer, incluso si se importa el servicio
+  // Default: true en producción, false en desarrollo
+  DISABLE_BROWSER_AUTOMATION: z.enum(['true', 'false']).optional().transform((val, ctx) => {
+    // Si está explícitamente seteado, usar ese valor
+    if (val !== undefined) return val === 'true';
+    // Si no está seteado, default true en producción, false en desarrollo
+    const nodeEnv = process.env.NODE_ENV || 'development';
+    return nodeEnv === 'production';
+  }),
 });
 
 // Asegurar que DATABASE_URL esté en process.env
