@@ -1,15 +1,18 @@
 /**
  * ? FIX STABILITY: Graceful overload protection middleware
  * Detecta event loop lag y memoria alta, responde con defaults degradados
- * para endpoints no críticos en lugar de causar 502.
+ * para endpoints no cr?ticos en lugar de causar 502.
  */
 
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../config/logger';
 
-// Umbrales de sobrecarga
+// ? FASE B: Umbrales ajustados para Railway Pro (8GB RAM)
 const EVENT_LOOP_LAG_THRESHOLD_MS = 100; // 100ms de lag = sobrecarga
-const MEMORY_THRESHOLD_PERCENT = 85; // 85% de memoria usada = sobrecarga
+// ? FASE B: Usar RSS (Resident Set Size) real en lugar de heapTotal para detectar memoria real del proceso
+// Railway Pro tiene 8GB, as? que 85% de 8GB = 6.8GB es un umbral realista
+const MEMORY_THRESHOLD_RSS_MB = 6800; // 6.8GB en MB (85% de 8GB)
+const MEMORY_THRESHOLD_PERCENT = 90; // 90% de heap usado (m?s conservador que antes)
 const MEMORY_CHECK_INTERVAL_MS = 5000; // Verificar memoria cada 5 segundos
 
 // Estado global de sobrecarga
@@ -31,7 +34,7 @@ function measureEventLoopLag(): Promise<number> {
 }
 
 /**
- * Verifica si el sistema está sobrecargado
+ * Verifica si el sistema est? sobrecargado
  */
 async function checkOverload(): Promise<{ overloaded: boolean; reason: string | null }> {
   const now = Date.now();
@@ -45,19 +48,37 @@ async function checkOverload(): Promise<{ overloaded: boolean; reason: string | 
     };
   }
 
-  // Verificar memoria cada N segundos (no en cada request)
+  // ? FASE B: Verificar memoria cada N segundos (no en cada request)
   if (now - lastMemoryCheck > MEMORY_CHECK_INTERVAL_MS) {
     lastMemoryCheck = now;
     const memory = process.memoryUsage();
-    const totalMemory = memory.heapTotal;
-    const usedMemory = memory.heapUsed;
-    const usedPercent = (usedMemory / totalMemory) * 100;
-
-    if (usedPercent > MEMORY_THRESHOLD_PERCENT) {
+    
+    // ? FASE B: Usar RSS (Resident Set Size) para detectar memoria real del proceso
+    // RSS es la memoria f?sica real que el proceso est? usando
+    const rssMB = memory.rss / 1024 / 1024; // Convertir bytes a MB
+    
+    // ? FASE B: Verificar RSS real primero (m?s preciso para Railway)
+    if (rssMB > MEMORY_THRESHOLD_RSS_MB) {
       return {
         overloaded: true,
-        reason: `memory_high_${Math.round(usedPercent)}%`
+        reason: `memory_high_rss_${Math.round(rssMB)}MB`
       };
+    }
+    
+    // ? FASE B: Verificar heap usado como fallback (solo si heapTotal es razonable)
+    // No degradar por heapTotal bajo - puede ser normal en Node.js
+    const heapUsedMB = memory.heapUsed / 1024 / 1024;
+    const heapTotalMB = memory.heapTotal / 1024 / 1024;
+    
+    // Solo verificar heap si heapTotal es razonable (> 100MB)
+    if (heapTotalMB > 100) {
+      const usedPercent = (memory.heapUsed / memory.heapTotal) * 100;
+      if (usedPercent > MEMORY_THRESHOLD_PERCENT) {
+        return {
+          overloaded: true,
+          reason: `memory_high_heap_${Math.round(usedPercent)}%`
+        };
+      }
     }
   }
 
@@ -65,7 +86,8 @@ async function checkOverload(): Promise<{ overloaded: boolean; reason: string | 
 }
 
 /**
- * Endpoints que pueden responder con defaults degradados en sobrecarga
+ * ? FASE B: Endpoints que pueden responder con defaults degradados en sobrecarga
+ * NOTA: /api/auth-status NO est aqu - es crtico y nunca debe degradarse
  */
 const DEGRADABLE_ENDPOINTS = [
   '/api/dashboard/stats',
@@ -77,13 +99,32 @@ const DEGRADABLE_ENDPOINTS = [
 ];
 
 /**
+ * ? FASE B: Endpoints crticos que NUNCA deben degradarse
+ */
+const CRITICAL_ENDPOINTS = [
+  '/api/auth-status',
+  '/api/marketplace/auth-url',
+  '/api/credentials',
+  '/api/manual-auth',
+];
+
+/**
  * Middleware de overload protection
- * Responde con defaults degradados para endpoints no críticos si hay sobrecarga
+ * Responde con defaults degradados para endpoints no cr?ticos si hay sobrecarga
  */
 export function overloadProtectionMiddleware() {
   return async (req: Request, res: Response, next: NextFunction) => {
     const correlationId = (req as any).correlationId || 'unknown';
     const path = req.path;
+
+    // ? FASE B: NUNCA degradar endpoints críticos
+    const isCritical = CRITICAL_ENDPOINTS.some(endpoint => 
+      path === endpoint || path.startsWith(endpoint + '/')
+    );
+    
+    if (isCritical) {
+      return next(); // Endpoints críticos siempre funcionan normalmente
+    }
 
     // Solo aplicar a endpoints degradables
     const isDegradable = DEGRADABLE_ENDPOINTS.some(endpoint => 
@@ -110,7 +151,7 @@ export function overloadProtectionMiddleware() {
           memoryPercent: reason?.includes('memory_high') ? reason.split('_')[2] : undefined,
         });
 
-        // Responder con defaults degradados según el endpoint
+        // Responder con defaults degradados seg?n el endpoint
         res.setHeader('X-Degraded', 'true');
         res.setHeader('X-Overload-Reason', reason || 'unknown');
 
@@ -173,7 +214,7 @@ export function overloadProtectionMiddleware() {
           });
         }
 
-        // Default degradado genérico
+        // Default degradado gen?rico
         return res.status(200).json({
           _degraded: true,
           _overloadReason: reason,

@@ -2449,9 +2449,9 @@ export default function APISettings() {
       // que inmediatamente tiene .closed = true, pero esto NO significa que esté bloqueada.
       // NO verificar .closed porque puede ser true inmediatamente para cross-origin y causar falsos positivos.
       
-      // ✅ FIX OAUTH ROBUSTO: Verificar explícitamente null Y undefined (algunos navegadores pueden retornar undefined)
+      // ✅ FASE A: Verificar explícitamente null Y undefined (algunos navegadores pueden retornar undefined)
       if (oauthWindow === null || oauthWindow === undefined) {
-        // ✅ FIX OAUTH ROBUSTO: Si popup falla, usar redirect en misma pestaña como fallback
+        // ✅ FASE A: Si popup falla, usar redirect en misma pestaña como fallback
         log.error('[APISettings] OAuth window blocked - window.open() returned null/undefined, using redirect fallback', {
           oauthWindow: oauthWindow,
           isNull: oauthWindow === null,
@@ -2459,24 +2459,15 @@ export default function APISettings() {
           apiName,
         });
         
-        // ✅ FIX OAUTH ROBUSTO: Para aliexpress-dropshipping, siempre usar redirect si popup falla
-        if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') {
-          log.info('[APISettings] Using redirect fallback for aliexpress-dropshipping OAuth');
+        // ✅ FASE A: Para TODOS los marketplaces, usar redirect si popup falla (no solo aliexpress-dropshipping)
+        log.info('[APISettings] Using redirect fallback for OAuth (popup blocked)', { apiName });
+        try {
           toast('Abriendo OAuth en esta pestaña...', { icon: 'ℹ️' });
-          window.location.href = authUrl;
-          setOauthing(null);
-          return;
+        } catch (toastError) {
+          // ✅ FASE A: Fallback silencioso si toast falla - NO romper flujo OAuth
+          console.log('[APISettings] Toast failed, continuing with redirect:', toastError);
         }
-        
-        // ✅ CORRECCIÓN: Para otros marketplaces, mostrar modal con opciones
-        setTimeout(() => {
-          setOauthBlockedModal({
-            open: true,
-            authUrl: authUrl,
-            apiName: apiName,
-            warning: oauthWarning,
-          });
-        }, 100);
+        window.location.href = authUrl;
         setOauthing(null);
         return;
       }

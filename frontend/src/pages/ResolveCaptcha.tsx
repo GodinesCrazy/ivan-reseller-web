@@ -62,7 +62,8 @@ export default function ResolveCaptcha() {
             try {
               const newWindow = window.open(sessionData.captchaUrl, '_blank', 'noopener,noreferrer');
               if (newWindow) {
-                toast.info('Se abrió la página de AliExpress en una nueva ventana. Por favor, resuelve el CAPTCHA allí.');
+                // ✅ FASE A: Usar toast() de sonner (compatible) en lugar de toast.info()
+                toast('Se abrió la página de AliExpress en una nueva ventana. Por favor, resuelve el CAPTCHA allí.', { icon: 'ℹ️' });
               } else {
                 // Pop-up bloqueado por el navegador
                 toast.warning('El navegador bloqueó la ventana emergente. Por favor, haz clic en "Abrir página de AliExpress" para abrirla manualmente.');
@@ -150,7 +151,8 @@ export default function ResolveCaptcha() {
         setSession((prev) => prev ? { ...prev, status: 'expired' } : prev);
         toast.error('La sesión de CAPTCHA ha expirado. Por favor, intenta buscar oportunidades nuevamente.');
       } else {
-        toast.info('El CAPTCHA aún no ha sido resuelto. Por favor, resuélvelo en la página de AliExpress que se abrió.');
+        // ✅ FASE A: Usar toast() de sonner (compatible) en lugar de toast.info()
+        toast('El CAPTCHA aún no ha sido resuelto. Por favor, resuélvelo en la página de AliExpress que se abrió.', { icon: 'ℹ️' });
       }
     } catch (error: any) {
       toast.error(error?.response?.data?.error || 'Error al verificar estado');
@@ -170,7 +172,8 @@ export default function ResolveCaptcha() {
     
     // ✅ Para resolver CAPTCHA, necesitamos guardar cookies de AliExpress
     // Esto requiere que el usuario copie las cookies desde la página de AliExpress
-    toast.info('Para marcar el CAPTCHA como resuelto, necesitas guardar las cookies de AliExpress. Usa la página de configuración de APIs para guardar las cookies.');
+    // ✅ FASE A: Usar toast() de sonner (compatible) en lugar de toast.info()
+    toast('Para marcar el CAPTCHA como resuelto, necesitas guardar las cookies de AliExpress. Usa la página de configuración de APIs para guardar las cookies.', { icon: 'ℹ️' });
     navigate('/settings/api-credentials');
   };
 

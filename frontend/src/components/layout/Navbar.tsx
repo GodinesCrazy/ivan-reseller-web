@@ -53,7 +53,8 @@ export default function Navbar() {
   useEffect(() => {
     if (pendingManualSession && pendingManualSession.token !== lastToastTokenRef.current) {
       lastToastTokenRef.current = pendingManualSession.token;
-      toast.info(
+      // ✅ FASE A: Usar toast() de sonner con JSX compatible
+      toast(
         <div className="flex flex-col gap-2">
           <span>AliExpress necesita que confirmes la sesión manual.</span>
           <button
@@ -63,7 +64,7 @@ export default function Navbar() {
             Abrir configuración
           </button>
         </div>,
-        { duration: 8000 }
+        { duration: 8000, icon: 'ℹ️' }
       );
     }
   }, [pendingManualSession, navigate]);

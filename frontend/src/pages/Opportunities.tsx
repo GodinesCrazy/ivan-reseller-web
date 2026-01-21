@@ -132,7 +132,8 @@ export default function Opportunities() {
         const resolveUrl = data?.resolveCaptchaUrl || (data?.token ? `/resolve-captcha/${data.token}` : null);
         if (resolveUrl) {
           const absoluteUrl = resolveUrl.startsWith('http') ? resolveUrl : `${window.location.origin}${resolveUrl}`;
-          toast.info('AliExpress requiere que resuelvas un CAPTCHA para continuar. Redirigiendo...');
+          // ✅ FASE A: Usar toast() de sonner (compatible) en lugar de toast.info()
+          toast('AliExpress requiere que resuelvas un CAPTCHA para continuar. Redirigiendo...', { icon: 'ℹ️' });
           console.log('[OPPORTUNITIES] Redirigiendo a CAPTCHA:', absoluteUrl);
           // Redirigir a la página de resolución de CAPTCHA
           window.location.href = absoluteUrl;
@@ -150,7 +151,8 @@ export default function Opportunities() {
         const resolveUrl = captchaData.resolveCaptchaUrl || (captchaData.token ? `/resolve-captcha/${captchaData.token}` : null);
         if (captchaData.captchaRequired && resolveUrl) {
           const absoluteUrl = resolveUrl.startsWith('http') ? resolveUrl : `${window.location.origin}${resolveUrl}`;
-          toast.info('AliExpress requiere que resuelvas un CAPTCHA para continuar. Redirigiendo...');
+          // ✅ FASE A: Usar toast() de sonner (compatible) en lugar de toast.info()
+          toast('AliExpress requiere que resuelvas un CAPTCHA para continuar. Redirigiendo...', { icon: 'ℹ️' });
           console.log('[OPPORTUNITIES] Redirigiendo a CAPTCHA desde catch:', absoluteUrl);
           // Redirigir a la página de resolución de CAPTCHA
           window.location.href = absoluteUrl;
@@ -349,9 +351,8 @@ export default function Opportunities() {
     if (available.length === 1) {
       const selected = available[0][0];
       if (workflowEnvironment && workflowEnvironment !== selected) {
-        toast.info(
-          `Usaremos ${selected} para ${marketplace} porque ${workflowEnvironment} no está disponible.`
-        );
+        // ✅ FASE A: Usar toast() de sonner (compatible) en lugar de toast.info()
+        toast(`Usaremos ${selected} para ${marketplace} porque ${workflowEnvironment} no está disponible.`, { icon: 'ℹ️' });
       }
       return selected;
     }
@@ -369,7 +370,8 @@ export default function Opportunities() {
       defaultPromptValue
     );
     if (!choice) {
-      toast.info('Operación cancelada por el usuario.');
+      // ✅ FASE A: Usar toast() de sonner (compatible) en lugar de toast.info()
+      toast('Operación cancelada por el usuario.', { icon: 'ℹ️' });
       return null;
     }
 

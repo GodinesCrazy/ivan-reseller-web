@@ -73,7 +73,10 @@ export const useAuthStatusStore = create<AuthStatusState>((set, get) => ({
   requestRefresh: async (marketplace: string) => {
     try {
       await api.post(`/api/auth-status/${marketplace}/refresh`);
-      toast.info('Estamos renovando la sesión de AliExpress. Esto puede tardar unos segundos.');
+      // ✅ FASE A: Usar toast() de sonner (compatible) en lugar de toast.info()
+      toast('Estamos renovando la sesión de AliExpress. Esto puede tardar unos segundos.', {
+        icon: 'ℹ️'
+      });
       await get().fetchStatuses();
     } catch (error: any) {
       const message =
