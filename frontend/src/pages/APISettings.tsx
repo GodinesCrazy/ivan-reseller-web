@@ -2462,7 +2462,7 @@ export default function APISettings() {
         // ✅ FIX OAUTH ROBUSTO: Para aliexpress-dropshipping, siempre usar redirect si popup falla
         if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') {
           log.info('[APISettings] Using redirect fallback for aliexpress-dropshipping OAuth');
-          toast.info('Abriendo OAuth en esta pestaña...', { icon: 'ℹ️' });
+          toast('Abriendo OAuth en esta pestaña...', { icon: 'ℹ️' });
           window.location.href = authUrl;
           setOauthing(null);
           return;
@@ -3740,7 +3740,7 @@ export default function APISettings() {
                           const url = await getOAuthUrlForAliExpress();
                           if (url) {
                             log.info('[APISettings] Opening OAuth in same tab (redirect)');
-                            toast.info('Redirigiendo a OAuth...', { icon: 'ℹ️' });
+                            toast('Redirigiendo a OAuth...', { icon: 'ℹ️' });
                             window.location.href = url;
                           }
                         };

@@ -85,6 +85,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
                        req.headers['host']?.includes('vercel') ||
                        req.headers['referer']?.includes('vercel') ||
                        req.headers['referer']?.includes('ivanreseller.com');
+  // ✅ Añadir headers de trazabilidad para confirmar que la petición llega a Railway
+  if (req.path.startsWith('/api/')) {
+    res.setHeader('X-Railway-Proxy', 'railway-backend');
+    res.setHeader('X-Proxy-Target', process.env.RAILWAY_STATIC_URL || process.env.RAILWAY_PROXY_TARGET || 'railway');
+  }
   
   if (isFromVercel || req.path.startsWith('/api/')) {
     const logData = {
