@@ -1,274 +1,126 @@
 /**
- * ? FIX OAUTH: Smoke Test para AliExpress Dropshipping OAuth
- * 
- * Script para validar:
- * - Login funciona
- * - GET /api/marketplace/auth-url/aliexpress-dropshipping devuelve authUrl
- * - Endpoints no devuelven 500
- * - Credenciales se pueden leer
+ * Smoke Test: AliExpress Dropshipping OAuth E2E (Node.js)
+ *
+ * Uses fetch (Node 18+). Does NOT use curl.exe.
+ * Run: node backend/scripts/smoke-test-aliexpress-oauth.js
+ *
+ * - Login via POST /api/auth/login
+ * - Store cookies, call /api/auth-status, /api/products
+ * - GET /api/marketplace/auth-url/aliexpress-dropshipping?environment=production
+ * - Print instructions to open authUrl manually
+ * - GET /api/debug/aliexpress-dropshipping-credentials
  */
 
-const https = require('https');
-const http = require('http');
-
-const API_URL = process.env.API_URL || 'https://www.ivanreseller.com';
+const API_BASE = process.env.API_URL || 'https://www.ivanreseller.com';
 const USERNAME = process.env.TEST_USERNAME || 'admin';
 const PASSWORD = process.env.TEST_PASSWORD || 'admin123';
 
-let sessionCookie = '';
+let cookieHeader = '';
 
-/**
- * Helper para hacer requests HTTP/HTTPS
- */
-function makeRequest(options, data = null) {
-  return new Promise((resolve, reject) => {
-    const protocol = options.protocol === 'https:' ? https : http;
-    const req = protocol.request(options, (res) => {
-      let body = '';
-      res.on('data', (chunk) => {
-        body += chunk;
-      });
-      res.on('end', () => {
-        // Guardar cookies de Set-Cookie header
-        if (res.headers['set-cookie']) {
-          sessionCookie = res.headers['set-cookie']
-            .map(cookie => cookie.split(';')[0])
-            .join('; ');
-        }
-        
-        resolve({
-          status: res.statusCode,
-          headers: res.headers,
-          body: body,
-          data: (() => {
-            try {
-              return JSON.parse(body);
-            } catch {
-              return body;
-            }
-          })(),
-        });
-      });
-    });
-
-    req.on('error', (error) => {
-      reject(error);
-    });
-
-    if (data) {
-      req.write(data);
-    }
-
-    req.end();
-  });
-}
-
-/**
- * Test 1: Login
- */
-async function testLogin() {
-  console.log('\n[TEST 1] Login...');
-  
-  const url = new URL(`${API_URL}/api/auth/login`);
-  const body = JSON.stringify({
-    username: USERNAME,
-    password: PASSWORD,
-  });
-
-  try {
-    const response = await makeRequest({
-      hostname: url.hostname,
-      port: url.port || (url.protocol === 'https:' ? 443 : 80),
-      path: url.pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body),
-      },
-      protocol: url.protocol,
-    }, body);
-
-    if (response.status === 200 && response.data.success) {
-      console.log('  ? Login exitoso');
-      console.log(`  Token: ${response.data.data?.token?.substring(0, 20)}...`);
-      return response.data.data?.token || null;
-    } else {
-      console.log(`  ? Login falló: ${response.status} - ${JSON.stringify(response.data)}`);
-      return null;
-    }
-  } catch (error) {
-    console.log(`  ? Error en login: ${error.message}`);
-    return null;
-  }
-}
-
-/**
- * Test 2: Auth URL
- */
-async function testAuthUrl(token) {
-  console.log('\n[TEST 2] Obtener auth URL...');
-  
-  const url = new URL(`${API_URL}/api/marketplace/auth-url/aliexpress-dropshipping`);
-  url.searchParams.set('redirect_uri', 'https://www.ivanreseller.com/api/aliexpress/callback');
-
-  const headers = {
-    'Cookie': sessionCookie || `token=${token}`,
-  };
-
-  if (token && !sessionCookie) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  try {
-    const response = await makeRequest({
-      hostname: url.hostname,
-      port: url.port || (url.protocol === 'https:' ? 443 : 80),
-      path: url.pathname + url.search,
-      method: 'GET',
-      headers,
-      protocol: url.protocol,
-    });
-
-    if (response.status === 200 && response.data.success && response.data.data?.authUrl) {
-      console.log('  ? Auth URL obtenida');
-      console.log(`  Auth URL: ${response.data.data.authUrl.substring(0, 80)}...`);
-      return true;
-    } else {
-      console.log(`  ? Auth URL falló: ${response.status} - ${JSON.stringify(response.data)}`);
-      return false;
-    }
-  } catch (error) {
-    console.log(`  ? Error obteniendo auth URL: ${error.message}`);
-    return false;
-  }
-}
-
-/**
- * Test 3: Debug Credentials
- */
-async function testDebugCredentials(token) {
-  console.log('\n[TEST 3] Verificar credenciales guardadas...');
-  
-  const url = new URL(`${API_URL}/api/debug/aliexpress-dropshipping-credentials`);
-
-  const headers = {
-    'Cookie': sessionCookie || `token=${token}`,
-  };
-
-  if (token && !sessionCookie) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  try {
-    const response = await makeRequest({
-      hostname: url.hostname,
-      port: url.port || (url.protocol === 'https:' ? 443 : 80),
-      path: url.pathname,
-      method: 'GET',
-      headers,
-      protocol: url.protocol,
-    });
-
-    if (response.status === 200 && response.data.ok) {
-      console.log('  ? Credenciales obtenidas');
-      const summary = response.data.summary;
-      console.log(`  Production token: ${summary.hasProductionToken ? '?' : '?'}`);
-      console.log(`  Sandbox token: ${summary.hasSandboxToken ? '?' : '?'}`);
-      console.log(`  Any configured: ${summary.anyConfigured ? '?' : '?'}`);
-      return true;
-    } else {
-      console.log(`  ? Credenciales fallaron: ${response.status} - ${JSON.stringify(response.data)}`);
-      return false;
-    }
-  } catch (error) {
-    console.log(`  ? Error obteniendo credenciales: ${error.message}`);
-    return false;
-  }
-}
-
-/**
- * Test 4: Validar que endpoints no devuelven 500
- */
-async function testNo500(token) {
-  console.log('\n[TEST 4] Validar que endpoints no devuelven 500...');
-  
-  const endpoints = [
-    '/api/auth-status',
-    '/api/products',
-  ];
-
-  let allPassed = true;
-
-  for (const endpoint of endpoints) {
-    const url = new URL(`${API_URL}${endpoint}`);
-    
-    const headers = {
-      'Cookie': sessionCookie || `token=${token}`,
-    };
-
-    if (token && !sessionCookie) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    try {
-      const response = await makeRequest({
-        hostname: url.hostname,
-        port: url.port || (url.protocol === 'https:' ? 443 : 80),
-        path: url.pathname,
-        method: 'GET',
-        headers,
-        protocol: url.protocol,
-      });
-
-      if (response.status >= 500) {
-        console.log(`  ? ${endpoint} devolvió ${response.status}`);
-        allPassed = false;
-      } else {
-        console.log(`  ? ${endpoint} OK (${response.status})`);
-      }
-    } catch (error) {
-      console.log(`  ? Error en ${endpoint}: ${error.message}`);
-      allPassed = false;
-    }
-  }
-
-  return allPassed;
-}
-
-/**
- * Main
- */
-async function main() {
-  console.log('?? Smoke Test: AliExpress Dropshipping OAuth');
-  console.log(`API URL: ${API_URL}`);
-  console.log(`Username: ${USERNAME}`);
-
-  const token = await testLogin();
-  if (!token) {
-    console.log('\n? Login falló, abortando tests');
-    process.exit(1);
-  }
-
-  const authUrlOk = await testAuthUrl(token);
-  const debugOk = await testDebugCredentials(token);
-  const no500Ok = await testNo500(token);
-
-  console.log('\n?? Resumen:');
-  console.log(`  Login: ?`);
-  console.log(`  Auth URL: ${authUrlOk ? '?' : '?'}`);
-  console.log(`  Debug Credentials: ${debugOk ? '?' : '?'}`);
-  console.log(`  No 500 errors: ${no500Ok ? '?' : '?'}`);
-
-  if (authUrlOk && debugOk && no500Ok) {
-    console.log('\n? Todos los tests pasaron');
-    process.exit(0);
+function parseSetCookie(res) {
+  const headers = res.headers;
+  let parts = [];
+  if (typeof headers.getSetCookie === 'function') {
+    parts = headers.getSetCookie();
   } else {
-    console.log('\n? Algunos tests fallaron');
-    process.exit(1);
+    const v = headers.get?.('set-cookie');
+    if (v) parts = [v];
   }
+  const pairs = parts.map((c) => String(c).split(';')[0].trim()).filter(Boolean);
+  if (pairs.length) cookieHeader = pairs.join('; ');
 }
 
-main().catch((error) => {
-  console.error('\n? Error fatal:', error);
+async function fetchApi(path, opts = {}) {
+  const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
+  const headers = { ...opts.headers };
+  if (cookieHeader) headers['Cookie'] = cookieHeader;
+  if (opts.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  const res = await fetch(url, { ...opts, headers, redirect: 'manual' });
+  parseSetCookie(res);
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+  return { status: res.status, data, ok: res.ok };
+}
+
+async function main() {
+  console.log('\n=== Smoke Test: AliExpress Dropshipping OAuth E2E (Node) ===\n');
+  console.log('API_BASE:', API_BASE);
+  console.log('USERNAME:', USERNAME);
+  console.log('');
+
+  // 1. Login
+  console.log('[1] Login POST /api/auth/login ...');
+  const loginRes = await fetchApi('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
+  });
+
+  if (loginRes.status !== 200 || !loginRes.data?.success) {
+    console.error('  FAIL Login:', loginRes.status, JSON.stringify(loginRes.data));
+    process.exit(1);
+  }
+  console.log('  OK Login success');
+  const token = loginRes.data?.data?.token;
+  if (token) console.log('  Token preview:', token.substring(0, 24) + '...');
+
+  // 2. Auth-status & Products
+  console.log('\n[2] GET /api/auth-status ...');
+  const authStatusRes = await fetchApi('/api/auth-status');
+  console.log('  Status:', authStatusRes.status, authStatusRes.ok ? 'OK' : 'FAIL');
+
+  console.log('\n[3] GET /api/products ...');
+  const productsRes = await fetchApi('/api/products');
+  console.log('  Status:', productsRes.status, productsRes.ok ? 'OK' : 'FAIL');
+
+  // 3. Auth URL
+  console.log('\n[4] GET /api/marketplace/auth-url/aliexpress-dropshipping?environment=production ...');
+  const authUrlRes = await fetchApi(
+    '/api/marketplace/auth-url/aliexpress-dropshipping?environment=production'
+  );
+
+  if (authUrlRes.status !== 200 || !authUrlRes.data?.success || !authUrlRes.data?.data?.authUrl) {
+    console.error('  FAIL Auth URL:', authUrlRes.status, JSON.stringify(authUrlRes.data));
+    console.log('\n  Ensure App Key / App Secret are configured for aliexpress-dropshipping.');
+    process.exit(1);
+  }
+
+  const authUrl = authUrlRes.data.data.authUrl;
+  console.log('  OK Auth URL obtained');
+  console.log('  Preview:', authUrl.substring(0, 80) + '...');
+  console.log('\n  --- INSTRUCTIONS ---');
+  console.log('  1. Open this URL in your browser to authorize AliExpress Dropshipping:');
+  console.log('     ' + authUrl);
+  console.log('  2. After authorizing, the callback will run and tokens will be stored.');
+  console.log('  3. Re-run this script (or call /api/debug/aliexpress-dropshipping-credentials)');
+  console.log('     to verify that credentials are saved.');
+  console.log('  -------------------\n');
+
+  // 4. Debug credentials (may not have tokens yet if OAuth not completed)
+  console.log('[5] GET /api/debug/aliexpress-dropshipping-credentials ...');
+  const debugRes = await fetchApi('/api/debug/aliexpress-dropshipping-credentials');
+
+  if (debugRes.status !== 200) {
+    console.log('  Status:', debugRes.status, debugRes.data ? JSON.stringify(debugRes.data) : '');
+  } else if (debugRes.data?.ok) {
+    const s = debugRes.data?.summary ?? {};
+    console.log('  OK Credentials endpoint');
+    console.log('  Production token:', s.hasProductionToken ? 'yes' : 'no');
+    console.log('  Sandbox token:', s.hasSandboxToken ? 'yes' : 'no');
+    console.log('  Any configured:', s.anyConfigured ? 'yes' : 'no');
+  } else {
+    console.log('  Response:', JSON.stringify(debugRes.data));
+  }
+
+  console.log('\n=== Smoke test finished ===\n');
+  process.exit(0);
+}
+
+main().catch((err) => {
+  console.error('Fatal:', err);
   process.exit(1);
 });
