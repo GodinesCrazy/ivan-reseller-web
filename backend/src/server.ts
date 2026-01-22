@@ -17,26 +17,40 @@ import { initBuildInfo } from './middleware/version-header.middleware';
 
 const execAsync = promisify(exec);
 
-// ✅ FIX RAILWAY P0: PORT from process.env (Railway injects it). Fallback 3000 SOLO en local.
-// En producción (Railway), process.env.PORT SIEMPRE está presente. No usar env.PORT que puede tener default 3000.
+// ✅ FIX RAILWAY P0: PORT from process.env (Railway injects it). NO fallback a 3000 en producción.
+// En producción (Railway), process.env.PORT SIEMPRE está presente. Si falta, es error crítico.
 const isProduction = process.env.NODE_ENV === 'production';
-const PORT = isProduction
-  ? Number(process.env.PORT || 3000)  // En prod: SOLO process.env.PORT, fallback 3000 si falta (no debería)
-  : Number(process.env.PORT || env.PORT || 3000);  // En dev: process.env.PORT > env.PORT > 3000
 
-if (isNaN(PORT) || PORT <= 0) {
-  console.error('❌ ERROR CRÍTICO: PORT no está configurado o es inválido');
-  console.error(`   Valor recibido: ${process.env.PORT ?? (isProduction ? 'undefined (Railway debe inyectarlo)' : env.PORT ?? 'undefined')}`);
-  console.error('   Railway inyecta PORT automáticamente. Si no está disponible, verifica la configuración del servicio.');
-  process.exit(1);
-}
+let PORT: number;
+let portSource: string;
 
-// ✅ FIX RAILWAY P0: Validar que en producción no estemos usando 3000 hardcodeado
-if (isProduction && PORT === 3000 && !process.env.PORT) {
-  console.error('❌ ERROR CRÍTICO: En producción, PORT debe venir de process.env.PORT (Railway)');
-  console.error('   process.env.PORT no está definido. Railway debe inyectarlo automáticamente.');
-  console.error('   Verifica la configuración del servicio en Railway Dashboard.');
-  process.exit(1);
+if (isProduction) {
+  // En producción: SOLO process.env.PORT, sin fallback
+  if (!process.env.PORT) {
+    console.error('❌ ERROR CRÍTICO: En producción, process.env.PORT es requerido (Railway debe inyectarlo)');
+    console.error('   Railway inyecta PORT automáticamente. Si no está disponible, verifica la configuración del servicio.');
+    console.error('   Ve a Railway Dashboard → Service → Variables y verifica que PORT esté configurado.');
+    process.exit(1);
+  }
+  PORT = Number(process.env.PORT);
+  portSource = 'process.env.PORT (Railway)';
+  
+  if (isNaN(PORT) || PORT <= 0) {
+    console.error('❌ ERROR CRÍTICO: PORT en producción es inválido');
+    console.error(`   Valor recibido: ${process.env.PORT}`);
+    console.error('   PORT debe ser un número positivo. Railway debe inyectarlo correctamente.');
+    process.exit(1);
+  }
+} else {
+  // En desarrollo: process.env.PORT > env.PORT > 3000
+  PORT = Number(process.env.PORT || env.PORT || 3000);
+  portSource = process.env.PORT ? 'process.env.PORT' : (env.PORT ? 'env.PORT' : 'fallback/local (3000)');
+  
+  if (isNaN(PORT) || PORT <= 0) {
+    console.error('❌ ERROR CRÍTICO: PORT no está configurado o es inválido');
+    console.error(`   Valor recibido: ${process.env.PORT ?? env.PORT ?? 'undefined'}`);
+    process.exit(1);
+  }
 }
 
 /**
@@ -541,9 +555,7 @@ async function startServer() {
       console.log(`   Listen time: ${listenTime}ms`);
       console.log(`   Total boot time: ${Date.now() - startTime}ms`);
       console.log(`   Environment: ${env.NODE_ENV}`);
-      if (isProduction) {
-        console.log(`   PORT source: ${process.env.PORT ? 'process.env.PORT (Railway)' : 'FALLBACK (ERROR - Railway debe inyectar PORT)'}`);
-      }
+      console.log(`   PORT source: ${portSource}`);
       console.log('');
       console.log('📡 Endpoints available:');
       console.log(`   Health: http://0.0.0.0:${PORT}/health`);
