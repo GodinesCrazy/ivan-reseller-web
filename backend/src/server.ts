@@ -83,15 +83,16 @@ function validateJwtSecret(): void {
 
 /**
  * ✅ GO-LIVE: Log configuración sanitizada (sin exponer secretos)
+ * ✅ FIX LOGGING: Usa PORT calculado (fuente de verdad), no env.PORT que puede tener default 3000
  */
-function logConfiguration(env: any): void {
+function logConfiguration(env: any, port: number, portSourceStr: string): void {
   const allowedOrigins = env.CORS_ORIGIN?.split(',')
     .map((o: string) => o.trim())
     .filter((o: string) => o.length > 0) || [];
   
   console.log('📋 Configuración del Sistema (sanitizada):');
   console.log(`   NODE_ENV: ${env.NODE_ENV}`);
-  console.log(`   PORT: ${env.PORT}`);
+  console.log(`   PORT: ${port} (${portSourceStr})`);
   console.log(`   API_URL: ${env.API_URL || '❌ NO CONFIGURADA'}`);
   console.log(`   FRONTEND_URL: ${env.FRONTEND_URL || '⚠️  No configurada (opcional)'}`);
   console.log(`   CORS_ORIGIN: ${allowedOrigins.length} origen(es) configurado(s)`);
@@ -522,7 +523,8 @@ async function startServer() {
     // ✅ FIX AUTH: Validar JWT_SECRET antes de iniciar servidor
     validateJwtSecret();
     
-    logConfiguration(env);
+    // ✅ FIX LOGGING: Pasar PORT y portSource para logging consistente
+    logConfiguration(env, PORT, portSource);
     
     // ✅ FASE 0: Initialize build info (for /version endpoint and X-App-Commit header)
     initBuildInfo();
