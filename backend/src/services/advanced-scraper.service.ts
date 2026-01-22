@@ -1,6 +1,4 @@
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { Browser, Page, Protocol, Frame, HTTPResponse } from 'puppeteer';
+// ✅ FASE 3: Dynamic imports para evitar SIGSEGV - NO importar puppeteer al nivel superior
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -16,8 +14,12 @@ import { resolvePrice, resolvePriceRange, parseLocalizedNumber } from '../utils/
 import fxService from './fx.service';
 import logger from '../config/logger';
 
-// Configurar Puppeteer con plugin stealth para evadir detección
-puppeteer.use(StealthPlugin());
+// ✅ FASE 3: Types para puppeteer dinámico
+type Browser = any;
+type Page = any;
+type Protocol = any;
+type Frame = any;
+type HTTPResponse = any;
 
 /**
  * Scraper AVANZADO con evasión de CAPTCHA y detección anti-bot
@@ -67,6 +69,42 @@ export class AdvancedMarketplaceScraper {
   private browser: Browser | null = null;
   private isLoggedIn = false;
   private loggedInUserId: number | null = null;
+  // ✅ FASE 3: Cache de módulos puppeteer cargados dinámicamente
+  private puppeteerModule: any = null;
+  private stealthPlugin: any = null;
+  private puppeteerTypes: any = null;
+
+  // ✅ FASE 3: Lazy load puppeteer solo cuando se necesite
+  private async loadPuppeteer(): Promise<any> {
+    if (this.puppeteerModule) {
+      return this.puppeteerModule;
+    }
+    
+    // Verificar DISABLE_BROWSER_AUTOMATION
+    const disableBrowser = process.env.DISABLE_BROWSER_AUTOMATION === 'true';
+    if (disableBrowser) {
+      throw new Error('Browser automation is disabled (DISABLE_BROWSER_AUTOMATION=true)');
+    }
+
+    try {
+      const puppeteerExtra = await import('puppeteer-extra');
+      const StealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
+      const puppeteerTypes = await import('puppeteer');
+      
+      const puppeteer = puppeteerExtra.default;
+      puppeteer.use(StealthPlugin());
+      
+      this.puppeteerModule = puppeteer;
+      this.stealthPlugin = StealthPlugin;
+      this.puppeteerTypes = puppeteerTypes;
+      
+      logger.info('[AdvancedScraper] Puppeteer loaded successfully (dynamic import)');
+      return puppeteer;
+    } catch (error) {
+      logger.error('[AdvancedScraper] Failed to load puppeteer:', error);
+      throw error;
+    }
+  }
   private readonly loginUrl = 'https://login.aliexpress.com/?fromSite=52&foreSite=main&spm=a2g0o.home.1000002.2.650511a5TtU7UQ';
   private readonly fallbackLoginUrl = 'https://passport.aliexpress.com/ac/vanstoken2?fromSite=main&lang=en_US&appName=ae_pc';
   private readonly aliExpressSelectorMap: Record<string, string[]> = {
@@ -265,6 +303,9 @@ export class AdvancedMarketplaceScraper {
   async init(): Promise<void> {
     const { logger } = await import('../config/logger');
     logger.info('[SCRAPER] Iniciando navegador con evasión anti-bot');
+
+    // ✅ FASE 3: Cargar puppeteer dinámicamente
+    const puppeteer = await this.loadPuppeteer();
 
     const { executablePath, args: chromiumArgs, headless, defaultViewport } = await getChromiumLaunchConfig([
       '--disable-setuid-sandbox',
@@ -5844,7 +5885,7 @@ export class AdvancedMarketplaceScraper {
     return currencyToCountry[currency.toUpperCase()] || null;
   }
 
-  private async fetchAliExpressCookies(userId: number, environment: 'sandbox' | 'production' = 'production'): Promise<Protocol.Network.Cookie[]> {
+  private async fetchAliExpressCookies(userId: number, environment: 'sandbox' | 'production' = 'production'): Promise<any[]> {
     try {
       const credentials = await CredentialsManager.getCredentials(userId, 'aliexpress', environment);
       if (!credentials) return [];
@@ -5855,13 +5896,13 @@ export class AdvancedMarketplaceScraper {
         try {
           const parsed = JSON.parse(cookiesRaw);
           if (Array.isArray(parsed)) {
-            return parsed as Protocol.Network.Cookie[];
+            return parsed as any[];
           }
         } catch (error) {
           logger.warn('[SCRAPER] Unable to parse AliExpress cookies JSON', { userId, error });
         }
       } else if (Array.isArray(cookiesRaw)) {
-        return cookiesRaw as Protocol.Network.Cookie[];
+        return cookiesRaw as any[];
       }
     } catch (error) {
       logger.warn('[SCRAPER] Error fetching AliExpress cookies', { userId, error });

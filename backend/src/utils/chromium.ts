@@ -2,11 +2,19 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-let chromium: any = null;
-try {
-  chromium = require('@sparticuz/chromium');
-} catch {
-  // @sparticuz/chromium no está disponible (normal en Windows)
+// ✅ FASE 3: Lazy load @sparticuz/chromium para evitar SIGSEGV
+let chromiumModule: any = null;
+async function loadChromiumModule(): Promise<any> {
+  if (chromiumModule !== null) {
+    return chromiumModule;
+  }
+  try {
+    chromiumModule = await import('@sparticuz/chromium');
+    return chromiumModule;
+  } catch {
+    chromiumModule = false; // Cache negativo
+    return null;
+  }
 }
 
 const isWindows = os.platform() === 'win32';
@@ -105,6 +113,8 @@ async function ensureChromiumFromPuppeteer(): Promise<string | undefined> {
 }
 
 async function ensureChromiumFromSparticuz(): Promise<string | undefined> {
+  // ✅ FASE 3: Lazy load chromium module
+  const chromium = await loadChromiumModule();
   if (!chromium) return undefined;
   
   try {
@@ -221,6 +231,9 @@ export async function resolveChromiumExecutable(): Promise<string | undefined> {
 
 export async function getChromiumLaunchConfig(extraArgs: string[] = []) {
   const executablePath = await resolveChromiumExecutable();
+  // ✅ FASE 3: Lazy load chromium module
+  const chromium = await loadChromiumModule();
+  
   // ✅ RESTAURADO: Lógica simple que funcionaba antes
   // Si executablePath es undefined, Puppeteer usará su propio Chromium automáticamente
   const args = executablePath && chromium?.args

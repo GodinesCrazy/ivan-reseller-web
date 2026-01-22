@@ -117,6 +117,98 @@ router.get('/login-smoke', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * ✅ FIX OAUTH: GET /api/debug/aliexpress-dropshipping-credentials
+ * Endpoint para verificar credenciales guardadas de AliExpress Dropshipping
+ * Requiere autenticación
+ */
+router.get('/aliexpress-dropshipping-credentials', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({
+        ok: false,
+        error: 'User ID not found',
+      });
+    }
+
+    const { CredentialsManager } = await import('../../services/credentials-manager.service');
+    const correlationId = (req as any).correlationId || 'unknown';
+    
+    // Obtener credenciales de ambos ambientes
+    const [credProd, credSandbox] = await Promise.all([
+      CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', 'production'),
+      CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', 'sandbox'),
+    ]);
+
+    const formatCredentials = (cred: any, env: string) => {
+      if (!cred) {
+        return {
+          environment: env,
+          hasAccessToken: false,
+          hasRefreshToken: false,
+          configured: false,
+        };
+      }
+
+      const accessToken = cred.accessToken || cred.ACCESS_TOKEN || null;
+      const refreshToken = cred.refreshToken || cred.REFRESH_TOKEN || null;
+      
+      // NO devolver tokens completos, solo preview (últimos 4 caracteres o hash)
+      const accessTokenLast4 = accessToken && accessToken.length >= 4 
+        ? accessToken.substring(accessToken.length - 4) 
+        : null;
+      const refreshTokenLast4 = refreshToken && refreshToken.length >= 4
+        ? refreshToken.substring(refreshToken.length - 4)
+        : null;
+
+      return {
+        environment: env,
+        hasAccessToken: !!accessToken,
+        hasRefreshToken: !!refreshToken,
+        accessTokenLast4: accessTokenLast4 || null,
+        refreshTokenLast4: refreshTokenLast4 || null,
+        expiresAt: cred.accessTokenExpiresAt || cred.ACCESS_TOKEN_EXPIRES_AT || null,
+        refreshExpiresAt: cred.refreshTokenExpiresAt || cred.REFRESH_TOKEN_EXPIRES_AT || null,
+        updatedAt: cred.updatedAt || null,
+        apiName: 'aliexpress-dropshipping',
+        configured: !!accessToken,
+      };
+    };
+
+    const prodInfo = formatCredentials(credProd, 'production');
+    const sandboxInfo = formatCredentials(credSandbox, 'sandbox');
+
+    res.json({
+      ok: true,
+      correlationId,
+      userId,
+      credentials: {
+        production: prodInfo,
+        sandbox: sandboxInfo,
+      },
+      summary: {
+        hasProductionToken: prodInfo.hasAccessToken,
+        hasSandboxToken: sandboxInfo.hasAccessToken,
+        anyConfigured: prodInfo.configured || sandboxInfo.configured,
+      },
+    });
+  } catch (error: any) {
+    const correlationId = (req as any).correlationId || 'unknown';
+    logger.error('[Debug AliExpress Dropshipping Credentials] Error', {
+      correlationId,
+      error: error?.message || String(error),
+      stack: error?.stack?.substring(0, 500),
+    });
+    
+    res.status(500).json({
+      ok: false,
+      error: error?.message || 'Failed to retrieve credentials',
+      correlationId,
+    });
+  }
+});
+
 // Require authentication for other endpoints
 router.use(authenticate);
 

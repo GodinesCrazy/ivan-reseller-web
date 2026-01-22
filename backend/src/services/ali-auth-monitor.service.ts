@@ -1,6 +1,6 @@
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
-import { AdvancedMarketplaceScraper } from './advanced-scraper.service';
+// ✅ FASE 3: Dynamic import para evitar SIGSEGV - NO importar AdvancedMarketplaceScraper al nivel superior
 import ManualAuthRequiredError from '../errors/manual-auth-required.error';
 import { marketplaceAuthStatusService } from './marketplace-auth-status.service';
 import type { MarketplaceAuthState } from './marketplace-auth-status.service';
@@ -44,6 +44,34 @@ class AliExpressAuthMonitor {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private cookieAlerts = new Map<number, CookieNotificationState>();
+  // ✅ FASE 3: Cache de clase scraper cargada dinámicamente
+  private scraperClass: any = null;
+
+  // ✅ FASE 3: Lazy load AdvancedMarketplaceScraper solo cuando se necesite
+  private async getScraperClass(): Promise<any> {
+    if (this.scraperClass) {
+      return this.scraperClass;
+    }
+    
+    // Verificar flags antes de cargar
+    const disableBrowser = process.env.DISABLE_BROWSER_AUTOMATION === 'true';
+    const safeMode = process.env.SAFE_AUTH_STATUS_MODE === 'true';
+    
+    if (disableBrowser || safeMode) {
+      logger.info('[AliAuthMonitor] Scraper not loaded (DISABLE_BROWSER_AUTOMATION or SAFE_AUTH_STATUS_MODE enabled)');
+      return null; // No cargar scraper en modo seguro
+    }
+
+    try {
+      const module = await import('./advanced-scraper.service');
+      this.scraperClass = module.AdvancedMarketplaceScraper;
+      logger.info('[AliAuthMonitor] AdvancedMarketplaceScraper loaded successfully (dynamic import)');
+      return this.scraperClass;
+    } catch (error) {
+      logger.error('[AliAuthMonitor] Failed to load AdvancedMarketplaceScraper:', error);
+      return null;
+    }
+  }
 
   start() {
     if (this.timer) {
@@ -241,7 +269,12 @@ class AliExpressAuthMonitor {
       'Renovando sesión de AliExpress en segundo plano'
     );
 
-    const scraper = new AdvancedMarketplaceScraper();
+    // ✅ FASE 3: Cargar scraper dinámicamente
+    const ScraperClass = await this.getScraperClass();
+    if (!ScraperClass) {
+      throw new Error('Scraper not available (DISABLE_BROWSER_AUTOMATION or SAFE_AUTH_STATUS_MODE enabled)');
+    }
+    const scraper = new ScraperClass();
 
     try {
       const success = await scraper.ensureAliExpressSession(userId);

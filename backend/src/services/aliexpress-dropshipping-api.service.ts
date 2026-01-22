@@ -509,57 +509,117 @@ export class AliExpressDropshippingAPIService {
       hasAppSecret: !!appSecret,
     });
 
-    try {
-      const tokenUrl = 'https://auth.aliexpress.com/oauth/token';
-      
-      // ✅ PASO 4: Payload según documentación de AliExpress
-      const payload = {
-        grant_type: 'authorization_code',
-        need_refresh_token: 'true',
-        client_id: appKey,
-        client_secret: appSecret,
-        code: code,
-        redirect_uri: redirectUri,
-      };
+    // ✅ FIX OAUTH: Token exchange robusto con retries y timeout
+    const tokenUrl = 'https://auth.aliexpress.com/oauth/token';
+    const startTime = Date.now();
+    
+    // ✅ PASO 4: Payload según documentación de AliExpress
+    const payload = {
+      grant_type: 'authorization_code',
+      need_refresh_token: 'true',
+      client_id: appKey,
+      client_secret: appSecret,
+      code: code,
+      redirect_uri: redirectUri,
+    };
 
-      logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
-        tokenUrl,
-        grantType: payload.grant_type,
-        hasCode: !!payload.code,
-        redirectUri: payload.redirect_uri,
-      });
+    logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
+      tokenUrl,
+      grantType: payload.grant_type,
+      hasCode: !!payload.code,
+      redirectUri: payload.redirect_uri,
+    });
 
-      // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
-      const response = await httpClient.post(tokenUrl, payload, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.data || !response.data.access_token) {
-        logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token exchange response missing access_token', {
-          responseData: response.data,
+    // ✅ FIX OAUTH: Retry con timeout (2 intentos con backoff)
+    const { retryWithBackoff } = await import('../utils/retry.util');
+    
+    const result = await retryWithBackoff(
+      async () => {
+        // ✅ FIX OAUTH: Timeout de 10s para token exchange
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Token exchange timeout after 10s')), 10000);
         });
-        throw new Error('Invalid response from AliExpress OAuth token endpoint: missing access_token');
+        
+        const requestPromise = httpClient.post(tokenUrl, payload, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        const response = await Promise.race([requestPromise, timeoutPromise]);
+        return response;
+      },
+      {
+        maxRetries: 2,
+        initialDelay: 1000,
+        maxDelay: 3000,
+        timeout: 10000,
+        onRetry: (attempt, error, delay) => {
+          logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Token exchange retry', {
+            attempt,
+            delay,
+            error: error.message,
+          });
+        },
       }
+    );
 
-      logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange successful', {
-        hasAccessToken: !!response.data.access_token,
-        accessTokenLength: response.data.access_token?.length || 0,
-        hasRefreshToken: !!response.data.refresh_token,
-        refreshTokenLength: response.data.refresh_token?.length || 0,
-        expiresIn: response.data.expires_in,
-        refreshExpiresIn: response.data.refresh_expires_in,
+    if (!result.success) {
+      const elapsed = Date.now() - startTime;
+      logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token exchange failed after retries', {
+        elapsed,
+        attempts: result.attempts,
+        error: result.error?.message || String(result.error),
       });
+      throw result.error || new Error('Token exchange failed');
+    }
 
-      return {
-        accessToken: response.data.access_token,
-        refreshToken: response.data.refresh_token,
-        expiresIn: response.data.expires_in || 86400, // Default: 24 horas
-        refreshExpiresIn: response.data.refresh_expires_in || 2592000, // Default: 30 días
-      };
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error_description || 
+    const response = result.data;
+
+    // ✅ FIX OAUTH: Validar respuesta robustamente
+    if (!response.data || !response.data.access_token) {
+      const elapsed = Date.now() - startTime;
+      logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token exchange response missing access_token', {
+        responseData: response.data,
+        elapsed,
+      });
+      throw new Error('Invalid response from AliExpress OAuth token endpoint: missing access_token');
+    }
+
+    // ✅ FIX OAUTH: Validar que tokens no sean null/undefined/empty
+    const accessToken = response.data.access_token;
+    const refreshToken = response.data.refresh_token || null;
+    
+    if (!accessToken || typeof accessToken !== 'string' || accessToken.trim().length === 0) {
+      const elapsed = Date.now() - startTime;
+      logger.error('[ALIEXPRESS-DROPSHIPPING-API] Invalid access token', {
+        tokenType: typeof accessToken,
+        tokenLength: accessToken?.length || 0,
+        elapsed,
+      });
+      throw new Error('Invalid access token received from AliExpress OAuth token endpoint');
+    }
+
+    const elapsed = Date.now() - startTime;
+    logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange successful', {
+      hasAccessToken: !!accessToken,
+      accessTokenLength: accessToken.length,
+      hasRefreshToken: !!refreshToken,
+      refreshTokenLength: refreshToken?.length || 0,
+      expiresIn: response.data.expires_in,
+      refreshExpiresIn: response.data.refresh_expires_in,
+      elapsed,
+    });
+
+    return {
+      accessToken: accessToken,
+      refreshToken: refreshToken || '',
+      expiresIn: response.data.expires_in || 86400, // Default: 24 horas
+      refreshExpiresIn: response.data.refresh_expires_in || 2592000, // Default: 30 días
+    };
+  } catch (error: any) {
+    const elapsed = Date.now() - startTime;
+    const errorMessage = error.response?.data?.error_description || 
                           error.response?.data?.error || 
                           error.message || 
                           'Unknown error';

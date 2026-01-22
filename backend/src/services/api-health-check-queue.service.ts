@@ -168,7 +168,7 @@ if (isRedisAvailable && bullMQRedis && apiHealthCheckQueue) {
     },
     {
       connection: bullMQRedis as any,
-      concurrency: 2, // ✅ FASE 1: Reducir concurrencia para prevenir SIGSEGV (2 en lugar de 3)
+      concurrency: 1, // ✅ FASE 2: Reducir a 1 para prevenir SIGSEGV y reducir uso de memoria
       removeOnComplete: {
         age: 3600, // Mantener jobs completados por 1 hora
         count: 100, // Mantener máximo 100 jobs completados

@@ -1,13 +1,13 @@
 // @ts-nocheck
-import puppeteer, { Browser } from 'puppeteer-core';
-import type { Page } from 'puppeteer';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+// ✅ FASE 3: Dynamic imports para evitar SIGSEGV - NO importar puppeteer al nivel superior
 import { logger } from '../config/logger';
 import { AppError } from '../middleware/error.middleware';
 import { prisma } from '../config/database';
 import { getChromiumLaunchConfig } from '../utils/chromium';
 
-puppeteer.use(StealthPlugin());
+// ✅ FASE 3: Types para puppeteer dinámico
+type Browser = any;
+type Page = any;
 
 /**
  * AliExpress Auto-Purchase Service
@@ -55,8 +55,37 @@ export class AliExpressAutoPurchaseService {
   private browser: Browser | null = null;
   private isLoggedIn: boolean = false;
   private credentials: AliExpressCredentials | null = null;
+  // ✅ FASE 3: Cache de módulo puppeteer cargado dinámicamente
+  private puppeteerModule: any = null;
 
   constructor() {}
+
+  // ✅ FASE 3: Lazy load puppeteer solo cuando se necesite
+  private async loadPuppeteer(): Promise<any> {
+    if (this.puppeteerModule) {
+      return this.puppeteerModule;
+    }
+    
+    const disableBrowser = process.env.DISABLE_BROWSER_AUTOMATION === 'true';
+    if (disableBrowser) {
+      throw new Error('Browser automation is disabled (DISABLE_BROWSER_AUTOMATION=true)');
+    }
+
+    try {
+      const puppeteerCore = await import('puppeteer-core');
+      const StealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
+      
+      const puppeteer = puppeteerCore.default;
+      puppeteer.use(StealthPlugin());
+      
+      this.puppeteerModule = puppeteer;
+      logger.info('[AutoPurchase] Puppeteer loaded successfully (dynamic import)');
+      return puppeteer;
+    } catch (error) {
+      logger.error('[AutoPurchase] Failed to load puppeteer:', error);
+      throw error;
+    }
+  }
 
   /**
    * Initialize browser with stealth mode
@@ -65,6 +94,9 @@ export class AliExpressAutoPurchaseService {
     if (this.browser) {
       return this.browser;
     }
+
+    // ✅ FASE 3: Cargar puppeteer dinámicamente
+    const puppeteer = await this.loadPuppeteer();
 
     const { executablePath, args, defaultViewport, headless } = await getChromiumLaunchConfig();
 

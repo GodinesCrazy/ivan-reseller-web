@@ -284,14 +284,40 @@ router.get('/callback', async (req: Request, res: Response) => {
         refreshExpiresIn: tokens.refreshExpiresIn,
       });
 
-      // Guardar tokens en base de datos
+      // ✅ FIX OAUTH: Validar tokens antes de guardar
+      if (!tokens.accessToken || typeof tokens.accessToken !== 'string' || tokens.accessToken.trim().length === 0) {
+        logger.error('[OAuth Callback] Invalid access token received', {
+          service: 'marketplace-oauth',
+          correlationId,
+          userId,
+          environment,
+          tokenType: typeof tokens.accessToken,
+          tokenLength: tokens.accessToken?.length || 0,
+        });
+        
+        return res.status(400).send(`
+          <html>
+            <body>
+              <h2>Error: Token inválido</h2>
+              <p>El token de acceso recibido no es válido. Por favor, intenta de nuevo.</p>
+              <p>Correlation ID: ${correlationId}</p>
+              <script>setTimeout(() => window.close(), 5000);</script>
+            </body>
+          </html>
+        `);
+      }
+
+      // ✅ FIX OAUTH: Guardar tokens en base de datos (solo si son válidos)
       const updatedCreds: any = {
         ...cred,
         accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
+        refreshToken: tokens.refreshToken || null,
         accessTokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
-        refreshTokenExpiresAt: new Date(Date.now() + tokens.refreshExpiresIn * 1000).toISOString(),
-        sandbox: environment === 'sandbox'
+        refreshTokenExpiresAt: tokens.refreshExpiresIn 
+          ? new Date(Date.now() + tokens.refreshExpiresIn * 1000).toISOString()
+          : null,
+        sandbox: environment === 'sandbox',
+        updatedAt: new Date().toISOString(),
       };
 
       logger.info('[OAuth Callback] Saving AliExpress Dropshipping credentials', {
@@ -354,11 +380,18 @@ router.get('/callback', async (req: Request, res: Response) => {
         });
       }
 
-      // ✅ REDIRIGIR A PÁGINA DE ÉXITO (mismo comportamiento que el handler estándar)
+      // ✅ FIX OAUTH: Redirect a frontend con query params para SPA routing
+      const webBaseUrl = process.env.WEB_BASE_URL || 
+                        (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
+      const successUrl = `${webBaseUrl}/#/api-settings?oauth=success&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
+      const errorUrl = `${webBaseUrl}/#/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
+      
+      // ✅ REDIRIGIR A PÁGINA DE ÉXITO con fallback HTML
       res.send(`
         <html>
           <head>
             <title>Autorización completada</title>
+            <meta http-equiv="refresh" content="2;url=${successUrl}" />
             <style>
               body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
               .success { color: green; font-size: 18px; margin: 20px 0; }
@@ -367,14 +400,18 @@ router.get('/callback', async (req: Request, res: Response) => {
           </head>
           <body>
             <div class="success">✅ Autorización completada exitosamente</div>
-            <div class="info">Puedes cerrar esta ventana y regresar a la aplicación.</div>
+            <div class="info">Redirigiendo a la aplicación...</div>
+            <div class="info" style="font-size: 12px; margin-top: 30px;">Si no eres redirigido, <a href="${successUrl}">haz clic aquí</a></div>
+            <div class="info" style="font-size: 12px; margin-top: 10px;">Correlation ID: ${correlationId}</div>
             <script>
+              // Intentar postMessage primero
               const sendMessage = () => {
                 if (window.opener && !window.opener.closed) {
                   try {
                     window.opener.postMessage({ 
                       type: 'oauth_success', 
                       marketplace: 'aliexpress-dropshipping',
+                      correlationId: '${correlationId}',
                       timestamp: Date.now()
                     }, '*');
                     console.log('[OAuth Callback] Success message sent to opener');
@@ -390,23 +427,64 @@ router.get('/callback', async (req: Request, res: Response) => {
               setTimeout(sendMessage, 500);
               setTimeout(sendMessage, 1000);
               setTimeout(sendMessage, 2000);
+              
+              // Fallback: redirect si no hay opener
+              setTimeout(() => {
+                if (!window.opener || window.opener.closed) {
+                  window.location.href = '${successUrl}';
+                }
+              }, 2000);
             </script>
           </body>
         </html>
       `);
 
     } catch (tokenError: any) {
+      const elapsed = Date.now() - startTime;
       logger.error('[OAuth Callback] AliExpress Dropshipping token exchange failed', {
         service: 'marketplace-oauth',
         correlationId,
         userId,
         environment,
+        elapsed,
         error: tokenError?.message || String(tokenError),
         responseData: tokenError?.response?.data,
         status: tokenError?.response?.status,
+        stack: tokenError?.stack?.substring(0, 500),
       });
       
-      // ✅ ERROR HANDLING: Responder con error sin exponer secretos
+      // ✅ FIX OAUTH: Redirect a frontend con error
+      const webBaseUrl = process.env.WEB_BASE_URL || 
+                        (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
+      const errorUrl = `${webBaseUrl}/#/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}&error=${encodeURIComponent(tokenError?.message || 'Token exchange failed')}`;
+      
+      // ✅ ERROR HANDLING: Responder con error sin exponer secretos (redirect a frontend)
+      const errorMessage = tokenError?.message || 'Token exchange failed';
+      res.send(`
+        <html>
+          <head>
+            <title>Error de autorización</title>
+            <meta http-equiv="refresh" content="3;url=${errorUrl}" />
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+              .error { color: red; font-size: 18px; margin: 20px 0; }
+              .info { color: #666; font-size: 14px; margin-top: 20px; }
+            </style>
+          </head>
+          <body>
+            <div class="error">❌ Error en la autorización</div>
+            <div class="info">${errorMessage}</div>
+            <div class="info" style="font-size: 12px; margin-top: 30px;">Redirigiendo a la aplicación...</div>
+            <div class="info" style="font-size: 12px; margin-top: 10px;">Si no eres redirigido, <a href="${errorUrl}">haz clic aquí</a></div>
+            <div class="info" style="font-size: 12px; margin-top: 10px;">Correlation ID: ${correlationId}</div>
+            <script>
+              setTimeout(() => {
+                window.location.href = '${errorUrl}';
+              }, 3000);
+            </script>
+          </body>
+        </html>
+      `);
       res.status(500).send(`
         <html>
           <head>

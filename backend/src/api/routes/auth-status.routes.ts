@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
 import { marketplaceAuthStatusService } from '../../services/marketplace-auth-status.service';
 import ManualAuthService from '../../services/manual-auth.service';
-import { aliExpressAuthMonitor } from '../../services/ali-auth-monitor.service';
+// ✅ FASE 3: Dynamic import para evitar SIGSEGV - NO importar aliExpressAuthMonitor al nivel superior
 import { handleSetupCheck } from '../../utils/setup-check';
 import { logger } from '../../config/logger';
 import { env } from '../../config/env';
@@ -266,6 +266,8 @@ router.post('/:marketplace/refresh', async (req: Request, res: Response, next: N
       return res.status(400).json({ success: false, error: 'Marketplace not supported' });
     }
 
+    // ✅ FASE 3: Dynamic import solo cuando se necesite
+    const { aliExpressAuthMonitor } = await import('../../services/ali-auth-monitor.service');
     const result = await aliExpressAuthMonitor.refreshNow(userId, { force: true, reason: 'user-request' });
 
     return res.json({
