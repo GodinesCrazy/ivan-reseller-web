@@ -1,4 +1,4 @@
-﻿# Dropshipping Go/No-Go Checklist
+# Dropshipping Go/No-Go Checklist
 
 Checklist operativo para validar que el sistema dropshipping est� listo para producci�n.
 
@@ -32,10 +32,12 @@ Checklist operativo para validar que el sistema dropshipping est� listo para p
 
 ### Railway Healthcheck
 - [ ] `GET /health` retorna 200 en Railway
-- [ ] `GET /api/health` retorna 200
+- [ ] `GET /api/health` retorna 200 con `degraded: false`
 - [ ] Healthcheck pasa en el primer minuto despu�s del deploy
 - [ ] Logs muestran "Listening on host=0.0.0.0 port=<PORT>" (PORT debe ser el inyectado por Railway, NO 3000)
+- [ ] Logs muestran "PORT source: process.env.PORT (Railway)"
 - [ ] Logs muestran "Health endpoint ready - server accepting connections"
+- [ ] **Verificar Railway Variables:** Si existe `PORT=3000` o cualquier valor → ELIMINAR
 
 **Comando de verificaci�n:**
 ```powershell
