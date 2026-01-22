@@ -1,6 +1,6 @@
-# Dropshipping Go/No-Go Checklist
+ï»¿# Dropshipping Go/No-Go Checklist
 
-Checklist operativo para validar que el sistema dropshipping está listo para producción.
+Checklist operativo para validar que el sistema dropshipping estï¿½ listo para producciï¿½n.
 
 ---
 
@@ -8,7 +8,23 @@ Checklist operativo para validar que el sistema dropshipping está listo para pro
 
 - [ ] Backend desplegado en Railway y saludable
 - [ ] Vercel proxy configurado y funcionando
-- [ ] Variables de entorno configuradas (DATABASE_URL, JWT_SECRET, etc.)
+- [ ] Variables de entorno configuradas en Railway:
+
+### Variables Railway Necesarias
+
+**Crï¿½ticas (sin estas el backend no arranca):**
+- `PORT` - Inyectado automï¿½ticamente por Railway (NO configurar manualmente)
+- `JWT_SECRET` - Mï¿½nimo 32 caracteres
+- `DATABASE_URL` - URL completa de PostgreSQL (formato: `postgresql://user:pass@host:port/db`)
+
+**Opcionales pero recomendadas:**
+- `ENCRYPTION_KEY` - Mï¿½nimo 32 caracteres (o usa JWT_SECRET como fallback)
+- `REDIS_URL` - Si se usa Redis para cache/queues
+- `CORS_ORIGIN` o `CORS_ORIGINS` - Orï¿½genes permitidos (comma-separated)
+- `FRONTEND_URL` - URL del frontend (Vercel)
+- `API_URL` - URL pï¿½blica del backend (Railway)
+
+**Nota:** `PORT` es inyectado automï¿½ticamente por Railway. Si los logs muestran `PORT=3000` en producciï¿½n, verifica que Railway estï¿½ inyectando PORT correctamente.
 
 ---
 
@@ -17,34 +33,39 @@ Checklist operativo para validar que el sistema dropshipping está listo para pro
 ### Railway Healthcheck
 - [ ] `GET /health` retorna 200 en Railway
 - [ ] `GET /api/health` retorna 200
-- [ ] Healthcheck pasa en el primer minuto después del deploy
-- [ ] Logs muestran "Listening on PORT=..." y "Health endpoint ready"
+- [ ] Healthcheck pasa en el primer minuto despuï¿½s del deploy
+- [ ] Logs muestran "Listening on host=0.0.0.0 port=<PORT>" (PORT debe ser el inyectado por Railway, NO 3000)
+- [ ] Logs muestran "Health endpoint ready - server accepting connections"
 
-**Comando de verificación:**
+**Comando de verificaciï¿½n:**
 ```powershell
 Invoke-WebRequest -Uri "https://www.ivanreseller.com/health" -UseBasicParsing
 ```
 
 ---
 
-## 2. Login y Autenticación
+## 2. Login y Autenticaciï¿½n
 
 ### Login Funcional
 - [ ] `POST /api/auth/login` retorna 200 con `success: true`
 - [ ] Cookies se establecen correctamente (`token`, `refreshToken`)
-- [ ] Cookies tienen `SameSite=None`, `Secure=true`, `httpOnly=true` en producción
-- [ ] Token viene en el body también (fallback)
+- [ ] Cookies tienen `SameSite=None`, `Secure=true`, `httpOnly=true` en producciï¿½n
+- [ ] Token viene en el body tambiï¿½n (fallback)
 
-**Script de verificación:**
+**Script de verificaciÃ³n (GO-LIVE):**
 ```powershell
-backend\scripts\ps-login-and-session-smoke.ps1
+cd backend
+.\scripts\ps-go-live-dropshipping.ps1
 ```
 
-**Validaciones esperadas:**
+**Validaciones esperadas (todas deben ser PASS):**
 - [PASS] Login success
 - [PASS] Auth-status returned 200
 - [PASS] Products returned 200
 - [PASS] Auth-URL returned 200 with authUrl
+- [PASS] Debug credentials returned 200
+
+**Nota:** Este script NO usa `curl.exe`. Usa PowerShell `Invoke-WebRequest` con `-SessionVariable` para mantener cookies. `curl.exe` en Windows puede fallar con 400 INVALID_JSON y NO es considerado bug crÃ­tico.
 
 ---
 
@@ -56,7 +77,7 @@ backend\scripts\ps-login-and-session-smoke.ps1
 - [ ] `GET /api/products` con `-WebSession $session` retorna 200
 - [ ] No se requiere re-login entre requests
 
-**Verificación:**
+**Verificaciï¿½n:**
 ```powershell
 $body = @{username="admin";password="admin123"} | ConvertTo-Json -Compress
 $null = Invoke-WebRequest -Uri "https://www.ivanreseller.com/api/auth/login" `
@@ -75,25 +96,25 @@ Invoke-WebRequest -Uri "https://www.ivanreseller.com/api/auth-status" `
 ### Auth URL Generation
 - [ ] `GET /api/marketplace/auth-url/aliexpress-dropshipping?environment=production` retorna 200
 - [ ] Response contiene `success: true` y `data.authUrl`
-- [ ] Auth URL es válida y apunta a `auth.aliexpress.com`
-- [ ] Auth URL contiene parámetros correctos (client_id, redirect_uri, state, etc.)
+- [ ] Auth URL es vï¿½lida y apunta a `auth.aliexpress.com`
+- [ ] Auth URL contiene parï¿½metros correctos (client_id, redirect_uri, state, etc.)
 
-**Script de verificación:**
+**Script de verificaciÃƒÂ³n (GO-LIVE):**
 ```powershell
 backend\scripts\ps-aliexpress-oauth-e2e.ps1
 ```
 
 ### OAuth Callback Path
 - [ ] Callback URL configurada: `https://www.ivanreseller.com/api/aliexpress/callback`
-- [ ] Callback endpoint existe y está montado
-- [ ] Callback guarda tokens correctamente después de autorización
+- [ ] Callback endpoint existe y estï¿½ montado
+- [ ] Callback guarda tokens correctamente despuï¿½s de autorizaciï¿½n
 - [ ] Callback redirige al frontend con query params (`oauth=success&...`)
 
 ### Debug Credentials Endpoint
 - [ ] `GET /api/debug/aliexpress-dropshipping-credentials` retorna 200 (autenticado)
 - [ ] Response contiene `ok: true` y `summary`
-- [ ] `summary.hasProductionToken` o `summary.hasSandboxToken` es `true` después de OAuth
-- [ ] No se exponen tokens completos (solo últimos 4 caracteres o hash)
+- [ ] `summary.hasProductionToken` o `summary.hasSandboxToken` es `true` despuï¿½s de OAuth
+- [ ] No se exponen tokens completos (solo ï¿½ltimos 4 caracteres o hash)
 
 ---
 
@@ -101,10 +122,10 @@ backend\scripts\ps-aliexpress-oauth-e2e.ps1
 
 ### Headers de Trazabilidad
 - [ ] Requests a `/api/*` incluyen header `X-Railway-Proxy: railway-backend`
-- [ ] Header `X-Proxy-Target` está presente
+- [ ] Header `X-Proxy-Target` estï¿½ presente
 - [ ] Logs en Railway muestran requests con `[VERCEL-PROXY]`
 
-**Verificación:**
+**Verificaciï¿½n:**
 ```powershell
 $r = Invoke-WebRequest -Uri "https://www.ivanreseller.com/api/auth-status" -UseBasicParsing
 $r.Headers['X-Railway-Proxy']  # Debe existir
@@ -112,16 +133,16 @@ $r.Headers['X-Railway-Proxy']  # Debe existir
 
 ---
 
-## 6. Errores y Diagnóstico
+## 6. Errores y Diagnï¿½stico
 
 ### Errores de Login (400, nunca 500)
-- [ ] Invalid JSON body ? `400` con `errorCode: "INVALID_JSON"` y `diagnostic`
-- [ ] Body no es objeto ? `400` con `errorCode: "INVALID_BODY"`
-- [ ] Faltan username/password ? `400` con `errorCode: "MISSING_REQUIRED_FIELD"`
-- [ ] Ningún caso retorna 500
+- [ ] Invalid JSON body -> `400` con `errorCode: "INVALID_JSON"` y `diagnostic`
+- [ ] Body no es objeto -> `400` con `errorCode: "INVALID_BODY"`
+- [ ] Faltan username/password -> `400` con `errorCode: "MISSING_REQUIRED_FIELD"`
+- [ ] Ningï¿½n caso retorna 500
 
-### Endpoint de Diagnóstico
-- [ ] `POST /api/debug/echo-json` retorna información de parsing sin exponer valores sensibles
+### Endpoint de Diagnï¿½stico
+- [ ] `POST /api/debug/echo-json` retorna informaciï¿½n de parsing sin exponer valores sensibles
 - [ ] Response incluye `contentType`, `contentLength`, `bodyType`, `bodyKeys`
 - [ ] Campos sensibles (password, token, etc.) se marcan como redacted
 
@@ -130,19 +151,19 @@ $r.Headers['X-Railway-Proxy']  # Debe existir
 ## 7. Scripts de QA
 
 ### Scripts Oficiales
-- [ ] `backend/scripts/ps-login-and-session-smoke.ps1` ejecuta sin errores
+- [ ] `backend/scripts/ps-go-live-dropshipping.ps1` ejecuta sin errores
 - [ ] `backend/scripts/ps-aliexpress-oauth-e2e.ps1` ejecuta sin errores
 - [ ] `backend/scripts/smoke-test-aliexpress-oauth.js` ejecuta sin errores (Node)
 - [ ] Todos los scripts usan PowerShell/Node, NO curl.exe
 
 ---
 
-## 8. Documentación
+## 8. Documentaciï¿½n
 
 ### Docs Actualizadas
-- [ ] `docs/COMANDOS_POWERSHELL_LOGIN.md` indica PowerShell como método oficial
+- [ ] `docs/COMANDOS_POWERSHELL_LOGIN.md` indica PowerShell como mï¿½todo oficial
 - [ ] `docs/ALIEXPRESS_OAUTH_E2E_PROD.md` describe flujo completo OAuth
-- [ ] `docs/DROPSHIPPING_GO_LIVE_CHECKLIST.md` (este documento) está completo
+- [ ] `docs/DROPSHIPPING_GO_LIVE_CHECKLIST.md` (este documento) estï¿½ completo
 
 ---
 
@@ -150,27 +171,28 @@ $r.Headers['X-Railway-Proxy']  # Debe existir
 
 ### Go/No-Go Decision
 
-**GO si:**
-- ? Todos los items de secciones 1-4 están marcados
-- ? Healthcheck Railway verde
-- ? Login funciona con PowerShell
-- ? OAuth auth-url genera URL válida
-- ? Callback path configurado correctamente
+****GO si:****
+- Ã¢Å“â€¦ Todos los items de secciones 1-4 estï¿½n marcados
+- Ã¢Å“â€¦ Healthcheck Railway verde
+- Ã¢Å“â€¦ Login funciona con PowerShell
+- Ã¢Å“â€¦ OAuth auth-url genera URL vï¿½lida
+- Ã¢Å“â€¦ Callback path configurado correctamente
 
-**NO-GO si:**
-- ? Healthcheck falla en Railway
-- ? Login retorna 500 o falla consistentemente
-- ? Cookies no persisten entre requests
-- ? Auth URL no se genera o es inválida
-- ? Callback no guarda tokens
+**NO-**GO si:****
+- Ã¢Å“â€¦ Healthcheck falla en Railway
+- Ã¢Å“â€¦ Login retorna 500 o falla consistentemente
+- Ã¢Å“â€¦ Cookies no persisten entre requests
+- Ã¢Å“â€¦ Auth URL no se genera o es invï¿½lida
+- Ã¢Å“â€¦ Callback no guarda tokens
 
 ---
 
-## Comandos Rápidos
+## Comandos Rï¿½pidos
 
 ```powershell
 # Smoke test completo
-backend\scripts\ps-login-and-session-smoke.ps1
+cd backend
+.\scripts\ps-go-live-dropshipping.ps1
 
 # OAuth E2E
 backend\scripts\ps-aliexpress-oauth-e2e.ps1
@@ -186,5 +208,5 @@ Invoke-RestMethod -Uri "https://www.ivanreseller.com/api/debug/echo-json" `
 
 ---
 
-**Última actualización:** 2025-01-22  
+**ï¿½ltima actualizaciï¿½n:** 2025-01-22  
 **Responsable:** Backend/QA Team

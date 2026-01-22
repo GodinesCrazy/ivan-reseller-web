@@ -17,12 +17,25 @@ import { initBuildInfo } from './middleware/version-header.middleware';
 
 const execAsync = promisify(exec);
 
-// ✅ FIX RAILWAY: PORT from process.env (Railway injects it). Fallback 3000.
-const PORT = Number(process.env.PORT || env.PORT || 3000);
+// ✅ FIX RAILWAY P0: PORT from process.env (Railway injects it). Fallback 3000 SOLO en local.
+// En producción (Railway), process.env.PORT SIEMPRE está presente. No usar env.PORT que puede tener default 3000.
+const isProduction = process.env.NODE_ENV === 'production';
+const PORT = isProduction
+  ? Number(process.env.PORT || 3000)  // En prod: SOLO process.env.PORT, fallback 3000 si falta (no debería)
+  : Number(process.env.PORT || env.PORT || 3000);  // En dev: process.env.PORT > env.PORT > 3000
+
 if (isNaN(PORT) || PORT <= 0) {
   console.error('❌ ERROR CRÍTICO: PORT no está configurado o es inválido');
-  console.error(`   Valor recibido: ${process.env.PORT ?? env.PORT ?? 'undefined'}`);
+  console.error(`   Valor recibido: ${process.env.PORT ?? (isProduction ? 'undefined (Railway debe inyectarlo)' : env.PORT ?? 'undefined')}`);
   console.error('   Railway inyecta PORT automáticamente. Si no está disponible, verifica la configuración del servicio.');
+  process.exit(1);
+}
+
+// ✅ FIX RAILWAY P0: Validar que en producción no estemos usando 3000 hardcodeado
+if (isProduction && PORT === 3000 && !process.env.PORT) {
+  console.error('❌ ERROR CRÍTICO: En producción, PORT debe venir de process.env.PORT (Railway)');
+  console.error('   process.env.PORT no está definido. Railway debe inyectarlo automáticamente.');
+  console.error('   Verifica la configuración del servicio en Railway Dashboard.');
   process.exit(1);
 }
 
@@ -523,12 +536,14 @@ async function startServer() {
       console.log('');
       console.log('✅ HTTP SERVER LISTENING');
       console.log('================================');
-      console.log(`   Listening on PORT=${PORT}`);
-      console.log(`   Host: 0.0.0.0`);
+      console.log(`   Listening on host=0.0.0.0 port=${PORT}`);
       console.log(`   Address: ${addressStr}`);
       console.log(`   Listen time: ${listenTime}ms`);
       console.log(`   Total boot time: ${Date.now() - startTime}ms`);
       console.log(`   Environment: ${env.NODE_ENV}`);
+      if (isProduction) {
+        console.log(`   PORT source: ${process.env.PORT ? 'process.env.PORT (Railway)' : 'FALLBACK (ERROR - Railway debe inyectar PORT)'}`);
+      }
       console.log('');
       console.log('📡 Endpoints available:');
       console.log(`   Health: http://0.0.0.0:${PORT}/health`);
