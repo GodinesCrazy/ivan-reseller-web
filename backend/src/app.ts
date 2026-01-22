@@ -87,12 +87,15 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     return next();
   }
   const start = Date.now();
+  // ✅ P0: Request logging para /health
+  console.log(`[HEALTH] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'}`);
   try {
     const mem = process.memoryUsage();
     const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
     const port = Number(process.env.PORT || env.PORT || 3000);
+    const responseTime = Date.now() - start;
     
-    res.setHeader('X-Response-Time', `${Date.now() - start}ms`);
+    res.setHeader('X-Response-Time', `${responseTime}ms`);
     res.setHeader('X-Health', 'ok');
     res.status(200).json({
       status: 'healthy',

@@ -516,13 +516,13 @@ async function startServer() {
     console.log('');
     console.log('🚀 BOOT START');
     console.log('================================');
-    console.log(`   NODE_ENV: ${env.NODE_ENV}`);
-    console.log(`   SAFE_BOOT: ${env.SAFE_BOOT}`);
-    console.log(`   PORT: ${PORT}`);
-    console.log(`   process.env.PORT exists: ${!!process.env.PORT}`);
-    console.log(`   cwd: ${process.cwd()}`);
-    console.log(`   build sha: ${(process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || 'unknown').toString().substring(0, 7)}`);
-    console.log(`   pid: ${process.pid}`);
+    console.log(`   pid=${process.pid}`);
+    console.log(`   NODE_ENV=${env.NODE_ENV}`);
+    console.log(`   SAFE_BOOT=${env.SAFE_BOOT}`);
+    console.log(`   PORT=${PORT}`);
+    console.log(`   PORT env exists=${!!process.env.PORT} value=${process.env.PORT || 'N/A'}`);
+    console.log(`   cwd=${process.cwd()}`);
+    console.log(`   build sha=${(process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || 'unknown').toString().substring(0, 7)}`);
     console.log('================================');
     console.log('');
     logMilestone('Starting server initialization');
@@ -572,13 +572,18 @@ async function startServer() {
       console.log('');
       console.log('✅ LISTENING OK');
       console.log('================================');
-      console.log(`   Listening on host=0.0.0.0 port=${PORT}`);
-      console.log(`   Address: ${addressStr}`);
+      console.log(`   LISTENING host=0.0.0.0 port=${PORT}`);
+      const addressInfo = typeof address === 'object' && address !== null
+        ? `ADDR actual=${address.address}:${address.port} family=${address.family}`
+        : `ADDR actual=${addressStr}`;
+      console.log(`   ${addressInfo}`);
+      console.log(`   PORT source: ${portSource}`);
+      console.log(`   PORT env exists: ${!!process.env.PORT} value=${process.env.PORT || 'N/A'}`);
       console.log(`   Listen time: ${listenTime}ms`);
       console.log(`   Total boot time: ${Date.now() - startTime}ms`);
       console.log(`   Environment: ${env.NODE_ENV}`);
-      console.log(`   PORT source: ${portSource}`);
       console.log(`   SAFE_BOOT: ${env.SAFE_BOOT}`);
+      console.log(`   pid: ${process.pid}`);
       console.log('');
       console.log('📡 Endpoints available:');
       console.log(`   Health: http://0.0.0.0:${PORT}/health`);

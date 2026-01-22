@@ -20,7 +20,9 @@ const router = Router();
  * Responde 200 siempre sin depender de nada
  * NO requiere autenticación
  */
-router.get('/ping', (_req: Request, res: Response) => {
+router.get('/ping', (req: Request, res: Response) => {
+  // ✅ P0: Request logging para /api/debug/ping
+  console.log(`[PING] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'}`);
   try {
     res.status(200).json({
       ok: true,

@@ -1,8 +1,0 @@
-{
-  "$schema": "https://railway.app/railway.schema.json",
-  "$service": {
-    "rootDirectory": ".",
-    "buildCommand": "npm ci && npx prisma generate && npm run build",
-    "startCommand": "npm start"
-  }
-}

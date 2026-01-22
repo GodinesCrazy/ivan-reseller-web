@@ -4,25 +4,7 @@ nixPkgs = ["nodejs-20_x", "npm", "chromium", "chromedriver"]
 [phases.install]
 cmds = [
   "npm install",
-  "npx prisma generate",
-  # Forzar descarga de Chrome para Puppeteer durante el build
-  "PUPPETEER_SKIP_DOWNLOAD=false node -e \"const p=require('puppeteer');p.launch({headless:true}).then(b=>{console.log('Chrome downloaded');b.close()}).catch(e=>{console.log('Chrome download error:',e.message);process.exit(0)})\" || true",
-  # Enlazar Chromium del sistema a una ruta estable dentro de la app
-  "CHROMIUM_SRC=$(\
-    (which chromium 2>/dev/null) || \
-    (which chromium-browser 2>/dev/null) || \
-    (find /nix/store -path '*chromium-*/bin/chromium' -type f -perm -u=x 2>/dev/null | head -1)
-  ); \
-  if [ -n \"$CHROMIUM_SRC\" ]; then \
-    mkdir -p /app/.chromium && \
-    ln -sf \"$CHROMIUM_SRC\" /app/.chromium/chromium && \
-    chmod +x /app/.chromium/chromium && \
-    echo \"Chromium linked from $CHROMIUM_SRC\"; \
-  else \
-    echo 'Chromium source not found during build'; \
-  fi",
-  # Verificar versión de Chromium enlazado
-  "/app/.chromium/chromium --version || true"
+  "npx prisma generate"
 ]
 
 [phases.build]
