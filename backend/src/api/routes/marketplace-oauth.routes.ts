@@ -257,10 +257,11 @@ router.get('/callback', async (req: Request, res: Response) => {
       redirectUriLength: redirectUri?.length || 0,
     });
 
+    const webBaseUrl = process.env.WEB_BASE_URL ||
+      (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
+
     try {
       // Intercambiar code por tokens
-      const webBaseUrl = process.env.WEB_BASE_URL || 
-                        (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
       // ✅ CORRECCIÓN: Callback debe incluir /api porque el serverless function está en /api/aliexpress/callback
       const defaultCallbackUrl = `${webBaseUrl}/api/aliexpress/callback`;
       
@@ -381,8 +382,6 @@ router.get('/callback', async (req: Request, res: Response) => {
       }
 
       // ✅ FIX OAUTH: Redirect a frontend con query params para SPA routing
-      const webBaseUrl = process.env.WEB_BASE_URL || 
-                        (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
       const successUrl = `${webBaseUrl}/#/api-settings?oauth=success&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
       const errorUrl = `${webBaseUrl}/#/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
       
@@ -452,10 +451,8 @@ router.get('/callback', async (req: Request, res: Response) => {
         status: tokenError?.response?.status,
         stack: tokenError?.stack?.substring(0, 500),
       });
-      
+
       // ✅ FIX OAUTH: Redirect a frontend con error
-      const webBaseUrl = process.env.WEB_BASE_URL || 
-                        (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
       const errorUrl = `${webBaseUrl}/#/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}&error=${encodeURIComponent(tokenError?.message || 'Token exchange failed')}`;
       
       // ✅ ERROR HANDLING: Responder con error sin exponer secretos (redirect a frontend)

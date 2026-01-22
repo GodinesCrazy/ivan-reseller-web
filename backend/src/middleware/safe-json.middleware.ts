@@ -15,7 +15,7 @@ export function safeJsonErrorHandler(
   next: NextFunction
 ): void {
   // ✅ FIX AUTH: Capturar SyntaxError del body parser
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+  if (err instanceof SyntaxError && (err as any).status === 400 && 'body' in err) {
     const correlationId = (req as any).correlationId || res.locals?.correlationId || 'unknown';
     const reqWithRaw = req as RequestWithRawBody;
     

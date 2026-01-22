@@ -78,6 +78,45 @@ app.set('trust proxy', 1);
 // Express por defecto puede devolver 304 (Not Modified) sin pasar por middlewares CORS
 app.set('etag', false); // Deshabilitar ETag globalmente (más seguro para APIs)
 
+// ====================================
+// HEALTH-FIRST MIDDLEWARE (Railway healthcheck path: /health)
+// Must be THE FIRST app.use() – no DB, Redis, queues, auth, or heavy deps.
+// ====================================
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.method !== 'GET' || req.path !== '/health') {
+    return next();
+  }
+  const start = Date.now();
+  try {
+    const mem = process.memoryUsage();
+    res.setHeader('X-Response-Time', `${Date.now() - start}ms`);
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      service: 'ivan-reseller-backend',
+      version: process.env.npm_package_version || '1.0.0',
+      build: {
+        gitSha: (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || 'unknown').toString().substring(0, 7),
+        buildTime: process.env.BUILD_TIME || process.env.RAILWAY_BUILD_TIME || new Date().toISOString(),
+      },
+      memory: {
+        used: Math.round(mem.heapUsed / 1024 / 1024),
+        total: Math.round(mem.heapTotal / 1024 / 1024),
+        unit: 'MB',
+      },
+    });
+  } catch {
+    res.setHeader('X-Response-Time', `${Date.now() - start}ms`);
+    res.status(200).json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      service: 'ivan-reseller-backend',
+    });
+  }
+});
+
 // ✅ FIX 502: Middleware para detectar requests desde Vercel y logging detallado
 app.use((req: Request, res: Response, next: NextFunction) => {
   const isFromVercel = req.headers['x-vercel-id'] || 
@@ -755,35 +794,7 @@ app.get('/config', (_req: Request, res: Response) => {
 
 // ✅ ELIMINADO: Duplicado de /api/health (ya definido arriba después de CORS en línea 358)
 
-// Liveness probe: Verifica que la aplicación está corriendo
-app.get('/health', async (_req: Request, res: Response) => {
-  // ✅ FIX: Health check ultra-rápido, sin imports dinámicos pesados
-  // Solo información básica del proceso
-  try {
-    res.status(200).json({
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      service: 'ivan-reseller-backend',
-      version: process.env.npm_package_version || '1.0.0',
-      environment: env.NODE_ENV,
-      // Memory info básico (sin import dinámico)
-      memory: {
-        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
-        unit: 'MB'
-      }
-    });
-  } catch (error) {
-    // Si algo falla, responder 200 de todas formas (proceso está vivo)
-    res.status(200).json({
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      service: 'ivan-reseller-backend'
-    });
-  }
-});
+// Liveness /health: handled by health-first middleware above (GET /health returns 200 immediately).
 
 // Readiness probe: Verifica que la aplicación puede servir tráfico
 app.get('/ready', async (_req: Request, res: Response) => {

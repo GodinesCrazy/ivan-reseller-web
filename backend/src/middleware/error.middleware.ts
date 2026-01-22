@@ -88,7 +88,7 @@ export const errorHandler = (
     errorCode = err.errorCode;
     errorId = err.errorId;
     details = err.details;
-  } else if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+  } else if (err instanceof SyntaxError && (err as any).status === 400 && 'body' in err) {
     // ✅ FIX AUTH: Capturar SyntaxError de JSON parser si no lo capturó safe-json middleware
     statusCode = 400;
     message = 'Invalid JSON body';

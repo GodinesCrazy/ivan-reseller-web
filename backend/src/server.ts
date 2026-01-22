@@ -17,11 +17,11 @@ import { initBuildInfo } from './middleware/version-header.middleware';
 
 const execAsync = promisify(exec);
 
-// ✅ FIX 502: Validar PORT antes de iniciar servidor
-const PORT = parseInt(env.PORT, 10);
+// ✅ FIX RAILWAY: PORT from process.env (Railway injects it). Fallback 3000.
+const PORT = Number(process.env.PORT || env.PORT || 3000);
 if (isNaN(PORT) || PORT <= 0) {
   console.error('❌ ERROR CRÍTICO: PORT no está configurado o es inválido');
-  console.error(`   Valor recibido: ${env.PORT || 'undefined'}`);
+  console.error(`   Valor recibido: ${process.env.PORT ?? env.PORT ?? 'undefined'}`);
   console.error('   Railway inyecta PORT automáticamente. Si no está disponible, verifica la configuración del servicio.');
   process.exit(1);
 }
@@ -552,6 +552,7 @@ async function startServer() {
             await runMigrations();
             logMilestone('Bootstrap: Database migrations completed');
           } catch (migrationError: any) {
+            // Startup guard: do not crash process if DB/migrations unavailable
             console.error('⚠️  Warning: Database migrations failed (server continues running):', migrationError.message);
             // Server continues but /ready will return 503
           }
@@ -570,6 +571,7 @@ async function startServer() {
             updateReadinessState();
             logMilestone('Bootstrap: Database connected successfully');
           } catch (dbError: any) {
+            // Startup guard: do not crash process if DB unavailable; log and retry later
             console.error('⚠️  Warning: Database connection failed (server continues in degraded mode):');
             console.error(`   ${dbError.message}`);
             // Server continues but /ready will return 503
@@ -783,8 +785,8 @@ async function startServer() {
           logMilestone(`Server fully initialized (total: ${totalInitTime}ms)`);
           console.log('');
         } catch (initError: any) {
+          // Startup guard: never crash process; server already listening, /health returns 200
           console.error('⚠️  Warning: Error during background initialization:', initError.message);
-          // Server is already listening, so continue running
         }
       })();
     });
