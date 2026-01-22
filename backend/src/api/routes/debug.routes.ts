@@ -118,6 +118,40 @@ router.get('/login-smoke', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/debug/echo-json
+ * Endpoint diagnóstico para inspeccionar parsing de JSON body
+ * No expone valores sensibles (password, tokens, etc.)
+ */
+router.post('/echo-json', (req: Request, res: Response) => {
+  const correlationId = (req as any).correlationId || 'unknown';
+  
+  // Extraer keys del body sin valores sensibles
+  const bodyKeys = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+    ? Object.keys(req.body)
+    : [];
+  
+  // Detectar si hay campos sensibles
+  const sensitiveFields = ['password', 'token', 'secret', 'key', 'credential', 'auth'];
+  const hasSensitiveFields = bodyKeys.some(key => 
+    sensitiveFields.some(sensitive => key.toLowerCase().includes(sensitive.toLowerCase()))
+  );
+  
+  res.json({
+    ok: true,
+    correlationId,
+    contentType: req.headers['content-type'] || 'not set',
+    contentLength: req.headers['content-length'] || 'not set',
+    bodyType: req.body ? typeof req.body : 'undefined',
+    isArray: Array.isArray(req.body),
+    isObject: req.body && typeof req.body === 'object' && !Array.isArray(req.body),
+    bodyKeys: hasSensitiveFields ? bodyKeys.map(k => k + ' (redacted)') : bodyKeys,
+    bodyKeyCount: bodyKeys.length,
+    hasSensitiveFields,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
  * ✅ FIX OAUTH: GET /api/debug/aliexpress-dropshipping-credentials
  * Endpoint para verificar credenciales guardadas de AliExpress Dropshipping
  * Requiere autenticación

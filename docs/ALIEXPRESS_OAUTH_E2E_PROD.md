@@ -6,6 +6,15 @@ Gu�a para pruebas end-to-end del OAuth de AliExpress Dropshipping en producci�
 
 ## Pruebas recomendadas
 
+### 0. Smoke Test Rápido (Login + Session)
+
+```powershell
+cd backend
+.\scripts\ps-login-and-session-smoke.ps1
+```
+
+Valida login, auth-status, products y auth-url en un solo script. **Método oficial para QA rápida.**
+
 ### 1. Node.js (fetch, Node 18+)
 
 ```bash

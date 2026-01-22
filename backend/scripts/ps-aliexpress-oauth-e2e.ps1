@@ -14,17 +14,46 @@ Write-Host ""
 
 # 1. Login (SessionVariable creates $session for subsequent -WebSession use)
 Write-Host "[1] Login POST /api/auth/login ..." -ForegroundColor Yellow
-$loginBody = @{ username = $Username; password = $Password } | ConvertTo-Json
+$loginBody = @{ username = $Username; password = $Password } | ConvertTo-Json -Compress
+Write-Host "  Request body (sanitized): $($loginBody -replace '"password":"[^"]+"', '"password":"***"')" -ForegroundColor Gray
+Write-Host "  Content-Type: application/json; charset=utf-8" -ForegroundColor Gray
+
 try {
     $login = Invoke-WebRequest -Uri "$BaseUrl/api/auth/login" -Method Post `
-        -Body $loginBody -ContentType "application/json" `
-        -SessionVariable session -UseBasicParsing
-    if ($login.StatusCode -ne 200) { throw "Status $($login.StatusCode)" }
+        -Body $loginBody -ContentType "application/json; charset=utf-8" `
+        -SessionVariable session -UseBasicParsing -ErrorAction Stop
+    
+    if ($login.StatusCode -ne 200) {
+        Write-Host "  FAIL Login: Status $($login.StatusCode)" -ForegroundColor Red
+        Write-Host "  Response: $($login.Content)" -ForegroundColor Yellow
+        exit 1
+    }
+    
     $loginJson = $login.Content | ConvertFrom-Json
-    if (-not $loginJson.success) { throw "success=false" }
+    if (-not $loginJson.success) {
+        Write-Host "  FAIL Login: success=false" -ForegroundColor Red
+        Write-Host "  Response: $($login.Content)" -ForegroundColor Yellow
+        if ($loginJson.correlationId) { Write-Host "  CorrelationId: $($loginJson.correlationId)" -ForegroundColor Gray }
+        if ($loginJson.errorId) { Write-Host "  ErrorId: $($loginJson.errorId)" -ForegroundColor Gray }
+        exit 1
+    }
+    
     Write-Host "  OK Login success" -ForegroundColor Green
+    if ($loginJson.correlationId) { Write-Host "  CorrelationId: $($loginJson.correlationId)" -ForegroundColor Gray }
 } catch {
-    Write-Host "  FAIL Login: $_" -ForegroundColor Red
+    Write-Host "  FAIL Login exception: $_" -ForegroundColor Red
+    if ($_.Exception.Response) {
+        $statusCode = $_.Exception.Response.StatusCode.value__
+        Write-Host "  Status: $statusCode" -ForegroundColor Yellow
+        try {
+            $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+            $responseBody = $reader.ReadToEnd()
+            Write-Host "  Response: $responseBody" -ForegroundColor Yellow
+            $errJson = $responseBody | ConvertFrom-Json -ErrorAction SilentlyContinue
+            if ($errJson.correlationId) { Write-Host "  CorrelationId: $($errJson.correlationId)" -ForegroundColor Gray }
+            if ($errJson.errorId) { Write-Host "  ErrorId: $($errJson.errorId)" -ForegroundColor Gray }
+        } catch {}
+    }
     exit 1
 }
 

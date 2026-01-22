@@ -42,26 +42,33 @@ export function safeJsonErrorHandler(
     }
     
     // NO llamar next(err) para evitar que llegue al error handler global (500)
-    // Responder directamente con 400
+    // Responder directamente con 400 con diagnóstico adicional
+    const contentType = req.headers['content-type'] || 'not set';
+    const contentLength = req.headers['content-length'] || 'not set';
+    const diagnostic = {
+      contentType,
+      contentLength: typeof contentLength === 'string' ? parseInt(contentLength, 10) || contentLength : contentLength,
+      bodyLength,
+      bodyPreview: bodyPreview.substring(0, 80), // Primeros 80 chars sanitizados
+    };
+    
     res.status(400).json({
       success: false,
       error: 'Invalid JSON body',
       errorCode: 'INVALID_JSON',
       correlationId,
-      hint: 'Ensure body is valid JSON e.g. {"username":"admin","password":"..."}',
+      diagnostic,
+      hint: 'Ensure body is valid JSON e.g. {"username":"admin","password":"..."}. Use PowerShell Invoke-WebRequest or Node fetch, not curl.exe on Windows.',
       timestamp: new Date().toISOString(),
     });
     
-    // ✅ Loggear el error con correlationId y rawBody info
+    // ✅ Loggear el error con correlationId y rawBody info (sin credenciales)
     logger.warn('[Safe JSON] Invalid JSON body rejected', {
       correlationId,
       path: req.path,
       method: req.method,
       error: err.message,
-      bodyLength,
-      bodyPreview,
-      contentType: req.headers['content-type'],
-      contentLength: req.headers['content-length'],
+      diagnostic,
     });
     
     return; // ✅ CRITICAL: NO llamar next()

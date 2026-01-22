@@ -1,6 +1,6 @@
-# Comandos PowerShell para Login y AutenticaciÛn
+# Comandos PowerShell para Login y Autenticaciùn
 
-## ConfiguraciÛn Inicial
+## Configuraciùn Inicial
 
 ```powershell
 # Variables de entorno
@@ -11,7 +11,7 @@ $API_URL = "https://www.ivanreseller.com"
 
 ## 1. Login y Obtener Cookie
 
-### MÈtodo 1: ConvertTo-Json (Recomendado)
+### Mùtodo 1: ConvertTo-Json (Recomendado)
 
 ```powershell
 # Crear body como objeto PowerShell
@@ -34,16 +34,14 @@ $tokenValue = $tokenCookie.Value
 Write-Host "Token: $tokenValue" -ForegroundColor Green
 ```
 
-### MÈtodo 2: JSON Literal con curl.exe
+### Mùtodo 2: NO USAR curl.exe en Windows
 
-```powershell
-# Login y ver headers Set-Cookie
-curl.exe -i -X POST "$API_URL/api/auth/login" `
-    -H "Content-Type: application/json" `
-    --data-binary '{"username":"admin","password":"admin123"}'
-```
+?? **IMPORTANTE:** `curl.exe` en Windows puede fallar con 400 INVALID_JSON por problemas de encoding/quotes.  
+**Usar siempre PowerShell `Invoke-WebRequest` o `Invoke-RestMethod` con `-SessionVariable`.**
 
-### MÈtodo 3: Usando Invoke-RestMethod (M·s simple)
+Si necesitas usar curl por alguna razùn, asegùrate de usar `--data-binary` y verificar encoding UTF-8, pero **no es el mùtodo recomendado**.
+
+### Mùtodo 3: Usando Invoke-RestMethod (Mùs simple)
 
 ```powershell
 $body = @{
@@ -57,18 +55,18 @@ $response = Invoke-RestMethod -Uri "$API_URL/api/auth/login" `
     -Body $body `
     -SessionVariable session
 
-# El token viene en el body tambiÈn
+# El token viene en el body tambiùn
 $tokenFromBody = $response.data.token
 Write-Host "Token from body: $tokenFromBody" -ForegroundColor Green
 
-# Y tambiÈn en las cookies
+# Y tambiùn en las cookies
 $tokenCookie = $session.Cookies.GetCookies($API_URL) | Where-Object { $_.Name -eq "token" }
 Write-Host "Token from cookie: $($tokenCookie.Value)" -ForegroundColor Green
 ```
 
 ## 2. Usar Cookie en Requests Posteriores
 
-### OpciÛn A: Usar WebSession (Recomendado para PowerShell)
+### Opciùn A: Usar WebSession (Recomendado para PowerShell)
 
 ```powershell
 # Login primero (crea session)
@@ -83,7 +81,7 @@ $null = Invoke-RestMethod -Uri "$API_URL/api/auth/login" `
     -Body $body `
     -WebSession $session
 
-# Usar la misma session para requests posteriores (envÌa cookies autom·ticamente)
+# Usar la misma session para requests posteriores (envùa cookies automùticamente)
 $authStatus = Invoke-RestMethod -Uri "$API_URL/api/auth-status" `
     -Method GET `
     -WebSession $session
@@ -91,7 +89,7 @@ $authStatus = Invoke-RestMethod -Uri "$API_URL/api/auth-status" `
 $authStatus | ConvertTo-Json -Depth 10
 ```
 
-### OpciÛn B: Usar Header Cookie Manual
+### Opciùn B: Usar Header Cookie Manual
 
 ```powershell
 # Obtener token (del body o de la cookie)
@@ -114,7 +112,7 @@ Invoke-RestMethod -Uri "$API_URL/api/auth-status" `
     -ContentType "application/json"
 ```
 
-### OpciÛn C: Usar Header Authorization Bearer
+### Opciùn C: Usar Header Authorization Bearer
 
 ```powershell
 $token = "TU_TOKEN_AQUI"
@@ -125,7 +123,7 @@ Invoke-RestMethod -Uri "$API_URL/api/auth-status" `
     -ContentType "application/json"
 ```
 
-## 3. Endpoints con AutenticaciÛn
+## 3. Endpoints con Autenticaciùn
 
 ### Auth Status
 
@@ -142,7 +140,7 @@ Invoke-RestMethod -Uri "$API_URL/api/auth-status" `
     -Headers @{"Authorization" = "Bearer $token"} `
     -ContentType "application/json"
 
-# Con WebSession (autom·tico)
+# Con WebSession (automùtico)
 Invoke-RestMethod -Uri "$API_URL/api/auth-status" `
     -Method GET `
     -WebSession $session
@@ -171,7 +169,7 @@ Invoke-RestMethod -Uri "$API_URL/api/automation/config" `
 ### Login Smoke Test
 
 ```powershell
-# Probar login autom·tico y verificar cookies
+# Probar login automùtico y verificar cookies
 Invoke-RestMethod -Uri "$API_URL/api/debug/login-smoke" `
     -Method GET `
     -ContentType "application/json" | ConvertTo-Json -Depth 5
@@ -202,7 +200,7 @@ try {
         $token = $loginResponse.data.token
         Write-Host "  Token obtenido: $($token.Substring(0, 20))..." -ForegroundColor Green
     } else {
-        Write-Host "  ? Login fallÛ" -ForegroundColor Red
+        Write-Host "  ? Login fallù" -ForegroundColor Red
         exit 1
     }
 } catch {
@@ -237,7 +235,7 @@ try {
 Write-Host "`n? Tests completados" -ForegroundColor Green
 ```
 
-## 6. SoluciÛn de Problemas
+## 6. Soluciùn de Problemas
 
 ### Si recibes 400 INVALID_JSON
 
@@ -253,12 +251,9 @@ Write-Host "`n? Tests completados" -ForegroundColor Green
    $body = @{username="admin";password="admin123"} | ConvertTo-Json -Compress
    ```
 
-3. **Usar --data-binary con curl:**
-   ```powershell
-   curl.exe -X POST "$API_URL/api/auth/login" `
-       -H "Content-Type: application/json" `
-       --data-binary '{"username":"admin","password":"admin123"}'
-   ```
+3. **NO usar curl.exe en Windows:**
+   - Usar `Invoke-WebRequest` o `Invoke-RestMethod` con `-SessionVariable session`
+   - Ver script oficial: `backend/scripts/ps-login-and-session-smoke.ps1`
 
 ### Si recibes 401 Invalid token
 
@@ -268,12 +263,12 @@ Write-Host "`n? Tests completados" -ForegroundColor Green
 
 2. **Verificar formato del token:**
    ```powershell
-   # Token debe ser un JWT v·lido
+   # Token debe ser un JWT vùlido
    $token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
    ```
 
-3. **Verificar JWT_SECRET no cambiÛ:**
-   - Si JWT_SECRET cambiÛ en Railway, todos los tokens anteriores se invalidan
+3. **Verificar JWT_SECRET no cambiù:**
+   - Si JWT_SECRET cambiù en Railway, todos los tokens anteriores se invalidan
    - Necesitas hacer login nuevamente
 
 ### Si las cookies no funcionan
@@ -284,14 +279,14 @@ Write-Host "`n? Tests completados" -ForegroundColor Green
    ```
 
 2. **Verificar SameSite=None y Secure:**
-   - En producciÛn, cookies deben tener `SameSite=None; Secure`
+   - En producciùn, cookies deben tener `SameSite=None; Secure`
    - Backend debe estar en HTTPS
 
-3. **Verificar que NO se estableciÛ Domain:**
-   - En producciÛn (Vercel -> Railway), no debe haber `Domain=...`
+3. **Verificar que NO se estableciù Domain:**
+   - En producciùn (Vercel -> Railway), no debe haber `Domain=...`
    - Esto permite cross-domain cookies
 
 ---
 
-**⁄ltima actualizaciÛn:** 2025-01-XX
+**ùltima actualizaciùn:** 2025-01-XX
 **Notas:** Los comandos funcionan con PowerShell 5.1+ y PowerShell Core 7+
