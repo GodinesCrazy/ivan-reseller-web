@@ -43,31 +43,45 @@ router.get('/ping', (req: Request, res: Response) => {
 
 /**
  * ✅ P0: GET /api/debug/build-info
- * Endpoint para diagnóstico de 502 - diferencia Vercel proxy issue vs Railway container restart vs backend crash
+ * Endpoint ultra mínimo para diagnóstico de 502 - diferencia Vercel proxy issue vs Railway container restart vs backend crash
  * NO requiere autenticación
+ * NO depende de DB/Redis
  */
-router.get('/build-info', (_req: Request, res: Response) => {
+router.get('/build-info', (req: Request, res: Response) => {
+  // ✅ P0: Request logging para /api/debug/build-info
+  console.log(`[BUILD-INFO] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'}`);
+  
   try {
     const buildInfo = getBuildInfo();
+    const env = require('../../config/env').default;
+    const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
+    const port = Number(process.env.PORT || env.PORT || 3000);
     
     res.status(200).json({
       ok: true,
       gitSha: buildInfo.gitSha,
       buildTime: buildInfo.buildTime,
       node: buildInfo.nodeVersion,
-      uptime: process.uptime(),
       pid: process.pid,
+      uptime: process.uptime(),
+      safeBoot,
+      port,
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
     // Even on error, respond 200 to indicate process is alive
+    const safeBoot = process.env.SAFE_BOOT === 'true' || (process.env.SAFE_BOOT !== 'false' && process.env.NODE_ENV === 'production');
+    const port = Number(process.env.PORT || 3000);
+    
     res.status(200).json({
       ok: true,
       gitSha: (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || 'unknown').toString().substring(0, 7),
       buildTime: process.env.BUILD_TIME || process.env.RAILWAY_BUILD_TIME || new Date().toISOString(),
       node: process.version,
-      uptime: process.uptime(),
       pid: process.pid,
+      uptime: process.uptime(),
+      safeBoot,
+      port,
       timestamp: new Date().toISOString(),
       error: error?.message || 'Unknown error',
     });
