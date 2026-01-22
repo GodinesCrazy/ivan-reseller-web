@@ -240,6 +240,8 @@ const redisUrlSchema = z.string()
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().default('3000'),
+  // ✅ P0: SAFE_BOOT mode - default true in production to prevent 502s
+  SAFE_BOOT: z.enum(['true', 'false']).default(process.env.NODE_ENV === 'production' ? 'true' : 'false').transform(val => val === 'true'),
   API_URL: z.string().url().default('http://localhost:3000'),
   FRONTEND_URL: z.string().url().optional(),
   WEB_BASE_URL: z.string().url().optional(), // Base URL for OAuth callbacks (defaults to www.ivanreseller.com in production)

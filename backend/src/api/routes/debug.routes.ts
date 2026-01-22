@@ -15,6 +15,30 @@ import logger from '../../config/logger';
 const router = Router();
 
 /**
+ * ✅ P0: GET /api/debug/ping
+ * Endpoint simple para probar routing en Railway
+ * Responde 200 siempre sin depender de nada
+ * NO requiere autenticación
+ */
+router.get('/ping', (_req: Request, res: Response) => {
+  try {
+    res.status(200).json({
+      ok: true,
+      timestamp: new Date().toISOString(),
+      pid: process.pid,
+    });
+  } catch (error: any) {
+    // Even on error, respond 200 to indicate process is alive
+    res.status(200).json({
+      ok: true,
+      timestamp: new Date().toISOString(),
+      pid: process.pid,
+      error: error?.message || 'Unknown error',
+    });
+  }
+});
+
+/**
  * ✅ FIX STABILITY: GET /api/debug/auth-status-crash-safe
  * Endpoint de diagnóstico que responde 200 siempre sin depender de nada más
  * Útil para detectar si el backend está vivo aunque otros endpoints fallen

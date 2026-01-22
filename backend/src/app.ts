@@ -89,11 +89,18 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
   try {
     const mem = process.memoryUsage();
+    const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
+    const port = Number(process.env.PORT || env.PORT || 3000);
+    
     res.setHeader('X-Response-Time', `${Date.now() - start}ms`);
+    res.setHeader('X-Health', 'ok');
     res.status(200).json({
       status: 'healthy',
+      safeBoot,
       timestamp: new Date().toISOString(),
+      pid: process.pid,
       uptime: process.uptime(),
+      port,
       service: 'ivan-reseller-backend',
       version: process.env.npm_package_version || '1.0.0',
       build: {
@@ -107,11 +114,18 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       },
     });
   } catch {
+    const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
+    const port = Number(process.env.PORT || env.PORT || 3000);
+    
     res.setHeader('X-Response-Time', `${Date.now() - start}ms`);
+    res.setHeader('X-Health', 'ok');
     res.status(200).json({
       status: 'healthy',
+      safeBoot,
       timestamp: new Date().toISOString(),
+      pid: process.pid,
       uptime: process.uptime(),
+      port,
       service: 'ivan-reseller-backend',
     });
   }
