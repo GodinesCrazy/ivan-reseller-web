@@ -12,16 +12,13 @@ Write-Host "=== AliExpress Dropshipping OAuth E2E (PowerShell) ===" -ForegroundC
 Write-Host "Base: $BaseUrl | User: $Username"
 Write-Host ""
 
-# Create session for cookie persistence
-$session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-
-# 1. Login
+# 1. Login (SessionVariable creates $session for subsequent -WebSession use)
 Write-Host "[1] Login POST /api/auth/login ..." -ForegroundColor Yellow
 $loginBody = @{ username = $Username; password = $Password } | ConvertTo-Json
 try {
     $login = Invoke-WebRequest -Uri "$BaseUrl/api/auth/login" -Method Post `
         -Body $loginBody -ContentType "application/json" `
-        -WebSession $session -UseBasicParsing
+        -SessionVariable session -UseBasicParsing
     if ($login.StatusCode -ne 200) { throw "Status $($login.StatusCode)" }
     $loginJson = $login.Content | ConvertFrom-Json
     if (-not $loginJson.success) { throw "success=false" }

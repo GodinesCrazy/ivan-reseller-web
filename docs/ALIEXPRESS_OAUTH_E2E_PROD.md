@@ -1,6 +1,6 @@
-# AliExpress Dropshipping OAuth E2E ? Production
+# AliExpress Dropshipping OAuth E2E ï¿½ Production
 
-Guía para pruebas end-to-end del OAuth de AliExpress Dropshipping en producción (o staging) usando scripts oficiales. **No usar `curl.exe` en Windows** para peticiones JSON; usar PowerShell o Node.
+Guï¿½a para pruebas end-to-end del OAuth de AliExpress Dropshipping en producciï¿½n (o staging) usando scripts oficiales. **No usar `curl.exe` en Windows** para peticiones JSON; usar PowerShell o Node.
 
 ---
 
@@ -34,22 +34,22 @@ Variables opcionales: `$env:API_URL`, `$env:TEST_USERNAME`, `$env:TEST_PASSWORD`
 
 El script:
 
-- Hace login con `Invoke-WebRequest -WebSession`
-- Consulta `/api/auth-status` y `/api/products` con la misma sesión
+- Hace login con `Invoke-WebRequest -SessionVariable session`
+- Consulta `/api/auth-status` y `/api/products` con la misma sesiï¿½n
 - Obtiene la auth URL y la abre con `Start-Process`
 - Indica que tras autorizar se debe revisar el endpoint de debug
-- Llama a `/api/debug/aliexpress-dropshipping-credentials` con la misma sesión
+- Llama a `/api/debug/aliexpress-dropshipping-credentials` con la misma sesiï¿½n
 
 ---
 
 ## No usar curl.exe en Windows para JSON
 
-En Windows, `curl.exe` suele dar problemas de encoding y comillas con JSON (p. ej. 400 INVALID_JSON). **No se considera bug crítico** si falla solo con `curl.exe`. Usar siempre:
+En Windows, `curl.exe` suele dar problemas de encoding y comillas con JSON (p. ej. 400 INVALID_JSON). **No se considera bug crï¿½tico** si falla solo con `curl.exe`. Usar siempre:
 
 - **PowerShell:** `Invoke-WebRequest` con `-WebSession` para mantener cookies.
 - **Node:** `node backend/scripts/smoke-test-aliexpress-oauth.js` (fetch).
 
-Los endpoints `/api/auth/login` y el resto aceptan `Content-Type: application/json` y cuerpo JSON válido. Si `curl.exe` falla por Windows, usar los scripts anteriores.
+Los endpoints `/api/auth/login` y el resto aceptan `Content-Type: application/json` y cuerpo JSON vÃ¡lido. Si `curl.exe` falla por Windows, usar los scripts anteriores.
 
 ---
 
@@ -57,14 +57,14 @@ Los endpoints `/api/auth/login` y el resto aceptan `Content-Type: application/js
 
 1. **Login**  
    `POST /api/auth/login` con `{"username":"...","password":"..."}`.  
-   Respuesta: token en body y cookies (`token`, `refreshToken`). En producción: `SameSite=None`, `Secure`, `httpOnly`.
+   Respuesta: token en body y cookies (`token`, `refreshToken`). En producciï¿½n: `SameSite=None`, `Secure`, `httpOnly`.
 
 2. **Auth URL**  
    `GET /api/marketplace/auth-url/aliexpress-dropshipping?environment=production`  
-   Requiere autenticación (cookie o Bearer). Devuelve `{ success, data: { authUrl } }`.
+   Requiere autenticaciï¿½n (cookie o Bearer). Devuelve `{ success, data: { authUrl } }`.
 
 3. **Abrir authUrl**  
-   Abrir la URL en el navegador, iniciar sesión en AliExpress y autorizar la app.
+   Abrir la URL en el navegador, iniciar sesiï¿½n en AliExpress y autorizar la app.
 
 4. **Callback**  
    Tras autorizar, el callback guarda los tokens. La app redirige al frontend (p. ej. `/#/api-settings?oauth=success&...`).
@@ -77,9 +77,9 @@ Los endpoints `/api/auth/login` y el resto aceptan `Content-Type: application/js
 
 ## Errores de login (400, nunca 500)
 
-- **Body no es JSON válido** ? `400` con `errorCode: "INVALID_JSON"` (middleware safe-json).
-- **Body no es objeto JSON** ? `400` con `errorCode: "INVALID_BODY"`.
-- **Faltan username o password** ? `400` con `errorCode: "MISSING_REQUIRED_FIELD"`.
+- **Body no es JSON vÃ¡lido** -> `400` con `errorCode: "INVALID_JSON"` (middleware safe-json).
+- **Body no es objeto JSON** -> `400` con `errorCode: "INVALID_BODY"`.
+- **Faltan username o password** -> `400` con `errorCode: "MISSING_REQUIRED_FIELD"`.
 
 Ninguno de estos casos debe devolver 500.
 
@@ -111,9 +111,9 @@ npm test
 
 ---
 
-## Referencia rápida
+## Referencia rï¿½pida
 
-| Acción              | Comando / Endpoint                                                                 |
+| Acciï¿½n              | Comando / Endpoint                                                                 |
 |---------------------|-------------------------------------------------------------------------------------|
 | Smoke Node          | `node backend/scripts/smoke-test-aliexpress-oauth.js`                              |
 | Smoke PowerShell    | `backend\scripts\ps-aliexpress-oauth-e2e.ps1`                                      |
@@ -121,4 +121,4 @@ npm test
 | Auth URL            | `GET /api/marketplace/auth-url/aliexpress-dropshipping?environment=production`     |
 | Debug credentials   | `GET /api/debug/aliexpress-dropshipping-credentials`                               |
 
-Configurar antes de OAuth: **App Key** y **App Secret** de AliExpress Dropshipping en la configuración de APIs de la app.
+Configurar antes de OAuth: **App Key** y **App Secret** de AliExpress Dropshipping en la configuraciï¿½n de APIs de la app.
