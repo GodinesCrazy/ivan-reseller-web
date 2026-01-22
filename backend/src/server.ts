@@ -5,7 +5,7 @@ import { prisma, connectWithRetry } from './config/database';
 import { redis, isRedisAvailable } from './config/redis';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { scheduledTasksService } from './services/scheduled-tasks.service';
+import { getScheduledTasksService } from './services/scheduled-tasks.service';
 // ✅ FASE 3: Dynamic import para evitar SIGSEGV - NO importar aliExpressAuthMonitor al nivel superior
 import { apiHealthMonitor } from './services/api-health-monitor.service';
 import { apiAvailability } from './services/api-availability.service';
@@ -598,6 +598,12 @@ async function startServer() {
       updateReadinessState();
       logMilestone('LISTEN_CALLBACK - Server is listening and ready to accept connections');
       
+      // ✅ P0: Log bootstrap mode
+      const bootstrapMode = env.SAFE_BOOT ? 'SAFE_BOOT' : 'FULL_BOOT';
+      console.log('');
+      console.log(`📦 BOOTSTRAP MODE: ${bootstrapMode}`);
+      console.log('================================');
+      
       // ✅ P0: Start bootstrap in background based on SAFE_BOOT
       setImmediate(async () => {
         try {
@@ -605,7 +611,9 @@ async function startServer() {
             logMilestone('SAFE_BOOT=true: Using safe bootstrap (no heavy initialization)');
             const { safeBootstrap } = await import('./bootstrap/safe-bootstrap');
             await safeBootstrap();
+            console.log('');
             console.log('✅ BOOTSTRAP DONE (SAFE_BOOT mode)');
+            console.log('');
           } else {
             logMilestone('SAFE_BOOT=false: Using full bootstrap (DB, Redis, migrations, etc.)');
             const { fullBootstrap } = await import('./bootstrap/full-bootstrap');
@@ -614,7 +622,9 @@ async function startServer() {
         } catch (bootstrapError: any) {
           // Startup guard: never crash process; server already listening, /health returns 200
           console.error('⚠️  Warning: Error during bootstrap:', bootstrapError.message);
+          console.log('');
           console.log('✅ BOOTSTRAP DONE (with errors)');
+          console.log('');
         }
       });
     });
@@ -646,6 +656,7 @@ process.on('SIGINT', async () => {
   } catch (error) {
     // Ignorar si el módulo no está cargado
   }
+  const scheduledTasksService = getScheduledTasksService();
   await scheduledTasksService.shutdown();
   
   // ✅ FASE 5: Detener Workflow Scheduler
@@ -673,6 +684,7 @@ process.on('SIGTERM', async () => {
   } catch (error) {
     // Ignorar si el módulo no está cargado
   }
+  const scheduledTasksService = getScheduledTasksService();
   await scheduledTasksService.shutdown();
   await prisma.$disconnect();
   if (isRedisAvailable) {

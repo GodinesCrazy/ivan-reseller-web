@@ -22,20 +22,26 @@ const router = Router();
  * NO requiere autenticación
  */
 router.get('/ping', (req: Request, res: Response) => {
+  const correlationId = (req as any).correlationId || `ping-${Date.now()}`;
   // ✅ P0: Request logging para /api/debug/ping
-  console.log(`[PING] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'}`);
+  console.log(`[PING] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'} correlationId=${correlationId}`);
   try {
+    res.setHeader('X-Correlation-Id', correlationId);
     res.status(200).json({
       ok: true,
       timestamp: new Date().toISOString(),
       pid: process.pid,
+      correlationId,
     });
   } catch (error: any) {
     // Even on error, respond 200 to indicate process is alive
+    const errorCorrelationId = correlationId || `ping-error-${Date.now()}`;
+    res.setHeader('X-Correlation-Id', errorCorrelationId);
     res.status(200).json({
       ok: true,
       timestamp: new Date().toISOString(),
       pid: process.pid,
+      correlationId: errorCorrelationId,
       error: error?.message || 'Unknown error',
     });
   }
@@ -48,8 +54,9 @@ router.get('/ping', (req: Request, res: Response) => {
  * NO depende de DB/Redis
  */
 router.get('/build-info', (req: Request, res: Response) => {
+  const correlationId = (req as any).correlationId || `build-info-${Date.now()}`;
   // ✅ P0: Request logging para /api/debug/build-info
-  console.log(`[BUILD-INFO] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'}`);
+  console.log(`[BUILD-INFO] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'} correlationId=${correlationId}`);
   
   try {
     const buildInfo = getBuildInfo();
@@ -57,6 +64,7 @@ router.get('/build-info', (req: Request, res: Response) => {
     const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
     const port = Number(process.env.PORT || env.PORT || 3000);
     
+    res.setHeader('X-Correlation-Id', correlationId);
     res.status(200).json({
       ok: true,
       gitSha: buildInfo.gitSha,
@@ -67,12 +75,15 @@ router.get('/build-info', (req: Request, res: Response) => {
       safeBoot,
       port,
       timestamp: new Date().toISOString(),
+      correlationId,
     });
   } catch (error: any) {
     // Even on error, respond 200 to indicate process is alive
     const safeBoot = process.env.SAFE_BOOT === 'true' || (process.env.SAFE_BOOT !== 'false' && process.env.NODE_ENV === 'production');
     const port = Number(process.env.PORT || 3000);
+    const errorCorrelationId = `build-info-error-${Date.now()}`;
     
+    res.setHeader('X-Correlation-Id', errorCorrelationId);
     res.status(200).json({
       ok: true,
       gitSha: (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || 'unknown').toString().substring(0, 7),
@@ -83,6 +94,7 @@ router.get('/build-info', (req: Request, res: Response) => {
       safeBoot,
       port,
       timestamp: new Date().toISOString(),
+      correlationId: errorCorrelationId,
       error: error?.message || 'Unknown error',
     });
   }

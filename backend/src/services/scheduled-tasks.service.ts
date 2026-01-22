@@ -1200,5 +1200,36 @@ export class ScheduledTasksService {
   }
 }
 
-export const scheduledTasksService = new ScheduledTasksService();
+// ✅ P0: Lazy initialization - NO instanciar en import-time si SAFE_BOOT=true
+let scheduledTasksServiceInstance: ScheduledTasksService | null = null;
+
+export function getScheduledTasksService(): ScheduledTasksService {
+  if (scheduledTasksServiceInstance) {
+    return scheduledTasksServiceInstance;
+  }
+  
+  // ✅ P0: Check SAFE_BOOT before initializing
+  const safeBoot = process.env.SAFE_BOOT === 'true' || (process.env.SAFE_BOOT !== 'false' && process.env.NODE_ENV === 'production');
+  
+  if (safeBoot) {
+    console.log('🛡️  SAFE_BOOT: skipping ScheduledTasksService initialization');
+    // Return a mock service that does nothing
+    scheduledTasksServiceInstance = {
+      shutdown: async () => {},
+    } as any;
+    return scheduledTasksServiceInstance;
+  }
+  
+  scheduledTasksServiceInstance = new ScheduledTasksService();
+  return scheduledTasksServiceInstance;
+}
+
+// Export getter for backward compatibility
+export const scheduledTasksService = new Proxy({} as ScheduledTasksService, {
+  get(_target, prop) {
+    const instance = getScheduledTasksService();
+    const value = (instance as any)[prop];
+    return typeof value === 'function' ? value.bind(instance) : value;
+  }
+});
 

@@ -17,7 +17,8 @@ import { redis, isRedisAvailable } from '../config/redis';
 import { env } from '../config/env';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { scheduledTasksService } from '../services/scheduled-tasks.service';
+import { getScheduledTasksService } from '../services/scheduled-tasks.service';
+import { initializeJobWorkers } from '../services/job.service';
 import { apiHealthMonitor } from '../services/api-health-monitor.service';
 import { apiAvailability } from '../services/api-availability.service';
 import scheduledReportsService from '../services/scheduled-reports.service';
@@ -201,6 +202,26 @@ export async function fullBootstrap(startTime: number): Promise<void> {
       } catch (error: any) {
         console.warn('??  Error verificando Scraper Bridge:', error?.message || 'Unknown error');
       }
+    }
+    
+    // Initialize job workers (BullMQ)
+    try {
+      logMilestone('Initializing job workers');
+      initializeJobWorkers();
+      console.log('✅ Job workers initialized');
+      logMilestone('Job workers initialized');
+    } catch (error: any) {
+      console.warn('⚠️  Warning: Could not initialize job workers:', error.message);
+    }
+    
+    // Initialize scheduled tasks service
+    try {
+      logMilestone('Initializing scheduled tasks service');
+      const scheduledTasksService = getScheduledTasksService();
+      console.log('✅ Scheduled tasks service initialized');
+      logMilestone('Scheduled tasks service initialized');
+    } catch (error: any) {
+      console.warn('⚠️  Warning: Could not initialize scheduled tasks service:', error.message);
     }
     
     // Initialize scheduled reports

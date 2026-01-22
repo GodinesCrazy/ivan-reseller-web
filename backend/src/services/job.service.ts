@@ -543,13 +543,35 @@ class JobService {
 // Create job service instance
 export const jobService = new JobService();
 
-// Workers - only create when Redis is available
+// ✅ P0: Lazy workers - NO inicializar en import-time si SAFE_BOOT=true
 let scrapingWorker: Worker | null = null;
 let publishingWorker: Worker | null = null;
 let payoutWorker: Worker | null = null;
 let syncWorker: Worker | null = null;
+let workersInitialized = false;
 
-if (isRedisAvailable && bullMQRedis) {
+/**
+ * Initialize workers (lazy - only if SAFE_BOOT=false)
+ */
+function initializeWorkers(): void {
+  if (workersInitialized) {
+    return;
+  }
+  
+  // ✅ P0: Check SAFE_BOOT before initializing workers
+  const safeBoot = process.env.SAFE_BOOT === 'true' || (process.env.SAFE_BOOT !== 'false' && process.env.NODE_ENV === 'production');
+  
+  if (safeBoot) {
+    console.log('🛡️  SAFE_BOOT: skipping workers initialization');
+    workersInitialized = true;
+    return;
+  }
+  
+  if (!isRedisAvailable || !bullMQRedis) {
+    workersInitialized = true;
+    return;
+  }
+  
   scrapingWorker = new Worker(
     'scraping',
     async (job: Job<ScrapingJobData>) => {
@@ -593,29 +615,33 @@ if (isRedisAvailable && bullMQRedis) {
       concurrency: 3,
     }
   );
-}
 
-// Worker event listeners
-const setupWorkerEvents = (worker: Worker, name: string) => {
-  worker.on('completed', (job) => {
-    logger.info('Job completed', { jobType: name, jobId: job.id });
-  });
+  // Worker event listeners
+  const setupWorkerEvents = (worker: Worker, name: string) => {
+    worker.on('completed', (job) => {
+      logger.info('Job completed', { jobType: name, jobId: job.id });
+    });
 
-  worker.on('failed', (job, err) => {
-    logger.error('Job failed', { jobType: name, jobId: job?.id, error: err.message, stack: err.stack });
-  });
+    worker.on('failed', (job, err) => {
+      logger.error('Job failed', { jobType: name, jobId: job?.id, error: err.message, stack: err.stack });
+    });
 
-  worker.on('progress', (job, progress) => {
-    logger.debug('Job progress', { jobType: name, jobId: job.id, progress });
-  });
-};
+    worker.on('progress', (job, progress) => {
+      logger.debug('Job progress', { jobType: name, jobId: job.id, progress });
+    });
+  };
 
-// Setup event listeners - only if workers were created
-if (isRedisAvailable) {
   if (scrapingWorker) setupWorkerEvents(scrapingWorker, 'Scraping');
   if (publishingWorker) setupWorkerEvents(publishingWorker, 'Publishing');
   if (payoutWorker) setupWorkerEvents(payoutWorker, 'Payout');
   if (syncWorker) setupWorkerEvents(syncWorker, 'Sync');
+  
+  workersInitialized = true;
+}
+
+// ✅ P0: Export function to initialize workers (called from full-bootstrap.ts)
+export function initializeJobWorkers(): void {
+  initializeWorkers();
 }
 
 // Graceful shutdown

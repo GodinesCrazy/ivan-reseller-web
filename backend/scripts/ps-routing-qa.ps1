@@ -151,6 +151,7 @@ Write-Host ""
 # Phase 1: Railway Direct Tests
 Write-Host "=== Phase 1: Railway Direct Routing ===" -ForegroundColor Cyan
 Test-Endpoint -Name "/health" -Url "$RailwayDirect/health" -Source "Railway"
+Test-Endpoint -Name "/ready" -Url "$RailwayDirect/ready" -Source "Railway"
 Test-Endpoint -Name "/api/debug/ping" -Url "$RailwayDirect/api/debug/ping" -Source "Railway"
 Test-Endpoint -Name "/api/debug/build-info" -Url "$RailwayDirect/api/debug/build-info" -Source "Railway"
 
@@ -158,6 +159,7 @@ Test-Endpoint -Name "/api/debug/build-info" -Url "$RailwayDirect/api/debug/build
 Write-Host ""
 Write-Host "=== Phase 2: Vercel Proxy Routing ===" -ForegroundColor Cyan
 Test-Endpoint -Name "/health" -Url "$VercelProxy/health" -Source "Vercel"
+Test-Endpoint -Name "/ready" -Url "$VercelProxy/ready" -Source "Vercel"
 Test-Endpoint -Name "/api/debug/ping" -Url "$VercelProxy/api/debug/ping" -Source "Vercel"
 Test-Endpoint -Name "/api/debug/build-info" -Url "$VercelProxy/api/debug/build-info" -Source "Vercel"
 

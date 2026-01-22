@@ -83,12 +83,78 @@ app.set('etag', false); // Deshabilitar ETag globalmente (más seguro para APIs)
 // Must be THE FIRST app.use() – no DB, Redis, queues, auth, or heavy deps.
 // ====================================
 app.use((req: Request, res: Response, next: NextFunction) => {
-  if (req.method !== 'GET' || req.path !== '/health') {
+  if (req.method !== 'GET' || (req.path !== '/health' && req.path !== '/ready')) {
+    return next();
+  }
+  
+  // Handle /ready endpoint
+  if (req.path === '/ready') {
+    const start = Date.now();
+    const correlationId = (req as any).correlationId || `ready-${Date.now()}`;
+    console.log(`[READY] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'} correlationId=${correlationId}`);
+    try {
+      const mem = process.memoryUsage();
+      const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
+      const port = Number(process.env.PORT || env.PORT || 3000);
+      const responseTime = Date.now() - start;
+      
+      // ✅ P0: /ready is always ready if server is listening (SAFE_BOOT or not)
+      const isReady = true; // Server is listening, so it's ready
+      
+      res.setHeader('X-Response-Time', `${responseTime}ms`);
+      res.setHeader('X-Health', 'ok');
+      res.setHeader('X-Correlation-Id', correlationId);
+      res.status(200).json({
+        ok: true,
+        ready: isReady,
+        safeBoot,
+        timestamp: new Date().toISOString(),
+        pid: process.pid,
+        uptime: process.uptime(),
+        port,
+        correlationId,
+        service: 'ivan-reseller-backend',
+        build: {
+          gitSha: (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || 'unknown').toString().substring(0, 7),
+          buildTime: process.env.BUILD_TIME || process.env.RAILWAY_BUILD_TIME || new Date().toISOString(),
+        },
+        memory: {
+          used: Math.round(mem.heapUsed / 1024 / 1024),
+          total: Math.round(mem.heapTotal / 1024 / 1024),
+          unit: 'MB',
+        },
+      });
+      return;
+    } catch {
+      const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
+      const port = Number(process.env.PORT || env.PORT || 3000);
+      
+      res.setHeader('X-Response-Time', `${Date.now() - start}ms`);
+      res.setHeader('X-Health', 'ok');
+      res.setHeader('X-Correlation-Id', correlationId);
+      res.status(200).json({
+        ok: true,
+        ready: true,
+        safeBoot,
+        timestamp: new Date().toISOString(),
+        pid: process.pid,
+        uptime: process.uptime(),
+        port,
+        correlationId,
+        service: 'ivan-reseller-backend',
+      });
+      return;
+    }
+  }
+  
+  // Handle /health endpoint
+  if (req.path !== '/health') {
     return next();
   }
   const start = Date.now();
+  const correlationId = (req as any).correlationId || `health-${Date.now()}`;
   // ✅ P0: Request logging para /health
-  console.log(`[HEALTH] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'}`);
+  console.log(`[HEALTH] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'} correlationId=${correlationId}`);
   try {
     const mem = process.memoryUsage();
     const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
@@ -122,13 +188,16 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     
     res.setHeader('X-Response-Time', `${Date.now() - start}ms`);
     res.setHeader('X-Health', 'ok');
+    res.setHeader('X-Correlation-Id', correlationId);
     res.status(200).json({
       status: 'healthy',
+      ok: true,
       safeBoot,
       timestamp: new Date().toISOString(),
       pid: process.pid,
       uptime: process.uptime(),
       port,
+      correlationId,
       service: 'ivan-reseller-backend',
     });
   }
