@@ -10,6 +10,7 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { AliExpressAffiliateAPIService } from '../../services/aliexpress-affiliate-api.service';
 import { CredentialsManager } from '../../services/credentials-manager.service';
 import { resolveEnvironment } from '../../utils/environment-resolver';
+import { getBuildInfo } from '../../middleware/version-header.middleware';
 import logger from '../../config/logger';
 
 const router = Router();
@@ -35,6 +36,39 @@ router.get('/ping', (req: Request, res: Response) => {
       ok: true,
       timestamp: new Date().toISOString(),
       pid: process.pid,
+      error: error?.message || 'Unknown error',
+    });
+  }
+});
+
+/**
+ * ✅ P0: GET /api/debug/build-info
+ * Endpoint para diagnóstico de 502 - diferencia Vercel proxy issue vs Railway container restart vs backend crash
+ * NO requiere autenticación
+ */
+router.get('/build-info', (_req: Request, res: Response) => {
+  try {
+    const buildInfo = getBuildInfo();
+    
+    res.status(200).json({
+      ok: true,
+      gitSha: buildInfo.gitSha,
+      buildTime: buildInfo.buildTime,
+      node: buildInfo.nodeVersion,
+      uptime: process.uptime(),
+      pid: process.pid,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    // Even on error, respond 200 to indicate process is alive
+    res.status(200).json({
+      ok: true,
+      gitSha: (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || 'unknown').toString().substring(0, 7),
+      buildTime: process.env.BUILD_TIME || process.env.RAILWAY_BUILD_TIME || new Date().toISOString(),
+      node: process.version,
+      uptime: process.uptime(),
+      pid: process.pid,
+      timestamp: new Date().toISOString(),
       error: error?.message || 'Unknown error',
     });
   }

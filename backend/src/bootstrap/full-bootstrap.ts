@@ -117,9 +117,10 @@ export async function fullBootstrap(startTime: number): Promise<void> {
     logMilestone('Bootstrap: Running database migrations');
     try {
       await runMigrations();
+      console.log('✅ Database migrations ok');
       logMilestone('Bootstrap: Database migrations completed');
     } catch (migrationError: any) {
-      console.error('??  Warning: Database migrations failed (server continues running):', migrationError.message);
+      console.error('⚠️  Database migrations fail (server continues running):', migrationError.message);
     }
     
     // Test database connection with retry (non-blocking for server startup)
@@ -133,9 +134,10 @@ export async function fullBootstrap(startTime: number): Promise<void> {
       await Promise.race([dbConnectionPromise, dbTimeoutPromise]);
       setIsDatabaseReady(true);
       updateReadinessState();
+      console.log('✅ Prisma connect ok');
       logMilestone('Bootstrap: Database connected successfully');
     } catch (dbError: any) {
-      console.error('⚠️  Warning: Database connection failed (server continues in degraded mode):');
+      console.error('⚠️  Prisma connect fail (server continues in degraded mode):');
       console.error(`   ${dbError.message}`);
       setIsDatabaseReady(false);
       updateReadinessState();

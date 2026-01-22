@@ -37,6 +37,10 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
 // POST /api/auth/login - Con rate limiting para prevenir brute force
 router.post('/login', loginRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   const correlationId = (req as any).correlationId || 'unknown';
+  const requestId = req.headers['x-request-id'] || req.headers['x-vercel-id'] || 'unknown';
+  
+  // ✅ P0: Logging mínimo por request (sin password ni token)
+  console.log(`[LOGIN] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'} correlationId=${correlationId} requestId=${requestId}`);
   
   // ✅ FIX AUTH: Logging robusto del raw body SOLO en modo debug para /api/auth/login
   const isDebugMode = process.env.LOG_LEVEL === 'debug' || process.env.NODE_ENV !== 'production';
