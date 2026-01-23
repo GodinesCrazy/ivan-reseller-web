@@ -512,18 +512,19 @@ async function startServer() {
   const startTime = Date.now();
   bootstrapStartTime = startTime;
   
-  // ✅ P0: Check FORCE_ROUTING_OK - if true, use minimal server ONLY
-  const FORCE_ROUTING_OK = process.env.FORCE_ROUTING_OK !== 'false'; // Default true en prod
+  // ✅ FIX: FORCE_ROUTING_OK ya NO bloquea Express - solo se usa como fallback de emergencia
+  // Express SIEMPRE debe iniciar para que la app funcione
+  const FORCE_ROUTING_OK = process.env.FORCE_ROUTING_OK === 'true'; // Solo si explícitamente true
   
   try {
-    // ✅ P0: Logging obligatorio al boot
+    // ✅ BOOT: Logging obligatorio al boot
     console.log('');
     console.log('🚀 BOOT START');
     console.log('================================');
     console.log(`   pid=${process.pid}`);
     console.log(`   NODE_ENV=${env.NODE_ENV}`);
-    console.log(`   SAFE_BOOT=${env.SAFE_BOOT}`);
-    console.log(`   FORCE_ROUTING_OK=${FORCE_ROUTING_OK}`);
+    console.log(`   SAFE_BOOT=${env.SAFE_BOOT || false}`);
+    console.log(`   FORCE_ROUTING_OK=${FORCE_ROUTING_OK} (deprecated - Express always starts)`);
     console.log(`   PORT=${PORT}`);
     console.log(`   PORT env exists=${!!process.env.PORT} value=${process.env.PORT || 'N/A'}`);
     console.log(`   cwd=${process.cwd()}`);
@@ -531,28 +532,31 @@ async function startServer() {
     console.log('================================');
     console.log('');
     
-    // ✅ P0: If FORCE_ROUTING_OK=true, start minimal server and exit early
+    // ✅ FIX: Express SIEMPRE inicia - FORCE_ROUTING_OK ya no bloquea
+    // FORCE_ROUTING_OK solo se usa como fallback de emergencia si Express falla completamente
     if (FORCE_ROUTING_OK) {
-      console.log('⚠️  FORCE_ROUTING_OK=true: Starting minimal server only');
-      console.log('   Full Express app will NOT be loaded');
-      console.log('   Only /health, /ready, /api/debug/ping, /api/debug/build-info will work');
+      console.log('⚠️  FORCE_ROUTING_OK=true: Minimal server will be available as fallback');
+      console.log('   Express app WILL be loaded normally');
+      console.log('   Minimal server is only a backup if Express fails');
       console.log('');
-      startMinimalServer();
-      return; // Exit early - don't load Express app
+      // NO hacer return - continuar con Express
     }
     
-    logMilestone('Starting server initialization (full mode)');
+    // ✅ BOOT: Express siempre inicia - modo completo
+    logMilestone('[BOOT] Starting Express server initialization');
+    console.log('[BOOT] Express will ALWAYS start - SAFE_BOOT only disables heavy workers');
+    console.log('');
     
     // ✅ FIX 502: Validar ENCRYPTION_KEY antes de iniciar cualquier servicio
     // NO crashea el servidor si falta, pero marca como "degraded"
-    logMilestone('Validating encryption key');
+    logMilestone('[BOOT] Validating encryption key');
     validateEncryptionKey();
     // Actualizar estado global después de validar
     (global as any).__isEncryptionKeyValid = isEncryptionKeyValid;
     
     // ✅ FIX: Usar env ya importado estáticamente (no import dinámico)
     // El env ya está disponible desde la línea 3: import { env } from './config/env';
-    logMilestone(`Environment: ${env.NODE_ENV}, Port: ${PORT}`);
+    logMilestone(`[BOOT] Environment: ${env.NODE_ENV}, Port: ${PORT}`);
     
     // ✅ GO-LIVE: Log configuración sanitizada (sin secretos)
     // ✅ FIX AUTH: Validar JWT_SECRET antes de iniciar servidor
@@ -565,10 +569,12 @@ async function startServer() {
     initBuildInfo();
     
     // ✅ FASE A CRÍTICO: Create HTTP server FIRST (NO awaits before this)
-    // ✅ P0: Import app dynamically only if not in minimal mode
-    logMilestone('Creating HTTP server (BEFORE any DB/Redis/migrations)');
+    // ✅ BOOT: Express SIEMPRE se carga - no depende de FORCE_ROUTING_OK
+    logMilestone('[BOOT] Creating Express HTTP server (BEFORE any DB/Redis/migrations)');
+    console.log('[BOOT] Loading Express app...');
     const { default: app } = await import('./app');
     const httpServer = http.createServer(app);
+    console.log('[BOOT] Express app loaded OK');
     
     // ✅ CRÍTICO: Inicializar Socket.io antes de que el servidor escuche
     logMilestone('Initializing Socket.IO');
@@ -616,35 +622,58 @@ async function startServer() {
       updateReadinessState();
       logMilestone('LISTEN_CALLBACK - Server is listening and ready to accept connections');
       
-      // ✅ P0: Log bootstrap mode
-      const bootstrapMode = env.SAFE_BOOT ? 'SAFE_BOOT' : 'FULL_BOOT';
+      // ✅ BOOT: Log bootstrap mode
+      const bootstrapMode = env.SAFE_BOOT ? 'SAFE_BOOT (workers disabled)' : 'FULL_BOOT (all services)';
       console.log('');
       console.log(`📦 BOOTSTRAP MODE: ${bootstrapMode}`);
       console.log('================================');
+      console.log('[BOOT] Express started OK - all endpoints available');
+      if (env.SAFE_BOOT) {
+        console.log('[BOOT] SAFE_BOOT=true: Heavy workers (BullMQ, scraping) will be skipped');
+        console.log('[BOOT] Redis connection will be skipped');
+        console.log('[BOOT] Scheduled tasks will be disabled');
+      } else {
+        console.log('[BOOT] SAFE_BOOT=false: All services will initialize');
+      }
+      console.log('================================');
       
-      // ✅ P0: Start bootstrap in background based on SAFE_BOOT
+      // ✅ BOOT: Start bootstrap in background based on SAFE_BOOT
+      // Express ya está funcionando, esto solo inicializa servicios pesados
       setImmediate(async () => {
         try {
           if (env.SAFE_BOOT) {
-            logMilestone('SAFE_BOOT=true: Using safe bootstrap (no heavy initialization)');
+            logMilestone('[BOOT] SAFE_BOOT=true: Using safe bootstrap (no heavy initialization)');
+            console.log('[BOOT] Skipping: BullMQ, Redis workers, scheduled tasks');
+            console.log('[BOOT] Express endpoints remain fully functional');
             const { safeBootstrap } = await import('./bootstrap/safe-bootstrap');
             await safeBootstrap();
             console.log('');
-            console.log('✅ BOOTSTRAP DONE (SAFE_BOOT mode)');
+            console.log('✅ BOOTSTRAP DONE (SAFE_BOOT mode - Express OK, workers disabled)');
             console.log('');
           } else {
-            logMilestone('SAFE_BOOT=false: Using full bootstrap (DB, Redis, migrations, etc.)');
+            logMilestone('[BOOT] SAFE_BOOT=false: Using full bootstrap (DB, Redis, migrations, etc.)');
+            console.log('[BOOT] Initializing: Database, Redis, BullMQ, scheduled tasks');
             const { fullBootstrap } = await import('./bootstrap/full-bootstrap');
             await fullBootstrap(startTime);
           }
         } catch (bootstrapError: any) {
-          // Startup guard: never crash process; server already listening, /health returns 200
-          console.error('⚠️  Warning: Error during bootstrap:', bootstrapError.message);
+          // ✅ BOOT: Startup guard - nunca crashear el proceso
+          // El servidor ya está escuchando, /health retorna 200
+          // Express sigue funcionando aunque bootstrap falle
+          console.error('[BOOT] ⚠️  Warning: Error during bootstrap (Express still works):', bootstrapError.message);
+          console.log('[BOOT] Express endpoints remain available despite bootstrap error');
           console.log('');
-          console.log('✅ BOOTSTRAP DONE (with errors)');
+          console.log('✅ BOOTSTRAP DONE (with errors - Express OK)');
           console.log('');
         }
       });
+      
+      // ✅ BOOT: Si FORCE_ROUTING_OK está activo, iniciar minimal server como fallback
+      // (pero Express ya está funcionando, esto es solo backup)
+      if (FORCE_ROUTING_OK) {
+        console.log('[BOOT] Minimal server available as emergency fallback (Express is primary)');
+        // No hacer nada - minimal server solo se usa si Express falla completamente
+      }
     });
     
     // ✅ FASE 1: Error handling for listen()

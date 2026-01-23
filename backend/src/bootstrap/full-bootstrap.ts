@@ -204,24 +204,36 @@ export async function fullBootstrap(startTime: number): Promise<void> {
       }
     }
     
-    // Initialize job workers (BullMQ)
+    // Initialize job workers (BullMQ) - puede fallar si Redis no está disponible
     try {
-      logMilestone('Initializing job workers');
-      initializeJobWorkers();
-      console.log('✅ Job workers initialized');
-      logMilestone('Job workers initialized');
+      logMilestone('[BOOT] Initializing job workers (BullMQ)');
+      if (!isRedisAvailable) {
+        console.log('[BOOT] Redis not available - skipping job workers');
+        logMilestone('[BOOT] Job workers skipped (Redis unavailable)');
+      } else {
+        initializeJobWorkers();
+        console.log('[BOOT] ✅ Job workers initialized');
+        logMilestone('[BOOT] Job workers initialized');
+      }
     } catch (error: any) {
-      console.warn('⚠️  Warning: Could not initialize job workers:', error.message);
+      console.warn('[BOOT] ⚠️  Warning: Could not initialize job workers (Express still works):', error.message);
+      console.warn('[BOOT] Server continues running - job workers disabled');
     }
     
-    // Initialize scheduled tasks service
+    // Initialize scheduled tasks service - puede fallar si Redis no está disponible
     try {
-      logMilestone('Initializing scheduled tasks service');
-      const scheduledTasksService = getScheduledTasksService();
-      console.log('✅ Scheduled tasks service initialized');
-      logMilestone('Scheduled tasks service initialized');
+      logMilestone('[BOOT] Initializing scheduled tasks service');
+      if (!isRedisAvailable) {
+        console.log('[BOOT] Redis not available - skipping scheduled tasks');
+        logMilestone('[BOOT] Scheduled tasks skipped (Redis unavailable)');
+      } else {
+        const scheduledTasksService = getScheduledTasksService();
+        console.log('[BOOT] ✅ Scheduled tasks service initialized');
+        logMilestone('[BOOT] Scheduled tasks service initialized');
+      }
     } catch (error: any) {
-      console.warn('⚠️  Warning: Could not initialize scheduled tasks service:', error.message);
+      console.warn('[BOOT] ⚠️  Warning: Could not initialize scheduled tasks service (Express still works):', error.message);
+      console.warn('[BOOT] Server continues running - scheduled tasks disabled');
     }
     
     // Initialize scheduled reports
