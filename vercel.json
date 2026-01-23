@@ -10,6 +10,10 @@
       "destination": "https://ivan-reseller-web-production.up.railway.app/health"
     },
     {
+      "source": "/ready",
+      "destination": "https://ivan-reseller-web-production.up.railway.app/ready"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://ivan-reseller-web-production.up.railway.app/api/:path*"
     },

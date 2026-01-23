@@ -1,5 +1,4 @@
 import http from 'http';
-import app from './app';
 import { env } from './config/env';
 import { prisma, connectWithRetry } from './config/database';
 import { redis, isRedisAvailable } from './config/redis';
@@ -14,6 +13,8 @@ import scheduledReportsService from './services/scheduled-reports.service';
 import bcrypt from 'bcryptjs';
 import { resolveChromiumExecutable } from './utils/chromium';
 import { initBuildInfo } from './middleware/version-header.middleware';
+// ✅ P0: Import minimal server
+import { startMinimalServer } from './minimal-server';
 
 const execAsync = promisify(exec);
 
@@ -511,6 +512,9 @@ async function startServer() {
   const startTime = Date.now();
   bootstrapStartTime = startTime;
   
+  // ✅ P0: Check FORCE_ROUTING_OK - if true, use minimal server ONLY
+  const FORCE_ROUTING_OK = process.env.FORCE_ROUTING_OK !== 'false'; // Default true en prod
+  
   try {
     // ✅ P0: Logging obligatorio al boot
     console.log('');
@@ -519,13 +523,25 @@ async function startServer() {
     console.log(`   pid=${process.pid}`);
     console.log(`   NODE_ENV=${env.NODE_ENV}`);
     console.log(`   SAFE_BOOT=${env.SAFE_BOOT}`);
+    console.log(`   FORCE_ROUTING_OK=${FORCE_ROUTING_OK}`);
     console.log(`   PORT=${PORT}`);
     console.log(`   PORT env exists=${!!process.env.PORT} value=${process.env.PORT || 'N/A'}`);
     console.log(`   cwd=${process.cwd()}`);
     console.log(`   build sha=${(process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || 'unknown').toString().substring(0, 7)}`);
     console.log('================================');
     console.log('');
-    logMilestone('Starting server initialization');
+    
+    // ✅ P0: If FORCE_ROUTING_OK=true, start minimal server and exit early
+    if (FORCE_ROUTING_OK) {
+      console.log('⚠️  FORCE_ROUTING_OK=true: Starting minimal server only');
+      console.log('   Full Express app will NOT be loaded');
+      console.log('   Only /health, /ready, /api/debug/ping, /api/debug/build-info will work');
+      console.log('');
+      startMinimalServer();
+      return; // Exit early - don't load Express app
+    }
+    
+    logMilestone('Starting server initialization (full mode)');
     
     // ✅ FIX 502: Validar ENCRYPTION_KEY antes de iniciar cualquier servicio
     // NO crashea el servidor si falta, pero marca como "degraded"
@@ -549,7 +565,9 @@ async function startServer() {
     initBuildInfo();
     
     // ✅ FASE A CRÍTICO: Create HTTP server FIRST (NO awaits before this)
+    // ✅ P0: Import app dynamically only if not in minimal mode
     logMilestone('Creating HTTP server (BEFORE any DB/Redis/migrations)');
+    const { default: app } = await import('./app');
     const httpServer = http.createServer(app);
     
     // ✅ CRÍTICO: Inicializar Socket.io antes de que el servidor escuche
