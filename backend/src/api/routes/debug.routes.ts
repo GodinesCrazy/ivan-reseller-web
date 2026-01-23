@@ -333,34 +333,52 @@ router.get('/aliexpress-dropshipping-credentials', authenticate, async (req: Req
 router.use(authenticate);
 
 /**
- * GET /debug/aliexpress/test-search
+ * GET /api/debug/aliexpress/test-search
  * 
- * Prueba directa de la AliExpress Affiliate API sin pasar por scraping
+ * ✅ ENDPOINT DE PRUEBA CONTROLADA: Prueba directa de la AliExpress Affiliate API
+ * sin pasar por toda la lógica de oportunidades y scraping.
+ * 
+ * Este endpoint permite verificar rápidamente si la API está funcionando correctamente.
  * 
  * Query params:
- * - query (required): Término de búsqueda
+ * - query (optional): Término de búsqueda (default: "test")
  * - userId (optional): ID del usuario (default: usuario autenticado)
- * - environment (optional): sandbox | production
+ * - environment (optional): sandbox | production (default: auto-detect)
+ * 
+ * Respuesta:
+ * - status: "ok" | "error"
+ * - Si ok: número de ítems, título del primer producto, moneda, etc.
+ * - Si error: código HTTP, mensaje, cuerpo resumido
  */
-router.get('/aliexpress/test-search', async (req: Request, res: Response) => {
+router.get('/aliexpress/test-search', authenticate, async (req: Request, res: Response) => {
+  const correlationId = (req as any).correlationId || `test-search-${Date.now()}`;
+  const startTime = Date.now();
+  
   try {
     const userId = req.user?.userId || Number(req.query.userId);
     if (!userId || userId <= 0) {
       return res.status(401).json({ 
         status: 'error',
         code: 'AUTH_REQUIRED',
-        message: 'User ID is required' 
+        message: 'User ID is required',
+        correlationId
       });
     }
 
     const query = String(req.query.query || 'test');
     const environment = req.query.environment as 'sandbox' | 'production' | undefined;
 
+    // ✅ LOG OBLIGATORIO: Entrada al endpoint de debug
+    logger.info('[DEBUG-API] ════════════════════════════════════════════════════════');
     logger.info('[DEBUG-API] Test search requested', {
       userId,
       query,
-      environment: environment || 'auto'
+      environment: environment || 'auto',
+      correlationId,
+      endpoint: '/api/debug/aliexpress/test-search',
+      timestamp: new Date().toISOString()
     });
+    logger.info('[DEBUG-API] ════════════════════════════════════════════════════════');
 
     // Resolver ambiente
     const preferredEnvironment = await resolveEnvironment({
@@ -414,18 +432,39 @@ router.get('/aliexpress/test-search', async (req: Request, res: Response) => {
       });
     }
 
+    // ✅ LOG OBLIGATORIO: Credenciales encontradas, configurando servicio
+    logger.info('[DEBUG-API] ════════════════════════════════════════════════════════');
+    logger.info('[DEBUG-API] Credenciales encontradas - Configurando servicio', {
+      userId,
+      environment: resolvedEnv,
+      hasAppKey: !!affiliateCreds.appKey,
+      hasAppSecret: !!affiliateCreds.appSecret,
+      appKeyPreview: affiliateCreds.appKey ? `${affiliateCreds.appKey.substring(0, 6)}...` : 'missing',
+      step: 'configuring_service'
+    });
+    logger.info('[DEBUG-API] ════════════════════════════════════════════════════════');
+
     // Inicializar servicio de API
     const apiService = new AliExpressAffiliateAPIService();
     apiService.setCredentials(affiliateCreds);
 
-    const startTime = Date.now();
+    const apiCallStartTime = Date.now();
 
     try {
-      logger.info('[DEBUG-API] Calling AliExpress Affiliate API', {
+      // ✅ LOG OBLIGATORIO: Justo antes de llamar a la API
+      logger.info('[DEBUG-API] ════════════════════════════════════════════════════════');
+      logger.info('[DEBUG-API] Llamando a AliExpress Affiliate API', {
         userId,
         query,
-        environment: resolvedEnv
+        environment: resolvedEnv,
+        pageSize: 5,
+        targetCurrency: 'USD',
+        shipToCountry: 'CL',
+        step: 'api_call_start',
+        timestamp: new Date().toISOString(),
+        note: 'A partir de aquí deberías ver logs [ALIEXPRESS-AFFILIATE-API] Request →'
       });
+      logger.info('[DEBUG-API] ════════════════════════════════════════════════════════');
 
       const products = await apiService.searchProducts({
         keywords: query,
@@ -436,12 +475,18 @@ router.get('/aliexpress/test-search', async (req: Request, res: Response) => {
         sort: 'LAST_VOLUME_DESC',
       });
 
-      const duration = Date.now() - startTime;
+      const duration = Date.now() - apiCallStartTime;
 
-      logger.info('[DEBUG-API] API call successful', {
+      // ✅ LOG OBLIGATORIO: Éxito
+      logger.info('[DEBUG-API] ════════════════════════════════════════════════════════');
+      logger.info('[DEBUG-API] ✅ API call successful', {
         productsFound: products.length,
-        duration: `${duration}ms`
+        duration: `${duration}ms`,
+        step: 'api_call_success',
+        firstProductId: products[0]?.productId,
+        firstProductTitle: products[0]?.productTitle?.substring(0, 50)
       });
+      logger.info('[DEBUG-API] ════════════════════════════════════════════════════════');
 
       return res.json({
         status: 'ok',
@@ -464,14 +509,21 @@ router.get('/aliexpress/test-search', async (req: Request, res: Response) => {
       });
 
     } catch (apiError: any) {
-      const duration = Date.now() - startTime;
+      const duration = Date.now() - apiCallStartTime;
       const errorMessage = apiError?.message || String(apiError);
       
-      logger.error('[DEBUG-API] API call failed', {
+      // ✅ LOG OBLIGATORIO: Error detallado
+      logger.error('[DEBUG-API] ════════════════════════════════════════════════════════');
+      logger.error('[DEBUG-API] ❌ API call failed', {
         error: errorMessage,
         duration: `${duration}ms`,
-        stack: apiError?.stack?.substring(0, 500)
+        step: 'api_call_error',
+        errorType: apiError?.code || 'unknown',
+        httpStatus: apiError?.response?.status || 'NO_HTTP_RESPONSE',
+        stack: apiError?.stack?.substring(0, 500),
+        responseData: apiError?.response?.data ? JSON.stringify(apiError.response.data).substring(0, 300) : undefined
       });
+      logger.error('[DEBUG-API] ════════════════════════════════════════════════════════');
 
       // Determinar tipo de error
       let code = 'API_ERROR';
@@ -505,15 +557,24 @@ router.get('/aliexpress/test-search', async (req: Request, res: Response) => {
     }
 
   } catch (error: any) {
-    logger.error('[DEBUG-API] Unexpected error', {
+    const totalDuration = Date.now() - startTime;
+    
+    logger.error('[DEBUG-API] ════════════════════════════════════════════════════════');
+    logger.error('[DEBUG-API] ❌ Unexpected error', {
       error: error?.message || String(error),
-      stack: error?.stack
+      stack: error?.stack?.substring(0, 500),
+      totalDuration: `${totalDuration}ms`,
+      correlationId,
+      step: 'unexpected_error'
     });
+    logger.error('[DEBUG-API] ════════════════════════════════════════════════════════');
 
     return res.status(500).json({
       status: 'error',
       code: 'INTERNAL_ERROR',
-      message: error?.message || 'Internal server error'
+      message: error?.message || 'Internal server error',
+      correlationId,
+      totalDuration: `${totalDuration}ms`
     });
   }
 });

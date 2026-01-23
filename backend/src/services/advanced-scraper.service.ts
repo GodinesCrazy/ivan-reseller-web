@@ -616,8 +616,19 @@ export class AdvancedMarketplaceScraper {
    */
   async scrapeAliExpress(userId: number, query: string, environment: 'sandbox' | 'production' = 'production', userBaseCurrency?: string): Promise<ScrapedProduct[]> {
     const { logger } = await import('../config/logger');
+    const entryTime = Date.now();
     
-    logger.info('[SCRAPER] scrapeAliExpress iniciado', { query, userId, environment, userBaseCurrency });
+    // ✅ LOG OBLIGATORIO #1: Entrada al método (SIEMPRE se ejecuta)
+    logger.info('[ALIEXPRESS-FLOW] ════════════════════════════════════════════════════════');
+    logger.info('[ALIEXPRESS-FLOW] ENTRADA: scrapeAliExpress()', {
+      query,
+      userId,
+      environment,
+      userBaseCurrency: userBaseCurrency || 'USD',
+      timestamp: new Date().toISOString(),
+      entryPoint: 'advanced-scraper.service.ts:scrapeAliExpress'
+    });
+    logger.info('[ALIEXPRESS-FLOW] ════════════════════════════════════════════════════════');
     
     // ============================================================================
     // FLUJO: PRIORIDAD 1 - AliExpress Affiliate API → PRIORIDAD 2 - Scraping Nativo
@@ -631,6 +642,8 @@ export class AdvancedMarketplaceScraper {
     // 3. Si NO hay credenciales → Usar scraping nativo directamente
     //
     // LOGS CLAVE PARA DEBUGGING:
+    // - [ALIEXPRESS-FLOW] ENTRADA → Método iniciado
+    // - [ALIEXPRESS-API] Buscando credenciales → Iniciando búsqueda
     // - [ALIEXPRESS-API] ✅ Credenciales encontradas → Se intentará usar API
     // - [ALIEXPRESS-API] ✅ PREPARANDO LLAMADA HTTP → Está por hacer la llamada
     // - [ALIEXPRESS-API] ✅ EJECUTANDO LLAMADA HTTP → Justo antes de HTTP
@@ -649,6 +662,16 @@ export class AdvancedMarketplaceScraper {
     let affiliateCreds: any = null;
     let resolvedEnv: 'sandbox' | 'production' | null = null;
     let credentialsCheckError: any = null;
+    
+    // ✅ LOG OBLIGATORIO #2: Antes de buscar credenciales (SIEMPRE se ejecuta)
+    logger.info('[ALIEXPRESS-API] Iniciando búsqueda de credenciales', {
+      userId,
+      query,
+      environment,
+      step: 'credentials_lookup',
+      willCheckEnvironments: ['sandbox', 'production'],
+      note: 'Si NO ves este log, el método no se está ejecutando'
+    });
     
     try {
       const { CredentialsManager } = await import('./credentials-manager.service');
@@ -670,13 +693,15 @@ export class AdvancedMarketplaceScraper {
       const environmentsToTry: Array<'sandbox' | 'production'> = [preferredEnvironment];
       environmentsToTry.push(preferredEnvironment === 'production' ? 'sandbox' : 'production');
       
-      // Buscar credenciales en ambos ambientes (distinción organizacional, no funcional - mismo endpoint)
+      // ✅ LOG OBLIGATORIO #3: Antes de iterar ambientes (SIEMPRE se ejecuta si llegamos aquí)
       logger.info('[ALIEXPRESS-API] Buscando credenciales de AliExpress Affiliate API', {
         userId,
         query,
         preferredEnvironment,
         environmentsToTry,
-        note: 'Nota: AliExpress Affiliate API usa el mismo endpoint para ambos ambientes. La distinción es solo organizacional.'
+        step: 'iterating_environments',
+        note: 'Nota: AliExpress Affiliate API usa el mismo endpoint para ambos ambientes. La distinción es solo organizacional.',
+        willTryCount: environmentsToTry.length
       });
       
       for (const env of environmentsToTry) {
@@ -737,9 +762,10 @@ export class AdvancedMarketplaceScraper {
         }
       }
       
-      // ✅ PRIORIDAD 1: Si hay credenciales, SIEMPRE intentar API primero
+      // ✅ LOG OBLIGATORIO #4: Resultado de búsqueda de credenciales (SIEMPRE se ejecuta)
       if (affiliateCreds) {
-        logger.info('[ALIEXPRESS-API] ✅ PRIORIDAD 1: Attempting official AliExpress Affiliate API first', {
+        logger.info('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
+        logger.info('[ALIEXPRESS-API] ✅ CREDENCIALES ENCONTRADAS - Usando API oficial', {
           userId,
           query,
           environment: resolvedEnv || preferredEnvironment,
@@ -747,11 +773,31 @@ export class AdvancedMarketplaceScraper {
           source: 'aliexpress-affiliate-api',
           credentialsFound: true,
           appKey: affiliateCreds.appKey ? `${affiliateCreds.appKey.substring(0, 6)}...` : 'missing',
+          hasAppSecret: !!affiliateCreds.appSecret,
           sandbox: affiliateCreds.sandbox,
+          step: 'api_attempt',
           note: 'If API fails or times out, will fallback to native scraping'
         });
+        logger.info('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
+      } else {
+        logger.info('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
+        logger.info('[ALIEXPRESS-API] ⚠️ NO HAY CREDENCIALES - Usando scraping nativo', {
+          userId,
+          query,
+          preferredEnvironment,
+          environmentsTried: environmentsToTry,
+          credentialsCheckError: credentialsCheckError?.message || null,
+          step: 'fallback_to_scraping',
+          reason: 'no_credentials_found',
+          note: 'Para usar la API oficial, configura credenciales en Settings → API Settings → AliExpress Affiliate API'
+        });
+        logger.info('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
+      }
+      
+      // ✅ PRIORIDAD 1: Si hay credenciales, SIEMPRE intentar API primero
+      if (affiliateCreds) {
         
-        // ✅ CRÍTICO: Log obligatorio ANTES de configurar servicio y hacer llamada HTTP
+        // ✅ LOG OBLIGATORIO #5: Antes de configurar servicio (SIEMPRE se ejecuta si hay credenciales)
         logger.info('[ALIEXPRESS-API] ✅ PREPARANDO LLAMADA HTTP a AliExpress Affiliate API', {
           userId,
           query,
@@ -759,10 +805,21 @@ export class AdvancedMarketplaceScraper {
           hasCredentials: !!affiliateCreds,
           appKey: affiliateCreds.appKey ? `${affiliateCreds.appKey.substring(0, 6)}...` : 'missing',
           endpoint: 'https://gw.api.taobao.com/router/rest',
+          step: 'configuring_service',
           note: 'Si NO ves logs [ALIEXPRESS-AFFILIATE-API] Request → después de este mensaje, hay un problema en el código'
         });
         
         try {
+          // ✅ LOG OBLIGATORIO #6: Configurando servicio (SIEMPRE se ejecuta si hay credenciales)
+          logger.info('[ALIEXPRESS-API] Configurando servicio con credenciales', {
+            userId,
+            query,
+            step: 'setting_credentials',
+            hasAppKey: !!affiliateCreds.appKey,
+            hasAppSecret: !!affiliateCreds.appSecret,
+            hasTrackingId: !!affiliateCreds.trackingId
+          });
+          
           aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
           
           // Mapear país desde currency si es necesario
@@ -778,7 +835,8 @@ export class AdvancedMarketplaceScraper {
           
           const apiCallStartTime = Date.now();
           try {
-            // ✅ LOG OBLIGATORIO: Justo antes de hacer la llamada HTTP real
+            // ✅ LOG OBLIGATORIO #7: Justo antes de hacer la llamada HTTP real (SIEMPRE se ejecuta)
+            logger.info('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
             logger.info('[ALIEXPRESS-API] ✅ EJECUTANDO LLAMADA HTTP - searchProducts()', {
               query,
               pageSize: 5,
@@ -786,8 +844,11 @@ export class AdvancedMarketplaceScraper {
               shipToCountry,
               timeout: '30s (axios) + 35s (race)',
               endpoint: 'https://gw.api.taobao.com/router/rest',
+              step: 'http_call_start',
+              timestamp: new Date().toISOString(),
               note: 'A partir de aquí deberías ver logs [ALIEXPRESS-AFFILIATE-API] Request → y Success/Error ←'
             });
+            logger.info('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
             
             affiliateProducts = await Promise.race([
               aliexpressAffiliateAPIService.searchProducts({
@@ -829,12 +890,19 @@ export class AdvancedMarketplaceScraper {
           }
           
           if (affiliateProducts && affiliateProducts.length > 0) {
-            logger.info('[ALIEXPRESS-API] Product search successful', {
+            // ✅ LOG OBLIGATORIO: Éxito de API (SIEMPRE se ejecuta si API retorna productos)
+            const totalDuration = Date.now() - entryTime;
+            logger.info('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
+            logger.info('[ALIEXPRESS-API] ✅ ÉXITO: API retornó productos - NO usando scraping', {
               count: affiliateProducts.length,
               query,
               userId,
-              source: 'official-api'
+              source: 'official-api',
+              totalDuration: `${totalDuration}ms`,
+              step: 'api_success',
+              note: 'Estos productos vienen directamente de la API oficial de AliExpress'
             });
+            logger.info('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
             
             // ✅ MEJORADO: Obtener detalles completos (incluyendo shipping) en batch
             // Limitar a los primeros 10 productos para optimizar llamadas a la API y evitar timeouts
@@ -1011,15 +1079,31 @@ export class AdvancedMarketplaceScraper {
             });
             
             // ✅ ÉXITO: Retornar productos desde API oficial (NO usar scraping)
+            const totalDuration = Date.now() - entryTime;
+            logger.info('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
+            logger.info('[ALIEXPRESS-API] ✅ RETORNANDO productos de API oficial', {
+              productsCount: scrapedProducts.length,
+              query,
+              userId,
+              totalDuration: `${totalDuration}ms`,
+              step: 'returning_api_products',
+              source: 'official-api',
+              note: 'NO se usará scraping - productos vienen de API'
+            });
+            logger.info('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
             return scrapedProducts;
           } else {
             // ✅ API retornó 0 productos - usar scraping como fallback
+            logger.warn('[ALIEXPRESS-FALLBACK] ════════════════════════════════════════════════════════');
             logger.warn('[ALIEXPRESS-FALLBACK] API returned 0 products, using native scraper', {
               query,
               userId,
               reason: 'api_returned_empty',
-              fallbackSource: 'native-scraping'
+              fallbackSource: 'native-scraping',
+              step: 'api_empty_fallback',
+              note: 'La API se llamó correctamente pero retornó 0 productos. Continuando con scraping.'
             });
+            logger.warn('[ALIEXPRESS-FALLBACK] ════════════════════════════════════════════════════════');
             // Continuar con scraping nativo si no hay resultados
           }
         } catch (apiError: any) {
@@ -1104,35 +1188,54 @@ export class AdvancedMarketplaceScraper {
         // Continuar con scraping nativo si no hay credenciales
       }
     } catch (affiliateCheckError: any) {
-      // ✅ Error al verificar credenciales - usar scraping nativo como fallback seguro
-      logger.warn('[ALIEXPRESS-FALLBACK] Using native scraper because credentials check failed', {
+      // ✅ LOG OBLIGATORIO #9: Error al verificar credenciales (SIEMPRE se ejecuta si hay excepción)
+      logger.warn('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
+      logger.warn('[ALIEXPRESS-API] ❌ Error al verificar credenciales - usando scraping nativo', {
         reason: 'credentials_check_error',
         error: affiliateCheckError?.message || String(affiliateCheckError),
+        errorStack: affiliateCheckError?.stack?.substring(0, 500),
         query,
         userId,
-        fallbackSource: 'native-scraping'
+        step: 'credentials_check_exception',
+        fallbackSource: 'native-scraping',
+        note: 'Este error NO debería ocurrir normalmente. Revisar logs anteriores para más detalles.'
       });
+      logger.warn('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
       // Continuar con scraping nativo si hay error
       // En caso de error, affiliateCreds queda como null
     }
     
-    // ✅ HOTFIX: Verificar si browser automation está permitido
-    // affiliateCreds se declara arriba (línea 627), puede ser null si no hay credenciales
+    // ✅ DECISIÓN: Verificar condiciones para usar scraping como fallback
+    // affiliateCreds se declara arriba (línea 649), puede ser null si no hay credenciales
     const { env } = await import('../config/env');
     const allowBrowserAutomation = env.ALLOW_BROWSER_AUTOMATION;
     const dataSource = env.ALIEXPRESS_DATA_SOURCE;
     
-    // Si dataSource es 'api' y no hay credenciales, NO hacer scraping
-    // affiliateCreds se declara en línea 628 dentro del try, pero puede no estar en scope aquí
-    // Verificar si existe usando typeof para evitar error de referencia
+    // ✅ LOG OBLIGATORIO: Estado antes de decidir usar scraping
     const hasAffiliateCreds = (typeof affiliateCreds !== 'undefined') && affiliateCreds !== null;
+    logger.info('[ALIEXPRESS-FLOW] Verificando condiciones para scraping fallback', {
+      userId,
+      query,
+      hasAffiliateCreds,
+      dataSource: dataSource || 'not_set',
+      allowBrowserAutomation: allowBrowserAutomation || false,
+      step: 'fallback_conditions_check',
+      note: 'Si hasAffiliateCreds=false y dataSource=api, se lanzará error. Si no, se usará scraping.'
+    });
+    
+    // ✅ REGLA CLARA: Si dataSource es 'api' y NO hay credenciales, NO hacer scraping
+    // Esto fuerza al usuario a configurar credenciales si quiere usar el sistema en modo API-only
     if (dataSource === 'api' && !hasAffiliateCreds) {
-      logger.warn('[ALIEXPRESS-API-FIRST] API credentials required but not configured. Scraping disabled by ALIEXPRESS_DATA_SOURCE=api', {
+      logger.warn('[ALIEXPRESS-API-FIRST] ════════════════════════════════════════════════════════');
+      logger.warn('[ALIEXPRESS-API-FIRST] API credentials required but not configured', {
         userId,
         query,
         dataSource,
         allowBrowserAutomation,
+        step: 'api_first_mode_no_credentials',
+        recommendation: 'Configure AliExpress Affiliate API credentials in Settings → API Settings, or set ALIEXPRESS_DATA_SOURCE=scrape to allow scraping fallback'
       });
+      logger.warn('[ALIEXPRESS-API-FIRST] ════════════════════════════════════════════════════════');
       throw new AppError(
         'AliExpress API credentials required. Please configure AliExpress Affiliate API in Settings → API Settings. Scraping is disabled in API-first mode.',
         400,
@@ -1145,25 +1248,37 @@ export class AdvancedMarketplaceScraper {
       );
     }
     
-    // Si browser automation está deshabilitado, NO hacer scraping
-    if (!allowBrowserAutomation) {
-      logger.warn('[ALIEXPRESS-API-FIRST] Browser automation disabled. Scraping not allowed.', {
+    // ✅ REGLA CLARA: Si browser automation está deshabilitado Y no hay credenciales, NO hacer scraping
+    // Si hay credenciales, la API ya se intentó arriba, así que esto solo aplica si no hay credenciales
+    if (!allowBrowserAutomation && !hasAffiliateCreds) {
+      logger.warn('[ALIEXPRESS-API-FIRST] ════════════════════════════════════════════════════════');
+      logger.warn('[ALIEXPRESS-API-FIRST] Browser automation disabled and no API credentials', {
         userId,
         query,
         allowBrowserAutomation,
         dataSource,
+        hasAffiliateCreds,
+        step: 'no_automation_no_credentials',
+        recommendation: 'Configure AliExpress Affiliate API credentials in Settings → API Settings, or enable ALLOW_BROWSER_AUTOMATION=true to allow scraping'
       });
+      logger.warn('[ALIEXPRESS-API-FIRST] ════════════════════════════════════════════════════════');
       throw new AppError(
-        'Browser automation is disabled. Please configure AliExpress Affiliate API credentials in Settings → API Settings.',
+        'Browser automation is disabled and no API credentials found. Please configure AliExpress Affiliate API credentials in Settings → API Settings, or enable browser automation.',
         400,
         ErrorCode.CREDENTIALS_ERROR,
         {
           authRequired: true,
           allowBrowserAutomation: false,
-          message: 'AUTH_REQUIRED: Browser automation disabled. Configure API credentials to use this feature.',
+          hasCredentials: false,
+          message: 'AUTH_REQUIRED: Browser automation disabled and no API credentials. Configure API credentials to use this feature.',
         }
       );
     }
+    
+    // ✅ Si llegamos aquí, podemos usar scraping como fallback
+    // Esto significa que:
+    // - O hay credenciales pero la API falló (ya se intentó arriba)
+    // - O no hay credenciales pero scraping está permitido (dataSource != 'api' y allowBrowserAutomation = true)
     
     // ✅ FALLBACK: Continuar con scraping nativo (solo si API falló o no está disponible Y automation está permitido)
     logger.info('[ALIEXPRESS-FALLBACK] Proceeding with native scraping', { 

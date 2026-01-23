@@ -1,74 +1,125 @@
-# Guía de Debugging: AliExpress Affiliate API
+# 🔍 AliExpress API Debug Guide
 
-## 📋 Flujo Completo de Búsqueda de Productos
+**Versión:** 1.0.0  
+**Última actualización:** 2025-01-23
+
+---
+
+## 📋 Índice
+
+1. [Problema Identificado](#problema-identificado)
+2. [Flujo Completo Documentado](#flujo-completo-documentado)
+3. [Endpoint de Prueba](#endpoint-de-prueba)
+4. [Logs a Revisar](#logs-a-revisar)
+5. [Variables de Entorno Necesarias](#variables-de-entorno-necesarias)
+6. [Troubleshooting](#troubleshooting)
+
+---
+
+## 🐛 Problema Identificado
+
+**Síntoma:** El sistema no está usando la API oficial de AliExpress en producción. Solo se usa scraping.
+
+**Causa Raíz:** Aunque el código intenta usar la API primero, puede haber problemas en:
+1. Detección de credenciales
+2. Condiciones demasiado restrictivas
+3. Errores silenciados que hacen fallback inmediato
+
+**Solución Implementada:**
+- Logs obligatorios en cada paso del flujo
+- Endpoint de debug para probar API directamente
+- Condiciones más claras y menos restrictivas
+- Manejo explícito de errores
+
+---
+
+## 🔄 Flujo Completo Documentado
+
+### Flujo de Búsqueda de Oportunidades
 
 ```
-1. Frontend: GET /api/opportunities?query=...
+1. Usuario hace búsqueda en frontend
    ↓
-2. backend/src/api/routes/opportunities.routes.ts
-   → opportunityFinder.findOpportunities(userId, {...})
+2. Frontend → GET /api/opportunities?query=...
    ↓
-3. backend/src/services/opportunity-finder.service.ts
-   → scraper.scrapeAliExpress(userId, query, environment, baseCurrency)
+3. Backend: opportunity-finder.service.ts → findOpportunities()
    ↓
-4. backend/src/services/advanced-scraper.service.ts
-   → DECISIÓN CRÍTICA AQUÍ:
-   
-   A) Intenta obtener credenciales de AliExpress Affiliate API
-      ├─ Si encuentra credenciales → Usa API oficial
-      │  └─ aliexpressAffiliateAPIService.searchProducts({...})
-      │     └─ backend/src/services/aliexpress-affiliate-api.service.ts
-      │        └─ makeRequest() → HTTP POST a https://gw.api.taobao.com/router/rest
-      │
-      └─ Si NO encuentra credenciales → Usa scraping nativo (Puppeteer)
-         └─ Continúa con navegador y scraping DOM
+4. Backend: advanced-scraper.service.ts → scrapeAliExpress()
+   ↓
+5. DECISIÓN CRÍTICA: ¿Hay credenciales de AliExpress Affiliate API?
+   │
+   ├─ SÍ → Intentar API oficial primero
+   │   │
+   │   ├─ API responde OK → Retornar productos de API
+   │   │
+   │   └─ API falla → Fallback a scraping nativo
+   │
+   └─ NO → Usar scraping nativo directamente
 ```
 
-## 🔍 Puntos de Decisión Críticos
+**Evidencia:** `backend/src/services/advanced-scraper.service.ts:617-1094`
 
-### Punto 1: Obtención de Credenciales (Línea ~615-673 en advanced-scraper.service.ts)
+---
 
-**Condición para usar API:**
+### Punto de Decisión: API vs Scraper
+
+**Ubicación:** `backend/src/services/advanced-scraper.service.ts:740-1094`
+
+**Lógica:**
 ```typescript
+// 1. Buscar credenciales en BD
+const affiliateCreds = await CredentialsManager.getCredentials(
+  userId, 
+  'aliexpress-affiliate', 
+  environment
+);
+
+// 2. Si hay credenciales → Intentar API
 if (affiliateCreds) {
-  // ✅ Usa API
-} else {
-  // ❌ Usa scraping nativo
+  // Configurar servicio
+  aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
+  
+  // Llamar a API
+  const products = await aliexpressAffiliateAPIService.searchProducts({...});
+  
+  // Si API retorna productos → Retornar
+  if (products && products.length > 0) {
+    return products; // ✅ ÉXITO - API funcionó
+  }
+  // Si API falla → Continuar con scraping (fallback)
 }
+
+// 3. Si NO hay credenciales → Usar scraping directamente
+// (código continúa más abajo)
 ```
 
-**Qué buscar en logs:**
-- `[ALIEXPRESS-API] ✅ Credenciales encontradas` → API debería usarse
-- `[ALIEXPRESS-FALLBACK] Using native scraper because API credentials not configured` → No hay credenciales
+**Evidencia:** `backend/src/services/advanced-scraper.service.ts:740-1014`
 
-### Punto 2: Llamada HTTP Real (Línea ~208 en aliexpress-affiliate-api.service.ts)
-
-**Qué buscar en logs:**
-- `[ALIEXPRESS-AFFILIATE-API] Making request` → ANTES de la llamada HTTP
-- `[ALIEXPRESS-AFFILIATE-API] Request →` (NUEVO log detallado)
-- `[ALIEXPRESS-AFFILIATE-API] Success ←` o `[ALIEXPRESS-AFFILIATE-API] Error ←` → DESPUÉS de la llamada HTTP
-
-**Si NO ves estos logs:**
-- El código nunca llegó a hacer la llamada HTTP
-- Revisar Punto 1 (credenciales)
+---
 
 ## 🧪 Endpoint de Prueba
 
-### GET /debug/aliexpress/test-search?query=test
+### GET /api/debug/aliexpress/test-search
 
-Este endpoint llama **directamente a la API** sin pasar por la lógica de oportunidades ni scraping.
+**Descripción:** Prueba directa de la AliExpress Affiliate API sin pasar por scraping.
 
-**Parámetros:**
-- `query` (required): Término de búsqueda
-- `userId` (optional): ID del usuario (default: usuario autenticado)
-- `environment` (optional): sandbox | production
+**Autenticación:** Requerida (Bearer token)
 
-**Headers requeridos:**
+**Query Parameters:**
+- `query` (opcional): Término de búsqueda (default: "test")
+- `environment` (opcional): `sandbox` | `production` (default: auto-detect)
+
+**Ejemplo de Uso:**
+```bash
+# Con curl
+curl -X GET "https://ivanreseller.com/api/debug/aliexpress/test-search?query=wireless+earbuds" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Con autenticación de usuario autenticado
+GET /api/debug/aliexpress/test-search?query=phone+case
 ```
-Authorization: Bearer YOUR_JWT_TOKEN
-```
 
-**Respuesta exitosa:**
+**Respuesta Exitosa (200):**
 ```json
 {
   "status": "ok",
@@ -76,188 +127,271 @@ Authorization: Bearer YOUR_JWT_TOKEN
   "duration": "1234ms",
   "environment": "production",
   "firstProduct": {
-    "title": "Producto de prueba...",
-    "price": 19.99,
+    "title": "Wireless Earbuds Bluetooth 5.0...",
+    "price": 12.99,
     "currency": "USD",
-    "productId": "123456789",
+    "productId": "1005001234567890",
     "hasImages": true
   },
   "allProducts": [...]
 }
 ```
 
-**Respuesta de error (sin credenciales):**
+**Respuesta de Error:**
 ```json
 {
   "status": "error",
-  "code": "NO_CREDENTIALS",
-  "message": "AliExpress Affiliate API credentials not found",
-  "recommendation": "Configure credentials in Settings → API Settings → AliExpress Affiliate API",
-  "environmentsChecked": ["sandbox", "production"]
+  "code": "NO_CREDENTIALS" | "AUTH_ERROR" | "TIMEOUT" | "NETWORK_ERROR" | "API_ERROR",
+  "message": "Error description",
+  "duration": "1234ms",
+  "recommendation": "Action to take"
 }
 ```
 
-**Respuesta de error (API falló):**
-```json
-{
-  "status": "error",
-  "code": "AUTH_ERROR",
-  "message": "AliExpress API authentication error (401): ...",
-  "duration": "543ms",
-  "recommendation": "Verify credentials in Settings → API Settings"
-}
-```
+**Evidencia:** `backend/src/api/routes/debug.routes.ts:345-537`
 
-**Códigos de error posibles:**
-- `NO_CREDENTIALS`: No se encontraron credenciales en BD
-- `AUTH_ERROR`: Error de autenticación (credenciales inválidas)
-- `TIMEOUT`: La API no respondió a tiempo
-- `RATE_LIMIT`: Límite de requests excedido
-- `NETWORK_ERROR`: Error de conectividad de red
-- `API_ERROR`: Error de la API de AliExpress
+---
 
 ## 📊 Logs a Revisar
 
-### 1. Verificación de Credenciales
+### Logs Obligatorios en el Flujo
 
-```bash
-# Buscar en logs:
-grep "ALIEXPRESS-API.*Credenciales encontradas" logs/*.log
-grep "ALIEXPRESS-FALLBACK.*credentials not configured" logs/*.log
+**1. Entrada al método:**
 ```
-
-### 2. Intentos de Llamada HTTP
-
-```bash
-# Buscar en logs:
-grep "ALIEXPRESS-AFFILIATE-API.*Making request" logs/*.log
-grep "ALIEXPRESS-AFFILIATE-API.*Request →" logs/*.log
+[ALIEXPRESS-FLOW] ENTRADA: scrapeAliExpress()
 ```
+**Ubicación:** `advanced-scraper.service.ts:620`  
+**Si NO aparece:** El método no se está ejecutando
 
-### 3. Respuestas de la API
+---
 
-```bash
-# Buscar en logs:
-grep "ALIEXPRESS-AFFILIATE-API.*Success ←" logs/*.log
-grep "ALIEXPRESS-AFFILIATE-API.*Error ←" logs/*.log
+**2. Búsqueda de credenciales:**
 ```
-
-### 4. Fallbacks a Scraping
-
-```bash
-# Buscar en logs:
-grep "ALIEXPRESS-FALLBACK" logs/*.log
+[ALIEXPRESS-API] Iniciando búsqueda de credenciales
+[ALIEXPRESS-API] Buscando credenciales de AliExpress Affiliate API
 ```
+**Ubicación:** `advanced-scraper.service.ts:653, 674`  
+**Si NO aparece:** Error antes de buscar credenciales
 
-## 🔧 Troubleshooting
+---
 
-### Problema: No se ven logs de llamadas HTTP
-
-**Posibles causas:**
-1. **Credenciales no encontradas**
-   - Revisar: `[ALIEXPRESS-FALLBACK] Using native scraper because API credentials not configured`
-   - Solución: Configurar credenciales en Settings → API Settings
-
-2. **Error silenciado antes de la llamada HTTP**
-   - Revisar: `[ALIEXPRESS-API] Error obteniendo credenciales`
-   - Solución: Revisar logs de errores de CredentialsManager
-
-3. **Código nunca llega al bloque de API**
-   - Revisar el flujo completo en logs desde `[OPPORTUNITY-FINDER]`
-   - Verificar que `affiliateCreds` no sea null
-
-### Problema: Veo "Making request" pero no "Success" ni "Error"
-
-**Causa:** La llamada HTTP se está colgando o hay un timeout
-
-**Solución:**
-- Revisar logs de axios para timeouts
-- Verificar conectividad de red desde Railway
-- Usar el endpoint de debug para probar en aislamiento
-
-### Problema: API retorna error de autenticación
-
-**Logs esperados:**
+**3. Resultado de búsqueda:**
 ```
-[ALIEXPRESS-AFFILIATE-API] Error ← status=401, code=INVALID_SIGNATURE
+[ALIEXPRESS-API] ✅ CREDENCIALES ENCONTRADAS - Usando API oficial
 ```
-
-**Solución:**
-- Verificar que `app_key` y `app_secret` sean correctos
-- Verificar formato del timestamp
-- Verificar cálculo de la firma (sign)
-
-## 📝 Variables de Entorno
-
-Ver `docs/ALIEXPRESS_ENV.md` para variables de entorno necesarias.
-
-## 🚀 Cómo Probar
-
-### 1. Prueba Rápida con Endpoint de Debug
-
-**Endpoint:** `GET /debug/aliexpress/test-search?query=test`
-
-```bash
-curl "https://api.ivanreseller.com/debug/aliexpress/test-search?query=test" \
-  -H "Authorization: Bearer YOUR_TOKEN"
+**O:**
 ```
-
-**Ventajas:**
-- Llama directamente a la API sin pasar por scraping
-- Respuesta rápida y clara
-- Útil para verificar si la API funciona en aislamiento
-
-**Logs esperados:**
+[ALIEXPRESS-API] ⚠️ NO HAY CREDENCIALES - Usando scraping nativo
 ```
-[DEBUG-API] Test search requested
-[DEBUG-API] Credentials found
-[DEBUG-API] Calling AliExpress Affiliate API
+**Ubicación:** `advanced-scraper.service.ts:742`  
+**Si aparece "NO HAY CREDENCIALES":** Configurar credenciales en Settings
+
+---
+
+**4. Preparación de llamada HTTP:**
+```
+[ALIEXPRESS-API] ✅ PREPARANDO LLAMADA HTTP a AliExpress Affiliate API
+[ALIEXPRESS-API] Configurando servicio con credenciales
+[ALIEXPRESS-API] ✅ EJECUTANDO LLAMADA HTTP - searchProducts()
+```
+**Ubicación:** `advanced-scraper.service.ts:755, 766, 782`  
+**Si NO aparece:** Error antes de configurar servicio
+
+---
+
+**5. Llamada HTTP real:**
+```
 [ALIEXPRESS-AFFILIATE-API] Request →
-[ALIEXPRESS-AFFILIATE-API] Success ← (o Error ←)
-[DEBUG-API] API call successful (o failed)
 ```
+**Ubicación:** `aliexpress-affiliate-api.service.ts:189`  
+**Si NO aparece:** El servicio no está haciendo la llamada HTTP
 
-### 2. Prueba Completa con Búsqueda de Oportunidades
+---
 
-**Endpoint:** `GET /api/opportunities?query=test&maxItems=5`
-
-```bash
-curl "https://api.ivanreseller.com/api/opportunities?query=test&maxItems=5" \
-  -H "Authorization: Bearer YOUR_TOKEN"
+**6. Respuesta de API:**
 ```
-
-**Logs esperados (flujo completo):**
-```
-[OPPORTUNITY-FINDER] Starting search
-[ALIEXPRESS-API] ✅ Credenciales encontradas
-[ALIEXPRESS-API] ✅ PRIORIDAD 1: Attempting official...
-[ALIEXPRESS-API] ✅ PREPARANDO LLAMADA HTTP...
-[ALIEXPRESS-API] ✅ EJECUTANDO LLAMADA HTTP...
-[ALIEXPRESS-AFFILIATE-API] Request →
 [ALIEXPRESS-AFFILIATE-API] Success ←
-[ALIEXPRESS-API] Product search successful
-[OPPORTUNITY-FINDER] scrapeAliExpress completed
 ```
-
-### 3. Revisar Logs en Railway
-
-**Pasos:**
-1. Ir a Railway Dashboard → Tu servicio backend → Logs
-2. Filtrar por: `ALIEXPRESS-AFFILIATE-API` o `ALIEXPRESS-API`
-3. Buscar la secuencia de logs esperada
-
-**Comandos útiles:**
-```bash
-# Buscar intentos de llamada HTTP
-grep "Request →" logs/*.log
-
-# Buscar respuestas exitosas
-grep "Success ←" logs/*.log
-
-# Buscar errores
-grep "Error ←" logs/*.log
-
-# Buscar fallbacks
-grep "ALIEXPRESS-FALLBACK" logs/*.log
+**O:**
 ```
+[ALIEXPRESS-AFFILIATE-API] Error ←
+```
+**Ubicación:** `aliexpress-affiliate-api.service.ts:265, 233, 286`  
+**Si aparece "Error":** Revisar código HTTP, mensaje, y recomendación
 
+---
+
+**7. Fallback a scraping:**
+```
+[ALIEXPRESS-FALLBACK] API failed - using native scraper
+```
+**Ubicación:** `advanced-scraper.service.ts:1072`  
+**Si aparece:** La API falló, se está usando scraping como fallback
+
+---
+
+## 🔧 Variables de Entorno Necesarias
+
+### Variables para API de AliExpress
+
+**NO se requieren variables de entorno globales.** Las credenciales se almacenan en la base de datos (tabla `api_credentials`).
+
+**Configuración:**
+1. Ir a Settings → API Settings → AliExpress Affiliate API
+2. Configurar:
+   - `appKey` - App Key de AliExpress
+   - `appSecret` - App Secret de AliExpress
+   - `trackingId` - Tracking ID (opcional, default: "ivanreseller")
+   - `environment` - sandbox o production
+
+**Evidencia:** `backend/src/services/credentials-manager.service.ts`
+
+---
+
+### Variables Opcionales (Feature Flags)
+
+| Variable | Default | Descripción | Evidencia |
+|----------|---------|-------------|-----------|
+| `ALIEXPRESS_DATA_SOURCE` | `api` | Fuente de datos preferida (api/scrape) | `backend/src/config/env.ts:304` |
+| `ALLOW_BROWSER_AUTOMATION` | `false` | Permitir scraping nativo | `backend/src/config/env.ts` |
+| `DISABLE_BROWSER_AUTOMATION` | `true` en producción | Deshabilitar Puppeteer | `backend/src/config/env.ts:329` |
+
+**Nota:** Si `ALIEXPRESS_DATA_SOURCE=api` y no hay credenciales, el sistema lanzará error en lugar de hacer scraping.
+
+---
+
+## 🔍 Troubleshooting
+
+### Problema 1: No aparecen logs de API
+
+**Síntoma:** No se ven logs `[ALIEXPRESS-AFFILIATE-API] Request →`
+
+**Diagnóstico:**
+1. Verificar que aparezca `[ALIEXPRESS-FLOW] ENTRADA`
+2. Verificar que aparezca `[ALIEXPRESS-API] Buscando credenciales`
+3. Verificar resultado: `✅ CREDENCIALES ENCONTRADAS` o `⚠️ NO HAY CREDENCIALES`
+
+**Solución:**
+- Si no hay credenciales: Configurar en Settings → API Settings
+- Si hay credenciales pero no llega a "EJECUTANDO LLAMADA HTTP": Revisar error en logs anteriores
+
+---
+
+### Problema 2: API retorna error
+
+**Síntoma:** Se ve `[ALIEXPRESS-AFFILIATE-API] Error ←`
+
+**Diagnóstico:**
+Revisar el log de error que incluye:
+- `status`: Código HTTP
+- `code`: Código de error de AliExpress
+- `message`: Mensaje de error
+- `errorType`: Tipo de error (timeout, auth, network, etc.)
+
+**Soluciones por tipo:**
+
+**AUTH_ERROR (401/403):**
+- Verificar que `appKey` y `appSecret` sean correctos
+- Verificar que las credenciales no hayan expirado
+- Re-autorizar en AliExpress Developer Portal
+
+**TIMEOUT:**
+- La API puede ser lenta. El timeout es de 30s.
+- Si persiste, puede ser problema de conectividad
+
+**NETWORK_ERROR:**
+- Verificar conectividad a `https://gw.api.taobao.com/router/rest`
+- Verificar firewall/proxy
+
+**RATE_LIMIT (429):**
+- Esperar antes de hacer otra llamada
+- Reducir frecuencia de búsquedas
+
+---
+
+### Problema 3: Siempre usa scraping
+
+**Síntoma:** Siempre aparece `[ALIEXPRESS-FALLBACK] Using native scraper`
+
+**Diagnóstico:**
+1. Verificar logs: ¿Aparece "NO HAY CREDENCIALES"?
+2. Si aparece "CREDENCIALES ENCONTRADAS" pero luego fallback:
+   - Revisar logs de error de API
+   - Verificar que la API realmente falló (no solo retornó 0 productos)
+
+**Solución:**
+- Si no hay credenciales: Configurar en Settings
+- Si hay credenciales pero falla: Revisar error específico en logs
+
+---
+
+### Problema 4: Endpoint de debug no funciona
+
+**Síntoma:** `/api/debug/aliexpress/test-search` retorna error
+
+**Diagnóstico:**
+1. Verificar autenticación (debe estar autenticado)
+2. Verificar que el endpoint esté registrado en rutas
+3. Revisar logs del servidor
+
+**Solución:**
+- Verificar que el token JWT sea válido
+- Verificar que el usuario tenga credenciales configuradas
+
+---
+
+## ✅ Verificación de que la API se está usando
+
+### Checklist de Logs
+
+Al hacer una búsqueda, deberías ver en orden:
+
+- [ ] `[ALIEXPRESS-FLOW] ENTRADA: scrapeAliExpress()`
+- [ ] `[ALIEXPRESS-API] Iniciando búsqueda de credenciales`
+- [ ] `[ALIEXPRESS-API] ✅ CREDENCIALES ENCONTRADAS` (o `⚠️ NO HAY CREDENCIALES`)
+- [ ] `[ALIEXPRESS-API] ✅ PREPARANDO LLAMADA HTTP`
+- [ ] `[ALIEXPRESS-API] ✅ EJECUTANDO LLAMADA HTTP`
+- [ ] `[ALIEXPRESS-AFFILIATE-API] Request →`
+- [ ] `[ALIEXPRESS-AFFILIATE-API] Success ←` (o `Error ←`)
+
+**Si faltan logs:** El código no está llegando a ese punto. Revisar logs anteriores para encontrar dónde se detiene.
+
+---
+
+## 📝 Archivos Modificados
+
+1. `backend/src/services/advanced-scraper.service.ts`
+   - Añadidos logs obligatorios en cada paso
+   - Mejorado manejo de errores
+   - Documentación inline del flujo
+
+2. `backend/src/api/routes/debug.routes.ts`
+   - Mejorado endpoint `/api/debug/aliexpress/test-search`
+   - Añadidos logs detallados
+
+3. `backend/src/services/aliexpress-affiliate-api.service.ts`
+   - Ya tenía logs obligatorios (sin cambios)
+
+---
+
+## 🎯 Próximos Pasos
+
+1. **Probar endpoint de debug:**
+   ```bash
+   GET /api/debug/aliexpress/test-search?query=test
+   ```
+
+2. **Revisar logs en producción:**
+   - Buscar logs `[ALIEXPRESS-FLOW]` y `[ALIEXPRESS-API]`
+   - Identificar dónde se detiene el flujo
+
+3. **Si no hay credenciales:**
+   - Configurar en Settings → API Settings → AliExpress Affiliate API
+
+4. **Si hay credenciales pero falla:**
+   - Revisar error específico en logs `[ALIEXPRESS-AFFILIATE-API] Error ←`
+   - Corregir según tipo de error
+
+---
+
+**Evidencia completa:** Ver código fuente en `backend/src/services/advanced-scraper.service.ts` y `backend/src/services/aliexpress-affiliate-api.service.ts`
