@@ -88,7 +88,7 @@ function Test-Endpoint {
                     }
                 }
             } else {
-                Write-Warning "[$Source] $Endpoint -> $LastStatusCode (expected 200)"
+                Write-Warning "[${Source}] ${Endpoint} -> ${LastStatusCode} (expected 200)"
                 if ($Attempt -lt $MaxRetries) {
                     Write-Info "  Retrying in ${RetryDelay}s..."
                     Start-Sleep -Seconds $RetryDelay
@@ -119,7 +119,7 @@ function Test-Endpoint {
                     Start-Sleep -Seconds $RetryDelay
                 }
             } else {
-                Write-Warning "[$Source] $Endpoint -> Error: $LastError (attempt $Attempt/$MaxRetries)"
+                Write-Warning "[${Source}] ${Endpoint} -> Error: ${LastError} (attempt ${Attempt}/${MaxRetries})"
                 if ($Attempt -lt $MaxRetries) {
                     Write-Info "  Retrying in ${RetryDelay}s..."
                     Start-Sleep -Seconds $RetryDelay
