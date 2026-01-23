@@ -7,15 +7,15 @@
   "rewrites": [
     {
       "source": "/health",
-      "destination": "https://ivan-reseller-web-production.up.railway.app/health"
+      "destination": "https://<BACKEND_RAILWAY_DOMAIN>/health"
     },
     {
       "source": "/ready",
-      "destination": "https://ivan-reseller-web-production.up.railway.app/ready"
+      "destination": "https://<BACKEND_RAILWAY_DOMAIN>/ready"
     },
     {
       "source": "/api/:path*",
-      "destination": "https://ivan-reseller-web-production.up.railway.app/api/:path*"
+      "destination": "https://<BACKEND_RAILWAY_DOMAIN>/api/:path*"
     },
     {
       "source": "/(.*)",
