@@ -7,15 +7,15 @@
   "rewrites": [
     {
       "source": "/health",
-      "destination": "https://<BACKEND_RAILWAY_DOMAIN>/health"
+      "destination": "https://<REEMPLAZAR_CON_DOMINIO_BACKEND_RAILWAY>/health"
     },
     {
       "source": "/ready",
-      "destination": "https://<BACKEND_RAILWAY_DOMAIN>/ready"
+      "destination": "https://<REEMPLAZAR_CON_DOMINIO_BACKEND_RAILWAY>/ready"
     },
     {
       "source": "/api/:path*",
-      "destination": "https://<BACKEND_RAILWAY_DOMAIN>/api/:path*"
+      "destination": "https://<REEMPLAZAR_CON_DOMINIO_BACKEND_RAILWAY>/api/:path*"
     },
     {
       "source": "/(.*)",
