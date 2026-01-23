@@ -1,4 +1,4 @@
-# ? P0: Script de validación de routing mínimo
+# ? P0: Script de validacin de routing mnimo
 # Prueba Railway directo y Vercel proxy para /health, /ready, /api/debug/ping, /api/debug/build-info
 # Reintentos 5 veces con delay 2s si 502
 # Termina con PASS/FAIL
@@ -36,7 +36,7 @@ $Endpoints = @(
     "/api/debug/build-info"
 )
 
-# Función para hacer request con reintentos
+# Funcin para hacer request con reintentos
 function Test-Endpoint {
     param(
         [string]$Url,
@@ -58,7 +58,7 @@ function Test-Endpoint {
         $Attempt++
         
         try {
-            Write-Info "[$Source] Attempt $Attempt/$MaxRetries: $FullUrl"
+            Write-Info "[${Source}] Attempt ${Attempt}/${MaxRetries}: ${FullUrl}"
             
             $Response = Invoke-WebRequest -Uri $FullUrl -Method GET -TimeoutSec 10 -UseBasicParsing -ErrorAction Stop
             
@@ -68,7 +68,7 @@ function Test-Endpoint {
             
             if ($LastStatusCode -eq 200) {
                 $Success = $true
-                Write-Success "[$Source] $Endpoint -> 200 OK"
+                Write-Success "[${Source}] ${Endpoint} -> 200 OK"
                 
                 # Parse JSON response si es posible
                 try {
@@ -84,7 +84,7 @@ function Test-Endpoint {
                 $KeyHeaders = @('X-Response-Time', 'X-Health', 'X-Mode', 'Content-Type')
                 foreach ($Header in $KeyHeaders) {
                     if ($Response.Headers[$Header]) {
-                        Write-Info "  $Header`: $($Response.Headers[$Header])"
+                        Write-Info "  ${Header}: $($Response.Headers[$Header])"
                     }
                 }
             } else {
@@ -107,13 +107,13 @@ function Test-Endpoint {
             }
             
             if ($LastStatusCode -eq 502) {
-                Write-Warning "[$Source] $Endpoint -> 502 Bad Gateway (attempt $Attempt/$MaxRetries)"
+                Write-Warning "[${Source}] ${Endpoint} -> 502 Bad Gateway (attempt ${Attempt}/${MaxRetries})"
                 if ($Attempt -lt $MaxRetries) {
                     Write-Info "  Retrying in ${RetryDelay}s..."
                     Start-Sleep -Seconds $RetryDelay
                 }
             } elseif ($LastStatusCode) {
-                Write-Warning "[$Source] $Endpoint -> $LastStatusCode (attempt $Attempt/$MaxRetries)"
+                Write-Warning "[${Source}] ${Endpoint} -> ${LastStatusCode} (attempt ${Attempt}/${MaxRetries})"
                 if ($Attempt -lt $MaxRetries) {
                     Write-Info "  Retrying in ${RetryDelay}s..."
                     Start-Sleep -Seconds $RetryDelay
@@ -202,9 +202,9 @@ Write-Host "RAILWAY DIRECT:" -ForegroundColor Cyan
 foreach ($Endpoint in $Endpoints) {
     $Result = $Results.Railway[$Endpoint]
     if ($Result.Success) {
-        Write-Success "  $Endpoint -> $($Result.StatusCode) OK"
+        Write-Success "  ${Endpoint} -> $($Result.StatusCode) OK"
     } else {
-        Write-Error "  $Endpoint -> FAILED (Status: $($Result.StatusCode), Error: $($Result.Error))"
+        Write-Error "  ${Endpoint} -> FAILED (Status: $($Result.StatusCode), Error: $($Result.Error))"
     }
 }
 
