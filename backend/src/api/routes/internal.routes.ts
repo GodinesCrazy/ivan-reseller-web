@@ -15,7 +15,7 @@ function validateInternalSecret(req: Request, res: Response, next: NextFunction)
     res.status(503).json({
       success: false,
       error: 'Internal endpoint not configured',
-      message: 'INTERNAL_RUN_SECRET no está configurado',
+      message: 'INTERNAL_RUN_SECRET no esta configurado',
     });
     return;
   }
@@ -30,7 +30,7 @@ function validateInternalSecret(req: Request, res: Response, next: NextFunction)
     res.status(401).json({
       success: false,
       error: 'Unauthorized',
-      message: 'Secret inválido o faltante',
+      message: 'Secret invalido o faltante',
     });
     return;
   }
@@ -38,13 +38,26 @@ function validateInternalSecret(req: Request, res: Response, next: NextFunction)
   next();
 }
 
+// ? Health check del endpoint (sin autenticación para verificar que existe)
+router.get('/health', (_req: Request, res: Response) => {
+  res.status(200).json({
+    success: true,
+    message: 'Internal routes endpoint is active',
+    hasSecret: !!INTERNAL_SECRET,
+    routes: ['POST /api/internal/run-ebay-cycle'],
+  });
+});
+
+// ? Ruta siempre registrada, validación de secret en middleware
 router.post('/run-ebay-cycle', validateInternalSecret, async (req: Request, res: Response) => {
   const startTime = Date.now();
   const correlationId = (req as any).correlationId || `internal-${Date.now()}`;
 
-  logger.info('[INTERNAL] Ejecutando ciclo real de eBay', {
+  logger.info('[INTERNAL] POST /api/internal/run-ebay-cycle - Ejecutando ciclo real de eBay', {
     correlationId,
     ip: req.ip,
+    path: req.path,
+    method: req.method,
   });
 
   try {
@@ -95,5 +108,19 @@ router.post('/run-ebay-cycle', validateInternalSecret, async (req: Request, res:
     });
   }
 });
+
+// ? LOG: Registrar rutas al cargar el módulo
+const routes = router.stack.map((layer: any) => ({
+  path: layer.route?.path,
+  method: layer.route?.stack?.[0]?.method?.toUpperCase(),
+}));
+logger.info('[INTERNAL] Routes registered', {
+  routes: routes.filter((r: any) => r.path && r.method),
+  totalRoutes: routes.filter((r: any) => r.path && r.method).length,
+  hasSecret: !!INTERNAL_SECRET,
+});
+console.log('[INTERNAL] Routes mounted at /api/internal');
+console.log('[INTERNAL]   - GET  /api/internal/health (no auth)');
+console.log('[INTERNAL]   - POST /api/internal/run-ebay-cycle (requires x-internal-secret)');
 
 export default router;

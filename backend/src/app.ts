@@ -1094,7 +1094,21 @@ app.use('/api/meeting-room', meetingRoomRoutes);
 app.use('/api/help', helpRoutes);
 app.use('/api/trends', trendsRoutes); // ✅ FASE 1: Detección de Tendencias
 app.use('/api/profitability', profitabilityRoutes); // ✅ FASE 3: Evaluación de Rentabilidad
-app.use('/api/internal', internalRoutes); // ✅ INTERNAL: Endpoint protegido para ejecutar ciclo real de eBay
+// ✅ INTERNAL: Endpoint protegido para ejecutar ciclo real de eBay
+app.use('/api/internal', internalRoutes);
+if (internalRoutes) {
+  console.log('[INTERNAL] Routes mounted at /api/internal');
+  console.log('[INTERNAL]   - GET  /api/internal/health (no auth)');
+  console.log('[INTERNAL]   - POST /api/internal/run-ebay-cycle (requires x-internal-secret)');
+  logger.info('[INTERNAL] Internal routes router mounted successfully', {
+    path: '/api/internal',
+    hasSecret: !!process.env.INTERNAL_RUN_SECRET,
+    routesCount: (internalRoutes as any).stack?.length || 0,
+  });
+} else {
+  console.error('[INTERNAL] ❌ Internal routes router is null/undefined');
+  logger.error('[INTERNAL] Failed to mount internal routes - router is null/undefined');
+}
 app.use('/api/diag', diagRoutes); // ✅ FIX STABILITY: Endpoint de diagnóstico /api/diag/ping
 app.use('/api/debug', debugRoutes); // ✅ FIX STABILITY: Endpoint de debug /api/debug/auth-status-crash-safe
 app.use('/debug', debugRoutes); // Mantener ruta legacy
@@ -1106,6 +1120,21 @@ if (aliExpressRoutes) {
   console.log('   ✅ AliExpress router loaded successfully');
 } else {
   console.log('   ❌ AliExpress router is null/undefined');
+}
+console.log('   - /api/internal (internalRoutes)');
+if (internalRoutes) {
+  console.log('   ✅ Internal routes router loaded successfully');
+  const internalRoutesCount = (internalRoutes as any).stack?.length || 0;
+  console.log(`   ✅ Internal routes registered: ${internalRoutesCount} route(s)`);
+  (internalRoutes as any).stack?.forEach((layer: any) => {
+    if (layer.route) {
+      const method = layer.route.stack?.[0]?.method?.toUpperCase() || 'UNKNOWN';
+      const path = layer.route.path || 'UNKNOWN';
+      console.log(`      ${method} /api/internal${path}`);
+    }
+  });
+} else {
+  console.log('   ❌ Internal routes router is null/undefined');
 }
 
 // Swagger API Documentation
