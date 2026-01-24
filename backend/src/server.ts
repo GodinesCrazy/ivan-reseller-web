@@ -514,10 +514,6 @@ async function startServer() {
   const startTime = Date.now();
   bootstrapStartTime = startTime;
   
-  // ✅ FIX: FORCE_ROUTING_OK ya NO bloquea Express - solo se usa como fallback de emergencia
-  // Express SIEMPRE debe iniciar para que la app funcione
-  const FORCE_ROUTING_OK = process.env.FORCE_ROUTING_OK === 'true'; // Solo si explícitamente true
-  
   try {
     // ✅ BOOT: Logging obligatorio al boot
     console.log('');
@@ -526,23 +522,12 @@ async function startServer() {
     console.log(`   pid=${process.pid}`);
     console.log(`   NODE_ENV=${env.NODE_ENV}`);
     console.log(`   SAFE_BOOT=${env.SAFE_BOOT || false}`);
-    console.log(`   FORCE_ROUTING_OK=${FORCE_ROUTING_OK} (deprecated - Express always starts)`);
     console.log(`   PORT=${PORT}`);
     console.log(`   PORT env exists=${!!process.env.PORT} value=${process.env.PORT || 'N/A'}`);
     console.log(`   cwd=${process.cwd()}`);
     console.log(`   build sha=${(process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || 'unknown').toString().substring(0, 7)}`);
     console.log('================================');
     console.log('');
-    
-    // ✅ FIX: Express SIEMPRE inicia - FORCE_ROUTING_OK ya no bloquea
-    // FORCE_ROUTING_OK solo se usa como fallback de emergencia si Express falla completamente
-    if (FORCE_ROUTING_OK) {
-      console.log('⚠️  FORCE_ROUTING_OK=true: Minimal server will be available as fallback');
-      console.log('   Express app WILL be loaded normally');
-      console.log('   Minimal server is only a backup if Express fails');
-      console.log('');
-      // NO hacer return - continuar con Express
-    }
     
     // ✅ BOOT: Express siempre inicia - modo completo
     logMilestone('[BOOT] Starting Express server initialization');
@@ -609,7 +594,6 @@ async function startServer() {
       console.log(`   Total boot time: ${Date.now() - startTime}ms`);
       console.log(`   Environment: ${env.NODE_ENV}`);
       console.log(`   SAFE_BOOT: ${env.SAFE_BOOT} (workers ${env.SAFE_BOOT ? 'disabled' : 'enabled'})`);
-      console.log(`   FORCE_ROUTING_OK: ${FORCE_ROUTING_OK_ENV || 'not set'} (minimal server: DISABLED)`);
       console.log(`   pid: ${process.pid}`);
       console.log('');
       console.log('📡 Express endpoints available:');
@@ -679,14 +663,6 @@ async function startServer() {
         }
       });
       
-      // ✅ BOOT: Minimal server NO se inicia automáticamente
-      // Solo se activaría si Express falla completamente (no implementado)
-      // Express es el servidor principal y siempre debe funcionar
-      if (FORCE_ROUTING_OK) {
-        console.log('[BOOT] ⚠️  FORCE_ROUTING_OK=true detected but Express is primary');
-        console.log('[BOOT] Minimal server will NOT start - Express handles all requests');
-        console.log('[BOOT] If you see this, consider removing FORCE_ROUTING_OK variable');
-      }
     });
     
     // ✅ FASE 1: Error handling for listen()

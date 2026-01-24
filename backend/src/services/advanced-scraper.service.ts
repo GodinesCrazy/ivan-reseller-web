@@ -1079,13 +1079,13 @@ export class AdvancedMarketplaceScraper {
             });
             
             // ✅ ÉXITO: Retornar productos desde API oficial (NO usar scraping)
-            const totalDuration = Date.now() - entryTime;
+            const apiTotalDuration = Date.now() - entryTime;
             logger.info('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
             logger.info('[ALIEXPRESS-API] ✅ RETORNANDO productos de API oficial', {
               productsCount: scrapedProducts.length,
               query,
               userId,
-              totalDuration: `${totalDuration}ms`,
+              totalDuration: `${apiTotalDuration}ms`,
               step: 'returning_api_products',
               source: 'official-api',
               note: 'NO se usará scraping - productos vienen de API'
