@@ -179,7 +179,7 @@ export class MarketplacePublishService {
   }
 
   private async getPublishableProducts(userId: number, limit: number): Promise<PublishableProduct[]> {
-    return prisma.product.findMany({
+    const products = await prisma.product.findMany({
       where: {
         userId,
         status: 'publishable',
@@ -188,6 +188,19 @@ export class MarketplacePublishService {
       orderBy: { updatedAt: 'asc' },
       take: limit,
     });
+
+    return products.map((p) => ({
+      id: p.id,
+      userId: p.userId,
+      title: p.title,
+      description: p.description,
+      suggestedPrice: p.suggestedPrice ? Number(p.suggestedPrice) : null,
+      finalPrice: p.finalPrice ? Number(p.finalPrice) : null,
+      currency: p.currency,
+      category: p.category,
+      images: p.images,
+      targetCountry: p.targetCountry,
+    }));
   }
 
   private ensurePublishingEnabled(marketplace: MarketplaceName, mode: PublishMode): boolean {

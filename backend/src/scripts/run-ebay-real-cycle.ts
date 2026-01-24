@@ -318,7 +318,7 @@ export async function runEbayRealCycle(): Promise<{
         ...evaluation,
         productId: product.id,
         trendScore: record.trendScore,
-      });
+      } as ProfitabilityEvaluation & { productId: number; trendScore: number });
     }
 
     const publishable = evaluations.filter(
