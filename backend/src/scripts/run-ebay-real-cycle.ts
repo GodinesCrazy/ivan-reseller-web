@@ -716,6 +716,7 @@ export async function runEbayRealCycle(): Promise<{
           // Continuar con la publicación usando el producto seleccionado forzado
           const selected = selectedForForce;
           const selectedProduct = selectedProductForForce;
+          const selectedRecordForForce = createdCandidates.find(c => c.productId === selected.productId);
 
           console.log('[EBAY-PUBLISH] Publishing FORCED VALIDATION product', {
             productId: selectedProduct.id,
@@ -790,7 +791,7 @@ export async function runEbayRealCycle(): Promise<{
             productsPublishable: 0, // Forzado
             productPublished: selectedProduct.title,
             productId: selectedProduct.id,
-            candidateId: selected.candidateId || selectedProduct.id.toString(),
+            candidateId: selectedRecordForForce?.candidateId || selectedProduct.id.toString(),
             listingId: publishResult.listingId,
             price: selected.salePrice,
             expectedProfit: selected.estimatedProfit,
@@ -870,6 +871,7 @@ export async function runEbayRealCycle(): Promise<{
     });
 
     const selected = publishable[0];
+    const selectedRecord = createdCandidates.find(c => c.productId === selected.productId);
     const selectedProduct = await prisma.product.findUnique({
       where: { id: selected.productId },
     });
@@ -954,7 +956,7 @@ export async function runEbayRealCycle(): Promise<{
       productsPublishable: publishable.length,
       productPublished: selectedProduct.title,
       productId: selectedProduct.id,
-      candidateId: selected.candidateId || selectedProduct.id.toString(),
+      candidateId: selectedRecord?.candidateId || selectedProduct.id.toString(),
       listingId: publishResult.listingId,
       price: selected.salePrice,
       expectedProfit: selected.estimatedProfit,
@@ -964,8 +966,8 @@ export async function runEbayRealCycle(): Promise<{
     console.log('[REPORT] FINAL', reportData);
     console.log('[REPORT] Product selected:', {
       productId: selectedProduct.id,
-      candidateId: selected.candidateId || selectedProduct.id.toString(),
-      keyword: keywordsTried[0] || 'unknown',
+      candidateId: selectedRecord?.candidateId || selectedProduct.id.toString(),
+      keyword: selectedRecord?.keyword || keywordsTried[0] || 'unknown',
       listingId: publishResult.listingId,
       profit: selected.estimatedProfit,
     });
