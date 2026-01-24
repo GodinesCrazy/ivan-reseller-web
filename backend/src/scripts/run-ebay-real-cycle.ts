@@ -298,35 +298,54 @@ export async function runEbayRealCycle(): Promise<{
       })),
     });
 
-    // ✅ FASE 2: Búsqueda robusta con retry y fallback
+    // ✅ FASE 2: Búsqueda FORZADA para obtener al menos 1 producto REAL
     const allCandidates: ReturnType<typeof normalizeProduct>[] = [];
     const seen = new Set<string>();
     const keywordsTried: string[] = [];
     let affiliateReachable = false;
+    let finalSearchParams: any = null;
 
-    // Helper: Buscar productos por keyword
-    async function searchByKeyword(
+    // Helper: Buscar productos con parámetros forzados
+    async function searchWithForcedParams(
       keywordText: string,
+      categoryId?: string,
       keywordData?: TrendKeyword,
-      useFilters = true,
-    ): Promise<number> {
-      console.log(`[ALIEXPRESS] Searching keyword: "${keywordText}"`);
+      useFilters = false,
+    ): Promise<{ count: number; params: any; rawResponse?: any }> {
+      const searchParams = {
+        keywords: keywordText,
+        pageNo: 1,
+        pageSize: 50, // ✅ FORZADO: máximo productos
+        sort: 'volume_desc', // ✅ FORZADO: ordenar por volumen
+        categoryId: categoryId || undefined,
+        // ✅ DESACTIVAR filtros de precio
+        minPrice: undefined,
+        maxPrice: undefined,
+      };
+
+      console.log(`[ALIEXPRESS] Searching with forced params:`, {
+        keyword: keywordText,
+        categoryId: categoryId || 'none',
+        pageSize: searchParams.pageSize,
+        sort: searchParams.sort,
+        filtersDisabled: true,
+      });
       keywordsTried.push(keywordText);
 
       try {
-        const searchResult = await aliExpressService.searchProducts({
-          keywords: keywordText,
-          pageNo: 1,
-          pageSize: 10,
+        const searchResult = await aliExpressService.searchProducts(searchParams);
+
+        affiliateReachable = true;
+        const productsFound = searchResult.products?.length || 0;
+        console.log(`[ALIEXPRESS] Products found: ${productsFound}`, {
+          keyword: keywordText,
+          categoryId: categoryId || 'none',
+          totalResults: searchResult.totalResults,
         });
 
-        affiliateReachable = true; // API respondió
-        const productsFound = searchResult.products?.length || 0;
-        console.log(`[ALIEXPRESS] Products found: ${productsFound} for keyword "${keywordText}"`);
-
         if (productsFound === 0) {
-          console.log(`[ALIEXPRESS] 0 products for keyword "${keywordText}" - continuing`);
-          return 0;
+          console.log(`[ALIEXPRESS] 0 products - trying next strategy`);
+          return { count: 0, params: searchParams };
         }
 
         let added = 0;
@@ -340,7 +359,7 @@ export async function runEbayRealCycle(): Promise<{
             },
           );
 
-          // Si useFilters=false, solo validar título básico
+          // Si useFilters=false, solo validar título básico (mínimo)
           if (useFilters && !passesBasicFilters(candidate)) continue;
           if (!useFilters && (!candidate.title || candidate.title.trim().length === 0)) continue;
 
@@ -350,75 +369,116 @@ export async function runEbayRealCycle(): Promise<{
           added++;
         }
 
-        return added;
+        finalSearchParams = searchParams;
+        return { count: added, params: searchParams, rawResponse: searchResult };
       } catch (error) {
-        console.warn(`[ALIEXPRESS] Error searching keyword "${keywordText}":`, error instanceof Error ? error.message : String(error));
-        return 0;
+        console.warn(`[ALIEXPRESS] Error searching:`, {
+          keyword: keywordText,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return { count: 0, params: searchParams };
       }
     }
 
-    // Paso 1: Intentar con keywords de tendencias (hasta 3)
-    if (filteredKeywords.length > 0) {
-      console.log('[ALIEXPRESS] Attempting search with trending keywords');
-      const keywordsToTry = filteredKeywords.slice(0, 3);
-      
-      for (const keyword of keywordsToTry) {
-        const added = await searchByKeyword(keyword.keyword, keyword, true);
-        if (allCandidates.length >= 5) break; // Suficientes candidatos
+    // ✅ ESTRATEGIA 1: Keywords permitidas históricamente con parámetros forzados
+    const historicalKeywords = ['phone case', 'wireless earbuds', 'usb charger', 'led strip', 'car phone holder'];
+    console.log('[ALIEXPRESS] STRATEGY 1: Using historical keywords with forced params');
+    
+    for (const keyword of historicalKeywords) {
+      const result = await searchWithForcedParams(keyword, undefined, undefined, false);
+      if (allCandidates.length >= 1) {
+        console.log(`[ALIEXPRESS] ✅ Obtained ${allCandidates.length} candidates from keyword "${keyword}"`);
+        break;
       }
-    } else {
-      console.log('[ALIEXPRESS] No trending keywords available - will use fallback');
     }
 
-    // Paso 2: Fallback con keywords evergreen si no hay suficientes candidatos
+    // ✅ ESTRATEGIA 2: Búsqueda por categoryId genérico si aún no hay productos
     if (allCandidates.length === 0) {
-      console.log('[ALIEXPRESS] Using fallback keywords (evergreen)');
-      const fallbackKeywords = ['phone accessory', 'wireless charger', 'led light', 'car accessory'];
+      console.log('[ALIEXPRESS] STRATEGY 2: Searching by categoryId (Electronics Accessories)');
+      const categoryId = '200000297'; // Electronics Accessories
       
-      for (const fallbackKeyword of fallbackKeywords) {
-        const added = await searchByKeyword(fallbackKeyword, undefined, true);
-        if (allCandidates.length >= 5) break;
+      for (const keyword of ['', 'phone', 'charger']) {
+        const result = await searchWithForcedParams(keyword, categoryId, undefined, false);
+        if (allCandidates.length >= 1) {
+          console.log(`[ALIEXPRESS] ✅ Obtained ${allCandidates.length} candidates from categoryId ${categoryId}`);
+          break;
+        }
       }
     }
 
-    // Paso 3: Búsqueda sin filtros restrictivos si aún no hay productos
+    // ✅ ESTRATEGIA 3: Búsqueda mínima sin filtros (último recurso)
     if (allCandidates.length === 0) {
-      console.log('[ALIEXPRESS] Attempting search without restrictive filters');
-      const noFilterKeywords = filteredKeywords.length > 0 
-        ? filteredKeywords.slice(0, 2).map(k => k.keyword)
-        : ['phone case', 'charger'];
+      console.log('[ALIEXPRESS] STRATEGY 3: Minimal search without any filters');
       
-      for (const keyword of noFilterKeywords) {
-        const added = await searchByKeyword(keyword, undefined, false);
-        if (allCandidates.length >= 3) break; // Menos estricto pero suficiente
+      const minimalKeywords = ['phone', 'charger', 'case'];
+      for (const keyword of minimalKeywords) {
+        try {
+          const searchResult = await aliExpressService.searchProducts({
+            keywords: keyword,
+            pageNo: 1,
+            pageSize: 50,
+            sort: 'volume_desc',
+          });
+
+          console.log(`[ALIEXPRESS] Minimal search result:`, {
+            keyword,
+            productsFound: searchResult.products?.length || 0,
+            totalResults: searchResult.totalResults,
+          });
+
+          if (searchResult.products && searchResult.products.length > 0) {
+            // Tomar el PRIMER producto válido (solo título básico)
+            const firstProduct = searchResult.products[0];
+            const candidate = normalizeProduct(firstProduct, {
+              keyword: keyword,
+              score: 30,
+              priority: 'low',
+            });
+
+            if (candidate.title && candidate.title.trim().length > 0) {
+              allCandidates.push(candidate);
+              finalSearchParams = { keywords: keyword, pageSize: 50, sort: 'volume_desc' };
+              console.log(`[ALIEXPRESS] ✅ Obtained 1 candidate from minimal search: "${candidate.title}"`);
+              break;
+            }
+          }
+        } catch (error) {
+          console.warn(`[ALIEXPRESS] Minimal search failed for "${keyword}":`, error instanceof Error ? error.message : String(error));
+        }
       }
     }
 
     console.log('[ALIEXPRESS] Candidates normalized', {
       total: allCandidates.length,
       keywordsTried: keywordsTried.length,
+      finalParams: finalSearchParams,
+      affiliateReachable,
     });
 
-    // ✅ VALIDACIÓN FINAL: Solo fallar si realmente no hay productos después de todos los intentos
+    // ✅ VALIDACIÓN FINAL: CRÍTICO - Debe haber al menos 1 producto
     if (allCandidates.length === 0) {
       const errorResponse = {
         success: false,
         reason: 'NO_PRODUCTS_FOUND',
-        message: 'No se encontraron productos después de intentar múltiples keywords y fallbacks',
+        message: 'No se encontraron productos después de todas las estrategias (keywords históricas, categoryId, búsqueda mínima)',
         details: {
           keywordsTried,
           affiliateReachable,
-          filtersApplied: true,
+          strategiesAttempted: ['historical_keywords', 'categoryId_search', 'minimal_search'],
+          finalParams: finalSearchParams,
         },
       };
       
-      console.log('[PIPELINE] No products found after all attempts:', errorResponse);
+      console.error('[PIPELINE] ❌ CRITICAL: No products found after all strategies:', errorResponse);
       return errorResponse;
     }
+
+    console.log(`[PIPELINE] ✅ SUCCESS: Obtained ${allCandidates.length} candidate(s) from AliExpress Affiliate API`);
 
     const createdCandidates = await persistCandidates(allCandidates);
     console.log('[ALIEXPRESS] Candidates persisted', {
       total: createdCandidates.length,
+      productIds: createdCandidates.map(c => c.candidateId),
     });
 
     if (createdCandidates.length === 0) {
@@ -433,11 +493,16 @@ export async function runEbayRealCycle(): Promise<{
           affiliateReachable,
         },
       };
-      console.log('[PIPELINE] Products found but not persisted:', errorResponse);
+      console.error('[PIPELINE] ❌ Products found but not persisted:', errorResponse);
       return errorResponse;
     }
 
-    console.log('[PIPELINE] Continuing pipeline with', createdCandidates.length, 'candidates');
+    console.log('[PIPELINE] ✅ Continuing pipeline with', createdCandidates.length, 'candidate(s)');
+    console.log('[PIPELINE] Selected productIds:', createdCandidates.map(c => ({
+      productId: c.productId,
+      candidateId: c.candidateId,
+      keyword: c.keyword,
+    })));
 
     console.log('[PROFITABILITY] Evaluating candidates');
     const evaluations: Array<ProfitabilityEvaluation & { productId: number; trendScore: number }> = [];
@@ -720,13 +785,17 @@ export async function runEbayRealCycle(): Promise<{
 
           const reportData = {
             keywordsAnalyzed: filteredKeywords.map((kw) => kw.keyword),
+            keywordsUsed: keywordsTried,
             productsFound: allCandidates.length,
             productsPublishable: 0, // Forzado
             productPublished: selectedProduct.title,
+            productId: selectedProduct.id,
+            candidateId: selected.candidateId || selectedProduct.id.toString(),
             listingId: publishResult.listingId,
             price: selected.salePrice,
             expectedProfit: selected.estimatedProfit,
             forcedValidation: true,
+            searchParams: finalSearchParams,
           };
 
           console.log('[REPORT] FINAL (FORCED VALIDATION)', reportData);
@@ -880,15 +949,26 @@ export async function runEbayRealCycle(): Promise<{
 
     const reportData = {
       keywordsAnalyzed: filteredKeywords.map((kw) => kw.keyword),
+      keywordsUsed: keywordsTried,
       productsFound: allCandidates.length,
       productsPublishable: publishable.length,
       productPublished: selectedProduct.title,
+      productId: selectedProduct.id,
+      candidateId: selected.candidateId || selectedProduct.id.toString(),
       listingId: publishResult.listingId,
       price: selected.salePrice,
       expectedProfit: selected.estimatedProfit,
+      searchParams: finalSearchParams,
     };
 
     console.log('[REPORT] FINAL', reportData);
+    console.log('[REPORT] Product selected:', {
+      productId: selectedProduct.id,
+      candidateId: selected.candidateId || selectedProduct.id.toString(),
+      keyword: keywordsTried[0] || 'unknown',
+      listingId: publishResult.listingId,
+      profit: selected.estimatedProfit,
+    });
 
     if (publishResult.status !== 'published') {
       // ✅ NO lanzar excepción, retornar respuesta JSON clara
