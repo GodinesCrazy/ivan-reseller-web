@@ -42,6 +42,7 @@ model User {
   adminCommissions        AdminCommission[] // Comisiones que recibe como admin de usuarios creados
   successfulOperations    SuccessfulOperation[] // Operaciones exitosas del usuario
   marketplaceListings     MarketplaceListing[]
+  marketplacePublications MarketplacePublication[]
   opportunities           Opportunity[]
   aiSuggestions           AISuggestion[]
   manualAuthSessions      ManualAuthSession[]
@@ -125,6 +126,7 @@ model Product {
   sales                Sale[]
   successfulOperations SuccessfulOperation[]
   marketplaceListings  MarketplaceListing[]
+  marketplacePublications MarketplacePublication[]
   purchaseLogs         PurchaseLog[] // Logs de compras relacionadas
 
   @@index([userId, status])
@@ -353,6 +355,27 @@ model MarketplaceListing {
 
   @@unique([marketplace, listingId])
   @@map("marketplace_listings")
+}
+
+model MarketplacePublication {
+  id           Int      @id @default(autoincrement())
+  productId    Int
+  userId       Int
+  marketplace  String
+  listingId    String?
+  publishStatus String
+  publishedAt  DateTime?
+  publishMode  String
+  rawResponse  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, marketplace, publishStatus])
+  @@index([productId, marketplace])
+  @@map("marketplace_publications")
 }
 
 // ✅ OPORTUNIDADES DE NEGOCIO

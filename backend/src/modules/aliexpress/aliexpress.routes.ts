@@ -1,158 +1,26 @@
 /**
  * Rutas para AliExpress Affiliate API
+ * 
+ * ⚠️ IMPORTANTE: AliExpress Affiliate API does NOT support OAuth interactive login.
+ * The API works EXCLUSIVELY with:
+ * - app_key
+ * - app_secret
+ * - sign (signature)
+ * - timestamp
+ * 
+ * All requests must be signed according to AliExpress TOP API specification.
  */
 
 import { Router } from 'express';
 import {
-  handleOAuthCallback,
-  initiateOAuth,
-  oauthDebug,
-  getOAuthRedirectUrl,
   generateAffiliateLink,
   testAffiliateLink,
   searchProducts,
-  getTokenStatus,
+  getHealthStatus,
+  getCandidates,
 } from './aliexpress.controller';
 
-// ✅ LOG OBLIGATORIO: Verificar que los controllers se importan correctamente
-console.log('[ALIEXPRESS-ROUTES] ════════════════════════════════════════════════════════');
-console.log('[ALIEXPRESS-ROUTES] Importing controllers...');
-console.log('[ALIEXPRESS-ROUTES] handleOAuthCallback:', typeof handleOAuthCallback);
-console.log('[ALIEXPRESS-ROUTES] initiateOAuth:', typeof initiateOAuth);
-console.log('[ALIEXPRESS-ROUTES] ════════════════════════════════════════════════════════');
-
 const router = Router();
-
-// ✅ LOG OBLIGATORIO: Confirmar que el router se crea
-console.log('[ALIEXPRESS-ROUTES] Router created');
-console.log('[ALIEXPRESS-ROUTES] Router type:', typeof router);
-console.log('[ALIEXPRESS-ROUTES] Router stack length:', (router as any).stack?.length || 0);
-
-/**
- * @swagger
- * /api/aliexpress/callback:
- *   get:
- *     summary: Callback OAuth de AliExpress
- *     tags: [AliExpress]
- *     parameters:
- *       - in: query
- *         name: code
- *         required: true
- *         schema:
- *           type: string
- *         description: Código de autorización de AliExpress
- *       - in: query
- *         name: state
- *         required: true
- *         schema:
- *           type: string
- *         description: State para validación CSRF
- *     responses:
- *       200:
- *         description: Autenticación completada exitosamente
- *       400:
- *         description: Parámetros inválidos
- *       500:
- *         description: Error del servidor
- */
-router.get('/callback', handleOAuthCallback);
-console.log('[ALIEXPRESS-ROUTES] ✅ Route registered: GET /callback');
-
-/**
- * @swagger
- * /api/aliexpress/auth:
- *   get:
- *     summary: Iniciar flujo OAuth de AliExpress
- *     tags: [AliExpress]
- *     responses:
- *       200:
- *         description: URL de autorización generada
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     authUrl:
- *                       type: string
- *                     state:
- *                       type: string
- */
-router.get('/auth', initiateOAuth);
-console.log('[ALIEXPRESS-ROUTES] ✅ Route registered: GET /auth');
-console.log('[ALIEXPRESS-ROUTES] Full path will be: /api/aliexpress/auth');
-
-/**
- * @swagger
- * /api/aliexpress/oauth-debug:
- *   get:
- *     summary: Debug endpoint para verificar configuración OAuth (solo admin en producción)
- *     tags: [AliExpress]
- *     parameters:
- *       - in: header
- *         name: X-Debug-Key
- *         required: false
- *         schema:
- *           type: string
- *         description: Debug key requerido en producción
- *     responses:
- *       200:
- *         description: Información de debug OAuth (sin secretos)
- *       403:
- *         description: No autorizado (en producción requiere X-Debug-Key válido)
- *       500:
- *         description: Error del servidor
- */
-router.get('/oauth-debug', oauthDebug);
-
-/**
- * @swagger
- * /api/aliexpress/oauth-redirect-url:
- *   get:
- *     summary: Obtener información de la URL de OAuth redirect (protegido, requiere X-Debug-Key en producción)
- *     tags: [AliExpress]
- *     parameters:
- *       - in: header
- *         name: X-Debug-Key
- *         required: false
- *         schema:
- *           type: string
- *         description: Debug key requerido en producción
- *     responses:
- *       200:
- *         description: Información de OAuth redirect URL (sin secretos)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     oauthBaseUrl:
- *                       type: string
- *                     clientIdMasked:
- *                       type: string
- *                     clientIdTail:
- *                       type: string
- *                     redirectUri:
- *                       type: string
- *                     scope:
- *                       type: string
- *                     stateLength:
- *                       type: number
- *       403:
- *         description: No autorizado (en producción requiere X-Debug-Key válido)
- *       500:
- *         description: Error del servidor
- */
-router.get('/oauth-redirect-url', getOAuthRedirectUrl);
 
 /**
  * @swagger
@@ -248,25 +116,71 @@ router.get('/search', searchProducts);
 
 /**
  * @swagger
- * /api/aliexpress/token-status:
+ * /api/aliexpress/health:
  *   get:
- *     summary: Verificar estado del token OAuth
+ *     summary: Health check y diagnóstico de AliExpress Affiliate API
  *     tags: [AliExpress]
  *     responses:
  *       200:
- *         description: Estado del token
+ *         description: Estado de la configuración y conectividad
  */
-router.get('/token-status', getTokenStatus);
-console.log('[ALIEXPRESS-ROUTES] ✅ Route registered: GET /token-status');
+router.get('/health', getHealthStatus);
 
-console.log('[ALIEXPRESS-ROUTES] ════════════════════════════════════════════════════════');
-console.log('[ALIEXPRESS-ROUTES] All routes registered. Router ready.');
-console.log('[ALIEXPRESS-ROUTES] Routes summary:');
-console.log('[ALIEXPRESS-ROUTES]   - GET /api/aliexpress/auth');
-console.log('[ALIEXPRESS-ROUTES]   - GET /api/aliexpress/callback');
-console.log('[ALIEXPRESS-ROUTES]   - GET /api/aliexpress/search');
-console.log('[ALIEXPRESS-ROUTES]   - GET /api/aliexpress/token-status');
-console.log('[ALIEXPRESS-ROUTES] ════════════════════════════════════════════════════════');
+/**
+ * @swagger
+ * /api/aliexpress/candidates:
+ *   get:
+ *     summary: Obtener productos candidatos basados en tendencias (FASE 2)
+ *     tags: [AliExpress]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Máximo de candidatos a retornar
+ *       - in: query
+ *         name: priority
+ *         schema:
+ *           type: string
+ *           enum: [high, medium, low]
+ *         description: Filtrar por prioridad de keyword
+ *       - in: query
+ *         name: minTrendScore
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Score mínimo de tendencia
+ *       - in: query
+ *         name: region
+ *         schema:
+ *           type: string
+ *           default: US
+ *         description: Región para búsqueda de tendencias
+ *       - in: query
+ *         name: days
+ *         schema:
+ *           type: integer
+ *           default: 30
+ *         description: Días hacia atrás para analizar tendencias
+ *     responses:
+ *       200:
+ *         description: Lista de productos candidatos
+ *       401:
+ *         description: No autorizado
+ *       500:
+ *         description: Error del servidor
+ */
+router.get('/candidates', authenticate, getCandidates);
+
+console.log('[ALIEXPRESS-AFFILIATE] Routes registered:');
+console.log('[ALIEXPRESS-AFFILIATE]   - POST /api/aliexpress/generate-link');
+console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/test-link');
+console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/search');
+console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/health');
+console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/candidates (FASE 2)');
 
 export default router;
 

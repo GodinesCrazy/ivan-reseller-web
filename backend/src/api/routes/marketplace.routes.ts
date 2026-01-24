@@ -1,5 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { MarketplaceService, MarketplaceName } from '../../services/marketplace.service';
+import { MarketplacePublishService } from '../../modules/marketplace/marketplace-publish.service';
+import { PublishMode } from '../../modules/marketplace/marketplace.types';
 import { EbayService } from '../../services/ebay.service';
 import { MercadoLibreService } from '../../services/mercadolibre.service';
 import crypto from 'crypto';
@@ -11,6 +13,7 @@ import { AppError, ErrorCode } from '../../middleware/error.middleware';
 
 const router = Router();
 const marketplaceService = new MarketplaceService();
+const marketplacePublishService = new MarketplacePublishService();
 
 // Apply auth middleware to all routes
 router.use(authenticate);
@@ -30,6 +33,12 @@ const publishProductSchema = z.object({
     title: z.string().optional(),
     description: z.string().optional(),
   }).optional(),
+});
+
+const publishBatchSchema = z.object({
+  marketplace: z.enum(['ebay', 'mercadolibre', 'amazon']),
+  limit: z.number().min(1).max(25).optional(),
+  mode: z.nativeEnum(PublishMode).optional(),
 });
 
 const multipleMarketplacesSchema = z.object({
@@ -145,65 +154,82 @@ router.get('/validate/:marketplace', async (req: Request, res: Response, next: N
 // ✅ Rate limit específico por marketplace
 router.post('/publish', marketplaceRateLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = publishProductSchema.parse(req.body);
-    
-    // ✅ P0.4: Validar credenciales antes de publicar
-    const credentials = await marketplaceService.getCredentials(
-      req.user!.userId,
-      data.marketplace,
-      data.environment
-    );
-    
-    if (!credentials || !credentials.isActive) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing credentials',
-        message: `Please configure your ${data.marketplace} credentials before publishing.`,
-        action: 'configure_credentials',
-        settingsUrl: '/settings?tab=api-credentials'
-      });
-    }
-    
-    // Probar conexión antes de publicar
-    const testResult = await marketplaceService.testConnection(
-      req.user!.userId,
-      data.marketplace,
-      data.environment
-    );
-    
-    if (!testResult.success) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid credentials',
-        message: testResult.message || `Your ${data.marketplace} credentials are invalid or expired. Please update them in Settings.`,
-        action: 'update_credentials',
-        settingsUrl: '/settings?tab=api-credentials'
-      });
-    }
-    
-    const result = await marketplaceService.publishProduct(
-      req.user!.userId,
-      {
-        productId: data.productId,
-        marketplace: data.marketplace,
-        customData: data.customData,
-      },
-      data.environment
-    );
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'productId')) {
+      const data = publishProductSchema.parse(req.body);
 
-    if (result.success) {
-      res.status(201).json({
-        success: true,
-        message: 'Product published successfully',
-        data: result,
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        message: 'Failed to publish product',
-        error: result.error,
-      });
+      // ✅ P0.4: Validar credenciales antes de publicar
+      const credentials = await marketplaceService.getCredentials(
+        req.user!.userId,
+        data.marketplace,
+        data.environment
+      );
+
+      if (!credentials || !credentials.isActive) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing credentials',
+          message: `Please configure your ${data.marketplace} credentials before publishing.`,
+          action: 'configure_credentials',
+          settingsUrl: '/settings?tab=api-credentials'
+        });
+      }
+
+      // Probar conexión antes de publicar
+      const testResult = await marketplaceService.testConnection(
+        req.user!.userId,
+        data.marketplace,
+        data.environment
+      );
+
+      if (!testResult.success) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid credentials',
+          message: testResult.message || `Your ${data.marketplace} credentials are invalid or expired. Please update them in Settings.`,
+          action: 'update_credentials',
+          settingsUrl: '/settings?tab=api-credentials'
+        });
+      }
+
+      const result = await marketplaceService.publishProduct(
+        req.user!.userId,
+        {
+          productId: data.productId,
+          marketplace: data.marketplace,
+          customData: data.customData,
+        },
+        data.environment
+      );
+
+      if (result.success) {
+        res.status(201).json({
+          success: true,
+          message: 'Product published successfully',
+          data: result,
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: 'Failed to publish product',
+          error: result.error,
+        });
+      }
+      return;
     }
+
+    const data = publishBatchSchema.parse(req.body);
+    const result = await marketplacePublishService.publish({
+      userId: req.user!.userId,
+      marketplace: data.marketplace,
+      limit: data.limit,
+      mode: data.mode,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Marketplace publish execution completed',
+      data: result,
+    });
   } catch (error: any) {
     next(error);
   }

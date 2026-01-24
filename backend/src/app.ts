@@ -65,7 +65,10 @@ import meetingRoomRoutes from './api/routes/meeting-room.routes';
 import debugRoutes from './api/routes/debug.routes';
 import helpRoutes from './api/routes/help.routes';
 import aliExpressRoutes from './modules/aliexpress/aliexpress.routes';
+import trendsRoutes from './api/routes/trends.routes';
+import profitabilityRoutes from './modules/profitability/profitability.routes';
 import diagRoutes from './api/routes/diag.routes';
+import internalRoutes from './api/routes/internal.routes';
 
 // ✅ FIX STABILITY: Import overload protection and timeout middlewares
 import { overloadProtectionMiddleware } from './middleware/overload-protection.middleware';
@@ -1089,6 +1092,9 @@ app.use('/api/config-audit', configAuditRoutes);
 app.use('/api/listing-lifetime', listingLifetimeRoutes);
 app.use('/api/meeting-room', meetingRoomRoutes);
 app.use('/api/help', helpRoutes);
+app.use('/api/trends', trendsRoutes); // ✅ FASE 1: Detección de Tendencias
+app.use('/api/profitability', profitabilityRoutes); // ✅ FASE 3: Evaluación de Rentabilidad
+app.use('/api/internal', internalRoutes); // ✅ INTERNAL: Endpoint protegido para ejecutar ciclo real de eBay
 app.use('/api/diag', diagRoutes); // ✅ FIX STABILITY: Endpoint de diagnóstico /api/diag/ping
 app.use('/api/debug', debugRoutes); // ✅ FIX STABILITY: Endpoint de debug /api/debug/auth-status-crash-safe
 app.use('/debug', debugRoutes); // Mantener ruta legacy
