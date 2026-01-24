@@ -79,8 +79,9 @@ router.get('/build-info', (req: Request, res: Response) => {
     });
   } catch (error: any) {
     // Even on error, respond 200 to indicate process is alive
+    const env = require('../../config/env').default;
     const safeBoot = env.SAFE_BOOT || false;
-    const port = Number(process.env.PORT || 3000);
+    const port = Number(process.env.PORT || env.PORT || 3000);
     const errorCorrelationId = `build-info-error-${Date.now()}`;
     
     res.setHeader('X-Correlation-Id', errorCorrelationId);
