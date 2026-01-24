@@ -1208,11 +1208,11 @@ export function getScheduledTasksService(): ScheduledTasksService {
     return scheduledTasksServiceInstance;
   }
   
-  // ✅ P0: Check SAFE_BOOT before initializing
-  const safeBoot = process.env.SAFE_BOOT === 'true' || (process.env.SAFE_BOOT !== 'false' && process.env.NODE_ENV === 'production');
+  // ✅ FIX: Check SAFE_BOOT - solo si explícitamente 'true'
+  const safeBoot = process.env.SAFE_BOOT === 'true';
   
   if (safeBoot) {
-    console.log('🛡️  SAFE_BOOT: skipping ScheduledTasksService initialization');
+    console.log('🛡️  SAFE_BOOT=true: skipping ScheduledTasksService initialization');
     // Return a mock service that does nothing
     scheduledTasksServiceInstance = {
       shutdown: async () => {},

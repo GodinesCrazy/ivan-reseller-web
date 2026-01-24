@@ -94,7 +94,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     console.log(`[READY] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'} correlationId=${correlationId}`);
     try {
       const mem = process.memoryUsage();
-      const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
+      const safeBoot = env.SAFE_BOOT || false;
       const port = Number(process.env.PORT || env.PORT || 3000);
       const responseTime = Date.now() - start;
       
@@ -126,7 +126,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       });
       return;
     } catch {
-      const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
+      const safeBoot = env.SAFE_BOOT || false;
       const port = Number(process.env.PORT || env.PORT || 3000);
       
       res.setHeader('X-Response-Time', `${Date.now() - start}ms`);

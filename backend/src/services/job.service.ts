@@ -558,11 +558,11 @@ function initializeWorkers(): void {
     return;
   }
   
-  // ✅ P0: Check SAFE_BOOT before initializing workers
-  const safeBoot = process.env.SAFE_BOOT === 'true' || (process.env.SAFE_BOOT !== 'false' && process.env.NODE_ENV === 'production');
+  // ✅ FIX: Check SAFE_BOOT - solo si explícitamente 'true'
+  const safeBoot = process.env.SAFE_BOOT === 'true';
   
   if (safeBoot) {
-    console.log('🛡️  SAFE_BOOT: skipping workers initialization');
+    console.log('🛡️  SAFE_BOOT=true: skipping workers initialization');
     workersInitialized = true;
     return;
   }

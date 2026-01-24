@@ -31,11 +31,11 @@ function getRedisInstance(): Redis | MockRedis {
     return redisInstance;
   }
   
-  // ✅ P0: Check SAFE_BOOT before connecting
-  const safeBoot = process.env.SAFE_BOOT === 'true' || (process.env.SAFE_BOOT !== 'false' && process.env.NODE_ENV === 'production');
+  // ✅ FIX: Check SAFE_BOOT - solo si explícitamente 'true'
+  const safeBoot = process.env.SAFE_BOOT === 'true';
   
   if (safeBoot) {
-    console.log('🛡️  SAFE_BOOT: skipping Redis connection');
+    console.log('🛡️  SAFE_BOOT=true: skipping Redis connection');
     redisInstance = new MockRedis() as any;
     return redisInstance;
   }
@@ -104,6 +104,7 @@ export const getBullMQRedisConnection = () => {
   });
 };
 
-export const isRedisAvailable = !!REDIS_URL && !(process.env.SAFE_BOOT === 'true' || (process.env.SAFE_BOOT !== 'false' && process.env.NODE_ENV === 'production'));
+// ✅ FIX: Redis disponible si hay URL y SAFE_BOOT no está activo
+export const isRedisAvailable = !!REDIS_URL && process.env.SAFE_BOOT !== 'true';
 
 export default redis;

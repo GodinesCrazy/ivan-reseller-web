@@ -61,7 +61,7 @@ router.get('/build-info', (req: Request, res: Response) => {
   try {
     const buildInfo = getBuildInfo();
     const env = require('../../config/env').default;
-    const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
+    const safeBoot = env.SAFE_BOOT || false;
     const port = Number(process.env.PORT || env.PORT || 3000);
     
     res.setHeader('X-Correlation-Id', correlationId);
@@ -79,7 +79,7 @@ router.get('/build-info', (req: Request, res: Response) => {
     });
   } catch (error: any) {
     // Even on error, respond 200 to indicate process is alive
-    const safeBoot = process.env.SAFE_BOOT === 'true' || (process.env.SAFE_BOOT !== 'false' && process.env.NODE_ENV === 'production');
+    const safeBoot = env.SAFE_BOOT || false;
     const port = Number(process.env.PORT || 3000);
     const errorCorrelationId = `build-info-error-${Date.now()}`;
     

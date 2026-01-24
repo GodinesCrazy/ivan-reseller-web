@@ -16,7 +16,7 @@ import { env } from '../config/env';
  * @returns true if full system should initialize, false if SAFE_BOOT mode
  */
 export function shouldRunFullSystem(): boolean {
-  const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
+  const safeBoot = env.SAFE_BOOT || false;
   return !safeBoot;
 }
 
