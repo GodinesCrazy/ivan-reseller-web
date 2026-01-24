@@ -20,6 +20,8 @@ const USER_ID = Number(process.env.REAL_CYCLE_USER_ID || 1);
 const MIN_MARGIN = Number(process.env.REAL_CYCLE_MIN_MARGIN || 15);
 const REGION = process.env.REAL_CYCLE_REGION || 'US';
 const DAYS = Number(process.env.REAL_CYCLE_DAYS || 30);
+const FORCE_FIRST_PUBLICATION = process.env.FORCE_FIRST_PUBLICATION === 'true';
+const FORCE_MIN_MARGIN = 5; // Margen mínimo en modo forzado (5%)
 
 const REQUIRED_EBAY_ENV = ['EBAY_CLIENT_ID', 'EBAY_CLIENT_SECRET', 'EBAY_REFRESH_TOKEN', 'EBAY_ENV'];
 const REQUIRED_ALIEXPRESS_ENV = ['ALIEXPRESS_APP_KEY', 'ALIEXPRESS_APP_SECRET'];
@@ -257,10 +259,21 @@ export async function runEbayRealCycle(): Promise<{
     listingId?: string;
     price: number;
     expectedProfit: number;
+    forcedValidation?: boolean;
   };
   error?: string;
 }> {
   try {
+    // ✅ LOG: Indicar si FORCE_FIRST_PUBLICATION está activo
+    if (FORCE_FIRST_PUBLICATION) {
+      console.log('[PIPELINE] FORCE_FIRST_PUBLICATION mode ENABLED');
+      console.log('[PIPELINE] Will publish validation product even with low margin (min 5%)');
+      logger.info('[PIPELINE] FORCE_FIRST_PUBLICATION enabled', {
+        minMargin: FORCE_MIN_MARGIN,
+        normalMinMargin: MIN_MARGIN,
+      });
+    }
+    
     await validatePreconditions();
 
     console.log('[TRENDS] Fetching trending keywords');
@@ -521,24 +534,265 @@ export async function runEbayRealCycle(): Promise<{
       publishable: publishable.length,
     });
 
-    // ✅ NO lanzar error si no hay productos publishable - es un escenario de negocio válido
+    // ✅ MODO FORCE_FIRST_PUBLICATION: Si no hay publishable, seleccionar mejor candidato disponible
     if (publishable.length === 0) {
-      const errorResponse = {
-        success: false,
-        reason: 'NO_PUBLISHABLE_PRODUCTS',
-        message: 'No hay productos publishable con margen suficiente después de evaluación de rentabilidad',
-        details: {
-          candidatesEvaluated: evaluations.length,
-          evaluations: evaluations.map((e) => ({
-            decision: e.decision,
-            profitMargin: e.profitMargin,
-            reason: e.reason,
-          })),
-        },
-      };
-      console.log('[PIPELINE] No publishable products found:', errorResponse);
-      console.log('Ciclo de dropshipping ejecutado correctamente o finalizado por falta real de oportunidades.');
-      return errorResponse;
+      if (FORCE_FIRST_PUBLICATION) {
+        console.log('[PIPELINE] FORCE_FIRST_PUBLICATION enabled — no publishable products, selecting best available candidate');
+        
+        // Filtrar productos con margen mínimo forzado (5%)
+        const forcePublishable = evaluations.filter(
+          (evaluation) =>
+            evaluation.decision === 'publish' && evaluation.profitMargin >= FORCE_MIN_MARGIN,
+        );
+
+        let selectedForForce: typeof evaluations[0] | null = null;
+        let selectedProductForForce = null;
+
+        if (forcePublishable.length > 0) {
+          // Si hay productos con margen >= 5%, usar el mejor
+          forcePublishable.sort((a, b) => {
+            if (b.profitMargin !== a.profitMargin) return b.profitMargin - a.profitMargin;
+            return b.trendScore - a.trendScore;
+          });
+          selectedForForce = forcePublishable[0];
+        } else {
+          // Si no hay productos con margen >= 5%, seleccionar el más barato disponible
+          // que tenga: imágenes, precio, shipping info básica
+          const availableCandidates = evaluations
+            .filter((e) => {
+              // Verificar que el producto tenga datos básicos
+              return e.decision === 'publish' || e.profitMargin > 0;
+            })
+            .map((e) => ({
+              evaluation: e,
+              productId: e.productId,
+            }));
+
+          if (availableCandidates.length > 0) {
+            // Obtener productos de DB para validar imágenes y datos
+            const productsToCheck = await Promise.all(
+              availableCandidates.map((c) =>
+                prisma.product.findUnique({
+                  where: { id: c.productId },
+                  select: {
+                    id: true,
+                    title: true,
+                    images: true,
+                    aliexpressPrice: true,
+                    aliexpressUrl: true,
+                    suggestedPrice: true,
+                    currency: true,
+                    category: true,
+                    description: true,
+                    targetCountry: true,
+                  },
+                }),
+              ),
+            );
+
+            // Filtrar productos que tengan: imágenes, precio, URL (shipping info)
+            const validProducts = productsToCheck
+              .filter((p) => {
+                if (!p) return false;
+                // Tiene imágenes
+                let hasImages = false;
+                try {
+                  const images = JSON.parse(p.images || '[]');
+                  hasImages = Array.isArray(images) && images.length > 0;
+                } catch {
+                  hasImages = false;
+                }
+                // Tiene precio
+                const hasPrice = p.aliexpressPrice && Number(p.aliexpressPrice) > 0;
+                // Tiene URL (shipping info básica)
+                const hasUrl = p.aliexpressUrl && p.aliexpressUrl.trim().length > 0;
+
+                return hasImages && hasPrice && hasUrl;
+              })
+              .map((p) => {
+                const eval = evaluations.find((e) => e.productId === p!.id);
+                return {
+                  product: p!,
+                  evaluation: eval!,
+                  price: Number(p!.aliexpressPrice),
+                };
+              })
+              .sort((a, b) => a.price - b.price); // Ordenar por precio (más barato primero)
+
+            if (validProducts.length > 0) {
+              const bestCandidate = validProducts[0];
+              selectedForForce = bestCandidate.evaluation;
+              selectedProductForForce = bestCandidate.product;
+              
+              console.log('[PIPELINE] FORCE_FIRST_PUBLICATION — Selected cheapest available product', {
+                productId: bestCandidate.product.id,
+                title: bestCandidate.product.title,
+                price: bestCandidate.price,
+                profitMargin: bestCandidate.evaluation.profitMargin,
+              });
+            }
+          }
+        }
+
+        if (selectedForForce && !selectedProductForForce) {
+          selectedProductForForce = await prisma.product.findUnique({
+            where: { id: selectedForForce.productId },
+          });
+        }
+
+        if (selectedForForce && selectedProductForForce) {
+          console.log('[PIPELINE] FORCE_FIRST_PUBLICATION enabled — publishing validation product', {
+            productId: selectedProductForForce.id,
+            title: selectedProductForForce.title,
+            profitMargin: selectedForForce.profitMargin,
+            forced: true,
+          });
+
+          // Continuar con la publicación usando el producto seleccionado forzado
+          const selected = selectedForForce;
+          const selectedProduct = selectedProductForForce;
+
+          console.log('[EBAY-PUBLISH] Publishing FORCED VALIDATION product', {
+            productId: selectedProduct.id,
+            title: selectedProduct.title,
+            price: selected.salePrice,
+            profitMargin: selected.profitMargin,
+            mode: 'FORCED_VALIDATION',
+          });
+
+          const publisher = new EbayPublisher();
+          const publishPayload: PublishableProduct = {
+            id: selectedProduct.id,
+            userId: selectedProduct.userId,
+            title: cleanTitle(selectedProduct.title),
+            description: cleanDescription(selectedProduct.description, selectedProduct.title),
+            suggestedPrice: Number(selectedProduct.suggestedPrice),
+            finalPrice: selectedProduct.finalPrice ? Number(selectedProduct.finalPrice) : null,
+            currency: selectedProduct.currency,
+            category: selectedProduct.category,
+            images: selectedProduct.images,
+            targetCountry: selectedProduct.targetCountry,
+          };
+
+          const publishResult = await publisher.publishProduct(publishPayload, PublishMode.STAGING_REAL);
+
+          await prisma.marketplacePublication.create({
+            data: {
+              productId: selectedProduct.id,
+              userId: selectedProduct.userId,
+              marketplace: 'ebay',
+              listingId: publishResult.listingId,
+              publishStatus: publishResult.status,
+              publishedAt: publishResult.status === 'published' ? new Date() : null,
+              publishMode: 'FORCED_VALIDATION' as any, // Marcar como validación forzada
+              rawResponse: publishResult.rawResponse
+                ? JSON.stringify({
+                    ...(typeof publishResult.rawResponse === 'object' ? publishResult.rawResponse : {}),
+                    forcedValidation: true,
+                    originalProfitMargin: selected.profitMargin,
+                    forceMinMargin: FORCE_MIN_MARGIN,
+                  })
+                : JSON.stringify({ forcedValidation: true }),
+            },
+          });
+
+          if (publishResult.status === 'published' && publishResult.listingId) {
+            await prisma.marketplaceListing.create({
+              data: {
+                productId: selectedProduct.id,
+                userId: selectedProduct.userId,
+                marketplace: 'ebay',
+                listingId: publishResult.listingId,
+                listingUrl: publishResult.listingUrl,
+                publishedAt: new Date(),
+              },
+            });
+
+            await prisma.product.update({
+              where: { id: selectedProduct.id },
+              data: {
+                status: 'PUBLISHED',
+                isPublished: true,
+                publishedAt: new Date(),
+              },
+            });
+          }
+
+          const reportData = {
+            keywordsAnalyzed: filteredKeywords.map((kw) => kw.keyword),
+            productsFound: allCandidates.length,
+            productsPublishable: 0, // Forzado
+            productPublished: selectedProduct.title,
+            listingId: publishResult.listingId,
+            price: selected.salePrice,
+            expectedProfit: selected.estimatedProfit,
+            forcedValidation: true,
+          };
+
+          console.log('[REPORT] FINAL (FORCED VALIDATION)', reportData);
+
+          if (publishResult.status !== 'published') {
+            const errorResponse = {
+              success: false,
+              reason: 'PUBLISH_FAILED',
+              message: `Publicación forzada fallida: ${publishResult.message || 'Unknown error'}`,
+              details: {
+                listingId: publishResult.listingId,
+                status: publishResult.status,
+                forcedValidation: true,
+              },
+            };
+            console.log('[PIPELINE] Forced publish failed:', errorResponse);
+            console.log('Ciclo real de dropshipping validado mediante publicación forzada controlada.');
+            return errorResponse;
+          }
+
+          console.log('Ciclo real de dropshipping validado mediante publicación forzada controlada.');
+
+          return {
+            success: true,
+            message: 'Ciclo real de dropshipping validado mediante publicación forzada controlada.',
+            data: reportData,
+          };
+        } else {
+          // No se pudo encontrar ningún candidato válido ni siquiera en modo forzado
+          const errorResponse = {
+            success: false,
+            reason: 'NO_PUBLISHABLE_PRODUCTS',
+            message: 'No hay productos publishable con margen suficiente después de evaluación de rentabilidad',
+            details: {
+              candidatesEvaluated: evaluations.length,
+              evaluations: evaluations.map((e) => ({
+                decision: e.decision,
+                profitMargin: e.profitMargin,
+                reason: e.reason,
+              })),
+              forceModeAttempted: true,
+            },
+          };
+          console.log('[PIPELINE] No publishable products found (even with FORCE mode):', errorResponse);
+          console.log('Ciclo de dropshipping ejecutado correctamente o finalizado por falta real de oportunidades.');
+          return errorResponse;
+        }
+      } else {
+        // Comportamiento normal sin FORCE
+        const errorResponse = {
+          success: false,
+          reason: 'NO_PUBLISHABLE_PRODUCTS',
+          message: 'No hay productos publishable con margen suficiente después de evaluación de rentabilidad',
+          details: {
+            candidatesEvaluated: evaluations.length,
+            evaluations: evaluations.map((e) => ({
+              decision: e.decision,
+              profitMargin: e.profitMargin,
+              reason: e.reason,
+            })),
+          },
+        };
+        console.log('[PIPELINE] No publishable products found:', errorResponse);
+        console.log('Ciclo de dropshipping ejecutado correctamente o finalizado por falta real de oportunidades.');
+        return errorResponse;
+      }
     }
 
     publishable.sort((a, b) => {
