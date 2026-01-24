@@ -610,10 +610,10 @@ export async function runEbayRealCycle(): Promise<{
                 return hasImages && hasPrice && hasUrl;
               })
               .map((p) => {
-                const eval = evaluations.find((e) => e.productId === p!.id);
+                const evaluationResult = evaluations.find((e) => e.productId === p!.id);
                 return {
                   product: p!,
-                  evaluation: eval!,
+                  evaluation: evaluationResult!,
                   price: Number(p!.aliexpressPrice),
                 };
               })
@@ -940,16 +940,6 @@ export async function runEbayRealCycle(): Promise<{
   }
 }
 
-if (require.main === module) {
-  runEbayRealCycle()
-    .catch((error) => {
-      logger.error('[REAL-CYCLE] Error', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      console.error('ERROR:', error instanceof Error ? error.message : String(error));
-      process.exit(1);
-    })
-    .finally(async () => {
-      await prisma.$disconnect();
-    });
-}
+// ✅ REMOVED: Code execution on import removed for production safety
+// This script is now imported-only, execution happens via internal.routes.ts
+// No code runs when this module is imported
