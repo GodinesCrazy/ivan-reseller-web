@@ -12,6 +12,18 @@ import env from '../../config/env';
  * GET /api/aliexpress/callback?code=xxx&state=xxx
  */
 export const handleOAuthCallback = async (req: Request, res: Response) => {
+  // ✅ LOG OBLIGATORIO: Entrada al callback
+  console.log('[ALIEXPRESS-OAUTH] ════════════════════════════════════════════════════════');
+  console.log('[ALIEXPRESS-OAUTH] Callback received');
+  console.log('[ALIEXPRESS-OAUTH] Method:', req.method);
+  console.log('[ALIEXPRESS-OAUTH] Path:', req.path);
+  console.log('[ALIEXPRESS-OAUTH] URL:', req.url);
+  console.log('[ALIEXPRESS-OAUTH] Query params:', Object.keys(req.query));
+  console.log('[ALIEXPRESS-OAUTH] Has code:', !!req.query.code);
+  console.log('[ALIEXPRESS-OAUTH] Has state:', !!req.query.state);
+  console.log('[ALIEXPRESS-OAUTH] Timestamp:', new Date().toISOString());
+  console.log('[ALIEXPRESS-OAUTH] ════════════════════════════════════════════════════════');
+  
   try {
     const { code, state } = req.query;
 
@@ -80,6 +92,14 @@ export const handleOAuthCallback = async (req: Request, res: Response) => {
  * GET /api/aliexpress/auth
  */
 export const initiateOAuth = async (req: Request, res: Response) => {
+  // ✅ LOG OBLIGATORIO: Entrada al endpoint
+  console.log('[ALIEXPRESS-AUTH] OAuth initiation endpoint hit');
+  console.log('[ALIEXPRESS-OAUTH] Auth route hit');
+  console.log('[ALIEXPRESS-OAUTH] Method:', req.method);
+  console.log('[ALIEXPRESS-OAUTH] Path:', req.path);
+  console.log('[ALIEXPRESS-OAUTH] URL:', req.url);
+  console.log('[ALIEXPRESS-OAUTH] Timestamp:', new Date().toISOString());
+  
   // Generate correlation ID for debugging
   const correlationId = req.headers['x-correlation-id'] as string || 
                        `oauth-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -195,6 +215,12 @@ export const initiateOAuth = async (req: Request, res: Response) => {
       authUrlSanitized: sanitizedUrl,
       envSource: env.ALIEXPRESS_APP_KEY ? 'env.ts' : 'process.env',
     });
+
+    // ✅ LOG OBLIGATORIO: Antes de redirect
+    console.log('[ALIEXPRESS-OAUTH] Redirecting to AliExpress');
+    console.log('[ALIEXPRESS-OAUTH] Redirect URL:', sanitizedUrl);
+    console.log('[ALIEXPRESS-OAUTH] Status: 302 (redirect)');
+    console.log('[ALIEXPRESS-OAUTH] ════════════════════════════════════════════════════════');
 
     // Redirect to AliExpress OAuth (302)
     return res.redirect(302, authUrl.toString());

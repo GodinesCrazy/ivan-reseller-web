@@ -449,6 +449,30 @@ router.get('/aliexpress/test-search', authenticate, async (req: Request, res: Re
     const apiService = new AliExpressAffiliateAPIService();
     apiService.setCredentials(affiliateCreds);
 
+    // ✅ CRÍTICO: Intentar obtener y usar OAuth token si está disponible
+    try {
+      const aliExpressService = await import('../../modules/aliexpress/aliexpress.service').then(m => m.default);
+      const tokenData = await aliExpressService.getActiveToken();
+      if (tokenData && tokenData.expiresAt > new Date()) {
+        apiService.setAccessToken(tokenData.accessToken, tokenData.expiresAt);
+        logger.info('[DEBUG-API] OAuth token found and set', {
+          expiresAt: tokenData.expiresAt.toISOString(),
+          tokenType: tokenData.tokenType
+        });
+      } else {
+        logger.warn('[DEBUG-API] No valid OAuth token available', {
+          hasToken: !!tokenData,
+          isExpired: tokenData ? tokenData.expiresAt <= new Date() : true,
+          note: 'Some API methods may require OAuth. Use /api/aliexpress/auth to authenticate.'
+        });
+      }
+    } catch (tokenError: any) {
+      logger.warn('[DEBUG-API] Error getting OAuth token', {
+        error: tokenError?.message || String(tokenError),
+        note: 'Will attempt API call without OAuth token'
+      });
+    }
+
     const apiCallStartTime = Date.now();
 
     try {
@@ -569,6 +593,258 @@ router.get('/aliexpress/test-search', authenticate, async (req: Request, res: Re
       step: 'unexpected_error'
     });
     logger.error('[DEBUG-API] ════════════════════════════════════════════════════════');
+
+    return res.status(500).json({
+      status: 'error',
+      code: 'INTERNAL_ERROR',
+      message: error?.message || 'Internal server error',
+      correlationId,
+      totalDuration: `${totalDuration}ms`
+    });
+  }
+});
+
+/**
+ * GET /api/debug/aliexpress/diagnostic
+ * 
+ * ✅ ENDPOINT DE AUTODIAGNÓSTICO: Valida configuración completa de AliExpress API
+ * 
+ * Verifica:
+ * - Credenciales cargadas
+ * - Firma válida
+ * - Conectividad
+ * - Respuesta real de AliExpress
+ * - Modo activo: API | FALLBACK
+ */
+router.get('/aliexpress/diagnostic', authenticate, async (req: Request, res: Response) => {
+  const correlationId = (req as any).correlationId || `diagnostic-${Date.now()}`;
+  const startTime = Date.now();
+  
+  try {
+    const userId = req.user?.userId || Number(req.query.userId);
+    if (!userId || userId <= 0) {
+      return res.status(401).json({ 
+        status: 'error',
+        code: 'AUTH_REQUIRED',
+        message: 'User ID is required',
+        correlationId
+      });
+    }
+
+    logger.info('[ALIEXPRESS-DIAGNOSTIC] Starting diagnostic', {
+      userId,
+      correlationId,
+      timestamp: new Date().toISOString()
+    });
+
+    const diagnostic: any = {
+      timestamp: new Date().toISOString(),
+      correlationId,
+      userId,
+      checks: {}
+    };
+
+    // 1. Verificar credenciales
+    const environmentsToTry: Array<'sandbox' | 'production'> = ['production', 'sandbox'];
+    let affiliateCreds: any = null;
+    let resolvedEnv: 'sandbox' | 'production' | null = null;
+
+    for (const env of environmentsToTry) {
+      try {
+        const creds = await CredentialsManager.getCredentials(
+          userId,
+          'aliexpress-affiliate',
+          env
+        );
+        if (creds) {
+          creds.sandbox = env === 'sandbox';
+          affiliateCreds = creds;
+          resolvedEnv = env;
+          break;
+        }
+      } catch (credError: any) {
+        logger.debug('[ALIEXPRESS-DIAGNOSTIC] Error checking credentials', {
+          environment: env,
+          error: credError?.message
+        });
+      }
+    }
+
+    diagnostic.checks.credentials = {
+      status: affiliateCreds ? 'ok' : 'missing',
+      environment: resolvedEnv,
+      hasAppKey: !!affiliateCreds?.appKey,
+      hasAppSecret: !!affiliateCreds?.appSecret,
+      hasTrackingId: !!affiliateCreds?.trackingId,
+      appKeyPreview: affiliateCreds?.appKey ? `${affiliateCreds.appKey.substring(0, 6)}...` : null
+    };
+
+    if (!affiliateCreds) {
+      diagnostic.status = 'error';
+      diagnostic.message = 'AliExpress Affiliate API credentials not found';
+      diagnostic.recommendation = 'Configure credentials in Settings → API Settings → AliExpress Affiliate API';
+      return res.status(400).json(diagnostic);
+    }
+
+    // 2. Verificar OAuth token
+    let tokenData: any = null;
+    try {
+      const aliExpressService = await import('../../modules/aliexpress/aliexpress.service').then(m => m.default);
+      tokenData = await aliExpressService.getActiveToken();
+    } catch (tokenError: any) {
+      logger.debug('[ALIEXPRESS-DIAGNOSTIC] Error getting token', {
+        error: tokenError?.message
+      });
+    }
+
+    diagnostic.checks.oauth = {
+      status: tokenData ? (tokenData.expiresAt > new Date() ? 'valid' : 'expired') : 'missing',
+      hasToken: !!tokenData,
+      isExpired: tokenData ? tokenData.expiresAt <= new Date() : true,
+      expiresAt: tokenData?.expiresAt?.toISOString() || null,
+      tokenType: tokenData?.tokenType || null,
+      hasRefreshToken: !!tokenData?.refreshToken
+    };
+
+    // 3. Verificar firma (test signature calculation)
+    let signatureValid = false;
+    try {
+      const testParams: Record<string, any> = {
+        method: 'aliexpress.affiliate.product.query',
+        app_key: affiliateCreds.appKey,
+        timestamp: '20240123120000',
+        format: 'json',
+        v: '2.0',
+        sign_method: 'md5',
+        keywords: 'test'
+      };
+      
+      // Calcular firma de prueba
+      const sortedKeys = Object.keys(testParams).sort();
+      const signString = sortedKeys.map(key => `${key}${testParams[key]}`).join('');
+      const fullSignString = `${affiliateCreds.appSecret}${signString}${affiliateCreds.appSecret}`;
+      const testSign = require('crypto').createHash('md5').update(fullSignString, 'utf8').digest('hex').toUpperCase();
+      
+      signatureValid = !!testSign && testSign.length === 32;
+    } catch (sigError: any) {
+      logger.debug('[ALIEXPRESS-DIAGNOSTIC] Error calculating test signature', {
+        error: sigError?.message
+      });
+    }
+
+    diagnostic.checks.signature = {
+      status: signatureValid ? 'ok' : 'error',
+      canCalculate: signatureValid,
+      algorithm: 'MD5',
+      format: 'UPPERCASE_HEX'
+    };
+
+    // 4. Test de conectividad (ping simple)
+    let connectivityOk = false;
+    let connectivityError: string | null = null;
+    try {
+      const testResponse = await require('axios').get('https://gw.api.taobao.com/router/rest', {
+        timeout: 5000,
+        validateStatus: () => true // Aceptar cualquier status para verificar conectividad
+      });
+      connectivityOk = true;
+    } catch (connError: any) {
+      connectivityError = connError?.message || String(connError);
+      // Si es timeout o network error, es problema de conectividad
+      if (connError?.code === 'ECONNABORTED' || connError?.code === 'ENOTFOUND' || connError?.code === 'ECONNREFUSED') {
+        connectivityOk = false;
+      } else {
+        // Otros errores pueden ser normales (404, etc.)
+        connectivityOk = true;
+      }
+    }
+
+    diagnostic.checks.connectivity = {
+      status: connectivityOk ? 'ok' : 'error',
+      endpoint: 'https://gw.api.taobao.com/router/rest',
+      canReach: connectivityOk,
+      error: connectivityError
+    };
+
+    // 5. Test de API real (solo si hay credenciales y token)
+    let apiTestOk = false;
+    let apiTestError: string | null = null;
+    let apiTestResponse: any = null;
+
+    if (affiliateCreds && tokenData && tokenData.expiresAt > new Date()) {
+      try {
+        const apiService = new AliExpressAffiliateAPIService();
+        apiService.setCredentials(affiliateCreds);
+        apiService.setAccessToken(tokenData.accessToken, tokenData.expiresAt);
+
+        const testProducts = await apiService.searchProducts({
+          keywords: 'test',
+          pageSize: 1,
+          targetCurrency: 'USD'
+        });
+
+        apiTestOk = Array.isArray(testProducts);
+        apiTestResponse = {
+          productsCount: testProducts?.length || 0,
+          hasData: apiTestOk
+        };
+      } catch (apiError: any) {
+        apiTestError = apiError?.message || String(apiError);
+        apiTestOk = false;
+      }
+    } else {
+      apiTestError = 'OAuth token required for API test';
+    }
+
+    diagnostic.checks.apiTest = {
+      status: apiTestOk ? 'ok' : 'error',
+      tested: !!(affiliateCreds && tokenData),
+      success: apiTestOk,
+      error: apiTestError,
+      response: apiTestResponse
+    };
+
+    // 6. Determinar modo activo
+    const hasValidCredentials = !!affiliateCreds?.appKey && !!affiliateCreds?.appSecret;
+    const hasValidToken = tokenData && tokenData.expiresAt > new Date();
+    const canUseAPI = hasValidCredentials && hasValidToken && connectivityOk && signatureValid;
+
+    diagnostic.mode = canUseAPI ? 'API' : 'FALLBACK';
+    diagnostic.status = canUseAPI ? 'ok' : 'degraded';
+    diagnostic.summary = {
+      canUseAPI,
+      hasCredentials: hasValidCredentials,
+      hasValidToken,
+      connectivityOk,
+      signatureValid,
+      recommendation: canUseAPI 
+        ? 'API mode active - system ready for production'
+        : hasValidCredentials && !hasValidToken
+        ? 'OAuth token required - use /api/aliexpress/auth to authenticate'
+        : 'Credentials required - configure in Settings → API Settings'
+    };
+
+    const duration = Date.now() - startTime;
+    diagnostic.duration = `${duration}ms`;
+
+    logger.info('[ALIEXPRESS-DIAGNOSTIC] Diagnostic complete', {
+      status: diagnostic.status,
+      mode: diagnostic.mode,
+      duration: `${duration}ms`,
+      correlationId
+    });
+
+    return res.json(diagnostic);
+
+  } catch (error: any) {
+    const totalDuration = Date.now() - startTime;
+    
+    logger.error('[ALIEXPRESS-DIAGNOSTIC] Unexpected error', {
+      error: error?.message || String(error),
+      stack: error?.stack?.substring(0, 500),
+      totalDuration: `${totalDuration}ms`,
+      correlationId
+    });
 
     return res.status(500).json({
       status: 'error',

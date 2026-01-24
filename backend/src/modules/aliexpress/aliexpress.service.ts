@@ -303,13 +303,17 @@ class AliExpressService {
         trackingId,
       });
 
+      // ✅ CORREGIDO: Formato de timestamp correcto para AliExpress TOP API
+      const now = new Date();
+      const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+
       // Construir parámetros para la API de AliExpress
       const apiParams: any = {
         app_key: this.appKey,
         access_token: accessToken,
         method: 'aliexpress.affiliate.link.generate',
-        sign_method: 'sha256',
-        timestamp: new Date().toISOString(),
+        sign_method: 'md5', // ✅ CORREGIDO: Usar MD5 por defecto
+        timestamp, // ✅ CORREGIDO: Formato YYYYMMDDHHmmss
         format: 'json',
         v: '2.0',
         tracking_id: trackingId,
@@ -320,14 +324,23 @@ class AliExpressService {
         apiParams.promotion_name = params.promotionName;
       }
 
-      // Generar signature
-      const signature = this.generateSignature(apiParams);
+      // ✅ CORREGIDO: Pasar sign_method al método de firma
+      const signature = this.generateSignature(apiParams, apiParams.sign_method);
       apiParams.sign = signature;
 
+      // ✅ CORREGIDO: Usar application/x-www-form-urlencoded como en el otro servicio
+      const formData = new URLSearchParams();
+      Object.keys(apiParams).forEach(key => {
+        const value = apiParams[key];
+        if (value !== undefined && value !== null) {
+          formData.append(key, String(value));
+        }
+      });
+
       // Llamar a la API
-      const response = await axios.post(this.apiBaseUrl, apiParams, {
+      const response = await axios.post(this.apiBaseUrl, formData.toString(), {
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
       });
 
@@ -371,9 +384,11 @@ class AliExpressService {
 
   /**
    * Genera la firma (signature) requerida por AliExpress API
+   * ✅ CORREGIDO: Formato correcto según documentación AliExpress TOP API
+   * Formato: app_secret + sorted_params + app_secret
    */
-  private generateSignature(params: any): string {
-    // Ordenar parámetros alfabéticamente
+  private generateSignature(params: any, signMethod: 'md5' | 'sha256' = 'md5'): string {
+    // Ordenar parámetros alfabéticamente (excluir 'sign')
     const sortedKeys = Object.keys(params).sort();
     const sortedParams: string[] = [];
 
@@ -383,11 +398,16 @@ class AliExpressService {
       }
     });
 
-    // Agregar app_secret al final
-    const signString = sortedParams.join('') + this.appSecret;
+    // ✅ CORREGIDO: Formato correcto según AliExpress TOP API
+    // app_secret + sorted_params + app_secret
+    const signString = this.appSecret + sortedParams.join('') + this.appSecret;
 
-    // Generar hash SHA256
-    return crypto.createHash('sha256').update(signString).digest('hex').toUpperCase();
+    // Generar hash según sign_method
+    if (signMethod === 'sha256') {
+      return crypto.createHash('sha256').update(signString, 'utf8').digest('hex').toUpperCase();
+    } else {
+      return crypto.createHash('md5').update(signString, 'utf8').digest('hex').toUpperCase();
+    }
   }
 
   /**
@@ -401,12 +421,16 @@ class AliExpressService {
     try {
       const accessToken = await this.getValidToken();
 
+      // ✅ CORREGIDO: Formato de timestamp correcto para AliExpress TOP API
+      const now = new Date();
+      const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+
       const apiParams: any = {
         app_key: this.appKey,
         access_token: accessToken,
         method: 'aliexpress.affiliate.product.query',
-        sign_method: 'sha256',
-        timestamp: new Date().toISOString(),
+        sign_method: 'md5', // ✅ CORREGIDO: Usar MD5 por defecto (más compatible)
+        timestamp, // ✅ CORREGIDO: Formato YYYYMMDDHHmmss (no ISO)
         format: 'json',
         v: '2.0',
         keywords: params.keywords,
@@ -427,10 +451,24 @@ class AliExpressService {
         apiParams.sort = params.sort;
       }
 
-      const signature = this.generateSignature(apiParams);
+      // ✅ CORREGIDO: Pasar sign_method al método de firma
+      const signature = this.generateSignature(apiParams, apiParams.sign_method);
       apiParams.sign = signature;
 
-      const response = await axios.post(this.apiBaseUrl, apiParams);
+      // ✅ CORREGIDO: Usar application/x-www-form-urlencoded
+      const formData = new URLSearchParams();
+      Object.keys(apiParams).forEach(key => {
+        const value = apiParams[key];
+        if (value !== undefined && value !== null) {
+          formData.append(key, String(value));
+        }
+      });
+
+      const response = await axios.post(this.apiBaseUrl, formData.toString(), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
 
       if (response.data.error_response) {
         throw new Error(response.data.error_response.msg || 'Error de AliExpress API');

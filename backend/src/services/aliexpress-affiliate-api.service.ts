@@ -83,6 +83,8 @@ export interface ProductDetailParams {
 export class AliExpressAffiliateAPIService {
   private client: AxiosInstance;
   private credentials: AliExpressAffiliateCredentials | null = null;
+  private accessToken: string | null = null;
+  private tokenExpiresAt: Date | null = null;
 
   // Endpoints base de la API
   private readonly ENDPOINT_LEGACY = 'https://gw.api.taobao.com/router/rest';
@@ -119,13 +121,68 @@ export class AliExpressAffiliateAPIService {
     // Sin embargo, podríamos intentar el endpoint nuevo si el legacy falla
     this.endpoint = this.ENDPOINT_LEGACY;
     
+    // ✅ CRÍTICO: Si las credenciales incluyen accessToken, usarlo
+    if (credentials.accessToken) {
+      this.accessToken = credentials.accessToken;
+      if (credentials.accessTokenExpiresAt) {
+        this.tokenExpiresAt = new Date(credentials.accessTokenExpiresAt);
+      }
+    }
+    
     const logger = require('../config/logger').default;
     logger.info('[ALIEXPRESS-AFFILIATE-API] Credentials set', {
       endpoint: this.ENDPOINT_LEGACY,
       sandbox: credentials.sandbox,
       appKey: credentials.appKey ? `${credentials.appKey.substring(0, 6)}...` : 'missing',
+      hasAccessToken: !!this.accessToken,
+      tokenExpiresAt: this.tokenExpiresAt?.toISOString() || 'N/A',
       note: 'Using legacy endpoint (more stable). Both sandbox and production use the same endpoint in AliExpress TOP API.'
     });
+  }
+
+  /**
+   * ✅ NUEVO: Establecer access token OAuth
+   */
+  setAccessToken(accessToken: string, expiresAt?: Date): void {
+    this.accessToken = accessToken;
+    this.tokenExpiresAt = expiresAt || null;
+    logger.info('[ALIEXPRESS-AUTH] Access token set', {
+      hasToken: !!accessToken,
+      expiresAt: expiresAt?.toISOString() || 'N/A',
+      tokenPreview: accessToken ? `${accessToken.substring(0, 10)}...` : 'N/A'
+    });
+  }
+
+  /**
+   * ✅ NUEVO: Obtener access token válido (verificar expiración)
+   */
+  async getAccessToken(): Promise<string | null> {
+    // Si hay token y no está expirado, retornarlo
+    if (this.accessToken && this.tokenExpiresAt && this.tokenExpiresAt > new Date()) {
+      return this.accessToken;
+    }
+    
+    // Si está expirado o no hay token, intentar obtenerlo desde el servicio principal
+    if (this.credentials) {
+      try {
+        const aliExpressService = await import('../modules/aliexpress/aliexpress.service').then(m => m.default);
+        const tokenData = await aliExpressService.getActiveToken();
+        if (tokenData && tokenData.expiresAt > new Date()) {
+          this.accessToken = tokenData.accessToken;
+          this.tokenExpiresAt = tokenData.expiresAt;
+          logger.info('[ALIEXPRESS-AUTH] Token refreshed from service', {
+            expiresAt: tokenData.expiresAt.toISOString()
+          });
+          return this.accessToken;
+        }
+      } catch (error: any) {
+        logger.warn('[ALIEXPRESS-AUTH] Failed to get token from service', {
+          error: error.message
+        });
+      }
+    }
+    
+    return this.accessToken;
   }
 
   /**
@@ -156,12 +213,27 @@ export class AliExpressAffiliateAPIService {
       throw new Error('AliExpress Affiliate API credentials not configured');
     }
 
+    // ✅ CRÍTICO: Obtener access token OAuth si está disponible
+    const accessToken = await this.getAccessToken();
+    if (accessToken) {
+      params.access_token = accessToken;
+      logger.info('[ALIEXPRESS-AUTH] Using OAuth access token', {
+        tokenPreview: `${accessToken.substring(0, 10)}...`,
+        method
+      });
+    } else {
+      logger.warn('[ALIEXPRESS-AUTH] No OAuth token available - using app_key only', {
+        method,
+        note: 'Some API methods may require OAuth token. Use /api/aliexpress/auth to authenticate.'
+      });
+    }
+
     // Parámetros comunes para todas las peticiones
     // ✅ MEJORADO: Formato de timestamp correcto para AliExpress TOP API
     const now = new Date();
     const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
     
-    const commonParams = {
+    const commonParams: Record<string, any> = {
       method,
       app_key: this.credentials.appKey,
       timestamp, // Formato: YYYYMMDDHHmmss
@@ -170,10 +242,15 @@ export class AliExpressAffiliateAPIService {
       sign_method: 'md5',
     };
 
+    // ✅ CRÍTICO: Agregar access_token a commonParams si existe (debe estar en la firma)
+    if (accessToken) {
+      commonParams.access_token = accessToken;
+    }
+
     // Combinar parámetros comunes con específicos
     const allParams: Record<string, any> = { ...commonParams, ...params };
 
-    // Calcular firma
+    // ✅ CRÍTICO: Calcular firma ANTES de agregar sign (sign no debe estar en el cálculo)
     const sign = this.calculateSign(allParams, this.credentials.appSecret, commonParams.sign_method as 'md5' | 'sha256');
     allParams.sign = sign;
 

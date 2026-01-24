@@ -1043,7 +1043,16 @@ app.use('/api/marketplace-oauth', marketplaceOauthRoutes);
 // ✅ AliExpress callback directo (según documentación: https://ivanreseller.com/aliexpress/callback)
 app.use('/aliexpress', marketplaceOauthRoutes);
 // ✅ AliExpress Affiliate API routes
+// ✅ CRÍTICO: Logging para confirmar que el router se monta correctamente
+console.log('[APP] Mounting AliExpress routes at /api/aliexpress');
+console.log('[APP] Router loaded:', !!aliExpressRoutes);
+if (aliExpressRoutes) {
+  console.log('[APP] Router type:', typeof aliExpressRoutes);
+  console.log('[APP] Router has stack:', !!(aliExpressRoutes as any).stack);
+}
 app.use('/api/aliexpress', aliExpressRoutes);
+console.log('[APP] ✅ AliExpress routes mounted at /api/aliexpress');
+console.log('[BOOT] AliExpress routes mounted at /api/aliexpress');
 app.use('/api/amazon', amazonRoutes);
 app.use('/api/jobs', jobsRoutes);
 app.use('/api/reports', reportsRoutes);

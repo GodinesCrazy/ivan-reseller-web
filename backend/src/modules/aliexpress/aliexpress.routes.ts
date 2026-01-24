@@ -14,7 +14,19 @@ import {
   getTokenStatus,
 } from './aliexpress.controller';
 
+// ✅ LOG OBLIGATORIO: Verificar que los controllers se importan correctamente
+console.log('[ALIEXPRESS-ROUTES] ════════════════════════════════════════════════════════');
+console.log('[ALIEXPRESS-ROUTES] Importing controllers...');
+console.log('[ALIEXPRESS-ROUTES] handleOAuthCallback:', typeof handleOAuthCallback);
+console.log('[ALIEXPRESS-ROUTES] initiateOAuth:', typeof initiateOAuth);
+console.log('[ALIEXPRESS-ROUTES] ════════════════════════════════════════════════════════');
+
 const router = Router();
+
+// ✅ LOG OBLIGATORIO: Confirmar que el router se crea
+console.log('[ALIEXPRESS-ROUTES] Router created');
+console.log('[ALIEXPRESS-ROUTES] Router type:', typeof router);
+console.log('[ALIEXPRESS-ROUTES] Router stack length:', (router as any).stack?.length || 0);
 
 /**
  * @swagger
@@ -44,6 +56,7 @@ const router = Router();
  *         description: Error del servidor
  */
 router.get('/callback', handleOAuthCallback);
+console.log('[ALIEXPRESS-ROUTES] ✅ Route registered: GET /callback');
 
 /**
  * @swagger
@@ -70,6 +83,8 @@ router.get('/callback', handleOAuthCallback);
  *                       type: string
  */
 router.get('/auth', initiateOAuth);
+console.log('[ALIEXPRESS-ROUTES] ✅ Route registered: GET /auth');
+console.log('[ALIEXPRESS-ROUTES] Full path will be: /api/aliexpress/auth');
 
 /**
  * @swagger
@@ -242,6 +257,16 @@ router.get('/search', searchProducts);
  *         description: Estado del token
  */
 router.get('/token-status', getTokenStatus);
+console.log('[ALIEXPRESS-ROUTES] ✅ Route registered: GET /token-status');
+
+console.log('[ALIEXPRESS-ROUTES] ════════════════════════════════════════════════════════');
+console.log('[ALIEXPRESS-ROUTES] All routes registered. Router ready.');
+console.log('[ALIEXPRESS-ROUTES] Routes summary:');
+console.log('[ALIEXPRESS-ROUTES]   - GET /api/aliexpress/auth');
+console.log('[ALIEXPRESS-ROUTES]   - GET /api/aliexpress/callback');
+console.log('[ALIEXPRESS-ROUTES]   - GET /api/aliexpress/search');
+console.log('[ALIEXPRESS-ROUTES]   - GET /api/aliexpress/token-status');
+console.log('[ALIEXPRESS-ROUTES] ════════════════════════════════════════════════════════');
 
 export default router;
 
