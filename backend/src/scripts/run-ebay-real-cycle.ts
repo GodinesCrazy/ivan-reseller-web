@@ -30,16 +30,94 @@ const FILTERS = {
 };
 
 async function assertEnvVars(keys: string[]): Promise<void> {
-  const missing = keys.filter((key) => !process.env[key]);
-  if (missing.length > 0) {
-    throw new Error(`Faltan variables de entorno: ${missing.join(', ')}`);
+  const present: string[] = [];
+  const missing: string[] = [];
+  
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value && value.trim().length > 0) {
+      present.push(key);
+    } else {
+      missing.push(key);
+    }
   }
+  
+  // ✅ LOG: Sanitizado - solo presence, no valores
+  console.log('[PRECHECK] Environment variables status:', {
+    present: present.length,
+    missing: missing.length,
+    presentKeys: present,
+    missingKeys: missing,
+  });
+  
+  if (missing.length > 0) {
+    const errorMsg = `Faltan variables de entorno: ${missing.join(', ')}`;
+    console.error(`[PRECHECK] ❌ ${errorMsg}`);
+    throw new Error(errorMsg);
+  }
+  
+  console.log(`[PRECHECK] ✅ Todas las variables requeridas están presentes (${present.length}/${keys.length})`);
 }
 
 async function validatePreconditions(): Promise<void> {
   console.log('[PRECHECK] Validating environment variables');
+  console.log('[PRECHECK] Reading directly from process.env (no filters)');
+  
+  // ✅ DEBUG: Verificar acceso directo a process.env
+  const directCheck = {
+    EBAY_CLIENT_ID: {
+      present: !!process.env.EBAY_CLIENT_ID,
+      length: process.env.EBAY_CLIENT_ID?.length || 0,
+    },
+    EBAY_CLIENT_SECRET: {
+      present: !!process.env.EBAY_CLIENT_SECRET,
+      length: process.env.EBAY_CLIENT_SECRET?.length || 0,
+    },
+    EBAY_REFRESH_TOKEN: {
+      present: !!process.env.EBAY_REFRESH_TOKEN,
+      length: process.env.EBAY_REFRESH_TOKEN?.length || 0,
+    },
+    EBAY_ENV: {
+      present: !!process.env.EBAY_ENV,
+      value: process.env.EBAY_ENV || 'NOT_SET',
+    },
+  };
+  console.log('[PRECHECK] Direct process.env check (sanitized):', JSON.stringify(directCheck, null, 2));
+  
+  // ✅ DEBUG: Listar todas las variables EBAY_* presentes (solo keys, no valores)
+  const allEbayVars = Object.keys(process.env)
+    .filter((key) => key.startsWith('EBAY_'))
+    .map((key) => ({
+      key,
+      present: true,
+      length: process.env[key]?.length || 0,
+    }));
+  console.log('[PRECHECK] All EBAY_* variables found:', {
+    count: allEbayVars.length,
+    keys: allEbayVars.map((v) => v.key),
+    details: allEbayVars,
+  });
+  
   await assertEnvVars(REQUIRED_EBAY_ENV);
   await assertEnvVars(REQUIRED_ALIEXPRESS_ENV);
+
+  // ✅ VERIFICACIÓN FINAL: Confirmar que todas las variables están accesibles
+  const finalCheck = {
+    EBAY_CLIENT_ID: !!process.env.EBAY_CLIENT_ID,
+    EBAY_CLIENT_SECRET: !!process.env.EBAY_CLIENT_SECRET,
+    EBAY_REFRESH_TOKEN: !!process.env.EBAY_REFRESH_TOKEN,
+    EBAY_ENV: !!process.env.EBAY_ENV,
+  };
+  const allPresent = Object.values(finalCheck).every((v) => v === true);
+  
+  if (!allPresent) {
+    const missing = Object.entries(finalCheck)
+      .filter(([_, present]) => !present)
+      .map(([key]) => key);
+    throw new Error(`Verificación final falló. Variables faltantes: ${missing.join(', ')}`);
+  }
+  
+  console.log('[PRECHECK] ✅ Todas las variables de eBay están presentes y accesibles');
 
   if (process.env.ENABLE_EBAY_PUBLISH !== 'true') {
     throw new Error('ENABLE_EBAY_PUBLISH debe ser true para publicar en eBay.');
@@ -49,6 +127,8 @@ async function validatePreconditions(): Promise<void> {
   if (!['production', 'sandbox'].includes(env)) {
     throw new Error('EBAY_ENV debe ser "production" o "sandbox".');
   }
+  
+  console.log(`[PRECHECK] ✅ EBAY_ENV configurado: ${env}`);
 
   console.log('[PRECHECK] Validating database connectivity');
   await prisma.$queryRaw`SELECT 1`;
