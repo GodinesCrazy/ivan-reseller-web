@@ -1,23 +1,26 @@
 /**
  * ? P0: Absolute Minimal Server
  * 
- * Este servidor mÌnimo se activa cuando FORCE_ROUTING_OK=true.
- * Su propÛsito es asegurar que Railway siempre responda 200 a /health, /ready, /api/debug/ping y /api/debug/build-info
- * incluso si todo lo dem·s est· roto.
+ * Este servidor mùnimo se activa cuando FORCE_ROUTING_OK=true.
+ * Su propùsito es asegurar que Railway siempre responda 200 a /health, /ready, /api/debug/ping y /api/debug/build-info
+ * incluso si todo lo demùs estù roto.
  * 
- * CaracterÌsticas:
+ * Caracterùsticas:
  * - NO importa app.ts ni rutas
  * - NO usa Express (solo http nativo)
  * - Inicia en <50ms
- * - Jam·s crashea
- * - Responde siempre 200 a rutas crÌticas
+ * - Jamùs crashea
+ * - Responde siempre 200 a rutas crùticas
  */
 
 import http from 'http';
 import { URL } from 'url';
 
 const PORT = Number(process.env.PORT || 3000);
-const FORCE_ROUTING_OK = process.env.FORCE_ROUTING_OK !== 'false'; // Default true en prod
+// ? FIX: FORCE_ROUTING_OK debe ser explùcitamente 'true' para activar minimal server
+// Default: false (NO activar minimal server por defecto)
+// Minimal server solo se usa en emergencias extremas
+const FORCE_ROUTING_OK = process.env.FORCE_ROUTING_OK === 'true'; // Solo si explùcitamente 'true'
 
 // Build info
 const gitSha = (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || 'unknown').toString().substring(0, 7);
@@ -41,7 +44,7 @@ function createMinimalServer(): http.Server {
     const path = url.pathname;
     const method = req.method;
 
-    // CORS headers b·sicos
+    // CORS headers bùsicos
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -187,13 +190,22 @@ function createMinimalServer(): http.Server {
 }
 
 export function startMinimalServer(): void {
+  // ? FIX: Minimal server SOLO se activa si FORCE_ROUTING_OK es explÌcitamente 'true'
+  // En producciÛn normal, esto NUNCA debe activarse
   if (!FORCE_ROUTING_OK) {
-    console.log('[MINIMAL-SERVER] FORCE_ROUTING_OK=false, skipping minimal server');
+    console.log('[MINIMAL-SERVER] FORCE_ROUTING_OK not set to "true", skipping minimal server');
+    console.log('[MINIMAL-SERVER] Express will start normally');
     return;
   }
 
+  // ?? ADVERTENCIA: Minimal server solo para emergencias extremas
   console.log('');
-  console.log('?? MINIMAL SERVER MODE');
+  console.log('??  ??  ??  MINIMAL SERVER MODE (EMERGENCY ONLY) ??  ??  ??');
+  console.log('================================');
+  console.log('   ??  WARNING: Minimal server is active');
+  console.log('   ??  Express endpoints will NOT be available');
+  console.log('   ??  Only /health, /ready, /api/debug/ping, /api/debug/build-info work');
+  console.log('   ??  This should ONLY be used in extreme emergencies');
   console.log('================================');
   console.log(`   FORCE_ROUTING_OK=${FORCE_ROUTING_OK}`);
   console.log(`   PORT=${PORT}`);

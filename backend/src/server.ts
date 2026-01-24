@@ -13,8 +13,10 @@ import scheduledReportsService from './services/scheduled-reports.service';
 import bcrypt from 'bcryptjs';
 import { resolveChromiumExecutable } from './utils/chromium';
 import { initBuildInfo } from './middleware/version-header.middleware';
-// ✅ P0: Import minimal server
-import { startMinimalServer } from './minimal-server';
+// ✅ FIX: Minimal server importado pero NO se usa automáticamente
+// Solo se activaría en emergencias extremas si Express falla completamente
+// (no implementado - Express siempre debe funcionar)
+// import { startMinimalServer } from './minimal-server'; // NO USAR - Express es el servidor principal
 
 const execAsync = promisify(exec);
 
@@ -606,16 +608,21 @@ async function startServer() {
       console.log(`   Listen time: ${listenTime}ms`);
       console.log(`   Total boot time: ${Date.now() - startTime}ms`);
       console.log(`   Environment: ${env.NODE_ENV}`);
-      console.log(`   SAFE_BOOT: ${env.SAFE_BOOT}`);
+      console.log(`   SAFE_BOOT: ${env.SAFE_BOOT} (workers ${env.SAFE_BOOT ? 'disabled' : 'enabled'})`);
+      console.log(`   FORCE_ROUTING_OK: ${FORCE_ROUTING_OK_ENV || 'not set'} (minimal server: DISABLED)`);
       console.log(`   pid: ${process.pid}`);
       console.log('');
-      console.log('📡 Endpoints available:');
+      console.log('📡 Express endpoints available:');
       console.log(`   Health: http://0.0.0.0:${PORT}/health`);
       console.log(`   Health API: http://0.0.0.0:${PORT}/api/health`);
-      console.log(`   Debug Ping: http://0.0.0.0:${PORT}/api/debug/ping`);
       console.log(`   Ready: http://0.0.0.0:${PORT}/ready`);
+      console.log(`   Auth: http://0.0.0.0:${PORT}/api/auth/login`);
+      console.log(`   Auth Me: http://0.0.0.0:${PORT}/api/auth/me`);
+      console.log(`   Debug Ping: http://0.0.0.0:${PORT}/api/debug/ping`);
+      console.log(`   Debug AliExpress: http://0.0.0.0:${PORT}/api/debug/aliexpress/test-search`);
       console.log('================================');
-      console.log('✅ Health endpoint ready - server accepting connections');
+      console.log('✅ Express server ready - ALL endpoints available');
+      console.log('✅ Minimal server is NOT active (Express handles all requests)');
       console.log('');
       
       setIsServerReady(true);
@@ -627,14 +634,18 @@ async function startServer() {
       console.log('');
       console.log(`📦 BOOTSTRAP MODE: ${bootstrapMode}`);
       console.log('================================');
-      console.log('[BOOT] Express started OK - all endpoints available');
+      console.log('[BOOT] ✅ Express started OK - ALL endpoints available');
+      console.log('[BOOT] ✅ Server mode: FULL EXPRESS (not minimal)');
+      console.log('[BOOT] ✅ /api/auth/login, /api/auth/me, and all other endpoints work');
       if (env.SAFE_BOOT) {
-        console.log('[BOOT] SAFE_BOOT=true: Heavy workers (BullMQ, scraping) will be skipped');
-        console.log('[BOOT] Redis connection will be skipped');
-        console.log('[BOOT] Scheduled tasks will be disabled');
+        console.log('[BOOT] ⚠️  SAFE_BOOT=true: Heavy workers (BullMQ, scraping) will be skipped');
+        console.log('[BOOT] ⚠️  Redis connection will be skipped');
+        console.log('[BOOT] ⚠️  Scheduled tasks will be disabled');
+        console.log('[BOOT] ✅ Express endpoints remain fully functional');
       } else {
-        console.log('[BOOT] SAFE_BOOT=false: All services will initialize');
+        console.log('[BOOT] ✅ SAFE_BOOT=false: All services will initialize');
       }
+      console.log('[BOOT] ✅ Minimal server is NOT active (Express is primary)');
       console.log('================================');
       
       // ✅ BOOT: Start bootstrap in background based on SAFE_BOOT
@@ -668,11 +679,13 @@ async function startServer() {
         }
       });
       
-      // ✅ BOOT: Si FORCE_ROUTING_OK está activo, iniciar minimal server como fallback
-      // (pero Express ya está funcionando, esto es solo backup)
+      // ✅ BOOT: Minimal server NO se inicia automáticamente
+      // Solo se activaría si Express falla completamente (no implementado)
+      // Express es el servidor principal y siempre debe funcionar
       if (FORCE_ROUTING_OK) {
-        console.log('[BOOT] Minimal server available as emergency fallback (Express is primary)');
-        // No hacer nada - minimal server solo se usa si Express falla completamente
+        console.log('[BOOT] ⚠️  FORCE_ROUTING_OK=true detected but Express is primary');
+        console.log('[BOOT] Minimal server will NOT start - Express handles all requests');
+        console.log('[BOOT] If you see this, consider removing FORCE_ROUTING_OK variable');
       }
     });
     
