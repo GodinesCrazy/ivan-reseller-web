@@ -330,6 +330,103 @@ router.get('/aliexpress-dropshipping-credentials', authenticate, async (req: Req
   }
 });
 
+/**
+ * GET /api/debug/aliexpress/probe
+ *
+ * Endpoint de diagnóstico para AliExpress Affiliate API.
+ * Una sola llamada con parámetros fijos. Sin auth. Evidencia para AliExpress Support.
+ */
+router.get('/aliexpress/probe', async (_req: Request, res: Response) => {
+  const timestamp = new Date().toISOString();
+  const apiName = 'aliexpress.affiliate.product.query';
+  const method = 'POST';
+  const url = (process.env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync').trim();
+  const params = {
+    keyword: 'phone case',
+    pageSize: 20,
+    pageNo: 1,
+    sort: 'volume_desc',
+    shipToCountry: 'US',
+  };
+
+  console.log('[ALIEXPRESS-PROBE] Request params', {
+    keyword: params.keyword,
+    pageSize: params.pageSize,
+    pageNo: params.pageNo,
+    sort: params.sort,
+    shipToCountry: params.shipToCountry,
+  });
+
+  try {
+    const aliExpressService = (await import('../../modules/aliexpress/aliexpress.service')).default;
+    const result = await aliExpressService.searchProducts({
+      keywords: params.keyword,
+      pageNo: params.pageNo,
+      pageSize: params.pageSize,
+      sort: params.sort,
+    });
+
+    const productCount = result.products?.length ?? 0;
+    console.log('[ALIEXPRESS-PROBE] Response received');
+    console.log('[ALIEXPRESS-PROBE] Products count:', productCount);
+
+    const responseRaw = {
+      products: result.products,
+      totalResults: result.totalResults,
+      pageNo: result.pageNo,
+      pageSize: result.pageSize,
+      hasMore: result.hasMore,
+    };
+
+    res.status(200).json({
+      success: true,
+      request: {
+        apiName,
+        method,
+        url,
+        params: {
+          keyword: params.keyword,
+          pageNo: params.pageNo,
+          pageSize: params.pageSize,
+          sort: params.sort,
+          shipToCountry: params.shipToCountry,
+        },
+      },
+      responseRaw,
+      productCount,
+      timestamp,
+    });
+  } catch (error: any) {
+    console.log('[ALIEXPRESS-PROBE] Response received (error)');
+    console.log('[ALIEXPRESS-PROBE] Products count: 0');
+
+    const responseRaw = {
+      error: error?.message ?? String(error),
+      code: error?.response?.data?.error_response?.code,
+      msg: error?.response?.data?.error_response?.msg,
+    };
+
+    res.status(200).json({
+      success: false,
+      request: {
+        apiName,
+        method,
+        url,
+        params: {
+          keyword: params.keyword,
+          pageNo: params.pageNo,
+          pageSize: params.pageSize,
+          sort: params.sort,
+          shipToCountry: params.shipToCountry,
+        },
+      },
+      responseRaw,
+      productCount: 0,
+      timestamp,
+    });
+  }
+});
+
 // Require authentication for other endpoints
 router.use(authenticate);
 
