@@ -276,6 +276,16 @@ class AliExpressService {
         throw new Error(`AliExpress API Error [${errorCode}]: ${errorMsg}`);
       }
 
+      // Extraer requestId de la respuesta (puede estar en diferentes ubicaciones)
+      const requestId = 
+        response.data.request_id || 
+        response.data.requestId || 
+        response.data.trace_id ||
+        response.data.aliexpress_affiliate_product_query_response?.request_id ||
+        response.data.aliexpress_affiliate_product_query_response?.requestId ||
+        response.data.aliexpress_affiliate_product_query_response?.trace_id ||
+        undefined;
+
       const result = response.data.aliexpress_affiliate_product_query_response?.result;
       if (!result) {
         return {
@@ -284,6 +294,7 @@ class AliExpressService {
           pageNo: params.pageNo || 1,
           pageSize: params.pageSize || 20,
           hasMore: false,
+          requestId,
         };
       }
 
@@ -308,6 +319,7 @@ class AliExpressService {
         pageNo: params.pageNo || 1,
         pageSize: params.pageSize || 20,
         hasMore: (params.pageNo || 1) * (params.pageSize || 20) < (result.total_results || 0),
+        requestId,
       };
     } catch (error: any) {
       logger.error('[AliExpress Affiliate] Error al buscar productos', {

@@ -369,6 +369,7 @@ router.get('/aliexpress/probe', async (_req: Request, res: Response) => {
     const productCount = result.products?.length ?? 0;
     console.log('[ALIEXPRESS-PROBE] Response received');
     console.log('[ALIEXPRESS-PROBE] Products count:', productCount);
+    console.log('[ALIEXPRESS-PROBE] RequestId:', result.requestId || 'not found');
 
     const responseRaw = {
       products: result.products,
@@ -380,6 +381,7 @@ router.get('/aliexpress/probe', async (_req: Request, res: Response) => {
 
     res.status(200).json({
       success: true,
+      requestId: result.requestId || null,
       request: {
         apiName,
         method,
@@ -408,6 +410,7 @@ router.get('/aliexpress/probe', async (_req: Request, res: Response) => {
 
     res.status(200).json({
       success: false,
+      requestId: null,
       request: {
         apiName,
         method,

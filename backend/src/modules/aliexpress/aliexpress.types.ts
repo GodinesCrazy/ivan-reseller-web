@@ -66,6 +66,7 @@ export interface AliExpressProductSearchResponse {
   pageNo: number;
   pageSize: number;
   hasMore: boolean;
+  requestId?: string;
 }
 
 export interface AliExpressOAuthState {
