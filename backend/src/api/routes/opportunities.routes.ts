@@ -226,6 +226,9 @@ router.get('/', async (req, res) => {
       ...(items.length === 0 && Object.keys(debugInfo).length > 0 ? { debug: debugInfo } : {})
     });
   } catch (error) {
+    // ✅ FIX: Single declaration of correlationId at the top of catch block
+    const correlationId = (req as any).correlationId || 'unknown';
+    
     if (progressTimer) clearInterval(progressTimer);
     if (warnTimer) clearTimeout(warnTimer);
 
@@ -273,8 +276,6 @@ router.get('/', async (req, res) => {
     
     const statusCode = isClientError ? 400 : 500;
     
-    // ✅ FIX: Include correlationId for tracking (single declaration)
-    const correlationId = (req as any).correlationId || 'unknown';
     logger.error('Error in /api/opportunities', { 
       correlationId,
       error: errorMessage,
