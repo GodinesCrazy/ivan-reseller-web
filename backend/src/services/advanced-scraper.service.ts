@@ -822,31 +822,14 @@ export class AdvancedMarketplaceScraper {
           
           aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
           
-          // ✅ CRÍTICO: Obtener y configurar OAuth token si está disponible
+          // ✅ CRÍTICO: AliExpress Affiliate API usa autenticación por firma (app_key/app_secret)
+          // No requiere OAuth tokens - la autenticación se hace mediante signature en cada request
+          // Este código se mantiene para compatibilidad pero no se usa para Affiliate API
           try {
-            const aliExpressService = await import('../modules/aliexpress/aliexpress.service').then(m => m.default);
-            const tokenData = await aliExpressService.getActiveToken();
-            if (tokenData && tokenData.expiresAt > new Date()) {
-              aliexpressAffiliateAPIService.setAccessToken(tokenData.accessToken, tokenData.expiresAt);
-              logger.info('[ALIEXPRESS-AUTH] OAuth token configurado en servicio', {
-                expiresAt: tokenData.expiresAt.toISOString(),
-                tokenType: tokenData.tokenType,
-                step: 'oauth_token_set'
-              });
-            } else {
-              logger.warn('[ALIEXPRESS-AUTH] No hay token OAuth válido disponible', {
-                hasToken: !!tokenData,
-                isExpired: tokenData ? tokenData.expiresAt <= new Date() : true,
-                step: 'oauth_token_missing',
-                note: 'Algunos métodos de API pueden requerir OAuth. Use /api/aliexpress/auth para autenticar.'
-              });
-            }
+            // Affiliate API no usa OAuth - usa signature-based auth
+            logger.info('[ALIEXPRESS-AUTH] Affiliate API usa autenticación por firma (no OAuth)');
           } catch (tokenError: any) {
-            logger.warn('[ALIEXPRESS-AUTH] Error obteniendo token OAuth, continuando sin él', {
-              error: tokenError?.message || String(tokenError),
-              step: 'oauth_token_error',
-              note: 'La API puede funcionar sin OAuth token para algunos métodos'
-            });
+            logger.warn('[ALIEXPRESS-AUTH] Note: Affiliate API usa signature auth, no OAuth tokens');
           }
           
           // Mapear país desde currency si es necesario

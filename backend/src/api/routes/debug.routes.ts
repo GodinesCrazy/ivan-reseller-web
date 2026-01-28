@@ -820,27 +820,14 @@ router.get('/aliexpress/test-search', authenticate, async (req: Request, res: Re
     apiService.setCredentials(affiliateCreds);
 
     // ✅ CRÍTICO: Intentar obtener y usar OAuth token si está disponible
+    // Note: AliExpress Affiliate API doesn't use OAuth tokens - it uses app_key/app_secret signing
+    // This code is kept for compatibility but won't be used for Affiliate API
     try {
-      const aliExpressService = await import('../../modules/aliexpress/aliexpress.service').then(m => m.default);
-      const tokenData = await aliExpressService.getActiveToken();
-      if (tokenData && tokenData.expiresAt > new Date()) {
-        apiService.setAccessToken(tokenData.accessToken, tokenData.expiresAt);
-        logger.info('[DEBUG-API] OAuth token found and set', {
-          expiresAt: tokenData.expiresAt.toISOString(),
-          tokenType: tokenData.tokenType
-        });
-      } else {
-        logger.warn('[DEBUG-API] No valid OAuth token available', {
-          hasToken: !!tokenData,
-          isExpired: tokenData ? tokenData.expiresAt <= new Date() : true,
-          note: 'Some API methods may require OAuth. Use /api/aliexpress/auth to authenticate.'
-        });
-      }
+      // OAuth tokens are not used for AliExpress Affiliate API
+      // The API uses app_key/app_secret signature-based authentication
+      logger.info('[DEBUG-API] AliExpress Affiliate API uses signature-based auth (not OAuth)');
     } catch (tokenError: any) {
-      logger.warn('[DEBUG-API] Error getting OAuth token', {
-        error: tokenError?.message || String(tokenError),
-        note: 'Will attempt API call without OAuth token'
-      });
+      logger.warn('[DEBUG-API] Note: AliExpress Affiliate API uses signature auth, not OAuth tokens');
     }
 
     const apiCallStartTime = Date.now();
@@ -1056,24 +1043,25 @@ router.get('/aliexpress/diagnostic', authenticate, async (req: Request, res: Res
       return res.status(400).json(diagnostic);
     }
 
-    // 2. Verificar OAuth token
+    // 2. Verificar OAuth token (not used for Affiliate API - uses signature auth)
+    // Note: AliExpress Affiliate API uses app_key/app_secret signature, not OAuth
     let tokenData: any = null;
     try {
-      const aliExpressService = await import('../../modules/aliexpress/aliexpress.service').then(m => m.default);
-      tokenData = await aliExpressService.getActiveToken();
+      // OAuth tokens are not used for AliExpress Affiliate API
+      // The API uses signature-based authentication
+      logger.debug('[ALIEXPRESS-DIAGNOSTIC] Affiliate API uses signature auth (not OAuth)');
     } catch (tokenError: any) {
-      logger.debug('[ALIEXPRESS-DIAGNOSTIC] Error getting token', {
-        error: tokenError?.message
-      });
+      logger.debug('[ALIEXPRESS-DIAGNOSTIC] Note: Affiliate API uses signature auth');
     }
 
     diagnostic.checks.oauth = {
-      status: tokenData ? (tokenData.expiresAt > new Date() ? 'valid' : 'expired') : 'missing',
-      hasToken: !!tokenData,
-      isExpired: tokenData ? tokenData.expiresAt <= new Date() : true,
-      expiresAt: tokenData?.expiresAt?.toISOString() || null,
-      tokenType: tokenData?.tokenType || null,
-      hasRefreshToken: !!tokenData?.refreshToken
+      status: 'not_applicable',
+      hasToken: false,
+      isExpired: false,
+      expiresAt: null,
+      tokenType: null,
+      hasRefreshToken: false,
+      note: 'AliExpress Affiliate API uses signature-based auth (app_key/app_secret), not OAuth tokens'
     };
 
     // 3. Verificar firma (test signature calculation)
@@ -1136,16 +1124,16 @@ router.get('/aliexpress/diagnostic', authenticate, async (req: Request, res: Res
       error: connectivityError
     };
 
-    // 5. Test de API real (solo si hay credenciales y token)
+    // 5. Test de API real (solo si hay credenciales - no requiere OAuth token)
     let apiTestOk = false;
     let apiTestError: string | null = null;
     let apiTestResponse: any = null;
 
-    if (affiliateCreds && tokenData && tokenData.expiresAt > new Date()) {
+    if (affiliateCreds) {
       try {
         const apiService = new AliExpressAffiliateAPIService();
         apiService.setCredentials(affiliateCreds);
-        apiService.setAccessToken(tokenData.accessToken, tokenData.expiresAt);
+        // Note: Affiliate API doesn't use OAuth tokens - uses signature auth
 
         const testProducts = await apiService.searchProducts({
           keywords: 'test',
@@ -1163,7 +1151,7 @@ router.get('/aliexpress/diagnostic', authenticate, async (req: Request, res: Res
         apiTestOk = false;
       }
     } else {
-      apiTestError = 'OAuth token required for API test';
+      apiTestError = 'Credentials required for API test';
     }
 
     diagnostic.checks.apiTest = {
@@ -1189,8 +1177,8 @@ router.get('/aliexpress/diagnostic', authenticate, async (req: Request, res: Res
       signatureValid,
       recommendation: canUseAPI 
         ? 'API mode active - system ready for production'
-        : hasValidCredentials && !hasValidToken
-        ? 'OAuth token required - use /api/aliexpress/auth to authenticate'
+        : hasValidCredentials
+        ? 'Credentials configured - API should work (uses signature auth, not OAuth)'
         : 'Credentials required - configure in Settings → API Settings'
     };
 

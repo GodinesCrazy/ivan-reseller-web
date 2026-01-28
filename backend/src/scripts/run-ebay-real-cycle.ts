@@ -356,6 +356,10 @@ export async function runEbayRealCycle(): Promise<{
               keyword: keywordText,
               score: 50,
               priority: 'medium',
+              region: 'US',
+              date: new Date().toISOString(),
+              trend: 'stable' as const,
+              searchVolume: 0,
             },
           );
 
@@ -433,6 +437,10 @@ export async function runEbayRealCycle(): Promise<{
               keyword: keyword,
               score: 30,
               priority: 'low',
+              region: 'US',
+              date: new Date().toISOString(),
+              trend: 'stable' as const,
+              searchVolume: 0,
             });
 
             if (candidate.title && candidate.title.trim().length > 0) {

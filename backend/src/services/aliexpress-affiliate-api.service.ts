@@ -121,11 +121,12 @@ export class AliExpressAffiliateAPIService {
     // Sin embargo, podríamos intentar el endpoint nuevo si el legacy falla
     this.endpoint = this.ENDPOINT_LEGACY;
     
-    // ✅ CRÍTICO: Si las credenciales incluyen accessToken, usarlo
-    if (credentials.accessToken) {
-      this.accessToken = credentials.accessToken;
-      if (credentials.accessTokenExpiresAt) {
-        this.tokenExpiresAt = new Date(credentials.accessTokenExpiresAt);
+    // ✅ CRÍTICO: Si las credenciales incluyen accessToken, usarlo (opcional - Affiliate API no lo requiere)
+    // Note: Affiliate API uses signature auth, not OAuth tokens
+    if ((credentials as any).accessToken) {
+      this.accessToken = (credentials as any).accessToken;
+      if ((credentials as any).accessTokenExpiresAt) {
+        this.tokenExpiresAt = new Date((credentials as any).accessTokenExpiresAt);
       }
     }
     
@@ -163,25 +164,21 @@ export class AliExpressAffiliateAPIService {
     }
     
     // Si está expirado o no hay token, intentar obtenerlo desde el servicio principal
+    // Note: AliExpress Affiliate API doesn't use OAuth tokens - uses signature-based auth
+    // El token se maneja internamente si está disponible, pero no es requerido para Affiliate API
     if (this.credentials) {
       try {
-        const aliExpressService = await import('../modules/aliexpress/aliexpress.service').then(m => m.default);
-        const tokenData = await aliExpressService.getActiveToken();
-        if (tokenData && tokenData.expiresAt > new Date()) {
-          this.accessToken = tokenData.accessToken;
-          this.tokenExpiresAt = tokenData.expiresAt;
-          logger.info('[ALIEXPRESS-AUTH] Token refreshed from service', {
-            expiresAt: tokenData.expiresAt.toISOString()
-          });
-          return this.accessToken;
-        }
+        // Affiliate API no usa OAuth - usa signature auth con app_key/app_secret
+        // El token se maneja internamente si está disponible, pero no es requerido
+        logger.debug('[ALIEXPRESS-AUTH] Affiliate API usa signature auth (no OAuth)');
       } catch (error: any) {
-        logger.warn('[ALIEXPRESS-AUTH] Failed to get token from service', {
+        logger.warn('[ALIEXPRESS-AUTH] Note: Affiliate API usa signature auth', {
           error: error.message
         });
       }
     }
     
+    // Retornar token si existe (puede ser null - Affiliate API no lo requiere)
     return this.accessToken;
   }
 

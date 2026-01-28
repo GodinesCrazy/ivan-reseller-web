@@ -559,7 +559,19 @@ async function startServer() {
     // ✅ BOOT: Express SIEMPRE se carga - no depende de FORCE_ROUTING_OK
     logMilestone('[BOOT] Creating Express HTTP server (BEFORE any DB/Redis/migrations)');
     console.log('[BOOT] Loading Express app...');
-    const { default: app } = await import('./app');
+    let app;
+    try {
+      const appModule = await import('./app');
+      app = appModule.default;
+      if (!app) {
+        throw new Error('Failed to import app - default export is undefined');
+      }
+    } catch (appError: any) {
+      console.error('❌ CRITICAL: Failed to load Express app:', appError);
+      console.error('   Error message:', appError?.message || String(appError));
+      console.error('   Stack:', appError?.stack?.substring(0, 500));
+      throw new Error(`Failed to load Express app: ${appError?.message || String(appError)}`);
+    }
     const httpServer = http.createServer(app);
     console.log('[BOOT] Express app loaded OK');
     
