@@ -430,6 +430,276 @@ router.get('/aliexpress/probe', async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/debug/ebay/probe
+ *
+ * Endpoint de diagnóstico para eBay Browse API.
+ * Una sola llamada con parámetros fijos para probar integración eBay.
+ * Sin auth - similar a /api/debug/aliexpress/probe
+ */
+router.get('/ebay/probe', async (req: Request, res: Response) => {
+  const timestamp = new Date().toISOString();
+  const correlationId = (req as any).correlationId || `ebay-probe-${Date.now()}`;
+  const apiName = 'ebay.buy.browse.item_summary.search';
+  const method = 'GET';
+  
+  const params = {
+    keywords: 'phone case',
+    limit: 20,
+    marketplace_id: 'EBAY_US',
+  };
+
+  console.log('[EBAY-PROBE] Starting eBay probe request', {
+    correlationId,
+    keywords: params.keywords,
+    limit: params.limit,
+    marketplace_id: params.marketplace_id,
+  });
+
+  try {
+    // Get user ID from query or use default (for debugging)
+    const userId = Number(req.query.userId) || 1;
+    const environment = (req.query.environment as 'sandbox' | 'production') || 'production';
+
+    console.log('[EBAY-PROBE] Configuration', {
+      userId,
+      environment,
+      correlationId,
+    });
+
+    // Try to get credentials from CredentialsManager first
+    let ebayCredentials: any = null;
+    let credentialsSource = 'none';
+
+    try {
+      const creds = await CredentialsManager.getCredentials(
+        userId,
+        'ebay',
+        environment
+      );
+
+      if (creds && (creds as any).credentials) {
+        const credsData = (creds as any).credentials;
+        ebayCredentials = {
+          ...credsData,
+          sandbox: (creds as any).environment === 'sandbox',
+        };
+        credentialsSource = 'credentials-manager';
+        console.log('[EBAY-PROBE] Credentials found in CredentialsManager', {
+          hasAppId: !!ebayCredentials.appId,
+          hasDevId: !!ebayCredentials.devId,
+          hasCertId: !!ebayCredentials.certId,
+          hasToken: !!ebayCredentials.token,
+          hasRefreshToken: !!ebayCredentials.refreshToken,
+          sandbox: (creds as any).environment === 'sandbox',
+        });
+      }
+    } catch (credError: any) {
+      console.warn('[EBAY-PROBE] Error getting credentials from CredentialsManager', {
+        error: credError?.message || String(credError),
+      });
+    }
+
+    // Fallback to environment variables if no credentials found
+    if (!ebayCredentials) {
+      const envAppId = process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID;
+      const envDevId = process.env.EBAY_DEV_ID;
+      const envCertId = process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET;
+      const envToken = process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN;
+      const envRefreshToken = process.env.EBAY_REFRESH_TOKEN;
+      const envSandbox = (process.env.EBAY_ENV || 'production').toLowerCase() === 'sandbox';
+
+      if (envAppId && envCertId) {
+        ebayCredentials = {
+          appId: envAppId,
+          devId: envDevId,
+          certId: envCertId,
+          token: envToken,
+          refreshToken: envRefreshToken,
+          sandbox: envSandbox,
+        };
+        credentialsSource = 'environment-variables';
+        console.log('[EBAY-PROBE] Using environment variables', {
+          hasAppId: !!envAppId,
+          hasDevId: !!envDevId,
+          hasCertId: !!envCertId,
+          hasToken: !!envToken,
+          hasRefreshToken: !!envRefreshToken,
+          sandbox: envSandbox,
+        });
+      }
+    }
+
+    // Check if we have minimum required credentials
+    if (!ebayCredentials || !ebayCredentials.appId || !ebayCredentials.certId) {
+      const missingVars: string[] = [];
+      if (!ebayCredentials?.appId && !process.env.EBAY_APP_ID && !process.env.EBAY_CLIENT_ID) {
+        missingVars.push('EBAY_APP_ID or EBAY_CLIENT_ID');
+      }
+      if (!ebayCredentials?.certId && !process.env.EBAY_CERT_ID && !process.env.EBAY_CLIENT_SECRET) {
+        missingVars.push('EBAY_CERT_ID or EBAY_CLIENT_SECRET');
+      }
+      if (!ebayCredentials?.token && !ebayCredentials?.refreshToken && !process.env.EBAY_OAUTH_TOKEN && !process.env.EBAY_REFRESH_TOKEN) {
+        missingVars.push('EBAY_OAUTH_TOKEN or EBAY_REFRESH_TOKEN');
+      }
+
+      console.error('[EBAY-PROBE] Missing required credentials', {
+        missingVars,
+        credentialsSource,
+      });
+
+      return res.status(200).json({
+        success: false,
+        requestId: null,
+        request: {
+          apiName,
+          method,
+          url: ebayCredentials?.sandbox 
+            ? 'https://api.sandbox.ebay.com/buy/browse/v1/item_summary/search'
+            : 'https://api.ebay.com/buy/browse/v1/item_summary/search',
+          params,
+        },
+        responseRaw: {
+          error: 'Missing required eBay credentials',
+          missingVariables: missingVars,
+          credentialsSource,
+          instructions: 'Configure eBay credentials in Settings → API Settings → eBay, or set environment variables: ' + missingVars.join(', '),
+        },
+        items: [],
+        totalResults: 0,
+        timestamp,
+        correlationId,
+      });
+    }
+
+    // Create eBay service instance
+    const { EbayService } = await import('../../services/ebay.service');
+    
+    // Ensure we have token or refreshToken before creating service
+    if (!ebayCredentials.token && !ebayCredentials.refreshToken) {
+      return res.status(200).json({
+        success: false,
+        requestId: correlationId,
+        request: {
+          apiName,
+          method,
+          url: ebayCredentials.sandbox 
+            ? 'https://api.sandbox.ebay.com/buy/browse/v1/item_summary/search'
+            : 'https://api.ebay.com/buy/browse/v1/item_summary/search',
+          params,
+        },
+        responseRaw: {
+          error: 'Missing eBay OAuth token or refresh token',
+          instructions: 'Complete OAuth flow in Settings → API Settings → eBay, or set EBAY_OAUTH_TOKEN or EBAY_REFRESH_TOKEN environment variable',
+        },
+        items: [],
+        totalResults: 0,
+        timestamp,
+        correlationId,
+      });
+    }
+
+    const ebayService = new EbayService(ebayCredentials);
+
+    console.log('[EBAY-PROBE] Calling eBay searchProducts', {
+      keywords: params.keywords,
+      limit: params.limit,
+      marketplace_id: params.marketplace_id,
+      sandbox: ebayCredentials.sandbox,
+      hasToken: !!ebayCredentials.token,
+      hasRefreshToken: !!ebayCredentials.refreshToken,
+      baseUrl: ebayCredentials.sandbox ? 'https://api.sandbox.ebay.com' : 'https://api.ebay.com',
+    });
+
+    // Call searchProducts - the service handles token refresh internally
+    const startTime = Date.now();
+    const products = await ebayService.searchProducts({
+      keywords: params.keywords,
+      limit: params.limit,
+      marketplace_id: params.marketplace_id,
+    });
+    const duration = Date.now() - startTime;
+
+    const productCount = products?.length ?? 0;
+    console.log('[EBAY-PROBE] Response received', {
+      productCount,
+      duration: `${duration}ms`,
+      firstProductTitle: products[0]?.title?.substring(0, 50),
+    });
+
+    // Format response
+    const items = products.map((p: any) => ({
+      itemId: p.itemId,
+      title: p.title,
+      price: p.price,
+      condition: p.condition,
+      seller: p.seller,
+      itemWebUrl: p.itemWebUrl,
+      image: p.image,
+    }));
+
+    res.status(200).json({
+      success: true,
+      requestId: correlationId,
+      request: {
+        apiName,
+        method,
+        url: ebayCredentials.sandbox 
+          ? 'https://api.sandbox.ebay.com/buy/browse/v1/item_summary/search'
+          : 'https://api.ebay.com/buy/browse/v1/item_summary/search',
+        params,
+        credentialsSource,
+      },
+      responseRaw: {
+        items: products,
+        totalCount: productCount,
+      },
+      items,
+      totalResults: productCount,
+      timestamp,
+      correlationId,
+      duration: `${duration}ms`,
+    });
+  } catch (error: any) {
+    console.error('[EBAY-PROBE] Error occurred', {
+      error: error?.message || String(error),
+      stack: error?.stack,
+      responseStatus: error?.response?.status,
+      responseData: error?.response?.data,
+    });
+
+    const responseRaw: any = {
+      error: error?.message ?? String(error),
+    };
+
+    if (error?.response?.data) {
+      responseRaw.apiError = error.response.data;
+      responseRaw.statusCode = error.response.status;
+    }
+
+    if (error?.response?.status === 401) {
+      responseRaw.message = 'Authentication failed. Check OAuth token or refresh token.';
+      responseRaw.instructions = 'Complete OAuth flow in Settings → API Settings → eBay';
+    }
+
+    res.status(200).json({
+      success: false,
+      requestId: correlationId,
+      request: {
+        apiName,
+        method,
+        url: 'https://api.ebay.com/buy/browse/v1/item_summary/search',
+        params,
+      },
+      responseRaw,
+      items: [],
+      totalResults: 0,
+      timestamp,
+      correlationId,
+    });
+  }
+});
+
 // Require authentication for other endpoints
 router.use(authenticate);
 
