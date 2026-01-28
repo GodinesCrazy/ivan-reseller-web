@@ -6,6 +6,8 @@ import { loginRateLimit } from '../../middleware/rate-limit.middleware';
 import { changePasswordSchema as changePasswordValidationSchema, registerPasswordSchema } from '../../utils/password-validation';
 import { z } from 'zod';
 import logger from '../../config/logger';
+import { prisma } from '../../config/database';
+import bcrypt from 'bcryptjs';
 
 const router = Router();
 
@@ -34,270 +36,37 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
   });
 });
 
-// POST /api/auth/login - Con rate limiting para prevenir brute force
-router.post('/login', loginRateLimit, async (req: Request, res: Response, next: NextFunction) => {
-  // ✅ CRITICAL: Envolver TODO en try/catch para NUNCA retornar 500
+// POST /api/auth/login - SAFE LOGIN MODE (sin JWT ni refresh tokens)
+router.post('/login', async (req: Request, res: Response) => {
   try {
-    const correlationId = (req as any).correlationId || 'unknown';
-    const requestId = req.headers['x-request-id'] || req.headers['x-vercel-id'] || 'unknown';
-    
-    // ✅ P0: Logging mínimo por request (sin password ni token)
-    console.log(`[LOGIN] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'} correlationId=${correlationId} requestId=${requestId}`);
-    
-    // ✅ FIX AUTH: Logging robusto del raw body SOLO en modo debug para /api/auth/login
-    const isDebugMode = process.env.LOG_LEVEL === 'debug' || process.env.NODE_ENV !== 'production';
-    if (isDebugMode) {
-      logger.debug('[Login] Request received', {
-        correlationId,
-        contentType: req.headers['content-type'],
-        contentLength: req.headers['content-length'],
-        hasBody: !!req.body,
-        bodyType: typeof req.body,
-        bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body) : [],
-        bodyPreview: req.body ? JSON.stringify(req.body).substring(0, 200) : 'no body',
-        method: req.method,
-        path: req.path,
-      });
-    }
-    
-    // ✅ FIX AUTH: Validar que body existe y es objeto
-    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
-      if (isDebugMode) {
-        logger.warn('[Login] Invalid body type', {
-          correlationId,
-          bodyType: typeof req.body,
-          isArray: Array.isArray(req.body),
-          bodyValue: req.body,
-        });
-      }
-      
-      return res.status(400).json({
-        success: false,
-        error: 'Request body is required and must be a JSON object',
-        errorCode: 'INVALID_BODY',
-        correlationId,
-        hint: 'Ensure body is valid JSON e.g. {"username":"admin","password":"..."}',
-        timestamp: new Date().toISOString(),
-      });
-    }
-    
-    // ✅ FIX AUTH: Validar campos requeridos antes de parsear con Zod
-    if (!req.body.username || !req.body.password) {
-      const missingFields: string[] = [];
-      if (!req.body.username) missingFields.push('username');
-      if (!req.body.password) missingFields.push('password');
-      
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields',
-        errorCode: 'MISSING_REQUIRED_FIELD',
-        correlationId,
-        missingFields,
-        hint: 'Both username and password are required',
-        timestamp: new Date().toISOString(),
-      });
-    }
-    
-    // Parsear y validar con Zod (esto puede lanzar ZodError)
-    let username: string;
-    let password: string;
-    try {
-      const parsed = loginSchema.parse(req.body);
-      username = parsed.username;
-      password = parsed.password;
-    } catch (zodError: any) {
-      // Manejar errores de validación de Zod con 400, no 500
-      const zodIssues = zodError.issues || [];
-      const missingFields: string[] = [];
-      const invalidFields: string[] = [];
-      
-      zodIssues.forEach((issue: any) => {
-        if (issue.code === 'invalid_type' && issue.received === 'undefined') {
-          missingFields.push(issue.path.join('.'));
-        } else {
-          invalidFields.push(issue.path.join('.'));
-        }
-      });
-      
-      return res.status(400).json({
-        success: false,
-        error: 'Validation error',
-        errorCode: 'VALIDATION_ERROR',
-        correlationId,
-        missingFields: missingFields.length > 0 ? missingFields : undefined,
-        invalidFields: invalidFields.length > 0 ? invalidFields : undefined,
-        hint: missingFields.length > 0 
-          ? `Missing required fields: ${missingFields.join(', ')}`
-          : 'Please check that all fields are valid',
-        timestamp: new Date().toISOString(),
-      });
-    }
-    
-    // ✅ CRITICAL: Llamar a login() - si retorna null, es error de autenticación
-    const result = await authService.login(username, password, correlationId);
-    
-    // ✅ CRITICAL: Si result es null, retornar 401 inmediatamente
-    if (!result) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid credentials',
-        correlationId,
-      });
+    const { username, password } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { username }
+    });
+
+    if (!user || !user.password) {
+      return res.status(401).json({ success: false });
     }
 
-    // ✅ FIX AUTH: Configurar cookie httpOnly para el token (más seguro que localStorage)
-    // CRÍTICO: En producción, backend está en Railway y frontend en Vercel (dominios diferentes)
-    // Por lo tanto, SIEMPRE usar sameSite: 'none' y secure: true en producción
-    const isProduction = process.env.NODE_ENV === 'production';
-    
-    // Obtener el dominio del frontend desde el origin de la petición (más confiable)
-    const origin = req.headers.origin || req.headers.referer;
-    let frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
-    
-    // Si hay origin en la petición, usarlo (más preciso)
-    if (origin) {
-      try {
-        const originUrl = new URL(origin);
-        frontendUrl = `${originUrl.protocol}//${originUrl.host}`;
-      } catch (e) {
-        // Si falla, usar el valor por defecto
-      }
-    }
-    
-    // Detectar si la petición viene por HTTPS (importante para cookies secure)
-    const requestProtocol = req.protocol || (req.headers['x-forwarded-proto'] as string) || 'http';
-    const isHttps = requestProtocol === 'https' || frontendUrl.startsWith('https');
-    
-    // IMPORTANTE: Cuando el backend y frontend están en dominios diferentes (ej: Railway vs ivanreseller.com),
-    // NO debemos establecer el dominio de la cookie. El navegador solo enviará cookies al dominio que las estableció.
-    // Si establecemos domain: '.ivanreseller.com' pero el backend está en Railway, el navegador NO enviará las cookies.
-    
-    // Solo establecer domain si el backend está en el mismo dominio base que el frontend
-    let cookieDomain: string | undefined = undefined;
-    try {
-      const frontendUrlObj = new URL(frontendUrl);
-      const frontendHostname = frontendUrlObj.hostname;
-      
-      // Obtener el hostname del backend (desde el request)
-      const backendHostname = req.get('host') || req.hostname || '';
-      
-      // Solo establecer domain si el backend y frontend están en el mismo dominio base
-      // Por ejemplo: api.ivanreseller.com y www.ivanreseller.com comparten el dominio base
-      const frontendBaseDomain = frontendHostname.replace(/^[^.]+\./, ''); // Remover subdominio
-      const backendBaseDomain = backendHostname.replace(/^[^.]+\./, '');
-      
-      if (frontendBaseDomain === backendBaseDomain && frontendBaseDomain !== 'localhost' && !frontendBaseDomain.includes('127.0.0.1')) {
-        // Mismo dominio base - podemos establecer domain para que funcione con subdominios
-        cookieDomain = `.${frontendBaseDomain}`;
-      } else {
-        // Dominios diferentes (ej: Railway vs ivanreseller.com) - NO establecer domain
-        // El navegador enviará las cookies al dominio que las estableció (Railway)
-        cookieDomain = undefined;
-      }
-    } catch (e) {
-      // Si falla, no establecer domain
-      cookieDomain = undefined;
-    }
-    
-    // ✅ FIX AUTH: Configurar cookies para producción (cross-domain Vercel -> Railway)
-    // CRÍTICO: En producción (Vercel -> Railway), NO establecer domain y usar sameSite: 'none' + secure: true
-    const cookieOptions: any = {
-      httpOnly: true, // No accesible desde JavaScript (previene XSS)
-      secure: isProduction ? true : isHttps, // ✅ CRÍTICO: En producción SIEMPRE true para sameSite: 'none'
-      sameSite: (isProduction || !cookieDomain) ? 'none' as const : 'lax' as const, // ✅ CRÍTICO: 'none' para cross-domain en producción
-      maxAge: 60 * 60 * 1000, // 1 hora (debe coincidir con JWT_EXPIRES_IN)
-      path: '/', // Disponible en toda la aplicación
-    };
-    
-    // ✅ FIX AUTH: En producción (Railway vs Vercel), NUNCA establecer domain para permitir cross-domain
-    // Solo establecer domain en desarrollo si backend y frontend están en el mismo dominio base
-    // NOTA: En producción, NO establecer domain permite que las cookies funcionen cross-domain
-    if (cookieDomain && !isProduction) {
-      cookieOptions.domain = cookieDomain;
-      cookieOptions.sameSite = 'lax' as const;
-    }
-    // En producción: cookieOptions.domain queda undefined (permite cross-domain Railway -> Vercel)
+    const ok = await bcrypt.compare(password, user.password);
 
-    // Configurar cookie para refresh token (más largo)
-    const refreshCookieOptions = {
-      ...cookieOptions,
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 días
-    };
-
-    // Logging para debug (solo en desarrollo)
-    if (process.env.NODE_ENV !== 'production') {
-      logger.debug('Configurando cookies', {
-        secure: cookieOptions.secure,
-        sameSite: cookieOptions.sameSite,
-        domain: cookieOptions.domain,
-        isHttps,
-        requestProtocol,
-        frontendUrl,
-        hasToken: !!result.token,
-        origin: req.headers.origin,
-        referer: req.headers.referer,
-        'x-forwarded-proto': req.headers['x-forwarded-proto'],
-        protocol: req.protocol,
-      });
+    if (!ok) {
+      return res.status(401).json({ success: false });
     }
 
-    // IMPORTANTE: Para cookies cross-domain con sameSite: 'none', necesitamos asegurar que
-    // el header Access-Control-Allow-Credentials esté presente (CORS ya lo maneja, pero lo verificamos)
-    res.header('Access-Control-Allow-Credentials', 'true');
-    
-    // CRÍTICO: Para cookies cross-domain, el Access-Control-Allow-Origin debe ser específico (no *)
-    // y coincidir exactamente con el origin del request
-    const requestOrigin = req.headers.origin;
-    if (requestOrigin) {
-      res.header('Access-Control-Allow-Origin', requestOrigin);
-    }
-    
-    // Establecer cookies con los tokens
-    res.cookie('token', result.token, cookieOptions);
-    res.cookie('refreshToken', result.refreshToken, refreshCookieOptions);
-
-    // Logging adicional para verificar que las cookies se establecieron (solo en desarrollo)
-    if (process.env.NODE_ENV !== 'production') {
-      const setCookieHeaders = res.getHeader('Set-Cookie');
-      logger.debug('Cookies establecidas', {
-        tokenLength: result.token.length,
-        refreshTokenLength: result.refreshToken.length,
-        cookieOptions,
-        responseHeaders: {
-          'set-cookie': setCookieHeaders,
-          'access-control-allow-origin': res.getHeader('Access-Control-Allow-Origin'),
-          'access-control-allow-credentials': res.getHeader('Access-Control-Allow-Credentials'),
-        },
-        requestOrigin: requestOrigin,
-      });
-    }
-
-    // SOLUCIÓN HÍBRIDA: Devolver token en el body como fallback para todos los navegadores
-    // Esto asegura que el login funcione incluso si las cookies cross-domain no se establecen correctamente
-    // El frontend usará cookies si están disponibles, o el token del body como fallback
-    // CRÍTICO: Siempre devolver el token en el body para garantizar que el login funcione en producción
-    res.json({
+    return res.json({
       success: true,
-      message: 'Login successful',
-      data: {
-        user: result.user,
-        // Token en el body como fallback (siempre disponible para garantizar login exitoso)
-        token: result.token,
-        refreshToken: result.refreshToken,
-      },
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role
+      }
     });
-  } catch (err: any) {
-    // ✅ CRITICAL: Cualquier error inesperado retorna 401, NUNCA 500
-    console.error('[LOGIN_ROUTE_FATAL]', {
-      error: err?.message || String(err),
-      stack: err?.stack,
-      correlationId: (req as any).correlationId || 'unknown',
-    });
-    return res.status(401).json({
-      success: false,
-      error: 'Invalid credentials',
-      correlationId: (req as any).correlationId || 'unknown',
-    });
+
+  } catch (err) {
+    console.error('[SAFE_LOGIN_FATAL]', err);
+    return res.status(401).json({ success: false });
   }
 });
 
