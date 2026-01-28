@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
-import { AppError } from './error.middleware';
+import { AppError, ErrorCode } from './error.middleware';
 import { authService } from '../services/auth.service';
 import { getTokenFromRequest, parseCookiesFromHeader } from '../utils/cookie-parser';
 
@@ -153,11 +153,20 @@ export const authenticate = async (
       // ✅ FIX AUTH: Validar que JWT_SECRET existe y es válido
       if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) {
         const logger = (await import('../config/logger')).default;
+        const correlationId = (req as any).correlationId || 'unknown';
+        console.error(`[AUTH ERROR] ${correlationId} JWT_SECRET is missing or too short`, {
+          hasSecret: !!env.JWT_SECRET,
+          secretLength: env.JWT_SECRET?.length || 0,
+          path: req.path,
+          method: req.method,
+        });
         logger.error('[Auth] JWT_SECRET is missing or too short', {
+          correlationId,
           hasSecret: !!env.JWT_SECRET,
           secretLength: env.JWT_SECRET?.length || 0,
         });
-        throw new AppError('Server configuration error', 500);
+        // ✅ FIX: Return 401 instead of 500 for auth failures
+        throw new AppError('Authentication configuration error', 401, ErrorCode.UNAUTHORIZED);
       }
       
       const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;

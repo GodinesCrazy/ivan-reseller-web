@@ -99,7 +99,7 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
     
     // Parsear y validar con Zod (esto puede lanzar ZodError)
     const { username, password } = loginSchema.parse(req.body);
-    const result = await authService.login(username, password);
+    const result = await authService.login(username, password, correlationId);
 
     // ✅ FIX AUTH: Configurar cookie httpOnly para el token (más seguro que localStorage)
     // CRÍTICO: En producción, backend está en Railway y frontend en Vercel (dominios diferentes)

@@ -58,16 +58,23 @@ export class AuthService {
     };
   }
 
-  async login(username: string, password: string) {
+  async login(username: string, password: string, correlationId?: string): Promise<{
+    user: { id: number; username: string; email: string; role: string; fullName: string | null };
+    token: string;
+    refreshToken: string;
+  }> {
+    const logCorrelationId = correlationId || 'unknown';
+    
     // Trim whitespace from inputs
     const trimmedUsername = username?.trim();
     const trimmedPassword = password?.trim();
 
     if (!trimmedUsername || !trimmedPassword) {
+      console.error(`[LOGIN ERROR] ${logCorrelationId} Missing username or password`);
       throw new AppError('Username and password are required', 400);
     }
 
-    logger.debug('Login attempt', { username: trimmedUsername });
+    logger.debug('Login attempt', { username: trimmedUsername, correlationId: logCorrelationId });
 
     // ✅ FIX: Wrap database queries in try-catch to handle connection errors gracefully
     let user;
@@ -121,7 +128,14 @@ export class AuthService {
     } catch (dbError: any) {
       // ✅ FIX: Catch database errors (connection issues, table doesn't exist, etc.)
       // Return 401 instead of 500 to prevent information leakage
+      console.error(`[LOGIN ERROR] ${logCorrelationId} Database error during login`, {
+        error: dbError?.message || String(dbError),
+        code: dbError?.code,
+        username: trimmedUsername,
+        stack: dbError?.stack,
+      });
       logger.error('Database error during login', {
+        correlationId: logCorrelationId,
         error: dbError?.message || String(dbError),
         code: dbError?.code,
         username: trimmedUsername,
@@ -131,18 +145,21 @@ export class AuthService {
     }
 
     if (!user) {
-      logger.warn('Login failed: User not found', { username: trimmedUsername });
+      console.error(`[LOGIN ERROR] ${logCorrelationId} User not found`, { username: trimmedUsername });
+      logger.warn('Login failed: User not found', { correlationId: logCorrelationId, username: trimmedUsername });
       throw new AppError('Invalid credentials', 401, ErrorCode.UNAUTHORIZED);
     }
 
     if (!user.isActive) {
-      logger.warn('Login failed: Account disabled', { username: user.username });
+      console.error(`[LOGIN ERROR] ${logCorrelationId} Account disabled`, { username: user.username, userId: user.id });
+      logger.warn('Login failed: Account disabled', { correlationId: logCorrelationId, username: user.username });
       throw new AppError('Account is disabled', 403);
     }
 
     // ✅ FIX: Check if password exists before comparing
     if (!user.password) {
-      logger.warn('Login failed: User has no password set', { username: user.username });
+      console.error(`[LOGIN ERROR] ${logCorrelationId} User has no password set`, { username: user.username, userId: user.id });
+      logger.warn('Login failed: User has no password set', { correlationId: logCorrelationId, username: user.username });
       throw new AppError('Invalid credentials', 401, ErrorCode.UNAUTHORIZED);
     }
 
@@ -152,7 +169,14 @@ export class AuthService {
       isPasswordValid = await bcrypt.compare(trimmedPassword, user.password);
     } catch (bcryptError: any) {
       // If bcrypt.compare throws (e.g., invalid hash format), log and return 401
+      console.error(`[LOGIN ERROR] ${logCorrelationId} Password comparison error`, {
+        error: bcryptError?.message || String(bcryptError),
+        username: user.username,
+        userId: user.id,
+        stack: bcryptError?.stack,
+      });
       logger.error('Password comparison error during login', {
+        correlationId: logCorrelationId,
         error: bcryptError?.message || String(bcryptError),
         username: user.username,
       });
@@ -160,11 +184,12 @@ export class AuthService {
     }
 
     if (!isPasswordValid) {
-      logger.warn('Login failed: Invalid password', { username: user.username });
+      console.error(`[LOGIN ERROR] ${logCorrelationId} Invalid password`, { username: user.username, userId: user.id });
+      logger.warn('Login failed: Invalid password', { correlationId: logCorrelationId, username: user.username });
       throw new AppError('Invalid credentials', 401, ErrorCode.UNAUTHORIZED);
     }
 
-    logger.info('Login successful', { userId: user.id, username: user.username, email: user.email });
+    logger.info('Login successful', { correlationId: logCorrelationId, userId: user.id, username: user.username, email: user.email });
 
     // ✅ FIX: Wrap post-login database operations in try-catch to prevent 500 errors
     // These operations are non-critical and should not block login
@@ -174,7 +199,12 @@ export class AuthService {
         where: { id: user.id },
         data: { lastLoginAt: new Date() },
       }).catch((updateError) => {
+        console.error(`[LOGIN WARN] ${logCorrelationId} Failed to update lastLoginAt`, {
+          error: updateError?.message || String(updateError),
+          userId: user.id,
+        });
         logger.warn('Failed to update lastLoginAt', {
+          correlationId: logCorrelationId,
           error: updateError?.message || String(updateError),
           userId: user.id,
         });
@@ -188,14 +218,24 @@ export class AuthService {
           description: `User ${username} logged in`,
         },
       }).catch((activityError) => {
+        console.error(`[LOGIN WARN] ${logCorrelationId} Failed to create login activity`, {
+          error: activityError?.message || String(activityError),
+          userId: user.id,
+        });
         logger.warn('Failed to create login activity', {
+          correlationId: logCorrelationId,
           error: activityError?.message || String(activityError),
           userId: user.id,
         });
       });
     } catch (postLoginError: any) {
       // Log but don't fail login if post-login operations fail
+      console.error(`[LOGIN WARN] ${logCorrelationId} Post-login operations failed`, {
+        error: postLoginError?.message || String(postLoginError),
+        userId: user.id,
+      });
       logger.warn('Post-login operations failed', {
+        correlationId: logCorrelationId,
         error: postLoginError?.message || String(postLoginError),
         userId: user.id,
       });
@@ -204,18 +244,26 @@ export class AuthService {
     // Normalizar rol a mayúsculas para consistencia
     const normalizedRole = user.role.toUpperCase();
 
-    // ✅ FIX: Generate tokens with error handling
+    // ✅ FIX: Generate tokens with error handling - return 401 instead of 500
     let accessToken: string;
     let refreshToken: string;
     try {
-      accessToken = this.generateToken(user.id, user.username, normalizedRole);
-      refreshToken = await this.generateRefreshToken(user.id);
+      accessToken = this.generateToken(user.id, user.username, normalizedRole, undefined, logCorrelationId);
+      refreshToken = await this.generateRefreshToken(user.id, logCorrelationId);
     } catch (tokenError: any) {
+      console.error(`[LOGIN ERROR] ${logCorrelationId} Token generation error`, {
+        error: tokenError?.message || String(tokenError),
+        userId: user.id,
+        username: user.username,
+        stack: tokenError?.stack,
+      });
       logger.error('Token generation error during login', {
+        correlationId: logCorrelationId,
         error: tokenError?.message || String(tokenError),
         userId: user.id,
       });
-      throw new AppError('Authentication failed', 500);
+      // ✅ FIX: Return 401 instead of 500 for auth failures
+      throw new AppError('Authentication failed', 401, ErrorCode.UNAUTHORIZED);
     }
 
     return {
@@ -231,13 +279,32 @@ export class AuthService {
     };
   }
 
-  generateToken(userId: number, username: string, role: string, jti?: string): string {
+  generateToken(userId: number, username: string, role: string, jti?: string, correlationId?: string): string {
+    const logCorrelationId = correlationId || 'unknown';
+    
     // Normalizar rol a mayúsculas para consistencia
     const normalizedRole = role.toUpperCase();
     
+    // ✅ FIX: Defensive JWT_SECRET validation with detailed logging
     const secret: Secret = env.JWT_SECRET as string;
-    if (!secret) {
-      throw new AppError('JWT secret not configured', 500);
+    if (!secret || typeof secret !== 'string' || secret.trim().length < 32) {
+      const errorMsg = 'JWT_SECRET is missing or invalid';
+      console.error(`[AUTH ERROR] ${logCorrelationId} ${errorMsg}`, {
+        hasSecret: !!secret,
+        secretType: typeof secret,
+        secretLength: secret ? secret.length : 0,
+        minRequiredLength: 32,
+        userId,
+        username,
+      });
+      logger.error('JWT_SECRET validation failed', {
+        correlationId: logCorrelationId,
+        hasSecret: !!secret,
+        secretLength: secret ? secret.length : 0,
+        userId,
+      });
+      // ✅ FIX: Return 401 instead of 500 for auth failures
+      throw new AppError('Authentication configuration error', 401, ErrorCode.UNAUTHORIZED);
     }
 
     const signOptions: SignOptions = {
@@ -245,11 +312,27 @@ export class AuthService {
       jwtid: jti || crypto.randomBytes(16).toString('hex'), // JWT ID for blacklisting
     };
 
-    return jwt.sign(
-      { userId, username, role: normalizedRole },
-      secret,
-      signOptions
-    );
+    try {
+      return jwt.sign(
+        { userId, username, role: normalizedRole },
+        secret,
+        signOptions
+      );
+    } catch (jwtError: any) {
+      console.error(`[AUTH ERROR] ${logCorrelationId} JWT sign error`, {
+        error: jwtError?.message || String(jwtError),
+        userId,
+        username,
+        stack: jwtError?.stack,
+      });
+      logger.error('JWT sign error', {
+        correlationId: logCorrelationId,
+        error: jwtError?.message || String(jwtError),
+        userId,
+      });
+      // ✅ FIX: Return 401 instead of 500 for auth failures
+      throw new AppError('Authentication failed', 401, ErrorCode.UNAUTHORIZED);
+    }
   }
 
   async verifyToken(token: string) {
@@ -316,7 +399,9 @@ export class AuthService {
   /**
    * Generate refresh token and store in database
    */
-  async generateRefreshToken(userId: number): Promise<string> {
+  async generateRefreshToken(userId: number, correlationId?: string): Promise<string> {
+    const logCorrelationId = correlationId || 'unknown';
+    
     const token = crypto.randomBytes(64).toString('hex');
     const expiresAt = new Date();
     // Parse JWT_REFRESH_EXPIRES_IN (e.g., "30d" = 30 days)
@@ -325,16 +410,34 @@ export class AuthService {
     const days = daysMatch ? parseInt(daysMatch[1], 10) : 30;
     expiresAt.setDate(expiresAt.getDate() + days);
 
-    await prisma.refreshToken.create({
-      data: {
-        token,
-        userId,
-        expiresAt,
-      },
-    });
+    // ✅ FIX: Wrap database operation in try-catch to prevent 500 errors
+    try {
+      await prisma.refreshToken.create({
+        data: {
+          token,
+          userId,
+          expiresAt,
+        },
+      });
 
-    logger.debug('Refresh token generated', { userId });
-    return token;
+      logger.debug('Refresh token generated', { correlationId: logCorrelationId, userId });
+      return token;
+    } catch (dbError: any) {
+      console.error(`[AUTH ERROR] ${logCorrelationId} Failed to create refresh token`, {
+        error: dbError?.message || String(dbError),
+        code: dbError?.code,
+        userId,
+        stack: dbError?.stack,
+      });
+      logger.error('Failed to create refresh token', {
+        correlationId: logCorrelationId,
+        error: dbError?.message || String(dbError),
+        code: dbError?.code,
+        userId,
+      });
+      // ✅ FIX: Return 401 instead of 500 for auth failures
+      throw new AppError('Authentication failed', 401, ErrorCode.UNAUTHORIZED);
+    }
   }
 
   /**
