@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 import { prisma } from '../config/database';
 import { env } from '../config/env';
-import { AppError } from '../middleware/error.middleware';
+import { AppError, ErrorCode } from '../middleware/error.middleware';
 import { logger } from '../config/logger';
 import { redis, isRedisAvailable } from '../config/redis';
 import crypto from 'crypto';
@@ -69,56 +69,70 @@ export class AuthService {
 
     logger.debug('Login attempt', { username: trimmedUsername });
 
-    // Try to find user by username (exact match first)
-    // Especificar campos explícitamente para evitar errores si falta el campo 'plan'
-    let user = await prisma.user.findUnique({
-      where: { username: trimmedUsername },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        password: true,
-        fullName: true,
-        role: true,
-        isActive: true,
-        lastLoginAt: true,
-        // plan puede no existir en la BD, no lo incluimos en select
-      },
-    });
-
-    // If not found, try case-insensitive search by username or email
-    if (!user) {
-      const allUsers = await prisma.user.findMany({
-        where: { isActive: true },
-        select: { id: true, username: true, email: true },
+    // ✅ FIX: Wrap database queries in try-catch to handle connection errors gracefully
+    let user;
+    try {
+      // Try to find user by username (exact match first)
+      // Especificar campos explícitamente para evitar errores si falta el campo 'plan'
+      user = await prisma.user.findUnique({
+        where: { username: trimmedUsername },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          password: true,
+          fullName: true,
+          role: true,
+          isActive: true,
+          lastLoginAt: true,
+          // plan puede no existir en la BD, no lo incluimos en select
+        },
       });
-      
-      const lowerInput = trimmedUsername.toLowerCase();
-      const foundUser = allUsers.find(
-        u => u.username.toLowerCase() === lowerInput || u.email.toLowerCase() === lowerInput
-      );
-      
-      if (foundUser) {
-        user = await prisma.user.findUnique({
-          where: { id: foundUser.id },
-          select: {
-            id: true,
-            username: true,
-            email: true,
-            password: true,
-            fullName: true,
-            role: true,
-            isActive: true,
-            lastLoginAt: true,
-            // plan puede no existir en la BD, no lo incluimos en select
-          },
+
+      // If not found, try case-insensitive search by username or email
+      if (!user) {
+        const allUsers = await prisma.user.findMany({
+          where: { isActive: true },
+          select: { id: true, username: true, email: true },
         });
+        
+        const lowerInput = trimmedUsername.toLowerCase();
+        const foundUser = allUsers.find(
+          u => u.username.toLowerCase() === lowerInput || u.email.toLowerCase() === lowerInput
+        );
+        
+        if (foundUser) {
+          user = await prisma.user.findUnique({
+            where: { id: foundUser.id },
+            select: {
+              id: true,
+              username: true,
+              email: true,
+              password: true,
+              fullName: true,
+              role: true,
+              isActive: true,
+              lastLoginAt: true,
+              // plan puede no existir en la BD, no lo incluimos en select
+            },
+          });
+        }
       }
+    } catch (dbError: any) {
+      // ✅ FIX: Catch database errors (connection issues, table doesn't exist, etc.)
+      // Return 401 instead of 500 to prevent information leakage
+      logger.error('Database error during login', {
+        error: dbError?.message || String(dbError),
+        code: dbError?.code,
+        username: trimmedUsername,
+      });
+      // Return generic "Invalid credentials" to prevent information leakage
+      throw new AppError('Invalid credentials', 401, ErrorCode.UNAUTHORIZED);
     }
 
     if (!user) {
       logger.warn('Login failed: User not found', { username: trimmedUsername });
-      throw new AppError('Invalid credentials', 401);
+      throw new AppError('Invalid credentials', 401, ErrorCode.UNAUTHORIZED);
     }
 
     if (!user.isActive) {
