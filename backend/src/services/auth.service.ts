@@ -140,37 +140,83 @@ export class AuthService {
       throw new AppError('Account is disabled', 403);
     }
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(trimmedPassword, user.password);
+    // ✅ FIX: Check if password exists before comparing
+    if (!user.password) {
+      logger.warn('Login failed: User has no password set', { username: user.username });
+      throw new AppError('Invalid credentials', 401, ErrorCode.UNAUTHORIZED);
+    }
+
+    // ✅ FIX: Verify password with defensive error handling
+    let isPasswordValid = false;
+    try {
+      isPasswordValid = await bcrypt.compare(trimmedPassword, user.password);
+    } catch (bcryptError: any) {
+      // If bcrypt.compare throws (e.g., invalid hash format), log and return 401
+      logger.error('Password comparison error during login', {
+        error: bcryptError?.message || String(bcryptError),
+        username: user.username,
+      });
+      throw new AppError('Invalid credentials', 401, ErrorCode.UNAUTHORIZED);
+    }
 
     if (!isPasswordValid) {
       logger.warn('Login failed: Invalid password', { username: user.username });
-      throw new AppError('Invalid credentials', 401);
+      throw new AppError('Invalid credentials', 401, ErrorCode.UNAUTHORIZED);
     }
 
     logger.info('Login successful', { userId: user.id, username: user.username, email: user.email });
 
-    // Update last login
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
+    // ✅ FIX: Wrap post-login database operations in try-catch to prevent 500 errors
+    // These operations are non-critical and should not block login
+    try {
+      // Update last login
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      }).catch((updateError) => {
+        logger.warn('Failed to update lastLoginAt', {
+          error: updateError?.message || String(updateError),
+          userId: user.id,
+        });
+      });
 
-    // Log activity
-    await prisma.activity.create({
-      data: {
+      // Log activity
+      await prisma.activity.create({
+        data: {
+          userId: user.id,
+          action: 'login',
+          description: `User ${username} logged in`,
+        },
+      }).catch((activityError) => {
+        logger.warn('Failed to create login activity', {
+          error: activityError?.message || String(activityError),
+          userId: user.id,
+        });
+      });
+    } catch (postLoginError: any) {
+      // Log but don't fail login if post-login operations fail
+      logger.warn('Post-login operations failed', {
+        error: postLoginError?.message || String(postLoginError),
         userId: user.id,
-        action: 'login',
-        description: `User ${username} logged in`,
-      },
-    });
+      });
+    }
 
     // Normalizar rol a mayúsculas para consistencia
     const normalizedRole = user.role.toUpperCase();
 
-    // Generate access token and refresh token
-    const accessToken = this.generateToken(user.id, user.username, normalizedRole);
-    const refreshToken = await this.generateRefreshToken(user.id);
+    // ✅ FIX: Generate tokens with error handling
+    let accessToken: string;
+    let refreshToken: string;
+    try {
+      accessToken = this.generateToken(user.id, user.username, normalizedRole);
+      refreshToken = await this.generateRefreshToken(user.id);
+    } catch (tokenError: any) {
+      logger.error('Token generation error during login', {
+        error: tokenError?.message || String(tokenError),
+        userId: user.id,
+      });
+      throw new AppError('Authentication failed', 500);
+    }
 
     return {
       user: {
@@ -225,8 +271,23 @@ export class AuthService {
       throw new AppError('User not found', 404);
     }
 
-    // Verify current password
-    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    // ✅ FIX: Check if password exists before comparing
+    if (!user.password) {
+      throw new AppError('User has no password set', 400);
+    }
+
+    // ✅ FIX: Verify current password with defensive error handling
+    let isPasswordValid = false;
+    try {
+      isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    } catch (bcryptError: any) {
+      logger.error('Password comparison error during changePassword', {
+        error: bcryptError?.message || String(bcryptError),
+        userId: user.id,
+      });
+      throw new AppError('Current password is incorrect', 401);
+    }
+
     if (!isPasswordValid) {
       throw new AppError('Current password is incorrect', 401);
     }
