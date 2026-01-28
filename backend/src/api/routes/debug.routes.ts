@@ -12,6 +12,7 @@ import { CredentialsManager } from '../../services/credentials-manager.service';
 import { resolveEnvironment } from '../../utils/environment-resolver';
 import { getBuildInfo } from '../../middleware/version-header.middleware';
 import logger from '../../config/logger';
+import { prisma } from '../../config/database';
 
 const router = Router();
 
@@ -43,6 +44,34 @@ router.get('/ping', (req: Request, res: Response) => {
       pid: process.pid,
       correlationId: errorCorrelationId,
       error: error?.message || 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/debug/db-health
+ * Endpoint público para diagnosticar salud de la base de datos
+ * NO requiere autenticación
+ */
+router.get('/db-health', async (req: Request, res: Response) => {
+  try {
+    // Try raw prisma query
+    await prisma.$queryRaw`SELECT 1`;
+    
+    // Try user count
+    const userCount = await prisma.user.count();
+    
+    return res.status(200).json({
+      success: true,
+      db: 'ok',
+      userCount,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      stage: 'db-health',
+      error: error.message,
+      stack: error.stack,
     });
   }
 });

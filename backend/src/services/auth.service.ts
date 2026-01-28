@@ -78,7 +78,7 @@ export class AuthService {
 
       logger.debug('Login attempt', { username: trimmedUsername, correlationId: logCorrelationId });
 
-      // ✅ CRITICAL: Wrap database queries in try-catch - retornar null en caso de error
+      // ✅ CRITICAL: Wrap first database query in try-catch for diagnostic recovery
       let user;
       try {
         // Try to find user by username (exact match first)
@@ -97,7 +97,25 @@ export class AuthService {
             // plan puede no existir en la BD, no lo incluimos en select
           },
         });
+      } catch (dbQueryError: any) {
+        // ✅ DIAGNOSTIC RECOVERY: Surface prisma query error with correlationId
+        console.error(`[LOGIN_SERVICE_DB_QUERY_FAILED] ${logCorrelationId}`, {
+          error: dbQueryError?.message || String(dbQueryError),
+          code: dbQueryError?.code,
+          username: trimmedUsername,
+          stack: dbQueryError?.stack,
+        });
+        // Throw error with specific format for route handler to catch and return HTTP 500
+        const error: any = new Error('DB_QUERY_FAILED');
+        error.success = false;
+        error.error = 'DB_QUERY_FAILED';
+        error.details = dbQueryError?.message || String(dbQueryError);
+        error.correlationId = logCorrelationId;
+        throw error;
+      }
 
+      // ✅ CRITICAL: Wrap remaining database queries in try-catch - retornar null en caso de error
+      try {
         // If not found, try case-insensitive search by username or email
         if (!user) {
           const allUsers = await prisma.user.findMany({
