@@ -36,29 +36,30 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
 
 // POST /api/auth/login - Con rate limiting para prevenir brute force
 router.post('/login', loginRateLimit, async (req: Request, res: Response, next: NextFunction) => {
-  const correlationId = (req as any).correlationId || 'unknown';
-  const requestId = req.headers['x-request-id'] || req.headers['x-vercel-id'] || 'unknown';
-  
-  // ✅ P0: Logging mínimo por request (sin password ni token)
-  console.log(`[LOGIN] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'} correlationId=${correlationId} requestId=${requestId}`);
-  
-  // ✅ FIX AUTH: Logging robusto del raw body SOLO en modo debug para /api/auth/login
-  const isDebugMode = process.env.LOG_LEVEL === 'debug' || process.env.NODE_ENV !== 'production';
-  if (isDebugMode) {
-    logger.debug('[Login] Request received', {
-      correlationId,
-      contentType: req.headers['content-type'],
-      contentLength: req.headers['content-length'],
-      hasBody: !!req.body,
-      bodyType: typeof req.body,
-      bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body) : [],
-      bodyPreview: req.body ? JSON.stringify(req.body).substring(0, 200) : 'no body',
-      method: req.method,
-      path: req.path,
-    });
-  }
-  
+  // ✅ CRITICAL: Envolver TODO en try/catch para NUNCA retornar 500
   try {
+    const correlationId = (req as any).correlationId || 'unknown';
+    const requestId = req.headers['x-request-id'] || req.headers['x-vercel-id'] || 'unknown';
+    
+    // ✅ P0: Logging mínimo por request (sin password ni token)
+    console.log(`[LOGIN] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'} correlationId=${correlationId} requestId=${requestId}`);
+    
+    // ✅ FIX AUTH: Logging robusto del raw body SOLO en modo debug para /api/auth/login
+    const isDebugMode = process.env.LOG_LEVEL === 'debug' || process.env.NODE_ENV !== 'production';
+    if (isDebugMode) {
+      logger.debug('[Login] Request received', {
+        correlationId,
+        contentType: req.headers['content-type'],
+        contentLength: req.headers['content-length'],
+        hasBody: !!req.body,
+        bodyType: typeof req.body,
+        bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body) : [],
+        bodyPreview: req.body ? JSON.stringify(req.body).substring(0, 200) : 'no body',
+        method: req.method,
+        path: req.path,
+      });
+    }
+    
     // ✅ FIX AUTH: Validar que body existe y es objeto
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
       if (isDebugMode) {
@@ -98,8 +99,51 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
     }
     
     // Parsear y validar con Zod (esto puede lanzar ZodError)
-    const { username, password } = loginSchema.parse(req.body);
+    let username: string;
+    let password: string;
+    try {
+      const parsed = loginSchema.parse(req.body);
+      username = parsed.username;
+      password = parsed.password;
+    } catch (zodError: any) {
+      // Manejar errores de validación de Zod con 400, no 500
+      const zodIssues = zodError.issues || [];
+      const missingFields: string[] = [];
+      const invalidFields: string[] = [];
+      
+      zodIssues.forEach((issue: any) => {
+        if (issue.code === 'invalid_type' && issue.received === 'undefined') {
+          missingFields.push(issue.path.join('.'));
+        } else {
+          invalidFields.push(issue.path.join('.'));
+        }
+      });
+      
+      return res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        errorCode: 'VALIDATION_ERROR',
+        correlationId,
+        missingFields: missingFields.length > 0 ? missingFields : undefined,
+        invalidFields: invalidFields.length > 0 ? invalidFields : undefined,
+        hint: missingFields.length > 0 
+          ? `Missing required fields: ${missingFields.join(', ')}`
+          : 'Please check that all fields are valid',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    
+    // ✅ CRITICAL: Llamar a login() - si retorna null, es error de autenticación
     const result = await authService.login(username, password, correlationId);
+    
+    // ✅ CRITICAL: Si result es null, retornar 401 inmediatamente
+    if (!result) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials',
+        correlationId,
+      });
+    }
 
     // ✅ FIX AUTH: Configurar cookie httpOnly para el token (más seguro que localStorage)
     // CRÍTICO: En producción, backend está en Railway y frontend en Vercel (dominios diferentes)
@@ -242,38 +286,18 @@ router.post('/login', loginRateLimit, async (req: Request, res: Response, next: 
         refreshToken: result.refreshToken,
       },
     });
-  } catch (error: any) {
-    // ✅ FIX AUTH: Manejar errores de validación de Zod con 400, no 500
-    if (error.name === 'ZodError' || error.issues) {
-      const zodError = error.issues || [];
-      const missingFields: string[] = [];
-      const invalidFields: string[] = [];
-      
-      zodError.forEach((issue: any) => {
-        if (issue.code === 'invalid_type' && issue.received === 'undefined') {
-          missingFields.push(issue.path.join('.'));
-        } else {
-          invalidFields.push(issue.path.join('.'));
-        }
-      });
-      
-      return res.status(400).json({
-        success: false,
-        error: 'Validation error',
-        errorCode: 'VALIDATION_ERROR',
-        correlationId,
-        missingFields: missingFields.length > 0 ? missingFields : undefined,
-        invalidFields: invalidFields.length > 0 ? invalidFields : undefined,
-        hint: missingFields.length > 0 
-          ? `Missing required fields: ${missingFields.join(', ')}`
-          : 'Please check that all fields are valid',
-        timestamp: new Date().toISOString(),
-      });
-    }
-    
-    // Si es un AppError, pasarlo al error handler (responderá correctamente)
-    // Si es otro error, pasarlo al error handler global
-    next(error);
+  } catch (err: any) {
+    // ✅ CRITICAL: Cualquier error inesperado retorna 401, NUNCA 500
+    console.error('[LOGIN_ROUTE_FATAL]', {
+      error: err?.message || String(err),
+      stack: err?.stack,
+      correlationId: (req as any).correlationId || 'unknown',
+    });
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid credentials',
+      correlationId: (req as any).correlationId || 'unknown',
+    });
   }
 });
 

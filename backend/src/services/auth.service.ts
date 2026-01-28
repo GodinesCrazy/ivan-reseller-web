@@ -62,221 +62,231 @@ export class AuthService {
     user: { id: number; username: string; email: string; role: string; fullName: string | null };
     token: string;
     refreshToken: string;
-  }> {
-    const logCorrelationId = correlationId || 'unknown';
-    
-    // Trim whitespace from inputs
-    const trimmedUsername = username?.trim();
-    const trimmedPassword = password?.trim();
-
-    if (!trimmedUsername || !trimmedPassword) {
-      console.error(`[LOGIN ERROR] ${logCorrelationId} Missing username or password`);
-      throw new AppError('Username and password are required', 400);
-    }
-
-    logger.debug('Login attempt', { username: trimmedUsername, correlationId: logCorrelationId });
-
-    // ✅ FIX: Wrap database queries in try-catch to handle connection errors gracefully
-    let user;
+  } | null> {
+    // ✅ CRITICAL: Envolver TODO en try/catch - NUNCA lanzar throw, siempre retornar null en caso de error
     try {
-      // Try to find user by username (exact match first)
-      // Especificar campos explícitamente para evitar errores si falta el campo 'plan'
-      user = await prisma.user.findUnique({
-        where: { username: trimmedUsername },
-        select: {
-          id: true,
-          username: true,
-          email: true,
-          password: true,
-          fullName: true,
-          role: true,
-          isActive: true,
-          lastLoginAt: true,
-          // plan puede no existir en la BD, no lo incluimos en select
-        },
-      });
+      const logCorrelationId = correlationId || 'unknown';
+      
+      // Trim whitespace from inputs
+      const trimmedUsername = username?.trim();
+      const trimmedPassword = password?.trim();
 
-      // If not found, try case-insensitive search by username or email
-      if (!user) {
-        const allUsers = await prisma.user.findMany({
-          where: { isActive: true },
-          select: { id: true, username: true, email: true },
-        });
-        
-        const lowerInput = trimmedUsername.toLowerCase();
-        const foundUser = allUsers.find(
-          u => u.username.toLowerCase() === lowerInput || u.email.toLowerCase() === lowerInput
-        );
-        
-        if (foundUser) {
-          user = await prisma.user.findUnique({
-            where: { id: foundUser.id },
-            select: {
-              id: true,
-              username: true,
-              email: true,
-              password: true,
-              fullName: true,
-              role: true,
-              isActive: true,
-              lastLoginAt: true,
-              // plan puede no existir en la BD, no lo incluimos en select
-            },
-          });
-        }
+      if (!trimmedUsername || !trimmedPassword) {
+        console.error(`[LOGIN ERROR] ${logCorrelationId} Missing username or password`);
+        return null;
       }
-    } catch (dbError: any) {
-      // ✅ FIX: Catch database errors (connection issues, table doesn't exist, etc.)
-      // Return 401 instead of 500 to prevent information leakage
-      console.error(`[LOGIN ERROR] ${logCorrelationId} Database error during login`, {
-        error: dbError?.message || String(dbError),
-        code: dbError?.code,
-        username: trimmedUsername,
-        stack: dbError?.stack,
-      });
-      logger.error('Database error during login', {
-        correlationId: logCorrelationId,
-        error: dbError?.message || String(dbError),
-        code: dbError?.code,
-        username: trimmedUsername,
-      });
-      // Return generic "Invalid credentials" to prevent information leakage
-      throw new AppError('Invalid credentials', 401, ErrorCode.UNAUTHORIZED);
-    }
 
-    if (!user) {
-      console.error(`[LOGIN ERROR] ${logCorrelationId} User not found`, { username: trimmedUsername });
-      logger.warn('Login failed: User not found', { correlationId: logCorrelationId, username: trimmedUsername });
-      throw new AppError('Invalid credentials', 401, ErrorCode.UNAUTHORIZED);
-    }
+      logger.debug('Login attempt', { username: trimmedUsername, correlationId: logCorrelationId });
 
-    if (!user.isActive) {
-      console.error(`[LOGIN ERROR] ${logCorrelationId} Account disabled`, { username: user.username, userId: user.id });
-      logger.warn('Login failed: Account disabled', { correlationId: logCorrelationId, username: user.username });
-      throw new AppError('Account is disabled', 403);
-    }
-
-    // ✅ FIX: Check if password exists before comparing
-    if (!user.password) {
-      console.error(`[LOGIN ERROR] ${logCorrelationId} User has no password set`, { username: user.username, userId: user.id });
-      logger.warn('Login failed: User has no password set', { correlationId: logCorrelationId, username: user.username });
-      throw new AppError('Invalid credentials', 401, ErrorCode.UNAUTHORIZED);
-    }
-
-    // ✅ FIX: Verify password with defensive error handling
-    let isPasswordValid = false;
-    try {
-      isPasswordValid = await bcrypt.compare(trimmedPassword, user.password);
-    } catch (bcryptError: any) {
-      // If bcrypt.compare throws (e.g., invalid hash format), log and return 401
-      console.error(`[LOGIN ERROR] ${logCorrelationId} Password comparison error`, {
-        error: bcryptError?.message || String(bcryptError),
-        username: user.username,
-        userId: user.id,
-        stack: bcryptError?.stack,
-      });
-      logger.error('Password comparison error during login', {
-        correlationId: logCorrelationId,
-        error: bcryptError?.message || String(bcryptError),
-        username: user.username,
-      });
-      throw new AppError('Invalid credentials', 401, ErrorCode.UNAUTHORIZED);
-    }
-
-    if (!isPasswordValid) {
-      console.error(`[LOGIN ERROR] ${logCorrelationId} Invalid password`, { username: user.username, userId: user.id });
-      logger.warn('Login failed: Invalid password', { correlationId: logCorrelationId, username: user.username });
-      throw new AppError('Invalid credentials', 401, ErrorCode.UNAUTHORIZED);
-    }
-
-    logger.info('Login successful', { correlationId: logCorrelationId, userId: user.id, username: user.username, email: user.email });
-
-    // ✅ FIX: Wrap post-login database operations in try-catch to prevent 500 errors
-    // These operations are non-critical and should not block login
-    try {
-      // Update last login
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { lastLoginAt: new Date() },
-      }).catch((updateError) => {
-        console.error(`[LOGIN WARN] ${logCorrelationId} Failed to update lastLoginAt`, {
-          error: updateError?.message || String(updateError),
-          userId: user.id,
+      // ✅ CRITICAL: Wrap database queries in try-catch - retornar null en caso de error
+      let user;
+      try {
+        // Try to find user by username (exact match first)
+        // Especificar campos explícitamente para evitar errores si falta el campo 'plan'
+        user = await prisma.user.findUnique({
+          where: { username: trimmedUsername },
+          select: {
+            id: true,
+            username: true,
+            email: true,
+            password: true,
+            fullName: true,
+            role: true,
+            isActive: true,
+            lastLoginAt: true,
+            // plan puede no existir en la BD, no lo incluimos en select
+          },
         });
-        logger.warn('Failed to update lastLoginAt', {
+
+        // If not found, try case-insensitive search by username or email
+        if (!user) {
+          const allUsers = await prisma.user.findMany({
+            where: { isActive: true },
+            select: { id: true, username: true, email: true },
+          });
+          
+          const lowerInput = trimmedUsername.toLowerCase();
+          const foundUser = allUsers.find(
+            u => u.username.toLowerCase() === lowerInput || u.email.toLowerCase() === lowerInput
+          );
+          
+          if (foundUser) {
+            user = await prisma.user.findUnique({
+              where: { id: foundUser.id },
+              select: {
+                id: true,
+                username: true,
+                email: true,
+                password: true,
+                fullName: true,
+                role: true,
+                isActive: true,
+                lastLoginAt: true,
+                // plan puede no existir en la BD, no lo incluimos en select
+              },
+            });
+          }
+        }
+      } catch (dbError: any) {
+        // ✅ CRITICAL: Catch database errors - retornar null en lugar de throw
+        console.error(`[LOGIN_SERVICE_FATAL] ${logCorrelationId} Database error during login`, {
+          error: dbError?.message || String(dbError),
+          code: dbError?.code,
+          username: trimmedUsername,
+          stack: dbError?.stack,
+        });
+        logger.error('Database error during login', {
           correlationId: logCorrelationId,
-          error: updateError?.message || String(updateError),
+          error: dbError?.message || String(dbError),
+          code: dbError?.code,
+          username: trimmedUsername,
+        });
+        return null;
+      }
+
+      // ✅ CRITICAL: Si user no existe → return null
+      if (!user) {
+        console.error(`[LOGIN ERROR] ${logCorrelationId} User not found`, { username: trimmedUsername });
+        logger.warn('Login failed: User not found', { correlationId: logCorrelationId, username: trimmedUsername });
+        return null;
+      }
+
+      if (!user.isActive) {
+        console.error(`[LOGIN ERROR] ${logCorrelationId} Account disabled`, { username: user.username, userId: user.id });
+        logger.warn('Login failed: Account disabled', { correlationId: logCorrelationId, username: user.username });
+        return null;
+      }
+
+      // ✅ CRITICAL: Si user.password es null/undefined → return null
+      if (!user.password) {
+        console.error(`[LOGIN ERROR] ${logCorrelationId} User has no password set`, { username: user.username, userId: user.id });
+        logger.warn('Login failed: User has no password set', { correlationId: logCorrelationId, username: user.username });
+        return null;
+      }
+
+      // ✅ CRITICAL: bcrypt.compare envuelto en try/catch - retornar null en caso de error
+      let isPasswordValid = false;
+      try {
+        isPasswordValid = await bcrypt.compare(trimmedPassword, user.password);
+      } catch (bcryptError: any) {
+        // If bcrypt.compare throws (e.g., invalid hash format), log and return null
+        console.error(`[LOGIN_SERVICE_FATAL] ${logCorrelationId} Password comparison error`, {
+          error: bcryptError?.message || String(bcryptError),
+          username: user.username,
+          userId: user.id,
+          stack: bcryptError?.stack,
+        });
+        logger.error('Password comparison error during login', {
+          correlationId: logCorrelationId,
+          error: bcryptError?.message || String(bcryptError),
+          username: user.username,
+        });
+        return null;
+      }
+
+      if (!isPasswordValid) {
+        console.error(`[LOGIN ERROR] ${logCorrelationId} Invalid password`, { username: user.username, userId: user.id });
+        logger.warn('Login failed: Invalid password', { correlationId: logCorrelationId, username: user.username });
+        return null;
+      }
+
+      logger.info('Login successful', { correlationId: logCorrelationId, userId: user.id, username: user.username, email: user.email });
+
+      // ✅ FIX: Wrap post-login database operations in try-catch to prevent 500 errors
+      // These operations are non-critical and should not block login
+      try {
+        // Update last login
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { lastLoginAt: new Date() },
+        }).catch((updateError) => {
+          console.error(`[LOGIN WARN] ${logCorrelationId} Failed to update lastLoginAt`, {
+            error: updateError?.message || String(updateError),
+            userId: user.id,
+          });
+          logger.warn('Failed to update lastLoginAt', {
+            correlationId: logCorrelationId,
+            error: updateError?.message || String(updateError),
+            userId: user.id,
+          });
+        });
+
+        // Log activity
+        await prisma.activity.create({
+          data: {
+            userId: user.id,
+            action: 'login',
+            description: `User ${username} logged in`,
+          },
+        }).catch((activityError) => {
+          console.error(`[LOGIN WARN] ${logCorrelationId} Failed to create login activity`, {
+            error: activityError?.message || String(activityError),
+            userId: user.id,
+          });
+          logger.warn('Failed to create login activity', {
+            correlationId: logCorrelationId,
+            error: activityError?.message || String(activityError),
+            userId: user.id,
+          });
+        });
+      } catch (postLoginError: any) {
+        // Log but don't fail login if post-login operations fail
+        console.error(`[LOGIN WARN] ${logCorrelationId} Post-login operations failed`, {
+          error: postLoginError?.message || String(postLoginError),
           userId: user.id,
         });
-      });
-
-      // Log activity
-      await prisma.activity.create({
-        data: {
+        logger.warn('Post-login operations failed', {
+          correlationId: logCorrelationId,
+          error: postLoginError?.message || String(postLoginError),
           userId: user.id,
-          action: 'login',
-          description: `User ${username} logged in`,
+        });
+      }
+
+      // Normalizar rol a mayúsculas para consistencia
+      const normalizedRole = user.role.toUpperCase();
+
+      // ✅ CRITICAL: jwt.sign y generateRefreshToken envueltos en try/catch - retornar null en caso de error
+      let accessToken: string;
+      let refreshToken: string;
+      try {
+        accessToken = this.generateToken(user.id, user.username, normalizedRole, undefined, logCorrelationId);
+        refreshToken = await this.generateRefreshToken(user.id, logCorrelationId);
+      } catch (tokenError: any) {
+        console.error(`[LOGIN_SERVICE_FATAL] ${logCorrelationId} Token generation error`, {
+          error: tokenError?.message || String(tokenError),
+          userId: user.id,
+          username: user.username,
+          stack: tokenError?.stack,
+        });
+        logger.error('Token generation error during login', {
+          correlationId: logCorrelationId,
+          error: tokenError?.message || String(tokenError),
+          userId: user.id,
+        });
+        // ✅ CRITICAL: Retornar null en lugar de throw
+        return null;
+      }
+
+      return {
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          role: normalizedRole,
+          fullName: user.fullName,
         },
-      }).catch((activityError) => {
-        console.error(`[LOGIN WARN] ${logCorrelationId} Failed to create login activity`, {
-          error: activityError?.message || String(activityError),
-          userId: user.id,
-        });
-        logger.warn('Failed to create login activity', {
-          correlationId: logCorrelationId,
-          error: activityError?.message || String(activityError),
-          userId: user.id,
-        });
+        token: accessToken,
+        refreshToken,
+      };
+    } catch (err: any) {
+      // ✅ CRITICAL: Catch cualquier error inesperado - retornar null, NUNCA throw
+      console.error('[LOGIN_SERVICE_FATAL]', {
+        error: err?.message || String(err),
+        stack: err?.stack,
+        correlationId: correlationId || 'unknown',
       });
-    } catch (postLoginError: any) {
-      // Log but don't fail login if post-login operations fail
-      console.error(`[LOGIN WARN] ${logCorrelationId} Post-login operations failed`, {
-        error: postLoginError?.message || String(postLoginError),
-        userId: user.id,
-      });
-      logger.warn('Post-login operations failed', {
-        correlationId: logCorrelationId,
-        error: postLoginError?.message || String(postLoginError),
-        userId: user.id,
-      });
+      return null;
     }
-
-    // Normalizar rol a mayúsculas para consistencia
-    const normalizedRole = user.role.toUpperCase();
-
-    // ✅ FIX: Generate tokens with error handling - return 401 instead of 500
-    let accessToken: string;
-    let refreshToken: string;
-    try {
-      accessToken = this.generateToken(user.id, user.username, normalizedRole, undefined, logCorrelationId);
-      refreshToken = await this.generateRefreshToken(user.id, logCorrelationId);
-    } catch (tokenError: any) {
-      console.error(`[LOGIN ERROR] ${logCorrelationId} Token generation error`, {
-        error: tokenError?.message || String(tokenError),
-        userId: user.id,
-        username: user.username,
-        stack: tokenError?.stack,
-      });
-      logger.error('Token generation error during login', {
-        correlationId: logCorrelationId,
-        error: tokenError?.message || String(tokenError),
-        userId: user.id,
-      });
-      // ✅ FIX: Return 401 instead of 500 for auth failures
-      throw new AppError('Authentication failed', 401, ErrorCode.UNAUTHORIZED);
-    }
-
-    return {
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: normalizedRole,
-        fullName: user.fullName,
-      },
-      token: accessToken,
-      refreshToken,
-    };
   }
 
   generateToken(userId: number, username: string, role: string, jti?: string, correlationId?: string): string {
