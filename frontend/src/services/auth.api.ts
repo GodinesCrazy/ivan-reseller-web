@@ -16,22 +16,27 @@ export const authApi = {
       withCredentials: true,
     });
     
-    // Verificar que la respuesta sea exitosa
-    if (!data.success || !data.data) {
-      throw new Error(data.message || 'Login failed');
+    // Normalizar respuesta: backend puede retornar { success, user } o { success, data: { user } }
+    const user = data.user || data.data?.user;
+    
+    if (!data.success || !user) {
+      throw new Error(data.message || 'Invalid login response');
     }
+    
+    const token = data.token || data.data?.token;
     
     // El token puede estar en la cookie httpOnly O en el body
     // Si está en el body, lo guardamos en localStorage como fallback
     // CRÍTICO: Siempre guardar el token en localStorage como fallback para garantizar que funcione
-    if (data.data.token) {
-      localStorage.setItem('auth_token', data.data.token);
-      if (data.data.refreshToken) {
-        localStorage.setItem('auth_refresh_token', data.data.refreshToken);
+    if (token) {
+      localStorage.setItem('auth_token', token);
+      const refreshToken = data.refreshToken || data.data?.refreshToken;
+      if (refreshToken) {
+        localStorage.setItem('auth_refresh_token', refreshToken);
       }
     }
     
-    return data.data;
+    return { user, token };
   },
 
   register: async (userData: RegisterData) => {
