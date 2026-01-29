@@ -15,3 +15,7 @@ cmds = [
 [start]
 command = "npm start"
 
+[healthcheck]
+path = "/health"
+timeout = 300
+
