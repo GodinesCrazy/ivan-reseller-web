@@ -48,12 +48,33 @@ export default function Login() {
       toast.success('Login successful!');
       navigate('/dashboard', { replace: true });
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || 
-                          error.response?.data?.error || 
-                          error.message || 
-                          'Login failed';
+      // Manejo robusto de errores - prevenir crash de React
+      let errorMessage = 'Login failed';
+      
+      if (error?.response) {
+        // Error HTTP con respuesta
+        const status = error.response.status;
+        if (status === 502 || status === 503 || status === 504) {
+          errorMessage = 'Backend no disponible. Por favor, intenta más tarde.';
+        } else {
+          errorMessage = error.response.data?.message || 
+                        error.response.data?.error || 
+                        `Error ${status}`;
+        }
+      } else if (error?.message) {
+        // Error con mensaje
+        errorMessage = String(error.message);
+      } else if (typeof error === 'string') {
+        // Error como string
+        errorMessage = error;
+      }
+      
       toast.error(errorMessage);
-      console.error('Login error:', error);
+      console.error('Login error:', {
+        message: errorMessage,
+        status: error?.response?.status,
+        error: error?.response?.data || error?.message || error
+      });
     } finally {
       setIsLoading(false);
     }
