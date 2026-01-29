@@ -12,7 +12,9 @@ export interface RegisterData extends LoginCredentials {
 
 export const authApi = {
   login: async (credentials: LoginCredentials) => {
-    const { data } = await api.post('/api/auth/login', credentials);
+    const { data } = await api.post('/api/auth/login', credentials, {
+      withCredentials: true,
+    });
     
     // Verificar que la respuesta sea exitosa
     if (!data.success || !data.data) {
