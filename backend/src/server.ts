@@ -681,15 +681,27 @@ async function startServer() {
     httpServer.on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
         console.error(`❌ Port ${PORT} is already in use`);
+        console.error('   Railway debe inyectar PORT automáticamente. Verifica la configuración del servicio.');
         process.exit(1);
       } else {
         console.error('❌ HTTP Server error:', error);
-        process.exit(1);
+        console.error('   Error details:', {
+          code: error.code,
+          message: error.message,
+          stack: error.stack?.substring(0, 500)
+        });
+        // NO hacer exit inmediato - permitir que Railway vea el error en logs
+        setTimeout(() => process.exit(1), 5000);
       }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Failed to start server:', error);
-    process.exit(1);
+    console.error('   Error details:', {
+      message: error?.message,
+      stack: error?.stack?.substring(0, 500)
+    });
+    // NO hacer exit inmediato - permitir que Railway vea el error en logs
+    setTimeout(() => process.exit(1), 5000);
   }
 }
 
