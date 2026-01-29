@@ -1,11 +1,9 @@
 /**
- * ✅ FIX AUTH: Safe JSON Middleware Mejorado
+ * Safe JSON Middleware
  * Captura SyntaxError del body parser y responde 400 en lugar de 500
- * Incluye logging robusto con rawBody normalizado
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { RequestWithRawBody } from './raw-body-capture.middleware';
 import { logger } from '../config/logger';
 
 export function safeJsonErrorHandler(
@@ -14,29 +12,15 @@ export function safeJsonErrorHandler(
   res: Response,
   next: NextFunction
 ): void {
-  // ✅ FIX AUTH: Capturar SyntaxError del body parser
+  // Capturar SyntaxError del body parser
   if (err instanceof SyntaxError && (err as any).status === 400 && 'body' in err) {
     const correlationId = (req as any).correlationId || res.locals?.correlationId || 'unknown';
-    const reqWithRaw = req as RequestWithRawBody;
     
-    // Obtener rawBody normalizado si existe
+    // Obtener body preview si existe
     let bodyPreview = 'no body';
     let bodyLength = 0;
     
-    if (reqWithRaw.rawBody) {
-      if (typeof reqWithRaw.rawBody === 'string') {
-        bodyLength = reqWithRaw.rawBody.length;
-        // Redactar password en preview
-        bodyPreview = reqWithRaw.rawBody
-          .substring(0, 120)
-          .replace(/"password"\s*:\s*"[^"]+"/gi, '"password":"***"')
-          .replace(/"password"\s*:\s*"[^"]+"/gi, '"password":"***"');
-      } else if (Buffer.isBuffer(reqWithRaw.rawBody)) {
-        bodyLength = reqWithRaw.rawBody.length;
-        const bodyStr = reqWithRaw.rawBody.toString('utf8').substring(0, 120);
-        bodyPreview = bodyStr.replace(/"password"\s*:\s*"[^"]+"/gi, '"password":"***"');
-      }
-    } else if (typeof req.body === 'string') {
+    if (typeof req.body === 'string') {
       bodyLength = req.body.length;
       bodyPreview = req.body.substring(0, 120).replace(/"password"\s*:\s*"[^"]+"/gi, '"password":"***"');
     }
@@ -62,7 +46,7 @@ export function safeJsonErrorHandler(
       timestamp: new Date().toISOString(),
     });
     
-    // ✅ Loggear el error con correlationId y rawBody info (sin credenciales)
+    // Loggear el error con correlationId (sin credenciales)
     logger.warn('[Safe JSON] Invalid JSON body rejected', {
       correlationId,
       path: req.path,

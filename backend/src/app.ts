@@ -984,29 +984,15 @@ app.use(responseTimeMiddleware);
 import { createRoleBasedRateLimit } from './middleware/rate-limit.middleware';
 app.use('/api', createRoleBasedRateLimit());
 
-// ✅ FIX AUTH: Raw body capture ANTES de express.json() para normalizar BOM, CRLF
-import { rawBodyCaptureMiddleware } from './middleware/raw-body-capture.middleware';
-app.use(rawBodyCaptureMiddleware);
-
-// ✅ FIX AUTH: Body parsing con soporte robusto para UTF-8 y CRLF
-// express.json() con verify para capturar rawBody normalizado
+// Body parsing
 app.use(express.json({ 
   limit: '1mb',
   strict: false, // Permitir JSON más flexible (acepta comentarios, trailing commas, etc.)
   type: ['application/json', 'application/*+json'], // Aceptar diferentes content-types
-  verify: (req: any, res, buf, encoding) => {
-    // Si tenemos rawBody normalizado, usarlo
-    if (req.rawBody && typeof req.rawBody === 'string') {
-      // Reemplazar el buffer con el body normalizado
-      (req as any)._rawBody = Buffer.from(req.rawBody, 'utf8');
-    } else {
-      (req as any)._rawBody = buf;
-    }
-  },
 }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ✅ FIX AUTH: Safe JSON error handler mejorado (captura SyntaxError del body parser con rawBody logging)
+// Safe JSON error handler (captura SyntaxError del body parser)
 import { safeJsonErrorHandler } from './middleware/safe-json.middleware';
 app.use(safeJsonErrorHandler);
 
