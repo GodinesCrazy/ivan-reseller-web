@@ -156,8 +156,13 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   }
   const start = Date.now();
   const correlationId = (req as any).correlationId || `health-${Date.now()}`;
-  // ✅ P0: Request logging para /health
-  console.log(`[HEALTH] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'} correlationId=${correlationId}`);
+  // ✅ P0: Request logging para /health (solo en desarrollo o si hay error)
+  if (process.env.NODE_ENV !== 'production' || process.env.LOG_HEALTH === 'true') {
+    console.log(`[HEALTH] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'} correlationId=${correlationId}`);
+  }
+  
+  // ✅ CRITICAL: Responder inmediatamente sin bloqueos
+  // Railway necesita respuesta rápida (< 1 segundo) o detiene el contenedor
   try {
     const mem = process.memoryUsage();
     const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
@@ -166,8 +171,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     
     res.setHeader('X-Response-Time', `${responseTime}ms`);
     res.setHeader('X-Health', 'ok');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.status(200).json({
       status: 'healthy',
+      ok: true,
       safeBoot,
       timestamp: new Date().toISOString(),
       pid: process.pid,
@@ -185,13 +192,16 @@ app.use((req: Request, res: Response, next: NextFunction) => {
         unit: 'MB',
       },
     });
-  } catch {
+    return;
+  } catch (error: any) {
+    // ✅ CRITICAL: Incluso si hay error, responder 200 para mantener el contenedor activo
     const safeBoot = env.SAFE_BOOT ?? (process.env.NODE_ENV === 'production');
     const port = Number(process.env.PORT || env.PORT || 3000);
     
     res.setHeader('X-Response-Time', `${Date.now() - start}ms`);
     res.setHeader('X-Health', 'ok');
     res.setHeader('X-Correlation-Id', correlationId);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.status(200).json({
       status: 'healthy',
       ok: true,
@@ -202,7 +212,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       port,
       correlationId,
       service: 'ivan-reseller-backend',
+      note: 'Health check responded despite error',
     });
+    return;
   }
 });
 
