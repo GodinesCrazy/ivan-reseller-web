@@ -6,16 +6,16 @@
   "devCommand": "cd frontend && npm run dev",
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://ivan-reseller-web-production.up.railway.app/api/:path*"
+    },
+    {
       "source": "/health",
       "destination": "https://ivan-reseller-web-production.up.railway.app/health"
     },
     {
       "source": "/ready",
       "destination": "https://ivan-reseller-web-production.up.railway.app/ready"
-    },
-    {
-      "source": "/api/:path*",
-      "destination": "https://ivan-reseller-web-production.up.railway.app/api/:path*"
     },
     {
       "source": "/(.*)",
@@ -36,7 +36,11 @@
         },
         {
           "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization, X-Requested-With"
+          "value": "Content-Type, Authorization, X-Requested-With, Accept, Origin, X-Correlation-ID"
+        },
+        {
+          "key": "Access-Control-Allow-Credentials",
+          "value": "true"
         }
       ]
     },
