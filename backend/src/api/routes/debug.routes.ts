@@ -852,6 +852,100 @@ router.post('/seed-admin', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/debug/reset-admin-password
+ *
+ * Public endpoint to reset admin password (for emergency access recovery).
+ * Resets password for user with username "admin" to "admin123".
+ * 
+ * This endpoint is PUBLIC (no authentication required) for emergency recovery.
+ * ⚠️ SECURITY: Should be disabled or protected in production environments.
+ */
+router.post('/reset-admin-password', async (req: Request, res: Response) => {
+  const correlationId = (req as any).correlationId || `reset-admin-password-${Date.now()}`;
+  
+  try {
+    const { prisma } = await import('../../config/database');
+    const bcrypt = await import('bcryptjs');
+    
+    // Find admin user
+    const adminUser = await prisma.user.findUnique({
+      where: { username: 'admin' },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        isActive: true,
+      },
+    });
+
+    if (!adminUser) {
+      console.log('[RESET-ADMIN-PASSWORD] Admin user not found', { correlationId });
+      
+      return res.status(404).json({
+        success: false,
+        error: 'Admin user not found',
+        message: 'Admin user with username "admin" does not exist. Use /api/debug/seed-admin to create it.',
+        correlationId,
+      });
+    }
+
+    // Reset password to admin123
+    console.log('[RESET-ADMIN-PASSWORD] Resetting password for admin user', {
+      id: adminUser.id,
+      username: adminUser.username,
+      correlationId,
+    });
+    
+    // Hash password using same method as registration (bcrypt.hash with 10 rounds)
+    const SALT_ROUNDS = 10;
+    const passwordHash = await bcrypt.hash('admin123', SALT_ROUNDS);
+    
+    // Update admin password
+    await prisma.user.update({
+      where: { id: adminUser.id },
+      data: { password: passwordHash },
+    });
+
+    console.log('[RESET-ADMIN-PASSWORD] ✅ Admin password reset successfully', {
+      id: adminUser.id,
+      username: adminUser.username,
+      correlationId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Admin password reset successfully',
+      user: {
+        id: adminUser.id,
+        username: adminUser.username,
+        email: adminUser.email,
+        role: adminUser.role,
+      },
+      credentials: {
+        username: 'admin',
+        password: 'admin123',
+        note: 'Please change the password after logging in',
+      },
+      correlationId,
+    });
+  } catch (error: any) {
+    console.error('[RESET-ADMIN-PASSWORD] ❌ Error resetting admin password', {
+      error: error?.message || String(error),
+      stack: error?.stack?.substring(0, 500),
+      correlationId,
+    });
+
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to reset admin password',
+      message: error?.message || String(error),
+      correlationId,
+    });
+  }
+});
+
 // Require authentication for other endpoints
 router.use(authenticate);
 
