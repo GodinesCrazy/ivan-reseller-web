@@ -49,6 +49,8 @@ export const createRoleBasedRateLimit = () => {
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req: Request) => {
+      // Skip rate limiting for login endpoint (browser vs PowerShell parity; brute force still limited by loginRateLimit)
+      if (req.path === '/auth/login') return true;
       // Skip rate limiting para ADMIN en ciertos casos
       const user = (req as any).user;
       return user?.role === 'ADMIN' && req.path.startsWith('/api/admin');
@@ -128,25 +130,23 @@ export const createUserRateLimit = (maxRequests: number = 50, windowMs: number =
 };
 
 /**
- * ✅ FASE 8: Rate limit específico para login - Previene brute force attacks (configurable)
+ * ✅ FASE 8: Rate limit específico para login - Alto umbral para no bloquear tráfico browser (proxy/Vercel)
  */
 export const loginRateLimit = rateLimit({
-  windowMs: WINDOW_MS,
-  max: LOGIN_LIMIT, // Configurable vía RATE_LIMIT_LOGIN
+  windowMs: 60 * 1000, // 1 minute
+  max: 100,
   message: {
     success: false,
-    error: 'Too many login attempts. Please try again after 15 minutes.',
+    error: 'Too many login attempts. Please try again in a minute.',
     errorCode: 'RATE_LIMIT_EXCEEDED',
   },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
-    // Usar IP para prevenir brute force desde múltiples cuentas
-    // Usar ipKeyGenerator helper para soporte IPv6 correcto
     const ip = ipKeyGenerator(req as any);
     return `login:${ip}`;
   },
-  skipSuccessfulRequests: false, // Contar todos los intentos, incluso los exitosos
-  skipFailedRequests: false, // Contar todos los intentos fallidos
+  skipSuccessfulRequests: false,
+  skipFailedRequests: false,
 });
 
