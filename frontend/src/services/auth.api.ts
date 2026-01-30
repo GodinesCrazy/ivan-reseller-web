@@ -13,31 +13,30 @@ export interface RegisterData extends LoginCredentials {
 export const authApi = {
   login: async (credentials: LoginCredentials) => {
     try {
-      const { data } = await api.post('/api/auth/login', credentials, {
+      const response = await api.post('/api/auth/login', credentials, {
         withCredentials: true,
       });
-      
-      // Normalizar respuesta: backend puede retornar { success, user } o { success, data: { user } }
-      const user = data.user || data.data?.user;
-      
-      if (!data.success || !user) {
-        throw new Error(data.message || 'Invalid login response');
+
+      const raw = response.data;
+
+      const normalized = {
+        user: raw?.user || raw?.data?.user,
+        token: raw?.token || raw?.data?.token || null,
+      };
+
+      if (!raw?.success || !normalized.user) {
+        throw new Error(raw?.message || 'Invalid login response');
       }
-      
-      const token = data.token || data.data?.token;
-      
-      // El token puede estar en la cookie httpOnly O en el body
-      // Si está en el body, lo guardamos en localStorage como fallback
-      // CRÍTICO: Siempre guardar el token en localStorage como fallback para garantizar que funcione
-      if (token) {
-        localStorage.setItem('auth_token', token);
-        const refreshToken = data.refreshToken || data.data?.refreshToken;
+
+      if (normalized.token) {
+        localStorage.setItem('auth_token', normalized.token);
+        const refreshToken = raw?.refreshToken || raw?.data?.refreshToken;
         if (refreshToken) {
           localStorage.setItem('auth_refresh_token', refreshToken);
         }
       }
-      
-      return { user, token };
+
+      return normalized;
     } catch (error: any) {
       // Normalizar error para prevenir crash de React
       if (error?.response?.status === 502 || error?.response?.status === 503 || error?.response?.status === 504) {
