@@ -19,6 +19,7 @@ import {
   searchProducts,
   getHealthStatus,
   getCandidates,
+  oauthCallback,
 } from './aliexpress.controller';
 
 const router = Router();
@@ -128,6 +129,11 @@ router.get('/search', searchProducts);
 router.get('/health', getHealthStatus);
 
 /**
+ * GET /api/aliexpress/callback - OAuth callback: exchange code for tokens
+ */
+router.get('/callback', oauthCallback);
+
+/**
  * @swagger
  * /api/aliexpress/candidates:
  *   get:
@@ -181,6 +187,7 @@ console.log('[ALIEXPRESS-AFFILIATE]   - POST /api/aliexpress/generate-link');
 console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/test-link');
 console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/search');
 console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/health');
+console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/callback (OAuth)');
 console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/candidates (FASE 2)');
 
 export default router;

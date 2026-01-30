@@ -13,6 +13,7 @@
  */
 
 import { Request, Response } from 'express';
+import axios from 'axios';
 import aliExpressService from './aliexpress.service';
 import { aliExpressSearchService } from './aliexpress-search.service';
 import logger from '../../config/logger';
@@ -480,3 +481,74 @@ async function persistCandidates(userId: number, candidates: any[]): Promise<voi
     throw error;
   }
 }
+
+const ALIEXPRESS_TOKEN_URL = 'https://api.aliexpress.com/rest/auth/token/security/create';
+
+/**
+ * OAuth callback: exchange code for tokens and return (or store if persistence exists).
+ * GET /api/aliexpress/callback?code=...
+ */
+export const oauthCallback = async (req: Request, res: Response) => {
+  const code = typeof req.query.code === 'string' ? req.query.code.trim() : '';
+  if (!code) {
+    logger.warn('[AliExpress OAuth] Callback missing code', { query: req.query });
+    return res.status(400).json({ success: false, error: 'MISSING_CODE' });
+  }
+
+  const appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
+  const appSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+  if (!appKey || !appSecret) {
+    logger.error('[AliExpress OAuth] Missing ALIEXPRESS_APP_KEY or ALIEXPRESS_APP_SECRET');
+    return res.status(500).json({ success: false, error: 'CONFIG_MISSING' });
+  }
+
+  try {
+    const params = new URLSearchParams({
+      app_key: appKey,
+      app_secret: appSecret,
+      code,
+      grant_type: 'authorization_code',
+    });
+    const response = await axios.post(ALIEXPRESS_TOKEN_URL, params.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 15000,
+    });
+
+    const body = response.data;
+    const data = body?.data ?? body;
+    const access_token = data?.access_token;
+    const refresh_token = data?.refresh_token ?? null;
+    const expires_in = Number(data?.expires_in) || 0;
+
+    if (!access_token) {
+      logger.error('[AliExpress OAuth] Token response missing access_token', { body });
+      return res.status(500).json({ success: false, error: 'INVALID_RESPONSE' });
+    }
+
+    logger.info('[AliExpress OAuth] Tokens received', {
+      hasAccessToken: !!access_token,
+      hasRefreshToken: !!refresh_token,
+      expires_in,
+    });
+
+    return res.status(200).json({
+      success: true,
+      access_token,
+      refresh_token: refresh_token ?? undefined,
+      expires_in: expires_in || undefined,
+    });
+  } catch (err: any) {
+    const status = err?.response?.status ?? 500;
+    const data = err?.response?.data;
+    logger.error('[AliExpress OAuth] Token exchange failed', {
+      message: err?.message,
+      status,
+      responseData: data,
+    });
+    return res.status(status).json({
+      success: false,
+      error: data?.error ?? data?.error_msg ?? 'TOKEN_EXCHANGE_FAILED',
+      message: err?.message || 'Token exchange failed',
+    });
+  }
+};
