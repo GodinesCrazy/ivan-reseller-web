@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { Page, ElementHandle } from 'puppeteer';
+// Lazy types only - do NOT load puppeteer at module init (causes 502 on Railway)
+import type { Page, ElementHandle } from 'puppeteer';
 import { logger } from '../config/logger';
 import * as fs from 'fs';
 import * as path from 'path';
