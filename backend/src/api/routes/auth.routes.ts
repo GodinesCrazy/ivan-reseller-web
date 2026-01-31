@@ -39,6 +39,13 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
 // POST /api/auth/login - Cookie-based session (JWT in httpOnly cookie)
 router.post('/login', async (req: Request, res: Response) => {
   try {
+    console.log('[LOGIN HIT]', {
+      body: req.body,
+      headers: {
+        origin: req.headers.origin,
+        host: req.headers.host,
+      },
+    });
     const { username, password } = req.body;
 
     const user = await prisma.user.findUnique({
@@ -87,8 +94,12 @@ router.post('/login', async (req: Request, res: Response) => {
       }
     });
 
-  } catch (err) {
-    console.error('[SAFE_LOGIN_FATAL]', err);
+  } catch (error) {
+    console.error('[LOGIN ERROR]', {
+      message: (error as Error)?.message,
+      name: (error as Error)?.name,
+      stack: (error as Error)?.stack,
+    });
     return res.status(401).json({ success: false });
   }
 });
