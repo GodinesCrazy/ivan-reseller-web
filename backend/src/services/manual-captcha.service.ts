@@ -7,14 +7,21 @@
 
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { Browser, Page } from 'puppeteer';
 import { getChromiumLaunchConfig } from '../utils/chromium';
 import { logger } from '../config/logger';
 import { notificationService } from './notification.service';
 
-puppeteer.use(StealthPlugin());
+// Lazy load puppeteer to avoid SIGSEGV/crash during Railway startup
+let puppeteerModule: any = null;
+async function loadPuppeteer() {
+  if (puppeteerModule) return puppeteerModule;
+  const puppeteerExtra = await import('puppeteer-extra');
+  const StealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
+  const puppeteer = puppeteerExtra.default;
+  puppeteer.use(StealthPlugin());
+  puppeteerModule = puppeteer;
+  return puppeteer;
+}
 
 const prisma = new PrismaClient();
 
@@ -31,7 +38,7 @@ export interface ManualCaptchaSession {
 }
 
 export class ManualCaptchaService {
-  private static activeSessions: Map<string, { browser: Browser; page: Page; userId: number }> = new Map();
+  private static activeSessions: Map<string, { browser: any; page: any; userId: number }> = new Map();
 
   /**
    * Iniciar sesión de resolución manual de CAPTCHA
@@ -123,6 +130,7 @@ export class ManualCaptchaService {
     } else {
       // En desarrollo: intentar abrir navegador visible
       try {
+        const puppeteer = await loadPuppeteer();
         const { executablePath, args: chromiumArgs } = await getChromiumLaunchConfig([
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
