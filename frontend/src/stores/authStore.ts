@@ -17,6 +17,7 @@ interface AuthState {
   isCheckingAuth: boolean;
   login: (user: User, token?: string) => void; // token es opcional ahora
   logout: () => Promise<void>;
+  clearSession: () => void; // Clear local state only (no API call); use on 401 to avoid logout loop
   checkAuth: () => Promise<boolean>;
 }
 
@@ -49,13 +50,15 @@ export const useAuthStore = create<AuthState>()(
       },
       logout: async () => {
         try {
-          // Llamar al endpoint de logout para limpiar la cookie
           await authApi.logout();
         } catch (error) {
-          // Si falla, continuar con la limpieza local
           console.warn('Error al hacer logout en el servidor:', error);
         }
-        // Limpiar estado local y localStorage
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_refresh_token');
+        set({ user: null, token: null, isAuthenticated: false });
+      },
+      clearSession: () => {
         localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_refresh_token');
         set({ user: null, token: null, isAuthenticated: false });

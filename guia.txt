@@ -1,0 +1,1064 @@
+================================================================================
+                    GUÍA COMPLETA - IVAN RESELLER WEB
+           Sistema Automatizado de Dropshipping con Inteligencia Artificial
+================================================================================
+
+ÍNDICE
+------
+1. ?QUÉ ES IVAN RESELLER WEB?
+2. CÓMO GENERA DINERO AUTOMÁTICAMENTE
+3. FUNCIONALIDADES PRINCIPALES
+4. SISTEMAS DE AUTOMATIZACIÓN
+5. INTEGRACIONES CON MARKETPLACES
+6. SISTEMAS DE INTELIGENCIA ARTIFICIAL
+7. GESTIÓN FINANCIERA Y COMISIONES
+8. REPORTES Y ANALYTICS
+9. CONFIGURACIÓN Y USO
+10. CASOS DE USO Y EJEMPLOS PRÁCTICOS
+
+================================================================================
+1. ?QUÉ ES IVAN RESELLER WEB?
+================================================================================
+
+Ivan Reseller Web es una plataforma completa de dropshipping automatizado que
+permite generar ingresos de forma pasiva mediante la venta de productos en
+múltiples marketplaces (eBay, Amazon, MercadoLibre) sin necesidad de tener
+inventario físico.
+
+EL SISTEMA FUNCIONA ASÍ:
+- Busca productos rentables en AliExpress (proveedor chino)
+- Analiza la competencia en eBay, Amazon y MercadoLibre
+- Calcula automáticamente precios, márgenes y rentabilidad
+- Publica productos en los marketplaces seleccionados
+- Cuando alguien compra, el sistema procesa la orden automáticamente
+- El usuario gana la diferencia entre el precio de venta y el costo
+
+TODO ESTO FUNCIONA 24/7 SIN INTERVENCIÓN HUMANA cuando está configurado
+correctamente.
+
+================================================================================
+2. CÓMO GENERA DINERO AUTOMÁTICAMENTE
+================================================================================
+
+FLUJO COMPLETO DE GENERACIÓN DE DINERO:
+
+PASO 1: BÚSQUEDA AUTOMÁTICA DE OPORTUNIDADES
+---------------------------------------------
+El sistema busca productos en AliExpress que cumplan estos criterios:
+- Margen de ganancia mínimo: 10% (configurable)
+- ROI mínimo: 50% (configurable)
+- Ganancia mínima: $10 USD (configurable)
+- Demanda validada con Google Trends
+- Competencia analizada en tiempo real
+
+PASO 2: ANÁLISIS INTELIGENTE
+-----------------------------
+Para cada producto encontrado, el sistema:
+- Calcula el precio de venta óptimo considerando:
+  * Costo del producto en AliExpress
+  * Costo de envío
+  * Impuestos de importación
+  * Comisiones del marketplace (eBay, Amazon, MercadoLibre)
+  * Comisiones del sistema (10% + costo fijo mensual)
+  * Márgenes de seguridad
+- Analiza la competencia en cada marketplace
+- Valida la demanda real con Google Trends
+- Calcula tiempo estimado hasta primera venta
+- Calcula tiempo hasta recuperar inversión (break-even)
+
+PASO 3: PUBLICACIÓN AUTOMÁTICA
+-------------------------------
+El sistema publica el producto en los marketplaces configurados:
+- Crea el listing con título optimizado
+- Sube todas las imágenes del producto
+- Escribe descripción profesional
+- Establece precio calculado automáticamente
+- Configura categoría correcta
+- Gestiona inventario (cantidad disponible)
+
+PASO 4: RECEPCIÓN DE VENTAS
+----------------------------
+Cuando un cliente compra en eBay/Amazon/MercadoLibre:
+- El sistema recibe notificación automática vía webhook
+- Crea registro de venta en la base de datos
+- Calcula comisión automáticamente (10% + costo fijo)
+- Notifica al usuario en tiempo real
+- Reserva el capital necesario para comprar el producto
+
+PASO 5: PROCESAMIENTO AUTOMÁTICO DE ÓRDENES
+--------------------------------------------
+El sistema puede (si está configurado):
+- Comprar automáticamente el producto en AliExpress
+- Usar el link de afiliado para ganar comisión adicional
+- Enviar el producto directamente al cliente
+- Actualizar el estado del pedido
+- Gestionar reembolsos y devoluciones
+
+GANANCIA DEL USUARIO:
+---------------------
+Ganancia = Precio de Venta - Costo del Producto - Envío - Impuestos - 
+           Comisiones Marketplace - Comisión Sistema
+
+Ejemplo práctico:
+- Producto en AliExpress: $10 USD
+- Precio de venta calculado: $25 USD
+- Comisión eBay (10%): $2.50
+- Comisión sistema (10%): $2.50
+- Envío e impuestos: $3
+- GANANCIA NETA: $7 USD por venta
+
+Si vendes 10 productos al día: $70 USD/día = $2,100 USD/mes
+
+================================================================================
+3. FUNCIONALIDADES PRINCIPALES
+================================================================================
+
+3.1. BÚSQUEDA Y ANÁLISIS DE OPORTUNIDADES
+------------------------------------------
+- Búsqueda manual: Ingresa términos de búsqueda y el sistema encuentra
+  productos rentables en AliExpress
+- Búsqueda automática: El sistema busca continuamente nuevas oportunidades
+- Análisis de competencia: Compara precios en eBay, Amazon y MercadoLibre
+- Cálculo de rentabilidad: ROI, margen, ganancia neta automáticos
+- Validación de demanda: Integración con Google Trends para validar
+  búsquedas reales
+- Filtros avanzados: Por categoría, precio, margen, ROI, demanda
+- Deduplicación inteligente: Elimina productos similares automáticamente
+
+3.2. SCRAPING AVANZADO DE PRODUCTOS
+------------------------------------
+- Scraping stealth: Usa Puppeteer con plugins anti-detección
+- Rotación de proxies: 50+ proxies para evitar bloqueos
+- Fingerprinting: Simula navegadores reales
+- Resolución de CAPTCHAs: Automática con servicios de terceros
+- Extracción completa: Título, precio, imágenes, descripción, especificaciones,
+  reviews, rating, vendedor
+- Retry inteligente: Reintentos automáticos con backoff exponencial
+- Bridge Python: Opción de usar servidor Python para scraping más robusto
+
+3.3. PUBLICACIÓN MULTI-MARKETPLACE
+-----------------------------------
+El sistema publica productos en:
+- eBay: Integración completa con Trading API
+- Amazon: Integración con SP-API (Seller Partner API)
+- MercadoLibre: Integración con API v1
+
+Características:
+- Publicación simultánea en múltiples marketplaces
+- Optimización de títulos para SEO
+- Gestión automática de imágenes (validación, optimización)
+- Descripciones profesionales generadas automáticamente
+- Precios sincronizados automáticamente
+- Gestión de inventario unificada
+- Actualización automática de stock
+
+3.4. GESTIÓN DE PRODUCTOS
+--------------------------
+- Estado de productos: Pendiente, Aprobado, Publicado, Vendido, Pausado
+- Workflow de aprobación: Flujo configurable para revisar antes de publicar
+- Límites de productos: Control de cuántos productos puedes publicar
+- Categorización automática: Clasifica productos por categoría
+- Historial completo: Registro de todos los cambios
+- Búsqueda y filtros: Encuentra productos rápidamente
+
+3.5. GESTIÓN DE VENTAS
+----------------------
+- Registro automático: Todas las ventas se registran automáticamente
+- Cálculo de ganancias: Automático considerando todos los costos
+- Estado de pedidos: Seguimiento completo del ciclo de vida
+- Notificaciones: Alertas en tiempo real de nuevas ventas
+- Historial completo: Todas las ventas con detalles
+- Exportación: Exporta datos a Excel/CSV
+
+3.6. SISTEMA DE COMISIONES
+---------------------------
+El sistema cobra comisiones por cada venta:
+- Comisión base: 10% del precio de venta
+- Costo fijo mensual: Configurable por plan
+- Cálculo automático: Se calcula al momento de la venta
+- Programación de pagos: Puedes programar cuándo pagar
+- Integración PayPal: Pagos automáticos vía PayPal
+- Reportes de comisiones: Historial completo de comisiones
+
+3.7. NOTIFICACIONES EN TIEMPO REAL
+------------------------------------
+- WebSocket: Comunicación instantánea con el frontend
+- Notificaciones push: En el navegador
+- Email: Notificaciones por correo electrónico
+- SMS: Opción de notificaciones por SMS (Twilio)
+- Slack: Integración con Slack para notificaciones
+- Discord: Integración con Discord
+- Tipos de notificaciones:
+  * Nuevas oportunidades encontradas
+  * Productos publicados exitosamente
+  * Nuevas ventas
+  * Errores en publicación
+  * Alertas financieras
+  * Recordatorios de pago
+
+3.8. GESTIÓN DE CREDENCIALES
+-----------------------------
+El sistema gestiona credenciales de múltiples servicios:
+- AliExpress Affiliate API
+- AliExpress Dropshipping API
+- eBay Trading API (Sandbox y Production)
+- Amazon SP-API (Sandbox y Production)
+- MercadoLibre API
+- ScraperAPI
+- ZenRows
+- Anti-Captcha services
+- Google Trends API
+- Groq API (para IA)
+
+Características:
+- Almacenamiento seguro: Encriptado en base de datos
+- Validación automática: Verifica que las credenciales funcionen
+- Renovación automática: Renueva tokens OAuth automáticamente
+- Ambientes separados: Sandbox y Production
+- Auditoría: Historial de cambios en credenciales
+
+================================================================================
+4. SISTEMAS DE AUTOMATIZACIÓN
+================================================================================
+
+4.1. SISTEMA AUTOPILOT (AUTÓNOMO 24/7)
+--------------------------------------
+El sistema más potente: opera completamente solo.
+
+FUNCIONAMIENTO:
+- Se ejecuta en ciclos configurables (por defecto cada 60 minutos)
+- En cada ciclo:
+  1. Selecciona término de búsqueda inteligentemente (basado en performance)
+  2. Busca oportunidades en AliExpress
+  3. Analiza competencia en marketplaces
+  4. Calcula rentabilidad
+  5. Filtra por reglas de negocio (margen mínimo, ROI mínimo, capital disponible)
+  6. Publica automáticamente O envía a aprobación (según configuración)
+  7. Actualiza métricas y aprende de los resultados
+
+CONFIGURACIÓN:
+- Habilitado/Deshabilitado
+- Intervalo entre ciclos (minutos)
+- Modo de publicación: Automático o Manual (requiere aprobación)
+- Marketplace objetivo: eBay, Amazon, MercadoLibre
+- Máximo de oportunidades por ciclo
+- Términos de búsqueda personalizados
+- Capital de trabajo disponible
+- Ganancia mínima (USD)
+- ROI mínimo (%)
+- Optimización habilitada/deshabilitada
+
+OPTIMIZACIÓN INTELIGENTE:
+- Aprende qué categorías funcionan mejor
+- Prioriza búsquedas con mejor performance histórica
+- Ajusta estrategia basado en resultados
+- 80% explotación (categorías probadas), 20% exploración (nuevas)
+
+GESTIÓN DE CAPITAL:
+- Rastrea capital disponible en tiempo real
+- Reserva capital automáticamente por producto
+- Previene sobre-compromiso
+- Cálculo: Capital Total - Pedidos Pendientes - Productos Aprobados
+
+MÉTRICAS Y REPORTES:
+- Total de ciclos ejecutados
+- Productos encontrados
+- Productos publicados
+- Productos enviados a aprobación
+- Capital usado
+- Tasa de éxito
+- Performance por categoría
+- Tendencias de performance
+
+4.2. WORKFLOW SYSTEM (AUTOMATIZACIÓN PERSONALIZADA)
+---------------------------------------------------
+Sistema de workflows para automatizar tareas específicas.
+
+TIPOS DE WORKFLOWS:
+- Search: Búsqueda automática de productos
+- Analyze: Análisis automático de oportunidades
+- Publish: Publicación automática
+- Reprice: Re-preciado automático de productos
+- Custom: Workflows personalizados
+
+CARACTERÍSTICAS:
+- Programación: Ejecuta en horarios específicos (cron)
+- Condiciones: Ejecuta solo si se cumplen ciertas condiciones
+- Acciones: Define qué acciones realizar
+- Logs: Historial completo de ejecuciones
+- Habilitado/Deshabilitado: Control total
+
+EJEMPLOS DE WORKFLOWS:
+- "Buscar productos de 'auriculares bluetooth' cada día a las 9 AM"
+- "Re-preciar productos sin ventas después de 30 días"
+- "Publicar automáticamente productos con ROI > 100%"
+- "Analizar competencia de productos publicados semanalmente"
+
+4.3. SCHEDULED TASKS (TAREAS PROGRAMADAS)
+------------------------------------------
+Sistema de tareas programadas para mantenimiento y optimización.
+
+TAREAS INCLUIDAS:
+- Limpieza de datos antiguos
+- Optimización de base de datos
+- Generación de reportes programados
+- Sincronización de precios
+- Actualización de stock
+- Renovación de tokens OAuth
+- Verificación de salud de APIs
+- Backup de datos
+
+4.4. AUTO-RECOVERY SYSTEM (RECUPERACIÓN AUTOMÁTICA)
+---------------------------------------------------
+Sistema que detecta y corrige errores automáticamente.
+
+FUNCIONES:
+- Detecta fallos en scraping
+- Reintenta operaciones fallidas
+- Cambia de proxy automáticamente si hay bloqueo
+- Resuelve CAPTCHAs automáticamente
+- Recupera sesiones expiradas
+- Notifica problemas críticos
+
+================================================================================
+5. INTEGRACIONES CON MARKETPLACES
+================================================================================
+
+5.1. EBAY
+---------
+INTEGRACIÓN COMPLETA:
+- Trading API: Para crear, actualizar y gestionar listings
+- OAuth 2.0: Autenticación segura
+- Sandbox y Production: Ambientes separados
+- Múltiples marketplaces: US, UK, DE, ES, FR, IT, AU, CA, MX
+
+FUNCIONALIDADES:
+- Crear listings: Título, descripción, precio, imágenes, categoría
+- Actualizar listings: Modificar precio, stock, descripción
+- Eliminar listings: Finalizar ventas
+- Obtener ventas: Webhooks para notificaciones
+- Gestión de inventario: Sincronización automática
+- Búsqueda de productos: Para análisis de competencia
+
+5.2. AMAZON
+-----------
+INTEGRACIÓN COMPLETA:
+- SP-API (Seller Partner API): API oficial de Amazon
+- OAuth 2.0: Autenticación segura
+- Sandbox y Production: Ambientes separados
+- Múltiples marketplaces: US, CA, MX, UK, DE, FR, IT, ES, etc.
+
+FUNCIONALIDADES:
+- Crear listings: Productos nuevos y existentes
+- Actualizar listings: Precio, stock, descripción
+- Gestión de inventario: FBA y FBM
+- Obtener órdenes: Sincronización automática
+- Búsqueda de productos: Para análisis de competencia
+- Gestión de variantes: Productos con múltiples opciones
+
+5.3. MERCADOLIBRE
+-----------------
+INTEGRACIÓN COMPLETA:
+- API v1: API oficial de MercadoLibre
+- OAuth 2.0: Autenticación segura
+- Sandbox y Production: Ambientes separados
+- Múltiples países: Argentina, Brasil, Chile, Colombia, México, etc.
+
+FUNCIONALIDADES:
+- Crear publicaciones: Título, descripción, precio, imágenes
+- Actualizar publicaciones: Modificar precio, stock
+- Finalizar publicaciones: Cerrar ventas
+- Obtener ventas: Webhooks para notificaciones
+- Gestión de preguntas: Responder preguntas de compradores
+- Búsqueda de productos: Para análisis de competencia
+
+================================================================================
+6. SISTEMAS DE INTELIGENCIA ARTIFICIAL
+================================================================================
+
+6.1. CEO AGENT (AGENTE EJECUTIVO)
+----------------------------------
+Sistema de IA que toma decisiones estratégicas como un CEO.
+
+FUNCIONES:
+- Análisis de performance: Analiza ventas, productos, categorías
+- Optimización de capital: Sugiere cuánto capital usar
+- Decisiones estratégicas: Ajusta reglas de negocio dinámicamente
+- Identificación de oportunidades: Detecta nuevas áreas de negocio
+- Análisis de riesgos: Identifica factores de riesgo
+- Recomendaciones: Sugerencias accionables basadas en datos
+
+TECNOLOGÍA:
+- Groq API: Modelo Mixtral 8x7B para análisis
+- Análisis de datos históricos
+- Machine Learning: Aprende de patrones
+- Toma de decisiones autónoma
+
+6.2. AI LEARNING SYSTEM (SISTEMA DE APRENDIZAJE)
+------------------------------------------------
+Sistema que aprende de cada venta y mejora continuamente.
+
+FUNCIONES:
+- Aprende qué productos venden mejor
+- Identifica patrones de éxito
+- Optimiza selección de productos
+- Mejora cálculo de precios
+- Predice probabilidad de venta
+- Ajusta estrategias automáticamente
+
+DATOS QUE APRENDE:
+- Categorías más rentables
+- Rangos de precio óptimos
+- Términos de búsqueda efectivos
+- Horarios de publicación
+- Características de productos exitosos
+
+6.3. AI SUGGESTIONS (SUGERENCIAS INTELIGENTES)
+----------------------------------------------
+Sistema que genera sugerencias accionables para mejorar el negocio.
+
+TIPOS DE SUGERENCIAS:
+- Pricing: Ajustes de precio recomendados
+- Inventory: Gestión de inventario
+- Marketing: Estrategias de marketing
+- Listing: Optimización de listings
+- Optimization: Mejoras generales
+- Automation: Nuevas automatizaciones
+
+CARACTERÍSTICAS:
+- Prioridad: Alta, Media, Baja
+- Impacto estimado: Ingresos y tiempo ahorrado
+- Dificultad: Fácil, Media, Difícil
+- Confianza: Porcentaje de confianza en la sugerencia
+- Pasos accionables: Instrucciones detalladas
+
+6.4. TREND SUGGESTIONS (SUGERENCIAS DE TENDENCIAS)
+--------------------------------------------------
+Sistema que identifica tendencias de mercado usando Google Trends.
+
+FUNCIONES:
+- Analiza búsquedas en Google Trends
+- Identifica productos en tendencia
+- Valida demanda real
+- Sugiere términos de búsqueda
+- Predice tendencias futuras
+
+6.5. COMPETITOR ANALYZER (ANALIZADOR DE COMPETENCIA)
+----------------------------------------------------
+Sistema que analiza la competencia en tiempo real.
+
+FUNCIONES:
+- Encuentra productos similares en marketplaces
+- Compara precios
+- Analiza nivel de competencia
+- Calcula posición de mercado
+- Sugiere precios competitivos
+- Identifica oportunidades de arbitraje
+
+================================================================================
+7. GESTIÓN FINANCIERA Y COMISIONES
+================================================================================
+
+7.1. CÁLCULO AUTOMÁTICO DE COSTOS
+----------------------------------
+El sistema calcula automáticamente todos los costos:
+
+COSTOS CONSIDERADOS:
+- Costo del producto (AliExpress)
+- Costo de envío
+- Impuestos de importación (calculados por país)
+- Comisiones del marketplace:
+  * eBay: ~10-12% del precio de venta
+  * Amazon: ~15% del precio de venta
+  * MercadoLibre: ~13-15% del precio de venta
+- Comisión del sistema: 10% + costo fijo mensual
+- Márgenes de seguridad
+
+7.2. GESTIÓN DE CAPITAL
+-----------------------
+- Rastreo en tiempo real de capital disponible
+- Reserva automática al aprobar producto
+- Prevención de sobre-compromiso
+- Cálculo dinámico: Capital Total - Pedidos - Aprobados
+- Alertas cuando el capital es bajo
+
+7.3. SISTEMA DE COMISIONES
+---------------------------
+ESTRUCTURA:
+- Comisión base: 10% del precio de venta
+- Costo fijo mensual: Según plan (configurable)
+
+ESTADOS DE COMISIÓN:
+- PENDING: Pendiente de pago
+- SCHEDULED: Programada para fecha específica
+- PAID: Pagada
+- CANCELLED: Cancelada
+
+FUNCIONALIDADES:
+- Cálculo automático al momento de venta
+- Programación de pagos
+- Integración PayPal para pagos automáticos
+- Reportes de comisiones
+- Historial completo
+
+7.4. ALERTAS FINANCIERAS
+------------------------
+El sistema envía alertas cuando:
+- Capital disponible es bajo
+- Hay ventas pendientes de procesar
+- Comisiones próximas a vencer
+- Cambios significativos en ingresos
+- Productos sin ventas por mucho tiempo
+
+7.5. REPORTES FINANCIEROS
+--------------------------
+- Ingresos totales
+- Gastos totales
+- Ganancia neta
+- ROI promedio
+- Margen promedio
+- Tendencias de ingresos
+- Proyecciones futuras
+
+================================================================================
+8. REPORTES Y ANALYTICS
+================================================================================
+
+8.1. DASHBOARD PRINCIPAL
+------------------------
+Vista general con:
+- Ventas del día/semana/mes
+- Productos activos
+- Oportunidades encontradas
+- Ganancia total
+- ROI promedio
+- Gráficos de tendencias
+- Alertas importantes
+
+8.2. REPORTES DE VENTAS
+-----------------------
+- Ventas por período
+- Ventas por marketplace
+- Ventas por categoría
+- Productos más vendidos
+- Tendencias de ventas
+- Comparación de períodos
+
+8.3. REPORTES DE PRODUCTOS
+---------------------------
+- Productos publicados
+- Productos vendidos
+- Productos sin ventas
+- Performance por categoría
+- Tiempo hasta primera venta
+- Tasa de conversión
+
+8.4. REPORTES DE OPORTUNIDADES
+-------------------------------
+- Oportunidades encontradas
+- Oportunidades publicadas
+- Oportunidades vendidas
+- Tasa de éxito
+- Performance por término de búsqueda
+- ROI por categoría
+
+8.5. REPORTES AVANZADOS
+-----------------------
+- Análisis de competencia
+- Análisis de mercado
+- Predicciones de ventas
+- Optimización de precios
+- Análisis de tendencias
+- Reportes personalizados
+
+8.6. EXPORTACIÓN DE DATOS
+-------------------------
+- Exportar a Excel
+- Exportar a CSV
+- Exportar a PDF
+- Programar exportaciones automáticas
+- Envío por email
+
+================================================================================
+9. CONFIGURACIÓN Y USO
+================================================================================
+
+9.1. CONFIGURACIÓN INICIAL
+---------------------------
+PASOS PARA COMENZAR:
+
+1. CREAR CUENTA
+   - Registrarse en la plataforma
+   - Verificar email
+   - Completar perfil
+
+2. CONFIGURAR CREDENCIALES DE MARKETPLACES
+   - eBay: App ID, Dev ID, Cert ID, OAuth Token
+   - Amazon: Client ID, Client Secret, Refresh Token, AWS Keys
+   - MercadoLibre: Client ID, Client Secret, Access Token
+
+3. CONFIGURAR CREDENCIALES DE ALIEXPRESS
+   - AliExpress Affiliate API: App Key, App Secret
+   - AliExpress Dropshipping API: Access Token, Refresh Token
+   - (Opcional) ScraperAPI o ZenRows para scraping
+
+4. CONFIGURAR AUTOPILOT
+   - Habilitar/Deshabilitar
+   - Configurar intervalo de ciclos
+   - Establecer modo de publicación (Automático/Manual)
+   - Definir términos de búsqueda
+   - Configurar capital de trabajo
+   - Establecer reglas de negocio (margen mínimo, ROI mínimo)
+
+5. CONFIGURAR NOTIFICACIONES
+   - Email
+   - SMS (opcional)
+   - Slack (opcional)
+   - Discord (opcional)
+
+9.2. FLUJO DE TRABAJO TÍPICO
+-----------------------------
+
+MODO AUTOMÁTICO (AUTOPILOT):
+1. Configuras el Autopilot con tus preferencias
+2. El sistema busca oportunidades automáticamente
+3. Publica productos automáticamente (o envía a aprobación)
+4. Cuando hay venta, recibes notificación
+5. El sistema procesa la orden automáticamente
+6. Ganas dinero sin hacer nada
+
+MODO MANUAL:
+1. Buscas oportunidades manualmente
+2. Revisas los resultados
+3. Seleccionas productos que quieres publicar
+4. Apruebas productos para publicación
+5. El sistema publica en los marketplaces
+6. Cuando hay venta, recibes notificación
+7. Procesas la orden manualmente (o automáticamente si está configurado)
+
+9.3. CONFIGURACIÓN AVANZADA
+---------------------------
+
+WORKFLOW CONFIG:
+- Configuración de workflows personalizados
+- Programación de tareas
+- Condiciones y acciones
+- Integración con otros sistemas
+
+API SETTINGS:
+- Configuración de todas las APIs
+- Validación de credenciales
+- Renovación automática de tokens
+- Monitoreo de salud de APIs
+
+USER SETTINGS:
+- Preferencias de usuario
+- Configuración de notificaciones
+- Preferencias de publicación
+- Configuración regional
+
+================================================================================
+10. CASOS DE USO Y EJEMPLOS PRÁCTICOS
+================================================================================
+
+CASO DE USO 1: DROPSHIPPING PASIVO COMPLETO
+--------------------------------------------
+OBJETIVO: Generar ingresos pasivos sin intervención
+
+CONFIGURACIÓN:
+- Autopilot habilitado
+- Modo de publicación: Automático
+- Intervalo: Cada 60 minutos
+- Capital de trabajo: $1,000 USD
+- Margen mínimo: 15%
+- ROI mínimo: 50%
+
+RESULTADO:
+- El sistema busca oportunidades cada hora
+- Publica productos automáticamente
+- Procesa ventas automáticamente
+- Genera ingresos 24/7 sin intervención
+
+GANANCIA ESTIMADA:
+- 5 productos publicados/día
+- 1 venta cada 2 días por producto
+- Ganancia promedio: $10 USD por venta
+- GANANCIA MENSUAL: ~$750 USD
+
+CASO DE USO 2: ESCALADO RÁPIDO
+-------------------------------
+OBJETIVO: Crecer rápidamente el negocio
+
+CONFIGURACIÓN:
+- Autopilot habilitado
+- Modo de publicación: Manual (para control de calidad)
+- Intervalo: Cada 30 minutos
+- Capital de trabajo: $5,000 USD
+- Margen mínimo: 20%
+- ROI mínimo: 75%
+
+RESULTADO:
+- Encuentra muchas oportunidades
+- Revisas y apruebas las mejores
+- Publicas productos de alta calidad
+- Escalas rápidamente
+
+GANANCIA ESTIMADA:
+- 20 productos publicados/día
+- 2 ventas/día por producto
+- Ganancia promedio: $15 USD por venta
+- GANANCIA MENSUAL: ~$18,000 USD
+
+CASO DE USO 3: NICHO ESPECÍFICO
+--------------------------------
+OBJETIVO: Enfocarse en una categoría específica
+
+CONFIGURACIÓN:
+- Autopilot habilitado
+- Términos de búsqueda: Solo productos de "fitness"
+- Modo de publicación: Automático
+- Capital de trabajo: $2,000 USD
+
+RESULTADO:
+- Encuentra solo productos de fitness
+- Construye catálogo especializado
+- Atrae clientes específicos
+- Mejor tasa de conversión
+
+CASO DE USO 4: MULTI-MARKETPLACE
+---------------------------------
+OBJETIVO: Maximizar alcance publicando en todos los marketplaces
+
+CONFIGURACIÓN:
+- Credenciales configuradas para eBay, Amazon y MercadoLibre
+- Publicación simultánea habilitada
+- Autopilot habilitado
+
+RESULTADO:
+- Cada producto se publica en 3 marketplaces
+- 3x más exposición
+- 3x más oportunidades de venta
+- Ingresos diversificados
+
+CASO DE USO 5: OPTIMIZACIÓN CONTINUA
+------------------------------------
+OBJETIVO: Mejorar constantemente el negocio
+
+CONFIGURACIÓN:
+- CEO Agent habilitado
+- AI Learning System habilitado
+- AI Suggestions habilitado
+- Reportes programados
+
+RESULTADO:
+- El sistema aprende de cada venta
+- Optimiza automáticamente la estrategia
+- Sugiere mejoras continuamente
+- Mejora el ROI con el tiempo
+
+================================================================================
+FUNCIONALIDADES ADICIONALES
+================================================================================
+
+11.1. GESTIÓN DE USUARIOS Y PERMISOS
+-------------------------------------
+- Sistema multi-usuario
+- Roles y permisos (Admin, Usuario, Viewer)
+- Gestión de acceso
+- Auditoría de acciones
+
+11.2. SISTEMA DE REFERRALS (REFERIDOS)
+--------------------------------------
+- Programa de referidos
+- Comisiones por referidos
+- Tracking de referidos
+- Pagos automáticos
+
+11.3. PRICING TIERS (PLANES DE PRECIO)
+--------------------------------------
+- Múltiples planes disponibles
+- Límites por plan
+- Upgrade/Downgrade de planes
+- Facturación automática
+
+11.4. ANTI-CHURN SYSTEM
+-----------------------
+- Detecta usuarios en riesgo de cancelar
+- Acciones preventivas automáticas
+- Ofertas de retención
+- Análisis de churn
+
+11.5. MEETING ROOM
+------------------
+- Sistema de reuniones virtuales
+- Integración con video llamadas
+- Calendario de disponibilidad
+- Recordatorios automáticos
+
+11.6. HELP SYSTEM
+-----------------
+- Centro de ayuda integrado
+- Documentación completa
+- Tutoriales interactivos
+- Soporte en tiempo real
+
+11.7. MANUAL AUTH SYSTEM
+------------------------
+- Autenticación manual cuando falla OAuth
+- Resolución de CAPTCHAs manual
+- Flujo guiado paso a paso
+- Notificaciones de estado
+
+11.8. MANUAL CAPTCHA SYSTEM
+---------------------------
+- Resolución manual de CAPTCHAs
+- Integración con servicios de terceros
+- Notificaciones cuando se requiere
+- Historial de CAPTCHAs resueltos
+
+11.9. REGIONAL SUPPORT
+----------------------
+- Soporte para múltiples países
+- Conversión de monedas automática
+- Cálculo de impuestos por país
+- Configuración regional
+
+11.10. CURRENCY MANAGEMENT
+--------------------------
+- Soporte para múltiples monedas
+- Conversión automática
+- Tasas de cambio actualizadas
+- Cálculos precisos
+
+11.11. LISTING LIFETIME TRACKING
+--------------------------------
+- Rastrea tiempo de vida de listings
+- Detecta listings sin ventas
+- Sugiere acciones (re-preciar, pausar, eliminar)
+- Análisis de performance por tiempo
+
+11.12. COST OPTIMIZATION
+------------------------
+- Identifica oportunidades de ahorro
+- Optimiza costos automáticamente
+- Sugerencias de optimización
+- Reportes de ahorro
+
+11.13. REVENUE CHANGE TRACKING
+-------------------------------
+- Rastrea cambios en ingresos
+- Identifica causas de cambios
+- Alertas de cambios significativos
+- Análisis de tendencias
+
+11.14. SUCCESSFUL OPERATIONS TRACKING
+-------------------------------------
+- Rastrea operaciones exitosas
+- Aprende de éxitos
+- Repite estrategias exitosas
+- Optimiza basado en éxito
+
+11.15. BUSINESS METRICS
+-----------------------
+- Métricas de negocio completas
+- KPIs principales
+- Dashboards personalizables
+- Análisis comparativo
+
+11.16. FINANCIAL ALERTS
+-----------------------
+- Alertas de capital bajo
+- Alertas de ventas pendientes
+- Alertas de comisiones
+- Alertas de cambios significativos
+
+11.17. ADVANCED REPORTS
+-----------------------
+- Reportes personalizados
+- Análisis avanzados
+- Exportación de datos
+- Programación de reportes
+
+11.18. API CREDENTIALS AUDIT
+----------------------------
+- Auditoría de credenciales
+- Historial de cambios
+- Validación automática
+- Alertas de problemas
+
+11.19. CONFIG AUDIT
+-------------------
+- Auditoría de configuración
+- Historial de cambios
+- Rollback de configuraciones
+- Comparación de configuraciones
+
+11.20. ACCESS REQUESTS
+----------------------
+- Sistema de solicitudes de acceso
+- Aprobación/Rechazo de solicitudes
+- Gestión de permisos
+- Notificaciones de estado
+
+11.21. PROXY MANAGEMENT
+------------------------
+- Gestión de proxies
+- Rotación automática
+- Validación de proxies
+- Estadísticas de uso
+
+11.22. IMAGE VALIDATION
+-----------------------
+- Validación de imágenes
+- Optimización automática
+- Detección de problemas
+- Corrección automática
+
+11.23. PRODUCT STATE MACHINE
+----------------------------
+- Máquina de estados para productos
+- Transiciones automáticas
+- Validación de estados
+- Historial de cambios
+
+11.24. WORKFLOW EXECUTOR
+------------------------
+- Ejecución de workflows
+- Validación de condiciones
+- Ejecución de acciones
+- Logs detallados
+
+11.25. WORKFLOW SCHEDULER
+-------------------------
+- Programación de workflows
+- Ejecución automática
+- Manejo de errores
+- Reintentos automáticos
+
+11.26. PUBLICATION OPTIMIZER
+-----------------------------
+- Optimización de publicaciones
+- Mejora de títulos
+- Optimización de descripciones
+- Mejora de imágenes
+
+11.27. TAX CALCULATOR
+---------------------
+- Cálculo de impuestos por país
+- Consideración de tratados comerciales
+- Actualización automática de tasas
+- Cálculos precisos
+
+11.28. FX SERVICE
+-----------------
+- Conversión de monedas
+- Tasas de cambio actualizadas
+- Cálculos precisos
+- Historial de tasas
+
+11.29. GOOGLE TRENDS INTEGRATION
+--------------------------------
+- Integración con Google Trends
+- Validación de demanda
+- Análisis de tendencias
+- Predicción de demanda
+
+11.30. CIRCUIT BREAKER
+---------------------
+- Protección contra fallos en cascada
+- Detección de problemas
+- Aislamiento de servicios
+- Recuperación automática
+
+================================================================================
+RESUMEN FINAL
+================================================================================
+
+Ivan Reseller Web es un sistema COMPLETO de dropshipping automatizado que:
+
+1. BUSCA productos rentables automáticamente en AliExpress
+2. ANALIZA la competencia en eBay, Amazon y MercadoLibre
+3. CALCULA precios, márgenes y rentabilidad automáticamente
+4. PUBLICA productos en múltiples marketplaces simultáneamente
+5. PROCESA ventas automáticamente cuando alguien compra
+6. GENERA ingresos pasivos 24/7 sin intervención humana
+
+SISTEMAS DE IA INCLUIDOS:
+- CEO Agent: Toma decisiones estratégicas
+- AI Learning: Aprende de cada venta
+- AI Suggestions: Genera sugerencias accionables
+- Trend Analysis: Identifica tendencias de mercado
+- Competitor Analysis: Analiza la competencia
+
+AUTOMATIZACIÓN COMPLETA:
+- Autopilot: Sistema autónomo 24/7
+- Workflows: Automatización personalizada
+- Scheduled Tasks: Tareas programadas
+- Auto-Recovery: Recuperación automática de errores
+
+INTEGRACIONES:
+- eBay (Trading API)
+- Amazon (SP-API)
+- MercadoLibre (API v1)
+- AliExpress (Affiliate API, Dropshipping API)
+- Google Trends
+- ScraperAPI, ZenRows
+- PayPal
+- Email, SMS, Slack, Discord
+
+GESTIÓN FINANCIERA:
+- Cálculo automático de costos
+- Gestión de capital
+- Sistema de comisiones
+- Alertas financieras
+- Reportes completos
+
+REPORTES Y ANALYTICS:
+- Dashboard en tiempo real
+- Reportes de ventas, productos, oportunidades
+- Reportes avanzados personalizados
+- Exportación de datos
+- Análisis predictivo
+
+CONFIGURACIÓN FLEXIBLE:
+- Modo automático (sin intervención)
+- Modo manual (control total)
+- Workflows personalizados
+- Reglas de negocio configurables
+- Múltiples planes disponibles
+
+================================================================================
+CÓMO COMENZAR A GENERAR DINERO
+================================================================================
+
+PASO 1: Configura tus credenciales de marketplaces (eBay, Amazon, MercadoLibre)
+PASO 2: Configura tus credenciales de AliExpress
+PASO 3: Configura el Autopilot con tus preferencias
+PASO 4: Establece tu capital de trabajo disponible
+PASO 5: Activa el Autopilot
+PASO 6: El sistema comenzará a buscar y publicar productos automáticamente
+PASO 7: Cuando haya ventas, recibirás notificaciones
+PASO 8: El sistema procesará las órdenes automáticamente
+PASO 9: Ganas dinero sin hacer nada más
+
+================================================================================
+NOTAS IMPORTANTES
+================================================================================
+
+- El sistema requiere configuración inicial de credenciales
+- El capital de trabajo debe ser suficiente para comprar productos
+- Las comisiones del sistema son 10% + costo fijo mensual
+- El sistema funciona mejor con capital de trabajo de $500+ USD
+- La rentabilidad depende de la configuración y el mercado
+- El sistema aprende y mejora con el tiempo
+- Se recomienda empezar en modo manual para aprender
+- Una vez confiado, se puede activar modo automático
+
+================================================================================
+FIN DE LA GUÍA
+================================================================================
+
+Esta guía cubre TODAS las funcionalidades del sistema Ivan Reseller Web.
+Para más información, consulta la documentación técnica o contacta al soporte.
+
+?Éxito en tu negocio de dropshipping automatizado!

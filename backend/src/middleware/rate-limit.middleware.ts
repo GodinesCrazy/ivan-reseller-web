@@ -49,8 +49,10 @@ export const createRoleBasedRateLimit = () => {
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req: Request) => {
-      // Skip rate limiting for login endpoint (browser vs PowerShell parity; brute force still limited by loginRateLimit)
+      // Skip rate limiting for auth endpoints (evita 429 en bucles 401→logout→redirect)
       if (req.path === '/auth/login') return true;
+      if (req.path === '/auth/logout') return true;
+      if (req.path === '/auth/refresh') return true;
       // Skip rate limiting para ADMIN en ciertos casos
       const user = (req as any).user;
       return user?.role === 'ADMIN' && req.path.startsWith('/api/admin');

@@ -1,0 +1,134 @@
+
+RESUMEN DE CONTINUIDAD — PROYECTO IVAN_RESELLER (Dropshipping Automatizado con IA)
+
+OBJETIVO GLOBAL
+Construir un sistema que ejecute el ciclo completo de dropshipping automatizado:
+Tendencias -> Búsqueda AliExpress Affiliate -> Evaluación de rentabilidad -> Publicación real en eBay (por ahora) -> Futuro: compra automática, envío al cliente final, tracking y balance.
+
+ESTADO ACTUAL DEL PROYECTO
+Backend desplegado en Railway:
+https://ivan-reseller-backend-production.up.railway.app
+
+Repositorio:
+https://github.com/GodinesCrazy/ivan-reseller-web.git
+
+Dominio:
+https://ivanreseller.com
+
+FASES IMPLEMENTADAS
+FASE 1 – Detección de tendencias
+- Google Trends (via SerpAPI opcional)
+- Servicio interno de sugerencias
+- Fallback keywords
+- Scores y prioridades
+Estado: READY
+
+FASE 2 – Búsqueda AliExpress Affiliate
+- Endpoint principal: aliexpress.affiliate.product.query
+- URL base: https://api-sg.aliexpress.com/sync
+- Se implementaron múltiples estrategias de búsqueda forzada
+- A pesar de esto, AliExpress Affiliate retorna productos vacíos
+
+FASE 3 – Evaluación de rentabilidad
+- Calcula costos: producto, envío, fees marketplace, payment fee, impuestos, buffer
+- Decide publishable / discarded
+Estado: READY
+
+FASE 4 – Publicación real en eBay
+- Adaptador eBayPublisherAdapter
+- STAGING_REAL: máximo 1 publicación por ejecución
+Estado: READY
+
+SCRIPT PRINCIPAL
+backend/src/scripts/run-ebay-real-cycle.ts
+
+Endpoint interno:
+POST /api/internal/run-ebay-cycle
+Protegido con header:
+x-internal-secret
+
+Health interno:
+GET /api/internal/health
+
+VARIABLES DE ENTORNO (RAILWAY)
+AliExpress:
+ALIEXPRESS_APP_KEY
+ALIEXPRESS_APP_SECRET
+ALIEXPRESS_DATA_SOURCE=api
+
+eBay:
+EBAY_CLIENT_ID
+EBAY_CLIENT_SECRET
+EBAY_REFRESH_TOKEN
+EBAY_ENV=production
+ENABLE_EBAY_PUBLISH=true
+
+Interno:
+INTERNAL_RUN_SECRET
+
+PROBLEMA CRÍTICO ACTUAL
+AliExpress Affiliate API responde correctamente pero con:
+products: []
+totalResults: 0
+
+Se creó endpoint de diagnóstico:
+
+GET /api/debug/aliexpress/probe
+
+Respuesta real obtenida:
+{
+ success:true,
+ requestId:"21016c2317694431061162760",
+ apiName:"aliexpress.affiliate.product.query",
+ keyword:"phone case",
+ pageSize:20,
+ sort:"volume_desc",
+ products:[]
+}
+
+CONCLUSIÓN:
+Las credenciales funcionan, pero la cuenta NO está devolviendo productos.
+
+SOPORTE ALIEXPRESS
+Se abrió ticket en portal de soporte AliExpress Developers.
+Soporte solicitó:
+"Please also send us the requestID to check details."
+
+RequestID entregado:
+21016c2317694431061162760
+
+Estado: Esperando respuesta de AliExpress.
+
+CORRECCIONES REALIZADAS IMPORTANTES
+- Eliminado uso de palabra reservada eval
+- Eliminado código ejecutándose al importar scripts
+- Rutas internas siempre montadas
+- Fix duplicación correlationId (commit 9c74719)
+- Router interno funcional
+- Proyecto arranca estable en Railway
+
+COMMITS RELEVANTES
+c663b74 – probe endpoint
+cbb6577 – FORCE AliExpress search
+c6c9fda – remove eval keyword
+9c74719 – correlationId fix
+
+ESTRATEGIA ACORDADA
+1) Esperar resolución de AliExpress Affiliate.
+2) Mientras tanto obtener APIs:
+   - Amazon SP-API
+   - MercadoLibre Developers
+3) Una vez AliExpress funcione:
+   Ejecutar ciclo real completo:
+   Tendencias -> AliExpress -> Rentabilidad -> Publicación eBay
+
+NO IMPLEMENTAR AÚN
+- Compra automática
+- Inyección datos comprador
+- Tracking post venta
+
+OBJETIVO DEL NUEVO CHAT
+Continuar desde este punto:
+- Esperar respuesta AliExpress
+- Obtener APIs Amazon y MercadoLibre
+- Preparar FASE 5 futura

@@ -36,7 +36,7 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
   });
 });
 
-// POST /api/auth/login - SAFE LOGIN MODE (sin JWT ni refresh tokens)
+// POST /api/auth/login - Cookie-based session (JWT in httpOnly cookie)
 router.post('/login', async (req: Request, res: Response) => {
   try {
     const { username, password } = req.body;
@@ -54,6 +54,29 @@ router.post('/login', async (req: Request, res: Response) => {
     if (!ok) {
       return res.status(401).json({ success: false });
     }
+
+    // Set JWT in httpOnly cookie for session persistence (cross-origin: Vercel → Railway)
+    let token: string;
+    try {
+      token = authService.generateToken(user.id, user.username, user.role);
+    } catch (tokenErr) {
+      console.error('[SAFE_LOGIN_FATAL] token', tokenErr);
+      return res.status(500).json({ success: false });
+    }
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      path: '/',
+      maxAge: 60 * 60 * 1000, // 1 hour
+    });
+
+    const requestOrigin = req.headers.origin;
+    if (requestOrigin) {
+      res.header('Access-Control-Allow-Origin', requestOrigin);
+    }
+    res.header('Access-Control-Allow-Credentials', 'true');
 
     return res.json({
       success: true,
@@ -252,89 +275,12 @@ router.post('/reset-password', async (req: Request, res: Response, next: NextFun
   }
 });
 
-// POST /api/auth/logout
-router.post('/logout', authenticate, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = req.user?.userId;
-    const refreshToken = req.cookies?.refreshToken;
-
-    // Revoke refresh token if provided
-    if (refreshToken && userId) {
-      await authService.revokeRefreshToken(refreshToken, userId);
-    }
-
-    // Blacklist current access token
-    const accessToken = req.cookies?.token;
-    if (accessToken) {
-      const expiresIn = 60 * 60; // 1 hour in seconds
-      await authService.blacklistToken(accessToken, expiresIn);
-    }
-
-    // Limpiar cookies (usar misma configuración que al crear)
-    const origin = req.headers.origin || req.headers.referer;
-    let frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN?.split(',')[0] || 'http://localhost:5173';
-    
-    if (origin) {
-      try {
-        const originUrl = new URL(origin);
-        frontendUrl = `${originUrl.protocol}//${originUrl.host}`;
-      } catch (e) {
-        // Si falla, usar el valor por defecto
-      }
-    }
-    
-    const requestProtocol = req.protocol || (req.headers['x-forwarded-proto'] as string) || 'http';
-    const isHttps = requestProtocol === 'https' || frontendUrl.startsWith('https');
-    
-    // Misma lógica que en login - solo establecer domain si backend y frontend están en mismo dominio base
-    let cookieDomain: string | undefined = undefined;
-    try {
-      const frontendUrlObj = new URL(frontendUrl);
-      const frontendHostname = frontendUrlObj.hostname;
-      const backendHostname = req.get('host') || req.hostname || '';
-      
-      const frontendBaseDomain = frontendHostname.replace(/^[^.]+\./, '');
-      const backendBaseDomain = backendHostname.replace(/^[^.]+\./, '');
-      
-      if (frontendBaseDomain === backendBaseDomain && frontendBaseDomain !== 'localhost' && !frontendBaseDomain.includes('127.0.0.1')) {
-        cookieDomain = `.${frontendBaseDomain}`;
-      } else {
-        cookieDomain = undefined;
-      }
-    } catch (e) {
-      cookieDomain = undefined;
-    }
-    
-    // ✅ FIX AUTH: En producción, usar sameSite: 'none' y secure: true siempre
-    const isProduction = process.env.NODE_ENV === 'production';
-    const clearCookieOptions: any = {
-      httpOnly: true,
-      secure: isProduction ? true : isHttps, // ✅ CRÍTICO: En producción SIEMPRE true
-      sameSite: (isProduction || !cookieDomain) ? 'none' as const : 'lax' as const, // ✅ CRÍTICO: 'none' para cross-domain
-      path: '/',
-    };
-    
-    if (cookieDomain) {
-      clearCookieOptions.domain = cookieDomain;
-    }
-    
-    // CRÍTICO: Establecer Access-Control-Allow-Origin específico para cookies cross-domain
-    const requestOrigin = req.headers.origin;
-    if (requestOrigin) {
-      res.header('Access-Control-Allow-Origin', requestOrigin);
-    }
-    res.header('Access-Control-Allow-Credentials', 'true');
-    
-    res.clearCookie('token', clearCookieOptions);
-    res.clearCookie('refreshToken', clearCookieOptions);
-
-    res.json({
-      success: true,
-      message: 'Logout successful',
-    });
-  } catch (error) {
-    next(error);
-  }
+// POST /api/auth/logout - No auth required; clear cookie only so browser logout never returns 401
+router.post('/logout', async (req: Request, res: Response) => {
+  const opts = { httpOnly: true, secure: true, sameSite: 'none' as const, path: '/' };
+  res.clearCookie('token', opts);
+  res.clearCookie('refreshToken', opts);
+  return res.json({ success: true });
 });
 
 // GET /api/auth/test-cookies - Endpoint de prueba para verificar cookies

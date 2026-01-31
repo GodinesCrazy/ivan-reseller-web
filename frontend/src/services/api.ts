@@ -105,12 +105,20 @@ api.interceptors.response.use(
     const status = error.response.status;
     const message = error.response.data?.error || error.response.data?.message || 'Error desconocido';
     
-    // 401: No autorizado (NO es error CORS, es autenticación)
+    // 401: No autorizado - clear local session only (do NOT call logout API to avoid 401→logout→401 loop)
+    const requestUrl = String(error.config?.url || '');
+    const isLoginRequest = requestUrl.includes('/api/auth/login') || requestUrl.includes('auth/login');
+    const isAlreadyOnLogin = typeof window !== 'undefined' && window.location?.pathname === '/login';
+
     if (status === 401) {
-      // ✅ IMPORTANTE: 401 con response significa que CORS funcionó correctamente
-      // El backend devolvió 401 con headers CORS, así que NO es un error CORS
-      await useAuthStore.getState().logout();
-      toast.error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+      if (isLoginRequest) {
+        return Promise.reject(error);
+      }
+      useAuthStore.getState().clearSession();
+      if (isAlreadyOnLogin) {
+        return Promise.reject(error);
+      }
+      toast.error('Session expired');
       window.location.href = '/login';
       return Promise.reject(error);
     }

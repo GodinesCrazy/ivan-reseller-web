@@ -16,6 +16,12 @@ export const authApi = {
       const response = await api.post('/api/auth/login', credentials, {
         withCredentials: true,
       });
+      const requestUrl = response.config?.baseURL && response.config?.url
+        ? `${String(response.config.baseURL).replace(/\/$/, '')}${response.config.url}`
+        : '/api/auth/login';
+      console.log('[login] request URL', requestUrl);
+      console.log('[login] response status', response.status);
+      console.log('[login] response body', response.data);
 
       const raw = response.data;
 
@@ -38,6 +44,9 @@ export const authApi = {
 
       return normalized;
     } catch (error: any) {
+      console.log('[login] request URL', error?.config?.baseURL && error?.config?.url ? `${String(error.config.baseURL).replace(/\/$/, '')}${error.config.url}` : '/api/auth/login');
+      console.log('[login] response status', error?.response?.status ?? 'no response');
+      console.log('[login] response body', error?.response?.data ?? error?.message);
       // Normalizar error para prevenir crash de React
       if (error?.response?.status === 502 || error?.response?.status === 503 || error?.response?.status === 504) {
         throw new Error('Backend no disponible. Por favor, intenta más tarde.');
