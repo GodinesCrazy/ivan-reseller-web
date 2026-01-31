@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading security.service');
+
 import crypto from 'crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';

@@ -1,6 +1,9 @@
 // @ts-nocheck
 // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout y logging
 // ✅ FIX SIGSEGV: NO importar puppeteer ni stealthScrapingService al nivel superior
+import { trace } from '../utils/boot-trace';
+trace('loading scraping.service');
+
 import { scrapingHttpClient } from '../config/http-client';
 // import puppeteer, { Browser, Page } from 'puppeteer-core'; // ✅ FIX SIGSEGV: Dynamic import solo cuando se necesite
 import { AppError } from '../middleware/error.middleware';

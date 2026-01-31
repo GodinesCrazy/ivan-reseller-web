@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading opportunity.service');
+
 import { prisma } from '../config/database';
 
 export class OpportunityPersistenceService {

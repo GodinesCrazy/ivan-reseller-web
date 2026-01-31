@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading marketplace.service');
+
 import { EbayService, EbayCredentials, EbayProduct } from './ebay.service';
 import { MercadoLibreService, MercadoLibreCredentials, MLProduct } from './mercadolibre.service';
 import { AmazonService, AmazonCredentials, AmazonProduct } from './amazon.service';

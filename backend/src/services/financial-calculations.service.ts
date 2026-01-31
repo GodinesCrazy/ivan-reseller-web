@@ -5,6 +5,9 @@
  * para evitar duplicación de código y asegurar consistencia.
  */
 
+import { trace } from '../utils/boot-trace';
+trace('loading financial-calculations.service');
+
 import fx from './fx.service';
 
 export interface ProfitCalculationInput {

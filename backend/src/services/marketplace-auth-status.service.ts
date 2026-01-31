@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading marketplace-auth-status.service');
+
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database';
 

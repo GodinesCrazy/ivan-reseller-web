@@ -5,6 +5,9 @@
  * este servicio abre una página web para que el usuario lo resuelva manualmente.
  */
 
+import { trace } from '../utils/boot-trace';
+trace('loading manual-captcha.service');
+
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { getChromiumLaunchConfig } from '../utils/chromium';

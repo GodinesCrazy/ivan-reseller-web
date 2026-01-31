@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading cost-optimization.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { toNumber } from '../utils/decimal.utils';

@@ -3,6 +3,9 @@
  * Proactively monitors API health and detects issues before they affect users
  */
 
+import { trace } from '../utils/boot-trace';
+trace('loading api-health-monitor.service');
+
 import { EventEmitter } from 'events';
 import { logger } from '../config/logger';
 import { prisma } from '../config/database';

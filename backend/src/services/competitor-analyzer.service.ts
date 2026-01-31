@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading competitor-analyzer.service');
+
 import { EbayService } from './ebay.service';
 import { AmazonService } from './amazon.service';
 import { MercadoLibreService } from './mercadolibre.service';

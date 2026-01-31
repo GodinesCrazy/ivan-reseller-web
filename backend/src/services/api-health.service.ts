@@ -5,6 +5,9 @@
  * reutilizable que puede ser llamado desde endpoints HTTP.
  */
 
+import { trace } from '../utils/boot-trace';
+trace('loading api-health.service');
+
 import { CredentialsManager } from './credentials-manager.service';
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';

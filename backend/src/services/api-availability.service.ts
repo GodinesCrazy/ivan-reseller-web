@@ -4,6 +4,9 @@
  * All services should check this before attempting to use external APIs
  */
 
+import { trace } from '../utils/boot-trace';
+trace('loading api-availability.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { supportsEnvironments } from '../config/api-keys.config';

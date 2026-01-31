@@ -10,6 +10,9 @@
  * - Análisis de estacionalidad
  */
 
+import { trace } from '../utils/boot-trace';
+trace('loading trends.service');
+
 import { logger } from '../config/logger';
 import { getGoogleTrendsService } from './google-trends.service';
 import { trendSuggestionsService } from './trend-suggestions.service';

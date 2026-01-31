@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading pending-products-limit.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { AppError, ErrorCode } from '../middleware/error.middleware';

@@ -1,5 +1,8 @@
 // @ts-nocheck
 // ✅ FASE 3: Dynamic imports para evitar SIGSEGV - NO importar puppeteer al nivel superior
+import { trace } from '../utils/boot-trace';
+trace('loading aliexpress-auto-purchase.service');
+
 import { logger } from '../config/logger';
 import { AppError } from '../middleware/error.middleware';
 import { prisma } from '../config/database';

@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading manual-auth.service');
+
 import { PrismaClient, ManualAuthSession } from '@prisma/client';
 import crypto from 'crypto';
 import { marketplaceAuthStatusService } from './marketplace-auth-status.service';

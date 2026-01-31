@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading product-workflow-status.service');
+
 import { PrismaClient } from '@prisma/client';
 import { logger } from '../config/logger';
 import type {

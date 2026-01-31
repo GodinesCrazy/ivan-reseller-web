@@ -9,6 +9,9 @@
  */
 
 import { PrismaClient, type CredentialScope } from '@prisma/client';
+import { trace } from '../utils/boot-trace';
+trace('loading credentials-manager.service');
+
 import crypto from 'crypto';
 import { z } from 'zod';
 import type { 

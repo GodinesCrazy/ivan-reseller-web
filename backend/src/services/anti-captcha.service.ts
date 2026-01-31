@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading anti-captcha.service');
+
 import axios from 'axios';
 import { logger } from '../config/logger';
 import { AppError } from '../middleware/error.middleware';

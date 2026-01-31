@@ -4,6 +4,9 @@
  * Esto previene bloqueos y crashes SIGSEGV durante verificaciones
  */
 
+import { trace } from '../utils/boot-trace';
+trace('loading api-health-check-queue.service');
+
 import { Queue, Worker, Job } from 'bullmq';
 import { getBullMQRedisConnection, isRedisAvailable } from '../config/redis';
 import { logger } from '../config/logger';

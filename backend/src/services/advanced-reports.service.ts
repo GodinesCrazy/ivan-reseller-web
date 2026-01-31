@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading advanced-reports.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { toNumber } from '../utils/decimal.utils';

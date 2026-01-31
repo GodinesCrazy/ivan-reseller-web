@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading cost-calculator.service');
+
 export interface CostBreakdown {
   marketplaceFee: number;
   paymentFee: number;

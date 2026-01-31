@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading financial-alerts.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { notificationService } from './notification.service';

@@ -1,4 +1,7 @@
 // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
+import { trace } from '../utils/boot-trace';
+trace('loading real-scraper.service');
+
 import { scrapingHttpClient } from '../config/http-client';
 import * as cheerio from 'cheerio';
 import { HttpsProxyAgent } from 'https-proxy-agent';

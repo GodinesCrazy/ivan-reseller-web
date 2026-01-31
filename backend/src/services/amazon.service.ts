@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading amazon.service');
+
 import axios, { AxiosInstance } from 'axios';
 import crypto from 'crypto';
 import { prisma } from '../config/database';

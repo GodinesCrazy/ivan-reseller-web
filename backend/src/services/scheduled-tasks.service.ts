@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading scheduled-tasks.service');
+
 import { Queue, Worker, QueueEvents } from 'bullmq';
 import { getBullMQRedisConnection, isRedisAvailable } from '../config/redis';
 import { logger } from '../config/logger';

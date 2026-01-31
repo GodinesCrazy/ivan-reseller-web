@@ -1,4 +1,7 @@
 // @ts-nocheck
+import { trace } from '../utils/boot-trace';
+trace('loading automated-business.service');
+
 import { EbayService } from './ebay.service';
 import { AIOpportunityEngine } from './ai-opportunity.service';
 import { notificationService } from './notification.service';

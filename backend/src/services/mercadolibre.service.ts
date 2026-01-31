@@ -1,4 +1,7 @@
 // @ts-nocheck
+import { trace } from '../utils/boot-trace';
+trace('loading mercadolibre.service');
+
 import axios, { AxiosInstance } from 'axios';
 import { AppError } from '../middleware/error.middleware';
 

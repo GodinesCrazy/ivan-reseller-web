@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading automated-business.runtime-patch');
+
 import { automatedBusinessSystem } from './automated-business.service';
 import { notificationService } from './notification.service';
 

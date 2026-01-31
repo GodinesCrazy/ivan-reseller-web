@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading proxy-manager.service');
+
 import axios, { AxiosProxyConfig } from 'axios';
 import { logger } from '../config/logger';
 import * as fs from 'fs';

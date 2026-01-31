@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading config-audit.service');
+
 import { prisma } from '../config/database';
 import { CredentialsManager } from './credentials-manager.service';
 import { marketplaceAuthStatusService } from './marketplace-auth-status.service';

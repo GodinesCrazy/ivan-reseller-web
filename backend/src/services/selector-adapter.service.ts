@@ -1,5 +1,8 @@
 // @ts-nocheck
 // Lazy types only - do NOT load puppeteer at module init (causes 502 on Railway)
+import { trace } from '../utils/boot-trace';
+trace('loading selector-adapter.service');
+
 import type { Page, ElementHandle } from 'puppeteer';
 import { logger } from '../config/logger';
 import * as fs from 'fs';

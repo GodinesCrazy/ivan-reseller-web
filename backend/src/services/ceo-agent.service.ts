@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading ceo-agent.service');
+
 import { EventEmitter } from 'events';
 import axios from 'axios';
 import { logger } from '../config/logger';

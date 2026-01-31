@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading scheduled-reports.service');
+
 import { PrismaClient } from '@prisma/client';
 import { logger } from '../config/logger';
 import reportsService from './reports.service';

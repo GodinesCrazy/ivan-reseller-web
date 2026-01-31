@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading ebay.service');
+
 import axios, { AxiosInstance } from 'axios';
 import { AppError } from '../middleware/error.middleware';
 import { URLSearchParams } from 'url';

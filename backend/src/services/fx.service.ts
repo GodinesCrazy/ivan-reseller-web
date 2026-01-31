@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading fx.service');
+
 import { Prisma } from '@prisma/client';
 import { logger } from '../config/logger';
 import { redis, isRedisAvailable } from '../config/redis';

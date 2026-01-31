@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading user-settings.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 

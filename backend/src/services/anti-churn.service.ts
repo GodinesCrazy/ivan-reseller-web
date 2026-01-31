@@ -1,4 +1,7 @@
 // @ts-nocheck
+import { trace } from '../utils/boot-trace';
+trace('loading anti-churn.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { notificationService } from './notification.service';

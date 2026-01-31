@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading auto-recovery.service');
+
 import { EventEmitter } from 'events';
 import { logger } from '../config/logger';
 import * as fs from 'fs';

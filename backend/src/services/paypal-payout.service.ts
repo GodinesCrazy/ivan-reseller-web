@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading paypal-payout.service');
+
 import axios, { AxiosInstance } from 'axios';
 import { AppError } from '../middleware/error.middleware';
 import { logger } from '../config/logger';

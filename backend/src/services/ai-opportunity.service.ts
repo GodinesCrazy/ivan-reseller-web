@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading ai-opportunity.service');
+
 import { AdvancedScrapingService, MarketplaceProduct, scrapingService } from './scraping.service';
 import EbayService, { ArbitrageOpportunity, EBaySearchProduct } from './ebay.service';
 import { AppError } from '../middleware/error.middleware';

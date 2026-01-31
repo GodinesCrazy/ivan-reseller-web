@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading notification.service');
+
 import { Server } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import jwt from 'jsonwebtoken';

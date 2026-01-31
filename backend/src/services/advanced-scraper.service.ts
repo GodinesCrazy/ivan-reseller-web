@@ -1,4 +1,7 @@
 // ✅ FASE 3: Dynamic imports para evitar SIGSEGV - NO importar puppeteer al nivel superior
+import { trace } from '../utils/boot-trace';
+trace('loading advanced-scraper.service');
+
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';

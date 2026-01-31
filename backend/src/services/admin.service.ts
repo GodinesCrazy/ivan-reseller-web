@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading admin.service');
+
 import { prisma } from '../config/database';
 import bcrypt from 'bcryptjs';
 import { SecureCredentialManager } from './security.service';

@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading notifications.service');
+
 import nodemailer from 'nodemailer';
 import { Twilio } from 'twilio';
 import { WebClient } from '@slack/web-api';

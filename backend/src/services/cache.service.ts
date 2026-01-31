@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading cache.service');
+
 import { redis, isRedisAvailable } from '../config/redis';
 import { logger } from '../config/logger';
 

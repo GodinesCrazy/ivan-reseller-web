@@ -3,6 +3,9 @@
  * Valida límites, idempotencia y seguridad antes de ejecutar compras automáticas
  */
 
+import { trace } from '../utils/boot-trace';
+trace('loading auto-purchase-guardrails.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { env } from '../config/env';

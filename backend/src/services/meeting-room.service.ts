@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading meeting-room.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { AppError } from '../middleware/error.middleware';

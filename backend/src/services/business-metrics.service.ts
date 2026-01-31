@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading business-metrics.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import { toNumber } from '../utils/decimal.utils';

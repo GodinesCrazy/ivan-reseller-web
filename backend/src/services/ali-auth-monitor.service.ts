@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading ali-auth-monitor.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 // ✅ FASE 3: Dynamic import para evitar SIGSEGV - NO importar AdvancedMarketplaceScraper al nivel superior

@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading reports.service');
+
 import { PrismaClient } from '@prisma/client';
 import ExcelJS from 'exceljs';
 import { notificationService } from './notification.service';

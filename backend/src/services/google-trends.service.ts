@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading google-trends.service');
+
 import axios, { AxiosInstance } from 'axios';
 import { logger } from '../config/logger';
 import { AppError } from '../middleware/error.middleware';

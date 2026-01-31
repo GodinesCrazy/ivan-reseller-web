@@ -5,6 +5,9 @@
  * Facilita debugging y análisis de problemas
  */
 
+import { trace } from '../utils/boot-trace';
+trace('loading api-credentials-audit.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 

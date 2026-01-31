@@ -2,6 +2,8 @@
  * Tax Calculator Service
  * Calcula impuestos de importación (IVA/aranceles) por país
  */
+import { trace } from '../utils/boot-trace';
+trace('loading tax-calculator.service');
 
 export interface TaxConfig {
   vatRate: number; // IVA como decimal (ej: 0.19 para 19%)

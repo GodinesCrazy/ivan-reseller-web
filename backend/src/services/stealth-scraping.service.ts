@@ -1,6 +1,9 @@
 // @ts-nocheck
 // ✅ FIX SIGSEGV: Dynamic imports para evitar inicialización de Chromium al cargar el módulo
 // NO importar puppeteer al nivel superior - solo cuando realmente se necesite
+import { trace } from '../utils/boot-trace';
+trace('loading stealth-scraping.service');
+
 import axios from 'axios';
 import { AppError } from '../middleware/error.middleware';
 import { logger } from '../config/logger';

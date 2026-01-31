@@ -6,6 +6,9 @@
  * Este servicio intenta usar diferentes métodos para obtener información de balance.
  */
 
+import { trace } from '../utils/boot-trace';
+trace('loading paypal-rest.service');
+
 import axios, { AxiosInstance } from 'axios';
 import { logger } from '../config/logger';
 import { AppError } from '../middleware/error.middleware';

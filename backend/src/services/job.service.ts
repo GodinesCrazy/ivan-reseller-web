@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading job.service');
+
 import { Queue, Worker, Job } from 'bullmq';
 import { getBullMQRedisConnection, isRedisAvailable } from '../config/redis';
 import { AdvancedScrapingService } from '../services/scraping.service';

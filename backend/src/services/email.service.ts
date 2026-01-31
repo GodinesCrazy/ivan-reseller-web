@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading email.service');
+
 import nodemailer from 'nodemailer';
 import { logger } from '../config/logger';
 

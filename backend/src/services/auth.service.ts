@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading auth.service');
+
 import bcrypt from 'bcryptjs';
 import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 import { prisma } from '../config/database';

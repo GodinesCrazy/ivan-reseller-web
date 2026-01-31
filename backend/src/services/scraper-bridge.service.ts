@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading scraper-bridge.service');
+
 import axios, { AxiosInstance } from 'axios';
 
 export interface AliExpressSearchParams {

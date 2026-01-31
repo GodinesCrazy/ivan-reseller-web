@@ -8,6 +8,9 @@
  * @see instalarAPi.txt - Documentación técnica de la API
  */
 
+import { trace } from '../utils/boot-trace';
+trace('loading aliexpress-affiliate-api.service');
+
 import axios, { AxiosInstance } from 'axios';
 import crypto from 'crypto';
 import logger from '../config/logger';

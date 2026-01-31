@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading ai-learning.service');
+
 import { EventEmitter } from 'events';
 import { logger } from '../config/logger';
 import { prisma } from '../config/database';

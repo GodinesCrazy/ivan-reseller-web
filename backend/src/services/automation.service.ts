@@ -1,4 +1,7 @@
 // @ts-nocheck
+import { trace } from '../utils/boot-trace';
+trace('loading automation.service');
+
 import { Queue, Worker, Job } from 'bullmq';
 import { ScrapingService } from './scraping.service';
 import { EBayService } from './ebay.service';

@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading user.service');
+
 import { prisma } from '../config/database';
 import bcrypt from 'bcryptjs';
 

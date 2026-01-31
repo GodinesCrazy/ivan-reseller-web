@@ -8,6 +8,9 @@
  * - Limpiar acciones expiradas
  */
 
+import { trace } from '../utils/boot-trace';
+trace('loading guided-action-tracker.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 

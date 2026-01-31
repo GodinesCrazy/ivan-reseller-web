@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading opportunity-finder.service');
+
 import scraperBridge from './scraper-bridge.service';
 import notificationService from './notification.service';
 import { AdvancedMarketplaceScraper } from './advanced-scraper.service';

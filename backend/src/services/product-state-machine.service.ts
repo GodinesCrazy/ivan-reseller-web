@@ -4,6 +4,9 @@
  * Previene estados inconsistentes
  */
 
+import { trace } from '../utils/boot-trace';
+trace('loading product-state-machine.service');
+
 import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 

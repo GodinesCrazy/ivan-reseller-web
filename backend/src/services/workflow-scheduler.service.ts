@@ -1,3 +1,6 @@
+import { trace } from '../utils/boot-trace';
+trace('loading workflow-scheduler.service');
+
 import * as cron from 'node-cron';
 import { PrismaClient } from '@prisma/client';
 import logger from '../config/logger';
