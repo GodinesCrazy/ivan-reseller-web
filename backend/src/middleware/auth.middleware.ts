@@ -25,8 +25,12 @@ export const authenticate = async (
   next: NextFunction
 ) => {
   try {
-    // ✅ FIX AUTH: Usar parser robusto que maneja req.cookies, req.headers.cookie y Authorization header
-    let token: string | undefined = getTokenFromRequest(req);
+    // ✅ FIX AUTH: Cookie-first - accept cookie OR Authorization header for post-login requests
+    let token: string | undefined =
+      req.cookies?.token ||
+      (req.headers?.cookie ? parseCookiesFromHeader(req.headers.cookie).token : undefined) ||
+      ((req.headers?.authorization?.replace(/^Bearer\s+/i, '') ?? '').trim() || undefined);
+    if (!token) token = getTokenFromRequest(req);
 
     // ✅ FIX AUTH: Si no hay token pero hay refreshToken, intentar refrescar automáticamente
     if (!token) {
