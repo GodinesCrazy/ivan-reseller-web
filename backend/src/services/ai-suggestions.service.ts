@@ -1,4 +1,4 @@
-﻿import { prisma } from '../config/database';
+import { prisma } from '../config/database';
 import { logger } from '../config/logger';
 import axios from 'axios';
 import { CredentialsManager } from './credentials-manager.service';
