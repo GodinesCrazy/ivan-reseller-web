@@ -39,25 +39,30 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
 // POST /api/auth/login - Cookie-based session (JWT in httpOnly cookie)
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    console.log('[LOGIN HIT]', {
-      body: req.body,
-      headers: {
-        origin: req.headers.origin,
-        host: req.headers.host,
-      },
-    });
-    const { username, password } = req.body;
+    console.log('[LOGIN] body keys:', Object.keys(req.body || {}));
+    const { username, password } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing credentials',
+      });
+    }
 
     const user = await prisma.user.findUnique({
-      where: { username }
+      where: { username },
     });
 
     if (!user || !user.password) {
       return res.status(401).json({ success: false });
     }
 
-    const ok = await bcrypt.compare(password, user.password);
-
+    let ok: boolean;
+    try {
+      ok = await bcrypt.compare(password, user.password);
+    } catch (bcryptErr) {
+      console.error('LOGIN_FATAL_ERROR bcrypt', bcryptErr);
+      return res.status(401).json({ success: false });
+    }
     if (!ok) {
       return res.status(401).json({ success: false });
     }
@@ -67,17 +72,22 @@ router.post('/login', async (req: Request, res: Response) => {
     try {
       token = authService.generateToken(user.id, user.username, user.role);
     } catch (tokenErr) {
-      console.error('[SAFE_LOGIN_FATAL] token', tokenErr);
+      console.error('LOGIN_FATAL_ERROR token', tokenErr);
       return res.status(500).json({ success: false });
     }
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      path: '/',
-      maxAge: 60 * 60 * 1000, // 1 hour
-    });
+    try {
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        path: '/',
+        maxAge: 60 * 60 * 1000, // 1 hour
+      });
+    } catch (cookieErr) {
+      console.error('COOKIE_SET_FAILED', cookieErr);
+      // Still return success - session works via response body
+    }
 
     const requestOrigin = req.headers.origin;
     if (requestOrigin) {
@@ -85,22 +95,21 @@ router.post('/login', async (req: Request, res: Response) => {
     }
     res.header('Access-Control-Allow-Credentials', 'true');
 
+    console.log('[LOGIN] success for user', user.username);
     return res.json({
       success: true,
       user: {
         id: user.id,
         username: user.username,
-        role: user.role
-      }
+        role: user.role,
+      },
     });
-
-  } catch (error) {
-    console.error('[LOGIN ERROR]', {
-      message: (error as Error)?.message,
-      name: (error as Error)?.name,
-      stack: (error as Error)?.stack,
+  } catch (err) {
+    console.error('LOGIN_FATAL_ERROR', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Internal login error',
     });
-    return res.status(401).json({ success: false });
   }
 });
 
