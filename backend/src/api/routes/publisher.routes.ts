@@ -3,10 +3,12 @@ import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { productService, CreateProductDto } from '../../services/product.service';
 import { MarketplaceService } from '../../services/marketplace.service';
 import { AdvancedScrapingService } from '../../services/scraping.service';
+import scraperBridge from '../../services/scraper-bridge.service';
 import { prisma } from '../../config/database';
 import { logger } from '../../config/logger';
 import { toNumber } from '../../utils/decimal.utils';
 
+const SCRAPER_BRIDGE_ENABLED = process.env.SCRAPER_BRIDGE_ENABLED === 'true';
 const router = Router();
 router.use(authenticate);
 
@@ -105,9 +107,14 @@ router.post('/add_for_approval', async (req: Request, res: Response) => {
     let product;
 
     if (scrape && aliexpressUrl) {
-      // ✅ Scrapear producto desde AliExpress
-      const scrapingService = new AdvancedScrapingService();
-      const scrapedData = await scrapingService.scrapeAliExpressProduct(String(aliexpressUrl), userId);
+      // ✅ Scraper Bridge as primary datasource when enabled
+      let scrapedData: { title?: string; description?: string; price?: number; currency?: string; images?: string[]; category?: string };
+      if (SCRAPER_BRIDGE_ENABLED) {
+        scrapedData = await scraperBridge.fetchAliExpressProduct(String(aliexpressUrl));
+      } else {
+        const scrapingService = new AdvancedScrapingService();
+        scrapedData = await scrapingService.scrapeAliExpressProduct(String(aliexpressUrl), userId);
+      }
 
       // Crear producto desde datos scrapeados
       const productData: CreateProductDto = {

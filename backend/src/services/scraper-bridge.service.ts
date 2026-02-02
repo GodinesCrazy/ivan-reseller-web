@@ -23,18 +23,31 @@ export interface AliExpressProduct {
   raw?: any; // full payload from scraper
 }
 
+/** Result shape for single product fetch (compatible with ScrapedProduct) */
+export interface ScrapedProductFromBridge {
+  title: string;
+  description: string;
+  price: number;
+  currency: string;
+  images: string[];
+  category?: string;
+  shipping?: { cost?: number; estimatedDays?: number };
+  rating?: number;
+  reviews?: number;
+  seller?: { name: string; rating: number; location: string };
+}
+
 export class ScraperBridgeService {
   private client: AxiosInstance;
   private baseURL: string;
   private enabled: boolean;
 
   constructor(baseURL?: string) {
-    // ✅ FASE 2: Obtener configuración desde env con validación
-    const env = process.env;
-    const scraperBridgeEnabled = env.SCRAPER_BRIDGE_ENABLED === 'true' || env.SCRAPER_BRIDGE_ENABLED !== 'false';
-    const scraperBridgeURL = baseURL || env.SCRAPER_BRIDGE_URL || 'http://127.0.0.1:8077';
+    // ✅ MVP: Scraper bridge as primary datasource only when explicitly enabled
+    const SCRAPER_BRIDGE_ENABLED = process.env.SCRAPER_BRIDGE_ENABLED === 'true';
+    const scraperBridgeURL = baseURL || process.env.SCRAPER_BRIDGE_URL || 'http://127.0.0.1:8077';
     
-    this.enabled = scraperBridgeEnabled;
+    this.enabled = SCRAPER_BRIDGE_ENABLED;
     this.baseURL = scraperBridgeURL;
     
     // ✅ FASE 2: Solo crear cliente si está habilitado y URL válida
@@ -157,6 +170,62 @@ export class ScraperBridgeService {
     );
     
     return result;
+  }
+
+  /**
+   * Fetch single AliExpress product by URL (primary datasource when SCRAPER_BRIDGE_ENABLED=true)
+   */
+  async fetchAliExpressProduct(aliexpressUrl: string): Promise<ScrapedProductFromBridge> {
+    if (!this.enabled) {
+      const error: any = new Error('Scraper bridge is disabled');
+      error.code = 'BRIDGE_DISABLED';
+      throw error;
+    }
+
+    const { retryWithBackoff } = await import('../utils/retry');
+    const response = await retryWithBackoff(
+      async () => {
+        const res = await Promise.race([
+          this.client.post('/scraping/aliexpress/product', { url: aliexpressUrl }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Product fetch timeout after 120s')), 120000)
+          ),
+        ]);
+        const data = (res as any).data;
+        const lower = JSON.stringify(data || {}).toLowerCase();
+        if ((data && (data.captcha_required || data.requires_captcha)) || /captcha/.test(lower)) {
+          const err: any = new Error('CAPTCHA_REQUIRED');
+          err.code = 'CAPTCHA_REQUIRED';
+          err.details = data;
+          throw err;
+        }
+        if (data?.error || (res as any).status >= 400) {
+          throw new Error(data?.error || data?.message || `Bridge returned ${(res as any).status}`);
+        }
+        return data;
+      },
+      {
+        maxAttempts: 2,
+        initialDelay: 2000,
+        retryable: (error: any) =>
+          error.code !== 'CAPTCHA_REQUIRED' &&
+          error.code !== 'BRIDGE_DISABLED' &&
+          (!error.response || error.response?.status >= 500),
+      }
+    );
+
+    return {
+      title: response?.title || 'Producto sin título',
+      description: response?.description || '',
+      price: Number(response?.price) || 0,
+      currency: response?.currency || 'USD',
+      images: Array.isArray(response?.images) ? response.images : response?.image ? [response.image] : [],
+      category: response?.category,
+      shipping: response?.shipping,
+      rating: response?.rating,
+      reviews: response?.reviews,
+      seller: response?.seller,
+    };
   }
 }
 
