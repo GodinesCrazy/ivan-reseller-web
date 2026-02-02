@@ -14,6 +14,7 @@
 
 import { Request, Response } from 'express';
 import axios from 'axios';
+import crypto from 'crypto';
 import aliExpressService from './aliexpress.service';
 import { aliExpressSearchService } from './aliexpress-search.service';
 import logger from '../../config/logger';
@@ -482,7 +483,43 @@ async function persistCandidates(userId: number, candidates: any[]): Promise<voi
   }
 }
 
+const ALIEXPRESS_AUTH_URL = 'https://api.aliexpress.com/oauth/authorize';
 const ALIEXPRESS_TOKEN_URL = 'https://api.aliexpress.com/rest/auth/token/security/create';
+
+/**
+ * Get OAuth authorization URL to start OAuth flow
+ * GET /api/aliexpress/oauth/url
+ */
+export const getOAuthUrl = async (req: Request, res: Response) => {
+  const appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
+  const callbackUrl = (process.env.ALIEXPRESS_CALLBACK_URL || process.env.ALIEXPRESS_OAUTH_REDIRECT_URL || '').trim();
+  
+  if (!appKey) {
+    logger.error('[AliExpress OAuth] Missing ALIEXPRESS_APP_KEY');
+    return res.status(500).json({ success: false, error: 'ALIEXPRESS_APP_KEY not configured' });
+  }
+  
+  if (!callbackUrl) {
+    logger.error('[AliExpress OAuth] Missing ALIEXPRESS_CALLBACK_URL or ALIEXPRESS_OAUTH_REDIRECT_URL');
+    return res.status(500).json({ success: false, error: 'Callback URL not configured' });
+  }
+  
+  const state = crypto.randomBytes(16).toString('hex');
+  const authUrl = `${ALIEXPRESS_AUTH_URL}?response_type=code&client_id=${appKey}&redirect_uri=${encodeURIComponent(callbackUrl)}&state=${state}`;
+  
+  logger.info('[AliExpress OAuth] Authorization URL generated', {
+    appKey: `${appKey.substring(0, 6)}...`,
+    callbackUrl,
+    state,
+  });
+  
+  return res.status(200).json({
+    success: true,
+    authUrl,
+    state,
+    callbackUrl,
+  });
+};
 
 /**
  * OAuth callback: exchange code for tokens and return (or store if persistence exists).
