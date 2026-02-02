@@ -62,17 +62,17 @@ export const authApi = {
   },
 
   register: async (userData: RegisterData) => {
-    const { data } = await api.post('/api/auth/register', userData);
+    const { data } = await api.post('/auth/register', userData);
     return data.data;
   },
 
   logout: async () => {
-    const { data } = await api.post('/api/auth/logout');
+    const { data } = await api.post('/auth/logout');
     return data;
   },
 
   me: async () => {
-    const { data } = await api.get('/api/auth/me');
+    const { data } = await api.get('/auth/me');
     return data.data;
   },
 };

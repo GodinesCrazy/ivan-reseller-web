@@ -39,6 +39,8 @@ api.interceptors.request.use(
       }
     }
 
+    const finalUrl = config.baseURL ? `${String(config.baseURL).replace(/\/$/, '')}${config.url?.startsWith('/') ? '' : '/'}${config.url || ''}` : config.url;
+    console.log('[API] request', finalUrl || config.url);
     return config;
   },
   (error) => Promise.reject(error)
@@ -57,6 +59,10 @@ api.interceptors.response.use(
     if (backendDownToastShown) {
       backendDownToastShown = false;
     }
+    const url = response.config?.baseURL && response.config?.url
+      ? `${String(response.config.baseURL).replace(/\/$/, '')}${response.config.url}`
+      : response.config?.url;
+    console.log('[API]', url, response.status);
     return response;
   },
   async (error) => {
