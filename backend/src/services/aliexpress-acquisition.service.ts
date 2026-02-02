@@ -8,6 +8,7 @@
 import { trace } from '../utils/boot-trace';
 trace('loading aliexpress-acquisition.service');
 
+import axios from 'axios';
 import logger from '../config/logger';
 import { aliexpressAffiliateAPIService } from './aliexpress-affiliate-api.service';
 import scraperBridge from './scraper-bridge.service';
@@ -55,23 +56,32 @@ export async function getAliExpressProductCascaded(
     }
   }
 
-  // 3) Try Native Scraper
+  // 3) Try Native Scraper microservice (HTTP)
+  const nativeUrl = process.env.NATIVE_SCRAPER_URL;
+  if (!nativeUrl) {
+    logger.error('[ALIEXPRESS-ACQUISITION] NATIVE_SCRAPER_URL not configured');
+    throw new Error('All AliExpress acquisition methods failed');
+  }
   try {
-    const { AdvancedScrapingService } = await import('./scraping.service');
-    const advancedScrapingService = new AdvancedScrapingService();
-    const result = await advancedScrapingService.scrapeAliExpressProduct(aliexpressUrl, userId);
-    logger.info('[ALIEXPRESS-ACQUISITION] Succeeded via Native Scraper', { url: aliexpressUrl });
+    const response = await axios.post(
+      `${nativeUrl.replace(/\/$/, '')}/scrape/aliexpress`,
+      { url: aliexpressUrl },
+      { timeout: 120000 }
+    );
+    const data = response.data;
+    logger.info('[ALIEXPRESS-ACQUISITION] Succeeded via Native Scraper microservice', { url: aliexpressUrl });
+    const priceNum = typeof data.price === 'number' ? data.price : parseFloat(String(data.price || '0').replace(/[^0-9.]/g, '')) || 0;
     return {
-      title: result.title,
-      description: result.description,
-      price: result.price,
-      currency: result.currency,
-      images: result.images || [],
-      category: result.category,
-      shipping: result.shipping,
-      rating: result.rating,
-      reviews: result.reviews,
-      seller: result.seller,
+      title: data.title || 'Producto sin título',
+      description: '',
+      price: priceNum,
+      currency: data.currency || 'USD',
+      images: Array.isArray(data.images) ? data.images : [],
+      category: data.category,
+      shipping: data.shipping,
+      rating: data.rating,
+      reviews: data.reviews,
+      seller: data.seller,
     };
   } catch (e3) {
     logger.error('[ALIEXPRESS-ACQUISITION] Native scraping failed', {
