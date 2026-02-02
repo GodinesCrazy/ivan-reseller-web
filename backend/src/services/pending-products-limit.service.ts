@@ -9,14 +9,14 @@ import { AppError, ErrorCode } from '../middleware/error.middleware';
  * Servicio para gestionar el límite de productos pendientes
  */
 export class PendingProductsLimitService {
-  private static readonly DEFAULT_LIMIT = 100;
+  private static readonly DEFAULT_LIMIT = 10000;
   private static readonly CONFIG_KEY = 'max_pending_products';
   private static readonly MIN_LIMIT = 10;
-  private static readonly MAX_LIMIT = 5000;
+  private static readonly MAX_LIMIT = 10000;
 
   /**
    * Obtener el límite máximo de productos pendientes configurado
-   * @returns Límite configurado o valor por defecto (100)
+   * @returns Límite configurado o valor por defecto (10000)
    */
   async getMaxPendingProducts(): Promise<number> {
     try {
