@@ -7,10 +7,7 @@ const baseHasApiSuffix = API_BASE_HAS_SUFFIX;
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: true, // Enviar cookies automáticamente (necesario para httpOnly cookies)
+  withCredentials: true,
 });
 
 // Request interceptor - cookies se envían automáticamente con withCredentials
@@ -63,6 +60,7 @@ api.interceptors.response.use(
     return response;
   },
   async (error) => {
+    console.log('[API]', error.config?.url, error.response?.status);
     // ✅ FIX DEFINITIVO: Distinguir entre errores CORS y errores HTTP reales
     // Si NO hay error.response, puede ser:
     // 1. Error de red (CORS, timeout, DNS, etc.)
