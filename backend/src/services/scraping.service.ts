@@ -140,7 +140,7 @@ export class AdvancedScrapingService {
       logger.error('Scraping error', {
         error: error.message || String(error),
         stack: error.stack,
-        url: productUrl
+        url
       });
       throw new AppError(`Failed to scrape product: ${error.message}`, 500);
     }
