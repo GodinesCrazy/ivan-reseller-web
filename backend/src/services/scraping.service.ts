@@ -12,8 +12,6 @@ import { logger } from '../config/logger';
 import { getChromiumLaunchConfig } from '../utils/chromium';
 import { env } from '../config/env';
 
-const SCRAPER_BRIDGE_ENABLED = process.env.SCRAPER_BRIDGE_ENABLED === 'true';
-
 export interface ScrapedProduct {
   title: string;
   description: string;
@@ -98,24 +96,8 @@ export class AdvancedScrapingService {
         throw new AppError('Invalid AliExpress URL', 400);
       }
 
-      // ✅ Scraper Bridge as primary datasource when enabled
-      if (SCRAPER_BRIDGE_ENABLED) {
-        const scraperBridge = (await import('./scraper-bridge.service')).default;
-        const bridgeData = await scraperBridge.fetchAliExpressProduct(url);
-        return {
-          title: bridgeData.title,
-          description: bridgeData.description,
-          price: bridgeData.price,
-          currency: bridgeData.currency,
-          images: bridgeData.images || [],
-          category: bridgeData.category,
-          shipping: bridgeData.shipping,
-          rating: bridgeData.rating,
-          reviews: bridgeData.reviews,
-          seller: bridgeData.seller,
-        };
-      }
-
+      // ✅ Cascading acquisition handled by aliexpress-acquisition.service
+      // When called from cascade, this is the native scraper fallback
       // ✅ FIX SIGSEGV: Verificar flags antes de intentar scraping
       const isProduction = process.env.NODE_ENV === 'production';
       const disableBrowserAutomation = env.DISABLE_BROWSER_AUTOMATION ?? isProduction;

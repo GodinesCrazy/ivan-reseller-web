@@ -653,6 +653,49 @@ export class AliExpressAffiliateAPIService {
   }
 
   /**
+   * Get product by AliExpress URL (extracts product ID and fetches details)
+   */
+  async getProductByUrl(aliexpressUrl: string): Promise<{
+    title: string;
+    description: string;
+    price: number;
+    currency: string;
+    images: string[];
+    category?: string;
+    shipping?: { cost?: number; estimatedDays?: number };
+    rating?: number;
+    reviews?: number;
+    seller?: { name: string; rating: number; location: string };
+  }> {
+    const match = aliexpressUrl.match(/\/item\/(\d+)\.html/);
+    const productId = match?.[1];
+    if (!productId) {
+      throw new Error('Invalid AliExpress URL: could not extract product ID');
+    }
+    const details = await this.getProductDetails({ productIds: productId });
+    if (!details?.length) {
+      throw new Error('Product not found in Affiliate API');
+    }
+    const p = details[0];
+    const images = [p.productMainImageUrl, ...(p.productSmallImageUrls || [])].filter(Boolean);
+    return {
+      title: p.productTitle || 'Producto sin título',
+      description: p.description || '',
+      price: p.salePrice || 0,
+      currency: p.currency || 'USD',
+      images,
+      category: p.categoryName,
+      shipping: p.shippingInfo ? {
+        cost: p.shippingInfo.shippingCost,
+        estimatedDays: p.shippingInfo.deliveryDays,
+      } : undefined,
+      rating: p.evaluateScore,
+      reviews: p.volume,
+      seller: p.storeName ? { name: p.storeName, rating: 0, location: '' } : undefined,
+    };
+  }
+
+  /**
    * Convertir producto de Affiliate API a formato ScrapedProduct para compatibilidad
    */
   toScrapedProduct(product: AffiliateProductDetail, productUrl?: string): {
