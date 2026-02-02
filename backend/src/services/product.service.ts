@@ -273,6 +273,15 @@ export class ProductService {
 
     const metadataPayload = Object.keys(metadata).length ? JSON.stringify(metadata) : null;
 
+    // ✅ HOTFIX: Enforce base and suggested price before validation
+    if (!rest.aliexpressPrice || rest.aliexpressPrice <= 0) {
+      rest.aliexpressPrice = 1;
+    }
+    if (!rest.suggestedPrice || rest.suggestedPrice <= rest.aliexpressPrice) {
+      rest.suggestedPrice = Number((rest.aliexpressPrice * 2).toFixed(2));
+    }
+    console.log('[PRICE_FIX]', { aliexpressPrice: rest.aliexpressPrice, suggestedPrice: rest.suggestedPrice });
+
     // ✅ P7: Validar que suggestedPrice sea mayor que aliexpressPrice
     if (rest.suggestedPrice <= rest.aliexpressPrice) {
       throw new AppError(
