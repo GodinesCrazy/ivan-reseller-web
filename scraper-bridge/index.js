@@ -43,6 +43,7 @@ app.post("/scraping/aliexpress/product", async (req, res) => {
   }
 });
 
-app.listen(3333, () => {
-  console.log("Scraper Bridge running on 3333");
+const PORT = process.env.PORT || 3333;
+app.listen(PORT, () => {
+  console.log(`Scraper Bridge running on ${PORT}`);
 });
