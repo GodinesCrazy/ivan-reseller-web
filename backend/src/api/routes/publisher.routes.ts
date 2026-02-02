@@ -109,12 +109,16 @@ router.post('/add_for_approval', async (req: Request, res: Response) => {
       const scrapedData = await getAliExpressProductCascaded(String(aliexpressUrl), userId);
 
       // Crear producto desde datos scrapeados
+      let aliexpressPrice = scrapedData.price ?? customData.aliexpressPrice ?? 0;
+      if (aliexpressPrice <= 0) aliexpressPrice = 1;
+      const suggestedPrice = customData.suggestedPrice ?? aliexpressPrice * 2;
+
       const productData: CreateProductDto = {
         title: scrapedData.title || customData.title || 'Producto sin título',
         description: scrapedData.description || customData.description || '',
         aliexpressUrl: String(aliexpressUrl),
-        aliexpressPrice: scrapedData.price || customData.aliexpressPrice || 0,
-        suggestedPrice: customData.suggestedPrice || (scrapedData.price ? scrapedData.price * 2 : 0),
+        aliexpressPrice,
+        suggestedPrice,
         finalPrice: customData.finalPrice,
         imageUrl: scrapedData.images?.[0] || customData.imageUrl,
         imageUrls: scrapedData.images || customData.imageUrls,
