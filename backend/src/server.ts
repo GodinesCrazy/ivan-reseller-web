@@ -1,10 +1,3 @@
-process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION:', err);
-});
-process.on('unhandledRejection', (reason) => {
-  console.error('UNHANDLED REJECTION:', reason);
-});
-
 import http from 'http';
 import { env } from './config/env';
 import { prisma, connectWithRetry } from './config/database';
@@ -408,10 +401,11 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
     return; // Don't log as error or exit
   }
 
-  // ✅ FIX SIGSEGV: Log detallado con correlationId y memoria
+  // ✅ FIX SIGSEGV: Log detallado con correlationId, memoria y full stack trace
   const memory = process.memoryUsage();
+  const fullStack = reason instanceof Error ? reason.stack : (reason?.stack || String(reason));
   console.error(`[${timestamp}] [${correlationId}] ❌ UNHANDLED REJECTION:`, reason);
-  console.error(`[${timestamp}] [${correlationId}] Stack:`, reason?.stack || 'No stack trace');
+  console.error(`[${timestamp}] [${correlationId}] Full stack trace:`, fullStack);
   console.error(`[${timestamp}] [${correlationId}] Memory:`, {
     heapUsed: Math.round(memory.heapUsed / 1024 / 1024) + 'MB',
     heapTotal: Math.round(memory.heapTotal / 1024 / 1024) + 'MB',
@@ -428,9 +422,9 @@ process.on('uncaughtException', (error: Error) => {
   const correlationId = 'uncaught-exception-' + Date.now();
   const memory = process.memoryUsage();
   
-  // ✅ FIX STABILITY: Log detallado con correlationId y memoria
+  // ✅ FIX STABILITY: Log detallado con correlationId, memoria y full stack trace
   console.error(`[${timestamp}] [${correlationId}] ❌ UNCAUGHT EXCEPTION:`, error);
-  console.error(`[${timestamp}] [${correlationId}] Stack:`, error.stack);
+  console.error(`[${timestamp}] [${correlationId}] Full stack trace:`, error.stack || 'No stack trace');
   console.error(`[${timestamp}] [${correlationId}] Memory:`, {
     heapUsed: Math.round(memory.heapUsed / 1024 / 1024) + 'MB',
     heapTotal: Math.round(memory.heapTotal / 1024 / 1024) + 'MB',

@@ -6,12 +6,14 @@ import ManualAuthService from '../../services/manual-auth.service';
 import { handleSetupCheck } from '../../utils/setup-check';
 import { logger } from '../../config/logger';
 import { env } from '../../config/env';
+import { wrapAsync } from '../../utils/async-route-wrapper';
 
 const router = Router();
 
 router.use(authenticate);
 
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction) => {
+  console.log('[ROUTE_ENTRY] GET /api/auth-status');
   const startTime = Date.now();
   const correlationId = (req as any).correlationId || 'unknown';
   const memoryStart = {
@@ -251,7 +253,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       correlationId
     });
   }
-});
+}, { route: '/api/auth-status', serviceName: 'auth-status' }));
 
 router.post('/:marketplace/refresh', async (req: Request, res: Response, next: NextFunction) => {
   try {

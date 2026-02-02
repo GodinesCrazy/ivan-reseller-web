@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
 import { aiSuggestionsService } from '../../services/ai-suggestions.service';
 import { AppError } from '../../middleware/error.middleware';
+import { wrapAsync } from '../../utils/async-route-wrapper';
 
 const router = Router();
 
@@ -9,7 +10,8 @@ const router = Router();
 router.use(authenticate);
 
 // GET /api/ai-suggestions - Obtener sugerencias del usuario
-router.get('/', async (req: Request, res: Response, next) => {
+router.get('/', wrapAsync(async (req: Request, res: Response, next) => {
+  console.log('[ROUTE_ENTRY] GET /api/ai-suggestions');
   try {
     const userId = req.user?.userId;
     if (!userId) {
@@ -27,7 +29,7 @@ router.get('/', async (req: Request, res: Response, next) => {
   } catch (error) {
     next(error);
   }
-});
+}, { route: '/api/ai-suggestions', serviceName: 'ai-suggestions' }));
 
 // POST /api/ai-suggestions/generate - Generar nuevas sugerencias IA
 router.post('/generate', async (req: Request, res: Response, next) => {

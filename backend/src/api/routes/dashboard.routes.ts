@@ -9,6 +9,7 @@ import { logger } from '../../config/logger';
 import { queryWithTimeout } from '../../utils/queryWithTimeout';
 import { handleSetupCheck } from '../../utils/setup-check';
 import { env } from '../../config/env';
+import { wrapAsync } from '../../utils/async-route-wrapper';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -21,7 +22,8 @@ const queryParamsSchema = z.object({
 });
 
 // GET /api/dashboard/stats - Estadísticas del dashboard
-router.get('/stats', async (req: Request, res: Response, next) => {
+router.get('/stats', wrapAsync(async (req: Request, res: Response, next) => {
+  console.log('[ROUTE_ENTRY] GET /api/dashboard/stats');
   const startTime = Date.now();
   const correlationId = (req as any).correlationId || 'unknown';
   
@@ -125,7 +127,7 @@ router.get('/stats', async (req: Request, res: Response, next) => {
     });
     next(error);
   }
-});
+}, { route: '/api/dashboard/stats', serviceName: 'dashboard' }));
 
 // GET /api/dashboard/recent-activity - Actividad reciente
 router.get('/recent-activity', async (req: Request, res: Response, next) => {

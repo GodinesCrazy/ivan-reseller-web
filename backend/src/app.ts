@@ -82,6 +82,15 @@ app.set('trust proxy', 1);
 app.set('etag', false); // Deshabilitar ETag globalmente (más seguro para APIs)
 
 // ====================================
+// REQUEST LOGGING - Log ALL requests before routing (for 502 debugging)
+// ====================================
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[REQ] ${timestamp} ${req.method} ${req.path}`);
+  next();
+});
+
+// ====================================
 // HEALTH-FIRST MIDDLEWARE (Railway healthcheck path: /health)
 // Must be THE FIRST app.use() – no DB, Redis, queues, auth, or heavy deps.
 // ====================================

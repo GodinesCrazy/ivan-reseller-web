@@ -8,6 +8,7 @@ import { MarketplaceService } from '../../services/marketplace.service';
 import { productWorkflowStatusService } from '../../services/product-workflow-status.service';
 import { queryWithTimeout } from '../../utils/queryWithTimeout';
 import { handleSetupCheck } from '../../utils/setup-check';
+import { wrapAsync } from '../../utils/async-route-wrapper';
 
 const router = Router();
 router.use(authenticate);
@@ -44,7 +45,8 @@ const getProductsQuerySchema = z.object({
 });
 
 // GET /api/products - Listar productos
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction) => {
+  console.log('[ROUTE_ENTRY] GET /api/products');
   const startTime = Date.now();
   try {
     // ✅ PRODUCTION READY: Validar query parameters
@@ -151,7 +153,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     });
     next(error); // El error handler ya tiene CORS headers garantizados
   }
-});
+}, { route: '/api/products', serviceName: 'products' }));
 
 // GET /api/products/stats - Estadísticas
 router.get('/stats', async (req: Request, res: Response, next: NextFunction) => {
