@@ -38,32 +38,26 @@ export interface ScrapedProductFromBridge {
 }
 
 export class ScraperBridgeService {
-  private client: AxiosInstance;
-  private baseURL: string;
-  private enabled: boolean;
+  private _client: AxiosInstance | null = null;
+  private readonly baseURL: string;
+  private readonly enabled: boolean;
 
   constructor(baseURL?: string) {
-    // ✅ MVP: Scraper bridge as primary datasource only when explicitly enabled
-    const SCRAPER_BRIDGE_ENABLED = process.env.SCRAPER_BRIDGE_ENABLED === 'true';
-    const scraperBridgeURL = baseURL || process.env.SCRAPER_BRIDGE_URL || 'http://127.0.0.1:8077';
-    
-    this.enabled = SCRAPER_BRIDGE_ENABLED;
-    this.baseURL = scraperBridgeURL;
-    
-    // ✅ FASE 2: Solo crear cliente si está habilitado y URL válida
-    if (this.enabled && scraperBridgeURL) {
-      this.client = axios.create({
-        baseURL: scraperBridgeURL,
-        timeout: 120000,
-        validateStatus: (status) => status < 500, // No lanzar error en 4xx (puede ser CAPTCHA)
-      });
-    } else {
-      // Crear cliente mock si está deshabilitado
-      this.client = axios.create({
-        baseURL: 'http://localhost:1', // URL inválida pero no importa si no se usa
-        timeout: 1000,
-      });
+    this.enabled = process.env.SCRAPER_BRIDGE_ENABLED === 'true';
+    this.baseURL = baseURL || process.env.SCRAPER_BRIDGE_URL || 'http://127.0.0.1:8077';
+  }
+
+  private getClient(): AxiosInstance {
+    if (this._client) return this._client;
+    if (!this.baseURL) {
+      throw new Error('Scraper bridge disabled or URL missing');
     }
+    this._client = axios.create({
+      baseURL: this.baseURL,
+      timeout: 120000,
+      validateStatus: (status) => status < 500,
+    });
+    return this._client;
   }
 
   /**
@@ -94,7 +88,7 @@ export class ScraperBridgeService {
       async () => {
         // ✅ FASE 2: Timeout estricto de 5 segundos para health check
         const { data } = await Promise.race([
-          this.client.get('/health'),
+          this.getClient().get('/health'),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('Health check timeout')), 5000)
           ),
@@ -128,7 +122,7 @@ export class ScraperBridgeService {
       async () => {
         // ✅ FASE 2: Timeout estricto de 120 segundos para búsqueda (2 minutos)
         const response = await Promise.race([
-          this.client.post('/scraping/aliexpress/search', {
+          this.getClient().post('/scraping/aliexpress/search', {
             query: params.query,
             max_items: Math.min(Math.max(params.maxItems || 10, 1), 20),
             locale: params.locale || 'es-ES',
@@ -176,17 +170,18 @@ export class ScraperBridgeService {
    * Fetch single AliExpress product by URL (primary datasource when SCRAPER_BRIDGE_ENABLED=true)
    */
   async fetchAliExpressProduct(aliexpressUrl: string): Promise<ScrapedProductFromBridge> {
-    if (!this.enabled) {
-      const error: any = new Error('Scraper bridge is disabled');
+    if (!this.enabled || !this.baseURL) {
+      const error: any = new Error('Scraper bridge disabled or URL missing');
       error.code = 'BRIDGE_DISABLED';
       throw error;
     }
 
-    const { retryWithBackoff } = await import('../utils/retry');
-    const response = await retryWithBackoff(
-      async () => {
-        const res = await Promise.race([
-          this.client.post('/scraping/aliexpress/product', { url: aliexpressUrl }),
+    try {
+      const { retryWithBackoff } = await import('../utils/retry');
+      const response = await retryWithBackoff(
+        async () => {
+          const res = await Promise.race([
+            this.getClient().post('/scraping/aliexpress/product', { url: aliexpressUrl }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('Product fetch timeout after 120s')), 120000)
           ),
@@ -214,18 +209,25 @@ export class ScraperBridgeService {
       }
     );
 
-    return {
-      title: response?.title || 'Producto sin título',
-      description: response?.description || '',
-      price: Number(response?.price) || 0,
-      currency: response?.currency || 'USD',
-      images: Array.isArray(response?.images) ? response.images : response?.image ? [response.image] : [],
-      category: response?.category,
-      shipping: response?.shipping,
-      rating: response?.rating,
-      reviews: response?.reviews,
-      seller: response?.seller,
-    };
+      return {
+        title: response?.title || 'Producto sin título',
+        description: response?.description || '',
+        price: Number(response?.price) || 0,
+        currency: response?.currency || 'USD',
+        images: Array.isArray(response?.images) ? response.images : response?.image ? [response.image] : [],
+        category: response?.category,
+        shipping: response?.shipping,
+        rating: response?.rating,
+        reviews: response?.reviews,
+        seller: response?.seller,
+      };
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      const controlled = new Error(`Scraper bridge request failed: ${msg}`) as any;
+      controlled.code = err?.code || 'BRIDGE_ERROR';
+      controlled.cause = err;
+      throw controlled;
+    }
   }
 }
 
