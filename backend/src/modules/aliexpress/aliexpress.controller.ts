@@ -562,17 +562,58 @@ export const oauthCallback = async (req: Request, res: Response) => {
       return res.status(500).json({ success: false, error: 'INVALID_RESPONSE' });
     }
 
-    logger.info('[AliExpress OAuth] Tokens received', {
-      hasAccessToken: !!access_token,
-      hasRefreshToken: !!refresh_token,
-      expires_in,
-    });
+    // Calculate expiration date
+    const expiresAt = new Date();
+    if (expires_in > 0) {
+      expiresAt.setSeconds(expiresAt.getSeconds() + expires_in);
+    } else {
+      // Default to 1 year if no expiration provided
+      expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+    }
+
+    // Persist tokens to database
+    try {
+      await prisma.aliExpressToken.upsert({
+        where: { id: 'global' }, // Use a fixed ID for global token
+        create: {
+          id: 'global',
+          accessToken: access_token,
+          refreshToken: refresh_token || '',
+          expiresAt,
+          tokenType: 'Bearer',
+          scope: data?.scope || null,
+          state: (req.query.state as string) || null,
+        },
+        update: {
+          accessToken: access_token,
+          refreshToken: refresh_token || '',
+          expiresAt,
+          tokenType: 'Bearer',
+          scope: data?.scope || null,
+          updatedAt: new Date(),
+        },
+      });
+
+      logger.info('[AliExpress OAuth] Tokens persisted to database', {
+        hasAccessToken: !!access_token,
+        hasRefreshToken: !!refresh_token,
+        expires_in,
+        expiresAt: expiresAt.toISOString(),
+      });
+    } catch (dbError: any) {
+      logger.error('[AliExpress OAuth] Failed to persist tokens to database', {
+        error: dbError.message,
+        stack: dbError.stack,
+      });
+      // Continue anyway - tokens are still returned to client
+    }
 
     return res.status(200).json({
       success: true,
       access_token,
       refresh_token: refresh_token ?? undefined,
       expires_in: expires_in || undefined,
+      expiresAt: expiresAt.toISOString(),
     });
   } catch (err: any) {
     const status = err?.response?.status ?? 500;

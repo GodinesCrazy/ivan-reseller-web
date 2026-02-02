@@ -158,10 +158,49 @@ export class AliExpressAffiliateAPIService {
   }
 
   /**
+   * ✅ NUEVO: Cargar access token desde base de datos
+   */
+  async loadTokenFromDatabase(): Promise<void> {
+    try {
+      const { prisma } = await import('../config/database');
+      const tokenRecord = await prisma.aliExpressToken.findUnique({
+        where: { id: 'global' },
+      });
+
+      if (tokenRecord && tokenRecord.expiresAt > new Date()) {
+        this.accessToken = tokenRecord.accessToken;
+        this.tokenExpiresAt = tokenRecord.expiresAt;
+        logger.info('[ALIEXPRESS-AUTH] Token loaded from database', {
+          expiresAt: tokenRecord.expiresAt.toISOString(),
+          tokenPreview: `${tokenRecord.accessToken.substring(0, 10)}...`,
+        });
+      } else if (tokenRecord) {
+        logger.warn('[ALIEXPRESS-AUTH] Token in database is expired', {
+          expiresAt: tokenRecord.expiresAt.toISOString(),
+        });
+      } else {
+        logger.info('[ALIEXPRESS-AUTH] No token found in database');
+      }
+    } catch (error: any) {
+      logger.error('[ALIEXPRESS-AUTH] Failed to load token from database', {
+        error: error.message,
+      });
+    }
+  }
+
+  /**
    * ✅ NUEVO: Obtener access token válido (verificar expiración)
    */
   async getAccessToken(): Promise<string | null> {
     // Si hay token y no está expirado, retornarlo
+    if (this.accessToken && this.tokenExpiresAt && this.tokenExpiresAt > new Date()) {
+      return this.accessToken;
+    }
+    
+    // Intentar cargar desde base de datos
+    await this.loadTokenFromDatabase();
+    
+    // Si ahora hay token válido, retornarlo
     if (this.accessToken && this.tokenExpiresAt && this.tokenExpiresAt > new Date()) {
       return this.accessToken;
     }
