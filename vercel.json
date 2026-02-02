@@ -10,6 +10,14 @@
       "destination": "https://ivan-reseller-backend-production.up.railway.app/api/:path*"
     },
     {
+      "source": "/health",
+      "destination": "https://ivan-reseller-backend-production.up.railway.app/health"
+    },
+    {
+      "source": "/ready",
+      "destination": "https://ivan-reseller-backend-production.up.railway.app/ready"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
