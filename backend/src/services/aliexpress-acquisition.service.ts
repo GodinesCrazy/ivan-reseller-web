@@ -31,45 +31,40 @@ export async function getAliExpressProductCascaded(
   _userId: number
 ): Promise<AliExpressProductResult> {
   // 1) Try Affiliate API
-  logger.info('[ALIEXPRESS] Trying Affiliate API');
   try {
-    const result = await aliexpressAffiliateAPIService.getProductByUrl(aliexpressUrl);
-    logger.info('[ALIEXPRESS-ACQUISITION] Succeeded via Affiliate API', { url: aliexpressUrl });
-    return result;
-  } catch (e1) {
-    logger.warn('[ALIEXPRESS] Affiliate API failed', {
-      error: e1 instanceof Error ? e1.message : String(e1),
-    });
+    logger.info('[ALIEXPRESS] Trying Affiliate API');
+    const p = await aliexpressAffiliateAPIService.getProductByUrl(aliexpressUrl);
+    logger.info('[ALIEXPRESS] Affiliate API success');
+    return p;
+  } catch (e) {
+    logger.warn('[ALIEXPRESS] Affiliate API failed', e?.message || e);
   }
 
   // 2) Try Scraper Bridge (if enabled)
-  logger.info('[ALIEXPRESS] Trying Scraper Bridge');
   if (process.env.SCRAPER_BRIDGE_ENABLED === 'true') {
     try {
-      const result = await scraperBridge.fetchAliExpressProduct(aliexpressUrl);
-      logger.info('[ALIEXPRESS-ACQUISITION] Succeeded via Scraper Bridge', { url: aliexpressUrl });
-      return result;
-    } catch (e2) {
-      logger.warn('[ALIEXPRESS] Scraper Bridge failed', {
-        error: e2 instanceof Error ? e2.message : String(e2),
-      });
+      logger.info('[ALIEXPRESS] Trying Scraper Bridge');
+      const p = await scraperBridge.fetchAliExpressProduct(aliexpressUrl);
+      logger.info('[ALIEXPRESS] Scraper Bridge success');
+      return p;
+    } catch (e) {
+      logger.warn('[ALIEXPRESS] Scraper Bridge failed', e?.message || e);
     }
   }
 
   // 3) Try Native Scraper (if NATIVE_SCRAPER_URL configured)
-  logger.info('[ALIEXPRESS] Trying Native Scraper');
   if (process.env.NATIVE_SCRAPER_URL) {
     try {
+      logger.info('[ALIEXPRESS] Trying Native Scraper');
       const nativeScraper = getNativeScraperService();
-      const result = await nativeScraper.scrapeAliExpress(aliexpressUrl);
-      logger.info('[ALIEXPRESS-ACQUISITION] Succeeded via Native Scraper', { url: aliexpressUrl });
-      return result;
-    } catch (e3) {
-      logger.error('[ALIEXPRESS] Native Scraper failed', {
-        error: e3 instanceof Error ? e3.message : String(e3),
-      });
+      const p = await nativeScraper.scrapeAliExpress(aliexpressUrl);
+      logger.info('[ALIEXPRESS] Native Scraper success');
+      return p;
+    } catch (e) {
+      logger.error('[ALIEXPRESS] Native Scraper failed', e?.message || e);
     }
   }
 
+  logger.error('[ALIEXPRESS] All methods failed');
   throw new Error('All AliExpress acquisition methods failed');
 }
