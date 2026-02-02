@@ -8,10 +8,10 @@
 import { trace } from '../utils/boot-trace';
 trace('loading aliexpress-acquisition.service');
 
-import axios from 'axios';
 import logger from '../config/logger';
 import { aliexpressAffiliateAPIService } from './aliexpress-affiliate-api.service';
 import scraperBridge from './scraper-bridge.service';
+import { getNativeScraperService } from './native-scraper.service';
 
 export interface AliExpressProductResult {
   title: string;
@@ -28,66 +28,48 @@ export interface AliExpressProductResult {
 
 export async function getAliExpressProductCascaded(
   aliexpressUrl: string,
-  userId: number
+  _userId: number
 ): Promise<AliExpressProductResult> {
   // 1) Try Affiliate API
+  logger.info('[ALIEXPRESS] Trying Affiliate API');
   try {
     const result = await aliexpressAffiliateAPIService.getProductByUrl(aliexpressUrl);
     logger.info('[ALIEXPRESS-ACQUISITION] Succeeded via Affiliate API', { url: aliexpressUrl });
     return result;
   } catch (e1) {
-    logger.warn('[ALIEXPRESS-ACQUISITION] Affiliate API failed', {
-      url: aliexpressUrl,
+    logger.warn('[ALIEXPRESS] Affiliate API failed', {
       error: e1 instanceof Error ? e1.message : String(e1),
     });
   }
 
   // 2) Try Scraper Bridge (if enabled)
+  logger.info('[ALIEXPRESS] Trying Scraper Bridge');
   if (process.env.SCRAPER_BRIDGE_ENABLED === 'true') {
     try {
       const result = await scraperBridge.fetchAliExpressProduct(aliexpressUrl);
       logger.info('[ALIEXPRESS-ACQUISITION] Succeeded via Scraper Bridge', { url: aliexpressUrl });
       return result;
     } catch (e2) {
-      logger.warn('[ALIEXPRESS-ACQUISITION] Scraper bridge failed', {
-        url: aliexpressUrl,
+      logger.warn('[ALIEXPRESS] Scraper Bridge failed', {
         error: e2 instanceof Error ? e2.message : String(e2),
       });
     }
   }
 
-  // 3) Try Native Scraper microservice (HTTP)
-  const nativeUrl = process.env.NATIVE_SCRAPER_URL;
-  if (!nativeUrl) {
-    logger.error('[ALIEXPRESS-ACQUISITION] NATIVE_SCRAPER_URL not configured');
-    throw new Error('All AliExpress acquisition methods failed');
+  // 3) Try Native Scraper (if NATIVE_SCRAPER_URL configured)
+  logger.info('[ALIEXPRESS] Trying Native Scraper');
+  if (process.env.NATIVE_SCRAPER_URL) {
+    try {
+      const nativeScraper = getNativeScraperService();
+      const result = await nativeScraper.scrapeAliExpress(aliexpressUrl);
+      logger.info('[ALIEXPRESS-ACQUISITION] Succeeded via Native Scraper', { url: aliexpressUrl });
+      return result;
+    } catch (e3) {
+      logger.error('[ALIEXPRESS] Native Scraper failed', {
+        error: e3 instanceof Error ? e3.message : String(e3),
+      });
+    }
   }
-  try {
-    const response = await axios.post(
-      `${nativeUrl.replace(/\/$/, '')}/scrape/aliexpress`,
-      { url: aliexpressUrl },
-      { timeout: 120000 }
-    );
-    const data = response.data;
-    logger.info('[ALIEXPRESS-ACQUISITION] Succeeded via Native Scraper microservice', { url: aliexpressUrl });
-    const priceNum = typeof data.price === 'number' ? data.price : parseFloat(String(data.price || '0').replace(/[^0-9.]/g, '')) || 0;
-    return {
-      title: data.title || 'Producto sin título',
-      description: '',
-      price: priceNum,
-      currency: data.currency || 'USD',
-      images: Array.isArray(data.images) ? data.images : [],
-      category: data.category,
-      shipping: data.shipping,
-      rating: data.rating,
-      reviews: data.reviews,
-      seller: data.seller,
-    };
-  } catch (e3) {
-    logger.error('[ALIEXPRESS-ACQUISITION] Native scraping failed', {
-      url: aliexpressUrl,
-      error: e3 instanceof Error ? e3.message : String(e3),
-    });
-    throw new Error('All AliExpress acquisition methods failed');
-  }
+
+  throw new Error('All AliExpress acquisition methods failed');
 }
