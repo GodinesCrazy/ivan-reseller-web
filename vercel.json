@@ -6,8 +6,8 @@
   "devCommand": "cd frontend && npm run dev",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://ivan-reseller-backend-production.up.railway.app/api/:path*"
+      "source": "/api/(.*)",
+      "destination": "https://ivan-reseller-backend-production.up.railway.app/api/$1"
     },
     {
       "source": "/health",
