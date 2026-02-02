@@ -39,12 +39,37 @@ app.post("/scrape/aliexpress", async (req, res) => {
     }
 
     const data = await page.evaluate(() => {
-      const title = document.querySelector("h1")?.innerText || "";
-      const price = document.querySelector("span[class*=price]")?.innerText || "";
-      const images = Array.from(document.querySelectorAll("img"))
-        .map(i => i.src)
-        .filter(src => src && src.includes("alicdn"));
-      return { title, price, currency: "USD", images };
+
+      const title =
+        document.querySelector("h1.product-title-text")?.innerText ||
+        document.querySelector("h1")?.innerText ||
+        document.title ||
+        "";
+
+      const images = [];
+
+      document.querySelectorAll("img").forEach(img => {
+        const src =
+          img.getAttribute("src") ||
+          img.getAttribute("data-src") ||
+          img.getAttribute("data-ks-lazyload");
+
+        if (src && src.includes("alicdn")) {
+          images.push(src.startsWith("//") ? "https:" + src : src);
+        }
+      });
+
+      const priceText =
+        document.querySelector("span[class*=price]")?.innerText ||
+        document.querySelector("div[class*=price]")?.innerText ||
+        "";
+
+      return {
+        title: title.trim(),
+        price: priceText.trim(),
+        currency: "USD",
+        images
+      };
     });
 
     await browser.close();
