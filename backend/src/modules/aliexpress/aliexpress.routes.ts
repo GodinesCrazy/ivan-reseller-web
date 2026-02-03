@@ -156,6 +156,10 @@ router.get('/affiliate/debug-search', async (_req, res) => {
  */
 router.get('/oauth/status', getOAuthStatusHandler);
 /**
+ * GET /api/aliexpress/oauth/test-flow - Get OAuth authorization URL for manual test
+ */
+router.get('/oauth/test-flow', getOAuthUrl);
+/**
  * GET /api/aliexpress/oauth/url - Get OAuth authorization URL
  */
 router.get('/oauth/url', getOAuthUrl);

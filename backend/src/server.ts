@@ -116,20 +116,18 @@ function logConfiguration(env: any, port: number, portSourceStr: string): void {
   console.log(`   SCRAPER_BRIDGE_ENABLED: ${env.SCRAPER_BRIDGE_ENABLED ? 'true' : 'false'}`);
   console.log(`   NATIVE_SCRAPER_URL: ${process.env.NATIVE_SCRAPER_URL || '❌ FALTA'}`);
   console.log('');
+  console.log('[ALIEXPRESS-CONFIG]', {
+    APP_KEY: process.env.ALIEXPRESS_APP_KEY ? 'SET' : 'MISSING',
+    APP_SECRET: process.env.ALIEXPRESS_APP_SECRET ? 'SET' : 'MISSING',
+    REDIRECT_URI: process.env.ALIEXPRESS_REDIRECT_URI || 'MISSING',
+    OAUTH_BASE: process.env.ALIEXPRESS_OAUTH_BASE,
+    API_BASE: process.env.ALIEXPRESS_API_BASE,
+  });
   const appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
   const appSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
   const redirectUri = (process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
-  const trackingId = (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim();
-  const oauthBase = (process.env.ALIEXPRESS_OAUTH_BASE || 'https://api-sg.aliexpress.com/oauth').replace(/\/$/, '');
   const hasAppKey = !!appKey && appKey !== 'PUT_YOUR_APP_KEY_HERE';
   const hasAppSecret = !!appSecret && appSecret !== 'PUT_YOUR_APP_SECRET_HERE';
-  console.log('[ALIEXPRESS CONFIG]');
-  console.log(`   APP_KEY: ${hasAppKey ? 'SET' : 'NOT SET'}`);
-  console.log(`   APP_SECRET: ${hasAppSecret ? 'SET' : 'NOT SET'}`);
-  console.log(`   TRACKING_ID: ${trackingId || 'MISSING'}`);
-  console.log(`   REDIRECT_URI: ${redirectUri || 'MISSING'}`);
-  console.log(`   OAUTH_BASE: ${oauthBase}`);
-  console.log('');
   if (!hasAppKey || !hasAppSecret || !redirectUri) {
     const msg = 'AliExpress OAuth requires ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, and ALIEXPRESS_REDIRECT_URI. ' +
       'Canonical redirect: https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback';

@@ -776,11 +776,10 @@ export class AliExpressAffiliateAPIService {
     };
     const sign = this.calculateSign(params, this.appSecret, 'sha256');
     const signedParams = { ...params, sign };
-    console.log('[AFFILIATE-DEBUG] PARAMS:', signedParams);
+    console.log('[AFFILIATE-DEBUG] PARAMS', signedParams);
     const res = await axios.post(this.apiBaseUrl, null, { params: signedParams, timeout: 30000 });
-    const rawResponse = res.data;
-    console.log('[AFFILIATE-DEBUG] RAW RESPONSE:', rawResponse);
-    return rawResponse;
+    console.log('[AFFILIATE-DEBUG] RAW RESPONSE', res.data);
+    return res.data;
   }
 
   toScrapedProduct(product: AffiliateProductDetail, productUrl?: string): {

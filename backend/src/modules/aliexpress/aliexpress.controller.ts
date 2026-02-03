@@ -576,6 +576,7 @@ export const oauthCallback = async (req: Request, res: Response) => {
       logger.error('[AliExpress OAuth] Failed to persist tokens to database', { error: dbError?.message });
     }
 
+    console.log('[ALIEXPRESS-OAUTH] TOKEN STORED OK', { expiresAt: expiresAt.toISOString() });
     return res.status(200).json({ success: true, expiresAt: expiresAt.toISOString() });
   } catch (err: any) {
     const status = err?.response?.status ?? 500;
