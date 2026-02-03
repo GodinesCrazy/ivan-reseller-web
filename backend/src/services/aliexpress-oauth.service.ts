@@ -15,6 +15,7 @@ const REDIRECT_URI =
     '').trim();
 const OAUTH_BASE = (process.env.ALIEXPRESS_OAUTH_BASE || 'https://api-sg.aliexpress.com/oauth').replace(/\/$/, '');
 const API_BASE = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync').replace(/\/$/, '');
+const TOKEN_URL = (process.env.ALIEXPRESS_TOKEN_URL || 'https://api.aliexpress.com/rest/auth/token/security/create').replace(/\/$/, '');
 
 /**
  * Get authorization URL to start OAuth flow.
@@ -40,16 +41,18 @@ export async function exchangeCodeForToken(code: string): Promise<TokenData> {
   if (!APP_KEY || !APP_SECRET) {
     throw new Error('ALIEXPRESS_APP_KEY / ALIEXPRESS_APP_SECRET not configured');
   }
+  if (!REDIRECT_URI) {
+    throw new Error('ALIEXPRESS_REDIRECT_URI not configured');
+  }
   const params = new URLSearchParams({
-    method: 'auth.token.create',
-    app_key: APP_KEY,
-    app_secret: APP_SECRET,
-    code,
     grant_type: 'authorization_code',
+    client_id: APP_KEY,
+    client_secret: APP_SECRET,
+    code,
     redirect_uri: REDIRECT_URI,
   });
-  logger.info('[ALIEXPRESS-OAUTH] Exchanging code for token', { apiBase: API_BASE });
-  const response = await axios.post(API_BASE, params.toString(), {
+  logger.info('[ALIEXPRESS-OAUTH] Exchanging code for token', { tokenUrl: TOKEN_URL });
+  const response = await axios.post(TOKEN_URL, params.toString(), {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     timeout: 15000,
   });
@@ -77,14 +80,13 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenDat
     throw new Error('ALIEXPRESS_APP_KEY / ALIEXPRESS_APP_SECRET not configured');
   }
   const params = new URLSearchParams({
-    method: 'auth.token.refresh',
-    app_key: APP_KEY,
-    app_secret: APP_SECRET,
-    refresh_token: refreshToken,
     grant_type: 'refresh_token',
+    client_id: APP_KEY,
+    client_secret: APP_SECRET,
+    refresh_token: refreshToken,
   });
-  logger.info('[ALIEXPRESS-OAUTH] Refreshing token', { apiBase: API_BASE });
-  const response = await axios.post(API_BASE, params.toString(), {
+  logger.info('[ALIEXPRESS-OAUTH] Refreshing token', { tokenUrl: TOKEN_URL });
+  const response = await axios.post(TOKEN_URL, params.toString(), {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     timeout: 15000,
   });

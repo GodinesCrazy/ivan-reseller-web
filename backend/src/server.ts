@@ -20,41 +20,23 @@ import { initBuildInfo } from './middleware/version-header.middleware';
 
 const execAsync = promisify(exec);
 
+process.on('exit', () => console.log('Process exiting'));
+process.on('SIGINT', () => process.exit(0));
+process.on('SIGTERM', () => process.exit(0));
+
 // ✅ FIX RAILWAY P0: PORT from process.env (Railway injects it). NO fallback a 3000 en producción.
 // En producción (Railway), process.env.PORT SIEMPRE está presente. Si falta, es error crítico.
-const isProduction = process.env.NODE_ENV === 'production';
+const rawPort = process.env.PORT || '0';
+const PORT = Number(rawPort);
+const portSource = process.env.PORT ? 'process.env.PORT' : 'OS-assigned (0)';
 
-let PORT: number;
-let portSource: string;
-
-if (isProduction) {
-  // En producción: SOLO process.env.PORT, sin fallback
-  if (!process.env.PORT) {
-    console.error('❌ ERROR CRÍTICO: En producción, process.env.PORT es requerido (Railway debe inyectarlo)');
-    console.error('   Railway inyecta PORT automáticamente. Si no está disponible, verifica la configuración del servicio.');
-    console.error('   Ve a Railway Dashboard → Service → Variables y verifica que PORT esté configurado.');
-    process.exit(1);
-  }
-  PORT = Number(process.env.PORT);
-  portSource = 'process.env.PORT (Railway)';
-  
-  if (isNaN(PORT) || PORT <= 0) {
-    console.error('❌ ERROR CRÍTICO: PORT en producción es inválido');
-    console.error(`   Valor recibido: ${process.env.PORT}`);
-    console.error('   PORT debe ser un número positivo. Railway debe inyectarlo correctamente.');
-    process.exit(1);
-  }
-} else {
-  // En desarrollo: process.env.PORT > env.PORT > 3000
-  PORT = Number(process.env.PORT || env.PORT || 3000);
-  portSource = process.env.PORT ? 'process.env.PORT' : (env.PORT ? 'env.PORT' : 'fallback/local (3000)');
-  
-  if (isNaN(PORT) || PORT <= 0) {
-    console.error('❌ ERROR CRÍTICO: PORT no está configurado o es inválido');
-    console.error(`   Valor recibido: ${process.env.PORT ?? env.PORT ?? 'undefined'}`);
-    process.exit(1);
-  }
+if (isNaN(PORT) || PORT < 0) {
+  console.error('❌ ERROR CRÍTICO: PORT no está configurado o es inválido');
+  console.error(`   Valor recibido: ${process.env.PORT ?? 'undefined'}`);
+  process.exit(1);
 }
+
+console.log('[BOOT] PORT =', process.env.PORT);
 
 console.log('NATIVE_SCRAPER_URL:', process.env.NATIVE_SCRAPER_URL);
 

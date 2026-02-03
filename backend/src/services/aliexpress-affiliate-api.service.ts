@@ -263,14 +263,14 @@ export class AliExpressAffiliateAPIService {
   /**
    * Realizar petición a la API con autenticación
    */
-  private async makeRequest(method: string, params: Record<string, any>): Promise<any> {
+  private async makeRequest(method: string, params: Record<string, any>, providedToken?: string): Promise<any> {
     if (!this.credentials) {
       throw new Error('AliExpress Affiliate API credentials not configured');
     }
 
     let accessToken: string;
     try {
-      accessToken = await this.getValidAccessToken();
+      accessToken = providedToken || (await this.getValidAccessToken());
     } catch (e: any) {
       if (e?.message === 'AliExpress not authorized') {
         throw e;
@@ -279,7 +279,7 @@ export class AliExpressAffiliateAPIService {
     }
     params.access_token = accessToken;
     const last4 = accessToken.length >= 4 ? accessToken.slice(-4) : '****';
-    console.log('[ALIEXPRESS-AFFILIATE] Using access_token: ****' + last4);
+    console.log('[ALIEXPRESS-AFFILIATE] Using token last4:', last4);
     logger.info('[ALIEXPRESS-AFFILIATE] Using access_token', { method, last4: '****' + last4 });
 
     // Parámetros comunes para todas las peticiones
@@ -351,6 +351,7 @@ export class AliExpressAffiliateAPIService {
         },
         timeout: 30000, // ✅ Aumentado a 30s - AliExpress TOP API puede ser lenta
       });
+      console.log('[ALIEXPRESS-AFFILIATE] Raw response:', JSON.stringify(response.data).slice(0, 800));
 
       const elapsedMs = Date.now() - requestStartTime;
 
@@ -468,6 +469,7 @@ export class AliExpressAffiliateAPIService {
         pageNo: params.pageNo || 1,
         pageSize: params.pageSize || 20,
       });
+      const token = await this.getValidAccessToken();
 
       const apiParams: Record<string, any> = {
         keywords: params.keywords,
@@ -498,7 +500,7 @@ export class AliExpressAffiliateAPIService {
         endpoint: this.endpoint
       });
 
-      const result = await this.makeRequest('aliexpress.affiliate.product.query', apiParams);
+      const result = await this.makeRequest('aliexpress.affiliate.product.query', apiParams, token);
 
       // ✅ MEJORADO: Procesar respuesta con mejor manejo de imágenes
       const products = result.products?.product || [];
@@ -555,6 +557,14 @@ export class AliExpressAffiliateAPIService {
   }
 
   /**
+   * Debug raw search for diagnostics.
+   */
+  async debugSearchRaw(params: Record<string, any>): Promise<any> {
+    const token = await this.getValidAccessToken();
+    return this.makeRequest('aliexpress.affiliate.product.query', params, token);
+  }
+
+  /**
    * Obtener detalles de producto (aliexpress.affiliate.productdetail.get)
    */
   async getProductDetails(params: ProductDetailParams): Promise<AffiliateProductDetail[]> {
@@ -562,6 +572,7 @@ export class AliExpressAffiliateAPIService {
       logger.info('[ALIEXPRESS-AFFILIATE-API] Getting product details', {
         productIds: params.productIds,
       });
+      const token = await this.getValidAccessToken();
 
       const apiParams: Record<string, any> = {
         product_ids: params.productIds,
@@ -576,7 +587,7 @@ export class AliExpressAffiliateAPIService {
       // Campos a solicitar
       apiParams.fields = 'product_id,product_title,product_main_image_url,product_small_image_urls,sale_price,original_price,discount,evaluate_score,evaluate_rate,volume,store_name,store_url,product_detail_url,promotion_link,commission_rate,description,category_id,category_name,shipping_info';
 
-      const result = await this.makeRequest('aliexpress.affiliate.productdetail.get', apiParams);
+      const result = await this.makeRequest('aliexpress.affiliate.productdetail.get', apiParams, token);
 
       // Procesar respuesta
       const products = Array.isArray(result.products?.product) 
@@ -632,6 +643,7 @@ export class AliExpressAffiliateAPIService {
       logger.info('[ALIEXPRESS-AFFILIATE-API] Getting SKU details', {
         productId,
       });
+      const token = await this.getValidAccessToken();
 
       const apiParams: Record<string, any> = {
         product_id: productId,
@@ -641,7 +653,7 @@ export class AliExpressAffiliateAPIService {
       if (params?.targetCurrency) apiParams.target_currency = params.targetCurrency;
       if (params?.targetLanguage) apiParams.target_language = params.targetLanguage;
 
-      const result = await this.makeRequest('aliexpress.affiliate.product.sku.detail.get', apiParams);
+      const result = await this.makeRequest('aliexpress.affiliate.product.sku.detail.get', apiParams, token);
 
       // Procesar respuesta
       const skus = result.skus?.sku || [];
@@ -682,6 +694,7 @@ export class AliExpressAffiliateAPIService {
     reviews?: number;
     seller?: { name: string; rating: number; location: string };
   }> {
+    await this.getValidAccessToken();
     const match = aliexpressUrl.match(/\/item\/(\d+)\.html/);
     const productId = match?.[1];
     if (!productId) {
