@@ -1,5 +1,6 @@
 import express from "express";
 import puppeteer from "puppeteer";
+import readline from "readline";
 
 const app = express();
 app.use(express.json());
@@ -7,6 +8,19 @@ app.use(express.json());
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
+
+function waitForEnter(message) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    rl.question(message, () => {
+      rl.close();
+      resolve();
+    });
+  });
+}
 
 app.post("/scrape/aliexpress", async (req, res) => {
   const { url } = req.body;
@@ -20,15 +34,11 @@ app.post("/scrape/aliexpress", async (req, res) => {
     });
 
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
 
-    console.log("If CAPTCHA appears, solve it in the browser window.");
-    console.log("When finished, press ENTER in this terminal...");
-
-    await new Promise(resolve => {
-      process.stdin.resume();
-      process.stdin.once("data", () => resolve());
-    });
+    console.log("⚠️  If CAPTCHA appears, solve it in Chrome.");
+    console.log("⏳ Wait until product page is fully loaded.");
+    await waitForEnter("👉 Press ENTER to continue scraping...");
 
     const data = await page.evaluate(() => {
 
