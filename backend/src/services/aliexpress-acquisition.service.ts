@@ -34,8 +34,13 @@ export async function getAliExpressProductCascaded(
     const p = await aliexpressAffiliateAPIService.getProductByUrl(aliexpressUrl);
     logger.info('[ALIEXPRESS] Affiliate API success');
     return p;
-  } catch (e) {
-    logger.warn('[ALIEXPRESS] Affiliate API failed', e?.message || e);
+  } catch (e: any) {
+    const msg = e?.message || String(e);
+    if (msg === 'AliExpress not authorized' || msg?.includes('not authorized')) {
+      logger.warn('[ALIEXPRESS] Affiliate API not authorized – continuing cascade');
+    } else {
+      logger.warn('[ALIEXPRESS] Affiliate API failed', msg);
+    }
   }
 
   // 2) Try Native Scraper (if NATIVE_SCRAPER_URL configured)

@@ -20,6 +20,8 @@ import { aliExpressSearchService } from './aliexpress-search.service';
 import logger from '../../config/logger';
 import env from '../../config/env';
 import { prisma } from '../../config/database';
+import { getAuthorizationUrl, exchangeCodeForToken } from '../../services/aliexpress-oauth.service';
+import { getToken } from '../../services/aliexpress-token.store';
 
 /**
  * Endpoint para generar un link afiliado
@@ -483,46 +485,37 @@ async function persistCandidates(userId: number, candidates: any[]): Promise<voi
   }
 }
 
-const ALIEXPRESS_AUTH_URL = 'https://api.aliexpress.com/oauth/authorize';
-const ALIEXPRESS_TOKEN_URL = 'https://api.aliexpress.com/rest/auth/token/security/create';
+/**
+ * GET /api/aliexpress/affiliate/health - Token status for Affiliate API
+ */
+export const getAffiliateHealth = async (_req: Request, res: Response) => {
+  try {
+    const tokenData = getToken();
+    const hasToken = !!tokenData?.accessToken;
+    const expiresAt = tokenData?.expiresAt ? new Date(tokenData.expiresAt).toISOString() : null;
+    const expired = tokenData ? tokenData.expiresAt <= Date.now() : true;
+    return res.status(200).json({ hasToken, expiresAt, expired });
+  } catch (err: any) {
+    return res.status(200).json({ hasToken: false, expiresAt: null, expired: true });
+  }
+};
 
 /**
  * Get OAuth authorization URL to start OAuth flow
  * GET /api/aliexpress/oauth/url
  */
 export const getOAuthUrl = async (req: Request, res: Response) => {
-  const appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
-  const callbackUrl = (process.env.ALIEXPRESS_CALLBACK_URL || process.env.ALIEXPRESS_OAUTH_REDIRECT_URL || '').trim();
-  
-  if (!appKey) {
-    logger.error('[AliExpress OAuth] Missing ALIEXPRESS_APP_KEY');
-    return res.status(500).json({ success: false, error: 'ALIEXPRESS_APP_KEY not configured' });
+  try {
+    const url = getAuthorizationUrl();
+    return res.status(200).json({ url });
+  } catch (err: any) {
+    logger.error('[AliExpress OAuth] getOAuthUrl failed', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'OAuth URL not configured' });
   }
-  
-  if (!callbackUrl) {
-    logger.error('[AliExpress OAuth] Missing ALIEXPRESS_CALLBACK_URL or ALIEXPRESS_OAUTH_REDIRECT_URL');
-    return res.status(500).json({ success: false, error: 'Callback URL not configured' });
-  }
-  
-  const state = crypto.randomBytes(16).toString('hex');
-  const authUrl = `${ALIEXPRESS_AUTH_URL}?response_type=code&client_id=${appKey}&redirect_uri=${encodeURIComponent(callbackUrl)}&state=${state}`;
-  
-  logger.info('[AliExpress OAuth] Authorization URL generated', {
-    appKey: `${appKey.substring(0, 6)}...`,
-    callbackUrl,
-    state,
-  });
-  
-  return res.status(200).json({
-    success: true,
-    authUrl,
-    state,
-    callbackUrl,
-  });
 };
 
 /**
- * OAuth callback: exchange code for tokens and return (or store if persistence exists).
+ * OAuth callback: exchange code for tokens, persist to store + DB, return success.
  * GET /api/aliexpress/callback?code=...
  */
 export const oauthCallback = async (req: Request, res: Response) => {
@@ -532,97 +525,46 @@ export const oauthCallback = async (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: 'MISSING_CODE' });
   }
 
-  const appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
-  const appSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
-  if (!appKey || !appSecret) {
-    logger.error('[AliExpress OAuth] Missing ALIEXPRESS_APP_KEY or ALIEXPRESS_APP_SECRET');
-    return res.status(500).json({ success: false, error: 'CONFIG_MISSING' });
-  }
-
   try {
-    const params = new URLSearchParams({
-      app_key: appKey,
-      app_secret: appSecret,
-      code,
-      grant_type: 'authorization_code',
-    });
-    const response = await axios.post(ALIEXPRESS_TOKEN_URL, params.toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 15000,
-    });
+    const tokenData = await exchangeCodeForToken(code);
+    const expiresAt = new Date(tokenData.expiresAt);
 
-    const body = response.data;
-    const data = body?.data ?? body;
-    const access_token = data?.access_token;
-    const refresh_token = data?.refresh_token ?? null;
-    const expires_in = Number(data?.expires_in) || 0;
-
-    if (!access_token) {
-      logger.error('[AliExpress OAuth] Token response missing access_token', { body });
-      return res.status(500).json({ success: false, error: 'INVALID_RESPONSE' });
-    }
-
-    // Calculate expiration date
-    const expiresAt = new Date();
-    if (expires_in > 0) {
-      expiresAt.setSeconds(expiresAt.getSeconds() + expires_in);
-    } else {
-      // Default to 1 year if no expiration provided
-      expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-    }
-
-    // Persist tokens to database
     try {
       await prisma.aliExpressToken.upsert({
-        where: { id: 'global' }, // Use a fixed ID for global token
+        where: { id: 'global' },
         create: {
           id: 'global',
-          accessToken: access_token,
-          refreshToken: refresh_token || '',
+          accessToken: tokenData.accessToken,
+          refreshToken: tokenData.refreshToken,
           expiresAt,
           tokenType: 'Bearer',
-          scope: data?.scope || null,
+          scope: null,
           state: (req.query.state as string) || null,
         },
         update: {
-          accessToken: access_token,
-          refreshToken: refresh_token || '',
+          accessToken: tokenData.accessToken,
+          refreshToken: tokenData.refreshToken,
           expiresAt,
           tokenType: 'Bearer',
-          scope: data?.scope || null,
+          scope: null,
           updatedAt: new Date(),
         },
       });
-
-      logger.info('[AliExpress OAuth] Tokens persisted to database', {
-        hasAccessToken: !!access_token,
-        hasRefreshToken: !!refresh_token,
-        expires_in,
-        expiresAt: expiresAt.toISOString(),
-      });
+      logger.info('[AliExpress OAuth] Tokens persisted to database');
     } catch (dbError: any) {
-      logger.error('[AliExpress OAuth] Failed to persist tokens to database', {
-        error: dbError.message,
-        stack: dbError.stack,
-      });
-      // Continue anyway - tokens are still returned to client
+      logger.error('[AliExpress OAuth] Failed to persist tokens to database', { error: dbError?.message });
     }
 
     return res.status(200).json({
       success: true,
-      access_token,
-      refresh_token: refresh_token ?? undefined,
-      expires_in: expires_in || undefined,
+      access_token: tokenData.accessToken,
+      refresh_token: tokenData.refreshToken,
       expiresAt: expiresAt.toISOString(),
     });
   } catch (err: any) {
     const status = err?.response?.status ?? 500;
     const data = err?.response?.data;
-    logger.error('[AliExpress OAuth] Token exchange failed', {
-      message: err?.message,
-      status,
-      responseData: data,
-    });
+    logger.error('[AliExpress OAuth] Token exchange failed', { message: err?.message, status, responseData: data });
     return res.status(status).json({
       success: false,
       error: data?.error ?? data?.error_msg ?? 'TOKEN_EXCHANGE_FAILED',

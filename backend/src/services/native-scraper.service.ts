@@ -43,7 +43,7 @@ export class NativeScraperService {
   }
 
   async scrapeAliExpress(url: string): Promise<ScrapedProduct> {
-    console.log('[NATIVE] Calling native scraper:', this.baseURL);
+    console.log('[NATIVE] Calling native scraper:', this.baseUrl);
     const response = await this.client.post('/scrape/aliexpress', { url });
     console.log('[NATIVE] Raw native scraper response:', response.data);
 

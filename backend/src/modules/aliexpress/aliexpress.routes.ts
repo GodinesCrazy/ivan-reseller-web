@@ -18,6 +18,7 @@ import {
   testAffiliateLink,
   searchProducts,
   getHealthStatus,
+  getAffiliateHealth,
   getCandidates,
   getOAuthUrl,
   oauthCallback,
@@ -128,6 +129,11 @@ router.get('/search', searchProducts);
  *         description: Estado de la configuración y conectividad
  */
 router.get('/health', getHealthStatus);
+
+/**
+ * GET /api/aliexpress/affiliate/health - Token status (hasToken, expiresAt, expired)
+ */
+router.get('/affiliate/health', getAffiliateHealth);
 
 /**
  * GET /api/aliexpress/oauth/url - Get OAuth authorization URL

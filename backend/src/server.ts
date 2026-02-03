@@ -56,6 +56,8 @@ if (isProduction) {
   }
 }
 
+console.log('NATIVE_SCRAPER_URL:', process.env.NATIVE_SCRAPER_URL);
+
 /**
  * ✅ FIX AUTH: Validar JWT_SECRET al iniciar para prevenir cambios accidentales
  */

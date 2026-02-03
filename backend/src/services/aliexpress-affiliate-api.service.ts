@@ -15,6 +15,8 @@ import axios, { AxiosInstance } from 'axios';
 import crypto from 'crypto';
 import logger from '../config/logger';
 import type { AliExpressAffiliateCredentials } from '../types/api-credentials.types';
+import { getToken, setToken } from './aliexpress-token.store';
+import { refreshAccessToken } from './aliexpress-oauth.service';
 
 // Tipos de datos de la API
 export interface AffiliateProduct {
@@ -158,7 +160,7 @@ export class AliExpressAffiliateAPIService {
   }
 
   /**
-   * ✅ NUEVO: Cargar access token desde base de datos
+   * Load token from database and sync to in-memory store.
    */
   async loadTokenFromDatabase(): Promise<void> {
     try {
@@ -167,61 +169,75 @@ export class AliExpressAffiliateAPIService {
         where: { id: 'global' },
       });
 
-      if (tokenRecord && tokenRecord.expiresAt > new Date()) {
+      if (tokenRecord) {
         this.accessToken = tokenRecord.accessToken;
         this.tokenExpiresAt = tokenRecord.expiresAt;
+        setToken({
+          accessToken: tokenRecord.accessToken,
+          refreshToken: tokenRecord.refreshToken || '',
+          expiresAt: tokenRecord.expiresAt.getTime(),
+        });
         logger.info('[ALIEXPRESS-AUTH] Token loaded from database', {
           expiresAt: tokenRecord.expiresAt.toISOString(),
-          tokenPreview: `${tokenRecord.accessToken.substring(0, 10)}...`,
-        });
-      } else if (tokenRecord) {
-        logger.warn('[ALIEXPRESS-AUTH] Token in database is expired', {
-          expiresAt: tokenRecord.expiresAt.toISOString(),
+          hasRefresh: !!tokenRecord.refreshToken,
         });
       } else {
         logger.info('[ALIEXPRESS-AUTH] No token found in database');
       }
     } catch (error: any) {
-      logger.error('[ALIEXPRESS-AUTH] Failed to load token from database', {
-        error: error.message,
-      });
+      logger.error('[ALIEXPRESS-AUTH] Failed to load token from database', { error: error.message });
     }
   }
 
   /**
-   * ✅ NUEVO: Obtener access token válido (verificar expiración)
+   * Get valid access token: from store, then DB; if expired refresh. Throws if missing.
    */
-  async getAccessToken(): Promise<string | null> {
-    // Si hay token y no está expirado, retornarlo
-    if (this.accessToken && this.tokenExpiresAt && this.tokenExpiresAt > new Date()) {
-      return this.accessToken;
-    }
-    
-    // Intentar cargar desde base de datos
-    await this.loadTokenFromDatabase();
-    
-    // Si ahora hay token válido, retornarlo
-    if (this.accessToken && this.tokenExpiresAt && this.tokenExpiresAt > new Date()) {
-      return this.accessToken;
-    }
-    
-    // Si está expirado o no hay token, intentar obtenerlo desde el servicio principal
-    // Note: AliExpress Affiliate API doesn't use OAuth tokens - uses signature-based auth
-    // El token se maneja internamente si está disponible, pero no es requerido para Affiliate API
-    if (this.credentials) {
-      try {
-        // Affiliate API no usa OAuth - usa signature auth con app_key/app_secret
-        // El token se maneja internamente si está disponible, pero no es requerido
-        logger.debug('[ALIEXPRESS-AUTH] Affiliate API usa signature auth (no OAuth)');
-      } catch (error: any) {
-        logger.warn('[ALIEXPRESS-AUTH] Note: Affiliate API usa signature auth', {
-          error: error.message
+  async getValidAccessToken(): Promise<string> {
+    let tokenData = getToken();
+    if (!tokenData) {
+      await this.loadTokenFromDatabase();
+      if (this.accessToken && this.tokenExpiresAt) {
+        setToken({
+          accessToken: this.accessToken,
+          refreshToken: '',
+          expiresAt: this.tokenExpiresAt.getTime(),
         });
+        tokenData = getToken();
+      }
+    } else {
+      this.accessToken = tokenData.accessToken;
+      this.tokenExpiresAt = new Date(tokenData.expiresAt);
+    }
+    if (!tokenData?.accessToken) {
+      throw new Error('AliExpress not authorized');
+    }
+    const now = Date.now();
+    const bufferMs = 5 * 60 * 1000;
+    if (tokenData.expiresAt <= now + bufferMs && tokenData.refreshToken) {
+      try {
+        const refreshed = await refreshAccessToken(tokenData.refreshToken);
+        tokenData = refreshed;
+        this.accessToken = refreshed.accessToken;
+        this.tokenExpiresAt = new Date(refreshed.expiresAt);
+      } catch (e: any) {
+        logger.warn('[ALIEXPRESS-AFFILIATE] Token refresh failed', { message: e?.message });
       }
     }
-    
-    // Retornar token si existe (puede ser null - Affiliate API no lo requiere)
-    return this.accessToken;
+    if (!tokenData.accessToken) {
+      throw new Error('AliExpress not authorized');
+    }
+    return tokenData.accessToken;
+  }
+
+  /**
+   * ✅ Obtener access token (nullable, for backward compatibility).
+   */
+  async getAccessToken(): Promise<string | null> {
+    try {
+      return await this.getValidAccessToken();
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -252,20 +268,19 @@ export class AliExpressAffiliateAPIService {
       throw new Error('AliExpress Affiliate API credentials not configured');
     }
 
-    // ✅ CRÍTICO: Obtener access token OAuth si está disponible
-    const accessToken = await this.getAccessToken();
-    if (accessToken) {
-      params.access_token = accessToken;
-      logger.info('[ALIEXPRESS-AUTH] Using OAuth access token', {
-        tokenPreview: `${accessToken.substring(0, 10)}...`,
-        method
-      });
-    } else {
-      logger.warn('[ALIEXPRESS-AUTH] No OAuth token available - using app_key only', {
-        method,
-        note: 'Some API methods may require OAuth token. Use /api/aliexpress/auth to authenticate.'
-      });
+    let accessToken: string;
+    try {
+      accessToken = await this.getValidAccessToken();
+    } catch (e: any) {
+      if (e?.message === 'AliExpress not authorized') {
+        throw e;
+      }
+      throw new Error('AliExpress not authorized');
     }
+    params.access_token = accessToken;
+    const last4 = accessToken.length >= 4 ? accessToken.slice(-4) : '****';
+    console.log('[ALIEXPRESS-AFFILIATE] Using access_token: ****' + last4);
+    logger.info('[ALIEXPRESS-AFFILIATE] Using access_token', { method, last4: '****' + last4 });
 
     // Parámetros comunes para todas las peticiones
     // ✅ MEJORADO: Formato de timestamp correcto para AliExpress TOP API
