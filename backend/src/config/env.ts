@@ -2,6 +2,7 @@ import { z } from 'zod';
 import dotenv from 'dotenv';
 
 dotenv.config();
+dotenv.config({ path: '.env.local', override: true });
 
 // Debug: Mostrar información sobre DATABASE_URL antes de validar
 function getDatabaseUrl(): string {

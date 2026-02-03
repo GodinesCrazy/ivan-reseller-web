@@ -42,8 +42,10 @@ export async function getAliExpressProductCascaded(
   if (process.env.NATIVE_SCRAPER_URL) {
     try {
       logger.info('[ALIEXPRESS] Trying Native Scraper');
+      console.log('[ALIEXPRESS] Native scraper waiting for human confirmation...');
       const nativeScraper = getNativeScraperService();
       const p = await nativeScraper.scrapeAliExpress(aliexpressUrl);
+      console.log('[ALIEXPRESS] Native scraper SUCCESS');
       logger.info('[ALIEXPRESS] Native Scraper success');
       return p;
     } catch (e) {

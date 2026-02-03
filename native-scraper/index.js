@@ -24,7 +24,7 @@ function waitForEnter(message) {
 
 app.post("/scrape/aliexpress", async (req, res) => {
   const { url } = req.body;
-  if (!url) return res.status(400).json({ error: "url required" });
+  if (!url) return res.status(400).json({ success: false, error: "url required" });
 
   let browser;
   try {
@@ -34,14 +34,16 @@ app.post("/scrape/aliexpress", async (req, res) => {
     });
 
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 120000 });
 
-    console.log("⚠️  If CAPTCHA appears, solve it in Chrome.");
-    console.log("⏳ Wait until product page is fully loaded.");
-    await waitForEnter("👉 Press ENTER to continue scraping...");
+    console.log("================================================");
+    console.log("CHROME OPENED");
+    console.log("If you see a CAPTCHA, solve it in the browser.");
+    console.log("When the product page is fully visible, PRESS ENTER here.");
+    console.log("================================================");
+    await waitForEnter("👉 Press ENTER to continue scraping... ");
 
     const data = await page.evaluate(() => {
-
       const title =
         document.querySelector("h1.product-title-text")?.innerText ||
         document.querySelector("h1")?.innerText ||
@@ -49,13 +51,11 @@ app.post("/scrape/aliexpress", async (req, res) => {
         "";
 
       const images = [];
-
       document.querySelectorAll("img").forEach(img => {
         const src =
           img.getAttribute("src") ||
           img.getAttribute("data-src") ||
           img.getAttribute("data-ks-lazyload");
-
         if (src && src.includes("alicdn")) {
           images.push(src.startsWith("//") ? "https:" + src : src);
         }
@@ -74,11 +74,17 @@ app.post("/scrape/aliexpress", async (req, res) => {
       };
     });
 
+    if (!data.title || !data.title.trim() || !Array.isArray(data.images) || data.images.length === 0) {
+      throw new Error("human_confirmation_received_but_no_data");
+    }
+
     await browser.close();
-    res.json(data);
+    return res.json({ success: true, data });
   } catch (err) {
-    if (browser) await browser.close().catch(() => {});
-    res.status(500).json({ success: false, error: "scrape_failed" });
+    if (browser) {
+      await browser.close().catch(() => {});
+    }
+    return res.status(500).json({ success: false, error: err?.message || "scrape_failed" });
   }
 });
 

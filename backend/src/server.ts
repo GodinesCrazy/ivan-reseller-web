@@ -130,6 +130,7 @@ function logConfiguration(env: any, port: number, portSourceStr: string): void {
   console.log(`   ALIEXPRESS_DATA_SOURCE: ${env.ALIEXPRESS_DATA_SOURCE || 'api (default)'}`);
   console.log(`   ALLOW_BROWSER_AUTOMATION: ${env.ALLOW_BROWSER_AUTOMATION ? 'true' : 'false'}`);
   console.log(`   SCRAPER_BRIDGE_ENABLED: ${env.SCRAPER_BRIDGE_ENABLED ? 'true' : 'false'}`);
+  console.log(`   NATIVE_SCRAPER_URL: ${process.env.NATIVE_SCRAPER_URL || '❌ FALTA'}`);
   console.log('');
 }
 

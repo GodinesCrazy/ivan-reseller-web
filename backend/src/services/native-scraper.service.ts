@@ -32,7 +32,7 @@ export class NativeScraperService {
     this.baseUrl = url.replace(/\/$/, '');
     this.client = axios.create({
       baseURL: this.baseUrl,
-      timeout: 120000,
+      timeout: 0,
       validateStatus: (status) => status < 500,
     });
   }
@@ -45,17 +45,11 @@ export class NativeScraperService {
   async scrapeAliExpress(url: string): Promise<ScrapedProduct> {
     const response = await this.client.post('/scrape/aliexpress', { url });
 
-    if (response.status === 429) {
-      const err = new Error(response.data?.error || 'captcha_or_blocked') as Error & { code?: string };
-      err.code = 'CAPTCHA_OR_BLOCKED';
-      throw err;
+    if (response.status >= 400 || response.data?.success !== true || !response.data?.data) {
+      throw new Error('native_scraper_failed');
     }
 
-    if (response.status >= 400) {
-      throw new Error(response.data?.error || `Native scraper returned ${response.status}`);
-    }
-
-    const d = response.data;
+    const d = response.data.data;
     const priceNum = typeof d.price === 'number' ? d.price : parseFloat(String(d.price || '0').replace(/[^0-9.]/g, '')) || 0;
 
     return {
