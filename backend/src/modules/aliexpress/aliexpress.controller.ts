@@ -20,7 +20,7 @@ import { aliExpressSearchService } from './aliexpress-search.service';
 import logger from '../../config/logger';
 import env from '../../config/env';
 import { prisma } from '../../config/database';
-import { getAuthorizationUrl, exchangeCodeForToken } from '../../services/aliexpress-oauth.service';
+import { getAuthorizationUrl, exchangeCodeForToken, getOAuthStatus } from '../../services/aliexpress-oauth.service';
 import { getToken } from '../../services/aliexpress-token.store';
 /**
  * Endpoint para generar un link afiliado
@@ -514,6 +514,14 @@ export const getAffiliateHealth = async (_req: Request, res: Response) => {
 };
 
 /**
+ * GET /api/aliexpress/oauth/status - Token status (hasToken, expiresAt, expired)
+ */
+export const getOAuthStatusHandler = async (_req: Request, res: Response) => {
+  const status = getOAuthStatus();
+  return res.status(200).json(status);
+};
+
+/**
  * Get OAuth authorization URL to start OAuth flow
  * GET /api/aliexpress/oauth/url
  */
@@ -568,12 +576,7 @@ export const oauthCallback = async (req: Request, res: Response) => {
       logger.error('[AliExpress OAuth] Failed to persist tokens to database', { error: dbError?.message });
     }
 
-    return res.status(200).json({
-      success: true,
-      access_token: tokenData.accessToken,
-      refresh_token: tokenData.refreshToken,
-      expiresAt: expiresAt.toISOString(),
-    });
+    return res.status(200).json({ success: true, expiresAt: expiresAt.toISOString() });
   } catch (err: any) {
     const status = err?.response?.status ?? 500;
     const data = err?.response?.data;

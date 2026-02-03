@@ -36,7 +36,7 @@ export async function getAliExpressProductCascaded(
     return p;
   } catch (e: any) {
     const msg = e?.message || String(e);
-    if (msg === 'AliExpress not authorized' || msg?.includes('not authorized')) {
+    if (msg === 'AliExpress OAuth not completed' || msg?.includes('not authorized') || msg?.includes('OAuth not completed')) {
       logger.warn('[ALIEXPRESS] Affiliate API not authorized – continuing cascade');
     } else {
       logger.warn('[ALIEXPRESS] Affiliate API failed', msg);

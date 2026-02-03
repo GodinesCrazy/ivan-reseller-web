@@ -1,6 +1,7 @@
 /**
  * AliExpress OAuth2: authorization URL, code exchange, token refresh.
- * Reads ONLY from process.env - no default fallback values. Placeholder strings treated as missing.
+ * Uses ALIEXPRESS_REDIRECT_URI only. No placeholders. No localhost fallback.
+ * Canonical redirect: https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback
  */
 
 import axios from 'axios';
@@ -14,11 +15,7 @@ function fromEnv(key: string): string {
 }
 const APP_KEY = fromEnv('ALIEXPRESS_APP_KEY');
 const APP_SECRET = fromEnv('ALIEXPRESS_APP_SECRET');
-const REDIRECT_URI = (
-  (process.env.ALIEXPRESS_REDIRECT_URI || '').trim() ||
-  (process.env.ALIEXPRESS_CALLBACK_URL || '').trim() ||
-  (process.env.ALIEXPRESS_OAUTH_REDIRECT_URL || '').trim()
-);
+const REDIRECT_URI = (process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
 const OAUTH_BASE = (process.env.ALIEXPRESS_OAUTH_BASE || 'https://api-sg.aliexpress.com/oauth').replace(/\/$/, '');
 const API_BASE = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync').replace(/\/$/, '');
 const TOKEN_URL = (process.env.ALIEXPRESS_TOKEN_URL || 'https://api.aliexpress.com/rest/auth/token/security/create').replace(/\/$/, '');
@@ -40,6 +37,14 @@ export function getAuthorizationUrl(): string {
   logger.info('[ALIEXPRESS-OAUTH] Authorization URL generated', { oauthBase: OAUTH_BASE, clientIdLast4: last4 });
   const url = `${OAUTH_BASE}/authorize?response_type=code&client_id=${APP_KEY}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
   return url;
+}
+
+export function getOAuthStatus(): { hasToken: boolean; expiresAt: string | null; expired: boolean } {
+  const tokenData = getToken();
+  const hasToken = !!tokenData?.accessToken;
+  const expiresAt = tokenData?.expiresAt ? new Date(tokenData.expiresAt).toISOString() : null;
+  const expired = tokenData ? tokenData.expiresAt <= Date.now() : true;
+  return { hasToken, expiresAt, expired };
 }
 
 /**

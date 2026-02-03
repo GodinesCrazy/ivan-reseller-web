@@ -311,14 +311,14 @@ const envSchema = z.object({
   // ✅ AliExpress Affiliate API - REQUERIDO para generación de links afiliados y OAuth
   ALIEXPRESS_APP_KEY: z.string().optional(),
   ALIEXPRESS_APP_SECRET: z.string().optional(),
-  ALIEXPRESS_CALLBACK_URL: z.string().url().optional(),
   ALIEXPRESS_REDIRECT_URI: z.string().url().optional(),
   ALIEXPRESS_TRACKING_ID: z.string().default('ivanreseller'),
+  ALIEXPRESS_OAUTH_BASE: z.string().url().default('https://api-sg.aliexpress.com/oauth'),
+  ALIEXPRESS_API_BASE: z.string().url().default('https://api-sg.aliexpress.com/sync'),
+  ALIEXPRESS_CALLBACK_URL: z.string().url().optional(),
   ALIEXPRESS_OAUTH_REDIRECT_URL: z.string().url().optional(),
+  ALIEXPRESS_API_BASE_URL: z.string().url().optional(),
   ALIEXPRESS_ENV: z.enum(['production', 'test']).default('production'),
-  ALIEXPRESS_OAUTH_BASE: z.string().url().default('https://api-sg.aliexpress.com/oauth/authorize'),
-  ALIEXPRESS_API_BASE_URL: z.string().url().default('https://api-sg.aliexpress.com/sync'),
-  ALIEXPRESS_API_BASE: z.string().url().optional(),
   ALIEXPRESS_TOKEN_URL: z.string().url().default('https://api.aliexpress.com/rest/auth/token/security/create'),
   
   // ✅ DEBUG: Debug key for protected debug endpoints

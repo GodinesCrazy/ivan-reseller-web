@@ -21,6 +21,7 @@ import {
   getAffiliateHealth,
   getDebugAuth,
   getCandidates,
+  getOAuthStatusHandler,
   getOAuthUrl,
   oauthCallback,
 } from './aliexpress.controller';
@@ -150,6 +151,10 @@ router.get('/affiliate/debug-search', async (_req, res) => {
   }
 });
 
+/**
+ * GET /api/aliexpress/oauth/status - Token status (hasToken, expiresAt, expired)
+ */
+router.get('/oauth/status', getOAuthStatusHandler);
 /**
  * GET /api/aliexpress/oauth/url - Get OAuth authorization URL
  */

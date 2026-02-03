@@ -222,7 +222,7 @@ export class AliExpressAffiliateAPIService {
       this.tokenExpiresAt = new Date(tokenData.expiresAt);
     }
     if (!tokenData?.accessToken) {
-      throw new Error('AliExpress not authorized');
+      throw new Error('AliExpress OAuth not completed');
     }
     const now = Date.now();
     const bufferMs = 5 * 60 * 1000;
@@ -237,7 +237,7 @@ export class AliExpressAffiliateAPIService {
       }
     }
     if (!tokenData.accessToken) {
-      throw new Error('AliExpress not authorized');
+      throw new Error('AliExpress OAuth not completed');
     }
     return tokenData.accessToken;
   }
@@ -299,10 +299,10 @@ export class AliExpressAffiliateAPIService {
     try {
       accessToken = providedToken || (await this.getValidAccessToken());
     } catch (e: any) {
-      if (e?.message === 'AliExpress not authorized') {
+      if (e?.message === 'AliExpress OAuth not completed') {
         throw e;
       }
-      throw new Error('AliExpress not authorized');
+      throw new Error('AliExpress OAuth not completed');
     }
     params.access_token = accessToken;
     const last4 = accessToken.length >= 4 ? accessToken.slice(-4) : '****';

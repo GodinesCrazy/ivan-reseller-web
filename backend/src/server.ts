@@ -116,12 +116,26 @@ function logConfiguration(env: any, port: number, portSourceStr: string): void {
   console.log(`   SCRAPER_BRIDGE_ENABLED: ${env.SCRAPER_BRIDGE_ENABLED ? 'true' : 'false'}`);
   console.log(`   NATIVE_SCRAPER_URL: ${process.env.NATIVE_SCRAPER_URL || '❌ FALTA'}`);
   console.log('');
-  console.log('[ALIEXPRESS-CONFIG]');
-  console.log(`   APP_KEY: ${process.env.ALIEXPRESS_APP_KEY && process.env.ALIEXPRESS_APP_KEY.trim() !== 'PUT_YOUR_APP_KEY_HERE' ? 'SET' : 'MISSING'}`);
-  console.log(`   APP_SECRET: ${process.env.ALIEXPRESS_APP_SECRET && process.env.ALIEXPRESS_APP_SECRET.trim() !== 'PUT_YOUR_APP_SECRET_HERE' ? 'SET' : 'MISSING'}`);
-  console.log(`   TRACKING_ID: ${(process.env.ALIEXPRESS_TRACKING_ID || '').trim() || 'MISSING'}`);
-  console.log(`   REDIRECT_URI: ${(process.env.ALIEXPRESS_REDIRECT_URI || process.env.ALIEXPRESS_CALLBACK_URL || '').trim() || 'MISSING'}`);
+  const appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
+  const appSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+  const redirectUri = (process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
+  const trackingId = (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim();
+  const oauthBase = (process.env.ALIEXPRESS_OAUTH_BASE || 'https://api-sg.aliexpress.com/oauth').replace(/\/$/, '');
+  const hasAppKey = !!appKey && appKey !== 'PUT_YOUR_APP_KEY_HERE';
+  const hasAppSecret = !!appSecret && appSecret !== 'PUT_YOUR_APP_SECRET_HERE';
+  console.log('[ALIEXPRESS CONFIG]');
+  console.log(`   APP_KEY: ${hasAppKey ? 'SET' : 'NOT SET'}`);
+  console.log(`   APP_SECRET: ${hasAppSecret ? 'SET' : 'NOT SET'}`);
+  console.log(`   TRACKING_ID: ${trackingId || 'MISSING'}`);
+  console.log(`   REDIRECT_URI: ${redirectUri || 'MISSING'}`);
+  console.log(`   OAUTH_BASE: ${oauthBase}`);
   console.log('');
+  if (!hasAppKey || !hasAppSecret || !redirectUri) {
+    const msg = 'AliExpress OAuth requires ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, and ALIEXPRESS_REDIRECT_URI. ' +
+      'Canonical redirect: https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback';
+    console.error('❌ [ALIEXPRESS] FAIL FAST:', msg);
+    process.exit(1);
+  }
 }
 
 /**
