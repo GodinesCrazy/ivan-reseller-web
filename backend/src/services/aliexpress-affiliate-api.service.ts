@@ -104,9 +104,10 @@ export class AliExpressAffiliateAPIService {
   constructor() {
     this.appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
     this.appSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
-    console.log('[ALIEXPRESS-AFFILIATE] app_key present:', !!this.appKey);
-    console.log('[ALIEXPRESS-AFFILIATE] app_secret present:', !!this.appSecret);
-    console.log('[ALIEXPRESS-AFFILIATE] tracking_id:', process.env.ALIEXPRESS_TRACKING_ID);
+    const trackingId = (process.env.ALIEXPRESS_TRACKING_ID || '').trim();
+    console.log('[ALIEXPRESS-AFFILIATE] APP KEY:', this.appKey ? 'SET' : 'MISSING');
+    console.log('[ALIEXPRESS-AFFILIATE] APP SECRET:', this.appSecret ? 'SET' : 'MISSING');
+    console.log('[ALIEXPRESS-AFFILIATE] TRACKING ID:', trackingId || 'MISSING');
     this.apiBaseUrl = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || this.ENDPOINT_NEW).replace(/\/$/, '');
 
     this.client = axios.create({
