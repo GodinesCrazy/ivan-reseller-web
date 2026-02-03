@@ -9,7 +9,7 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-function waitForEnter(message) {
+function waitForEnter(message = "Press ENTER to continue... ") {
   return new Promise((resolve) => {
     const rl = readline.createInterface({
       input: process.stdin,
@@ -36,50 +36,60 @@ app.post("/scrape/aliexpress", async (req, res) => {
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 120000 });
 
-    console.log("================================================");
-    console.log("CHROME OPENED");
-    console.log("If you see a CAPTCHA, solve it in the browser.");
-    console.log("When the product page is fully visible, PRESS ENTER here.");
-    console.log("================================================");
-    await waitForEnter("👉 Press ENTER to continue scraping... ");
+    console.log("");
+    console.log("==================================================");
+    console.log("PAGE LOADED. Please inspect the browser window.");
+    console.log("If there is a CAPTCHA, solve it.");
+    console.log("If no CAPTCHA, just confirm page looks correct.");
+    console.log("Then press ENTER here to continue...");
+    console.log("==================================================");
+    await waitForEnter();
 
-    const data = await page.evaluate(() => {
-      const title =
-        document.querySelector("h1.product-title-text")?.innerText ||
-        document.querySelector("h1")?.innerText ||
-        document.title ||
-        "";
+    const pageUrl = page.url();
+    const pageTitle = await page.title();
+    console.log("[SCRAPER] Current URL:", pageUrl);
+    console.log("[SCRAPER] Page title:", pageTitle);
 
-      const images = [];
+    const title = await page.evaluate(() => {
+      const h1 = document.querySelector("h1");
+      return h1 ? h1.innerText.trim() : null;
+    });
+    console.log("[SCRAPER] Extracted title:", title);
+
+    const images = await page.evaluate(() => {
+      const out = [];
       document.querySelectorAll("img").forEach(img => {
         const src =
           img.getAttribute("src") ||
           img.getAttribute("data-src") ||
           img.getAttribute("data-ks-lazyload");
         if (src && src.includes("alicdn")) {
-          images.push(src.startsWith("//") ? "https:" + src : src);
+          out.push(src.startsWith("//") ? "https:" + src : src);
         }
       });
+      return out;
+    });
+    console.log("[SCRAPER] Images found:", images.length);
 
-      const priceText =
-        document.querySelector("span[class*=price]")?.innerText ||
-        document.querySelector("div[class*=price]")?.innerText ||
-        "";
-
-      return {
-        title: title.trim(),
-        price: priceText.trim(),
-        currency: "USD",
-        images
-      };
+    const priceText = await page.evaluate(() => {
+      const el =
+        document.querySelector("span[class*=price]") ||
+        document.querySelector("div[class*=price]");
+      return el ? el.innerText.trim() : "";
     });
 
-    if (!data.title || !data.title.trim() || !Array.isArray(data.images) || data.images.length === 0) {
-      throw new Error("human_confirmation_received_but_no_data");
+    if (title === null || title === "" || !Array.isArray(images) || images.length === 0) {
+      throw new Error("native_scraper_extraction_failed");
     }
 
     await browser.close();
-    return res.json({ success: true, data });
+    return res.json({
+      success: true,
+      title,
+      price: priceText,
+      currency: "USD",
+      images
+    });
   } catch (err) {
     if (browser) {
       await browser.close().catch(() => {});

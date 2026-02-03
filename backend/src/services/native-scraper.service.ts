@@ -43,13 +43,18 @@ export class NativeScraperService {
   }
 
   async scrapeAliExpress(url: string): Promise<ScrapedProduct> {
+    console.log('[NATIVE] Calling native scraper:', this.baseURL);
     const response = await this.client.post('/scrape/aliexpress', { url });
+    console.log('[NATIVE] Raw native scraper response:', response.data);
 
-    if (response.status >= 400 || response.data?.success !== true || !response.data?.data) {
+    if (response.data?.success !== true) {
+      throw new Error('native_scraper_failed');
+    }
+    if (response.status >= 400) {
       throw new Error('native_scraper_failed');
     }
 
-    const d = response.data.data;
+    const d = response.data.data ?? response.data;
     const priceNum = typeof d.price === 'number' ? d.price : parseFloat(String(d.price || '0').replace(/[^0-9.]/g, '')) || 0;
 
     return {
