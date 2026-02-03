@@ -1,8 +1,7 @@
 /**
  * AliExpress product acquisition - cascading strategy:
  * 1) Affiliate API
- * 2) Scraper Bridge (if enabled)
- * 3) Native Scraper
+ * 2) Native Scraper
  */
 
 import { trace } from '../utils/boot-trace';
@@ -10,7 +9,6 @@ trace('loading aliexpress-acquisition.service');
 
 import logger from '../config/logger';
 import { aliexpressAffiliateAPIService } from './aliexpress-affiliate-api.service';
-import scraperBridge from './scraper-bridge.service';
 import { getNativeScraperService } from './native-scraper.service';
 
 export interface AliExpressProductResult {
@@ -40,19 +38,7 @@ export async function getAliExpressProductCascaded(
     logger.warn('[ALIEXPRESS] Affiliate API failed', e?.message || e);
   }
 
-  // 2) Try Scraper Bridge (if enabled)
-  if (process.env.SCRAPER_BRIDGE_ENABLED === 'true') {
-    try {
-      logger.info('[ALIEXPRESS] Trying Scraper Bridge');
-      const p = await scraperBridge.fetchAliExpressProduct(aliexpressUrl);
-      logger.info('[ALIEXPRESS] Scraper Bridge success');
-      return p;
-    } catch (e) {
-      logger.warn('[ALIEXPRESS] Scraper Bridge failed', e?.message || e);
-    }
-  }
-
-  // 3) Try Native Scraper (if NATIVE_SCRAPER_URL configured)
+  // 2) Try Native Scraper (if NATIVE_SCRAPER_URL configured)
   if (process.env.NATIVE_SCRAPER_URL) {
     try {
       logger.info('[ALIEXPRESS] Trying Native Scraper');
