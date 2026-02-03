@@ -123,15 +123,11 @@ function logConfiguration(env: any, port: number, portSourceStr: string): void {
     OAUTH_BASE: process.env.ALIEXPRESS_OAUTH_BASE,
     API_BASE: process.env.ALIEXPRESS_API_BASE,
   });
-  const appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
-  const appSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
-  const redirectUri = (process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
-  const hasAppKey = !!appKey && appKey !== 'PUT_YOUR_APP_KEY_HERE';
-  const hasAppSecret = !!appSecret && appSecret !== 'PUT_YOUR_APP_SECRET_HERE';
-  if (!hasAppKey || !hasAppSecret || !redirectUri) {
-    const msg = 'AliExpress OAuth requires ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, and ALIEXPRESS_REDIRECT_URI. ' +
-      'Canonical redirect: https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback';
-    console.error('❌ [ALIEXPRESS] FAIL FAST:', msg);
+  const hasAppKey = !!(process.env.ALIEXPRESS_APP_KEY || '').trim();
+  const hasAppSecret = !!(process.env.ALIEXPRESS_APP_SECRET || '').trim();
+  const hasRedirectUri = !!(process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
+  if (!hasAppKey || !hasAppSecret || !hasRedirectUri) {
+    console.error('❌ [ALIEXPRESS] FAIL FAST: ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, and ALIEXPRESS_REDIRECT_URI are required');
     process.exit(1);
   }
 }
