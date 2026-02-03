@@ -340,7 +340,7 @@ export const debugAffiliateSearch = async (_req: Request, res: Response) => {
       sort: 'volume_desc',
       ship_to_country: 'US',
     });
-    return res.json({ success: true, data: raw });
+    return res.json(raw);
   } catch (error: any) {
     logger.error('[AliExpress Affiliate] Debug search failed', { error: error.message });
     return res.status(500).json({ success: false, error: error.message });

@@ -99,6 +99,13 @@ export class AliExpressAffiliateAPIService {
   private endpoint: string = this.ENDPOINT_LEGACY;
 
   constructor() {
+    if (!process.env.ALIEXPRESS_APP_KEY || !process.env.ALIEXPRESS_APP_SECRET) {
+      throw new Error('AliExpress Affiliate credentials missing');
+    }
+    console.log('[ALIEXPRESS-AFFILIATE] app_key present:', !!process.env.ALIEXPRESS_APP_KEY);
+    console.log('[ALIEXPRESS-AFFILIATE] app_secret present:', !!process.env.ALIEXPRESS_APP_SECRET);
+    console.log('[ALIEXPRESS-AFFILIATE] tracking_id:', process.env.ALIEXPRESS_TRACKING_ID);
+
     this.client = axios.create({
       timeout: 30000, // ✅ CRÍTICO: Timeout aumentado a 30s para dar tiempo a AliExpress TOP API
       // AliExpress TOP API puede ser lenta, especialmente en la primera llamada
@@ -351,7 +358,7 @@ export class AliExpressAffiliateAPIService {
         },
         timeout: 30000, // ✅ Aumentado a 30s - AliExpress TOP API puede ser lenta
       });
-      console.log('[ALIEXPRESS-AFFILIATE] Raw response:', JSON.stringify(response.data).slice(0, 800));
+      console.log('[ALIEXPRESS-AFFILIATE] RAW RESPONSE:', JSON.stringify(response.data, null, 2));
 
       const elapsedMs = Date.now() - requestStartTime;
 

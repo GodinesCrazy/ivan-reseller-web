@@ -316,9 +316,10 @@ const envSchema = z.object({
   ALIEXPRESS_TRACKING_ID: z.string().default('ivanreseller'),
   ALIEXPRESS_OAUTH_REDIRECT_URL: z.string().url().optional(),
   ALIEXPRESS_ENV: z.enum(['production', 'test']).default('production'),
-  ALIEXPRESS_OAUTH_BASE: z.string().url().default('https://api-sg.aliexpress.com/oauth'),
+  ALIEXPRESS_OAUTH_BASE: z.string().url().default('https://api-sg.aliexpress.com/oauth/authorize'),
   ALIEXPRESS_API_BASE_URL: z.string().url().default('https://api-sg.aliexpress.com/sync'),
   ALIEXPRESS_API_BASE: z.string().url().optional(),
+  ALIEXPRESS_TOKEN_URL: z.string().url().default('https://api.aliexpress.com/rest/auth/token/security/create'),
   
   // ✅ DEBUG: Debug key for protected debug endpoints
   DEBUG_KEY: z.string().optional(),
