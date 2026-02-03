@@ -102,15 +102,11 @@ export class AliExpressAffiliateAPIService {
   private endpoint: string = this.ENDPOINT_LEGACY;
 
   constructor() {
-    if (!process.env.ALIEXPRESS_APP_KEY || !process.env.ALIEXPRESS_APP_SECRET) {
-      throw new Error('AliExpress Affiliate credentials missing');
-    }
-    console.log('[ALIEXPRESS-AFFILIATE] app_key present:', !!process.env.ALIEXPRESS_APP_KEY);
-    console.log('[ALIEXPRESS-AFFILIATE] app_secret present:', !!process.env.ALIEXPRESS_APP_SECRET);
+    this.appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
+    this.appSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+    console.log('[ALIEXPRESS-AFFILIATE] app_key present:', !!this.appKey);
+    console.log('[ALIEXPRESS-AFFILIATE] app_secret present:', !!this.appSecret);
     console.log('[ALIEXPRESS-AFFILIATE] tracking_id:', process.env.ALIEXPRESS_TRACKING_ID);
-
-    this.appKey = process.env.ALIEXPRESS_APP_KEY.trim();
-    this.appSecret = process.env.ALIEXPRESS_APP_SECRET.trim();
     this.apiBaseUrl = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || this.ENDPOINT_NEW).replace(/\/$/, '');
 
     this.client = axios.create({
@@ -277,9 +273,23 @@ export class AliExpressAffiliateAPIService {
   /**
    * Realizar petición a la API con autenticación
    */
+  private setCredentialsFromEnv(): void {
+    if (this.appKey && this.appSecret) {
+      this.credentials = {
+        appKey: this.appKey,
+        appSecret: this.appSecret,
+        trackingId: (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim(),
+        sandbox: false,
+      };
+    }
+  }
+
   private async makeRequest(method: string, params: Record<string, any>, providedToken?: string): Promise<any> {
-    if (!this.credentials) {
+    if (!this.appKey || !this.appSecret) {
       throw new Error('AliExpress Affiliate API credentials not configured');
+    }
+    if (!this.credentials) {
+      this.setCredentialsFromEnv();
     }
 
     let accessToken: string;
@@ -741,6 +751,9 @@ export class AliExpressAffiliateAPIService {
    * Convertir producto de Affiliate API a formato ScrapedProduct para compatibilidad
    */
   async debugProductQuery(keyword: string): Promise<any> {
+    if (!this.appKey || !this.appSecret) {
+      throw new Error('AliExpress Affiliate API credentials not configured');
+    }
     const accessToken = await this.getValidAccessToken();
     const now = new Date();
     const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
