@@ -22,8 +22,6 @@ import env from '../../config/env';
 import { prisma } from '../../config/database';
 import { getAuthorizationUrl, exchangeCodeForToken } from '../../services/aliexpress-oauth.service';
 import { getToken } from '../../services/aliexpress-token.store';
-import { aliexpressAffiliateAPIService } from '../../services/aliexpress-affiliate-api.service';
-
 /**
  * Endpoint para generar un link afiliado
  * POST /api/aliexpress/generate-link
@@ -325,25 +323,6 @@ export const getHealthStatus = async (req: Request, res: Response) => {
       error: 'Error al verificar estado de salud',
       message: error.message,
     });
-  }
-};
-
-/**
- * GET /api/aliexpress/affiliate/debug-search
- */
-export const debugAffiliateSearch = async (_req: Request, res: Response) => {
-  try {
-    const raw = await aliexpressAffiliateAPIService.debugSearchRaw({
-      keywords: 'phone case',
-      page_no: 1,
-      page_size: 20,
-      sort: 'volume_desc',
-      ship_to_country: 'US',
-    });
-    return res.json(raw);
-  } catch (error: any) {
-    logger.error('[AliExpress Affiliate] Debug search failed', { error: error.message });
-    return res.status(500).json({ success: false, error: error.message });
   }
 };
 

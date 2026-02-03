@@ -90,6 +90,9 @@ export class AliExpressAffiliateAPIService {
   private credentials: AliExpressAffiliateCredentials | null = null;
   private accessToken: string | null = null;
   private tokenExpiresAt: Date | null = null;
+  private readonly appKey: string;
+  private readonly appSecret: string;
+  private readonly apiBaseUrl: string;
 
   // Endpoints base de la API
   private readonly ENDPOINT_LEGACY = 'https://gw.api.taobao.com/router/rest';
@@ -105,6 +108,10 @@ export class AliExpressAffiliateAPIService {
     console.log('[ALIEXPRESS-AFFILIATE] app_key present:', !!process.env.ALIEXPRESS_APP_KEY);
     console.log('[ALIEXPRESS-AFFILIATE] app_secret present:', !!process.env.ALIEXPRESS_APP_SECRET);
     console.log('[ALIEXPRESS-AFFILIATE] tracking_id:', process.env.ALIEXPRESS_TRACKING_ID);
+
+    this.appKey = process.env.ALIEXPRESS_APP_KEY.trim();
+    this.appSecret = process.env.ALIEXPRESS_APP_SECRET.trim();
+    this.apiBaseUrl = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || this.ENDPOINT_NEW).replace(/\/$/, '');
 
     this.client = axios.create({
       timeout: 30000, // ✅ CRÍTICO: Timeout aumentado a 30s para dar tiempo a AliExpress TOP API
@@ -733,6 +740,32 @@ export class AliExpressAffiliateAPIService {
   /**
    * Convertir producto de Affiliate API a formato ScrapedProduct para compatibilidad
    */
+  async debugProductQuery(keyword: string): Promise<any> {
+    const accessToken = await this.getValidAccessToken();
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    const params: Record<string, any> = {
+      method: 'aliexpress.affiliate.product.query',
+      app_key: this.appKey,
+      sign_method: 'sha256',
+      timestamp,
+      v: '2.0',
+      format: 'json',
+      keywords: keyword,
+      page_no: 1,
+      page_size: 20,
+      ship_to_country: 'US',
+      sort: 'volume_desc',
+      access_token: accessToken,
+    };
+    const sign = this.calculateSign(params, this.appSecret, 'sha256');
+    const signedParams = { ...params, sign };
+    console.log('[AFFILIATE-DEBUG] REQUEST PARAMS:', signedParams);
+    const res = await axios.post(this.apiBaseUrl, null, { params: signedParams, timeout: 30000 });
+    console.log('[AFFILIATE-DEBUG] RAW RESPONSE:', JSON.stringify(res.data, null, 2));
+    return res.data;
+  }
+
   toScrapedProduct(product: AffiliateProductDetail, productUrl?: string): {
     title: string;
     price: number;

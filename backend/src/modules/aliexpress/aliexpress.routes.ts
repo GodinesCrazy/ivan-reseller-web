@@ -19,11 +19,11 @@ import {
   searchProducts,
   getHealthStatus,
   getAffiliateHealth,
-  debugAffiliateSearch,
   getCandidates,
   getOAuthUrl,
   oauthCallback,
 } from './aliexpress.controller';
+import { aliexpressAffiliateAPIService } from '../../services/aliexpress-affiliate-api.service';
 
 const router = Router();
 
@@ -135,7 +135,18 @@ router.get('/health', getHealthStatus);
  * GET /api/aliexpress/affiliate/health - Token status (hasToken, expiresAt, expired)
  */
 router.get('/affiliate/health', getAffiliateHealth);
-router.get('/affiliate/debug-search', debugAffiliateSearch);
+router.get('/affiliate/debug-search', async (_req, res) => {
+  try {
+    const data = await aliexpressAffiliateAPIService.debugProductQuery('phone case');
+    res.json({ success: true, data });
+  } catch (err: any) {
+    console.error('[AFFILIATE-DEBUG] ERROR:', err);
+    res.status(500).json({
+      success: false,
+      error: err?.message || 'debug failed',
+    });
+  }
+});
 
 /**
  * GET /api/aliexpress/oauth/url - Get OAuth authorization URL
