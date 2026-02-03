@@ -32,7 +32,8 @@ export function getAuthorizationUrl(): string {
     logger.error('[ALIEXPRESS-OAUTH] Missing ALIEXPRESS_REDIRECT_URI / ALIEXPRESS_CALLBACK_URL');
     throw new Error('Redirect URI not configured');
   }
-  const url = `${OAUTH_BASE}/authorize?response_type=code&client_id=${APP_KEY}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+  const base = OAUTH_BASE.endsWith('/authorize') ? OAUTH_BASE.replace(/\/authorize\/?$/, '') : OAUTH_BASE;
+  const url = `${base}/authorize?response_type=code&client_id=${APP_KEY}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
   console.log('[ALIEXPRESS-OAUTH] Authorization URL:', url);
   logger.info('[ALIEXPRESS-OAUTH] Authorization URL generated', { oauthBase: OAUTH_BASE });
   return url;
