@@ -102,8 +102,10 @@ export class AliExpressAffiliateAPIService {
   private endpoint: string = this.ENDPOINT_LEGACY;
 
   constructor() {
-    this.appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
-    this.appSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+    const rawKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
+    const rawSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+    this.appKey = rawKey && rawKey !== 'PUT_YOUR_APP_KEY_HERE' ? rawKey : '';
+    this.appSecret = rawSecret && rawSecret !== 'PUT_YOUR_APP_SECRET_HERE' ? rawSecret : '';
     const trackingId = (process.env.ALIEXPRESS_TRACKING_ID || '').trim();
     console.log('[ALIEXPRESS-AFFILIATE] APP KEY:', this.appKey ? 'SET' : 'MISSING');
     console.log('[ALIEXPRESS-AFFILIATE] APP SECRET:', this.appSecret ? 'SET' : 'MISSING');

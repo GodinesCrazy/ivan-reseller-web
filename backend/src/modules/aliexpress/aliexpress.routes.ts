@@ -19,6 +19,7 @@ import {
   searchProducts,
   getHealthStatus,
   getAffiliateHealth,
+  getDebugAuth,
   getCandidates,
   getOAuthUrl,
   oauthCallback,
@@ -135,6 +136,7 @@ router.get('/health', getHealthStatus);
  * GET /api/aliexpress/affiliate/health - Token status (hasToken, expiresAt, expired)
  */
 router.get('/affiliate/health', getAffiliateHealth);
+router.get('/affiliate/debug-auth', getDebugAuth);
 router.get('/affiliate/debug-search', async (_req, res) => {
   try {
     const data = await aliexpressAffiliateAPIService.debugProductQuery('phone case');

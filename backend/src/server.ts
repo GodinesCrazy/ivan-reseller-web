@@ -116,6 +116,12 @@ function logConfiguration(env: any, port: number, portSourceStr: string): void {
   console.log(`   SCRAPER_BRIDGE_ENABLED: ${env.SCRAPER_BRIDGE_ENABLED ? 'true' : 'false'}`);
   console.log(`   NATIVE_SCRAPER_URL: ${process.env.NATIVE_SCRAPER_URL || '❌ FALTA'}`);
   console.log('');
+  console.log('[ALIEXPRESS-CONFIG]');
+  console.log(`   APP_KEY: ${process.env.ALIEXPRESS_APP_KEY && process.env.ALIEXPRESS_APP_KEY.trim() !== 'PUT_YOUR_APP_KEY_HERE' ? 'SET' : 'MISSING'}`);
+  console.log(`   APP_SECRET: ${process.env.ALIEXPRESS_APP_SECRET && process.env.ALIEXPRESS_APP_SECRET.trim() !== 'PUT_YOUR_APP_SECRET_HERE' ? 'SET' : 'MISSING'}`);
+  console.log(`   TRACKING_ID: ${(process.env.ALIEXPRESS_TRACKING_ID || '').trim() || 'MISSING'}`);
+  console.log(`   REDIRECT_URI: ${(process.env.ALIEXPRESS_REDIRECT_URI || process.env.ALIEXPRESS_CALLBACK_URL || '').trim() || 'MISSING'}`);
+  console.log('');
 }
 
 /**

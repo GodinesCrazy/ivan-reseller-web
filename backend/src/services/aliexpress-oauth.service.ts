@@ -1,18 +1,24 @@
 /**
  * AliExpress OAuth2: authorization URL, code exchange, token refresh.
+ * Reads ONLY from process.env - no default fallback values. Placeholder strings treated as missing.
  */
 
 import axios from 'axios';
 import logger from '../config/logger';
 import { getToken, setToken, type TokenData } from './aliexpress-token.store';
 
-const APP_KEY = (process.env.ALIEXPRESS_APP_KEY || '').trim();
-const APP_SECRET = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
-const REDIRECT_URI =
-  (process.env.ALIEXPRESS_REDIRECT_URI ||
-    process.env.ALIEXPRESS_CALLBACK_URL ||
-    process.env.ALIEXPRESS_OAUTH_REDIRECT_URL ||
-    '').trim();
+const PLACEHOLDERS = ['PUT_YOUR_APP_KEY_HERE', 'PUT_YOUR_APP_SECRET_HERE'];
+function fromEnv(key: string): string {
+  const v = (process.env[key] || '').trim();
+  return v && !PLACEHOLDERS.includes(v) ? v : '';
+}
+const APP_KEY = fromEnv('ALIEXPRESS_APP_KEY');
+const APP_SECRET = fromEnv('ALIEXPRESS_APP_SECRET');
+const REDIRECT_URI = (
+  (process.env.ALIEXPRESS_REDIRECT_URI || '').trim() ||
+  (process.env.ALIEXPRESS_CALLBACK_URL || '').trim() ||
+  (process.env.ALIEXPRESS_OAUTH_REDIRECT_URL || '').trim()
+);
 const OAUTH_BASE = (process.env.ALIEXPRESS_OAUTH_BASE || 'https://api-sg.aliexpress.com/oauth').replace(/\/$/, '');
 const API_BASE = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync').replace(/\/$/, '');
 const TOKEN_URL = (process.env.ALIEXPRESS_TOKEN_URL || 'https://api.aliexpress.com/rest/auth/token/security/create').replace(/\/$/, '');
@@ -29,8 +35,10 @@ export function getAuthorizationUrl(): string {
     logger.error('[ALIEXPRESS-OAUTH] Missing ALIEXPRESS_REDIRECT_URI / ALIEXPRESS_CALLBACK_URL');
     throw new Error('Redirect URI not configured');
   }
+  const last4 = APP_KEY.length >= 4 ? APP_KEY.slice(-4) : '****';
+  console.log('[ALIEXPRESS-OAUTH] Using client_id: ****' + last4);
+  logger.info('[ALIEXPRESS-OAUTH] Authorization URL generated', { oauthBase: OAUTH_BASE, clientIdLast4: last4 });
   const url = `${OAUTH_BASE}/authorize?response_type=code&client_id=${APP_KEY}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
-  logger.info('[ALIEXPRESS-OAUTH] Authorization URL generated', { oauthBase: OAUTH_BASE });
   return url;
 }
 

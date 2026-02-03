@@ -485,6 +485,20 @@ async function persistCandidates(userId: number, candidates: any[]): Promise<voi
 }
 
 /**
+ * GET /api/aliexpress/affiliate/debug-auth - Diagnostic: app credentials + token status
+ */
+export const getDebugAuth = async (_req: Request, res: Response) => {
+  const rawKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
+  const rawSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+  const hasAppKey = !!rawKey && rawKey !== 'PUT_YOUR_APP_KEY_HERE';
+  const hasAppSecret = !!rawSecret && rawSecret !== 'PUT_YOUR_APP_SECRET_HERE';
+  const tokenData = getToken();
+  const hasToken = !!tokenData?.accessToken;
+  const expiresAt = tokenData?.expiresAt ? new Date(tokenData.expiresAt).toISOString() : null;
+  return res.status(200).json({ hasAppKey, hasAppSecret, hasToken, expiresAt });
+};
+
+/**
  * GET /api/aliexpress/affiliate/health - Token status for Affiliate API
  */
 export const getAffiliateHealth = async (_req: Request, res: Response) => {
