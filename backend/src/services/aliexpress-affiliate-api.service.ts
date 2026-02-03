@@ -305,9 +305,8 @@ export class AliExpressAffiliateAPIService {
       throw new Error('AliExpress OAuth not completed');
     }
     params.access_token = accessToken;
-    const last4 = accessToken.length >= 4 ? accessToken.slice(-4) : '****';
-    console.log('[ALIEXPRESS-AFFILIATE] Using token last4:', last4);
-    logger.info('[ALIEXPRESS-AFFILIATE] Using access_token', { method, last4: '****' + last4 });
+    console.log('[AFFILIATE] USING ACCESS TOKEN:', accessToken.slice(-6));
+    logger.info('[ALIEXPRESS-AFFILIATE] Using access_token', { method, last6: '****' + accessToken.slice(-6) });
 
     // Parámetros comunes para todas las peticiones
     // ✅ MEJORADO: Formato de timestamp correcto para AliExpress TOP API
@@ -758,7 +757,7 @@ export class AliExpressAffiliateAPIService {
       throw new Error('AliExpress Affiliate API credentials not configured');
     }
     const accessToken = await this.getValidAccessToken();
-    console.log('[AFFILIATE] Using access token');
+    console.log('[AFFILIATE] USING ACCESS TOKEN:', accessToken.slice(-6));
     const now = new Date();
     const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
     const params: Record<string, any> = {
@@ -777,10 +776,11 @@ export class AliExpressAffiliateAPIService {
     };
     const sign = this.calculateSign(params, this.appSecret, 'sha256');
     const signedParams = { ...params, sign };
-    console.log('[AFFILIATE-DEBUG] REQUEST PARAMS:', signedParams);
+    console.log('[AFFILIATE-DEBUG] PARAMS:', signedParams);
     const res = await axios.post(this.apiBaseUrl, null, { params: signedParams, timeout: 30000 });
-    console.log('[AFFILIATE-DEBUG] RAW RESPONSE:', JSON.stringify(res.data, null, 2));
-    return res.data;
+    const rawResponse = res.data;
+    console.log('[AFFILIATE-DEBUG] RAW RESPONSE:', rawResponse);
+    return rawResponse;
   }
 
   toScrapedProduct(product: AffiliateProductDetail, productUrl?: string): {

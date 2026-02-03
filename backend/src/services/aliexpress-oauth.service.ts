@@ -18,7 +18,7 @@ const APP_SECRET = fromEnv('ALIEXPRESS_APP_SECRET');
 const REDIRECT_URI = (process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
 const OAUTH_BASE = (process.env.ALIEXPRESS_OAUTH_BASE || 'https://api-sg.aliexpress.com/oauth').replace(/\/$/, '');
 const API_BASE = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync').replace(/\/$/, '');
-const TOKEN_URL = 'https://api.aliexpress.com/rest/auth/token/security/create';
+const TOKEN_URL = 'https://api-sg.aliexpress.com/rest/auth/token/security/create';
 
 /**
  * Get authorization URL to start OAuth flow.
@@ -69,12 +69,9 @@ export async function exchangeCodeForToken(code: string): Promise<TokenData> {
     timeout: 15000,
   });
   const body = response.data;
+  console.log('[ALIEXPRESS-OAUTH] RAW TOKEN RESPONSE:', body);
   const data = body?.data ?? body;
   const tok = data?.access_token;
-  const masked = body && typeof body === 'object'
-    ? { ...body, data: data ? { ...data, access_token: tok ? '***' + tok.slice(-4) : tok } : data }
-    : body;
-  console.log('[ALIEXPRESS-OAUTH] Token response:', masked);
   const access_token = data?.access_token;
   const refresh_token = data?.refresh_token ?? '';
   const expires_in = Number(data?.expires_in ?? data?.expire_time ?? 0) || 86400 * 7; // default 7 days
@@ -85,7 +82,7 @@ export async function exchangeCodeForToken(code: string): Promise<TokenData> {
   const expiresAt = Date.now() + expires_in * 1000;
   const tokenData: TokenData = { accessToken: access_token, refreshToken: refresh_token, expiresAt };
   setToken(tokenData);
-  console.log('[ALIEXPRESS-OAUTH] Token stored. ExpiresAt:', new Date(expiresAt).toISOString());
+  console.log('[ALIEXPRESS-OAUTH] TOKEN STORED OK');
   logger.info('[ALIEXPRESS-OAUTH] Tokens stored', { expires_in, expiresAt: new Date(expiresAt).toISOString() });
   return tokenData;
 }
