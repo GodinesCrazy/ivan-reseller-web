@@ -18,7 +18,7 @@ const APP_SECRET = fromEnv('ALIEXPRESS_APP_SECRET');
 const REDIRECT_URI = (process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
 const OAUTH_BASE = (process.env.ALIEXPRESS_OAUTH_BASE || 'https://api-sg.aliexpress.com/oauth').replace(/\/$/, '');
 const API_BASE = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync').replace(/\/$/, '');
-const TOKEN_URL = (process.env.ALIEXPRESS_TOKEN_URL || 'https://api.aliexpress.com/rest/auth/token/security/create').replace(/\/$/, '');
+const TOKEN_URL = 'https://api-sg.aliexpress.com/rest/auth/token/security/create';
 
 /**
  * Get authorization URL to start OAuth flow.
@@ -59,6 +59,7 @@ export async function exchangeCodeForToken(code: string): Promise<TokenData> {
   console.log('[ALIEXPRESS-OAUTH] Exchanging code for token');
   const redirectUriExact = REDIRECT_URI.replace(/\/$/, '');
   const bodyParams: Record<string, string> = {
+    method: 'auth.token.create',
     grant_type: 'authorization_code',
     code,
     app_key: APP_KEY,
@@ -76,21 +77,26 @@ export async function exchangeCodeForToken(code: string): Promise<TokenData> {
     console.log('[ALIEXPRESS-OAUTH] Request failed:', err?.message, err?.response?.data);
     throw err;
   }
+  console.log('[ALIEXPRESS-OAUTH] RAW TOKEN RESPONSE:', response.data);
   const body = response.data;
-  console.log('[ALIEXPRESS-OAUTH] RAW TOKEN RESPONSE:', JSON.stringify(body));
+  const isHtmlMaintenance = typeof body === 'string' && (body.includes('Maintaining') || body.includes('maintenance'));
+  if (isHtmlMaintenance) {
+    logger.error('[ALIEXPRESS-OAUTH] Token API returned maintenance page', { tokenUrl: TOKEN_URL, status: response.status });
+    throw new Error('ALIEXPRESS_TOKEN_API_MAINTENANCE');
+  }
   const errMsg = body?.error_msg ?? body?.error_description ?? body?.error ?? body?.msg;
   if (errMsg) {
     logger.error('[ALIEXPRESS-OAUTH] Token API error', { errMsg, body, status: response.status });
     throw new Error(String(errMsg));
   }
-  const data = body?.data ?? body?.token_result ?? body;
-  const access_token = data?.access_token ?? data?.accessToken ?? body?.access_token ?? body?.accessToken;
-  const refresh_token = data?.refresh_token ?? data?.refreshToken ?? body?.refresh_token ?? '';
-  const expires_in = Number(data?.expires_in ?? data?.expire_time ?? data?.expiresIn ?? body?.expires_in ?? 0) || 86400 * 7;
-  if (!access_token) {
+  const data = response.data?.data ?? response.data;
+  const access_token = data?.access_token ?? data?.accessToken;
+  if (!data || !access_token) {
     logger.error('[ALIEXPRESS-OAUTH] Token response missing access_token', { body, status: response.status });
-    throw new Error('INVALID_RESPONSE');
+    throw new Error('TOKEN_EXCHANGE_FAILED');
   }
+  const refresh_token = data.refresh_token ?? data.refreshToken ?? '';
+  const expires_in = Number(data.expires_in ?? data.expire_time ?? data.expiresIn ?? 0) || 86400 * 7;
   const expiresAt = Date.now() + expires_in * 1000;
   const tokenData: TokenData = { accessToken: access_token, refreshToken: refresh_token, expiresAt };
   setToken(tokenData);
