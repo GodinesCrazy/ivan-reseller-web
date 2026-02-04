@@ -18,7 +18,7 @@ const APP_SECRET = fromEnv('ALIEXPRESS_APP_SECRET');
 const REDIRECT_URI = (process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
 const OAUTH_BASE = (process.env.ALIEXPRESS_OAUTH_BASE || 'https://api-sg.aliexpress.com/oauth').replace(/\/$/, '');
 const API_BASE = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync').replace(/\/$/, '');
-const TOKEN_URL = 'https://api-sg.aliexpress.com/rest/auth/token/security/create';
+const TOKEN_URL = (process.env.ALIEXPRESS_TOKEN_URL || 'https://api.aliexpress.com/rest/auth/token/security/create').replace(/\/$/, '');
 
 /**
  * Get authorization URL to start OAuth flow.
@@ -32,8 +32,7 @@ export function getAuthorizationUrl(): string {
     logger.error('[ALIEXPRESS-OAUTH] Missing ALIEXPRESS_REDIRECT_URI / ALIEXPRESS_CALLBACK_URL');
     throw new Error('Redirect URI not configured');
   }
-  const base = OAUTH_BASE.endsWith('/authorize') ? OAUTH_BASE.replace(/\/authorize\/?$/, '') : OAUTH_BASE;
-  const url = `${base}/authorize?response_type=code&client_id=${APP_KEY}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+  const url = `${OAUTH_BASE}/authorize?response_type=code&client_id=${APP_KEY}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
   console.log('[ALIEXPRESS-OAUTH] Authorization URL:', url);
   logger.info('[ALIEXPRESS-OAUTH] Authorization URL generated', { oauthBase: OAUTH_BASE });
   return url;
@@ -58,26 +57,38 @@ export async function exchangeCodeForToken(code: string): Promise<TokenData> {
     throw new Error('ALIEXPRESS_REDIRECT_URI not configured');
   }
   console.log('[ALIEXPRESS-OAUTH] Exchanging code for token');
-  const params = new URLSearchParams({
+  const redirectUriExact = REDIRECT_URI.replace(/\/$/, '');
+  const bodyParams: Record<string, string> = {
     grant_type: 'authorization_code',
     code,
-    client_id: APP_KEY,
-    client_secret: APP_SECRET,
-    redirect_uri: REDIRECT_URI,
-  });
-  const response = await axios.post(TOKEN_URL, params.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    timeout: 15000,
-  });
+    app_key: APP_KEY,
+    app_secret: APP_SECRET,
+    redirect_uri: redirectUriExact,
+  };
+  let response;
+  try {
+    response = await axios.post(TOKEN_URL, new URLSearchParams(bodyParams).toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 15000,
+      validateStatus: () => true,
+    });
+  } catch (err: any) {
+    console.log('[ALIEXPRESS-OAUTH] Request failed:', err?.message, err?.response?.data);
+    throw err;
+  }
   const body = response.data;
-  console.log('[ALIEXPRESS-OAUTH] RAW TOKEN RESPONSE:', body);
-  const data = body?.data ?? body;
-  const tok = data?.access_token;
-  const access_token = data?.access_token;
-  const refresh_token = data?.refresh_token ?? '';
-  const expires_in = Number(data?.expires_in ?? data?.expire_time ?? 0) || 86400 * 7; // default 7 days
+  console.log('[ALIEXPRESS-OAUTH] RAW TOKEN RESPONSE:', JSON.stringify(body));
+  const errMsg = body?.error_msg ?? body?.error_description ?? body?.error ?? body?.msg;
+  if (errMsg) {
+    logger.error('[ALIEXPRESS-OAUTH] Token API error', { errMsg, body, status: response.status });
+    throw new Error(String(errMsg));
+  }
+  const data = body?.data ?? body?.token_result ?? body;
+  const access_token = data?.access_token ?? data?.accessToken ?? body?.access_token ?? body?.accessToken;
+  const refresh_token = data?.refresh_token ?? data?.refreshToken ?? body?.refresh_token ?? '';
+  const expires_in = Number(data?.expires_in ?? data?.expire_time ?? data?.expiresIn ?? body?.expires_in ?? 0) || 86400 * 7;
   if (!access_token) {
-    logger.error('[ALIEXPRESS-OAUTH] Token response missing access_token', { body });
+    logger.error('[ALIEXPRESS-OAUTH] Token response missing access_token', { body, status: response.status });
     throw new Error('INVALID_RESPONSE');
   }
   const expiresAt = Date.now() + expires_in * 1000;
