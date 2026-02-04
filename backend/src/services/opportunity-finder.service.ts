@@ -31,6 +31,7 @@ export interface OpportunityFilters {
   marketplaces?: Array<'ebay' | 'amazon' | 'mercadolibre'>;
   region?: string; // e.g., 'us', 'uk', 'mx'
   environment?: 'sandbox' | 'production'; // Environment para credenciales
+  skipTrendsValidation?: boolean; // For smoke test: skip Google Trends filter
 }
 
 export interface OpportunityItem {
@@ -445,6 +446,59 @@ class OpportunityFinderService {
     const baseCurrency = await userSettingsService.getUserBaseCurrency(userId);
     logger.info('[OPPORTUNITY-FINDER] Using user base currency', { userId, baseCurrency });
 
+    const useNativeScraperFirst = process.env.USE_NATIVE_SCRAPER_FIRST === 'true';
+    logger.info('[OPPORTUNITY-FINDER] USE_NATIVE_SCRAPER_FIRST', { useNativeScraperFirst });
+
+    // ✅ USE_NATIVE_SCRAPER_FIRST: Try Scraper Bridge (native) before Affiliate API
+    if (useNativeScraperFirst) {
+      try {
+        const isBridgeAvailable = await scraperBridge.isAvailable().catch(() => false);
+        if (isBridgeAvailable) {
+          logger.info('[PIPELINE] discover (scraper-bridge first)', { query, source: 'scraper_bridge' });
+          const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
+          if (items && items.length > 0) {
+            products = (items as any[])
+              .map((p: any) => {
+                const sourceCurrency = String(p.currency || baseCurrency || 'USD').toUpperCase();
+                const sourcePrice = Number(p.price) || 0;
+                let priceInBase = sourcePrice;
+                try { priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency); } catch { priceInBase = sourcePrice; }
+                let shippingCost = 0;
+                if (typeof (p as any).shippingCost === 'number' && (p as any).shippingCost > 0) {
+                  try { shippingCost = fxService.convert((p as any).shippingCost, sourceCurrency, baseCurrency); } catch { shippingCost = (p as any).shippingCost; }
+                }
+                return {
+                  title: p.title,
+                  price: priceInBase,
+                  priceMin: priceInBase,
+                  priceMax: priceInBase,
+                  priceMinSource: sourcePrice,
+                  priceMaxSource: sourcePrice,
+                  priceRangeSourceCurrency: sourceCurrency,
+                  currency: baseCurrency,
+                  sourcePrice,
+                  sourceCurrency,
+                  productUrl: p.url || p.productUrl,
+                  imageUrl: p.images?.[0] || p.image || p.imageUrl || 'https://via.placeholder.com/300x300?text=No+Image',
+                  images: Array.isArray(p.images) ? p.images.filter((img: any) => img && typeof img === 'string') : [],
+                  productId: p.productId,
+                  shippingCost: shippingCost > 0 ? shippingCost : undefined,
+                };
+              })
+              .filter((p: any) => p.title && (p.price || 0) > 0 && p.productUrl && p.productUrl.length > 10);
+            logger.info('[PIPELINE] discovered', { count: products.length, source: 'scraper_bridge' });
+            if (products.length > 0) {
+              logger.info('[OPPORTUNITY-FINDER] Native scraper (bridge) succeeded first', { count: products.length });
+            }
+          }
+        } else {
+          logger.warn('[OPPORTUNITY-FINDER] Scraper bridge not available, continuing cascade', { query });
+        }
+      } catch (bridgeErr: any) {
+        logger.warn('[OPPORTUNITY-FINDER] Scraper bridge failed (soft fail)', { error: bridgeErr?.message, query });
+      }
+    }
+
     // ✅ CRÍTICO: Verificar si hay credenciales de AliExpress Affiliate API antes de empezar
     try {
       const { CredentialsManager } = await import('./credentials-manager.service');
@@ -478,8 +532,9 @@ class OpportunityFinderService {
       });
     }
 
+    if (products.length === 0) {
     try {
-      logger.info('[OPPORTUNITY-FINDER] Starting search', { query, userId, environment });
+      logger.info('[OPPORTUNITY-FINDER] Starting search (Affiliate/Puppeteer)', { query, userId, environment });
       // ✅ HOTFIX: Verificar feature flags antes de intentar scraping
       const { env } = await import('../config/env');
       const allowBrowserAutomation = env.ALLOW_BROWSER_AUTOMATION;
@@ -705,56 +760,23 @@ class OpportunityFinderService {
       nativeErrorForLogs = nativeError;
       const errorMsg = nativeError?.message || String(nativeError);
 
-      // ✅ HOTFIX: Si es error AUTH_REQUIRED (API credentials missing + scraping disabled), NO intentar fallbacks
-      // Lanzar el error inmediatamente para que el frontend muestre mensaje claro
+      // ✅ SOFT FAIL: No exception aborts cascade - log and continue to next source
       if (nativeError?.details?.authRequired === true || nativeError?.errorCode === 'CREDENTIALS_ERROR') {
-        logger.warn('[OPPORTUNITY-FINDER] AUTH_REQUIRED: API credentials missing and scraping disabled', {
+        logger.warn('[OPPORTUNITY-FINDER] AUTH_REQUIRED (soft fail): API credentials missing, continuing cascade', {
           service: 'opportunity-finder',
           userId,
           query,
           error: errorMsg,
-          dataSource: nativeError?.details?.dataSource,
-          allowBrowserAutomation: nativeError?.details?.allowBrowserAutomation,
         });
-        // Re-throw para que el frontend reciba el error con mensaje claro
-        throw nativeError;
-      }
-
-      // ✅ SOLUCIÓN CORRECTA: Si es error de autenticación manual (CAPTCHA), NO intentar fallbacks
-      // Lanzar el error inmediatamente para que el frontend active el sistema de resolución de CAPTCHA
-      if (nativeError instanceof ManualAuthRequiredError) {
-        logger.info('[OPPORTUNITY-FINDER] CAPTCHA detectado - Activando sistema de resolución manual (NO intentando fallbacks)', {
+        // Do NOT throw - continue to bridge/fallbacks
+      } else if (nativeError instanceof ManualAuthRequiredError) {
+        logger.warn('[OPPORTUNITY-FINDER] CAPTCHA detectado (soft fail), continuing cascade', {
           service: 'opportunity-finder',
           userId,
           query,
-          token: nativeError.token,
-          provider: nativeError.provider,
           error: errorMsg
         });
-        
-        // ✅ Crear sesión de CAPTCHA manual si no existe
-        try {
-          const { ManualCaptchaService } = await import('./manual-captcha.service');
-          await ManualCaptchaService.startSession(
-            userId,
-            nativeError.loginUrl,
-            nativeError.loginUrl // pageUrl = loginUrl para AliExpress
-          );
-          logger.info('[OPPORTUNITY-FINDER] Sesión de CAPTCHA manual creada, lanzando error al frontend', {
-            service: 'opportunity-finder',
-            userId,
-            token: nativeError.token
-          });
-        } catch (captchaError: any) {
-          logger.error('[OPPORTUNITY-FINDER] Error creando sesión de CAPTCHA manual', {
-            service: 'opportunity-finder',
-            userId,
-            error: captchaError?.message || String(captchaError)
-          });
-        }
-        
-        // ✅ Lanzar error inmediatamente para que el frontend muestre la página de resolución
-        throw nativeError;
+        // Do NOT throw - continue to bridge/fallbacks
       } else {
         logger.warn('Error en scraping nativo (esperado si navegador no está disponible), intentando bridge Python', {
           service: 'opportunity-finder',
@@ -773,6 +795,7 @@ class OpportunityFinderService {
         await scraper.close().catch(() => { });
       }
     }
+    } // end if products.length === 0
 
     // ✅ FALLBACK: Intentar bridge Python si scraping nativo falló o retornó vacío
     if (!products || products.length === 0) {
@@ -1038,6 +1061,7 @@ class OpportunityFinderService {
       return [];
     }
 
+    logger.info('[PIPELINE] normalized', { count: products.length });
     // 2) Analizar competencia real (placeholder hasta integrar servicios específicos)
     logger.info('[OPPORTUNITY-FINDER] Processing scraped products to find opportunities', { productCount: products.length });
     const opportunities: OpportunityItem[] = [];
@@ -1296,8 +1320,8 @@ class OpportunityFinderService {
           reason: trendsValidation.validation.reason
         });
         
-        // ❌ DESCARTA si NO es viable o confianza muy baja
-        if (!trendsValidation.validation.viable || trendsValidation.validation.confidence < this.minTrendConfidence) {
+        // ❌ DESCARTA si NO es viable o confianza muy baja (skip si skipTrendsValidation)
+        if (!filters.skipTrendsValidation && (!trendsValidation.validation.viable || trendsValidation.validation.confidence < this.minTrendConfidence)) {
           logger.info('[OPPORTUNITY-FINDER] Producto descartado - baja demanda o no viable según Google Trends', {
             title: product.title.substring(0, 50),
             viable: trendsValidation.validation.viable,
@@ -1309,8 +1333,8 @@ class OpportunityFinderService {
           continue; // ❌ DESCARTA PRODUCTO
         }
         
-        // ❌ DESCARTA si tendencia está declinando significativamente
-        if (trendsValidation.trend === 'declining' && trendsValidation.validation.confidence < 50) {
+        // ❌ DESCARTA si tendencia está declinando significativamente (skip si skipTrendsValidation)
+        if (!filters.skipTrendsValidation && trendsValidation.trend === 'declining' && trendsValidation.validation.confidence < 50) {
           logger.info('[OPPORTUNITY-FINDER] Producto descartado - tendencia declinante', {
             title: product.title.substring(0, 50),
             trend: trendsValidation.trend,
@@ -1362,8 +1386,8 @@ class OpportunityFinderService {
         trendsValidation?.trend || 'stable'
       );
 
-      // ✅ NUEVO: Descartar si tiempo hasta primera venta es muy largo
-      if (estimatedTimeToFirstSale > this.maxTimeToFirstSale) {
+      // ✅ NUEVO: Descartar si tiempo hasta primera venta es muy largo (skip si skipTrendsValidation)
+      if (!filters.skipTrendsValidation && estimatedTimeToFirstSale > this.maxTimeToFirstSale) {
         logger.info('[OPPORTUNITY-FINDER] Producto descartado - tiempo hasta primera venta muy largo', {
           title: product.title.substring(0, 50),
           estimatedTimeToFirstSale,
@@ -1373,8 +1397,8 @@ class OpportunityFinderService {
         continue;
       }
 
-      // ✅ NUEVO: Descartar si break-even time es muy largo
-      if (breakEvenTime > this.maxBreakEvenTime) {
+      // ✅ NUEVO: Descartar si break-even time es muy largo (skip si skipTrendsValidation)
+      if (!filters.skipTrendsValidation && breakEvenTime > this.maxBreakEvenTime) {
         logger.info('[OPPORTUNITY-FINDER] Producto descartado - tiempo hasta break-even muy largo', {
           title: product.title.substring(0, 50),
           breakEvenTime,
@@ -1556,6 +1580,7 @@ class OpportunityFinderService {
         estimationNotes,
       };
 
+      logger.info('[PIPELINE] scored', { title: opp.title?.substring(0, 40), profitMargin: (opp.profitMargin * 100).toFixed(1) });
       opportunities.push(opp);
       logger.debug('Oportunidad agregada', {
         service: 'opportunity-finder',
@@ -1565,6 +1590,7 @@ class OpportunityFinderService {
       });
 
       try {
+        logger.info('[PIPELINE] stored', { title: opp.title?.substring(0, 40) });
         await opportunityPersistence.saveOpportunity(userId, {
           title: opp.title,
           sourceMarketplace: opp.sourceMarketplace,
@@ -1623,6 +1649,7 @@ class OpportunityFinderService {
       });
     }
 
+    logger.info('[PIPELINE] evaluated', { opportunitiesFound: opportunities.length });
     // ✅ NUEVO: Aplicar deduplicación antes de retornar
     const uniqueOpportunities = this.deduplicateOpportunities(opportunities);
 

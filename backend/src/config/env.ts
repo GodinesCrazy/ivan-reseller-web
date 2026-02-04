@@ -305,6 +305,7 @@ const envSchema = z.object({
   
   // ✅ HOTFIX: AliExpress API-First Configuration
   ALIEXPRESS_DATA_SOURCE: z.enum(['api', 'scrape']).default('api').transform(val => val as 'api' | 'scrape'),
+  USE_NATIVE_SCRAPER_FIRST: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
   ALIEXPRESS_AUTH_MONITOR_ENABLED: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
   ALLOW_BROWSER_AUTOMATION: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
   
