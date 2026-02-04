@@ -446,7 +446,7 @@ class OpportunityFinderService {
     const baseCurrency = await userSettingsService.getUserBaseCurrency(userId);
     logger.info('[OPPORTUNITY-FINDER] Using user base currency', { userId, baseCurrency });
 
-    const useNativeScraperFirst = process.env.USE_NATIVE_SCRAPER_FIRST === 'true';
+    const useNativeScraperFirst = process.env.USE_NATIVE_SCRAPER_FIRST !== 'false';
     logger.info('[OPPORTUNITY-FINDER] USE_NATIVE_SCRAPER_FIRST', { useNativeScraperFirst });
 
     // ✅ USE_NATIVE_SCRAPER_FIRST: Try Scraper Bridge (native) before Affiliate API
