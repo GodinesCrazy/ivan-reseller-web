@@ -1,7 +1,7 @@
 /**
- * Smoke test for FULL dropshipping cycle.
- * Run: npx tsx scripts/test-full-cycle-smoke.ts
- * Must output success=true, discovered>=1, normalized>=1, evaluated>=1
+ * Smoke test for FULL dropshipping cycle (real data only - no mocks).
+ * Run: npx tsx scripts/test-full-cycle-smoke.ts [keyword]
+ * Exits 0 if success=true, 1 otherwise.
  */
 import opportunityFinder from '../src/services/opportunity-finder.service';
 
@@ -12,42 +12,14 @@ async function main() {
   console.log('[SMOKE] test-full-cycle starting, keyword:', keyword);
 
   try {
-    let opportunities = await opportunityFinder.findOpportunities(1, {
+    const result = await opportunityFinder.findOpportunitiesWithDiagnostics(1, {
       query: keyword,
       maxItems: 5,
       skipTrendsValidation: true,
     });
 
-    if (opportunities.length === 0) {
-      opportunities = [
-        {
-          title: `${keyword} - Full Cycle Smoke Test Product`,
-          sourceMarketplace: 'aliexpress',
-          aliexpressUrl: 'https://www.aliexpress.com/item/example.html',
-          productUrl: 'https://www.aliexpress.com/item/example.html',
-          image: 'https://via.placeholder.com/300x300?text=Full+Cycle+Test',
-          images: ['https://via.placeholder.com/300x300?text=Full+Cycle+Test'],
-          costUsd: 5.99,
-          costAmount: 5.99,
-          costCurrency: 'USD',
-          baseCurrency: 'USD',
-          suggestedPriceUsd: 12.99,
-          suggestedPriceAmount: 12.99,
-          suggestedPriceCurrency: 'USD',
-          profitMargin: 0.54,
-          roiPercentage: 117,
-          competitionLevel: 'unknown',
-          marketDemand: 'medium',
-          confidenceScore: 0.5,
-          targetMarketplaces: ['ebay'],
-          feesConsidered: {},
-          generatedAt: new Date().toISOString(),
-        } as any,
-      ];
-    }
-
     const durationMs = Date.now() - startTime;
-    const sample = opportunities[0];
+    const sample = result.opportunities[0];
     const sampleOpportunity = sample
       ? {
           title: sample.title,
@@ -57,24 +29,24 @@ async function main() {
         }
       : null;
 
-    const result = {
-      success: opportunities.length > 0,
-      discovered: opportunities.length,
-      normalized: opportunities.length,
-      evaluated: opportunities.length,
-      stored: opportunities.length,
-      published: 0,
-      sampleOpportunity,
+    const output = {
+      success: result.success,
+      discovered: result.diagnostics?.discovered ?? 0,
+      normalized: result.diagnostics?.normalized ?? 0,
+      evaluated: result.opportunities.length,
+      stored: result.opportunities.length,
+      sampleOpportunity: result.success ? sampleOpportunity : null,
       durationMs,
+      diagnostics: result.diagnostics,
     };
 
-    console.log(JSON.stringify(result, null, 2));
+    console.log(JSON.stringify(output, null, 2));
 
     const ok =
       result.success &&
-      result.discovered >= 1 &&
-      result.normalized >= 1 &&
-      result.evaluated >= 1 &&
+      (result.diagnostics?.discovered ?? 0) >= 1 &&
+      (result.diagnostics?.normalized ?? 0) >= 1 &&
+      result.opportunities.length >= 1 &&
       sampleOpportunity &&
       sampleOpportunity.title &&
       typeof sampleOpportunity.price === 'number' &&
@@ -90,7 +62,6 @@ async function main() {
       normalized: 0,
       evaluated: 0,
       stored: 0,
-      published: 0,
       sampleOpportunity: null,
       error: err?.message || String(err),
       durationMs,

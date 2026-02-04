@@ -32,6 +32,16 @@ export interface OpportunityFilters {
   region?: string; // e.g., 'us', 'uk', 'mx'
   environment?: 'sandbox' | 'production'; // Environment para credenciales
   skipTrendsValidation?: boolean; // For smoke test: skip Google Trends filter
+  /** Internal: collect pipeline diagnostics for test-full-cycle */
+  _collectDiagnostics?: { current: PipelineDiagnostics };
+}
+
+export interface PipelineDiagnostics {
+  sourcesTried: string[];
+  discovered: number;
+  normalized: number;
+  reason?: 'NO_REAL_PRODUCTS';
+  [key: string]: unknown;
 }
 
 export interface OpportunityItem {
@@ -446,15 +456,14 @@ class OpportunityFinderService {
     const baseCurrency = await userSettingsService.getUserBaseCurrency(userId);
     logger.info('[OPPORTUNITY-FINDER] Using user base currency', { userId, baseCurrency });
 
-    const useNativeScraperFirst = process.env.USE_NATIVE_SCRAPER_FIRST !== 'false';
-    logger.info('[OPPORTUNITY-FINDER] USE_NATIVE_SCRAPER_FIRST', { useNativeScraperFirst });
+    // ✅ CASCADE ORDER: A) Bridge B) Native C) Affiliate API D) External (ScraperAPI/ZenRows)
+    const sourcesTried: string[] = [];
 
-    // ✅ USE_NATIVE_SCRAPER_FIRST: Try Scraper Bridge (native) before Affiliate API
-    if (useNativeScraperFirst) {
-      try {
-        const isBridgeAvailable = await scraperBridge.isAvailable().catch(() => false);
-        if (isBridgeAvailable) {
-          logger.info('[PIPELINE] DISCOVER', { query, source: 'scraper_bridge' });
+    // A) Scraper Bridge
+    try {
+      sourcesTried.push('bridge');
+      const isBridgeAvailable = await scraperBridge.isAvailable().catch(() => false);
+      if (isBridgeAvailable) {
           const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
           if (items && items.length > 0) {
             products = (items as any[])
@@ -479,62 +488,38 @@ class OpportunityFinderService {
                   sourcePrice,
                   sourceCurrency,
                   productUrl: p.url || p.productUrl,
-                  imageUrl: p.images?.[0] || p.image || p.imageUrl || 'https://via.placeholder.com/300x300?text=No+Image',
-                  images: Array.isArray(p.images) ? p.images.filter((img: any) => img && typeof img === 'string') : [],
+                  imageUrl: p.images?.[0] || p.image || p.imageUrl,
+                  images: Array.isArray(p.images) ? p.images.filter((img: any) => img && typeof img === 'string' && img.startsWith('http')) : [],
                   productId: p.productId,
                   shippingCost: shippingCost > 0 ? shippingCost : undefined,
                 };
               })
-              .filter((p: any) => p.title && (p.price || 0) > 0 && p.productUrl && p.productUrl.length > 10);
-            logger.info('[PIPELINE] DISCOVER', { count: products.length, source: 'scraper_bridge' });
+              .filter(
+                (p: any) =>
+                  p.title &&
+                  (p.price || 0) > 0 &&
+                  p.productUrl &&
+                  p.productUrl.length > 10 &&
+                  ((p.images && p.images.length > 0) || (p.imageUrl && p.imageUrl.startsWith('http')))
+              );
+            logger.info('[PIPELINE][DISCOVER][SOURCE=bridge]', { count: products.length });
             if (products.length > 0) {
               logger.info('[OPPORTUNITY-FINDER] Native scraper (bridge) succeeded first', { count: products.length });
             }
           }
-        } else {
-          logger.warn('[OPPORTUNITY-FINDER] Scraper bridge not available, continuing cascade', { query });
-        }
-      } catch (bridgeErr: any) {
-        logger.warn('[OPPORTUNITY-FINDER] Scraper bridge failed (soft fail)', { error: bridgeErr?.message, query });
-      }
-    }
-
-    // ✅ CRÍTICO: Verificar si hay credenciales de AliExpress Affiliate API antes de empezar
-    try {
-      const { CredentialsManager } = await import('./credentials-manager.service');
-      const affiliateCreds = await CredentialsManager.getCredentials(
-        userId,
-        'aliexpress-affiliate',
-        environment
-      );
-      
-      if (affiliateCreds) {
-        logger.info('[OPPORTUNITY-FINDER] ✅ AliExpress Affiliate API credentials found - API will be attempted first', {
-          userId,
-          environment,
-          query,
-          source: 'aliexpress-affiliate-api'
-        });
       } else {
-        logger.info('[OPPORTUNITY-FINDER] ⚠️ No AliExpress Affiliate API credentials found - using native scraping only', {
-          userId,
-          environment,
-          query,
-          source: 'native-scraping-only',
-          recommendation: 'Configure AliExpress Affiliate API credentials in Settings → API Settings to use official API'
-        });
+        logger.info('[PIPELINE][DISCOVER][SOURCE=bridge]', { count: 0, reason: 'not available' });
       }
-    } catch (credCheckError: any) {
-      logger.warn('[OPPORTUNITY-FINDER] Error checking AliExpress Affiliate API credentials, will try anyway', {
-        error: credCheckError?.message || String(credCheckError),
-        userId,
-        environment
-      });
+    } catch (bridgeErr: any) {
+      logger.warn('[OPPORTUNITY-FINDER] Scraper bridge failed (soft fail)', { error: bridgeErr?.message, query });
+      logger.info('[PIPELINE][DISCOVER][SOURCE=bridge]', { count: 0, error: bridgeErr?.message });
     }
 
+    // B) Native Scraper (Puppeteer)
     if (products.length === 0) {
     try {
-      logger.info('[OPPORTUNITY-FINDER] Starting search (Affiliate/Puppeteer)', { query, userId, environment });
+      sourcesTried.push('native');
+      logger.info('[PIPELINE][DISCOVER][SOURCE=native]', { query });
       // ✅ HOTFIX: Verificar feature flags antes de intentar scraping
       const { env } = await import('../config/env');
       const allowBrowserAutomation = env.ALLOW_BROWSER_AUTOMATION;
@@ -567,7 +552,7 @@ class OpportunityFinderService {
 
       logger.debug('[OPPORTUNITY-FINDER] Calling scrapeAliExpress', { query, userId, environment, baseCurrency });
       const scrapeStartTime = Date.now();
-      const items = await scraper.scrapeAliExpress(userId, query, environment, baseCurrency);
+      const items = await scraper.scrapeAliExpress(userId, query, environment, baseCurrency, { nativeOnly: true });
       const scrapeDuration = Date.now() - scrapeStartTime;
       logger.info('[OPPORTUNITY-FINDER] scrapeAliExpress completed', {
         count: items?.length || 0,
@@ -668,11 +653,11 @@ class OpportunityFinderService {
             sourcePrice: sourcePrice,
             sourceCurrency: detectedCurrency, // ✅ Usar moneda detectada/corregida
             productUrl: p.productUrl,
-            imageUrl: p.imageUrl || 'https://via.placeholder.com/300x300?text=No+Image',
+            imageUrl: p.imageUrl,
             productId: p.productId || p.productUrl?.split('/').pop()?.split('.html')[0],
             images: Array.isArray(p.images) && p.images.length > 0 
-              ? p.images.filter((img: any) => img && typeof img === 'string' && img.trim().length > 0)
-              : undefined, // ✅ MEJORADO: Array de imágenes filtrado y validado
+              ? p.images.filter((img: any) => img && typeof img === 'string' && img.startsWith('http'))
+              : undefined,
             shippingCost: shippingCost > 0 ? shippingCost : undefined, // ✅ MEJORADO: Shipping cost
           };
         })
@@ -685,10 +670,11 @@ class OpportunityFinderService {
           const hasSourcePrice = (p.sourcePrice || 0) > 0;
           const hasUrl = p.productUrl && p.productUrl.trim().length > 10;
           
-          // ✅ Producto válido si tiene título, precio (incluyendo precio mínimo 1) y URL
-          // Si no tiene sourcePrice, usar price como fallback (puede ser precio mínimo 1)
-          // Esta validación restaura la funcionalidad de cuando el sistema encontraba oportunidades
-          const isValid = hasTitle && hasPrice && hasUrl && (hasSourcePrice || hasPrice);
+          // Real data only: must have at least one real image URL
+          const hasImages =
+            (Array.isArray(p.images) && p.images.length > 0 && p.images.some((img: any) => img && String(img).startsWith('http'))) ||
+            (p.imageUrl && String(p.imageUrl).startsWith('http'));
+          const isValid = hasTitle && hasPrice && hasUrl && (hasSourcePrice || hasPrice) && hasImages;
           
           if (!isValid && p.title) {
             logger.debug('Producto filtrado (datos inválidos)', {
@@ -707,6 +693,7 @@ class OpportunityFinderService {
         });
 
       if (products.length > 0) {
+        logger.info('[PIPELINE][DISCOVER][SOURCE=native]', { count: products.length });
         logger.info('✅ Scraping nativo exitoso', {
           service: 'opportunity-finder',
           query,
@@ -728,8 +715,8 @@ class OpportunityFinderService {
           })
         });
       } else {
-        // ✅ RESTAURACIÓN: Si el scraper retorna vacío, marcar como fallo para activar fallbacks
-        logger.warn('⚠️ Scraping nativo no encontró productos - activando fallbacks', {
+        logger.info('[PIPELINE][DISCOVER][SOURCE=native]', { count: 0 });
+        logger.warn('⚠️ Scraping nativo no encontró productos', {
           service: 'opportunity-finder',
           query,
           userId,
@@ -751,7 +738,7 @@ class OpportunityFinderService {
             'Los productos no pasaron el filtro de validación',
             'El término de búsqueda no tiene resultados'
           ],
-          action: 'Intentando bridge Python y ScraperAPI/ZenRows como fallback'
+          action: 'Intentando Affiliate API y ScraperAPI/ZenRows'
         });
         // ✅ Forzar que se intente el bridge Python estableciendo products como vacío explícitamente
         products = [];
@@ -778,13 +765,13 @@ class OpportunityFinderService {
         });
         // Do NOT throw - continue to bridge/fallbacks
       } else {
-        logger.warn('Error en scraping nativo (esperado si navegador no está disponible), intentando bridge Python', {
+        logger.warn('Error en scraping nativo (esperado si navegador no está disponible), continuando cascade', {
           service: 'opportunity-finder',
           userId,
           query,
           error: errorMsg,
           errorType: nativeError?.constructor?.name || 'Unknown',
-          note: 'Este error es normal si Puppeteer no está disponible. El sistema usará bridge Python como alternativa.'
+          note: 'Continuando con Affiliate API y External.'
         });
       }
 
@@ -797,271 +784,126 @@ class OpportunityFinderService {
     }
     } // end if products.length === 0
 
-    // ✅ FALLBACK: Intentar bridge Python si scraping nativo falló o retornó vacío
+    // C) AliExpress Affiliate API
     if (!products || products.length === 0) {
       try {
-        logger.info('🔄 Intentando bridge Python como alternativa (scraping nativo no encontró productos o falló)', {
-          service: 'opportunity-finder',
-          userId,
-          query,
-          nativeError: nativeErrorForLogs?.message || 'No error (retornó vacío)',
-          nativeProductsFound: 0,
-          reason: nativeErrorForLogs ? 'Error en scraping nativo' : 'Scraping nativo retornó vacío (posible bloqueo)'
-        });
-        // ✅ FASE 2: Verificar que el bridge esté disponible antes de usarlo
-        const isBridgeAvailable = await scraperBridge.isAvailable().catch(() => false);
-        if (!isBridgeAvailable) {
-          throw new Error('Scraper bridge not available');
-        }
-        
-        const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
-        logger.info('Bridge Python completado', {
-          service: 'opportunity-finder',
-          itemsCount: items?.length || 0,
-          query,
-          userId
-        });
-        products = (items || [])
-          .map((p: any) => {
-            const sourceCurrency = String(p.currency || baseCurrency || 'USD').toUpperCase();
-            const sourcePrice = Number(p.price) || 0;
-            let priceInBase = sourcePrice;
-            try {
-              priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
-            } catch (error: any) {
-              logger.warn('[OpportunityFinder] FX conversion failed for price', {
-                from: sourceCurrency,
-                to: baseCurrency,
-                amount: sourcePrice,
-                error: error?.message
-              });
-              // Fallback: usar precio sin convertir
-              priceInBase = sourcePrice;
+        sourcesTried.push('affiliate');
+        logger.info('[PIPELINE][DISCOVER][SOURCE=affiliate]', { query });
+        const { CredentialsManager } = await import('./credentials-manager.service');
+        const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
+        const affiliateCreds = await CredentialsManager.getCredentials(userId, 'aliexpress-affiliate', environment);
+        if (affiliateCreds) {
+          aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
+          const countryCode = baseCurrency === 'CLP' ? 'CL' : baseCurrency === 'MXN' ? 'MX' : 'US';
+          const apiProducts = await aliexpressAffiliateAPIService.searchProducts({
+            keywords: query,
+            pageNo: 1,
+            pageSize: maxItems,
+            targetCurrency: baseCurrency,
+            shipToCountry: countryCode,
+          });
+          if (apiProducts && apiProducts.length > 0) {
+            const mapped = apiProducts
+              .map((p: any) => {
+                const sourceCurrency = String(p.currency || 'USD').toUpperCase();
+                const sourcePrice = Number(p.salePrice || p.originalPrice) || 0;
+                let priceInBase = sourcePrice;
+                try {
+                  priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
+                } catch { priceInBase = sourcePrice; }
+                const imgs = [p.productMainImageUrl, ...(p.productSmallImageUrls || [])].filter(
+                  (x: any) => x && typeof x === 'string' && x.startsWith('http')
+                );
+                return {
+                  title: p.productTitle,
+                  price: priceInBase,
+                  priceMin: priceInBase,
+                  priceMax: priceInBase,
+                  priceMinSource: sourcePrice,
+                  priceMaxSource: sourcePrice,
+                  priceRangeSourceCurrency: sourceCurrency,
+                  currency: baseCurrency,
+                  sourcePrice,
+                  sourceCurrency,
+                  productUrl: p.productDetailUrl || p.promotionLink || '',
+                  imageUrl: imgs[0],
+                  images: imgs,
+                  productId: p.productId,
+                };
+              })
+              .filter(
+                (p: any) =>
+                  p.title &&
+                  (p.price || 0) > 0 &&
+                  p.productUrl &&
+                  p.productUrl.length > 10 &&
+                  p.images &&
+                  p.images.length > 0
+              );
+            products = mapped;
+            if (products.length > 0) {
+              logger.info('[PIPELINE][DISCOVER][SOURCE=affiliate]', { count: products.length });
             }
-            // ✅ MEJORADO: Extraer shipping cost si está disponible
-            let shippingCost = 0;
-            if (typeof p.shippingCost === 'number' && p.shippingCost > 0) {
-              try {
-                shippingCost = fxService.convert(p.shippingCost, sourceCurrency, baseCurrency);
-              } catch (error: any) {
-                logger.warn('[OpportunityFinder] FX conversion failed for shipping cost', {
-                  from: sourceCurrency,
-                  to: baseCurrency,
-                  amount: p.shippingCost,
-                  error: error?.message
-                });
-                shippingCost = p.shippingCost; // Fallback: usar sin convertir
-              }
-            }
-
-            return {
-              title: p.title,
-              price: priceInBase,
-              priceMin: priceInBase,
-              priceMax: priceInBase,
-              priceMinSource: sourcePrice,
-              priceMaxSource: sourcePrice,
-              priceRangeSourceCurrency: sourceCurrency,
-              currency: baseCurrency,
-              sourcePrice,
-              sourceCurrency,
-              productUrl: p.url || p.productUrl,
-              imageUrl: p.images?.[0] || p.image || p.imageUrl || 'https://via.placeholder.com/300x300?text=No+Image',
-              // ✅ MEJORADO: Incluir todas las imágenes disponibles
-              images: Array.isArray(p.images) && p.images.length > 0 
-                ? p.images.filter((img: any) => img && typeof img === 'string' && img.trim().length > 0)
-                : (p.image || p.imageUrl) ? [p.image || p.imageUrl].filter(Boolean) : [],
-              productId: p.productId,
-              shippingCost: shippingCost > 0 ? shippingCost : undefined, // ✅ MEJORADO: Shipping cost
-            };
-          })
-          .filter(p => {
-            // ✅ Validación más permisiva: aceptar productos con título y precio válido
-            const hasTitle = p.title && p.title.trim().length > 0;
-            const hasPrice = (p.price || 0) > 0;
-            const hasSourcePrice = (p.sourcePrice || 0) > 0;
-            const hasUrl = p.productUrl && p.productUrl.trim().length > 10;
-            
-            // ✅ Producto válido si tiene título, precio y URL
-            const isValid = hasTitle && hasPrice && hasUrl && (hasSourcePrice || hasPrice);
-            
-            if (!isValid && p.title) {
-              logger.debug('Producto filtrado desde bridge Python (datos inválidos)', {
-                service: 'opportunity-finder',
-                title: p.title.substring(0, 50),
-                hasTitle,
-                price: p.price,
-                sourcePrice: p.sourcePrice,
-                hasPrice,
-                hasSourcePrice,
-                hasUrl: !!p.productUrl
-              });
-            }
-            return isValid;
-          });
-
-        if (products.length > 0) {
-          logger.info('Bridge Python exitoso', {
-            service: 'opportunity-finder',
-            productsFound: products.length
-          });
-        } else {
-          logger.warn('Bridge Python no encontró productos', {
-            service: 'opportunity-finder',
-            userId,
-            query
-          });
-        }
-      } catch (bridgeError: any) {
-        const msg = String(bridgeError?.message || '').toLowerCase();
-        const isCaptchaError = bridgeError?.code === 'CAPTCHA_REQUIRED' || msg.includes('captcha');
-        const isBridgeDisabled = bridgeError?.code === 'BRIDGE_DISABLED' || msg.includes('disabled');
-        const isBridgeUnavailable = msg.includes('not available') || msg.includes('timeout') || msg.includes('econnrefused');
-
-        // ✅ FASE 2: Log diferenciado según tipo de error
-        if (isBridgeDisabled) {
-          logger.info('Bridge Python deshabilitado, usando fallback', {
-            service: 'opportunity-finder',
-            userId,
-            query,
-          });
-        } else if (isBridgeUnavailable) {
-          logger.warn('Bridge Python no disponible, usando fallback', {
-            service: 'opportunity-finder',
-            userId,
-            query,
-            error: bridgeError.message,
-          });
-        } else {
-          logger.error('Bridge Python falló', {
-            service: 'opportunity-finder',
-            userId,
-            query,
-            error: bridgeError.message,
-            isCaptchaError,
-          });
-        }
-
-        // Solo intentar resolver CAPTCHA si ambos métodos fallaron Y es un error de CAPTCHA
-        if (isCaptchaError && !manualAuthPending) {
-          try {
-            const ManualCaptchaService = (await import('./manual-captcha.service')).default;
-            const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}`;
-
-            logger.info('CAPTCHA detectado, iniciando sesión de resolución manual', {
-              service: 'opportunity-finder',
-              userId,
-              searchUrl
-            });
-            await ManualCaptchaService.startSession(userId, searchUrl, searchUrl);
-            logger.info('Notificación enviada al usuario para resolver CAPTCHA', {
-              service: 'opportunity-finder',
-              userId
-            });
-          } catch (captchaError: any) {
-            logger.error('Error al iniciar resolución manual de CAPTCHA', {
-              service: 'opportunity-finder',
-              userId,
-              error: captchaError.message
-            });
           }
         }
-
-        // ✅ FALLBACK NIVEL 3: Intentar ScraperAPI o ZenRows si están configurados
-        try {
-          logger.info('🔄 Intentando ScraperAPI/ZenRows como último recurso', {
-            service: 'opportunity-finder',
-            userId,
-            query,
-            bridgePythonFailed: true
-          });
-
-          const externalScrapingResult = await this.tryExternalScrapingAPIs(userId, query, maxItems);
-          if (externalScrapingResult && externalScrapingResult.length > 0) {
-            logger.info('✅ ScraperAPI/ZenRows encontró productos', {
-              service: 'opportunity-finder',
-              userId,
-              query,
-              count: externalScrapingResult.length
-            });
-            products = externalScrapingResult;
-          } else {
-            logger.warn('⚠️ ScraperAPI/ZenRows tampoco encontró productos o no están configurados', {
-              service: 'opportunity-finder',
-              userId,
-              query
-            });
-          }
-        } catch (externalError: any) {
-          logger.warn('Error al intentar ScraperAPI/ZenRows', {
-            service: 'opportunity-finder',
-            userId,
-            query,
-            error: externalError?.message || String(externalError)
-          });
-        }
+      } catch (affiliateError: any) {
+        logger.warn('[OPPORTUNITY-FINDER] Affiliate API failed (soft fail)', {
+          error: affiliateError?.message,
+          query,
+        });
+        logger.info('[PIPELINE][DISCOVER][SOURCE=affiliate]', { count: 0, error: affiliateError?.message });
       }
     }
-    
-    // ✅ RESTAURACIÓN: Si aún no hay productos después de bridge Python, intentar ScraperAPI/ZenRows de todos modos
+
+    // D) External APIs (ScraperAPI / ZenRows)
     if (!products || products.length === 0) {
       try {
-        logger.info('🔄 Intentando ScraperAPI/ZenRows (bridge Python no encontró productos o no está disponible)', {
-          service: 'opportunity-finder',
-          userId,
-          query,
-          reason: 'Bridge Python retornó vacío o no está disponible'
-        });
-
+        sourcesTried.push('external');
+        logger.info('[PIPELINE][DISCOVER][SOURCE=external]', { query });
         const externalScrapingResult = await this.tryExternalScrapingAPIs(userId, query, maxItems);
         if (externalScrapingResult && externalScrapingResult.length > 0) {
-          logger.info('✅ ScraperAPI/ZenRows encontró productos', {
-            service: 'opportunity-finder',
-            userId,
-            query,
-            count: externalScrapingResult.length
-          });
-          products = externalScrapingResult;
+          products = externalScrapingResult.filter(
+            (p: any) =>
+              p.title &&
+              (p.price || 0) > 0 &&
+              p.productUrl &&
+              ((p.images && p.images.length > 0) || (p.imageUrl && String(p.imageUrl).startsWith('http')))
+          );
+          logger.info('[PIPELINE][DISCOVER][SOURCE=external]', { count: products.length });
         } else {
-          logger.warn('⚠️ ScraperAPI/ZenRows tampoco encontró productos o no están configurados', {
-            service: 'opportunity-finder',
-            userId,
-            query
-          });
+          logger.info('[PIPELINE][DISCOVER][SOURCE=external]', { count: 0 });
         }
       } catch (externalError: any) {
-        logger.warn('Error al intentar ScraperAPI/ZenRows', {
-          service: 'opportunity-finder',
-          userId,
-          query,
-          error: externalError?.message || String(externalError)
-        });
+        logger.warn('[OPPORTUNITY-FINDER] External APIs failed (soft fail)', { error: externalError?.message, query });
+        logger.info('[PIPELINE][DISCOVER][SOURCE=external]', { count: 0, error: externalError?.message });
       }
     }
 
-    // ✅ Si después de todos los intentos (nativo, bridge Python, ScraperAPI/ZenRows) no hay productos
     if (!products || products.length === 0) {
-      logger.warn('Todos los métodos de scraping fallaron, retornando resultados vacíos', {
+      logger.warn('[OPPORTUNITY-FINDER] All sources failed - NO_REAL_PRODUCTS', {
         service: 'opportunity-finder',
         userId,
         query,
-        manualAuthPending,
-        manualAuthError: manualAuthError?.message
+        sourcesTried,
       });
-
-      // ✅ Si no hay productos después de todos los intentos (sin CAPTCHA), retornar vacío
-      // NO usar productos de ejemplo - el sistema debe retornar vacío cuando no hay datos reales
-      logger.info('[OPPORTUNITY-FINDER] No se encontraron productos después de todos los métodos', {
-        service: 'opportunity-finder',
-        userId,
-        query,
-        note: 'Sistema intentó todos los métodos disponibles. Si hay bloqueo de AliExpress, se requiere resolver CAPTCHA manualmente.'
-      });
-      // Retornar vacío - el frontend mostrará mensaje apropiado al usuario
+      const diag = filters._collectDiagnostics?.current;
+      if (diag) {
+        diag.sourcesTried = sourcesTried;
+        diag.discovered = 0;
+        diag.normalized = 0;
+        diag.reason = 'NO_REAL_PRODUCTS';
+      }
       return [];
     }
 
-    logger.info('[PIPELINE] NORMALIZED', { count: products.length });
+    const discoveredCount = products.length;
+    const diag = filters._collectDiagnostics?.current;
+    if (diag) {
+      diag.sourcesTried = sourcesTried;
+      diag.discovered = discoveredCount;
+      diag.normalized = discoveredCount;
+    }
+    logger.info('[PIPELINE][NORMALIZED]', { count: products.length });
     // 2) Analizar competencia real (placeholder hasta integrar servicios específicos)
     logger.info('[OPPORTUNITY-FINDER] Processing scraped products to find opportunities', { productCount: products.length });
     const opportunities: OpportunityItem[] = [];
@@ -1447,9 +1289,10 @@ class OpportunityFinderService {
             // Ignorar errores de parsing
           }
         }
-        // Si aún no hay imagen válida, usar placeholder
+        // Real data only: skip products without valid image
         if (!imageUrl || !imageUrl.startsWith('http')) {
-          imageUrl = 'https://via.placeholder.com/300x300?text=No+Image';
+          skippedInvalid++;
+          continue;
         }
       } else {
         // Asegurar que la URL esté completa (agregar https:// si falta)
@@ -1487,7 +1330,7 @@ class OpportunityFinderService {
         });
       }
       // Si no hay imágenes en el array pero sí imageUrl, agregarla
-      if (allImages.length === 0 && imageUrl && imageUrl !== 'https://via.placeholder.com/300x300?text=No+Image') {
+      if (allImages.length === 0 && imageUrl && imageUrl.startsWith('http')) {
         allImages.push(imageUrl);
       }
 
@@ -1590,7 +1433,7 @@ class OpportunityFinderService {
       });
 
       try {
-        logger.info('[PIPELINE] STORED', { title: opp.title?.substring(0, 40) });
+        logger.info('[PIPELINE][STORED]', { count: opportunities.length });
         await opportunityPersistence.saveOpportunity(userId, {
           title: opp.title,
           sourceMarketplace: opp.sourceMarketplace,
@@ -1649,8 +1492,7 @@ class OpportunityFinderService {
       });
     }
 
-    logger.info('[PIPELINE] EVALUATED', { opportunitiesFound: opportunities.length });
-    logger.info('[PIPELINE] PUBLISHED', { count: 0, note: 'optional step skipped' });
+    logger.info('[PIPELINE][EVALUATED]', { count: opportunities.length });
     // ✅ NUEVO: Aplicar deduplicación antes de retornar
     const uniqueOpportunities = this.deduplicateOpportunities(opportunities);
 
@@ -1948,6 +1790,21 @@ class OpportunityFinderService {
     }
   }
 
+  async findOpportunitiesWithDiagnostics(
+    userId: number,
+    filters: OpportunityFilters
+  ): Promise<{ success: boolean; opportunities: OpportunityItem[]; diagnostics: PipelineDiagnostics }> {
+    const diagnostics: PipelineDiagnostics = { sourcesTried: [], discovered: 0, normalized: 0 };
+    const opportunities = await this.findOpportunities(userId, {
+      ...filters,
+      _collectDiagnostics: { current: diagnostics },
+    });
+    const success = opportunities.length > 0;
+    if (!success && diagnostics.discovered === 0) {
+      diagnostics.reason = 'NO_REAL_PRODUCTS';
+    }
+    return { success, opportunities, diagnostics };
+  }
 }
 
 const opportunityFinder = new OpportunityFinderService();

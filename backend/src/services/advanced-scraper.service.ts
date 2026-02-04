@@ -617,7 +617,13 @@ export class AdvancedMarketplaceScraper {
   /**
    * Scraping REAL de AliExpress con evasión completa
    */
-  async scrapeAliExpress(userId: number, query: string, environment: 'sandbox' | 'production' = 'production', userBaseCurrency?: string): Promise<ScrapedProduct[]> {
+  async scrapeAliExpress(
+    userId: number,
+    query: string,
+    environment: 'sandbox' | 'production' = 'production',
+    userBaseCurrency?: string,
+    options?: { nativeOnly?: boolean }
+  ): Promise<ScrapedProduct[]> {
     const { logger } = await import('../config/logger');
     const entryTime = Date.now();
     
@@ -797,8 +803,8 @@ export class AdvancedMarketplaceScraper {
         logger.info('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
       }
       
-      // ✅ PRIORIDAD 1: Si hay credenciales, SIEMPRE intentar API primero
-      if (affiliateCreds) {
+      // ✅ PRIORIDAD 1: Si hay credenciales y no es nativeOnly, intentar API primero
+      if (affiliateCreds && !options?.nativeOnly) {
         
         // ✅ LOG OBLIGATORIO #5: Antes de configurar servicio (SIEMPRE se ejecuta si hay credenciales)
         logger.info('[ALIEXPRESS-API] ✅ PREPARANDO LLAMADA HTTP a AliExpress Affiliate API', {
@@ -1236,9 +1242,8 @@ export class AdvancedMarketplaceScraper {
       note: 'Si hasAffiliateCreds=false y dataSource=api, se lanzará error. Si no, se usará scraping.'
     });
     
-    // ✅ REGLA CLARA: Si dataSource es 'api' y NO hay credenciales, NO hacer scraping
-    // Esto fuerza al usuario a configurar credenciales si quiere usar el sistema en modo API-only
-    if (dataSource === 'api' && !hasAffiliateCreds) {
+    // ✅ REGLA CLARA: Si dataSource es 'api' y NO hay credenciales, NO hacer scraping (salvo nativeOnly)
+    if (!options?.nativeOnly && dataSource === 'api' && !hasAffiliateCreds) {
       logger.warn('[ALIEXPRESS-API-FIRST] ════════════════════════════════════════════════════════');
       logger.warn('[ALIEXPRESS-API-FIRST] API credentials required but not configured', {
         userId,

@@ -1,42 +1,18 @@
 /**
- * Smoke test for full dropshipping opportunity cycle.
- * Run: npx tsx scripts/test-opportunity-cycle-smoke.ts
+ * Smoke test for full dropshipping opportunity cycle (real data only - no mocks).
+ * Run: npx tsx scripts/test-opportunity-cycle-smoke.ts [keyword]
  */
 import opportunityFinder from '../src/services/opportunity-finder.service';
 
 async function main() {
-  console.log('[SMOKE] Starting opportunity cycle test...');
+  const keyword = process.argv[2] || 'phone case';
+  console.log('[SMOKE] Starting opportunity cycle test, keyword:', keyword);
   try {
-    let opportunities = await opportunityFinder.findOpportunities(1, {
-      query: 'phone case',
+    const opportunities = await opportunityFinder.findOpportunities(1, {
+      query: keyword,
       maxItems: 5,
       skipTrendsValidation: true,
     });
-    if (opportunities.length === 0) {
-      opportunities = [{
-        title: 'phone case - Smoke Test Product',
-        sourceMarketplace: 'aliexpress',
-        aliexpressUrl: 'https://www.aliexpress.com/item/example.html',
-        productUrl: 'https://www.aliexpress.com/item/example.html',
-        image: 'https://via.placeholder.com/300x300?text=Smoke+Test',
-        images: ['https://via.placeholder.com/300x300?text=Smoke+Test'],
-        costUsd: 5.99,
-        costAmount: 5.99,
-        costCurrency: 'USD',
-        baseCurrency: 'USD',
-        suggestedPriceUsd: 12.99,
-        suggestedPriceAmount: 12.99,
-        suggestedPriceCurrency: 'USD',
-        profitMargin: 0.54,
-        roiPercentage: 117,
-        competitionLevel: 'unknown',
-        marketDemand: 'medium',
-        confidenceScore: 0.5,
-        targetMarketplaces: ['ebay'],
-        feesConsidered: {},
-        generatedAt: new Date().toISOString(),
-      } as any];
-    }
     const sample = opportunities[0];
     const ok =
       opportunities.length > 0 &&

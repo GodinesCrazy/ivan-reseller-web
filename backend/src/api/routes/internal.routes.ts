@@ -110,7 +110,7 @@ router.post('/run-ebay-cycle', validateInternalSecret, async (req: Request, res:
   }
 });
 
-// POST /api/internal/test-opportunity-cycle - Smoke test for full dropshipping pipeline
+// POST /api/internal/test-opportunity-cycle - Smoke test for full dropshipping pipeline (real data only)
 router.post('/test-opportunity-cycle', validateInternalSecret, async (req: Request, res: Response) => {
   const startTime = Date.now();
   const keyword = (req.body?.keyword as string) || 'phone case';
@@ -118,41 +118,11 @@ router.post('/test-opportunity-cycle', validateInternalSecret, async (req: Reque
   logger.info('[INTERNAL] POST /api/internal/test-opportunity-cycle', { keyword });
 
   try {
-    let opportunities = await opportunityFinder.findOpportunities(1, {
+    const opportunities = await opportunityFinder.findOpportunities(1, {
       query: keyword,
       maxItems: 5,
       skipTrendsValidation: true,
     });
-
-    // Smoke-test fallback: when all sources fail, create minimal valid opportunity so pipeline "works"
-    if (opportunities.length === 0) {
-      logger.warn('[INTERNAL] test-opportunity-cycle: no opportunities from sources, using smoke-test fallback');
-      opportunities = [
-        {
-          title: `${keyword} - Smoke Test Product`,
-          sourceMarketplace: 'aliexpress' as const,
-          aliexpressUrl: 'https://www.aliexpress.com/item/example.html',
-          productUrl: 'https://www.aliexpress.com/item/example.html',
-          image: 'https://via.placeholder.com/300x300?text=Smoke+Test',
-          images: ['https://via.placeholder.com/300x300?text=Smoke+Test'],
-          costUsd: 5.99,
-          costAmount: 5.99,
-          costCurrency: 'USD',
-          baseCurrency: 'USD',
-          suggestedPriceUsd: 12.99,
-          suggestedPriceAmount: 12.99,
-          suggestedPriceCurrency: 'USD',
-          profitMargin: 0.54,
-          roiPercentage: 117,
-          competitionLevel: 'unknown' as const,
-          marketDemand: 'medium',
-          confidenceScore: 0.5,
-          targetMarketplaces: ['ebay'],
-          feesConsidered: {},
-          generatedAt: new Date().toISOString(),
-        } as any,
-      ];
-    }
 
     const duration = Date.now() - startTime;
     const sampleOpportunity = opportunities.length > 0 ? opportunities[0] : null;
@@ -200,7 +170,7 @@ router.post('/test-opportunity-cycle', validateInternalSecret, async (req: Reque
   }
 });
 
-// POST /api/internal/test-full-cycle - Permanent internal verification for full dropshipping pipeline
+// POST /api/internal/test-full-cycle - Real-data-only verification (no mocks)
 router.post('/test-full-cycle', validateInternalSecret, async (req: Request, res: Response) => {
   const startTime = Date.now();
   const keyword = (req.body?.keyword as string) || 'phone case';
@@ -208,78 +178,51 @@ router.post('/test-full-cycle', validateInternalSecret, async (req: Request, res
   logger.info('[INTERNAL] POST /api/internal/test-full-cycle', { keyword });
 
   try {
-    let opportunities = await opportunityFinder.findOpportunities(1, {
+    const result = await opportunityFinder.findOpportunitiesWithDiagnostics(1, {
       query: keyword,
       maxItems: 5,
       skipTrendsValidation: true,
     });
 
-    if (opportunities.length === 0) {
-      logger.warn('[INTERNAL] test-full-cycle: no opportunities from sources, using fallback');
-      opportunities = [
-        {
-          title: `${keyword} - Full Cycle Test Product`,
-          sourceMarketplace: 'aliexpress' as const,
-          aliexpressUrl: 'https://www.aliexpress.com/item/example.html',
-          productUrl: 'https://www.aliexpress.com/item/example.html',
-          image: 'https://via.placeholder.com/300x300?text=Full+Cycle+Test',
-          images: ['https://via.placeholder.com/300x300?text=Full+Cycle+Test'],
-          costUsd: 5.99,
-          costAmount: 5.99,
-          costCurrency: 'USD',
-          baseCurrency: 'USD',
-          suggestedPriceUsd: 12.99,
-          suggestedPriceAmount: 12.99,
-          suggestedPriceCurrency: 'USD',
-          profitMargin: 0.54,
-          roiPercentage: 117,
-          competitionLevel: 'unknown' as const,
-          marketDemand: 'medium',
-          confidenceScore: 0.5,
-          targetMarketplaces: ['ebay'],
-          feesConsidered: {},
-          generatedAt: new Date().toISOString(),
-        } as any,
-      ];
-    }
-
     const durationMs = Date.now() - startTime;
-    const sampleOpportunity = opportunities.length > 0 ? opportunities[0] : null;
+    const { opportunities, diagnostics } = result;
+    const sampleOpportunity =
+      opportunities.length > 0
+        ? {
+            title: opportunities[0].title,
+            price: opportunities[0].costUsd ?? opportunities[0].suggestedPriceUsd,
+            images: opportunities[0].images ?? (opportunities[0].image ? [opportunities[0].image] : []),
+            profitabilityScore: opportunities[0].roiPercentage ?? (opportunities[0].profitMargin ?? 0) * 100,
+          }
+        : null;
 
     const response = {
-      success: opportunities.length > 0,
-      discovered: opportunities.length,
-      normalized: opportunities.length,
+      success: result.success,
+      discovered: result.diagnostics?.discovered ?? opportunities.length,
+      normalized: result.diagnostics?.normalized ?? opportunities.length,
       evaluated: opportunities.length,
       stored: opportunities.length,
-      published: 0,
-      sampleOpportunity: sampleOpportunity
-        ? {
-            title: sampleOpportunity.title,
-            price: sampleOpportunity.costUsd ?? sampleOpportunity.suggestedPriceUsd,
-            images: sampleOpportunity.images ?? (sampleOpportunity.image ? [sampleOpportunity.image] : []),
-            profitabilityScore: sampleOpportunity.roiPercentage ?? (sampleOpportunity.profitMargin ?? 0) * 100,
-          }
-        : null,
+      sampleOpportunity: result.success ? sampleOpportunity : null,
       durationMs,
+      diagnostics: result.diagnostics ?? undefined,
     };
 
-    logger.info('[INTERNAL] test-full-cycle completed', response);
+    logger.info('[INTERNAL] test-full-cycle completed', { success: response.success, ...response });
 
     res.status(200).json(response);
   } catch (error: any) {
     const durationMs = Date.now() - startTime;
     logger.error('[INTERNAL] test-full-cycle failed', { error: error?.message, durationMs });
-    res.status(500).json({
+    const errPayload = error?.diagnostics;
+    res.status(200).json({
       success: false,
-      discovered: 0,
-      normalized: 0,
+      discovered: errPayload?.discovered ?? 0,
+      normalized: errPayload?.normalized ?? 0,
       evaluated: 0,
       stored: 0,
-      published: 0,
       sampleOpportunity: null,
-      error: error?.message || 'Unknown error',
       durationMs,
+      diagnostics: errPayload ?? { error: error?.message || 'Unknown error' },
     });
   }
 });
