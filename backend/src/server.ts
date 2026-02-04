@@ -1,6 +1,9 @@
 import http from 'http';
 import { env } from './config/env';
 
+console.log("=== IVAN RESELLER BACKEND BOOT ===");
+console.log("GIT_SHA:", process.env.RAILWAY_GIT_COMMIT_SHA || "unknown");
+
 // Railway startup env check (must run before any logic that depends on env)
 console.log('[RAILWAY ENV CHECK]', {
   PORT: process.env.PORT,
