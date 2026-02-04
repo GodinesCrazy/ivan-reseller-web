@@ -75,28 +75,59 @@ export async function exchangeCodeForToken(code: string): Promise<TokenData> {
     });
   } catch (err: any) {
     console.log('[ALIEXPRESS-OAUTH] Request failed:', err?.message, err?.response?.data);
+    logger.error('[ALIEXPRESS-OAUTH] Network/request error', { message: err?.message, code: err?.code });
     throw err;
   }
-  console.log('[ALIEXPRESS-OAUTH] RAW TOKEN RESPONSE:', response.data);
+
+  // Deep logging for diagnosis
+  const contentType = response.headers?.['content-type'] ?? response.headers?.['Content-Type'] ?? 'unknown';
+  const dataType = typeof response.data;
+  const rawStr = typeof response.data === 'string'
+    ? response.data
+    : JSON.stringify(response.data);
+  const truncated = rawStr.length > 5000 ? rawStr.substring(0, 5000) + '...[truncated]' : rawStr;
+
+  console.log('[ALIEXPRESS-OAUTH] DIAG response.status:', response.status);
+  console.log('[ALIEXPRESS-OAUTH] DIAG response.headers["content-type"]:', contentType);
+  console.log('[ALIEXPRESS-OAUTH] DIAG typeof response.data:', dataType);
+  console.log('[ALIEXPRESS-OAUTH] RAW TOKEN RESPONSE (max 5000 chars):', truncated);
+
+  if (typeof response.data === 'string') {
+    const first2000 = response.data.substring(0, 2000);
+    console.log('[ALIEXPRESS-OAUTH] DIAG response.data (first 2000 chars):', first2000);
+  }
+
   const body = response.data;
   const isHtmlMaintenance = typeof body === 'string' && (body.includes('Maintaining') || body.includes('maintenance'));
   if (isHtmlMaintenance) {
     logger.error('[ALIEXPRESS-OAUTH] Token API returned maintenance page', { tokenUrl: TOKEN_URL, status: response.status });
     throw new Error('ALIEXPRESS_TOKEN_API_MAINTENANCE');
   }
+
   const errMsg = body?.error_msg ?? body?.error_description ?? body?.error ?? body?.msg;
   if (errMsg) {
     logger.error('[ALIEXPRESS-OAUTH] Token API error', { errMsg, body, status: response.status });
     throw new Error(String(errMsg));
   }
-  const data = response.data?.data ?? response.data;
-  const access_token = data?.access_token ?? data?.accessToken;
-  if (!data || !access_token) {
-    logger.error('[ALIEXPRESS-OAUTH] Token response missing access_token', { body, status: response.status });
-    throw new Error('TOKEN_EXCHANGE_FAILED');
+
+  const payload = response.data?.data ?? response.data ?? {};
+  if (typeof payload === 'object' && !(payload.access_token || payload.accessToken || payload.token || payload.access_token_info?.access_token)) {
+    console.log('[ALIEXPRESS-OAUTH] DIAG object has no access_token - full object:', JSON.stringify(payload, null, 2));
   }
-  const refresh_token = data.refresh_token ?? data.refreshToken ?? '';
-  const expires_in = Number(data.expires_in ?? data.expire_time ?? data.expiresIn ?? 0) || 86400 * 7;
+
+  const access_token =
+    payload.access_token ||
+    payload.accessToken ||
+    payload.token ||
+    payload.access_token_info?.access_token;
+
+  if (!access_token) {
+    logger.error('[ALIEXPRESS-OAUTH] Token response missing access_token', { body, status: response.status });
+    throw new Error('ALIEXPRESS_TOKEN_EXCHANGE_RESPONSE_INVALID');
+  }
+  const p = typeof payload === 'object' && payload !== null ? payload : {};
+  const refresh_token = p.refresh_token ?? p.refreshToken ?? '';
+  const expires_in = Number(p.expires_in ?? p.expire_time ?? p.expiresIn ?? 0) || 86400 * 7;
   const expiresAt = Date.now() + expires_in * 1000;
   const tokenData: TokenData = { accessToken: access_token, refreshToken: refresh_token, expiresAt };
   setToken(tokenData);
