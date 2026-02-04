@@ -454,7 +454,7 @@ class OpportunityFinderService {
       try {
         const isBridgeAvailable = await scraperBridge.isAvailable().catch(() => false);
         if (isBridgeAvailable) {
-          logger.info('[PIPELINE] discover (scraper-bridge first)', { query, source: 'scraper_bridge' });
+          logger.info('[PIPELINE] DISCOVER', { query, source: 'scraper_bridge' });
           const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
           if (items && items.length > 0) {
             products = (items as any[])
@@ -486,7 +486,7 @@ class OpportunityFinderService {
                 };
               })
               .filter((p: any) => p.title && (p.price || 0) > 0 && p.productUrl && p.productUrl.length > 10);
-            logger.info('[PIPELINE] discovered', { count: products.length, source: 'scraper_bridge' });
+            logger.info('[PIPELINE] DISCOVER', { count: products.length, source: 'scraper_bridge' });
             if (products.length > 0) {
               logger.info('[OPPORTUNITY-FINDER] Native scraper (bridge) succeeded first', { count: products.length });
             }
@@ -1061,7 +1061,7 @@ class OpportunityFinderService {
       return [];
     }
 
-    logger.info('[PIPELINE] normalized', { count: products.length });
+    logger.info('[PIPELINE] NORMALIZED', { count: products.length });
     // 2) Analizar competencia real (placeholder hasta integrar servicios específicos)
     logger.info('[OPPORTUNITY-FINDER] Processing scraped products to find opportunities', { productCount: products.length });
     const opportunities: OpportunityItem[] = [];
@@ -1580,7 +1580,7 @@ class OpportunityFinderService {
         estimationNotes,
       };
 
-      logger.info('[PIPELINE] scored', { title: opp.title?.substring(0, 40), profitMargin: (opp.profitMargin * 100).toFixed(1) });
+      logger.info('[PIPELINE] EVALUATED', { title: opp.title?.substring(0, 40), profitMargin: (opp.profitMargin * 100).toFixed(1) });
       opportunities.push(opp);
       logger.debug('Oportunidad agregada', {
         service: 'opportunity-finder',
@@ -1590,7 +1590,7 @@ class OpportunityFinderService {
       });
 
       try {
-        logger.info('[PIPELINE] stored', { title: opp.title?.substring(0, 40) });
+        logger.info('[PIPELINE] STORED', { title: opp.title?.substring(0, 40) });
         await opportunityPersistence.saveOpportunity(userId, {
           title: opp.title,
           sourceMarketplace: opp.sourceMarketplace,
@@ -1649,7 +1649,8 @@ class OpportunityFinderService {
       });
     }
 
-    logger.info('[PIPELINE] evaluated', { opportunitiesFound: opportunities.length });
+    logger.info('[PIPELINE] EVALUATED', { opportunitiesFound: opportunities.length });
+    logger.info('[PIPELINE] PUBLISHED', { count: 0, note: 'optional step skipped' });
     // ✅ NUEVO: Aplicar deduplicación antes de retornar
     const uniqueOpportunities = this.deduplicateOpportunities(opportunities);
 

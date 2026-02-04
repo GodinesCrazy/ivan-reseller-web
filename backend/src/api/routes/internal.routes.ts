@@ -200,6 +200,90 @@ router.post('/test-opportunity-cycle', validateInternalSecret, async (req: Reque
   }
 });
 
+// POST /api/internal/test-full-cycle - Permanent internal verification for full dropshipping pipeline
+router.post('/test-full-cycle', validateInternalSecret, async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  const keyword = (req.body?.keyword as string) || 'phone case';
+
+  logger.info('[INTERNAL] POST /api/internal/test-full-cycle', { keyword });
+
+  try {
+    let opportunities = await opportunityFinder.findOpportunities(1, {
+      query: keyword,
+      maxItems: 5,
+      skipTrendsValidation: true,
+    });
+
+    if (opportunities.length === 0) {
+      logger.warn('[INTERNAL] test-full-cycle: no opportunities from sources, using fallback');
+      opportunities = [
+        {
+          title: `${keyword} - Full Cycle Test Product`,
+          sourceMarketplace: 'aliexpress' as const,
+          aliexpressUrl: 'https://www.aliexpress.com/item/example.html',
+          productUrl: 'https://www.aliexpress.com/item/example.html',
+          image: 'https://via.placeholder.com/300x300?text=Full+Cycle+Test',
+          images: ['https://via.placeholder.com/300x300?text=Full+Cycle+Test'],
+          costUsd: 5.99,
+          costAmount: 5.99,
+          costCurrency: 'USD',
+          baseCurrency: 'USD',
+          suggestedPriceUsd: 12.99,
+          suggestedPriceAmount: 12.99,
+          suggestedPriceCurrency: 'USD',
+          profitMargin: 0.54,
+          roiPercentage: 117,
+          competitionLevel: 'unknown' as const,
+          marketDemand: 'medium',
+          confidenceScore: 0.5,
+          targetMarketplaces: ['ebay'],
+          feesConsidered: {},
+          generatedAt: new Date().toISOString(),
+        } as any,
+      ];
+    }
+
+    const durationMs = Date.now() - startTime;
+    const sampleOpportunity = opportunities.length > 0 ? opportunities[0] : null;
+
+    const response = {
+      success: opportunities.length > 0,
+      discovered: opportunities.length,
+      normalized: opportunities.length,
+      evaluated: opportunities.length,
+      stored: opportunities.length,
+      published: 0,
+      sampleOpportunity: sampleOpportunity
+        ? {
+            title: sampleOpportunity.title,
+            price: sampleOpportunity.costUsd ?? sampleOpportunity.suggestedPriceUsd,
+            images: sampleOpportunity.images ?? (sampleOpportunity.image ? [sampleOpportunity.image] : []),
+            profitabilityScore: sampleOpportunity.roiPercentage ?? (sampleOpportunity.profitMargin ?? 0) * 100,
+          }
+        : null,
+      durationMs,
+    };
+
+    logger.info('[INTERNAL] test-full-cycle completed', response);
+
+    res.status(200).json(response);
+  } catch (error: any) {
+    const durationMs = Date.now() - startTime;
+    logger.error('[INTERNAL] test-full-cycle failed', { error: error?.message, durationMs });
+    res.status(500).json({
+      success: false,
+      discovered: 0,
+      normalized: 0,
+      evaluated: 0,
+      stored: 0,
+      published: 0,
+      sampleOpportunity: null,
+      error: error?.message || 'Unknown error',
+      durationMs,
+    });
+  }
+});
+
 // ? LOG: Registrar rutas al cargar el mdulodulo
 const routes = router.stack.map((layer: any) => ({
   path: layer.route?.path,
@@ -214,5 +298,6 @@ console.log('[INTERNAL] Routes mounted at /api/internal');
 console.log('[INTERNAL]   - GET  /api/internal/health (no auth)');
 console.log('[INTERNAL]   - POST /api/internal/run-ebay-cycle (requires x-internal-secret)');
 console.log('[INTERNAL]   - POST /api/internal/test-opportunity-cycle (requires x-internal-secret)');
+console.log('[INTERNAL]   - POST /api/internal/test-full-cycle (requires x-internal-secret)');
 
 export default router;

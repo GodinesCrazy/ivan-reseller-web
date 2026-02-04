@@ -70,11 +70,14 @@ export function normalizeProduct(
   if (price <= 0) return null;
   if (!productUrl || productUrl.length < 15) return null;
 
+  const finalImages = images.length > 0 ? images : (imageUrl ? [imageUrl.startsWith('http') ? imageUrl : `https://${imageUrl}`] : []);
+  if (finalImages.length === 0) return null;
+
   return {
     title,
     price,
     currency,
-    images: images.length > 0 ? images : (imageUrl ? [imageUrl.startsWith('http') ? imageUrl : `https://${imageUrl}`] : []),
+    images: finalImages,
     supplier: 'aliexpress',
     source,
     productUrl,
