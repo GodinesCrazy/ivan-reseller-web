@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "npm run sync-docs && vite",
-    "build": "npm run sync-docs && vite build",
+    "build": "vite build",
+    "start": "vite preview --host",
     "preview": "vite preview",
     "sync-docs": "node ../scripts/sync_help_docs.mjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",

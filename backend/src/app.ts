@@ -77,6 +77,11 @@ import { timeoutMiddleware } from './middleware/timeout.middleware';
 const app: Application = express();
 app.set('trust proxy', 1);
 
+// Health first (before any other middleware) for Railway
+app.get('/health', (_req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // ✅ PRODUCTION FIX DEFINITIVO: Deshabilitar ETag para /api/* para evitar 304 sin CORS
 // Express por defecto puede devolver 304 (Not Modified) sin pasar por middlewares CORS
 app.set('etag', false); // Deshabilitar ETag globalmente (más seguro para APIs)
