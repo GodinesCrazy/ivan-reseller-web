@@ -693,6 +693,7 @@ class OpportunityFinderService {
         });
 
       if (products.length > 0) {
+        console.log('[PIPELINE][DISCOVER][SOURCE=native] count=', products.length);
         logger.info('[PIPELINE][DISCOVER][SOURCE=native]', { count: products.length });
         logger.info('✅ Scraping nativo exitoso', {
           service: 'opportunity-finder',
@@ -791,7 +792,16 @@ class OpportunityFinderService {
         logger.info('[PIPELINE][DISCOVER][SOURCE=affiliate]', { query });
         const { CredentialsManager } = await import('./credentials-manager.service');
         const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
-        const affiliateCreds = await CredentialsManager.getCredentials(userId, 'aliexpress-affiliate', environment);
+        let affiliateCreds = await CredentialsManager.getCredentials(userId, 'aliexpress-affiliate', environment);
+        if (!affiliateCreds && process.env.ALIEXPRESS_APP_KEY && process.env.ALIEXPRESS_APP_SECRET) {
+          affiliateCreds = {
+            appKey: process.env.ALIEXPRESS_APP_KEY.trim(),
+            appSecret: process.env.ALIEXPRESS_APP_SECRET.trim(),
+            trackingId: (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim(),
+            sandbox: false,
+          } as any;
+          logger.info('[OPPORTUNITY-FINDER] Using Affiliate API credentials from env (fallback)');
+        }
         if (affiliateCreds) {
           aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
           const countryCode = baseCurrency === 'CLP' ? 'CL' : baseCurrency === 'MXN' ? 'MX' : 'US';

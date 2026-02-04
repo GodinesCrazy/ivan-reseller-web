@@ -240,10 +240,12 @@ export async function getChromiumLaunchConfig(extraArgs: string[] = []) {
     ? Array.from(new Set([...(chromium.args || []), ...extraArgs, '--no-sandbox']))
     : Array.from(new Set([...extraArgs, '--no-sandbox']));
 
+  const headlessEnv = process.env.HEADLESS ?? process.env.PUPPETEER_HEADLESS;
+  const headless = headlessEnv === 'false' ? false : true;
   return {
     executablePath: executablePath, // undefined = usar Chromium de Puppeteer automáticamente
     args,
-    headless: true,
+    headless,
     defaultViewport: executablePath && chromium?.defaultViewport ? chromium.defaultViewport : { width: 1920, height: 1080 },
   };
 }

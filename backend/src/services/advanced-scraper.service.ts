@@ -342,6 +342,7 @@ export class AdvancedMarketplaceScraper {
       };
 
       logger.info('[SCRAPER] Lanzando Chromium', { path: executablePath || 'Puppeteer default' });
+      console.log('[NATIVE] Launching Puppeteer');
 
       // ✅ Intentar lanzar con timeout para evitar cuelgues
       try {
@@ -1566,6 +1567,12 @@ export class AdvancedMarketplaceScraper {
           waitUntil: 'domcontentloaded', 
           timeout: 30000 
         });
+        console.log('[NATIVE] Page loaded:', page.url());
+        const loadedUrl = page.url();
+        if (loadedUrl.includes('/punish') || loadedUrl.includes('_____tmd_____') || loadedUrl.includes('x5secdata')) {
+          logger.warn('[SCRAPER] AliExpress block detected immediately, skipping native (will try Affiliate/External)', { url: loadedUrl.substring(0, 100) });
+          throw new Error('ALIEXPRESS_BLOCKED: Redirected to punish/TMD page');
+        }
         // ✅ Esperar más tiempo para que la página se cargue completamente
         await new Promise(resolve => setTimeout(resolve, 3000));
         navigationSuccess = true;
@@ -1576,6 +1583,10 @@ export class AdvancedMarketplaceScraper {
           url: searchUrl
         });
         
+        // Do NOT retry on ALIEXPRESS_BLOCKED - fail fast for Affiliate/External
+        if (navError?.message?.includes('ALIEXPRESS_BLOCKED')) {
+          throw navError;
+        }
         // Intentar con formatos alternativos
         for (let i = 1; i < searchUrls.length; i++) {
           try {
@@ -1585,10 +1596,15 @@ export class AdvancedMarketplaceScraper {
               waitUntil: 'domcontentloaded', 
               timeout: 25000 
             });
+            const altUrl = page.url();
+            if (altUrl.includes('/punish') || altUrl.includes('_____tmd_____') || altUrl.includes('x5secdata')) {
+              throw new Error('ALIEXPRESS_BLOCKED: Redirected to punish/TMD page');
+            }
             navigationSuccess = true;
             logger.info('[SCRAPER] Navegación exitosa con formato alternativo', { format: i + 1, url: searchUrl });
             break;
           } catch (altError: any) {
+            if (altError?.message?.includes('ALIEXPRESS_BLOCKED')) throw altError;
             logger.warn('[SCRAPER] Formato alternativo también falló', {
               format: i + 1,
               error: altError?.message || String(altError),
@@ -2418,15 +2434,17 @@ export class AdvancedMarketplaceScraper {
               if (priceElement) break;
             }
 
-            // ✅ MEJORADO: Obtener TODAS las imágenes, no solo la primera
+            // ✅ MEJORADO: Obtener TODAS las imágenes, no solo la primera (AliExpress real selectors)
             const imageSelectors = [
+              'img[src*="ae01.alicdn.com"]',
+              'img[src*="alicdn.com"]',
               '.search-card-item--gallery--img',
+              'img[data-pl="product-image"]',
+              'div[data-pl="product-image"] img',
               'img[src]',
               'img[data-src]',
               '[class*="image"] img',
-              '[class*="gallery"] img',
-              'img[data-pl="product-image"]',
-              'div[data-pl="product-image"] img'
+              '[class*="gallery"] img'
             ];
             
             // ✅ MEJORADO: Buscar TODAS las imágenes usando querySelectorAll
@@ -2469,8 +2487,9 @@ export class AdvancedMarketplaceScraper {
                       }
                     }
                     
-                    // Validar que sea una URL válida de imagen y que no sea pequeña
-                    if (shouldInclude && /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(normalizedUrl) && !imageSet.has(normalizedUrl)) {
+                    // Validar que sea una URL válida de imagen (incl. alicdn.com sin extensión) y que no sea pequeña
+                    const isImageUrl = /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)/i.test(normalizedUrl) || normalizedUrl.includes('alicdn.com');
+                    if (shouldInclude && isImageUrl && !imageSet.has(normalizedUrl)) {
                       imageSet.add(normalizedUrl);
                       allImageUrls.push(normalizedUrl); // ✅ CORREGIDO: Solo guardar URL, no el elemento DOM
                     }
