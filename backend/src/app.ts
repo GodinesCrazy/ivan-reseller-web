@@ -182,7 +182,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader('X-Health', 'ok');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.status(200).json({
-      status: 'healthy',
+      status: 'ok',
       ok: true,
       safeBoot,
       timestamp: new Date().toISOString(),

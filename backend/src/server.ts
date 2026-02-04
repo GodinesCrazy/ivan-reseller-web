@@ -1,5 +1,15 @@
 import http from 'http';
 import { env } from './config/env';
+
+// Railway startup env check (must run before any logic that depends on env)
+console.log('[RAILWAY ENV CHECK]', {
+  PORT: process.env.PORT,
+  ALIEXPRESS_APP_KEY: !!process.env.ALIEXPRESS_APP_KEY,
+  ALIEXPRESS_APP_SECRET: !!process.env.ALIEXPRESS_APP_SECRET,
+  ALIEXPRESS_REDIRECT_URI: process.env.ALIEXPRESS_REDIRECT_URI,
+  NODE_ENV: process.env.NODE_ENV,
+});
+
 import { prisma, connectWithRetry } from './config/database';
 import { redis, isRedisAvailable } from './config/redis';
 import { exec } from 'child_process';
@@ -24,19 +34,17 @@ process.on('exit', () => console.log('Process exiting'));
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
-// ✅ FIX RAILWAY P0: PORT from process.env (Railway injects it). NO fallback a 3000 en producción.
-// En producción (Railway), process.env.PORT SIEMPRE está presente. Si falta, es error crítico.
-const rawPort = process.env.PORT || '0';
-const PORT = Number(rawPort);
-const portSource = process.env.PORT ? 'process.env.PORT' : 'OS-assigned (0)';
+// Railway injects PORT; fallback 4000 for local dev so server always binds.
+const PORT = Number(process.env.PORT) || 4000;
+const portSource = process.env.PORT ? 'process.env.PORT' : 'fallback (4000)';
 
-if (isNaN(PORT) || PORT < 0) {
-  console.error('❌ ERROR CRÍTICO: PORT no está configurado o es inválido');
-  console.error(`   Valor recibido: ${process.env.PORT ?? 'undefined'}`);
+if (isNaN(PORT) || PORT < 1 || PORT > 65535) {
+  console.error('❌ ERROR CRÍTICO: PORT inválido');
+  console.error(`   Valor: ${process.env.PORT ?? 'undefined'}`);
   process.exit(1);
 }
 
-console.log('[BOOT] PORT =', process.env.PORT);
+console.log('[BOOT] PORT =', PORT, `(${portSource})`);
 
 console.log('NATIVE_SCRAPER_URL:', process.env.NATIVE_SCRAPER_URL);
 
@@ -127,8 +135,7 @@ function logConfiguration(env: any, port: number, portSourceStr: string): void {
   const hasAppSecret = !!(process.env.ALIEXPRESS_APP_SECRET || '').trim();
   const hasRedirectUri = !!(process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
   if (!hasAppKey || !hasAppSecret || !hasRedirectUri) {
-    console.error('❌ [ALIEXPRESS] FAIL FAST: ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, and ALIEXPRESS_REDIRECT_URI are required');
-    process.exit(1);
+    console.warn('[ALIEXPRESS] Disabled - missing credentials (APP_KEY, APP_SECRET, or REDIRECT_URI). Backend will start without AliExpress OAuth.');
   }
 }
 
