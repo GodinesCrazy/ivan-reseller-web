@@ -760,6 +760,30 @@ model PurchaseLog {
   @@map("purchase_logs")
 }
 
+// ✅ Post-sale dropshipping: Order entity for PayPal checkout → AliExpress fulfillment
+model Order {
+  id                String   @id @default(cuid())
+  productId         Int?
+  title             String
+  price             Decimal  @db.Decimal(18, 2)
+  currency          String   @default("USD")
+  customerName      String
+  customerEmail     String
+  shippingAddress   String   // JSON string
+  status            String   @default("CREATED") // CREATED | PAID | PURCHASING | PURCHASED | FAILED
+  paypalOrderId     String?
+  aliexpressOrderId String?
+  productUrl        String?
+  errorMessage      String?  // Stored on FAILED
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status])
+  @@index([paypalOrderId])
+  @@index([createdAt])
+  @@map("orders")
+}
+
 // Modelo para almacenar tokens OAuth de AliExpress Affiliate API
 model AliExpressToken {
   id           String   @id @default(cuid())

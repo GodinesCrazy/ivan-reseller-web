@@ -264,7 +264,9 @@ const envSchema = z.object({
   MERCADOLIBRE_CLIENT_SECRET: z.string().optional(),
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
+  PAYPAL_WEBHOOK_ID: z.string().optional(),
   PAYPAL_ENVIRONMENT: z.enum(['sandbox', 'production']).default('sandbox'),
+  PAYPAL_ENV: z.enum(['sandbox', 'live']).optional(), // Alias for PAYPAL_ENVIRONMENT (live = production)
   GROQ_API_KEY: z.string().optional(),
   SCRAPERAPI_KEY: z.string().optional(),
   
@@ -320,7 +322,7 @@ const envSchema = z.object({
   ALIEXPRESS_OAUTH_REDIRECT_URL: z.string().url().optional(),
   ALIEXPRESS_API_BASE_URL: z.string().url().optional(),
   ALIEXPRESS_ENV: z.enum(['production', 'test']).default('production'),
-  ALIEXPRESS_TOKEN_URL: z.string().url().default('https://api.aliexpress.com/rest/auth/token/security/create'),
+  ALIEXPRESS_TOKEN_URL: z.string().url().default('https://api-sg.aliexpress.com/rest/auth/token/security/create'),
   
   // ✅ DEBUG: Debug key for protected debug endpoints
   DEBUG_KEY: z.string().optional(),

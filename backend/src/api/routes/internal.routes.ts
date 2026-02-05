@@ -45,7 +45,12 @@ router.get('/health', (_req: Request, res: Response) => {
     success: true,
     message: 'Internal routes endpoint is active',
     hasSecret: !!INTERNAL_SECRET,
-    routes: ['POST /api/internal/run-ebay-cycle'],
+    routes: [
+      'POST /api/internal/run-ebay-cycle',
+      'POST /api/internal/test-post-sale-flow',
+      'POST /api/internal/test-opportunity-cycle',
+      'POST /api/internal/test-full-cycle',
+    ],
   });
 });
 
@@ -165,6 +170,102 @@ router.post('/test-opportunity-cycle', validateInternalSecret, async (req: Reque
       valid: 0,
       sampleOpportunity: null,
       error: error?.message || 'Unknown error',
+      duration: `${duration}ms`,
+    });
+  }
+});
+
+// POST /api/internal/test-post-sale-flow - End-to-end post-sale dropshipping test
+router.post('/test-post-sale-flow', validateInternalSecret, async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  const body = req.body || {};
+  const productUrl = (body.productUrl as string) || 'https://www.aliexpress.com/item/example.html';
+  const price = parseFloat(body.price as string) || 10.99;
+  const customer = body.customer as Record<string, string> || {};
+  const name = customer.name || 'John Doe';
+  const email = customer.email || 'john@test.com';
+  const address = customer.address || '123 Main St, Miami, FL, US';
+
+  logger.info('[INTERNAL] POST /api/internal/test-post-sale-flow', { productUrl, price });
+
+  try {
+    const { prisma } = await import('../../config/database');
+    const { PayPalCheckoutService } = await import('../../services/paypal-checkout.service');
+    const { orderFulfillmentService } = await import('../../services/order-fulfillment.service');
+
+    const paypal = PayPalCheckoutService.fromEnv();
+    let paypalOrderId: string | null = null;
+
+    if (paypal) {
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const createResult = await paypal.createOrder({
+        amount: price,
+        currency: 'USD',
+        productTitle: 'Test Order',
+        productUrl,
+        returnUrl: `${baseUrl}/api/paypal/success`,
+        cancelUrl: `${baseUrl}/api/paypal/cancel`,
+      });
+      if (createResult.success && createResult.orderId) {
+        paypalOrderId = createResult.orderId;
+        const captureResult = await paypal.captureOrder(createResult.orderId);
+        if (!captureResult.success) {
+          // In automated test, capture may fail (requires user approval in sandbox). Use simulated for flow test.
+          logger.warn('[INTERNAL] PayPal capture failed (using simulated for test)', { error: captureResult.error });
+          paypalOrderId = `SIMULATED_${createResult.orderId}`;
+        }
+      } else {
+        paypalOrderId = 'SIMULATED_PAYPAL_ORDER';
+      }
+    } else {
+      paypalOrderId = 'SIMULATED_PAYPAL_ORDER';
+    }
+
+    const shippingAddress = JSON.stringify({
+      fullName: name,
+      addressLine1: address.split(',')[0]?.trim() || address,
+      city: address.split(',')[1]?.trim() || 'Miami',
+      state: address.split(',')[2]?.trim() || 'FL',
+      country: address.split(',')[3]?.trim() || 'US',
+      zipCode: '33101',
+      phoneNumber: '+15551234567',
+    });
+
+    const order = await prisma.order.create({
+      data: {
+        title: 'Test Order',
+        price,
+        currency: 'USD',
+        customerName: name,
+        customerEmail: email,
+        shippingAddress,
+        status: 'PAID',
+        paypalOrderId,
+        productUrl,
+      },
+    });
+
+    const fulfill = await orderFulfillmentService.fulfillOrder(order.id);
+
+    const duration = Date.now() - startTime;
+    const finalStatus = fulfill.status;
+    const success = finalStatus === 'PURCHASED' || finalStatus === 'SIMULATED' || fulfill.aliexpressOrderId === 'SIMULATED_ORDER_ID';
+
+    return res.status(200).json({
+      success,
+      paypalOrderId,
+      orderId: order.id,
+      aliexpressOrderId: fulfill.aliexpressOrderId,
+      finalStatus,
+      duration: `${duration}ms`,
+    });
+  } catch (err: any) {
+    const duration = Date.now() - startTime;
+    logger.error('[INTERNAL] test-post-sale-flow failed', { error: err?.message, duration });
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Unknown error',
+      finalStatus: 'ERROR',
       duration: `${duration}ms`,
     });
   }

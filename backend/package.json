@@ -26,7 +26,8 @@
     "test-apis": "tsx scripts/test-apis.ts",
     "test:connectivity": "tsx src/scripts/test-aliexpress-connectivity.ts",
     "diagnose:connectivity": "tsx scripts/diagnose-connectivity.ts",
-    "run:ebay-real-cycle": "tsx src/scripts/run-ebay-real-cycle.ts"
+    "run:ebay-real-cycle": "tsx src/scripts/run-ebay-real-cycle.ts",
+    "test:post-sale-flow": "tsx scripts/test-post-sale-flow.ts"
   },
   "keywords": [
     "dropshipping",
