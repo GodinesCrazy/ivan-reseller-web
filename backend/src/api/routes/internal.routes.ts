@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { logger } from '../../config/logger';
 import { runEbayRealCycle } from '../../scripts/run-ebay-real-cycle';
 import opportunityFinder from '../../services/opportunity-finder.service';
+import { runTestFullDropshippingCycle } from '../handlers/test-full-dropshipping-cycle.handler';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ function validateInternalSecret(req: Request, res: Response, next: NextFunction)
     res.status(503).json({
       success: false,
       error: 'Internal endpoint not configured',
-      message: 'INTERNAL_RUN_SECRET no esta configurado',
+      message: 'INTERNAL_RUN_SECRET not configured',
     });
     return;
   }
@@ -50,6 +51,7 @@ router.get('/health', (_req: Request, res: Response) => {
       'POST /api/internal/test-post-sale-flow',
       'POST /api/internal/test-opportunity-cycle',
       'POST /api/internal/test-full-cycle',
+      'POST /api/internal/test-full-dropshipping-cycle',
     ],
   });
 });
@@ -328,6 +330,8 @@ router.post('/test-full-cycle', validateInternalSecret, async (req: Request, res
   }
 });
 
+router.post('/test-full-dropshipping-cycle', validateInternalSecret, runTestFullDropshippingCycle);
+
 // ? LOG: Registrar rutas al cargar el mdulodulo
 const routes = router.stack.map((layer: any) => ({
   path: layer.route?.path,
@@ -343,5 +347,6 @@ console.log('[INTERNAL]   - GET  /api/internal/health (no auth)');
 console.log('[INTERNAL]   - POST /api/internal/run-ebay-cycle (requires x-internal-secret)');
 console.log('[INTERNAL]   - POST /api/internal/test-opportunity-cycle (requires x-internal-secret)');
 console.log('[INTERNAL]   - POST /api/internal/test-full-cycle (requires x-internal-secret)');
+console.log('[INTERNAL]   - POST /api/internal/test-full-dropshipping-cycle (requires x-internal-secret)');
 
 export default router;
