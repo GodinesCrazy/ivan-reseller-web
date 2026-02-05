@@ -41,7 +41,8 @@ export class OrderFulfillmentService {
       where: { id: orderId },
       data: { status: 'PURCHASING' },
     });
-    logger.info('[ORDER-FULFILLMENT] Status ? PURCHASING', { orderId });
+    console.log('[FULFILLMENT] START', { orderId });
+    logger.info('[FULFILLMENT] Status → PURCHASING', { orderId });
 
     const shippingObj = this.parseShippingAddress(order.shippingAddress);
     if (!shippingObj) {
@@ -82,7 +83,8 @@ export class OrderFulfillmentService {
             errorMessage: null,
           },
         });
-        logger.info('[ORDER-FULFILLMENT] PURCHASED', { orderId, aliexpressOrderId: result.orderId });
+        console.log('[FULFILLMENT] ALIEXPRESS OK', { orderId, aliexpressOrderId: result.orderId });
+        logger.info('[FULFILLMENT] PURCHASED', { orderId, aliexpressOrderId: result.orderId });
         return {
           success: true,
           orderId,
@@ -111,7 +113,8 @@ export class OrderFulfillmentService {
       where: { id: orderId },
       data: { status: 'FAILED', errorMessage },
     });
-    logger.error('[ORDER-FULFILLMENT] FAILED', { orderId, errorMessage });
+    console.log('[FULFILLMENT] FAILED', { orderId, errorMessage });
+    logger.error('[FULFILLMENT] FAILED', { orderId, errorMessage });
   }
 
   private parseShippingAddress(str: string): Record<string, string> | null {

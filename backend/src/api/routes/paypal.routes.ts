@@ -4,6 +4,8 @@
 
 import { Router, Request, Response } from 'express';
 import { PayPalCheckoutService } from '../../services/paypal-checkout.service';
+import { orderFulfillmentService } from '../../services/order-fulfillment.service';
+import { prisma } from '../../config/database';
 import logger from '../../config/logger';
 
 const router = Router();
@@ -25,7 +27,11 @@ router.post('/create-order', async (req: Request, res: Response) => {
       cancelUrl: cancelUrl || `${baseUrl}/api/paypal/cancel`,
     });
     if (result.success && result.orderId) {
-      return res.status(200).json({ success: true, orderId: result.orderId });
+      return res.status(200).json({
+        success: true,
+        paypalOrderId: result.orderId,
+        approveUrl: result.approveUrl,
+      });
     }
     return res.status(400).json({ success: false, error: result.error });
   } catch (err: any) {
@@ -39,21 +45,47 @@ router.post('/capture-order', async (req: Request, res: Response) => {
     return res.status(503).json({ success: false, error: 'PayPal not configured' });
   }
   try {
-    const { orderId } = req.body;
-    if (!orderId) {
-      return res.status(400).json({ success: false, error: 'orderId required' });
+    const {
+      orderId: paypalOrderId,
+      productUrl,
+      productTitle,
+      price,
+      currency,
+      customerName,
+      customerEmail,
+      shippingAddress,
+    } = req.body;
+    if (!paypalOrderId) {
+      return res.status(400).json({ success: false, error: 'orderId (PayPal token) required' });
     }
-    const result = await service.captureOrder(orderId);
-    if (result.success) {
-      return res.status(200).json({
-        success: true,
-        orderId: result.orderId,
-        status: result.status,
-        payerEmail: result.payerEmail,
-        captureId: result.captureId,
-      });
+    const result = await service.captureOrder(paypalOrderId);
+    if (!result.success) {
+      return res.status(400).json({ success: false, error: result.error });
     }
-    return res.status(400).json({ success: false, error: result.error });
+    const shippingStr =
+      typeof shippingAddress === 'string'
+        ? shippingAddress
+        : JSON.stringify(shippingAddress || {});
+    const order = await prisma.order.create({
+      data: {
+        title: productTitle || 'Order',
+        price: parseFloat(price) || 0,
+        currency: currency || 'USD',
+        customerName: customerName || 'Customer',
+        customerEmail: customerEmail || result.payerEmail || '',
+        shippingAddress: shippingStr,
+        status: 'PAID',
+        paypalOrderId,
+        productUrl: productUrl || undefined,
+      },
+    });
+    const fulfill = await orderFulfillmentService.fulfillOrder(order.id);
+    return res.status(200).json({
+      success: true,
+      orderId: order.id,
+      status: fulfill.status,
+      aliexpressOrderId: fulfill.aliexpressOrderId,
+    });
   } catch (err: any) {
     logger.error('[PAYPAL] capture-order failed', { error: err?.message });
     return res.status(500).json({ success: false, error: err?.message || 'Capture failed' });

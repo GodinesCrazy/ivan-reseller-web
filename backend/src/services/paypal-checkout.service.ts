@@ -69,9 +69,10 @@ export class PayPalCheckoutService {
 
   static fromEnv(): PayPalCheckoutService | null {
     if (!CLIENT_ID || !CLIENT_SECRET) {
-      logger.warn('[PAYPAL] Checkout credentials not configured');
+      logger.warn('[PAYPAL] Checkout credentials not configured (PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET)');
       return null;
     }
+    console.log('[PAYPAL] ENV OK');
     return new PayPalCheckoutService({
       clientId: CLIENT_ID,
       clientSecret: CLIENT_SECRET,
@@ -100,7 +101,13 @@ export class PayPalCheckoutService {
     return this.accessToken!;
   }
 
-  async createOrder(params: CreateOrderParams): Promise<{ success: boolean; orderId?: string; error?: string }> {
+  getApproveUrl(paypalOrderId: string): string {
+    const isProd = ENV === 'production' || ENV === 'live';
+    const base = isProd ? 'https://www.paypal.com' : 'https://www.sandbox.paypal.com';
+    return `${base}/checkoutnow?token=${paypalOrderId}`;
+  }
+
+  async createOrder(params: CreateOrderParams): Promise<{ success: boolean; orderId?: string; approveUrl?: string; error?: string }> {
     try {
       const token = await this.getAccessToken();
       const payload = {
@@ -123,9 +130,11 @@ export class PayPalCheckoutService {
       const res = await this.client.post('/v2/checkout/orders', payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      console.log('[PAYPAL] CREATE ORDER', { orderId: res.data.id, status: res.data.status });
-      logger.info('[PAYPAL] Create order', { orderId: res.data.id });
-      return { success: true, orderId: res.data.id };
+      const orderId = res.data.id;
+      const approveUrl = this.getApproveUrl(orderId);
+      console.log('[PAYPAL] CREATE ORDER', { orderId, status: res.data.status });
+      logger.info('[PAYPAL] Create order', { orderId });
+      return { success: true, orderId, approveUrl };
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || String(err);
       logger.error('[PAYPAL] Create order failed', { error: msg });

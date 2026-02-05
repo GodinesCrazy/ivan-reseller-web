@@ -70,6 +70,7 @@ import profitabilityRoutes from './modules/profitability/profitability.routes';
 import diagRoutes from './api/routes/diag.routes';
 import internalRoutes from './api/routes/internal.routes';
 import paypalRoutes from './api/routes/paypal.routes';
+import ordersRoutes from './api/routes/orders.routes';
 
 // ✅ FIX STABILITY: Import overload protection and timeout middlewares
 import { overloadProtectionMiddleware } from './middleware/overload-protection.middleware';
@@ -1075,6 +1076,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/webhooks', webhooksRoutes);
 app.use('/api/paypal', paypalRoutes);
+app.use('/api/orders', ordersRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api/proxies', proxiesRoutes);

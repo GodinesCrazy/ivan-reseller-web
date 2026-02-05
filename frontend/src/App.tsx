@@ -41,6 +41,9 @@ const ResolveCaptcha = lazy(() => import('@pages/ResolveCaptcha'));
 const RequestAccess = lazy(() => import('@pages/RequestAccess'));
 const MeetingRoom = lazy(() => import('@pages/MeetingRoom'));
 const PendingPurchases = lazy(() => import('@pages/PendingPurchases'));
+const Orders = lazy(() => import('@pages/Orders'));
+const OrderDetail = lazy(() => import('@pages/OrderDetail'));
+const Checkout = lazy(() => import('@pages/Checkout'));
 const Diagnostics = lazy(() => import('@pages/Diagnostics'));
 const SetupRequired = lazy(() => import('@pages/SetupRequired'));
 import Layout from '@components/layout/Layout';
@@ -184,6 +187,9 @@ function AppContent() {
         <Route path="products/:id/preview" element={<ProductPreview />} />
         <Route path="sales" element={<Sales />} />
         <Route path="pending-purchases" element={<PendingPurchases />} />
+        <Route path="orders" element={<Orders />} />
+        <Route path="orders/:id" element={<OrderDetail />} />
+        <Route path="checkout" element={<Checkout />} />
         <Route path="commissions" element={<Commissions />} />
         
         {/* Finance & Dropshipping */}

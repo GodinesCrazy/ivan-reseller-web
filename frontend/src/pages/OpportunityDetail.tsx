@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import { Info, Package, Truck, Receipt } from 'lucide-react';
+import { Info, Package, Truck, Receipt, CreditCard } from 'lucide-react';
 import { formatCurrencySimple } from '../utils/currency';
 
 export default function OpportunityDetail() {
@@ -132,6 +132,16 @@ export default function OpportunityDetail() {
               Precio sugerido - Costo total = Ganancia neta
             </div>
           </div>
+        )}
+
+        {(item.productUrl || item.aliexpressUrl) && (
+          <Link
+            to={`/checkout?productUrl=${encodeURIComponent(item.productUrl || item.aliexpressUrl || '')}&title=${encodeURIComponent(item.title || '')}&price=${item.suggestedPriceUsd || item.costUsd || 10}`}
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+          >
+            <CreditCard className="w-4 h-4" />
+            Buy with PayPal
+          </Link>
         )}
       </div>
       <div className="bg-white border rounded p-4">
