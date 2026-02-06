@@ -34,11 +34,18 @@ export interface AliExpressCheckoutResult {
 export class AliExpressCheckoutService {
   /**
    * Place order on AliExpress. Stub mode if browser automation disabled.
+   * When AUTOPILOT_MODE=production, simulated checkout is forbidden.
    */
   async placeOrder(request: AliExpressCheckoutRequest): Promise<AliExpressCheckoutResult> {
     const allowBrowser = env.ALLOW_BROWSER_AUTOMATION ?? false;
+    const autopilotMode = (process.env.AUTOPILOT_MODE || 'sandbox') as 'production' | 'sandbox';
 
     if (!allowBrowser) {
+      if (autopilotMode === 'production') {
+        const msg = 'AUTOPILOT_MODE=production: simulated checkout forbidden. Set ALLOW_BROWSER_AUTOMATION=true.';
+        console.error('[ALIEXPRESS-CHECKOUT] FATAL:', msg);
+        throw new Error(msg);
+      }
       console.log('[ALIEXPRESS-CHECKOUT] STUB MODE (ALLOW_BROWSER_AUTOMATION=false)');
       logger.info('[ALIEXPRESS-CHECKOUT] Stub mode - returning simulated order');
       return {
@@ -54,6 +61,10 @@ export class AliExpressCheckoutService {
       const aliUser = (process.env.ALIEXPRESS_USER || '').trim();
       const aliPass = (process.env.ALIEXPRESS_PASS || '').trim();
       if (!aliUser || !aliPass) {
+        if (autopilotMode === 'production') {
+          const msg = 'AUTOPILOT_MODE=production: simulated checkout forbidden. Configure ALIEXPRESS_USER and ALIEXPRESS_PASS.';
+          throw new Error(msg);
+        }
         logger.warn('[ALIEXPRESS-CHECKOUT] Credentials missing, using stub');
         return { success: true, orderId: 'SIMULATED_ORDER_ID', orderNumber: 'SIMULATED_ORDER_ID' };
       }
@@ -65,7 +76,7 @@ export class AliExpressCheckoutService {
       }
       console.log('[ALIEXPRESS-CHECKOUT] LOGIN OK');
 
-      const result = await service.purchase({
+      const result = await (service as any).executePurchase({
         productUrl: request.productUrl,
         quantity: request.quantity ?? 1,
         maxPrice: request.maxPrice,
@@ -79,7 +90,7 @@ export class AliExpressCheckoutService {
           country: request.shippingAddress.country,
           phoneNumber: request.shippingAddress.phoneNumber,
         },
-      });
+      }, undefined);
 
       await service.closeBrowser?.();
 

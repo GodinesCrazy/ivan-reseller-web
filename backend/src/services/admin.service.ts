@@ -82,9 +82,9 @@ export class AdminService {
         commissionRate: userData.commissionRate,
         fixedMonthlyCost: userData.fixedMonthlyCost,
         isActive: userData.isActive ?? true,
-        createdBy: adminId, // ✅ Trackear admin que creó el usuario
+        createdBy: adminId,
         paypalPayoutEmail: userData.paypalPayoutEmail?.trim() || null,
-      },
+      } as any,
       select: {
         id: true,
         username: true,
@@ -97,7 +97,7 @@ export class AdminService {
         createdAt: true,
         onboardingStep: true,
         paypalPayoutEmail: true,
-      } as any
+      } as any,
     });
 
     // ✅ Crear configuración de workflow por defecto para el nuevo usuario
@@ -321,7 +321,7 @@ export class AdminService {
             commissions: true
           }
         }
-      },
+      } as any,
       orderBy: {
         createdAt: 'desc'
       }

@@ -437,7 +437,7 @@ router.post('/test-purchase-retry', validateInternalSecret, async (req: Request,
       [],
       testOrderId
     );
-    const logs = await prisma.purchaseAttemptLog.findMany({
+    const logs = await (prisma as any).purchaseAttemptLog.findMany({
       where: { orderId: testOrderId },
     });
     const success = !!purchaseRetryService && Array.isArray(result.attempts) && logs.length > 0;
@@ -518,10 +518,10 @@ router.post('/test-platform-commission', validateInternalSecret, async (req: Req
     const adminPaypalEmail = await platformConfigService.getAdminPaypalEmail();
     const firstUser = await prisma.user.findFirst({
       where: { role: 'USER', isActive: true },
-      select: { id: true, paypalPayoutEmail: true },
+      select: { id: true, paypalPayoutEmail: true } as any,
     });
     const uid = firstUser?.id ?? 1;
-    const userPaypal = firstUser?.paypalPayoutEmail?.trim() || process.env.TEST_PAYPAL_PAYOUT_EMAIL || null;
+    const userPaypal = (firstUser as any)?.paypalPayoutEmail?.trim() || process.env.TEST_PAYPAL_PAYOUT_EMAIL || null;
 
     let product = await prisma.product.findFirst({
       where: { userId: uid, status: { in: ['APPROVED', 'PUBLISHED'] }, isPublished: true },
@@ -651,7 +651,7 @@ router.post('/test-evolution-cycle', validateInternalSecret, async (req: Request
       [],
       testOrderId
     );
-    const retryLogs = await prisma.purchaseAttemptLog.findMany({
+    const retryLogs = await (prisma as any).purchaseAttemptLog.findMany({
       where: { orderId: testOrderId },
     });
     const retrySystem = Array.isArray(retryResult.attempts) && retryLogs.length > 0;

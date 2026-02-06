@@ -141,7 +141,7 @@ export class SaleService {
       throw new AppError('Usuario no encontrado', 404);
     }
 
-    const adminId = user.createdBy || null;
+    const adminId: number | null = user && typeof (user as any).createdBy === 'number' ? (user as any).createdBy : null;
     const adminCommission = platformCommission; // Platform commission (goes to admin PayPal)
 
     // ✅ Usar transacción para crear venta, comisiones y actualizar balances de forma atómica

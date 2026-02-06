@@ -34,7 +34,7 @@ export class OnboardingService {
         ebayConnected: true,
         amazonConnected: true,
         mercadolibreConnected: true,
-      },
+      } as any,
     });
     if (!user) {
       return {
@@ -49,21 +49,22 @@ export class OnboardingService {
         canFinish: false,
       };
     }
+    const u = user as any;
     const atLeastOneMarketplace =
-      user.ebayConnected || user.amazonConnected || user.mercadolibreConnected;
+      u.ebayConnected || u.amazonConnected || u.mercadolibreConnected;
     const canFinish =
-      !!user.paypalPayoutEmail?.trim() &&
+      !!u.paypalPayoutEmail?.trim() &&
       atLeastOneMarketplace &&
-      !user.onboardingCompleted;
+      !u.onboardingCompleted;
 
     return {
-      onboardingStep: user.onboardingStep,
-      onboardingCompleted: user.onboardingCompleted,
-      paypalPayoutEmail: user.paypalPayoutEmail,
+      onboardingStep: u.onboardingStep ?? 0,
+      onboardingCompleted: u.onboardingCompleted ?? false,
+      paypalPayoutEmail: u.paypalPayoutEmail ?? null,
       marketplacesConnected: {
-        ebayConnected: user.ebayConnected,
-        amazonConnected: user.amazonConnected,
-        mercadolibreConnected: user.mercadolibreConnected,
+        ebayConnected: u.ebayConnected ?? false,
+        amazonConnected: u.amazonConnected ?? false,
+        mercadolibreConnected: u.mercadolibreConnected ?? false,
       },
       canFinish,
     };
@@ -76,7 +77,7 @@ export class OnboardingService {
       data: {
         paypalPayoutEmail: trimmed || null,
         onboardingStep: Math.max(1, 2),
-      },
+      } as any,
     });
     logger.info('[ONBOARDING] PayPal email set', { userId });
   }
@@ -105,7 +106,7 @@ export class OnboardingService {
   async completeStep(userId: number, step: number): Promise<void> {
     await prisma.user.update({
       where: { id: userId },
-      data: { onboardingStep: Math.max(step, 0) },
+      data: { onboardingStep: Math.max(step, 0) } as any,
     });
   }
 
@@ -128,7 +129,7 @@ export class OnboardingService {
     }
     await prisma.user.update({
       where: { id: userId },
-      data: { onboardingCompleted: true, onboardingStep: 4 },
+      data: { onboardingCompleted: true, onboardingStep: 4 } as any,
     });
     logger.info('[ONBOARDING] Finished', { userId });
   }

@@ -28,7 +28,13 @@ model User {
   lastLoginAt      DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
-  createdBy        Int? // ID del admin que creó este usuario (null si es admin o auto-creado)
+  createdBy            Int?     // ID del admin que creó este usuario (null si es admin o auto-creado)
+  paypalPayoutEmail    String?  // Email PayPal para recibir ganancias (payouts)
+  onboardingStep      Int      @default(0)
+  onboardingCompleted Boolean  @default(false)
+  ebayConnected       Boolean  @default(false)
+  amazonConnected     Boolean  @default(false)
+  mercadolibreConnected Boolean @default(false)
 
   // Relations
   products                Product[]
@@ -66,6 +72,16 @@ model User {
   @@index([role, isActive])
   @@index([createdAt])
   @@map("users")
+}
+
+// Platform-wide commission config (only ADMIN can change)
+model PlatformConfig {
+  id                     Int      @id @default(autoincrement())
+  platformCommissionPct   Decimal  @db.Decimal(5, 2) @default(10.00) // Default 10%
+  adminPaypalEmail        String
+  updatedAt               DateTime @updatedAt
+
+  @@map("platform_config")
 }
 
 model ApiCredential {
@@ -144,14 +160,16 @@ model Sale {
   salePrice        Decimal   @db.Decimal(18, 2) // Precio de venta en moneda de venta
   aliexpressCost   Decimal   @db.Decimal(18, 2) // Costo en AliExpress en moneda base
   marketplaceFee   Decimal   @db.Decimal(18, 2) // Fee del marketplace en moneda de venta
-  grossProfit      Decimal   @db.Decimal(18, 2) // Ganancia bruta en moneda de venta
-  commissionAmount Decimal   @db.Decimal(18, 2) // Comisión del admin en moneda de venta
-  netProfit        Decimal   @db.Decimal(18, 2) // Ganancia neta del usuario en moneda de venta
-  currency         String    @default("USD") // Moneda de la venta (CLP, USD, EUR, etc.)
-  status           String    @default("PENDING") // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED, RETURNED
-  trackingNumber   String?
-  isCompleteCycle  Boolean   @default(false) // Si completó ciclo completo sin devoluciones
-  completedAt      DateTime? // Fecha de completado del ciclo
+  grossProfit        Decimal   @db.Decimal(18, 2) // Ganancia bruta en moneda de venta
+  commissionAmount   Decimal   @db.Decimal(18, 2) // Comisión plataforma (admin) en moneda de venta
+  netProfit          Decimal   @db.Decimal(18, 2) // Ganancia neta del usuario (grossProfit - commission) en moneda de venta
+  currency           String    @default("USD") // Moneda de la venta (CLP, USD, EUR, etc.)
+  status             String    @default("PENDING") // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED, RETURNED, PAYOUT_FAILED
+  trackingNumber     String?
+  isCompleteCycle    Boolean   @default(false) // Si completó ciclo completo sin devoluciones
+  completedAt        DateTime? // Fecha de completado del ciclo
+  adminPayoutId      String? // PayPal batch/item ID del payout al admin
+  userPayoutId       String? // PayPal batch/item ID del payout al usuario
 
   // ✅ MEJORADO: Información del comprador
   buyerEmail      String? // Email del comprador (si está disponible)
@@ -237,6 +255,8 @@ model UserWorkflowConfig {
   autoPublishThreshold Float? // Confianza mínima para auto-publicar
   maxAutoInvestment    Decimal? @db.Decimal(18, 2) // Inversión máxima para auto-operaciones en moneda base
   workingCapital       Decimal  @default(500) @db.Decimal(18, 2) // Capital de trabajo disponible en PayPal (USD)
+  minProfitUsd         Float? // Mínimo beneficio USD para publicar (override global)
+  minRoiPct            Float? // Mínimo ROI % para publicar (override global)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -687,6 +707,30 @@ model AutopilotWorkflow {
   @@map("autopilot_workflows")
 }
 
+// ✅ LOGS DE CICLOS AUTOPILOT - Persist every cycle execution, decision, failure
+model AutopilotCycleLog {
+  id                    Int       @id @default(autoincrement())
+  userId                Int
+  cycleId               String    // Unique ID for this cycle run
+  stage                 String    // trends, opportunity, pricing, publish, fulfillment
+  success               Boolean   @default(false)
+  message               String?
+  opportunitiesFound    Int       @default(0)
+  opportunitiesProcessed Int      @default(0)
+  productsPublished     Int       @default(0)
+  productsApproved      Int       @default(0)
+  capitalUsed           Decimal   @default(0) @db.Decimal(18, 2)
+  errors                Json?     // Array of error strings
+  metadata              Json?     // Extra context
+  durationMs            Int?
+  createdAt             DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([cycleId])
+  @@index([stage])
+  @@map("autopilot_cycle_logs")
+}
+
 // ✅ SALA DE REUNIONES (Meeting Room)
 model MeetingRoom {
   id        Int       @id @default(autoincrement())
@@ -782,6 +826,155 @@ model Order {
   @@index([paypalOrderId])
   @@index([createdAt])
   @@map("orders")
+}
+
+// Dynamic pricing history
+model DynamicPriceLog {
+  id               Int      @id @default(autoincrement())
+  productId        Int?
+  orderId          String?
+  previousPriceUsd Decimal  @db.Decimal(18, 2)
+  newPriceUsd      Decimal  @db.Decimal(18, 2)
+  costUsd          Decimal  @db.Decimal(18, 2)
+  competitorMinUsd Decimal? @db.Decimal(18, 2)
+  competitorAvgUsd Decimal? @db.Decimal(18, 2)
+  reason           String?
+  createdAt        DateTime @default(now())
+
+  @@index([productId])
+  @@index([createdAt])
+  @@map("dynamic_price_logs")
+}
+
+// Dynamic pricing history (spec: productId, oldPrice, newPrice, reason, createdAt)
+model DynamicPriceHistory {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  oldPrice  Decimal  @db.Decimal(18, 2)
+  newPrice  Decimal  @db.Decimal(18, 2)
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@index([createdAt])
+  @@map("dynamic_price_history")
+}
+
+// Purchase attempt log (orderId, provider, success, error, createdAt)
+model PurchaseAttemptLog {
+  id        Int      @id @default(autoincrement())
+  orderId   String
+  provider  String
+  success   Boolean
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@map("purchase_attempt_logs")
+}
+
+// Product performance (views, clicks, conversions, revenue)
+model ProductPerformance {
+  id          Int     @id @default(autoincrement())
+  productId   Int     @unique
+  category    String
+  views       Int     @default(0)
+  clicks      Int     @default(0)
+  conversions Int     @default(0)
+  revenue     Decimal @db.Decimal(18, 2) @default(0)
+
+  @@index([category])
+  @@map("product_performance")
+}
+
+// Account clustering (additive - existing ApiCredential unchanged)
+model MarketplaceAccount {
+  id            Int      @id @default(autoincrement())
+  clusterId     Int
+  userId        Int
+  apiName       String
+  credentialId  Int?
+  isActive      Boolean  @default(true)
+  isBlocked     Boolean  @default(false)
+  lastHealthAt  DateTime?
+  dailyUsage    Int      @default(0)
+  maxDailyUsage Int      @default(100)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  cluster AccountCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@index([clusterId])
+  @@map("marketplace_accounts")
+}
+
+model PayPalAccount {
+  id            Int      @id @default(autoincrement())
+  clusterId     Int
+  identifier    String
+  isActive      Boolean  @default(true)
+  isBlocked     Boolean  @default(false)
+  lastHealthAt  DateTime?
+  dailyUsage    Int      @default(0)
+  maxDailyUsage Int      @default(100)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  cluster AccountCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@index([clusterId])
+  @@map("paypal_accounts")
+}
+
+model AliExpressAccount {
+  id            Int      @id @default(autoincrement())
+  clusterId     Int
+  identifier    String
+  isActive      Boolean  @default(true)
+  isBlocked     Boolean  @default(false)
+  lastHealthAt  DateTime?
+  dailyUsage    Int      @default(0)
+  maxDailyUsage Int      @default(100)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  cluster AccountCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@index([clusterId])
+  @@map("aliexpress_accounts")
+}
+
+model AccountCluster {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  name      String   @default("default")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  marketplaceAccounts MarketplaceAccount[]
+  paypalAccounts      PayPalAccount[]
+  aliexpressAccounts  AliExpressAccount[]
+
+  @@index([userId])
+  @@map("account_clusters")
+}
+
+// Learning engine scores
+model LearningScore {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  category       String
+  priceRangeMin  Decimal  @db.Decimal(18, 2)
+  priceRangeMax  Decimal  @db.Decimal(18, 2)
+  conversionRate Decimal  @db.Decimal(8, 4)
+  avgProfit      Decimal  @db.Decimal(18, 2)
+  sampleCount    Int      @default(0)
+  learningScore  Decimal  @db.Decimal(8, 4)
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, category])
+  @@index([userId])
+  @@map("learning_scores")
 }
 
 // Modelo para almacenar tokens OAuth de AliExpress Affiliate API
