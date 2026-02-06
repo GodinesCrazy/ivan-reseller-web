@@ -101,9 +101,10 @@ export class AdminService {
     });
 
     // ✅ Crear configuración de workflow por defecto para el nuevo usuario
+    const newUserId = Number((newUser as any).id);
     await prisma.userWorkflowConfig.create({
       data: {
-        userId: newUser.id,
+        userId: newUserId,
         environment: 'sandbox',
         workflowMode: 'manual',
         stageScrape: 'automatic',
@@ -122,7 +123,7 @@ export class AdminService {
         action: 'user_created',
         description: `Admin creó usuario: ${userData.username}`,
         metadata: JSON.stringify({
-          newUserId: newUser.id,
+          newUserId: newUserId,
           commissionRate: userData.commissionRate,
           fixedMonthlyCost: userData.fixedMonthlyCost
         })
@@ -329,11 +330,11 @@ export class AdminService {
 
     // Calcular estadísticas
     const totalUsers = users.length;
-    const activeUsers = users.filter(user => user.isActive).length;
-    const totalRevenue = users.reduce((sum, user) => sum + toNumber(user.totalEarnings), 0);
+    const activeUsers = users.filter((user: any) => user.isActive).length;
+    const totalRevenue = users.reduce((sum: number, user: any) => sum + toNumber(user.totalEarnings), 0);
     
     // Calcular comisiones mensuales pendientes
-    const monthlyCommissions = users.reduce((sum, user) => {
+    const monthlyCommissions = users.reduce((sum: number, user: any) => {
       return sum + toNumber(user.fixedMonthlyCost) + (toNumber(user.totalEarnings) * toNumber(user.commissionRate));
     }, 0);
 

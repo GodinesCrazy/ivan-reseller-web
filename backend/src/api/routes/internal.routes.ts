@@ -520,10 +520,10 @@ router.post('/test-platform-commission', validateInternalSecret, async (req: Req
       where: { role: 'USER', isActive: true },
       select: { id: true, paypalPayoutEmail: true } as any,
     });
-    const uid = firstUser?.id ?? 1;
+    const uid: number = typeof (firstUser as any)?.id === 'number' ? (firstUser as any).id : 1;
     const userPaypal = (firstUser as any)?.paypalPayoutEmail?.trim() || process.env.TEST_PAYPAL_PAYOUT_EMAIL || null;
 
-    let product = await prisma.product.findFirst({
+    let product: { id: number } | null = await prisma.product.findFirst({
       where: { userId: uid, status: { in: ['APPROVED', 'PUBLISHED'] }, isPublished: true },
       select: { id: true },
     });
@@ -548,7 +548,7 @@ router.post('/test-platform-commission', validateInternalSecret, async (req: Req
           isPublished: true,
         },
       });
-      product = { id: created.id };
+      product = { id: Number(created.id) };
     }
 
     const orderId = `test-platform-commission-${Date.now()}`;
@@ -566,7 +566,7 @@ router.post('/test-platform-commission', validateInternalSecret, async (req: Req
     try {
       sale = await saleService.createSale(uid, {
         orderId,
-        productId: product.id,
+        productId: product!.id,
         marketplace: 'ebay',
         salePrice,
         costPrice,
