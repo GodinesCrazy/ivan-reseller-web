@@ -7,9 +7,9 @@ import logger from '../config/logger';
 import fxService from './fx.service';
 import { notificationService } from './notification.service';
 import { UserSettingsService } from './user-settings.service';
+import { platformConfigService } from './platform-config.service';
 import { toNumber } from '../utils/decimal.utils';
 import type { AutomatedOrder } from './automation.service';
-// ✅ FIX: Eliminar import duplicado (type import ya incluye el tipo)
 
 const prisma = new PrismaClient();
 
@@ -117,33 +117,32 @@ export class SaleService {
     // ✅ Calcular ganancias y comisiones (ambos en saleCurrency)
     const grossProfit = data.salePrice - costPriceInSaleCurrency;
     const platformFees = data.platformFees || 0;
-    
-    // ✅ Obtener usuario con información de creador para calcular comisión admin
+
+    // ✅ Platform commission from config (default 10% of gross profit)
+    const commissionPct = await platformConfigService.getCommissionPct();
+    const { roundMoney } = require('../utils/money.utils');
+    const grossProfitNum = toNumber(grossProfit);
+    const platformCommission = roundMoney((grossProfitNum * commissionPct) / 100, saleCurrency);
+    const userProfit = roundMoney(grossProfitNum - platformCommission, saleCurrency);
+    const netProfit = roundMoney(userProfit - platformFees, saleCurrency);
+
+    // ✅ User and creator admin for legacy AdminCommission (if user was created by admin)
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
         commissionRate: true,
-        createdBy: true
-      }
+        createdBy: true,
+        paypalPayoutEmail: true,
+      },
     });
 
     if (!user) {
       throw new AppError('Usuario no encontrado', 404);
     }
 
-    // ✅ COMISIÓN DEL ADMIN: 20% de la utilidad bruta (gross profit)
-    // El commissionRate del usuario ES la comisión que el admin cobra
-    const { roundMoney } = require('../utils/money.utils');
-    const { toNumber } = require('../utils/decimal.utils');
-    const grossProfitNum = toNumber(grossProfit);
-    const commissionRateNum = toNumber(user.commissionRate);
-    const adminCommission = roundMoney(grossProfitNum * commissionRateNum, saleCurrency); // Ej: 0.20 = 20%
-    const adminId = user.createdBy || null; // Admin que creó el usuario (si aplica)
-    
-    // Ganancia neta del USUARIO después de comisiones y fees
-    // El usuario se queda con: grossProfit - adminCommission - platformFees
-    const netProfit = roundMoney(grossProfit - adminCommission - platformFees, saleCurrency);
+    const adminId = user.createdBy || null;
+    const adminCommission = platformCommission; // Platform commission (goes to admin PayPal)
 
     // ✅ Usar transacción para crear venta, comisiones y actualizar balances de forma atómica
     const sale = await prisma.$transaction(async (tx) => {
@@ -287,35 +286,10 @@ export class SaleService {
           }
         }
 
-        // Actualizar balance del admin
-        await tx.user.update({
-          where: { id: adminId },
-          data: {
-            balance: {
-              increment: adminCommission
-            },
-            totalEarnings: {
-              increment: adminCommission
-            }
-          }
-        });
+        // Admin balance updated after successful PayPal payout (see below)
       }
 
-      // Actualizar balance del USUARIO con su ganancia neta
-      await tx.user.update({
-        where: { id: userId },
-        data: {
-          balance: {
-            increment: netProfit, // Usuario recibe su ganancia neta (después de comisiones)
-          },
-          totalEarnings: {
-            increment: netProfit,
-          },
-          totalSales: {
-            increment: 1,
-          },
-        },
-      });
+      // User balance/totals updated after successful PayPal payouts (see below)
 
       // Registrar actividad dentro de la transacción
       await tx.activity.create({
@@ -329,6 +303,113 @@ export class SaleService {
 
       return newSale;
     });
+
+    // ✅ Dual PayPal payout: admin (commission) then user (userProfit). Both must succeed.
+    const payoutService = (await import('./paypal-payout.service')).PayPalPayoutService.fromEnv();
+    const adminPaypalEmail = await platformConfigService.getAdminPaypalEmail();
+    const userPaypalEmail = user.paypalPayoutEmail?.trim() || null;
+
+    // ✅ Phase F: When AUTOPILOT_MODE=production, skipping payouts is forbidden
+    const autopilotMode = (process.env.AUTOPILOT_MODE || 'sandbox') as 'production' | 'sandbox';
+    if (!payoutService || !userPaypalEmail || !adminPaypalEmail) {
+      if (autopilotMode === 'production') {
+        logger.error('[SALE] AUTOPILOT_MODE=production: cannot skip payouts - missing config', {
+          saleId: sale.id,
+          hasPayoutService: !!payoutService,
+          hasUserPaypal: !!userPaypalEmail,
+          hasAdminPaypal: !!adminPaypalEmail,
+        });
+        await prisma.sale.update({
+          where: { id: sale.id },
+          data: { status: 'PAYOUT_FAILED' },
+        });
+        throw new AppError(
+          'AUTOPILOT_MODE=production: PayPal config required. Set PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, adminPaypalEmail in PlatformConfig, and user paypalPayoutEmail.',
+          502
+        );
+      }
+      await prisma.sale.update({
+        where: { id: sale.id },
+        data: { status: 'PAYOUT_FAILED' },
+      });
+      logger.warn('[SALE] Payout skipped: missing PayPal config or user paypalPayoutEmail', {
+        saleId: sale.id,
+        hasPayoutService: !!payoutService,
+        hasUserPaypal: !!userPaypalEmail,
+        hasAdminPaypal: !!adminPaypalEmail,
+      });
+      return sale;
+    }
+
+    const commissionAmountNum = toNumber(sale.commissionAmount);
+    const netProfitNum = toNumber(sale.netProfit);
+    if (commissionAmountNum <= 0 && netProfitNum <= 0) {
+      return sale;
+    }
+
+    let adminPayoutId: string | null = null;
+    let userPayoutId: string | null = null;
+
+    if (commissionAmountNum > 0) {
+      const adminRes = await payoutService.sendPayout({
+        recipientEmail: adminPaypalEmail,
+        amount: commissionAmountNum,
+        currency: sale.currency,
+        note: `Platform commission - Sale ${sale.orderId}`,
+        senderItemId: `sale-${sale.id}-admin`,
+      });
+      if (!adminRes.success) {
+        await prisma.sale.update({
+          where: { id: sale.id },
+          data: { status: 'PAYOUT_FAILED' },
+        });
+        logger.error('[SALE] Admin payout failed', { saleId: sale.id, error: adminRes.error });
+        throw new AppError(`Admin payout failed: ${adminRes.error}`, 502);
+      }
+      adminPayoutId = adminRes.batchId || null;
+    }
+
+    if (netProfitNum > 0) {
+      const userRes = await payoutService.sendPayout({
+        recipientEmail: userPaypalEmail,
+        amount: netProfitNum,
+        currency: sale.currency,
+        note: `Your profit - Sale ${sale.orderId}`,
+        senderItemId: `sale-${sale.id}-user`,
+      });
+      if (!userRes.success) {
+        await prisma.sale.update({
+          where: { id: sale.id },
+          data: { status: 'PAYOUT_FAILED', adminPayoutId },
+        });
+        logger.error('[SALE] User payout failed', { saleId: sale.id, error: userRes.error });
+        throw new AppError(`User payout failed: ${userRes.error}`, 502);
+      }
+      userPayoutId = userRes.batchId || null;
+    }
+
+    await prisma.sale.update({
+      where: { id: sale.id },
+      data: { adminPayoutId, userPayoutId },
+    });
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        balance: { increment: netProfitNum },
+        totalEarnings: { increment: netProfitNum },
+        totalSales: { increment: 1 },
+      },
+    });
+    if (adminId && commissionAmountNum > 0) {
+      await prisma.user.update({
+        where: { id: adminId },
+        data: {
+          balance: { increment: commissionAmountNum },
+          totalEarnings: { increment: commissionAmountNum },
+        },
+      });
+    }
 
     // ✅ NOTIFICAR AL USUARIO DE LA VENTA
     try {
@@ -764,6 +845,12 @@ export class SaleService {
       totalCommissions,
     ] = await queryWithTimeout(queriesPromise, 20000);
 
+    const netProfitAgg = await prisma.sale.aggregate({
+      where: { ...where, status: { not: 'PAYOUT_FAILED' } },
+      _sum: { netProfit: true },
+    });
+    const totalProfit = netProfitAgg._sum.netProfit ?? 0;
+
     return {
       totalSales,
       pendingSales,
@@ -771,6 +858,48 @@ export class SaleService {
       cancelledSales,
       totalRevenue: totalRevenue._sum.salePrice || 0,
       totalCommissions: totalCommissions._sum.commissionAmount || 0,
+      totalProfit: typeof totalProfit === 'object' ? Number((totalProfit as any) ?? 0) : Number(totalProfit),
+      platformCommissionPaid: totalCommissions._sum.commissionAmount || 0,
+    };
+  }
+
+  /**
+   * Admin: total platform revenue (commissions collected) and per-user revenue table.
+   */
+  async getPlatformRevenueStats() {
+    const [totalCommission, perUser] = await Promise.all([
+      prisma.sale.aggregate({
+        where: { status: { not: 'PAYOUT_FAILED' } },
+        _sum: { commissionAmount: true },
+        _count: { id: true },
+      }),
+      prisma.sale.groupBy({
+        by: ['userId'],
+        where: { status: { not: 'PAYOUT_FAILED' } },
+        _sum: { commissionAmount: true, netProfit: true, grossProfit: true },
+        _count: { id: true },
+      }),
+    ]);
+    const users = await prisma.user.findMany({
+      where: { id: { in: perUser.map((p) => p.userId) } },
+      select: { id: true, username: true, email: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    const perUserTable = perUser.map((p) => ({
+      userId: p.userId,
+      username: userMap.get(p.userId)?.username ?? '',
+      email: userMap.get(p.userId)?.email ?? '',
+      salesCount: p._count.id,
+      grossProfit: Number(p._sum.grossProfit ?? 0),
+      platformCommission: Number(p._sum.commissionAmount ?? 0),
+      userProfit: Number(p._sum.netProfit ?? 0),
+    }));
+
+    return {
+      totalPlatformRevenue: Number(totalCommission._sum.commissionAmount ?? 0),
+      totalCommissionsCollected: Number(totalCommission._sum.commissionAmount ?? 0),
+      salesCount: totalCommission._count.id,
+      perUser: perUserTable,
     };
   }
 }

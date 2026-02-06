@@ -17,6 +17,7 @@ import productRoutes from './api/routes/products.routes';
 import saleRoutes from './api/routes/sales.routes';
 import commissionRoutes from './api/routes/commissions.routes';
 import dashboardRoutes from './api/routes/dashboard.routes';
+import onboardingRoutes from './api/routes/onboarding.routes';
 import adminRoutes from './api/routes/admin.routes';
 
 // Additional routes
@@ -79,9 +80,10 @@ import { timeoutMiddleware } from './middleware/timeout.middleware';
 const app: Application = express();
 app.set('trust proxy', 1);
 
-// Health first (before any other middleware) for Railway
+// Phase 5: Health first (before any other middleware) for Railway
+// /health: 200 if Express running - NOT dependent on DB or Redis
 app.get('/health', (_req: Request, res: Response) => {
-  res.status(200).json({ status: 'ok' });
+  res.status(200).json({ status: 'ok', express: true });
 });
 
 // ✅ PRODUCTION FIX DEFINITIVO: Deshabilitar ETag para /api/* para evitar 304 sin CORS
@@ -106,26 +108,41 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     return next();
   }
   
-  // Handle /ready endpoint
+  // Handle /ready endpoint - Phase 5: 200 only if DB connected, 503 otherwise
   if (req.path === '/ready') {
     const start = Date.now();
     const correlationId = (req as any).correlationId || `ready-${Date.now()}`;
-    console.log(`[READY] ${req.method} ${req.path} from ${req.ip || req.socket.remoteAddress || 'unknown'} correlationId=${correlationId}`);
+    const isDbReady = (global as any).__isDatabaseReady === true;
     try {
       const mem = process.memoryUsage();
       const safeBoot = env.SAFE_BOOT || false;
-      const port = Number(process.env.PORT || env.PORT || 3000);
+      const port = Number(process.env.PORT || env.PORT || 4000);
       const responseTime = Date.now() - start;
       
-      // ✅ P0: /ready is always ready if server is listening (SAFE_BOOT or not)
-      const isReady = true; // Server is listening, so it's ready
-      
       res.setHeader('X-Response-Time', `${responseTime}ms`);
-      res.setHeader('X-Health', 'ok');
       res.setHeader('X-Correlation-Id', correlationId);
+      if (!isDbReady) {
+        res.setHeader('X-Health', 'degraded');
+        res.status(503).json({
+          ok: false,
+          ready: false,
+          db: false,
+          safeBoot,
+          timestamp: new Date().toISOString(),
+          pid: process.pid,
+          uptime: process.uptime(),
+          port,
+          correlationId,
+          service: 'ivan-reseller-backend',
+          memory: { used: Math.round(mem.heapUsed / 1024 / 1024), total: Math.round(mem.heapTotal / 1024 / 1024), unit: 'MB' },
+        });
+        return;
+      }
+      res.setHeader('X-Health', 'ok');
       res.status(200).json({
         ok: true,
-        ready: isReady,
+        ready: true,
+        db: true,
         safeBoot,
         timestamp: new Date().toISOString(),
         pid: process.pid,
@@ -146,14 +163,15 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       return;
     } catch {
       const safeBoot = env.SAFE_BOOT || false;
-      const port = Number(process.env.PORT || env.PORT || 3000);
+      const port = Number(process.env.PORT || env.PORT || 4000);
       
       res.setHeader('X-Response-Time', `${Date.now() - start}ms`);
-      res.setHeader('X-Health', 'ok');
+      res.setHeader('X-Health', 'degraded');
       res.setHeader('X-Correlation-Id', correlationId);
-      res.status(200).json({
-        ok: true,
-        ready: true,
+      res.status(503).json({
+        ok: false,
+        ready: false,
+        db: false,
         safeBoot,
         timestamp: new Date().toISOString(),
         pid: process.pid,
@@ -1048,6 +1066,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/sales', saleRoutes);
 app.use('/api/commissions', commissionRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/onboarding', onboardingRoutes);
 
 // Additional API routes
 app.use('/api/opportunities', opportunitiesRoutes);

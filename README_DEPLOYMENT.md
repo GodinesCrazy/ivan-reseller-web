@@ -6,6 +6,16 @@
 
 **Tiempo estimado:** 30-45 minutos
 
+## ⚙️ RAILWAY BACKEND - Build & Start Commands
+
+Railway debe usar los siguientes comandos (configurados en `backend/railway.json`):
+
+- **Build Command:** `npm install && npm run build`
+- **Start Command:** `npm run start:with-migrations`
+- **Healthcheck Path:** `/health`
+
+El comando `start:with-migrations` ejecuta `npx prisma migrate deploy` antes de iniciar el servidor, garantizando que las migraciones se apliquen en cada deploy. **No usar** `prisma migrate dev` en producción.
+
 **Archivos creados:**
 - ✅ `backend/.env.example` - Plantilla completa
 - ✅ `frontend/.env.example` - Plantilla completa

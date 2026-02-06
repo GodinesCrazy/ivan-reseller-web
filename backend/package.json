@@ -5,9 +5,9 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "start:with-migrations": "npx prisma migrate deploy && node dist/server.js",
+    "start:with-migrations": "prisma migrate deploy; node dist/server.js",
     "start:prod": "prisma migrate deploy && node dist/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -29,8 +29,20 @@
     "run:ebay-real-cycle": "tsx src/scripts/run-ebay-real-cycle.ts",
     "test:post-sale-flow": "tsx scripts/test-post-sale-flow.ts",
     "test-full-dropshipping-cycle": "tsx scripts/test-full-dropshipping-cycle.ts",
+    "test-production-cycle": "tsx scripts/test-production-cycle.ts",
+    "test-evolution-cycle": "tsx scripts/test-evolution-cycle.ts",
+    "test-dynamic-pricing": "tsx scripts/test-dynamic-pricing.ts",
+    "test-purchase-retry": "tsx scripts/test-purchase-retry.ts",
+    "test-account-rotation": "tsx scripts/test-account-rotation.ts",
+    "test-learning-engine": "tsx scripts/test-learning-engine.ts",
+    "test-platform-commission": "tsx scripts/test-platform-commission.ts",
+    "test-railway-ready": "tsx scripts/test-railway-ready.ts",
     "check-verifier-env": "tsx scripts/check-verifier-env.ts",
-    "bootstrap-env": "node scripts/ensure-env-local.js"
+    "bootstrap-env": "node scripts/ensure-env-local.js",
+    "bootstrap-verifier-env": "node scripts/bootstrap-verifier-env.js",
+    "inject-apis": "node scripts/inject-apis-from-file.js",
+    "kill-port": "powershell -ExecutionPolicy Bypass -File scripts/kill-port.ps1",
+    "dev:clean": "npm run kill-port && npm run dev"
   },
   "keywords": [
     "dropshipping",

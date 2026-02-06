@@ -21,6 +21,7 @@ const createUserSchema = z.object({
   commissionRate: z.number().min(0).max(1).optional(),
   fixedMonthlyCost: z.number().min(0).optional(),
   isActive: z.boolean().optional().default(true),
+  paypalPayoutEmail: z.string().email().optional().nullable(),
 });
 
 /**
@@ -99,7 +100,8 @@ router.post('/users', authenticate, authorize('ADMIN'), async (req, res, next) =
       role: (validatedData.role || 'USER') as 'ADMIN' | 'USER',
       commissionRate: validatedData.commissionRate ?? 0.20, // 20% por defecto
       fixedMonthlyCost: validatedData.fixedMonthlyCost ?? 0.0, // $0 USD por defecto
-      isActive: validatedData.isActive !== undefined ? validatedData.isActive : true
+      isActive: validatedData.isActive !== undefined ? validatedData.isActive : true,
+      paypalPayoutEmail: validatedData.paypalPayoutEmail?.trim() || null,
     };
 
     const result = await adminService.createUser(adminId, normalizedData);
@@ -342,6 +344,53 @@ router.post('/users/:userId/resend-credentials', authenticate, authorize('ADMIN'
       success: true,
       message: 'Credenciales reenviadas exitosamente'
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Platform config (commission %, admin PayPal) - ADMIN only
+ */
+router.get('/platform-config', authenticate, authorize('ADMIN'), async (req, res, next) => {
+  try {
+    const { platformConfigService } = await import('../../services/platform-config.service');
+    const commissionPct = await platformConfigService.getCommissionPct();
+    const adminPaypalEmail = await platformConfigService.getAdminPaypalEmail();
+    res.json({ success: true, platformCommissionPct: commissionPct, adminPaypalEmail });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/platform-config', authenticate, authorize('ADMIN'), async (req, res, next) => {
+  try {
+    const { platformConfigService } = await import('../../services/platform-config.service');
+    const body = req.body || {};
+    if (body.platformCommissionPct != null) {
+      const pct = Number(body.platformCommissionPct);
+      if (pct < 0 || pct > 100) return res.status(400).json({ success: false, error: 'platformCommissionPct must be 0-100' });
+    }
+    await platformConfigService.update({
+      platformCommissionPct: body.platformCommissionPct != null ? Number(body.platformCommissionPct) : undefined,
+      adminPaypalEmail: typeof body.adminPaypalEmail === 'string' ? body.adminPaypalEmail : undefined,
+    });
+    const commissionPct = await platformConfigService.getCommissionPct();
+    const adminPaypalEmail = await platformConfigService.getAdminPaypalEmail();
+    res.json({ success: true, platformCommissionPct: commissionPct, adminPaypalEmail });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Platform revenue stats (total commissions, per-user) - ADMIN only
+ */
+router.get('/platform-revenue', authenticate, authorize('ADMIN'), async (req, res, next) => {
+  try {
+    const { saleService } = await import('../../services/sale.service');
+    const stats = await saleService.getPlatformRevenueStats();
+    res.json({ success: true, ...stats });
   } catch (error) {
     next(error);
   }

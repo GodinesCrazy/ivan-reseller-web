@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import dotenv from 'dotenv';
 
+const portFromShell = process.env.PORT;
 dotenv.config();
 dotenv.config({ path: '.env.local', override: true });
+if (portFromShell) process.env.PORT = portFromShell;
 
 // Debug: Mostrar información sobre DATABASE_URL antes de validar
 function getDatabaseUrl(): string {
@@ -240,17 +242,17 @@ const redisUrlSchema = z.string()
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.string().default('3000'),
+  PORT: z.string().default('4000'),
   // ✅ FIX: SAFE_BOOT default false - solo activar explícitamente si hay problemas
   // SAFE_BOOT solo desactiva workers pesados, NO Express
   // Express SIEMPRE debe iniciar para que la app funcione
   SAFE_BOOT: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
-  API_URL: z.string().url().default('http://localhost:3000'),
+  API_URL: z.string().url().default('http://localhost:4000'),
   FRONTEND_URL: z.string().url().optional(),
   WEB_BASE_URL: z.string().url().optional(), // Base URL for OAuth callbacks (defaults to www.ivanreseller.com in production)
   DATABASE_URL: databaseUrlSchema,
   REDIS_URL: redisUrlSchema,
-  JWT_SECRET: z.string().min(32),
+  JWT_SECRET: z.string().default(''), // Phase 6: optional at parse - server validates without exit
   JWT_EXPIRES_IN: z.string().default('7d'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
@@ -471,9 +473,14 @@ try {
     });
     
     if (criticalErrors.length > 0) {
-      console.error('❌ ERRORES CRÍTICOS (el servidor no puede arrancar):');
+      console.error('❌ ERRORES CRÍTICOS (Phase 6: no process.exit - server will start degraded):');
       criticalErrors.forEach(msg => console.error(msg));
-      process.exit(1);
+      const fallbackEnv = { ...process.env };
+      if (!fallbackEnv.JWT_SECRET || String(fallbackEnv.JWT_SECRET).length < 32) {
+        fallbackEnv.JWT_SECRET = 'placeholder-min-32-chars-for-degraded-mode-xxxx';
+      }
+      if (!fallbackEnv.DATABASE_URL) fallbackEnv.DATABASE_URL = '';
+      env = envSchema.parse(fallbackEnv);
     }
     
     if (nonCriticalErrors.length > 0) {

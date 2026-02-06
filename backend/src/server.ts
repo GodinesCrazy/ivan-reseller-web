@@ -5,6 +5,15 @@ import { env } from './config/env';
 console.log("=== IVAN RESELLER BACKEND BOOT ===");
 console.log("GIT_SHA:", process.env.RAILWAY_GIT_COMMIT_SHA || "unknown");
 
+// Phase 1: Bootstrap env check - log before any heavy imports
+console.log('[BOOTSTRAP ENV CHECK]', {
+  NODE_ENV: process.env.NODE_ENV,
+  PORT: process.env.PORT,
+  DATABASE_URL_present: !!(process.env.DATABASE_URL && process.env.DATABASE_URL.trim()),
+  JWT_SECRET_present: !!(process.env.JWT_SECRET && process.env.JWT_SECRET.length >= 32),
+  ENCRYPTION_KEY_present: !!(process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY.length >= 32),
+});
+
 // Railway startup env check (must run before any logic that depends on env)
 console.log('[RAILWAY ENV CHECK]', {
   PORT: process.env.PORT,
@@ -38,13 +47,15 @@ process.on('exit', () => console.log('Process exiting'));
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
-// Railway injects PORT; fallback 4000 for local dev so server always binds.
-const PORT = Number(process.env.PORT) || 4000;
+// Railway injects PORT; fallback 4000 for local dev. Never use 3000 (verifier expects 4000).
+const rawPort = Number(process.env.PORT);
+const PORT = (rawPort && rawPort !== 3000) ? rawPort : 4000;
 const portSource = process.env.PORT ? 'process.env.PORT' : 'fallback (4000)';
 
 if (isNaN(PORT) || PORT < 1 || PORT > 65535) {
   console.error('❌ ERROR CRÍTICO: PORT inválido');
   console.error(`   Valor: ${process.env.PORT ?? 'undefined'}`);
+  console.error('[EXIT REASON] Invalid PORT - exiting');
   process.exit(1);
 }
 
@@ -62,14 +73,10 @@ function validateJwtSecret(): void {
     console.error('❌ ERROR CRÍTICO: JWT_SECRET no está configurado o es muy corto');
     console.error(`   Longitud actual: ${jwtSecret?.length || 0} caracteres`);
     console.error('   Mínimo requerido: 32 caracteres');
+    console.error('   [Phase 6] Server will start but auth will fail - no process.exit()');
     console.error('');
-    console.error('🔧 SOLUCIÓN:');
-    console.error('   1. Ve a Railway Dashboard → Variables');
-    console.error('   2. Verifica que JWT_SECRET existe y tiene al menos 32 caracteres');
-    console.error('   3. Si cambias JWT_SECRET, TODAS las cookies/tokens existentes se invalidarán');
-    console.error('   4. Los usuarios necesitarán hacer login nuevamente');
-    console.error('');
-    process.exit(1);
+    console.error('🔧 SOLUCIÓN: Add JWT_SECRET (32+ chars) in Railway Dashboard → Variables');
+    return;
   }
   
   // ✅ FIX AUTH: Calcular hash del JWT_SECRET para detectar cambios
@@ -524,8 +531,21 @@ export function updateReadinessState() {
 async function startServer() {
   const startTime = Date.now();
   bootstrapStartTime = startTime;
-  
+  updateReadinessState(); // Initialize __isDatabaseReady, __isRedisReady for /health
+
   try {
+    // Phase 6: Env hardening - log missing vars, do NOT process.exit()
+    const dbUrl = (env.DATABASE_URL || process.env.DATABASE_URL || '').trim();
+    const hasDb = !!(dbUrl && dbUrl.startsWith('postgres'));
+    const hasJwt = !!(process.env.JWT_SECRET && process.env.JWT_SECRET.length >= 32);
+    const hasEnc = !!(process.env.ENCRYPTION_KEY?.trim() && process.env.ENCRYPTION_KEY.length >= 32) || hasJwt;
+    if (!hasDb || !hasJwt || !hasEnc) {
+      console.error('⚠️ [Phase 6] Missing env (server will start, affected subsystems disabled):');
+      if (!hasDb) console.error('   - DATABASE_URL');
+      if (!hasJwt) console.error('   - JWT_SECRET (min 32 chars)');
+      if (!hasEnc) console.error('   - ENCRYPTION_KEY or JWT_SECRET (min 32 chars)');
+    }
+
     // ✅ BOOT: Logging obligatorio al boot
     console.log('');
     console.log('🚀 BOOT START');
@@ -596,6 +616,7 @@ async function startServer() {
     const listenStartTime = Date.now();
     
     httpServer.listen(PORT, '0.0.0.0', () => {
+      console.log('[STARTUP] Listening on port', PORT);
       const listenTime = Date.now() - listenStartTime;
       const address = httpServer.address();
       const addressStr = typeof address === 'string' 

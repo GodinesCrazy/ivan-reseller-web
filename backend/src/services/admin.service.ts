@@ -81,7 +81,8 @@ export class AdminService {
         commissionRate: userData.commissionRate,
         fixedMonthlyCost: userData.fixedMonthlyCost,
         isActive: userData.isActive ?? true,
-        createdBy: adminId // ✅ Trackear admin que creó el usuario
+        createdBy: adminId, // ✅ Trackear admin que creó el usuario
+        paypalPayoutEmail: userData.paypalPayoutEmail?.trim() || null,
       },
       select: {
         id: true,
@@ -304,6 +305,12 @@ export class AdminService {
         isActive: true,
         lastLoginAt: true,
         createdAt: true,
+        onboardingStep: true,
+        onboardingCompleted: true,
+        paypalPayoutEmail: true,
+        ebayConnected: true,
+        amazonConnected: true,
+        mercadolibreConnected: true,
         _count: {
           select: {
             sales: true,
