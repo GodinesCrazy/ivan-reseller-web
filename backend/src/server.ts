@@ -1,16 +1,14 @@
 import 'dotenv/config';
 import fs from 'fs';
-import path from 'path';
 import http from 'http';
 import { env } from './config/env';
 
 console.log("=== IVAN RESELLER BACKEND BOOT ===");
 
-// Phase 9: Verify dist/server.js exists in production (fail fast if build incomplete)
+// Phase 4: dist safety - fail fast if build incomplete
 if (process.env.NODE_ENV === 'production') {
-  const distServerPath = path.join(process.cwd(), 'dist', 'server.js');
-  if (!fs.existsSync(distServerPath)) {
-    console.error('❌ FATAL: dist/server.js not found. Build may have failed. Run: npm run build');
+  if (!fs.existsSync('./dist/server.js')) {
+    console.error('DIST BUILD MISSING');
     process.exit(1);
   }
 }
