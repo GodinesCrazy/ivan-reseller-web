@@ -13,7 +13,7 @@ cmds = [
 ]
 
 [start]
-command = "npm start"
+command = "npm run start:with-migrations"
 
 [healthcheck]
 path = "/health"

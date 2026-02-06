@@ -1,6 +1,8 @@
 {
+  "build": {
+    "buildCommand": "npm install && npm run build"
+  },
   "deploy": {
-    "buildCommand": "npm install && npm run build",
     "startCommand": "npm run start:with-migrations",
     "healthcheckPath": "/health"
   }

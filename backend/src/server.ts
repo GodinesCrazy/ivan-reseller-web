@@ -1,8 +1,19 @@
 import 'dotenv/config';
+import fs from 'fs';
+import path from 'path';
 import http from 'http';
 import { env } from './config/env';
 
 console.log("=== IVAN RESELLER BACKEND BOOT ===");
+
+// Phase 9: Verify dist/server.js exists in production (fail fast if build incomplete)
+if (process.env.NODE_ENV === 'production') {
+  const distServerPath = path.join(process.cwd(), 'dist', 'server.js');
+  if (!fs.existsSync(distServerPath)) {
+    console.error('❌ FATAL: dist/server.js not found. Build may have failed. Run: npm run build');
+    process.exit(1);
+  }
+}
 console.log("GIT_SHA:", process.env.RAILWAY_GIT_COMMIT_SHA || "unknown");
 
 // Phase 1: Bootstrap env check - log before any heavy imports
@@ -47,9 +58,9 @@ process.on('exit', () => console.log('Process exiting'));
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
-// Railway injects PORT; fallback 4000 for local dev. Never use 3000 (verifier expects 4000).
+// Railway injects PORT; fallback 4000 for local dev. Never hardcode 3000.
 const rawPort = Number(process.env.PORT);
-const PORT = (rawPort && rawPort !== 3000) ? rawPort : 4000;
+const PORT = rawPort && rawPort > 0 ? rawPort : 4000;
 const portSource = process.env.PORT ? 'process.env.PORT' : 'fallback (4000)';
 
 if (isNaN(PORT) || PORT < 1 || PORT > 65535) {
@@ -534,12 +545,20 @@ async function startServer() {
   updateReadinessState(); // Initialize __isDatabaseReady, __isRedisReady for /health
 
   try {
-    // Phase 6: Env hardening - log missing vars, do NOT process.exit()
+    // Phase 7: ENV hard fail in production - required vars must exist
     const dbUrl = (env.DATABASE_URL || process.env.DATABASE_URL || '').trim();
     const hasDb = !!(dbUrl && dbUrl.startsWith('postgres'));
     const hasJwt = !!(process.env.JWT_SECRET && process.env.JWT_SECRET.length >= 32);
     const hasEnc = !!(process.env.ENCRYPTION_KEY?.trim() && process.env.ENCRYPTION_KEY.length >= 32) || hasJwt;
-    if (!hasDb || !hasJwt || !hasEnc) {
+    if (env.NODE_ENV === 'production') {
+      if (!hasDb || !hasJwt || !hasEnc) {
+        console.error('❌ FATAL: Missing required env in production');
+        if (!hasDb) console.error('   - DATABASE_URL');
+        if (!hasJwt) console.error('   - JWT_SECRET (min 32 chars)');
+        if (!hasEnc) console.error('   - ENCRYPTION_KEY or JWT_SECRET (min 32 chars)');
+        process.exit(1);
+      }
+    } else if (!hasDb || !hasJwt || !hasEnc) {
       console.error('⚠️ [Phase 6] Missing env (server will start, affected subsystems disabled):');
       if (!hasDb) console.error('   - DATABASE_URL');
       if (!hasJwt) console.error('   - JWT_SECRET (min 32 chars)');
@@ -625,6 +644,7 @@ async function startServer() {
       
       console.log('');
       console.log('');
+      console.log('SERVER_BOOT_OK');
       console.log('✅ LISTENING OK');
       console.log('================================');
       console.log(`   LISTENING host=0.0.0.0 port=${PORT}`);

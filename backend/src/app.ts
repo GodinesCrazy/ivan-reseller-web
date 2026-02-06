@@ -81,9 +81,15 @@ const app: Application = express();
 app.set('trust proxy', 1);
 
 // Phase 5: Health first (before any other middleware) for Railway
-// /health: 200 if Express running - NOT dependent on DB or Redis
-app.get('/health', (_req: Request, res: Response) => {
-  res.status(200).json({ status: 'ok', express: true });
+// /health: 200 if DB reachable, 503 if booting - NEVER depends on Redis or background workers
+app.get('/health', async (_req: Request, res: Response) => {
+  try {
+    const { prisma } = await import('./config/database');
+    await prisma.$queryRaw`SELECT 1`;
+    return res.status(200).json({ status: 'ok' });
+  } catch {
+    return res.status(503).json({ status: 'booting' });
+  }
 });
 
 // ✅ PRODUCTION FIX DEFINITIVO: Deshabilitar ETag para /api/* para evitar 304 sin CORS

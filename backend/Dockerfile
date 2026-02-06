@@ -37,12 +37,11 @@ COPY src ./src
 # Generate Prisma Client (no DB connection needed for generation)
 RUN npx prisma generate
 
-# Build TypeScript to JavaScript (ignora errores de tipo)
-# Intentar compilar, si falla usar tsx directamente en runtime
-RUN npx tsc --skipLibCheck --noEmitOnError false || echo "⚠️ TypeScript compilation had errors, will use tsx at runtime"
+# Build: prisma generate + tsc - must succeed for deployment
+RUN npm run build
 
-EXPOSE 3000
+EXPOSE 4000
 
-# El servidor maneja las migraciones internamente con mejor manejo de errores
-# Run with tsx si dist no existe, sino con node compilado
-CMD ["sh", "-c", "test -f dist/server.js && node dist/server.js || tsx src/server.ts"]
+# Phase 8: Run compiled JS only - no tsx, nodemon, or dev watchers in production
+# Migrations run first via start:with-migrations
+CMD ["npm", "run", "start:with-migrations"]
