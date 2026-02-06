@@ -134,7 +134,7 @@ export class SaleService {
         commissionRate: true,
         createdBy: true,
         paypalPayoutEmail: true,
-      },
+      } as any,
     });
 
     if (!user) {
@@ -307,7 +307,7 @@ export class SaleService {
     // ✅ Dual PayPal payout: admin (commission) then user (userProfit). Both must succeed.
     const payoutService = (await import('./paypal-payout.service')).PayPalPayoutService.fromEnv();
     const adminPaypalEmail = await platformConfigService.getAdminPaypalEmail();
-    const userPaypalEmail = user.paypalPayoutEmail?.trim() || null;
+    const userPaypalEmail = (user as any).paypalPayoutEmail?.trim() || null;
 
     // ✅ Phase F: When AUTOPILOT_MODE=production, skipping payouts is forbidden
     const autopilotMode = (process.env.AUTOPILOT_MODE || 'sandbox') as 'production' | 'sandbox';
@@ -380,7 +380,7 @@ export class SaleService {
       if (!userRes.success) {
         await prisma.sale.update({
           where: { id: sale.id },
-          data: { status: 'PAYOUT_FAILED', adminPayoutId },
+          data: { status: 'PAYOUT_FAILED', adminPayoutId } as any,
         });
         logger.error('[SALE] User payout failed', { saleId: sale.id, error: userRes.error });
         throw new AppError(`User payout failed: ${userRes.error}`, 502);
@@ -390,7 +390,7 @@ export class SaleService {
 
     await prisma.sale.update({
       where: { id: sale.id },
-      data: { adminPayoutId, userPayoutId },
+      data: { adminPayoutId, userPayoutId } as any,
     });
 
     await prisma.user.update({

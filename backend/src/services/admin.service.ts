@@ -15,6 +15,7 @@ export interface UserCreationData {
   commissionRate: number; // Porcentaje de comisión (ej: 0.15 = 15%)
   fixedMonthlyCost: number; // Costo fijo mensual en USD
   isActive?: boolean;
+  paypalPayoutEmail?: string | null;
 }
 
 export interface CommissionSettings {
@@ -93,8 +94,10 @@ export class AdminService {
         commissionRate: true,
         fixedMonthlyCost: true,
         isActive: true,
-        createdAt: true
-      }
+        createdAt: true,
+        onboardingStep: true,
+        paypalPayoutEmail: true,
+      } as any
     });
 
     // ✅ Crear configuración de workflow por defecto para el nuevo usuario

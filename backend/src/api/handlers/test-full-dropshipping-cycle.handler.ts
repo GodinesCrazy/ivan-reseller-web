@@ -273,7 +273,7 @@ export async function runTestFullDropshippingCycle(req: Request, res: Response):
         const { orderFulfillmentService } = await import('../../services/order-fulfillment.service');
         const fulfill = await orderFulfillmentService.fulfillOrder(order.id);
         const aliSimulated =
-          fulfill.aliexpressOrderId === 'SIMULATED_ORDER_ID' || fulfill.status === 'SIMULATED';
+          fulfill.aliexpressOrderId === 'SIMULATED_ORDER_ID' || (fulfill.status as string) === 'SIMULATED';
         stageResults.aliexpressPurchase = {
           ok: fulfill.success && !aliSimulated,
           real: fulfill.success && !aliSimulated,

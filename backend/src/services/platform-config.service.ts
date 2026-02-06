@@ -9,13 +9,15 @@ import logger from '../config/logger';
 const DEFAULT_COMMISSION_PCT = 10;
 const DEFAULT_ADMIN_EMAIL = 'admin@example.com';
 
+const db = prisma as any;
+
 export class PlatformConfigService {
   /**
    * Get platform commission percentage (default 10).
    */
   async getCommissionPct(): Promise<number> {
     try {
-      const row = await prisma.platformConfig.findFirst({ orderBy: { id: 'asc' } });
+      const row = await db.platformConfig?.findFirst({ orderBy: { id: 'asc' } });
       return row ? Number(row.platformCommissionPct) : DEFAULT_COMMISSION_PCT;
     } catch (e: any) {
       logger.warn('[PLATFORM-CONFIG] getCommissionPct failed', { error: e?.message });
@@ -28,7 +30,7 @@ export class PlatformConfigService {
    */
   async getAdminPaypalEmail(): Promise<string> {
     try {
-      const row = await prisma.platformConfig.findFirst({ orderBy: { id: 'asc' } });
+      const row = await db.platformConfig?.findFirst({ orderBy: { id: 'asc' } });
       return (row?.adminPaypalEmail as string) || DEFAULT_ADMIN_EMAIL;
     } catch (e: any) {
       logger.warn('[PLATFORM-CONFIG] getAdminPaypalEmail failed', { error: e?.message });
@@ -45,7 +47,7 @@ export class PlatformConfigService {
     };
     if (config.platformCommissionPct != null) data.platformCommissionPct = config.platformCommissionPct;
     if (config.adminPaypalEmail != null) data.adminPaypalEmail = config.adminPaypalEmail;
-    await prisma.platformConfig.upsert({
+    await db.platformConfig.upsert({
       where: { id: 1 },
       create: {
         id: 1,
