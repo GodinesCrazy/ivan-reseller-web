@@ -27,9 +27,14 @@ import { isInvestorDocsEnabled } from '@/components/help/InvestorDocsRegistry';
 
 export default function HelpCenter() {
   const [activeSection, setActiveSection] = useState('inicio');
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s?.user ?? null) ?? null;
   const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
-  const investorDocsEnabled = isInvestorDocsEnabled();
+  let investorDocsEnabled = false;
+  try {
+    investorDocsEnabled = isInvestorDocsEnabled();
+  } catch {
+    investorDocsEnabled = false;
+  }
 
   const sections = [
     { id: 'inicio', label: 'Inicio Rápido', icon: Rocket },

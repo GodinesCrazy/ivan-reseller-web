@@ -22,13 +22,14 @@ const Reports = lazy(() => import('@pages/Reports'));
 const Users = lazy(() => import('@pages/Users'));
 const RegionalConfig = lazy(() => import('@pages/RegionalConfig'));
 const SystemLogs = lazy(() => import('@pages/SystemLogs'));
+const SystemStatus = lazy(() => import('@pages/SystemStatus'));
 const Settings = lazy(() => import('@pages/Settings'));
 const APIConfiguration = lazy(() => import('@pages/APIConfiguration'));
 const APISettings = lazy(() => import('@pages/APISettings'));
 const APIKeys = lazy(() => import('@pages/APIKeys'));
 const OtherCredentials = lazy(() => import('@pages/OtherCredentials'));
 const AdminPanel = lazy(() => import('@pages/AdminPanel'));
-const HelpCenter = lazy(() => import('@pages/HelpCenter'));
+import { HelpCenterSafe } from '@/components/help/HelpCenterSafe';
 const APIDocViewer = lazy(() => import('@pages/APIDocViewer'));
 const APIDocsList = lazy(() => import('@pages/APIDocsList'));
 const DocsList = lazy(() => import('@pages/DocsList'));
@@ -46,6 +47,7 @@ const OrderDetail = lazy(() => import('@pages/OrderDetail'));
 const Checkout = lazy(() => import('@pages/Checkout'));
 const Diagnostics = lazy(() => import('@pages/Diagnostics'));
 const SetupRequired = lazy(() => import('@pages/SetupRequired'));
+const OnboardingWizard = lazy(() => import('@components/OnboardingWizard'));
 import Layout from '@components/layout/Layout';
 import { ErrorBanner } from '@/components/ErrorBanner';
 
@@ -162,6 +164,7 @@ function AppContent() {
         element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />}
       />
       <Route path="/request-access" element={<RequestAccess />} />
+      <Route path="/help" element={<HelpCenterSafe />} />
       <Route path="/manual-login/:token" element={<ManualLogin />} />
       <Route path="/resolve-captcha/:token" element={<ResolveCaptcha />} />
       <Route path="/setup-required" element={<SetupRequired />} />
@@ -172,6 +175,7 @@ function AppContent() {
         element={isAuthenticated ? <Layout /> : <Navigate to="/login" />}
       >
         <Route index element={<Navigate to="/dashboard" />} />
+        <Route path="onboarding" element={<OnboardingWizard onComplete={() => window.location.href = '/dashboard'} />} />
         <Route path="dashboard" element={<Dashboard />} />
         
         {/* Opportunities System */}
@@ -207,6 +211,7 @@ function AppContent() {
         <Route path="users" element={<Users />} />
         <Route path="regional" element={<RegionalConfig />} />
         <Route path="logs" element={<SystemLogs />} />
+        <Route path="system-status" element={<SystemStatus />} />
         
         {/* Settings & Configuration */}
         <Route path="settings" element={<Settings />} />
@@ -219,8 +224,7 @@ function AppContent() {
         {/* Admin */}
         <Route path="admin" element={<AdminPanel />} />
         
-        {/* Help */}
-        <Route path="help" element={<HelpCenter />} />
+        {/* Help (main /help is public above; sub-routes require auth) */}
         <Route path="help/apis" element={<APIDocsList />} />
         <Route path="help/apis/:slug" element={<APIDocViewer />} />
         <Route path="help/docs" element={<DocsList />} />
