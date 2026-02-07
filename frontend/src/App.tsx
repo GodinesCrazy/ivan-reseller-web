@@ -126,25 +126,26 @@ function AppContent() {
     </div>
   );
 
-  // Solo mostrar loading si hay token Y está verificando Y no estamos en login
-  // Si no hay token o estamos en login, mostrar la app inmediatamente
+  // Solo mostrar loading si hay token Y está verificando Y no estamos en rutas públicas
   const isLoginPage = location.pathname === '/login';
+  const isHelpPage = location.pathname === '/help' || location.pathname.startsWith('/help/');
   
   // Verificar token en store O en localStorage (fallback)
   const tokenInStore = token;
   const tokenInStorage = localStorage.getItem('auth_token');
   const hasToken = tokenInStore || tokenInStorage;
   
-  // Si estamos en login o no hay token, inicializar inmediatamente
+  // Si estamos en login, help o no hay token, inicializar inmediatamente (no bloquear)
   useEffect(() => {
-    if (isLoginPage || !hasToken) {
+    if (isLoginPage || isHelpPage || !hasToken) {
       if (!isInitialized) {
         setIsInitialized(true);
       }
     }
-  }, [isLoginPage, hasToken, isInitialized]);
+  }, [isLoginPage, isHelpPage, hasToken, isInitialized]);
   
-  if (!isLoginPage && hasToken && !isInitialized && isCheckingAuth) {
+  // No bloquear /help: siempre renderizar para que el centro de ayuda sea accesible
+  if (!isLoginPage && !isHelpPage && hasToken && !isInitialized && isCheckingAuth) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
@@ -158,13 +159,14 @@ function AppContent() {
   return (
     <Suspense fallback={Fallback}>
       <Routes>
-      {/* Public routes */}
+      {/* /help SIEMPRE accesible (primera ruta, nunca bloqueada por auth) */}
+      <Route path="/help" element={<HelpCenterSafe />} />
+      {/* Resto de rutas públicas */}
       <Route
         path="/login"
         element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />}
       />
       <Route path="/request-access" element={<RequestAccess />} />
-      <Route path="/help" element={<HelpCenterSafe />} />
       <Route path="/manual-login/:token" element={<ManualLogin />} />
       <Route path="/resolve-captcha/:token" element={<ResolveCaptcha />} />
       <Route path="/setup-required" element={<SetupRequired />} />
