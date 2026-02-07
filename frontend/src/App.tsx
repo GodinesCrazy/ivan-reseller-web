@@ -51,6 +51,16 @@ const OnboardingWizard = lazy(() => import('@components/OnboardingWizard'));
 import Layout from '@components/layout/Layout';
 import { ErrorBanner } from '@/components/ErrorBanner';
 
+/** /help exacto: render sin auth ni stores - NUNCA pantalla en blanco */
+function HelpOnlyPage() {
+  return (
+    <>
+      <HelpCenterSafe />
+      <Toaster />
+    </>
+  );
+}
+
 function AppContent() {
   const location = useLocation();
   const { isAuthenticated, isCheckingAuth, checkAuth, token } = useAuthStore();
@@ -254,6 +264,11 @@ function AppContent() {
 }
 
 function App() {
+  const location = useLocation();
+  const isHelpExact = location.pathname === '/help' || location.pathname === '/help/';
+  if (isHelpExact) {
+    return <HelpOnlyPage />;
+  }
   return <AppContent />;
 }
 

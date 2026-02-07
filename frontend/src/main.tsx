@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { Toaster as SonnerToaster } from 'sonner';
 import App from './App';
+import { RootErrorBoundary } from '@/components/RootErrorBoundary';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -19,9 +20,10 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <QueryClientProvider client={queryClient}>
-        <App />
+    <RootErrorBoundary>
+      <BrowserRouter>
+        <QueryClientProvider client={queryClient}>
+          <App />
         <Toaster
           position="top-right"
           toastOptions={{
@@ -35,5 +37,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <SonnerToaster position="top-right" richColors />
       </QueryClientProvider>
     </BrowserRouter>
+    </RootErrorBoundary>
   </React.StrictMode>,
 );
