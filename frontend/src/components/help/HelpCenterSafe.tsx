@@ -1,22 +1,19 @@
 /**
  * Wrapper seguro para Help Center - ErrorBoundary + fallback, nunca pantalla en blanco
+ * HelpCenter se importa directamente para evitar fallos de lazy() en producción
  */
-import { Suspense, lazy } from 'react';
 import { HelpErrorBoundary } from './HelpErrorBoundary';
 import { HelpFallbackUI } from './HelpFallbackUI';
+import HelpCenter from '@/pages/HelpCenter';
 
-const HelpCenter = lazy(() => import('@pages/HelpCenter'));
-
-const Loader = () => (
-  <HelpFallbackUI message="Cargando centro de ayuda..." />
+const FALLBACK_UI = (
+  <HelpFallbackUI message="Ocurrió un error. Por favor, recarga la página o contacta soporte." />
 );
 
 export function HelpCenterSafe() {
   return (
-    <HelpErrorBoundary fallback={<HelpFallbackUI message="Ocurrió un error. Por favor, recarga la página o contacta soporte." />}>
-      <Suspense fallback={<Loader />}>
-        <HelpCenter />
-      </Suspense>
+    <HelpErrorBoundary fallback={FALLBACK_UI}>
+      <HelpCenter />
     </HelpErrorBoundary>
   );
 }
