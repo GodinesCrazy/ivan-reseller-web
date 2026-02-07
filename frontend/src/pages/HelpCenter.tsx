@@ -1,3 +1,7 @@
+/**
+ * Centro de Ayuda - render público, sin auth.
+ * NO usar: useAuthStore, authStore, hooks de sesión, redirects condicionales.
+ */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
