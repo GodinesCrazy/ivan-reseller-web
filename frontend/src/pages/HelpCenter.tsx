@@ -22,6 +22,8 @@ import {
   FileText,
   MessageCircle
 } from 'lucide-react';
+import { useAuthStore } from '@stores/authStore';
+import { isInvestorDocsEnabled } from '@/components/help/InvestorDocsRegistry';
 
 export default function HelpCenter() {
   const [activeSection, setActiveSection] = useState('inicio');
@@ -53,9 +55,9 @@ export default function HelpCenter() {
               <BookOpen className="w-8 h-8 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-4xl font-bold mb-2">Centro de Ayuda</h1>
+              <h1 className="text-4xl font-bold mb-2">Centro de Ayuda – Ivan Reseller</h1>
               <p className="text-blue-100 text-lg">
-                Todo lo que necesitas saber sobre Ivan Reseller Web
+                Todo lo que necesitas saber sobre Ivan Reseller. Guías, configuración y soporte.
               </p>
             </div>
           </div>
