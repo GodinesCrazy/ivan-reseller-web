@@ -128,3 +128,17 @@ Si obtienes un código real desde el navegador y el script sigue devolviendo **I
    cd c:\Ivan_Reseller_Web\backend
    $env:DOTENV_CONFIG_PATH=".env.local"; npx tsx -r dotenv/config scripts/test-aliexpress-full-flow.ts "TU_CODIGO"
    ```
+
+## Verificar que el deploy en Railway está activo
+
+Después de hacer push o de ejecutar `.\scripts\deploy-backend-railway.ps1`, comprueba que el backend responde y que el callback devuelve el detalle de AliExpress si falla el token:
+
+```powershell
+# Health del backend
+Invoke-RestMethod -Uri "https://ivan-reseller-backend-production.up.railway.app/health" -Method Get
+
+# Callback con código de prueba (debe devolver JSON con aliExpressCode y requestId si falla)
+Invoke-RestMethod -Uri "https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback?code=test" -Method Get
+```
+
+Si la segunda llamada devuelve algo como `aliExpressCode: "IncompleteSignature"` y `requestId`, el deploy nuevo está activo y podrás usar esos datos para soporte AliExpress.
