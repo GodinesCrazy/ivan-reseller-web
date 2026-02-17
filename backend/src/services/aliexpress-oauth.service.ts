@@ -7,6 +7,7 @@
 import axios from 'axios';
 import logger from '../config/logger';
 import { getToken, setToken, type TokenData } from './aliexpress-token.store';
+import { generateAliExpressSignatureWithSecret } from './aliexpress-signature.service';
 
 const PLACEHOLDERS = ['PUT_YOUR_APP_KEY_HERE', 'PUT_YOUR_APP_SECRET_HERE'];
 function fromEnv(key: string): string {
@@ -18,7 +19,9 @@ const APP_SECRET = fromEnv('ALIEXPRESS_APP_SECRET');
 const REDIRECT_URI = (process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
 const OAUTH_BASE = (process.env.ALIEXPRESS_OAUTH_BASE || 'https://api-sg.aliexpress.com/oauth').replace(/\/$/, '');
 const API_BASE = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync').replace(/\/$/, '');
-const TOKEN_URL = 'https://api-sg.aliexpress.com/rest/auth/token/security/create';
+const TOKEN_URL = 'https://api-sg.aliexpress.com/rest/auth/token/create';
+/** api_path for signature must match endpoint path exactly (including /rest). */
+const TOKEN_SIGN_PATH = '/rest/auth/token/create';
 
 /**
  * Get authorization URL to start OAuth flow.
@@ -48,6 +51,7 @@ export function getOAuthStatus(): { hasToken: boolean; expiresAt: string | null;
 
 /**
  * Exchange authorization code for access_token and refresh_token.
+ * Uses GET request with signature according to Case 2: System Interfaces.
  */
 export async function exchangeCodeForToken(code: string): Promise<TokenData> {
   if (!APP_KEY || !APP_SECRET) {
@@ -56,57 +60,59 @@ export async function exchangeCodeForToken(code: string): Promise<TokenData> {
   if (!REDIRECT_URI) {
     throw new Error('ALIEXPRESS_REDIRECT_URI not configured');
   }
-  console.log('[ALIEXPRESS-OAUTH] Exchanging code for token');
+  
+  // STRICT: Verify redirect URI matches exactly (no trailing slash, exact match)
+  const canonicalRedirectUri = 'https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback';
   const redirectUriExact = REDIRECT_URI.replace(/\/$/, '');
-  const bodyParams: Record<string, string> = {
-    method: 'auth.token.create',
-    grant_type: 'authorization_code',
-    code,
+  
+  if (redirectUriExact !== canonicalRedirectUri) {
+    console.warn('[ALIEXPRESS-OAUTH] Redirect URI mismatch:', {
+      configured: redirectUriExact,
+      expected: canonicalRedirectUri,
+    });
+    // Use configured URI but log warning
+  }
+  
+  console.log('[ALIEXPRESS-OAUTH] Exchanging code for token');
+  const params: Record<string, string> = {
     app_key: APP_KEY,
-    app_secret: APP_SECRET,
+    code: code,
+    sign_method: 'sha256',
+    timestamp: Date.now().toString(),
     redirect_uri: redirectUriExact,
   };
-  let response;
-  try {
-    response = await axios.post(TOKEN_URL, new URLSearchParams(bodyParams).toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 15000,
-      validateStatus: () => true,
-    });
-  } catch (err: any) {
-    console.log('[ALIEXPRESS-OAUTH] Request failed:', err?.message, err?.response?.data);
-    logger.error('[ALIEXPRESS-OAUTH] Network/request error', { message: err?.message, code: err?.code });
-    throw err;
+  const signature = generateAliExpressSignatureWithSecret(TOKEN_SIGN_PATH, params, APP_SECRET);
+  const fullUrl =
+    TOKEN_URL +
+    '?' +
+    new URLSearchParams({
+      ...params,
+      sign: signature,
+    }).toString();
+  console.log('TOKEN REQUEST URL:', fullUrl);
+
+  const response = await axios.get(fullUrl, { timeout: 15000, validateStatus: () => true });
+  const body2 = response.data;
+
+  const rawStr = typeof response.data === 'string' ? response.data : JSON.stringify(response.data, null, 2);
+  console.log('[ALIEXPRESS] TOKEN RESPONSE RAW:', rawStr);
+  console.log('[ALIEXPRESS] TOKEN HTTP STATUS:', response.status);
+
+  const hasAccessToken = body2?.access_token ?? body2?.accessToken ?? body2?.data?.access_token;
+  if (!hasAccessToken) {
+    console.error('TOKEN FAILED — EXACT VALUES FOR DEBUG:');
+    console.error('TOKEN REQUEST URL (full):', fullUrl);
+    console.error('API RESPONSE:', rawStr);
   }
-
-  // Deep logging for diagnosis
-  const contentType = response.headers?.['content-type'] ?? response.headers?.['Content-Type'] ?? 'unknown';
-  const dataType = typeof response.data;
-  const rawStr = typeof response.data === 'string'
-    ? response.data
-    : JSON.stringify(response.data);
-  const truncated = rawStr.length > 5000 ? rawStr.substring(0, 5000) + '...[truncated]' : rawStr;
-
-  console.log('[ALIEXPRESS-OAUTH] DIAG response.status:', response.status);
-  console.log('[ALIEXPRESS-OAUTH] DIAG response.headers["content-type"]:', contentType);
-  console.log('[ALIEXPRESS-OAUTH] DIAG typeof response.data:', dataType);
-  console.log('[ALIEXPRESS-OAUTH] RAW TOKEN RESPONSE (max 5000 chars):', truncated);
-
-  if (typeof response.data === 'string') {
-    const first2000 = response.data.substring(0, 2000);
-    console.log('[ALIEXPRESS-OAUTH] DIAG response.data (first 2000 chars):', first2000);
-  }
-
-  const body = response.data;
-  const isHtmlMaintenance = typeof body === 'string' && (body.includes('Maintaining') || body.includes('maintenance'));
+  const isHtmlMaintenance = typeof body2 === 'string' && (body2.includes('Maintaining') || body2.includes('maintenance'));
   if (isHtmlMaintenance) {
     logger.error('[ALIEXPRESS-OAUTH] Token API returned maintenance page', { tokenUrl: TOKEN_URL, status: response.status });
     throw new Error('ALIEXPRESS_TOKEN_API_MAINTENANCE');
   }
 
-  const errMsg = body?.error_msg ?? body?.error_description ?? body?.error ?? body?.msg;
-  if (errMsg) {
-    logger.error('[ALIEXPRESS-OAUTH] Token API error', { errMsg, body, status: response.status });
+  const errMsg = body2?.error_msg ?? body2?.error_description ?? body2?.error ?? body2?.msg;
+  if (errMsg && !(body2?.access_token || body2?.accessToken)) {
+    logger.error('[ALIEXPRESS-OAUTH] Token API error', { errMsg, body: body2, status: response.status });
     throw new Error(String(errMsg));
   }
 
@@ -115,26 +121,67 @@ export async function exchangeCodeForToken(code: string): Promise<TokenData> {
     console.log('[ALIEXPRESS-OAUTH] DIAG object has no access_token - full object:', JSON.stringify(payload, null, 2));
   }
 
+  // Extract access_token from response
+  // Response format: { access_token, refresh_token, expires_in } or nested in data
   const access_token =
     payload.access_token ||
     payload.accessToken ||
     payload.token ||
-    payload.access_token_info?.access_token;
+    payload.access_token_info?.access_token ||
+    response.data?.access_token ||
+    response.data?.accessToken;
 
   if (!access_token) {
-    logger.error('[ALIEXPRESS-OAUTH] Token response missing access_token', { body, status: response.status });
-    throw new Error('ALIEXPRESS_TOKEN_EXCHANGE_RESPONSE_INVALID');
+    logger.error('[ALIEXPRESS-OAUTH] Token response missing access_token', {
+      body: body2,
+      status: response.status,
+      responseData: JSON.stringify(response.data).substring(0, 500),
+    });
+    const err = new Error('ALIEXPRESS_TOKEN_EMPTY_RESPONSE') as Error & { aliExpressResponse?: unknown; tokenRequestUrl?: string };
+    err.aliExpressResponse = body2;
+    err.tokenRequestUrl = fullUrl;
+    throw err;
   }
+  
   const p = typeof payload === 'object' && payload !== null ? payload : {};
-  const refresh_token = p.refresh_token ?? p.refreshToken ?? '';
-  const expires_in = Number(p.expires_in ?? p.expire_time ?? p.expiresIn ?? 0) || 86400 * 7;
+  const fullResponse = typeof response.data === 'object' && response.data !== null ? response.data : {};
+  
+  const refresh_token = 
+    p.refresh_token ?? 
+    p.refreshToken ?? 
+    fullResponse.refresh_token ?? 
+    fullResponse.refreshToken ?? 
+    '';
+  
+  const expires_in = Number(
+    p.expires_in ?? 
+    p.expire_time ?? 
+    p.expiresIn ?? 
+    fullResponse.expires_in ?? 
+    fullResponse.expire_time ?? 
+    0
+  ) || 86400 * 7; // Default 7 days
+  
   const expiresAt = Date.now() + expires_in * 1000;
-  const tokenData: TokenData = { accessToken: access_token, refreshToken: refresh_token, expiresAt };
+  const tokenData: TokenData = { 
+    accessToken: access_token, 
+    refreshToken: refresh_token, 
+    expiresAt 
+  };
+  
   setToken(tokenData);
   console.log('[ALIEXPRESS-OAUTH] TOKEN STORED OK');
-  logger.info('[ALIEXPRESS-OAUTH] Tokens stored', { expires_in, expiresAt: new Date(expiresAt).toISOString() });
+  console.log('[ALIEXPRESS-OAUTH] Access token (masked):', access_token.substring(0, 10) + '...' + access_token.slice(-6));
+  logger.info('[ALIEXPRESS-OAUTH] Tokens stored', { 
+    expires_in, 
+    expiresAt: new Date(expiresAt).toISOString(),
+    hasRefreshToken: !!refresh_token,
+  });
   return tokenData;
 }
+
+/** Alias for exchangeCodeForToken. */
+export const exchangeAuthorizationCode = exchangeCodeForToken;
 
 /**
  * Refresh access token using refresh_token.

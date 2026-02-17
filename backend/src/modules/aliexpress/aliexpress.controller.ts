@@ -536,6 +536,20 @@ export const getOAuthUrl = async (req: Request, res: Response) => {
 };
 
 /**
+ * Redirect to AliExpress OAuth authorize page
+ * GET /api/aliexpress/oauth/start
+ */
+export const getOAuthStart = async (_req: Request, res: Response) => {
+  try {
+    const url = getAuthorizationUrl();
+    return res.redirect(302, url);
+  } catch (err: any) {
+    logger.error('[AliExpress OAuth] getOAuthStart failed', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'OAuth URL not configured' });
+  }
+};
+
+/**
  * OAuth callback: exchange code for tokens, persist to store + DB, return success.
  * GET /api/aliexpress/callback?code=...
  */
@@ -577,15 +591,30 @@ export const oauthCallback = async (req: Request, res: Response) => {
     }
 
     console.log('[ALIEXPRESS-OAUTH] TOKEN STORED OK', { expiresAt: expiresAt.toISOString() });
-    return res.status(200).json({ success: true, expiresAt: expiresAt.toISOString() });
+    return res.status(200).json({ success: true, message: 'Authorization successful', expiresAt: expiresAt.toISOString() });
   } catch (err: any) {
     const status = err?.response?.status ?? 500;
     const data = err?.response?.data;
-    logger.error('[AliExpress OAuth] Token exchange failed', { message: err?.message, status, responseData: data });
-    return res.status(status).json({
+    const msg = err?.message || 'Token exchange failed';
+    const aliExpressResponse = err?.aliExpressResponse;
+    const tokenRequestUrl = err?.tokenRequestUrl;
+    logger.error('[AliExpress OAuth] Token exchange failed', { message: msg, status, responseData: data ?? aliExpressResponse });
+    const userMsg = msg === 'ALIEXPRESS_TOKEN_API_MAINTENANCE'
+      ? 'El servidor de AliExpress está en mantenimiento. Intenta de nuevo más tarde.'
+      : msg;
+    const aliCode = aliExpressResponse != null ? (aliExpressResponse as { code?: string })?.code : null;
+    const requestId = aliExpressResponse != null ? (aliExpressResponse as { request_id?: string })?.request_id : null;
+    const body: Record<string, unknown> = {
       success: false,
-      error: data?.error ?? data?.error_msg ?? 'TOKEN_EXCHANGE_FAILED',
-      message: err?.message || 'Token exchange failed',
-    });
+      error: data?.error ?? data?.error_msg ?? (msg === 'ALIEXPRESS_TOKEN_API_MAINTENANCE' ? 'ALIEXPRESS_MAINTENANCE' : 'TOKEN_EXCHANGE_FAILED'),
+      message: aliCode ? `${userMsg} (AliExpress: ${aliCode})` : userMsg,
+    };
+    if (aliExpressResponse != null) {
+      body.aliExpressResponse = aliExpressResponse;
+      if (aliCode) body.aliExpressCode = aliCode;
+      if (requestId) body.requestId = requestId;
+    }
+    if (tokenRequestUrl) body.tokenRequestUrl = tokenRequestUrl;
+    return res.status(status).json(body);
   }
 };
