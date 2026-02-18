@@ -847,15 +847,17 @@ export class AutopilotSystem extends EventEmitter {
     }
 
     try {
-      const opportunityFinder = (await import('./opportunity-finder.service')).default;
+      const mod = await import('./opportunity-finder.service');
+      const finder = mod.default as { searchOpportunities: (q: string, uid: number, opts?: Record<string, unknown>) => Promise<unknown[]> };
       const env = environment || (process.env.NODE_ENV === 'production' ? 'production' : 'sandbox');
-      const foundItems = await opportunityFinder.searchOpportunities(query, userId, {
+      const raw = await finder.searchOpportunities(query, userId, {
         maxItems: this.config.maxOpportunitiesPerCycle || 20,
         marketplaces: [this.config.targetMarketplace as 'ebay' | 'amazon' | 'mercadolibre'] || ['ebay'],
         region: 'us',
         environment: env,
         skipTrendsValidation: false,
       });
+      const foundItems = Array.isArray(raw) ? raw : [];
 
       const opportunities: Opportunity[] = foundItems.map((item: any) => ({
         id: item.productId,

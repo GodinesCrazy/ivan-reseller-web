@@ -73,11 +73,15 @@ router.get('/health', async (req: Request, res: Response, next) => {
 
     const status = autopilotSystem.getStatus();
     const lastCycle = status.lastCycle;
-    const { autopilotCycleLogService } = await import('../../services/autopilot-cycle-log.service');
-
-    const since = new Date();
-    since.setHours(since.getHours() - 24); // Last 24h
-    const stageMetrics = await autopilotCycleLogService.getStageMetrics(userId, since);
+    let stageMetrics: Record<string, { success: number; failed: number }> = {};
+    try {
+      const { autopilotCycleLogService } = await import('../../services/autopilot-cycle-log.service');
+      const since = new Date();
+      since.setHours(since.getHours() - 24); // Last 24h
+      stageMetrics = await autopilotCycleLogService.getStageMetrics(userId, since);
+    } catch (_) {
+      // Service or DB may be unavailable; return empty metrics
+    }
 
     res.json({
       success: true,

@@ -668,16 +668,44 @@ export class APIAvailabilityService {
 
     try {
       const requiredFields = ['appId', 'devId', 'certId'];
-      const credentials = await this.getUserCredentials(userId, 'ebay', environment);
+      let credentials = await this.getUserCredentials(userId, 'ebay', environment);
       
-      // ✅ FIX: Logging detallado para debugging
+      // ✅ FALLBACK: Si no hay credenciales en DB, usar ENV
+      if (!credentials || !credentials.appId) {
+        if (process.env.EBAY_APP_ID?.trim()) {
+          const status: APIStatus = {
+            apiName: 'ebay',
+            name: 'eBay Trading API',
+            isConfigured: true,
+            isAvailable: true,
+            status: 'healthy',
+            environment,
+            lastChecked: new Date(),
+            message: 'API configurada desde variables de entorno'
+          };
+          await this.setCached(cacheKey, status);
+          return status;
+        }
+      }
+      
+      // ✅ Env fallback so Autopilot can start with .env.local only
+      if (!credentials && process.env.EBAY_APP_ID?.trim()) {
+        credentials = {
+          appId: process.env.EBAY_APP_ID.trim(),
+          devId: (process.env.EBAY_DEV_ID || '').trim(),
+          certId: (process.env.EBAY_CERT_ID || '').trim(),
+          redirectUri: (process.env.EBAY_REDIRECT_URI || '').trim(),
+          token: '',
+          refreshToken: '',
+          sandbox: environment === 'sandbox',
+        } as unknown as Record<string, string>;
+      }
       logger.info('[checkEbayAPI] Verificando credenciales', {
         userId,
         environment,
         hasCredentials: !!credentials,
         credentialKeys: credentials ? Object.keys(credentials) : [],
       });
-      
       if (!credentials) {
         logger.warn('[checkEbayAPI] No se encontraron credenciales', { userId, environment });
         const status: APIStatus = {
@@ -693,7 +721,6 @@ export class APIAvailabilityService {
         return status;
       }
 
-      // ✅ FIX: Normalización mejorada de nombres de campos (bidireccional)
       const normalizedCreds: Record<string, string> = {
         appId: credentials['appId'] || credentials['EBAY_APP_ID'] || '',
         devId: credentials['devId'] || credentials['EBAY_DEV_ID'] || '',
@@ -1263,8 +1290,25 @@ export class APIAvailabilityService {
     }
 
     try {
-      // ✅ CORRECCIÓN SCRAPERAPI: Buscar campo en camelCase (como se guarda) y UPPER_CASE (legacy)
-      const credentials = await this.getUserCredentials(userId, 'scraperapi');
+      // ✅ DB first, then env fallback so Autopilot can start with .env.local only
+      let credentials = await this.getUserCredentials(userId, 'scraperapi');
+      
+      // ✅ FALLBACK: Si no hay credenciales en DB, usar ENV
+      if (!credentials || !credentials.apiKey) {
+        if (process.env.SCRAPERAPI_KEY?.trim()) {
+          const status: APIStatus = {
+            apiName: 'scraperapi',
+            name: 'ScraperAPI',
+            isConfigured: true,
+            isAvailable: true,
+            status: 'healthy',
+            lastChecked: new Date(),
+            message: 'API configurada desde variables de entorno'
+          };
+          await this.setCached(cacheKey, status);
+          return status;
+        }
+      }
       
       if (!credentials) {
         const status: APIStatus = {
@@ -1279,7 +1323,6 @@ export class APIAvailabilityService {
         return status;
       }
 
-      // ✅ CORRECCIÓN SCRAPERAPI: Verificar campo con nombres correctos (camelCase + UPPER_CASE para compatibilidad)
       const apiKey = credentials['apiKey'] || credentials['SCRAPERAPI_KEY'] || credentials['SCRAPER_API_KEY'];
       const hasApiKey = !!(apiKey && String(apiKey).trim());
 
@@ -1332,8 +1375,25 @@ export class APIAvailabilityService {
     }
 
     try {
-      // ✅ CORRECCIÓN ZENROWS: Buscar campo en camelCase (como se guarda) y UPPER_CASE (legacy)
-      const credentials = await this.getUserCredentials(userId, 'zenrows');
+      // ✅ DB first, then env fallback so Autopilot can start with .env.local only
+      let credentials = await this.getUserCredentials(userId, 'zenrows');
+      
+      // ✅ FALLBACK: Si no hay credenciales en DB, usar ENV
+      if (!credentials || !credentials.apiKey) {
+        if (process.env.ZENROWS_API_KEY?.trim()) {
+          const status: APIStatus = {
+            apiName: 'zenrows',
+            name: 'ZenRows',
+            isConfigured: true,
+            isAvailable: true,
+            status: 'healthy',
+            lastChecked: new Date(),
+            message: 'API configurada desde variables de entorno'
+          };
+          await this.setCached(cacheKey, status);
+          return status;
+        }
+      }
       
       if (!credentials) {
         const status: APIStatus = {
@@ -1348,7 +1408,6 @@ export class APIAvailabilityService {
         return status;
       }
 
-      // ✅ CORRECCIÓN ZENROWS: Verificar campo con nombres correctos (camelCase + UPPER_CASE para compatibilidad)
       const apiKey = credentials['apiKey'] || credentials['ZENROWS_API_KEY'];
       const hasApiKey = !!(apiKey && String(apiKey).trim());
 

@@ -1,5 +1,17 @@
-import { autopilotSystem } from '../services/autopilot.service';
-import { logger } from '../config/logger';
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local'), override: true });
+
+console.log('[ENV CHECK]', {
+  SCRAPERAPI_KEY: !!process.env.SCRAPERAPI_KEY,
+  ZENROWS_API_KEY: !!process.env.ZENROWS_API_KEY,
+  EBAY_APP_ID: !!process.env.EBAY_APP_ID,
+});
+
+import { autopilotSystem } from './services/autopilot.service';
+import { logger } from './config/logger';
 
 /**
  * Initialize Autopilot System
@@ -12,55 +24,85 @@ import { logger } from '../config/logger';
 /**
  * Initialize autopilot with default configuration
  */
+const DEFAULT_AUTOPILOT_CONFIG = {
+  enabled: false,
+  cycleIntervalMinutes: 60,
+  publicationMode: 'manual' as const,
+  targetMarketplace: 'ebay',
+  maxOpportunitiesPerCycle: 5,
+  workingCapital: 500,
+  minProfitUsd: 10,
+  minRoiPct: 50,
+  optimizationEnabled: false,
+  searchQueries: [
+    'organizador cocina',
+    'luces solares jardin',
+    'macetas decorativas',
+    'mascarilla facial',
+    'difusor aceites esenciales',
+    'bandas resistencia fitness',
+    'yoga mat antideslizante',
+    'auriculares bluetooth',
+    'cable usb c',
+    'cargador inalambrico',
+    'soporte movil coche',
+    'organizador maletero',
+    'gafas sol polarizadas',
+    'reloj inteligente'
+  ]
+};
+
+// ✅ FIX: Prevent double initialization
+let AUTOPILOT_INIT_EXECUTED = false;
+
 export async function initializeAutopilot(): Promise<void> {
+  if (AUTOPILOT_INIT_EXECUTED) {
+    console.log('[AUTOPILOT_INIT] Already executed, skipping');
+    return;
+  }
+  AUTOPILOT_INIT_EXECUTED = true;
+  
   try {
     logger.info('Autopilot: Initializing system...');
 
-    // Configure autopilot system
-    await autopilotSystem.updateConfig({
-      enabled: false, // Start disabled, enable via API
-      cycleIntervalMinutes: 60, // Run every hour
-      publicationMode: 'manual', // Manual approval by default
-      targetMarketplace: 'ebay',
-      maxOpportunitiesPerCycle: 5,
-      workingCapital: 500, // $500 USD default
-      minProfitUsd: 10, // Minimum $10 profit
-      minRoiPct: 50, // Minimum 50% ROI
-      optimizationEnabled: false, // Disable until enough data
-      searchQueries: [
-        // Home & Garden
-        'organizador cocina',
-        'luces solares jardin',
-        'macetas decorativas',
-        
-        // Health & Beauty
-        'mascarilla facial',
-        'difusor aceites esenciales',
-        
-        // Sports & Fitness
-        'bandas resistencia fitness',
-        'yoga mat antideslizante',
-        
-        // Electronics
-        'auriculares bluetooth',
-        'cable usb c',
-        'cargador inalambrico',
-        
-        // Automotive
-        'soporte movil coche',
-        'organizador maletero',
-        
-        // Fashion
-        'gafas sol polarizadas',
-        'reloj inteligente'
-      ]
+    // Load persisted config from DB; only apply defaults if none saved (do not overwrite live config)
+    const { prisma } = await import('./config/database');
+    const configRecord = await prisma.systemConfig.findUnique({
+      where: { key: 'autopilot_config' },
     });
+    let configLoaded = false;
+    if (configRecord?.value) {
+      try {
+        const saved = JSON.parse(configRecord.value as string) as Record<string, unknown>;
+        if (Object.keys(saved).length > 0) {
+          await autopilotSystem.updateConfig(saved);
+          console.log('Autopilot: Loaded persisted config (enabled=' + saved.enabled + ')');
+          logger.info('Autopilot: Loaded persisted config (enabled=%s, cycleInterval=%s min)', saved.enabled, saved.cycleIntervalMinutes);
+          setupEventListeners();
+          configLoaded = true;
+        }
+      } catch {
+        // fallback to defaults
+      }
+    }
+    if (!configLoaded) {
+      await autopilotSystem.updateConfig(DEFAULT_AUTOPILOT_CONFIG);
+      setupEventListeners();
+      logger.info('Autopilot: System initialized with defaults (enable via API or activate-live-profit-mode)');
+    }
 
-    // Setup event listeners
-    setupEventListeners();
-
+    const cfg = autopilotSystem.getStatus().config as { enabled?: boolean };
+    if (cfg?.enabled) {
+      const firstUser = await prisma.user.findFirst({
+        where: { isActive: true, paypalPayoutEmail: { not: null } },
+        select: { id: true },
+      });
+      if (firstUser) {
+        console.log('[AUTOPILOT_START_TRIGGERED]', firstUser.id);
+        await autopilotSystem.start(firstUser.id);
+      }
+    }
     logger.info('Autopilot: System initialized successfully');
-    logger.info('Autopilot: System is disabled - enable via API to start');
 
   } catch (error) {
     logger.error('Autopilot: Failed to initialize', { error });
@@ -132,12 +174,21 @@ function setupEventListeners(): void {
 }
 
 /**
- * Start the autopilot system
+ * Start the autopilot system (uses first active user with PayPal email as runner)
  */
 export async function startAutopilot(): Promise<void> {
   try {
-    await autopilotSystem.start();
-    logger.info('Autopilot: System started successfully');
+    const { prisma } = await import('./config/database');
+    const firstUser = await prisma.user.findFirst({
+      where: { isActive: true, paypalPayoutEmail: { not: null } },
+      select: { id: true },
+    });
+    if (!firstUser) {
+      logger.warn('Autopilot: Cannot start - no active user with paypalPayoutEmail');
+      return;
+    }
+    await autopilotSystem.start(firstUser.id);
+    logger.info('Autopilot: System started successfully', { userId: firstUser.id });
   } catch (error) {
     logger.error('Autopilot: Failed to start', { error });
     throw error;
