@@ -2,9 +2,15 @@
   "name": "ivan-reseller-web",
   "version": "1.0.0",
   "description": "Ivan Reseller Web - Modern Dropshipping Platform",
+  "engines": {
+    "node": "18.x"
+  },
   "scripts": {
     "sync-docs": "node scripts/sync_help_docs.mjs",
-    "smoke:prod": "node scripts/prod-smoke.mjs"
+    "smoke:prod": "node scripts/prod-smoke.mjs",
+    "dev:reset": "powershell -ExecutionPolicy Bypass -File scripts/dev-reset.ps1",
+    "test-full-dropshipping-cycle": "cd backend && npm run test-full-dropshipping-cycle",
+    "release-check": "node scripts/release-check.mjs"
   },
   "dependencies": {
     "@vercel/speed-insights": "^1.3.1",
