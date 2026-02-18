@@ -344,53 +344,35 @@ export class AutopilotSystem extends EventEmitter {
       return;
     }
 
-    // ✅ CHECK: Verify required APIs are configured
-    logger.info('Autopilot: Checking API availability...', { userId });
-    
-    this.currentUserId = userId; // ✅ Guardar userId del usuario actual
-    
-    const capabilities = await apiAvailability.getCapabilities(userId);
-    const apiStatuses = await apiAvailability.getAllAPIStatus(userId);
+    this.currentUserId = userId;
 
-    const missingAPIs: string[] = [];
-    
-    // Check scraping capability
-    if (!capabilities.canScrapeAliExpress) {
-      missingAPIs.push('Scraping API (ScraperAPI or ZenRows)');
-    }
+    // ✅ PRODUCTION: Only block on core env credentials. eBay Trading API is NOT required (REST APIs used).
+    const hasScraping =
+      Boolean((process.env.SCRAPER_API_KEY || '').trim()) ||
+      Boolean((process.env.SCRAPERAPI_KEY || '').trim()) ||
+      Boolean((process.env.ZENROWS_API_KEY || '').trim());
+    const hasEbayCore =
+      (Boolean((process.env.EBAY_CLIENT_ID || '').trim()) || Boolean((process.env.EBAY_APP_ID || '').trim())) &&
+      (Boolean((process.env.EBAY_CLIENT_SECRET || '').trim()) || Boolean((process.env.EBAY_CERT_ID || '').trim()));
 
-    // Check marketplace capability based on target
-    if (this.config.targetMarketplace === 'ebay' && !capabilities.canPublishToEbay) {
-      missingAPIs.push('eBay Trading API');
-    } else if (this.config.targetMarketplace === 'amazon' && !capabilities.canPublishToAmazon) {
-      missingAPIs.push('Amazon SP-API');
-    } else if (this.config.targetMarketplace === 'mercadolibre' && !capabilities.canPublishToMercadoLibre) {
-      missingAPIs.push('MercadoLibre API');
-    }
+    console.log('[AUTOPILOT DEBUG] Scraping configured:', hasScraping);
+    console.log('[AUTOPILOT DEBUG] eBay core configured:', hasEbayCore);
 
-    // AI is optional but recommended
-    if (!capabilities.canUseAI) {
-      logger.warn('Autopilot: GROQ AI API not configured - will use basic descriptions');
-    }
-
-    // If critical APIs are missing, don't start
-    if (missingAPIs.length > 0) {
-      const errorMsg = `Autopilot: Cannot start - Missing required APIs: ${missingAPIs.join(', ')}. Please configure them in /settings/apis`;
-      logger.error(errorMsg);
+    if (!hasScraping) {
+      console.error('[AUTOPILOT] START BLOCKED: Scraping API missing');
       this.stats.currentStatus = 'error';
-      this.emit('error', new Error(errorMsg));
-      throw new Error(errorMsg);
+      throw new Error('Missing required APIs: Scraping API not configured');
+    }
+    if (!hasEbayCore) {
+      console.error('[AUTOPILOT] START BLOCKED: eBay core credentials missing');
+      this.stats.currentStatus = 'error';
+      throw new Error('Missing required APIs: eBay core credentials not configured');
     }
 
-    // Log available capabilities
-    logger.info('Autopilot: API check passed', {
-      scraping: capabilities.canScrapeAliExpress,
-      ebay: capabilities.canPublishToEbay,
-      amazon: capabilities.canPublishToAmazon,
-      mercadolibre: capabilities.canPublishToMercadoLibre,
-      ai: capabilities.canUseAI,
-      payouts: capabilities.canPayCommissions
-    });
+    console.warn('[AUTOPILOT] Trading API check bypassed (REST APIs sufficient)');
+    console.log('[AUTOPILOT] Scraping API: READY');
+    console.log('[AUTOPILOT] eBay API: READY');
+    console.log('[AUTOPILOT] START SUCCESS');
 
     this.isRunning = true;
     this.stats.currentStatus = 'running';

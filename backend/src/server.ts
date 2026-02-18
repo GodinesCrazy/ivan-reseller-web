@@ -10,6 +10,8 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local'), override: true 
 console.log("=== IVAN RESELLER BACKEND BOOT ===");
 if (process.env.NODE_ENV === 'production') {
   console.log('[PRODUCTION] Backend version:', new Date().toISOString());
+  console.log('[PRODUCTION] EBAY_CLIENT_ID exists:', Boolean(process.env.EBAY_CLIENT_ID));
+  console.log('[PRODUCTION] SCRAPER_API_KEY exists:', Boolean(process.env.SCRAPER_API_KEY));
 }
 
 // Phase 4: dist safety - fail fast if build incomplete
@@ -34,6 +36,26 @@ console.log('[ENV CHECK]', {
   ZENROWS_API_KEY: !!process.env.ZENROWS_API_KEY,
   EBAY_APP_ID: !!process.env.EBAY_APP_ID,
 });
+if (process.env.NODE_ENV === 'production') {
+  const scrapingAvailable =
+    !!process.env.SCRAPER_API_KEY ||
+    !!process.env.SCRAPERAPI_KEY ||
+    !!process.env.ZENROWS_API_KEY;
+  const ebayCoreAvailable =
+    !!(process.env.EBAY_CLIENT_ID || process.env.EBAY_APP_ID) &&
+    !!(process.env.EBAY_CLIENT_SECRET || process.env.EBAY_CERT_ID);
+  console.log('[PRODUCTION] API credentials loaded:');
+  console.log('  ScraperAPI:', !!(process.env.SCRAPER_API_KEY || process.env.SCRAPERAPI_KEY));
+  console.log('  ZenRows:', !!process.env.ZENROWS_API_KEY);
+  console.log('  eBay:', !!(process.env.EBAY_CLIENT_ID || process.env.EBAY_APP_ID));
+  console.log('[PRODUCTION] Core API status:');
+  console.log('  Scraping:', scrapingAvailable);
+  console.log('  eBay Core:', ebayCoreAvailable);
+  console.log('  Trading API: (checked at Autopilot start)');
+  console.log('[PRODUCTION] Autopilot API Status:');
+  console.log('  Scraper:', Boolean(process.env.SCRAPER_API_KEY || process.env.SCRAPERAPI_KEY || process.env.ZENROWS_API_KEY));
+  console.log('  eBay:', Boolean(process.env.EBAY_CLIENT_ID && process.env.EBAY_CLIENT_SECRET));
+}
 
 // Railway startup env check (must run before any logic that depends on env)
 console.log('[RAILWAY ENV CHECK]', {

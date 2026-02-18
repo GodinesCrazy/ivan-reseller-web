@@ -151,10 +151,11 @@ router.post('/start', async (req: Request, res: Response, next) => {
       message: 'Autopilot started successfully'
     });
   } catch (error: any) {
+    console.error('[AUTOPILOT ROUTE ERROR]', error);
     logger.error('Error starting autopilot', { error, userId: req.user?.userId });
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to start autopilot'
+      error: error?.message || 'Failed to start autopilot'
     });
   }
 });
