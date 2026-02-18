@@ -60,12 +60,24 @@ interface AutopilotStats {
   lastRunTime?: string;
 }
 
+/** Production status from GET /api/autopilot/status */
+interface AutopilotStatusResponse {
+  running: boolean;
+  totalRuns?: number;
+  itemsProcessed?: number;
+  productsPublished?: number;
+  opportunitiesGenerated?: number;
+  successRate?: number;
+  lastRun?: string | null;
+}
+
 export default function Autopilot() {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [logs, setLogs] = useState<WorkflowLog[]>([]);
   const [stats, setStats] = useState<AutopilotStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [autopilotRunning, setAutopilotRunning] = useState(false);
+  const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatusResponse | null>(null);
 
   // Modals
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
@@ -241,6 +253,13 @@ export default function Autopilot() {
     checkAutopilotStatus();
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkAutopilotStatus();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   const loadData = async () => {
     try {
       const [workflowsRes, statsRes] = await Promise.all([
@@ -272,8 +291,14 @@ export default function Autopilot() {
 
   const checkAutopilotStatus = async () => {
     try {
-      const { data } = await api.get('/api/autopilot/status');
-      setAutopilotRunning(data?.running || false);
+      const { data } = await api.get<AutopilotStatusResponse>('/api/autopilot/status');
+      setAutopilotRunning(data?.running ?? false);
+      setAutopilotStatus(data ? {
+        running: data.running ?? false,
+        opportunitiesGenerated: data.opportunitiesGenerated,
+        productsPublished: data.productsPublished,
+        lastRun: data.lastRun ?? undefined,
+      } : null);
     } catch (error: any) {
       // Silent fail
     }
@@ -520,6 +545,19 @@ export default function Autopilot() {
               ? `${stats?.activeWorkflows || 0} active workflows executing automatically`
               : 'No workflows are running. Start autopilot to enable scheduled executions.'}
           </div>
+          {(autopilotStatus?.opportunitiesGenerated != null || autopilotStatus?.productsPublished != null || autopilotStatus?.lastRun) && (
+            <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-500 dark:text-gray-400">
+              {autopilotStatus.opportunitiesGenerated != null && (
+                <span>Last cycle opportunities: {autopilotStatus.opportunitiesGenerated}</span>
+              )}
+              {autopilotStatus.productsPublished != null && (
+                <span>Published: {autopilotStatus.productsPublished}</span>
+              )}
+              {autopilotStatus.lastRun && (
+                <span>Last run: {new Date(autopilotStatus.lastRun).toLocaleString()}</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

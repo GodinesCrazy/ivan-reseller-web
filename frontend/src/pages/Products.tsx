@@ -63,9 +63,17 @@ export default function Products() {
     return () => clearTimeout(timer);
   }, []);
 
-  const fetchProducts = async () => {
+  // Refetch products every 15s so Autopilot-published products appear without manual refresh
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchProducts(true).catch(() => {});
+    }, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchProducts = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await api.get('/api/products');
       // ✅ FIX: Si es setup_required, no procesar (se manejará en App.tsx)
       if (response.data?.setupRequired === true || response.data?.error === 'setup_required') {
@@ -289,9 +297,11 @@ export default function Products() {
               <p className="mt-4 text-gray-600">Loading products...</p>
             </div>
           ) : paginatedProducts.length === 0 ? (
-            <div className="text-center py-8">
+            <div className="text-center py-12 max-w-md mx-auto">
               <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">No products found</p>
+              <p className="font-medium text-gray-700 mb-2">Sin productos</p>
+              <p className="text-sm text-gray-600 mb-4">No tienes productos importados o publicados. Ve a Oportunidades, selecciona un producto y publícalo. Los productos aparecen aquí tras publicar.</p>
+              <Button onClick={() => navigate('/opportunities')}>Ir a Oportunidades</Button>
             </div>
           ) : (
             <>

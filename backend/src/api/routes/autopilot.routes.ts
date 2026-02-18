@@ -123,10 +123,13 @@ router.get('/status', async (req: Request, res: Response, next) => {
       running: isRunning,
       status: stats.currentStatus,
       workflowMode,
-      lastCycle: stats.lastRunTimestamp,
+      totalRuns: stats.totalRuns,
+      itemsProcessed: stats.totalProductsProcessed,
+      productsPublished: stats.totalProductsPublished,
       opportunitiesGenerated: lastCycle?.opportunitiesFound ?? stats.totalProductsProcessed ?? 0,
-      productsPublished: lastCycle?.productsPublished ?? stats.totalProductsPublished ?? 0,
+      successRate: stats.successRate,
       lastRun: stats.lastRunTimestamp ? stats.lastRunTimestamp.toISOString() : null,
+      lastCycle: stats.lastRunTimestamp,
     });
   } catch (error) {
     next(error);

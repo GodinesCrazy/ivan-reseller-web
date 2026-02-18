@@ -617,8 +617,11 @@ export class AutopilotSystem extends EventEmitter {
     }
     
     try {
+      this.isRunning = true;
       this.stats.currentStatus = 'running';
+      this.stats.lastRunTimestamp = new Date();
       this.emit('cycle:started', { timestamp: new Date(), query });
+      console.log('[AUTOPILOT] CYCLE STARTED at', new Date().toISOString());
 
       logger.info('Autopilot: Starting new cycle', { query, userId: currentUserId, environment: userEnvironment });
 
@@ -1918,6 +1921,7 @@ export class AutopilotSystem extends EventEmitter {
       }
     }
 
+    console.log('[AUTOPILOT] Cycle stats:', this.stats);
     logger.info('Autopilot: Stats updated', {
       totalRuns: this.stats.totalRuns,
       successRate: (this.stats.successRate * 100).toFixed(1) + '%'

@@ -1,20 +1,10 @@
 {
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
   "routes": [
-    {
-      "src": "^/api/(.*)",
-      "dest": "https://ivan-reseller-backend-production.up.railway.app/api/$1"
-    },
-    {
-      "src": "^/health$",
-      "dest": "https://ivan-reseller-backend-production.up.railway.app/health"
-    },
-    {
-      "src": "^/ready$",
-      "dest": "https://ivan-reseller-backend-production.up.railway.app/ready"
-    },
-    {
-      "src": "^(.*)$",
-      "dest": "/index.html"
-    }
+    { "src": "^/api/(.*)", "dest": "https://ivan-reseller-backend-production.up.railway.app/api/$1" },
+    { "src": "^/health$", "dest": "https://ivan-reseller-backend-production.up.railway.app/health" },
+    { "src": "^/ready$", "dest": "https://ivan-reseller-backend-production.up.railway.app/ready" },
+    { "src": "^(.*)$", "dest": "/index.html" }
   ]
 }

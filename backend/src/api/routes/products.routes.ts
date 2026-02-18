@@ -240,6 +240,58 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
+// POST /api/products/scrape - Scrape URL AliExpress y crear producto (alineación frontend)
+const scrapeProductSchema = z.object({
+  aliexpressUrl: z.string().url(),
+  margin: z.number().min(0).max(500).optional(),
+  category: z.string().max(100).optional(),
+});
+router.post('/scrape', wrapAsync(async (req: Request, res: Response, next: NextFunction) => {
+  const userId = req.user?.userId;
+  if (!userId) {
+    return res.status(401).json({ success: false, error: 'Authentication required' });
+  }
+  const { aliexpressUrl, margin = 50, category } = scrapeProductSchema.parse(req.body);
+  const { scrapingService } = await import('../../services/scraping.service');
+  const { pendingProductsLimitService } = await import('../../services/pending-products-limit.service');
+  await pendingProductsLimitService.ensurePendingLimitNotExceeded(userId, false);
+  const scrapedData = await scrapingService.scrapeAliExpressProduct(aliexpressUrl, userId);
+  const suggestedPrice = scrapedData.price * (1 + (margin / 100));
+  const dto: CreateProductDto = {
+    title: scrapedData.title || 'Producto sin título',
+    description: scrapedData.description || '',
+    aliexpressUrl,
+    aliexpressPrice: scrapedData.price,
+    suggestedPrice,
+    imageUrl: scrapedData.images?.[0],
+    imageUrls: scrapedData.images || [],
+    category: category || scrapedData.category,
+  };
+  const userRole = req.user?.role?.toUpperCase();
+  const isAdmin = userRole === 'ADMIN';
+  const product = await productService.createProduct(userId, dto, isAdmin);
+  const extractImageUrl = (imagesString: string | null | undefined): string | null => {
+    if (!imagesString) return null;
+    try {
+      const images = JSON.parse(imagesString);
+      if (Array.isArray(images) && images.length > 0 && typeof images[0] === 'string') return images[0];
+    } catch { }
+    return null;
+  };
+  const imageUrl = extractImageUrl(product.images) || product.imageUrl || undefined;
+  res.status(201).json({
+    success: true,
+    data: {
+      ...product,
+      imageUrl,
+      sku: String(product.id),
+      originalPrice: product.aliexpressPrice,
+      price: product.finalPrice ?? product.suggestedPrice,
+      margin: margin ?? 0,
+    },
+  });
+}, { route: '/api/products/scrape', serviceName: 'products' }));
+
 // POST /api/products - Crear producto
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -479,12 +531,9 @@ router.get('/:id/workflow-status', async (req: Request, res: Response, next: Nex
     }
 
     const workflowStatus = await productWorkflowStatusService.getProductWorkflowStatus(productId, userId);
-    
+
     if (!workflowStatus) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Product not found or access denied' 
-      });
+      return res.status(200).json({ success: true, data: { status: 'NOT_STARTED' } });
     }
 
     res.json({ success: true, data: workflowStatus });

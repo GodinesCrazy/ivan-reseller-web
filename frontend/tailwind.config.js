@@ -4,7 +4,6 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  // ✅ CORRECCIÓN TEMA: Configurar dark mode para usar clase 'dark' en el elemento raíz
   darkMode: 'class',
   theme: {
     extend: {
@@ -25,4 +24,4 @@ export default {
     },
   },
   plugins: [],
-}
+};
