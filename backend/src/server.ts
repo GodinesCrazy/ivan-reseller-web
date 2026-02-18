@@ -1,9 +1,16 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
 import fs from 'fs';
 import http from 'http';
 import { env } from './config/env';
 
+dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local'), override: true });
+
 console.log("=== IVAN RESELLER BACKEND BOOT ===");
+if (process.env.NODE_ENV === 'production') {
+  console.log('[PRODUCTION] Backend version:', new Date().toISOString());
+}
 
 // Phase 4: dist safety - fail fast if build incomplete
 if (process.env.NODE_ENV === 'production') {
@@ -21,6 +28,11 @@ console.log('[BOOTSTRAP ENV CHECK]', {
   DATABASE_URL_present: !!(process.env.DATABASE_URL && process.env.DATABASE_URL.trim()),
   JWT_SECRET_present: !!(process.env.JWT_SECRET && process.env.JWT_SECRET.length >= 32),
   ENCRYPTION_KEY_present: !!(process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY.length >= 32),
+});
+console.log('[ENV CHECK]', {
+  SCRAPERAPI_KEY: !!process.env.SCRAPERAPI_KEY,
+  ZENROWS_API_KEY: !!process.env.ZENROWS_API_KEY,
+  EBAY_APP_ID: !!process.env.EBAY_APP_ID,
 });
 
 // Railway startup env check (must run before any logic that depends on env)
@@ -56,9 +68,7 @@ process.on('exit', () => console.log('Process exiting'));
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
-// Railway injects PORT; fallback 4000 for local dev. Never hardcode 3000.
-const rawPort = Number(process.env.PORT);
-const PORT = rawPort && rawPort > 0 ? rawPort : 4000;
+const PORT = Number(process.env.PORT) || 4000;
 const portSource = process.env.PORT ? 'process.env.PORT' : 'fallback (4000)';
 
 if (isNaN(PORT) || PORT < 1 || PORT > 65535) {
@@ -631,9 +641,10 @@ async function startServer() {
     // ✅ FASE A CRÍTICO: Start listening IMMEDIATELY (NO awaits before this point)
     logMilestone('BEFORE_LISTEN - About to call httpServer.listen()');
     const listenStartTime = Date.now();
-    
-    httpServer.listen(PORT, '0.0.0.0', () => {
-      console.log('[STARTUP] Listening on port', PORT);
+    let effectivePort = PORT;
+
+    const onListenSuccess = () => {
+      console.log('[STARTUP] Listening on port', effectivePort);
       const listenTime = Date.now() - listenStartTime;
       const address = httpServer.address();
       const addressStr = typeof address === 'string' 
@@ -645,7 +656,7 @@ async function startServer() {
       console.log('SERVER_BOOT_OK');
       console.log('✅ LISTENING OK');
       console.log('================================');
-      console.log(`   LISTENING host=0.0.0.0 port=${PORT}`);
+      console.log(`   LISTENING host=0.0.0.0 port=${effectivePort}`);
       const addressInfo = typeof address === 'object' && address !== null
         ? `ADDR actual=${address.address}:${address.port} family=${address.family}`
         : `ADDR actual=${addressStr}`;
@@ -659,13 +670,13 @@ async function startServer() {
       console.log(`   pid: ${process.pid}`);
       console.log('');
       console.log('📡 Express endpoints available:');
-      console.log(`   Health: http://0.0.0.0:${PORT}/health`);
-      console.log(`   Health API: http://0.0.0.0:${PORT}/api/health`);
-      console.log(`   Ready: http://0.0.0.0:${PORT}/ready`);
-      console.log(`   Auth: http://0.0.0.0:${PORT}/api/auth/login`);
-      console.log(`   Auth Me: http://0.0.0.0:${PORT}/api/auth/me`);
-      console.log(`   Debug Ping: http://0.0.0.0:${PORT}/api/debug/ping`);
-      console.log(`   Debug AliExpress: http://0.0.0.0:${PORT}/api/debug/aliexpress/test-search`);
+      console.log(`   Health: http://0.0.0.0:${effectivePort}/health`);
+      console.log(`   Health API: http://0.0.0.0:${effectivePort}/api/health`);
+      console.log(`   Ready: http://0.0.0.0:${effectivePort}/ready`);
+      console.log(`   Auth: http://0.0.0.0:${effectivePort}/api/auth/login`);
+      console.log(`   Auth Me: http://0.0.0.0:${effectivePort}/api/auth/me`);
+      console.log(`   Debug Ping: http://0.0.0.0:${effectivePort}/api/debug/ping`);
+      console.log(`   Debug AliExpress: http://0.0.0.0:${effectivePort}/api/debug/aliexpress/test-search`);
       console.log('================================');
       console.log('✅ Express server ready - ALL endpoints available');
       console.log('✅ Minimal server is NOT active (Express handles all requests)');
@@ -696,7 +707,15 @@ async function startServer() {
       
       // ✅ BOOT: Start bootstrap in background based on SAFE_BOOT
       // Express ya está funcionando, esto solo inicializa servicios pesados
+      // ✅ FIX: Prevent double bootstrap execution
+      let BOOTSTRAP_EXECUTED = false;
       setImmediate(async () => {
+        if (BOOTSTRAP_EXECUTED) {
+          console.log('[BOOT] Bootstrap already executed, skipping');
+          return;
+        }
+        BOOTSTRAP_EXECUTED = true;
+        
         try {
           if (env.SAFE_BOOT) {
             logMilestone('[BOOT] SAFE_BOOT=true: Using safe bootstrap (no heavy initialization)');
@@ -724,26 +743,29 @@ async function startServer() {
           console.log('');
         }
       });
-      
-    });
-    
-    // ✅ FASE 1: Error handling for listen()
-    httpServer.on('error', (error: NodeJS.ErrnoException) => {
-      if (error.code === 'EADDRINUSE') {
-        console.error(`❌ Port ${PORT} is already in use`);
-        console.error('   Railway debe inyectar PORT automáticamente. Verifica la configuración del servicio.');
-        process.exit(1);
-      } else {
-        console.error('❌ HTTP Server error:', error);
-        console.error('   Error details:', {
-          code: error.code,
-          message: error.message,
-          stack: error.stack?.substring(0, 500)
-        });
-        // NO hacer exit inmediato - permitir que Railway vea el error en logs
-        setTimeout(() => process.exit(1), 5000);
-      }
-    });
+    };
+
+    // ✅ FASE 1: EADDRINUSE → try next ports automatically (PORT, PORT+1, ..., PORT+5)
+    const MAX_PORT_ATTEMPTS = 6;
+    const tryListen = (port: number) => {
+      effectivePort = port;
+      httpServer.removeAllListeners('error');
+      httpServer.once('error', (err: NodeJS.ErrnoException) => {
+        if (err.code === 'EADDRINUSE' && port - PORT < MAX_PORT_ATTEMPTS - 1) {
+          const nextPort = port + 1;
+          console.log('[PORT FIX] Port', port, 'in use, trying', nextPort);
+          tryListen(nextPort);
+        } else if (err.code === 'EADDRINUSE') {
+          console.error('❌ Ports', PORT, 'to', PORT + MAX_PORT_ATTEMPTS - 1, 'in use. Stop other process or set PORT.');
+          setTimeout(() => process.exit(1), 1000);
+        } else {
+          console.error('❌ HTTP Server error:', err);
+          setTimeout(() => process.exit(1), 5000);
+        }
+      });
+      httpServer.listen(port, '0.0.0.0', onListenSuccess);
+    };
+    tryListen(PORT);
   } catch (error: any) {
     console.error('❌ Failed to start server:', error);
     console.error('   Error details:', {
