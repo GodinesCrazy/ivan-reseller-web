@@ -848,7 +848,7 @@ export class AutopilotSystem extends EventEmitter {
 
     try {
       const mod = await import('./opportunity-finder.service');
-      const finder = mod.default as { searchOpportunities: (q: string, uid: number, opts?: Record<string, unknown>) => Promise<unknown[]> };
+      const finder = mod.default as unknown as { searchOpportunities: (q: string, uid: number, opts?: Record<string, unknown>) => Promise<unknown[]> };
       const env = environment || (process.env.NODE_ENV === 'production' ? 'production' : 'sandbox');
       const marketplaces: Array<'ebay' | 'amazon' | 'mercadolibre'> =
         this.config.targetMarketplace && ['ebay', 'amazon', 'mercadolibre'].includes(this.config.targetMarketplace)
