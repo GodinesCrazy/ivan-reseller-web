@@ -156,7 +156,13 @@ async function handlePutWorkflowConfig(req: Request, res: Response, next: (err: 
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     console.log('[WORKFLOW CONFIG DEBUG] RAW BODY:', JSON.stringify(body, null, 2));
 
-    const parsed = updateSchema.safeParse(body);
+    // Normalize null → undefined for optional numerics (avoids 400 when client sends null)
+    const sanitized = { ...body } as Record<string, unknown>;
+    ['autoApproveThreshold', 'autoPublishThreshold', 'maxAutoInvestment', 'workingCapital'].forEach((k) => {
+      if (sanitized[k] === null) sanitized[k] = undefined;
+    });
+
+    const parsed = updateSchema.safeParse(sanitized);
     if (!parsed.success) {
       console.error('[WORKFLOW CONFIG DEBUG] VALIDATION ERROR:', parsed.error.flatten());
       res.status(400).json({

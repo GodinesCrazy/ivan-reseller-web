@@ -850,9 +850,13 @@ export class AutopilotSystem extends EventEmitter {
       const mod = await import('./opportunity-finder.service');
       const finder = mod.default as { searchOpportunities: (q: string, uid: number, opts?: Record<string, unknown>) => Promise<unknown[]> };
       const env = environment || (process.env.NODE_ENV === 'production' ? 'production' : 'sandbox');
+      const marketplaces: Array<'ebay' | 'amazon' | 'mercadolibre'> =
+        this.config.targetMarketplace && ['ebay', 'amazon', 'mercadolibre'].includes(this.config.targetMarketplace)
+          ? [this.config.targetMarketplace as 'ebay' | 'amazon' | 'mercadolibre']
+          : ['ebay'];
       const raw = await finder.searchOpportunities(query, userId, {
         maxItems: this.config.maxOpportunitiesPerCycle || 20,
-        marketplaces: [this.config.targetMarketplace as 'ebay' | 'amazon' | 'mercadolibre'] || ['ebay'],
+        marketplaces,
         region: 'us',
         environment: env,
         skipTrendsValidation: false,
