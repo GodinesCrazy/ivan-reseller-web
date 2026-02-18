@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Ivan Reseller Web - Modern Dropshipping Platform",
   "engines": {
-    "node": "18.x"
+    "node": "24.x"
   },
   "scripts": {
     "sync-docs": "node scripts/sync_help_docs.mjs",
