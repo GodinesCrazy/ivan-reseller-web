@@ -88,9 +88,9 @@ export default function WorkflowConfig() {
       fulfillmentStage: config.stageFulfillment,
       customerServiceStage: config.stageCustomerService,
 
-      autoApproveThreshold: Number(config.autoApproveThreshold) || 75,
-      autoPublishThreshold: Number(config.autoPublishThreshold) || 85,
-      maxAutoInvestment: Number(config.maxAutoInvestment) || 100
+      autoApproveThreshold: config.autoApproveThreshold != null ? Number(config.autoApproveThreshold) || 75 : 75,
+      autoPublishThreshold: config.autoPublishThreshold != null ? Number(config.autoPublishThreshold) || 85 : 85,
+      maxAutoInvestment: config.maxAutoInvestment != null ? Number(config.maxAutoInvestment) || 100 : 100
     };
 
     try {

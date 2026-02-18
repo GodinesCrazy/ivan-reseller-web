@@ -40,10 +40,14 @@ router.get('/config/test', async (req: Request, res: Response, next) => {
 const stageModeEnum = z.enum(['manual', 'automatic', 'guided']);
 
 const optionalNum = (min = 0, max?: number) =>
-  z.union([z.number(), z.string()]).transform((v) => {
-    const n = typeof v === 'string' ? parseFloat(v) : v;
-    return typeof n === 'number' && !Number.isNaN(n) ? n : undefined;
-  }).pipe(max != null ? z.number().min(min).max(max).optional() : z.number().min(min).optional());
+  z
+    .union([z.number(), z.string(), z.null(), z.undefined()])
+    .transform((v) => {
+      if (v === null || v === undefined) return undefined;
+      const n = typeof v === 'string' ? parseFloat(v) : v;
+      return typeof n === 'number' && !Number.isNaN(n) ? n : undefined;
+    })
+    .pipe(max != null ? z.number().min(min).max(max).optional() : z.number().min(min).optional());
 
 const updateSchema = z
   .object({
