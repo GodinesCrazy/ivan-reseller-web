@@ -42,6 +42,9 @@
     "zod": "^3.22.4",
     "zustand": "^4.4.7"
   },
+  "engines": {
+    "node": "24.x"
+  },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.1.5",
     "@testing-library/react": "^14.1.2",
