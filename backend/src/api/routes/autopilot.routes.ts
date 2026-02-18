@@ -61,7 +61,45 @@ router.get('/stats', async (req: Request, res: Response, next) => {
 });
 
 /**
- * ✅ GET /api/autopilot/status - Obtener estado del autopilot
+ * ✅ GET /api/autopilot/health - Health endpoint for autopilot observability
+ * Returns autopilot status, stage metrics, and readiness
+ */
+router.get('/health', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const status = autopilotSystem.getStatus();
+    const lastCycle = status.lastCycle;
+    const { autopilotCycleLogService } = await import('../../services/autopilot-cycle-log.service');
+
+    const since = new Date();
+    since.setHours(since.getHours() - 24); // Last 24h
+    const stageMetrics = await autopilotCycleLogService.getStageMetrics(userId, since);
+
+    res.json({
+      success: true,
+      autopilot: {
+        isRunning: status.isRunning,
+        status: status.stats.currentStatus,
+        lastCycle: lastCycle?.timestamp?.toISOString(),
+        config: {
+          enabled: status.config.enabled,
+          cycleIntervalMinutes: status.config.cycleIntervalMinutes,
+        },
+      },
+      stageMetrics,
+      healthy: status.stats.currentStatus !== 'error',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * ✅ GET /api/autopilot/status - Estado del autopilot (production)
  */
 router.get('/status', async (req: Request, res: Response, next) => {
   try {
@@ -71,14 +109,20 @@ router.get('/status', async (req: Request, res: Response, next) => {
     }
 
     const status = autopilotSystem.getStatus();
-    const stats = status.stats; // ✅ CORRECCIÓN: usar status.stats en lugar de status.basicStats
+    const stats = status.stats;
     const isRunning = stats.currentStatus === 'running';
-    
+    const lastCycle = status.lastCycle;
+    const workflowMode = await workflowConfigService.getWorkflowMode(userId);
+
     res.json({
       success: true,
       running: isRunning,
       status: stats.currentStatus,
-      lastCycle: stats.lastRunTimestamp
+      workflowMode,
+      lastCycle: stats.lastRunTimestamp,
+      opportunitiesGenerated: lastCycle?.opportunitiesFound ?? stats.totalProductsProcessed ?? 0,
+      productsPublished: lastCycle?.productsPublished ?? stats.totalProductsPublished ?? 0,
+      lastRun: stats.lastRunTimestamp ? stats.lastRunTimestamp.toISOString() : null,
     });
   } catch (error) {
     next(error);

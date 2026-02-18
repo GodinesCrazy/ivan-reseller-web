@@ -76,19 +76,40 @@ export default function WorkflowConfig() {
   const saveConfig = async () => {
     if (!config) return;
 
+    const payload = {
+      workingCapital: Number(workingCapital) || 500,
+      environment: config.environment,
+      workflowMode: config.workflowMode,
+
+      scrapeStage: config.stageScrape,
+      analyzeStage: config.stageAnalyze,
+      publishStage: config.stagePublish,
+      purchaseStage: config.stagePurchase,
+      fulfillmentStage: config.stageFulfillment,
+      customerServiceStage: config.stageCustomerService,
+
+      autoApproveThreshold: Number(config.autoApproveThreshold) || 75,
+      autoPublishThreshold: Number(config.autoPublishThreshold) || 85,
+      maxAutoInvestment: Number(config.maxAutoInvestment) || 100
+    };
+
     try {
       setSaving(true);
-      await api.put('/api/workflow/config', {
-        ...config,
-        workingCapital
-      });
+      console.log('[FRONTEND DEBUG] WORKFLOW CONFIG PAYLOAD:', payload);
+      await api.put('/api/workflow/config', payload);
 
-      // También actualizar working capital por separado
       await api.put('/api/workflow/working-capital', { workingCapital });
+
+      const testRes = await api.get('/api/workflow/config/test');
+      const savedConfig = testRes.data;
+      console.log('[FRONTEND DEBUG] SAVED CONFIG:', savedConfig);
+      if (savedConfig?.workflowMode === 'automatic') {
+        console.log('[FRONTEND DEBUG] workflowMode === "automatic" confirmed');
+      }
 
       toast.success('Configuración de workflow guardada exitosamente');
     } catch (error: any) {
-      console.error('Error saving workflow config:', error);
+      console.error('[FRONTEND] Workflow config save failed:', error.response?.data ?? error);
       toast.error(error.response?.data?.error || 'Error al guardar configuración');
     } finally {
       setSaving(false);

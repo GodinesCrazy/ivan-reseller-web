@@ -23,49 +23,168 @@ router.get('/config', async (req: Request, res: Response, next) => {
   }
 });
 
-// ✅ PUT /api/workflow/config - Actualizar configuración de workflow del usuario
-// ✅ MEJORADO: Logging cuando se cambia de ambiente
-router.put('/config', async (req: Request, res: Response, next) => {
+// ✅ GET /api/workflow/config/test - Return saved config (for validation)
+router.get('/config/test', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
+    const config = await workflowConfigService.getUserConfig(userId);
+    res.json(config);
+  } catch (error) {
+    next(error);
+  }
+});
 
-    const updateSchema = z.object({
-      environment: z.enum(['sandbox', 'production']).optional(),
-      workflowMode: z.enum(['manual', 'automatic', 'hybrid']).optional(),
-      stageScrape: z.enum(['manual', 'automatic', 'guided']).optional(),
-      stageAnalyze: z.enum(['manual', 'automatic', 'guided']).optional(),
-      stagePublish: z.enum(['manual', 'automatic', 'guided']).optional(),
-      stagePurchase: z.enum(['manual', 'automatic', 'guided']).optional(),
-      stageFulfillment: z.enum(['manual', 'automatic', 'guided']).optional(),
-      stageCustomerService: z.enum(['manual', 'automatic', 'guided']).optional(),
-      autoApproveThreshold: z.number().min(0).max(100).optional(),
-      autoPublishThreshold: z.number().min(0).max(100).optional(),
-      maxAutoInvestment: z.number().min(0).optional(),
-      workingCapital: z.number().min(0).optional() // ✅ Capital de trabajo en PayPal (USD)
-    });
+const stageModeEnum = z.enum(['manual', 'automatic', 'guided']);
 
-    const validatedData = updateSchema.parse(req.body);
-    
-    // ✅ NUEVO: Validar consistencia de configuración antes de guardar
-    const validation = await workflowConfigService.validateConfig(userId);
-    if (!validation.valid) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Invalid configuration',
-        errors: validation.errors,
-        warnings: validation.warnings
-      });
+const optionalNum = (min = 0, max?: number) =>
+  z.union([z.number(), z.string()]).transform((v) => {
+    const n = typeof v === 'string' ? parseFloat(v) : v;
+    return typeof n === 'number' && !Number.isNaN(n) ? n : undefined;
+  }).pipe(max != null ? z.number().min(min).max(max).optional() : z.number().min(min).optional());
+
+const updateSchema = z
+  .object({
+    workingCapital: optionalNum(0),
+    environment: z.enum(['sandbox', 'production']).optional(),
+    workflowMode: z.enum(['manual', 'automatic', 'hybrid']).optional(),
+
+    scrapeStage: stageModeEnum.optional(),
+    analyzeStage: stageModeEnum.optional(),
+    publishStage: stageModeEnum.optional(),
+    purchaseStage: stageModeEnum.optional(),
+    fulfillmentStage: stageModeEnum.optional(),
+    customerServiceStage: stageModeEnum.optional(),
+
+    stageScrape: stageModeEnum.optional(),
+    stageAnalyze: stageModeEnum.optional(),
+    stagePublish: stageModeEnum.optional(),
+    stagePurchase: stageModeEnum.optional(),
+    stageFulfillment: stageModeEnum.optional(),
+    stageCustomerService: stageModeEnum.optional(),
+
+    autoApproveThreshold: optionalNum(0, 100),
+    autoPublishThreshold: optionalNum(0, 100),
+    maxAutoInvestment: optionalNum(0),
+
+    thresholds: z
+      .object({
+        autoApproveConfidence: optionalNum(0, 100),
+        autoPublishConfidence: optionalNum(0, 100),
+        maxInvestmentPerProduct: optionalNum(0)
+      })
+      .optional(),
+
+    stages: z
+      .object({
+        scrape: stageModeEnum.optional(),
+        analyze: stageModeEnum.optional(),
+        publish: stageModeEnum.optional(),
+        purchase: stageModeEnum.optional(),
+        fulfillment: stageModeEnum.optional(),
+        customerService: stageModeEnum.optional()
+      })
+      .optional()
+  })
+  .passthrough();
+
+type UpdateWorkflowConfigDto = {
+  environment?: 'sandbox' | 'production';
+  workflowMode?: 'manual' | 'automatic' | 'hybrid';
+  stageScrape?: 'manual' | 'automatic' | 'guided';
+  stageAnalyze?: 'manual' | 'automatic' | 'guided';
+  stagePublish?: 'manual' | 'automatic' | 'guided';
+  stagePurchase?: 'manual' | 'automatic' | 'guided';
+  stageFulfillment?: 'manual' | 'automatic' | 'guided';
+  stageCustomerService?: 'manual' | 'automatic' | 'guided';
+  autoApproveThreshold?: number;
+  autoPublishThreshold?: number;
+  maxAutoInvestment?: number;
+  workingCapital?: number;
+};
+
+function normalizeWorkflowConfig(
+  input: z.infer<typeof updateSchema> & Record<string, unknown>,
+  existingConfig: Record<string, unknown>
+): UpdateWorkflowConfigDto {
+  const stage = (key: 'scrape' | 'analyze' | 'publish' | 'purchase' | 'fulfillment' | 'customerService') => {
+    const flatKey = `stage${key.charAt(0).toUpperCase()}${key.slice(1)}` as keyof typeof input;
+    const altKey = `${key}Stage` as keyof typeof input;
+    return (input[flatKey] ?? input[altKey] ?? input.stages?.[key] ?? existingConfig[flatKey]) as string | undefined;
+  };
+  return {
+    workflowMode: (input.workflowMode ?? existingConfig.workflowMode) as UpdateWorkflowConfigDto['workflowMode'],
+    environment: (input.environment ?? existingConfig.environment) as UpdateWorkflowConfigDto['environment'],
+    workingCapital: input.workingCapital ?? (existingConfig.workingCapital as number) ?? 500,
+
+    stageScrape: (stage('scrape') ?? existingConfig.stageScrape) as UpdateWorkflowConfigDto['stageScrape'],
+    stageAnalyze: (stage('analyze') ?? existingConfig.stageAnalyze) as UpdateWorkflowConfigDto['stageAnalyze'],
+    stagePublish: (stage('publish') ?? existingConfig.stagePublish) as UpdateWorkflowConfigDto['stagePublish'],
+    stagePurchase: (stage('purchase') ?? existingConfig.stagePurchase) as UpdateWorkflowConfigDto['stagePurchase'],
+    stageFulfillment: (stage('fulfillment') ?? existingConfig.stageFulfillment) as UpdateWorkflowConfigDto['stageFulfillment'],
+    stageCustomerService: (stage('customerService') ?? existingConfig.stageCustomerService) as UpdateWorkflowConfigDto['stageCustomerService'],
+
+    autoApproveThreshold:
+      input.autoApproveThreshold ??
+      (input.thresholds as { autoApproveConfidence?: number })?.autoApproveConfidence ??
+      (existingConfig.autoApproveThreshold as number | undefined),
+    autoPublishThreshold:
+      input.autoPublishThreshold ??
+      (input.thresholds as { autoPublishConfidence?: number })?.autoPublishConfidence ??
+      (existingConfig.autoPublishThreshold as number | undefined),
+    maxAutoInvestment:
+      input.maxAutoInvestment ??
+      (input.thresholds as { maxInvestmentPerProduct?: number })?.maxInvestmentPerProduct ??
+      (existingConfig.maxAutoInvestment as number | undefined)
+  };
+}
+
+async function handlePutWorkflowConfig(req: Request, res: Response, next: (err: any) => void): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'Authentication required' });
+      return;
     }
-    
-    // ✅ Logging: Detectar cambio de ambiente
-    if (validatedData.environment) {
-      const currentConfig = await workflowConfigService.getUserConfig(userId);
-      const oldEnvironment = currentConfig.environment;
-      const newEnvironment = validatedData.environment;
-      
+
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    console.log('[WORKFLOW CONFIG DEBUG] RAW BODY:', JSON.stringify(body, null, 2));
+
+    const parsed = updateSchema.safeParse(body);
+    if (!parsed.success) {
+      console.error('[WORKFLOW CONFIG DEBUG] VALIDATION ERROR:', parsed.error.flatten());
+      res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        details: parsed.error.flatten()
+      });
+      return;
+    }
+    const validatedData = parsed.data as z.infer<typeof updateSchema> & Record<string, unknown>;
+    console.log('[WORKFLOW CONFIG DEBUG] VALIDATED BODY:', JSON.stringify(validatedData, null, 2));
+
+    const existing = await workflowConfigService.getUserConfig(userId);
+    const existingConfig = existing as unknown as Record<string, unknown>;
+    const toSave = normalizeWorkflowConfig(validatedData, existingConfig);
+
+    if (typeof toSave.workingCapital === 'number' && toSave.workingCapital < 0) {
+      console.error('[WORKFLOW CONFIG DEBUG] VALIDATION ERROR: workingCapital cannot be negative');
+      res.status(400).json({
+        success: false,
+        error: 'Invalid configuration',
+        errors: ['El capital de trabajo no puede ser negativo']
+      });
+      return;
+    }
+
+    const config = await workflowConfigService.updateUserConfig(userId, toSave);
+    console.log('[WORKFLOW CONFIG] CONFIG SAVED SUCCESSFULLY');
+
+    if (toSave.environment) {
+      const oldEnvironment = existing.environment;
+      const newEnvironment = toSave.environment;
       if (oldEnvironment !== newEnvironment) {
         const logger = (await import('../../config/logger')).default;
         logger.info('[WorkflowConfig] Environment changed', {
@@ -75,8 +194,6 @@ router.put('/config', async (req: Request, res: Response, next) => {
           changedBy: req.user?.username || 'unknown',
           timestamp: new Date().toISOString()
         });
-        
-        // ✅ MEJORA: Enviar notificación al usuario sobre cambio de ambiente
         try {
           const { notificationService } = await import('../../services/notification.service');
           notificationService.sendToUser(userId, {
@@ -85,28 +202,34 @@ router.put('/config', async (req: Request, res: Response, next) => {
             message: `El ambiente ha sido cambiado de ${oldEnvironment} a ${newEnvironment}. Las próximas publicaciones usarán el nuevo ambiente.`,
             priority: 'NORMAL',
             category: 'SYSTEM',
-            data: {
-              oldEnvironment,
-              newEnvironment,
-              changedBy: req.user?.username || 'unknown'
-            }
+            data: { oldEnvironment, newEnvironment, changedBy: req.user?.username || 'unknown' }
           });
         } catch (notifError: any) {
-          logger.warn('[WorkflowConfig] Failed to send notification', {
+          (await import('../../config/logger')).default.warn('[WorkflowConfig] Failed to send notification', {
             error: notifError?.message || String(notifError),
             userId
           });
         }
       }
     }
-    
-    const config = await workflowConfigService.updateUserConfig(userId, validatedData);
-    
+
     res.json({ success: true, config });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'ZodError') {
+      console.error('[WORKFLOW CONFIG DEBUG] VALIDATION ERROR:', error?.errors ?? error);
+      res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        details: error?.errors ?? error?.message
+      });
+      return;
+    }
     next(error);
   }
-});
+}
+
+router.put('/config', handlePutWorkflowConfig);
+router.post('/config', handlePutWorkflowConfig);
 
 // ✅ GET /api/workflow/stage/:stage - Obtener modo de una etapa específica
 router.get('/stage/:stage', async (req: Request, res: Response, next) => {

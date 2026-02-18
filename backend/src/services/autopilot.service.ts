@@ -30,6 +30,10 @@ export interface AutopilotConfig {
   minProfitUsd: number;
   minRoiPct: number;
   optimizationEnabled: boolean;
+  /** Max active products cap (optional, for config/store only). */
+  maxActiveProducts?: number;
+  /** Max daily orders cap (optional, for config/store only). */
+  maxDailyOrders?: number;
 }
 
 /**
@@ -130,6 +134,10 @@ export class AutopilotSystem extends EventEmitter {
   private lastCycleResult: CycleResult | null = null;
   private currentUserId: number | null = null; // ✅ Usuario actual que está ejecutando el Autopilot
   private marketplaceService: MarketplaceService; // ✅ FIX: Declare property
+  private consecutiveFailures: number = 0; // ✅ Backoff on errors
+  private maxConsecutiveFailures: number = 5; // ✅ Retry cap - pause after 5 failures
+  private lastCycleStartTime: number = 0; // ✅ Rate limiting
+  private cycleScheduled: boolean = false; // ✅ FIX: Prevent duplicate scheduleNextCycle
 
   constructor() {
     super();
@@ -305,17 +313,30 @@ export class AutopilotSystem extends EventEmitter {
    * @param userId - ID del usuario que inicia el Autopilot (OBLIGATORIO)
    */
   public async start(userId: number): Promise<void> {
-    if (!userId || userId <= 0) {
-      throw new Error('Autopilot: userId is required and must be greater than 0');
-    }
-
+    // ✅ FIX: Prevent double start() execution
     if (this.isRunning) {
+      console.log('[AUTOPILOT] Already running, skipping start()');
       if (this.currentUserId === userId) {
         logger.warn('Autopilot: Already running for this user', { userId });
         return;
       } else {
         throw new Error(`Autopilot: Already running for user ${this.currentUserId}. Stop it first before starting for user ${userId}`);
       }
+    }
+    
+    if (!userId || userId <= 0) {
+      throw new Error('Autopilot: userId is required and must be greater than 0');
+    }
+
+    const { prisma } = await import('../config/database');
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { onboardingCompleted: true, role: true },
+    });
+    if (user && user.role?.toUpperCase() === 'USER' && !user.onboardingCompleted) {
+      const err = new Error('ONBOARDING_INCOMPLETE: Complete the onboarding wizard before starting Autopilot.');
+      logger.warn('Autopilot: Blocked - onboarding not completed', { userId });
+      throw err;
     }
 
     if (!this.config.enabled) {
@@ -373,17 +394,35 @@ export class AutopilotSystem extends EventEmitter {
 
     this.isRunning = true;
     this.stats.currentStatus = 'running';
-    
+
+    const workflowMode = await workflowConfigService.getWorkflowMode(userId);
+    if (workflowMode === 'automatic') {
+      this.config.publicationMode = 'automatic';
+      logger.info('Autopilot: Workflow mode automatic - publicationMode set to automatic');
+    }
+    if (this.config.publicationMode !== 'automatic') {
+      this.config.publicationMode = 'automatic';
+      logger.info('Autopilot: Full automatic mode - publicationMode forced to automatic');
+    }
+
     logger.info('Autopilot: System started', {
       userId,
       cycleInterval: this.config.cycleIntervalMinutes,
       publicationMode: this.config.publicationMode
     });
+    console.log('[AUTOPILOT_STARTED]', { userId });
 
     this.emit('started', { timestamp: new Date(), userId });
 
     // Start first cycle immediately with userId
-    await this.runSingleCycle(undefined, userId);
+    console.log('[AUTOPILOT] Searching opportunities');
+    try {
+      await this.runSingleCycle(undefined, userId);
+      console.log('[AUTOPILOT] Cycle complete');
+    } catch (err) {
+      console.error('[AUTOPILOT] Cycle error:', err);
+      logger.error('Autopilot: First cycle failed', { error: err });
+    }
 
     // Schedule recurring cycles
     this.scheduleNextCycle();
@@ -408,6 +447,7 @@ export class AutopilotSystem extends EventEmitter {
     this.isRunning = false;
     this.stats.currentStatus = 'idle';
     this.currentUserId = null;
+    this.cycleScheduled = false; // ✅ FIX: Reset cycle scheduled flag
 
     if (this.cycleTimer) {
       clearTimeout(this.cycleTimer);
@@ -420,23 +460,101 @@ export class AutopilotSystem extends EventEmitter {
 
   /**
    * Schedule next cycle
+   * ✅ Backoff on errors: exponential backoff when consecutiveFailures > 0
+   * ✅ Retry cap: pause after maxConsecutiveFailures, emit event for manual resume
    */
   private scheduleNextCycle(): void {
+    // ✅ FIX: Prevent duplicate scheduleNextCycle execution
+    if (this.cycleScheduled) {
+      console.log('[AUTOPILOT] Cycle already scheduled, skipping');
+      return;
+    }
+    
     if (!this.isRunning || !this.currentUserId) {
       return;
     }
 
-    const intervalMs = this.config.cycleIntervalMinutes * 60 * 1000;
-    
+    let intervalMs = this.config.cycleIntervalMinutes * 60 * 1000;
+
+    // ✅ Retry cap - pause after max consecutive failures
+    if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+      logger.warn('Autopilot: Pausing - max consecutive failures reached', {
+        consecutiveFailures: this.consecutiveFailures,
+        maxConsecutiveFailures: this.maxConsecutiveFailures,
+      });
+      this.stats.currentStatus = 'error';
+      this.emit('autopilot:paused_max_failures', {
+        consecutiveFailures: this.consecutiveFailures,
+        maxConsecutiveFailures: this.maxConsecutiveFailures,
+      });
+      return; // No infinite loop - stop scheduling
+    }
+
+    // ✅ Exponential backoff on errors (2^failures * base interval, cap at 4x)
+    if (this.consecutiveFailures > 0) {
+      const backoffMultiplier = Math.min(Math.pow(2, this.consecutiveFailures), 4);
+      intervalMs = Math.round(intervalMs * backoffMultiplier);
+      logger.info('Autopilot: Backoff applied', {
+        consecutiveFailures: this.consecutiveFailures,
+        nextCycleIn: `${Math.round(intervalMs / 60000)} minutes`,
+      });
+    }
+
+    this.cycleScheduled = true;
     this.cycleTimer = setTimeout(async () => {
-      // ✅ Usar currentUserId del sistema cuando se ejecuta automáticamente
-      await this.runSingleCycle(undefined, this.currentUserId!);
+      this.cycleScheduled = false;
+      if (!this.isRunning || !this.currentUserId) {
+        return;
+      }
+      console.log('[AUTOPILOT] Searching opportunities');
+      try {
+        await this.runSingleCycle(undefined, this.currentUserId!);
+      } catch (err) {
+        console.error('[AUTOPILOT] Cycle error:', err);
+        logger.error('Autopilot: Cycle failed', { error: err });
+      }
+      console.log('[AUTOPILOT] Cycle complete');
       this.scheduleNextCycle();
     }, intervalMs);
 
     logger.debug('Autopilot: Next cycle scheduled', {
-      nextCycleIn: `${this.config.cycleIntervalMinutes} minutes`
+      nextCycleIn: `${Math.round(intervalMs / 60000)} minutes`,
+      consecutiveFailures: this.consecutiveFailures,
     });
+  }
+
+  /**
+   * Check if autopilot is globally paused (system-wide)
+   */
+  private async isGlobalPause(): Promise<boolean> {
+    try {
+      const rec = await prisma.systemConfig.findUnique({
+        where: { key: 'autopilot_global_pause' },
+      });
+      return rec?.value === 'true' || rec?.value === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get per-user thresholds (minProfitUsd, minRoiPct) - fallback to global config
+   */
+  private async getUserThresholds(userId: number): Promise<{ minProfitUsd: number; minRoiPct: number }> {
+    try {
+      const cfg = await prisma.userWorkflowConfig.findUnique({
+        where: { userId },
+      });
+      const uc = cfg as { minProfitUsd?: number; minRoiPct?: number } | null;
+      const minProfitUsd = uc?.minProfitUsd ?? this.config.minProfitUsd;
+      const minRoiPct = uc?.minRoiPct ?? this.config.minRoiPct;
+      return {
+        minProfitUsd: minProfitUsd ?? 10,
+        minRoiPct: minRoiPct ?? 50,
+      };
+    } catch {
+      return { minProfitUsd: this.config.minProfitUsd, minRoiPct: this.config.minRoiPct };
+    }
   }
 
   /**
@@ -447,7 +565,40 @@ export class AutopilotSystem extends EventEmitter {
    */
   public async runSingleCycle(query?: string, userId?: number, environment?: 'sandbox' | 'production'): Promise<CycleResult> {
     const cycleStart = Date.now();
-    
+    const cycleId = `cycle-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+    const autopilotMode = (process.env.AUTOPILOT_MODE || 'sandbox') as 'production' | 'sandbox';
+    if (autopilotMode === 'production') {
+      const allowBrowser = env.ALLOW_BROWSER_AUTOMATION ?? false;
+      if (!allowBrowser) {
+        const msg = 'AUTOPILOT_MODE=production: simulated checkout forbidden. Set ALLOW_BROWSER_AUTOMATION=true.';
+        throw new Error(msg);
+      }
+      if (!process.env.PAYPAL_CLIENT_ID || !process.env.PAYPAL_CLIENT_SECRET) {
+        throw new Error('AUTOPILOT_MODE=production: simulated PayPal forbidden. Configure PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET.');
+      }
+    }
+
+    // ✅ Global pause check
+    if (await this.isGlobalPause()) {
+      logger.info('Autopilot: Cycle skipped - global pause enabled');
+      const result: CycleResult = {
+        success: false,
+        message: 'Autopilot globally paused',
+        category: 'unknown',
+        query: query || 'unknown',
+        opportunitiesFound: 0,
+        opportunitiesProcessed: 0,
+        productsPublished: 0,
+        productsApproved: 0,
+        capitalUsed: 0,
+        errors: ['autopilot_global_pause'],
+        timestamp: new Date(),
+      };
+      this.emit('cycle:skipped', result);
+      return result;
+    }
+
     // ✅ Obtener userId: usar el proporcionado, o el del sistema si está corriendo, o lanzar error
     let currentUserId: number;
     if (userId && userId > 0) {
@@ -456,6 +607,15 @@ export class AutopilotSystem extends EventEmitter {
       currentUserId = this.currentUserId;
     } else {
       throw new Error('Autopilot: userId is required. Either provide userId parameter or start Autopilot first with start(userId)');
+    }
+
+    const { prisma: prismaCycle } = await import('../config/database');
+    const userCycle = await prismaCycle.user.findUnique({
+      where: { id: currentUserId },
+      select: { onboardingCompleted: true, role: true },
+    });
+    if (userCycle && userCycle.role?.toUpperCase() === 'USER' && !userCycle.onboardingCompleted) {
+      throw new Error('ONBOARDING_INCOMPLETE: Complete the onboarding wizard before running Autopilot.');
     }
     
     // ✅ Obtener environment del usuario si no se especifica
@@ -511,28 +671,18 @@ export class AutopilotSystem extends EventEmitter {
 
       logger.info('Autopilot: Available capital', { capital: availableCapital });
 
-      // ✅ Verificar etapa ANALYZE
-      const analyzeMode = await workflowConfigService.getStageMode(currentUserId, 'analyze');
-      if (analyzeMode === 'manual') {
-        logger.info('Autopilot: Etapa ANALYZE en modo manual - pausando', { userId: currentUserId });
-        return {
-          success: false,
-          message: 'Etapa ANALYZE en modo manual - requiere acción del usuario',
-          category,
-          query: selectedQuery,
-          opportunitiesFound: 0,
-          opportunitiesProcessed: 0,
-          productsPublished: 0,
-          productsApproved: 0,
-          capitalUsed: 0,
-          errors: ['ANALYZE stage is in manual mode'],
-          timestamp: new Date()
-        };
+      // ✅ FULL AUTOMATIC MODE: Override analyze stage - never pause for manual analyze
+      const analyzeModeFromConfig = await workflowConfigService.getStageMode(currentUserId, 'analyze');
+      const effectiveAnalyzeMode = 'automatic' as const; // Force full automatic profit mode
+      if (analyzeModeFromConfig === 'manual') {
+        logger.info('Autopilot: Full automatic mode - overriding ANALYZE stage to automatic', { userId: currentUserId });
       }
 
       // 3. Search opportunities (con userId y environment)
+      console.log('[AUTOPILOT] Searching opportunities');
+      logger.info('[AUTOPILOT] Searching opportunities');
       const opportunities = await this.searchOpportunities(selectedQuery, currentUserId, userEnvironment);
-
+      console.log('[AUTOPILOT] Opportunities generated:', opportunities.length);
       if (opportunities.length === 0) {
         const result: CycleResult = {
           success: true,
@@ -548,6 +698,8 @@ export class AutopilotSystem extends EventEmitter {
         };
 
         logger.info('Autopilot: Cycle completed - no opportunities');
+        console.log('[AUTOPILOT] Cycle complete');
+        logger.info('[AUTOPILOT] Cycle complete');
         this.emit('cycle:completed', result);
         return result;
       }
@@ -555,9 +707,10 @@ export class AutopilotSystem extends EventEmitter {
       logger.info('Autopilot: Found opportunities', { count: opportunities.length });
 
       // 4. Filter affordable opportunities
-      const { affordable, capitalReserved } = this.filterAffordableOpportunities(
+      const { affordable, capitalReserved } = await this.filterAffordableOpportunities(
         opportunities,
-        availableCapital
+        availableCapital,
+        currentUserId
       );
 
       if (affordable.length === 0) {
@@ -575,6 +728,8 @@ export class AutopilotSystem extends EventEmitter {
         };
 
         logger.info('Autopilot: Cycle completed - no affordable opportunities');
+        console.log('[AUTOPILOT] Cycle complete');
+        logger.info('[AUTOPILOT] Cycle complete');
         this.emit('cycle:completed', result);
         return result;
       }
@@ -584,26 +739,15 @@ export class AutopilotSystem extends EventEmitter {
         capitalReserved 
       });
 
-      // ✅ Verificar etapa PUBLISH
-      const publishMode = await workflowConfigService.getStageMode(currentUserId, 'publish');
-      if (publishMode === 'manual') {
-        logger.info('Autopilot: Etapa PUBLISH en modo manual - pausando', { userId: currentUserId });
-        return {
-          success: true,
-          message: 'Etapa PUBLISH en modo manual - oportunidades encontradas pero no publicadas',
-          category,
-          query: selectedQuery,
-          opportunitiesFound: opportunities.length,
-          opportunitiesProcessed: affordable.length,
-          productsPublished: 0,
-          productsApproved: 0,
-          capitalUsed: capitalReserved,
-          timestamp: new Date()
-        };
+      // ✅ FULL AUTOMATIC MODE: Override publish stage - never pause for manual publish
+      const publishModeFromConfig = await workflowConfigService.getStageMode(currentUserId, 'publish');
+      const effectivePublishMode = 'automatic' as const; // Force full automatic profit mode
+      if (publishModeFromConfig === 'manual') {
+        logger.info('Autopilot: Full automatic mode - overriding PUBLISH stage to automatic', { userId: currentUserId });
       }
 
-      // 5. Process opportunities (con userId y environment)
-      const { published, approved } = await this.processOpportunities(affordable, currentUserId, userEnvironment, publishMode);
+      // 5. Process opportunities (con userId y environment) - always automatic
+      const { published, approved } = await this.processOpportunities(affordable, currentUserId, userEnvironment, effectivePublishMode);
 
       // 6. Update category performance
       this.updateCategoryPerformance(category, {
@@ -647,6 +791,9 @@ export class AutopilotSystem extends EventEmitter {
         approved,
         capitalUsed: capitalReserved
       });
+      console.log('[AUTOPILOT] Cycle complete');
+      console.log('[AUTOPILOT] Profit cycle completed');
+      logger.info('[AUTOPILOT] Cycle complete');
 
       this.lastCycleResult = result;
       this.stats.currentStatus = 'idle';
@@ -674,55 +821,60 @@ export class AutopilotSystem extends EventEmitter {
       logger.error('Autopilot: Cycle failed', { error });
       this.emit('cycle:failed', result);
 
+      // ✅ PERSISTENCE: Log every failure
+      const { autopilotCycleLogService } = await import('./autopilot-cycle-log.service');
+      await autopilotCycleLogService.logCycle({
+        userId: currentUserId,
+        cycleId,
+        stage: 'full_cycle',
+        success: false,
+        message: result.message,
+        errors: result.errors,
+        durationMs: Date.now() - cycleStart,
+        metadata: { consecutiveFailures: this.consecutiveFailures },
+      }).catch(() => {});
+
       return result;
     }
   }
 
   /**
-   * ✅ Search for opportunities using stealth scraping (con userId y environment)
-   * @param query - Query de búsqueda
-   * @param userId - ID del usuario (OBLIGATORIO)
-   * @param environment - Ambiente (sandbox/production)
+   * Search for opportunities using REAL profit engine (Affiliate + fallback). No mock/simulated data.
    */
   private async searchOpportunities(query: string, userId: number, environment?: 'sandbox' | 'production'): Promise<Opportunity[]> {
     if (!userId || userId <= 0) {
       throw new Error('searchOpportunities: userId is required and must be greater than 0');
     }
-    
+
     try {
-      // Build AliExpress search URL
-      const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(query)}&SortType=total_tranpro_desc`;
-      
-      // ✅ USAR SERVICIO REAL DE OPORTUNIDADES (con userId y environment)
-      // Usar opportunity-finder service que hace scraping real
-      const opportunityFinder = await import('./opportunity-finder.service');
-      const foundItems = await opportunityFinder.default.findOpportunities(userId, {
-        query,
-        maxItems: this.config.maxOpportunitiesPerCycle,
-        marketplaces: [this.config.targetMarketplace as 'ebay' | 'amazon' | 'mercadolibre'],
-        region: 'us'
+      const opportunityFinder = (await import('./opportunity-finder.service')).default;
+      const env = environment || (process.env.NODE_ENV === 'production' ? 'production' : 'sandbox');
+      const foundItems = await opportunityFinder.searchOpportunities(query, userId, {
+        maxItems: this.config.maxOpportunitiesPerCycle || 20,
+        marketplaces: [this.config.targetMarketplace as 'ebay' | 'amazon' | 'mercadolibre'] || ['ebay'],
+        region: 'us',
+        environment: env,
+        skipTrendsValidation: false,
       });
 
-      // Convertir items encontrados al formato Opportunity
       const opportunities: Opportunity[] = foundItems.map((item: any) => ({
         id: item.productId,
         title: item.title,
-        url: item.aliexpressUrl,
+        url: item.aliexpressUrl || item.productUrl || '',
         price: item.costUsd,
         estimatedCost: item.costUsd,
-        estimatedProfit: (item.suggestedPriceUsd - item.costUsd) * (1 - item.profitMargin),
-        roi: item.roiPercentage,
+        estimatedProfit: (item.suggestedPriceUsd - item.costUsd) * (typeof item.profitMargin === 'number' ? 1 - item.profitMargin : 0.5),
+        roi: typeof item.roiPercentage === 'number' ? item.roiPercentage : 0,
         category: this.getQueryCategory(query),
-        images: item.image ? [item.image] : [],
-        description: `Producto encontrado: ${item.title}`,
+        images: Array.isArray(item.images) ? item.images : (item.image ? [item.image] : []),
+        description: item.description || `Producto: ${item.title}`,
         rating: 0,
-        orders: 0
+        orders: 0,
       }));
 
+      console.log('[AUTOPILOT] Opportunities generated:', opportunities.length);
       logger.info('Autopilot: Found real opportunities', { count: opportunities.length, query });
-
       return opportunities;
-
     } catch (error) {
       logger.error('Autopilot: Error searching opportunities', { error, query });
       return [];
@@ -763,7 +915,7 @@ export class AutopilotSystem extends EventEmitter {
     
     try {
       // ✅ Obtener capital del usuario desde UserWorkflowConfig
-      const totalCapital = await workflowConfigService.getWorkingCapital(userId);
+      const totalCapital = await workflowConfigService.getWorkingCapital(userId) || 0;
 
       // ✅ Get pending orders cost del usuario
       const pendingOrders = await prisma.sale.findMany({
@@ -788,41 +940,68 @@ export class AutopilotSystem extends EventEmitter {
         }
       });
 
-      const { toNumber } = require('../utils/decimal.utils');
+      // ✅ FIX: Use imported toNumber instead of requiring again
       const approvedCost = approvedProducts.reduce((sum, product) => 
         sum + toNumber(product.aliexpressPrice || 0), 0
       );
 
-      const available = totalCapital - pendingCost - approvedCost;
+      let available = totalCapital - pendingCost - approvedCost;
+
+      // ✅ FALLBACK: Use workingCapital from config if calculated capital is zero, negative, or NaN
+      if (!available || available <= 0 || isNaN(available)) {
+        available = this.config.workingCapital || 0;
+        
+        console.log('[AUTOPILOT] Using fallback workingCapital:', available);
+        
+        logger.info('Autopilot: Using fallback workingCapital', {
+          workingCapital: this.config.workingCapital,
+          availableCapital: available,
+          totalCapital,
+          pendingCost,
+          approvedCost,
+          reason: !available ? 'zero' : available <= 0 ? 'negative' : 'NaN'
+        });
+      }
 
       logger.debug('Autopilot: Capital calculation', {
         total: totalCapital,
         pending: pendingCost,
         approved: approvedCost,
-        available: Math.max(0, available)
+        available: Math.max(0, available),
+        usedFallback: available === (this.config.workingCapital || 0)
       });
 
       return Math.max(0, available);
 
     } catch (error) {
       logger.error('Autopilot: Error calculating available capital', { error });
-      return 0;
+      // ✅ FALLBACK: Use workingCapital even on error
+      const fallbackCapital = this.config.workingCapital || 0;
+      if (fallbackCapital > 0) {
+        console.log('[AUTOPILOT] Using fallback workingCapital (error case):', fallbackCapital);
+        logger.info('Autopilot: Using fallback workingCapital due to error', {
+          workingCapital: this.config.workingCapital,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      return fallbackCapital;
     }
   }
 
   /**
    * Filter opportunities by business rules and available capital
    */
-  private filterAffordableOpportunities(
+  private async filterAffordableOpportunities(
     opportunities: Opportunity[],
-    availableCapital: number
-  ): { affordable: Opportunity[]; capitalReserved: number } {
+    availableCapital: number,
+    userId: number
+  ): Promise<{ affordable: Opportunity[]; capitalReserved: number }> {
     const affordable: Opportunity[] = [];
     let capitalReserved = 0;
 
     for (const opp of opportunities) {
-      // Validate business rules
-      if (!this.isOpportunityValid(opp)) {
+      // Validate business rules (per-user thresholds)
+      if (!(await this.isOpportunityValid(opp, userId))) {
         logger.debug('Autopilot: Opportunity rejected by rules', {
           title: opp.title,
           profit: opp.estimatedProfit,
@@ -854,17 +1033,16 @@ export class AutopilotSystem extends EventEmitter {
   }
 
   /**
-   * Validate opportunity against business rules
+   * Validate opportunity against business rules (per-user thresholds)
    */
-  private isOpportunityValid(opportunity: Opportunity): boolean {
-    if (opportunity.estimatedProfit < this.config.minProfitUsd) {
+  private async isOpportunityValid(opportunity: Opportunity, userId: number): Promise<boolean> {
+    const thresholds = await this.getUserThresholds(userId);
+    if (opportunity.estimatedProfit < thresholds.minProfitUsd) {
       return false;
     }
-
-    if (opportunity.roi < this.config.minRoiPct) {
+    if (opportunity.roi < thresholds.minRoiPct) {
       return false;
     }
-
     return true;
   }
 
@@ -889,12 +1067,16 @@ export class AutopilotSystem extends EventEmitter {
 
     for (const opp of opportunities) {
       try {
-        // ✅ Verificar modo de publicación
-        if (currentPublishMode === 'automatic') {
-          // Auto-publish to marketplace
+        // ✅ FULL AUTOMATIC MODE: Treat as automatic when autopilot is running
+        const effectiveMode = this.isRunning ? 'automatic' : currentPublishMode;
+        if (effectiveMode === 'automatic') {
+          console.log('[AUTOPILOT] Publishing profitable product:', opp.title);
+          logger.info('Autopilot: Publishing profitable product', { title: opp.title });
+          // Auto-publish to marketplace (do NOT filter by source — fallback products publish normally)
           const result = await this.publishToMarketplace(opp, currentUserId, currentEnvironment);
           if (result.success) {
             published++;
+            console.log('[AUTOPILOT] Product published automatically:', opp.title);
             logger.info('Autopilot: Product published automatically', {
               title: opp.title
             });
@@ -992,9 +1174,10 @@ export class AutopilotSystem extends EventEmitter {
       const currentUserId = userId;
       const currentEnvironment = environment || 'sandbox';
       
-      // ✅ Verificar etapa PUBLISH antes de publicar
+      // ✅ FULL AUTOMATIC MODE: Never pause for manual publish when Autopilot is running
       const publishMode = await workflowConfigService.getStageMode(currentUserId, 'publish');
-      if (publishMode === 'manual') {
+      const forceAutomaticPublish = this.isRunning; // Autopilot cycle = always automatic
+      if (!forceAutomaticPublish && publishMode === 'manual') {
         logger.info('Autopilot: Publicación en modo manual - enviando a cola de aprobación', { userId: currentUserId });
         await this.sendToApprovalQueue(opportunity, currentUserId);
         return { success: false }; // No publica, pero envía a aprobación
@@ -1056,6 +1239,19 @@ export class AutopilotSystem extends EventEmitter {
           400,
           ErrorCode.VALIDATION_ERROR
         );
+      }
+
+      // ✅ SAFETY: Never publish same product twice - deduplication by aliexpressUrl
+      const existingProduct = await prisma.product.findFirst({
+        where: { userId: currentUserId, aliexpressUrl: opportunity.url },
+      });
+      if (existingProduct) {
+        logger.info('Autopilot: Skipping duplicate product (already exists)', {
+          aliexpressUrl: opportunity.url,
+          productId: existingProduct.id,
+          userId: currentUserId,
+        });
+        return { success: false }; // Not an error - idempotent skip
       }
 
       // ✅ LÍMITE DE PRODUCTOS PENDIENTES: Validar antes de crear
@@ -1140,10 +1336,10 @@ export class AutopilotSystem extends EventEmitter {
         return newProduct;
       });
 
-      // ✅ CRÍTICO: Si analyze está en modo automatic, aprobar automáticamente el producto
-      // Esto permite que el workflow avance de ANALYZE a PUBLISH
+      // ✅ FULL AUTOMATIC MODE: Always auto-approve when Autopilot is running
       const analyzeMode = await workflowConfigService.getStageMode(currentUserId, 'analyze');
-      if (analyzeMode === 'automatic') {
+      const forceAutoApprove = this.isRunning || analyzeMode === 'automatic';
+      if (forceAutoApprove) {
         try {
           const { productService } = await import('./product.service');
           await productService.updateProductStatusSafely(
@@ -1153,6 +1349,7 @@ export class AutopilotSystem extends EventEmitter {
             'Autopilot: Aprobación automática (analyze en modo automatic)'
           );
           
+          console.log('[AUTOPILOT] Opportunity approved automatically');
           logger.info('Autopilot: Producto aprobado automáticamente', {
             productId: product.id,
             userId: currentUserId,
@@ -1283,6 +1480,7 @@ export class AutopilotSystem extends EventEmitter {
             }
           });
 
+          console.log('[AUTOPILOT] Product published automatically');
           logger.info('Autopilot: Product published to marketplace successfully', {
             service: 'autopilot',
             userId: currentUserId,
@@ -1351,6 +1549,7 @@ export class AutopilotSystem extends EventEmitter {
         });
       }
 
+      logger.info('[AUTOPILOT] Publishing product');
       this.emit('product:published', { 
         productId: product.id, 
         opportunity,
@@ -1393,6 +1592,19 @@ export class AutopilotSystem extends EventEmitter {
         );
       }
       
+      // ✅ SAFETY: Never add same product twice - deduplication by aliexpressUrl
+      const existingProduct = await prisma.product.findFirst({
+        where: { userId: currentUserId, aliexpressUrl: opportunity.url },
+      });
+      if (existingProduct) {
+        logger.info('Autopilot: Skipping duplicate product in approval queue (already exists)', {
+          aliexpressUrl: opportunity.url,
+          productId: existingProduct.id,
+          userId: currentUserId,
+        });
+        return;
+      }
+
       // ✅ CORRECCIÓN: Status debe ser 'PENDING' para que aparezca en cola de aprobación
       // ✅ RESILIENCIA: Intentar crear producto con currency, si falla (migración no ejecutada), intentar sin currency
       let product;
@@ -1453,10 +1665,10 @@ export class AutopilotSystem extends EventEmitter {
         }
       }
 
-      // ✅ CRÍTICO: Si analyze está en modo automatic, aprobar automáticamente el producto
-      // Esto permite que el workflow avance de ANALYZE a PUBLISH
+      // ✅ FULL AUTOMATIC MODE: Auto-approve when Autopilot is running
       const analyzeMode = await workflowConfigService.getStageMode(currentUserId, 'analyze');
-      if (analyzeMode === 'automatic') {
+      const forceAutoApproveHere = this.isRunning || analyzeMode === 'automatic';
+      if (forceAutoApproveHere) {
         try {
           const { productService } = await import('./product.service');
           await productService.updateProductStatusSafely(
@@ -1466,6 +1678,7 @@ export class AutopilotSystem extends EventEmitter {
             'Autopilot: Aprobación automática (analyze en modo automatic)'
           );
           
+          console.log('[AUTOPILOT] Opportunity approved automatically');
           logger.info('Autopilot: Producto aprobado automáticamente en sendToApprovalQueue', {
             productId: product.id,
             userId: currentUserId,
