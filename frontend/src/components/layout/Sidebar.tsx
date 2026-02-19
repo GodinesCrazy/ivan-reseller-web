@@ -19,7 +19,8 @@ import {
   Terminal,
   HelpCircle,
   Video,
-  ShoppingCart
+  ShoppingCart,
+  Activity
 } from 'lucide-react';
 
 interface NavItem {
@@ -30,27 +31,28 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/opportunities', label: 'Opportunities', icon: Search },
+  { path: '/dashboard', label: 'Panel', icon: LayoutDashboard },
+  { path: '/opportunities', label: 'Oportunidades', icon: Search },
   { path: '/autopilot', label: 'Autopilot', icon: Bot },
-  { path: '/products', label: 'Products', icon: Package },
-  { path: '/sales', label: 'Sales', icon: DollarSign },
-  { path: '/orders', label: 'Orders', icon: Receipt },
+  { path: '/products', label: 'Productos', icon: Package },
+  { path: '/sales', label: 'Ventas', icon: DollarSign },
+  { path: '/orders', label: 'Órdenes', icon: Receipt },
   { path: '/checkout', label: 'Checkout', icon: CreditCard },
-  { path: '/pending-purchases', label: 'Compras Pendientes', icon: ShoppingCart },
-  { path: '/commissions', label: 'Commissions', icon: Receipt },
-  { path: '/finance', label: 'Finance', icon: Wallet },
-  { path: '/flexible', label: 'Flexible Dropshipping', icon: TrendingUp },
-  { path: '/publisher', label: 'Intelligent Publisher', icon: Send },
-  { path: '/jobs', label: 'Jobs', icon: Briefcase },
-  { path: '/reports', label: 'Reports', icon: FileText },
-  { path: '/users', label: 'Users', icon: Users, roles: ['ADMIN'] }, // Solo ADMIN
-  { path: '/regional', label: 'Regional Config', icon: Globe },
-  { path: '/logs', label: 'System Logs', icon: Terminal, roles: ['ADMIN'] }, // Solo ADMIN
-  { path: '/workflow-config', label: 'Workflow Config', icon: Settings },
-  { path: '/settings', label: 'Settings', icon: Settings },
-  { path: '/meeting-room', label: 'Sala de Reuniones', icon: Video },
-  { path: '/help', label: 'Help Center', icon: HelpCircle },
+  { path: '/pending-purchases', label: 'Compras pendientes', icon: ShoppingCart },
+  { path: '/commissions', label: 'Comisiones', icon: Receipt },
+  { path: '/finance', label: 'Finanzas', icon: Wallet },
+  { path: '/flexible', label: 'Dropshipping flexible', icon: TrendingUp },
+  { path: '/publisher', label: 'Publicador inteligente', icon: Send },
+  { path: '/jobs', label: 'Trabajos', icon: Briefcase },
+  { path: '/reports', label: 'Reportes', icon: FileText },
+  { path: '/users', label: 'Usuarios', icon: Users, roles: ['ADMIN'] },
+  { path: '/regional', label: 'Configuración regional', icon: Globe },
+  { path: '/logs', label: 'Registros del sistema', icon: Terminal, roles: ['ADMIN'] },
+  { path: '/workflow-config', label: 'Config. workflows', icon: Settings },
+  { path: '/settings', label: 'Configuración', icon: Settings },
+  { path: '/meeting-room', label: 'Sala de reuniones', icon: Video },
+  { path: '/help', label: 'Centro de ayuda', icon: HelpCircle },
+  { path: '/onboarding', label: 'Asistente de configuración', icon: Settings },
 ];
 
 export default function Sidebar() {

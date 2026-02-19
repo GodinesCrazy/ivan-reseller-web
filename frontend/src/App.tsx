@@ -22,7 +22,6 @@ const Reports = lazy(() => import('@pages/Reports'));
 const Users = lazy(() => import('@pages/Users'));
 const RegionalConfig = lazy(() => import('@pages/RegionalConfig'));
 const SystemLogs = lazy(() => import('@pages/SystemLogs'));
-const SystemStatus = lazy(() => import('@pages/SystemStatus'));
 const Settings = lazy(() => import('@pages/Settings'));
 const APIConfiguration = lazy(() => import('@pages/APIConfiguration'));
 const APISettings = lazy(() => import('@pages/APISettings'));
@@ -223,7 +222,6 @@ function AppContent() {
         <Route path="users" element={<Users />} />
         <Route path="regional" element={<RegionalConfig />} />
         <Route path="logs" element={<SystemLogs />} />
-        <Route path="system-status" element={<SystemStatus />} />
         
         {/* Settings & Configuration */}
         <Route path="settings" element={<Settings />} />
