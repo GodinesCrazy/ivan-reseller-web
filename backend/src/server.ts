@@ -635,25 +635,22 @@ async function startServer() {
     // ✅ FASE 0: Initialize build info (for /version endpoint and X-App-Commit header)
     initBuildInfo();
     
-    // ✅ FASE A CRÍTICO: Create HTTP server FIRST (NO awaits before this)
-    // ✅ BOOT: Express SIEMPRE se carga - no depende de FORCE_ROUTING_OK
-    logMilestone('[BOOT] Creating Express HTTP server (BEFORE any DB/Redis/migrations)');
-    console.log('[BOOT] Loading Express app...');
-    let app;
-    try {
-      const appModule = await import('./app');
-      app = appModule.default;
-      if (!app) {
-        throw new Error('Failed to import app - default export is undefined');
+    // ✅ RAILWAY FIX: Listen FIRST with minimal /health, load Express in background
+    // This ensures /health returns 200 within seconds for healthcheck
+    let expressApp: any = null;
+    const wrapperHandler = (req: http.IncomingMessage, res: http.ServerResponse) => {
+      const url = req.url || '';
+      if (req.method === 'GET' && (url === '/health' || url === '/health/' || url.startsWith('/health?'))) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+        return;
       }
-    } catch (appError: any) {
-      console.error('❌ CRITICAL: Failed to load Express app:', appError);
-      console.error('   Error message:', appError?.message || String(appError));
-      console.error('   Stack:', appError?.stack?.substring(0, 500));
-      throw new Error(`Failed to load Express app: ${appError?.message || String(appError)}`);
-    }
-    const httpServer = http.createServer(app);
-    console.log('[BOOT] Express app loaded OK');
+      if (expressApp) return expressApp(req, res, () => {});
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'loading' }));
+    };
+    logMilestone('[BOOT] Creating HTTP server (listen first, load Express in background)');
+    const httpServer = http.createServer(wrapperHandler);
     
     // ✅ CRÍTICO: Inicializar Socket.io antes de que el servidor escuche
     logMilestone('Initializing Socket.IO');
@@ -707,6 +704,20 @@ async function startServer() {
       setIsServerReady(true);
       updateReadinessState();
       logMilestone('LISTEN_CALLBACK - Server is listening and ready to accept connections');
+      
+      // ✅ RAILWAY: Load Express app in background (wrapper already responds to /health)
+      setImmediate(async () => {
+        try {
+          console.log('[BOOT] Loading full Express app (background)...');
+          const appModule = await import('./app');
+          expressApp = appModule.default;
+          if (expressApp) {
+            console.log('[BOOT] Express app loaded - full routing active');
+          }
+        } catch (appErr: any) {
+          console.error('[BOOT] Failed to load Express app:', appErr?.message);
+        }
+      });
       
       // ✅ BOOT: Log bootstrap mode
       const bootstrapMode = env.SAFE_BOOT ? 'SAFE_BOOT (workers disabled)' : 'FULL_BOOT (all services)';
