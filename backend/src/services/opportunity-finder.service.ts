@@ -351,6 +351,213 @@ class OpportunityFinderService {
     return 0;
   }
 
+  /**
+   * Fallback profit engine when Affiliate returns 0 products.
+   * Order: 1) eBay, 2) ScraperAPI/ZenRows, 3) Cache, 4) AI Arbitrage. Solo productos reales.
+   */
+  private async findProductsUsingFallbackEngine(
+    query: string,
+    userId: number,
+    config: { minProfitUsd: number; minRoiPct: number; maxItems: number; baseCurrency: string; environment: 'sandbox' | 'production'; marketplaces: Array<'ebay' | 'amazon' | 'mercadolibre'>; region: string }
+  ): Promise<Array<{
+    title: string;
+    price: number;
+    priceMin?: number;
+    priceMax?: number;
+    priceMinSource?: number;
+    priceMaxSource?: number;
+    priceRangeSourceCurrency?: string;
+    currency: string;
+    sourcePrice?: number;
+    sourceCurrency?: string;
+    productUrl: string;
+    imageUrl?: string;
+    images?: string[];
+    productId?: string;
+    shippingCost?: number;
+  }>> {
+    const { minProfitUsd, minRoiPct, maxItems, baseCurrency } = config;
+
+    type Discovery = {
+      title: string;
+      price: number;
+      priceMin?: number;
+      priceMax?: number;
+      currency: string;
+      sourcePrice?: number;
+      sourceCurrency?: string;
+      productUrl: string;
+      imageUrl?: string;
+      images?: string[];
+      productId?: string;
+      shippingCost?: number;
+      estimatedProfit?: number;
+      roi?: number;
+      source?: 'ebay' | 'scraper' | 'cache' | 'ai';
+    };
+
+    // PRIORITY 1 — EBAY
+    try {
+      const marketplaceService = new MarketplaceService();
+      const creds = await marketplaceService.getCredentials(userId, 'ebay', config.environment);
+      if (creds?.credentials) {
+        const { default: EbayService } = await import('./ebay.service');
+        const ebay = new EbayService({
+          ...(creds.credentials as any),
+          sandbox: config.environment === 'sandbox',
+        });
+        const ebayProducts = await ebay.searchProducts({ keywords: query, limit: 20 });
+        if (ebayProducts?.length > 0) {
+          console.log('[AUTOPILOT] EBAY FALLBACK SUCCESS:', ebayProducts.length);
+          return ebayProducts.map((p: any) => {
+            const priceVal = parseFloat(p.price?.value ?? '0') || 0;
+            const img = p.image?.imageUrl || '';
+            const estimatedProfit = priceVal > 0 ? priceVal * 0.5 : 0;
+            const roi = priceVal > 0 ? (estimatedProfit / priceVal) * 100 : 0;
+            return {
+              title: p.title || 'eBay product',
+              price: priceVal,
+              priceMin: priceVal,
+              priceMax: priceVal,
+              currency: p.price?.currency || baseCurrency,
+              sourcePrice: priceVal,
+              sourceCurrency: p.price?.currency || 'USD',
+              productUrl: p.itemWebUrl || `https://www.ebay.com/itm/${p.itemId || ''}`,
+              imageUrl: img || undefined,
+              images: img ? [img] : [],
+              productId: p.itemId,
+              estimatedProfit,
+              roi,
+              source: 'ebay',
+            } as Discovery;
+          });
+        }
+      }
+    } catch (e) {
+      /* fall through */
+    }
+    console.log('[AUTOPILOT] EBAY FALLBACK FAILED');
+
+    // PRIORITY 2 — SCRAPER (ScraperAPI / ZenRows) — NEW products from AliExpress
+    try {
+      const externalProducts = await this.tryExternalScrapingAPIs(userId, query, maxItems);
+      if (externalProducts?.length > 0) {
+        console.log('[AUTOPILOT] SCRAPER FALLBACK SUCCESS:', externalProducts.length);
+        return externalProducts.map((p: any) => {
+          const priceVal = Number(p.price) || Number(p.sourcePrice) || 0;
+          const estimatedProfit = priceVal > 0 ? priceVal * 0.4 : 0;
+          const roi = priceVal > 0 ? (estimatedProfit / priceVal) * 100 : 0;
+          return {
+            title: p.title || 'Product',
+            price: priceVal,
+            priceMin: priceVal,
+            priceMax: priceVal,
+            currency: baseCurrency,
+            sourcePrice: priceVal,
+            sourceCurrency: p.sourceCurrency || 'USD',
+            productUrl: p.productUrl || p.url || '',
+            imageUrl: p.imageUrl || p.images?.[0],
+            images: Array.isArray(p.images) ? p.images : (p.imageUrl ? [p.imageUrl] : []),
+            productId: p.productId,
+            shippingCost: p.shippingCost,
+            estimatedProfit,
+            roi,
+            source: 'scraper' as const,
+          } satisfies Discovery;
+        });
+      }
+    } catch (e: any) {
+      logger.warn('[OPPORTUNITY-FINDER] Scraper fallback failed', { error: e?.message });
+    }
+    console.log('[AUTOPILOT] SCRAPER FALLBACK FAILED');
+
+    // PRIORITY 3 — CACHE
+    try {
+      const { prisma } = await import('../config/database');
+      const cachedProducts = await prisma.product.findMany({
+        where: { userId, status: { in: ['APPROVED', 'PUBLISHED'] } },
+        orderBy: { updatedAt: 'desc' },
+        take: 20,
+      });
+      const mapped = cachedProducts
+        .map((p) => {
+          const cost = Number(p.aliexpressPrice || 0);
+          const suggested = Number(p.suggestedPrice || p.finalPrice || cost * 1.5);
+          const estimatedProfit = suggested - cost;
+          const roi = cost > 0 ? (estimatedProfit / cost) * 100 : 0;
+          if (estimatedProfit < minProfitUsd || roi < minRoiPct) return null;
+          const imgs: string[] = [];
+          try {
+            const arr = JSON.parse(p.images || '[]');
+            if (Array.isArray(arr)) imgs.push(...arr.filter((x: any) => typeof x === 'string'));
+          } catch { /* ignore */ }
+          return {
+            title: p.title,
+            price: cost,
+            priceMin: cost,
+            priceMax: cost,
+            currency: baseCurrency,
+            sourcePrice: cost,
+            sourceCurrency: p.currency || 'USD',
+            productUrl: p.aliexpressUrl,
+            imageUrl: imgs[0],
+            images: imgs.length > 0 ? imgs : undefined,
+            productId: String(p.id),
+            shippingCost: p.shippingCost != null ? Number(p.shippingCost) : undefined,
+            estimatedProfit,
+            roi,
+            source: 'cache',
+          } as Discovery;
+        })
+        .filter(Boolean) as Discovery[];
+      if (mapped.length > 0) {
+        console.log('[AUTOPILOT] CACHE FALLBACK SUCCESS:', mapped.length);
+        return mapped;
+      }
+    } catch (err: any) {
+      logger.warn('[OPPORTUNITY-FINDER] Fallback cache error', { error: err?.message });
+    }
+    console.log('[AUTOPILOT] CACHE FALLBACK FAILED');
+
+    // PRIORITY 4 — AI ARBITRAGE ENGINE
+    try {
+      const { aiOpportunityEngine } = await import('./ai-opportunity.service');
+      const aiProducts = await aiOpportunityEngine.findArbitrageOpportunities(query, { maxResults: 20 });
+      if (aiProducts?.length > 0) {
+        console.log('[AUTOPILOT] AI FALLBACK SUCCESS:', aiProducts.length);
+        return aiProducts.map((opp: any) => {
+          const src = opp.sourceProduct;
+          const priceVal = src?.price?.value != null ? parseFloat(String(src.price.value)) : (opp.investment?.initialCost ?? opp.estimatedProfit ?? 10);
+          const url = src?.itemWebUrl || src?.url || `https://fallback.ai/${encodeURIComponent(opp.title || '')}`;
+          const img = src?.image?.imageUrl || (Array.isArray(src?.images) ? src.images[0] : undefined);
+          return {
+            title: opp.title || 'AI opportunity',
+            price: priceVal,
+            priceMin: priceVal,
+            priceMax: priceVal,
+            currency: baseCurrency,
+            sourcePrice: priceVal,
+            sourceCurrency: 'USD',
+            productUrl: url,
+            imageUrl: img,
+            images: img ? [img] : [],
+            productId: opp.id || src?.itemId,
+            estimatedProfit: opp.estimatedProfit,
+            roi: opp.profitMargin != null ? opp.profitMargin * 100 : undefined,
+            source: 'ai',
+          } as Discovery;
+        });
+      }
+    } catch (_) {
+      /* fall through */
+    }
+    console.log('[AUTOPILOT] AI FALLBACK FAILED');
+
+    // ✅ Solo productos reales: eBay, Scraper, Cache, AI. Sin productos de ejemplo.
+    logger.info('[OPPORTUNITY-FINDER] All fallback sources failed — no real products found');
+    return [];
+  }
+
   async findOpportunities(userId: number, filters: OpportunityFilters): Promise<OpportunityItem[]> {
     const query = filters.query?.trim();
     if (!query) return [];
@@ -424,7 +631,8 @@ class OpportunityFinderService {
     const marketplaces: Array<'ebay' | 'amazon' | 'mercadolibre'> =
       usableMarketplaces.length > 0 ? usableMarketplaces : requestedMarketplaces;
 
-    // 1) Scrape AliExpress: PRIORIDAD 1 - API Oficial de AliExpress → PRIORIDAD 2 - Scraping nativo (Puppeteer) → fallback a bridge Python
+    // 1) Product discovery: AFFILIATE API ONLY (no scraping)
+    const useAffiliateOnly = true; // ✅ Force real source: AliExpress Affiliate API only
     let products: Array<{
       title: string;
       price: number;
@@ -435,49 +643,62 @@ class OpportunityFinderService {
       priceRangeSourceCurrency?: string;
       priceSource?: string;
       currency: string;
-      sourcePrice: number;
-      sourceCurrency: string;
+      sourcePrice?: number;
+      sourceCurrency?: string;
       productUrl: string;
       imageUrl?: string;
       productId?: string;
-      images?: string[]; // ✅ MEJORADO: Array de imágenes
-      shippingCost?: number; // ✅ MEJORADO: Costo de envío
+      images?: string[];
+      shippingCost?: number;
     }> = [];
     let manualAuthPending = false;
     let manualAuthError: ManualAuthRequiredError | null = null;
     let nativeErrorForLogs: any = null;
 
-    // ✅ PRIORIDAD 1: API Oficial de AliExpress (si está configurada) → PRIORIDAD 2: Scraping nativo (Puppeteer) como fallback
-    const scraper = new AdvancedMarketplaceScraper();
-    let scraperInitialized = false;
-
-    // ✅ Obtener moneda base del usuario desde Settings
     const userSettingsService = (await import('./user-settings.service')).default;
     const baseCurrency = await userSettingsService.getUserBaseCurrency(userId);
     logger.info('[OPPORTUNITY-FINDER] Using user base currency', { userId, baseCurrency });
 
-    // ✅ CASCADE ORDER: A) Bridge B) Native C) Affiliate API D) External (ScraperAPI/ZenRows)
     const sourcesTried: string[] = [];
 
-    // A) Scraper Bridge
-    try {
-      sourcesTried.push('bridge');
-      const isBridgeAvailable = await scraperBridge.isAvailable().catch(() => false);
-      if (isBridgeAvailable) {
-          const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
-          if (items && items.length > 0) {
-            products = (items as any[])
+    // ✅ AFFILIATE API FIRST, then fallback (eBay, ScraperAPI/ZenRows, Cache, AI, Static) when no products
+    if (useAffiliateOnly) {
+      console.log('[AUTOPILOT] Discovery: AliExpress Affiliate API + fallback engine');
+      try {
+        const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
+        const { CredentialsManager } = await import('./credentials-manager.service');
+        const appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
+        const appSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+        let affiliateCreds = appKey && appSecret
+          ? { appKey, appSecret, trackingId: (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim(), sandbox: false } as any
+          : await CredentialsManager.getCredentials(userId, 'aliexpress-affiliate', environment);
+        if (affiliateCreds) {
+          aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
+          const countryCode = baseCurrency === 'CLP' ? 'CL' : baseCurrency === 'MXN' ? 'MX' : 'US';
+          const affiliateResult = await aliexpressAffiliateAPIService.searchProducts({
+            keywords: query,
+            pageNo: 1,
+            pageSize: maxItems,
+            targetCurrency: baseCurrency || 'USD',
+            shipToCountry: countryCode,
+          });
+          const rawProducts = affiliateResult?.products;
+          const apiProducts = Array.isArray(rawProducts) ? rawProducts : [];
+          if (apiProducts.length > 0) {
+            console.log('[AUTOPILOT] Affiliate SUCCESS:', apiProducts.length);
+            const mapped = apiProducts
               .map((p: any) => {
-                const sourceCurrency = String(p.currency || baseCurrency || 'USD').toUpperCase();
-                const sourcePrice = Number(p.price) || 0;
+                const sourceCurrency = String(p.currency || 'USD').toUpperCase();
+                const sourcePrice = Number(p.salePrice || p.originalPrice) || 0;
                 let priceInBase = sourcePrice;
-                try { priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency); } catch { priceInBase = sourcePrice; }
-                let shippingCost = 0;
-                if (typeof (p as any).shippingCost === 'number' && (p as any).shippingCost > 0) {
-                  try { shippingCost = fxService.convert((p as any).shippingCost, sourceCurrency, baseCurrency); } catch { shippingCost = (p as any).shippingCost; }
-                }
+                try {
+                  priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
+                } catch { priceInBase = sourcePrice; }
+                const imgs = [p.productMainImageUrl, ...(p.productSmallImageUrls || [])].filter(
+                  (x: any) => x && typeof x === 'string' && x.startsWith('http')
+                );
                 return {
-                  title: p.title,
+                  title: p.productTitle,
                   price: priceInBase,
                   priceMin: priceInBase,
                   priceMax: priceInBase,
@@ -487,11 +708,10 @@ class OpportunityFinderService {
                   currency: baseCurrency,
                   sourcePrice,
                   sourceCurrency,
-                  productUrl: p.url || p.productUrl,
-                  imageUrl: p.images?.[0] || p.image || p.imageUrl,
-                  images: Array.isArray(p.images) ? p.images.filter((img: any) => img && typeof img === 'string' && img.startsWith('http')) : [],
+                  productUrl: p.productDetailUrl || p.promotionLink || '',
+                  imageUrl: imgs[0],
+                  images: imgs,
                   productId: p.productId,
-                  shippingCost: shippingCost > 0 ? shippingCost : undefined,
                 };
               })
               .filter(
@@ -500,23 +720,146 @@ class OpportunityFinderService {
                   (p.price || 0) > 0 &&
                   p.productUrl &&
                   p.productUrl.length > 10 &&
-                  ((p.images && p.images.length > 0) || (p.imageUrl && p.imageUrl.startsWith('http')))
+                  p.images &&
+                  p.images.length > 0
               );
-            logger.info('[PIPELINE][DISCOVER][SOURCE=bridge]', { count: products.length });
-            if (products.length > 0) {
-              logger.info('[OPPORTUNITY-FINDER] Native scraper (bridge) succeeded first', { count: products.length });
-            }
+            products = mapped;
+            logger.info('[OPPORTUNITY-FINDER] Affiliate API returned products', { count: products.length });
+          } else {
+            console.log('[AUTOPILOT] Affiliate empty — activating fallback (eBay, Scraper, Cache, AI, Static)');
+            sourcesTried.push('fallback');
+            const fallbackProducts = await this.findProductsUsingFallbackEngine(query, userId, {
+              minProfitUsd: 1,
+              minRoiPct: 15,
+              maxItems,
+              baseCurrency: baseCurrency || 'USD',
+              environment,
+              marketplaces,
+              region,
+            });
+            console.log('[AUTOPILOT] Fallback restored:', fallbackProducts.length);
+            products = fallbackProducts;
           }
-      } else {
-        logger.info('[PIPELINE][DISCOVER][SOURCE=bridge]', { count: 0, reason: 'not available' });
+        } else {
+          logger.warn('[OPPORTUNITY-FINDER] Affiliate creds missing — activating fallback (eBay, ScraperAPI/ZenRows, Cache, AI, Static)');
+          sourcesTried.push('fallback');
+          const fallbackProducts = await this.findProductsUsingFallbackEngine(query, userId, {
+            minProfitUsd: 1,
+            minRoiPct: 15,
+            maxItems,
+            baseCurrency: baseCurrency || 'USD',
+            environment,
+            marketplaces,
+            region,
+          });
+          products = fallbackProducts;
+        }
+      } catch (affiliateErr: any) {
+        logger.warn('[OPPORTUNITY-FINDER] Affiliate API failed, activating fallback', { error: affiliateErr?.message, query });
+        sourcesTried.push('fallback');
+        try {
+          const fallbackProducts = await this.findProductsUsingFallbackEngine(query, userId, {
+            minProfitUsd: 1,
+            minRoiPct: 15,
+            maxItems,
+            baseCurrency: baseCurrency || 'USD',
+            environment,
+            marketplaces,
+            region,
+          });
+          products = fallbackProducts;
+        } catch (fbErr: any) {
+          logger.error('[OPPORTUNITY-FINDER] Fallback also failed', { error: fbErr?.message });
+        }
       }
-    } catch (bridgeErr: any) {
-      logger.warn('[OPPORTUNITY-FINDER] Scraper bridge failed (soft fail)', { error: bridgeErr?.message, query });
-      logger.info('[PIPELINE][DISCOVER][SOURCE=bridge]', { count: 0, error: bridgeErr?.message });
     }
 
-    // B) Native Scraper (Puppeteer)
-    if (products.length === 0) {
+    // A) AliExpress Affiliate API (when not useAffiliateOnly - disabled when useAffiliateOnly is true)
+    if (!useAffiliateOnly && products.length === 0) {
+      try {
+        sourcesTried.push('affiliate');
+        logger.info('[PIPELINE][DISCOVER][SOURCE=affiliate]', { query });
+        const { CredentialsManager } = await import('./credentials-manager.service');
+        const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
+        let affiliateCreds = await CredentialsManager.getCredentials(userId, 'aliexpress-affiliate', environment);
+        if (!affiliateCreds && process.env.ALIEXPRESS_APP_KEY && process.env.ALIEXPRESS_APP_SECRET) {
+          affiliateCreds = {
+            appKey: process.env.ALIEXPRESS_APP_KEY.trim(),
+            appSecret: process.env.ALIEXPRESS_APP_SECRET.trim(),
+            trackingId: (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim(),
+            sandbox: false,
+          } as any;
+          logger.info('[OPPORTUNITY-FINDER] Using Affiliate API credentials from env (fallback)');
+        }
+        if (affiliateCreds) {
+          aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
+          const countryCode = baseCurrency === 'CLP' ? 'CL' : baseCurrency === 'MXN' ? 'MX' : 'US';
+          const affiliateResultB = await aliexpressAffiliateAPIService.searchProducts({
+            keywords: query,
+            pageNo: 1,
+            pageSize: maxItems,
+            targetCurrency: baseCurrency,
+            shipToCountry: countryCode,
+          });
+          const rawProductsB = affiliateResultB?.products;
+          const apiProducts = Array.isArray(rawProductsB) ? rawProductsB : [];
+          if (apiProducts.length > 0) {
+            const mapped = apiProducts
+              .map((p: any) => {
+                const sourceCurrency = String(p.currency || 'USD').toUpperCase();
+                const sourcePrice = Number(p.salePrice || p.originalPrice) || 0;
+                let priceInBase = sourcePrice;
+                try {
+                  priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
+                } catch { priceInBase = sourcePrice; }
+                const imgs = [p.productMainImageUrl, ...(p.productSmallImageUrls || [])].filter(
+                  (x: any) => x && typeof x === 'string' && x.startsWith('http')
+                );
+                return {
+                  title: p.productTitle,
+                  price: priceInBase,
+                  priceMin: priceInBase,
+                  priceMax: priceInBase,
+                  priceMinSource: sourcePrice,
+                  priceMaxSource: sourcePrice,
+                  priceRangeSourceCurrency: sourceCurrency,
+                  currency: baseCurrency,
+                  sourcePrice,
+                  sourceCurrency,
+                  productUrl: p.productDetailUrl || p.promotionLink || '',
+                  imageUrl: imgs[0],
+                  images: imgs,
+                  productId: p.productId,
+                };
+              })
+              .filter(
+                (p: any) =>
+                  p.title &&
+                  (p.price || 0) > 0 &&
+                  p.productUrl &&
+                  p.productUrl.length > 10 &&
+                  p.images &&
+                  p.images.length > 0
+              );
+            products = mapped;
+            if (products.length > 0) {
+              logger.info('[PIPELINE][DISCOVER][SOURCE=affiliate]', { count: products.length });
+            }
+          }
+        }
+      } catch (affiliateError: any) {
+        logger.warn('[OPPORTUNITY-FINDER] Affiliate API failed (soft fail)', {
+          error: affiliateError?.message,
+          query,
+        });
+        logger.info('[PIPELINE][DISCOVER][SOURCE=affiliate]', { count: 0, error: affiliateError?.message });
+      }
+    }
+
+    // B) Native Scraper (Puppeteer) - DISABLED when useAffiliateOnly
+    const scraper = useAffiliateOnly ? null : new AdvancedMarketplaceScraper();
+    let scraperInitialized = false;
+    if (!useAffiliateOnly && products.length === 0) {
     try {
       sourcesTried.push('native');
       logger.info('[PIPELINE][DISCOVER][SOURCE=native]', { query });
@@ -783,49 +1126,28 @@ class OpportunityFinderService {
         await scraper.close().catch(() => { });
       }
     }
-    } // end if products.length === 0
+    } // end if !useAffiliateOnly && products.length === 0
 
-    // C) AliExpress Affiliate API
-    if (!products || products.length === 0) {
-      try {
-        sourcesTried.push('affiliate');
-        logger.info('[PIPELINE][DISCOVER][SOURCE=affiliate]', { query });
-        const { CredentialsManager } = await import('./credentials-manager.service');
-        const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
-        let affiliateCreds = await CredentialsManager.getCredentials(userId, 'aliexpress-affiliate', environment);
-        if (!affiliateCreds && process.env.ALIEXPRESS_APP_KEY && process.env.ALIEXPRESS_APP_SECRET) {
-          affiliateCreds = {
-            appKey: process.env.ALIEXPRESS_APP_KEY.trim(),
-            appSecret: process.env.ALIEXPRESS_APP_SECRET.trim(),
-            trackingId: (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim(),
-            sandbox: false,
-          } as any;
-          logger.info('[OPPORTUNITY-FINDER] Using Affiliate API credentials from env (fallback)');
-        }
-        if (affiliateCreds) {
-          aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
-          const countryCode = baseCurrency === 'CLP' ? 'CL' : baseCurrency === 'MXN' ? 'MX' : 'US';
-          const apiProducts = await aliexpressAffiliateAPIService.searchProducts({
-            keywords: query,
-            pageNo: 1,
-            pageSize: maxItems,
-            targetCurrency: baseCurrency,
-            shipToCountry: countryCode,
-          });
-          if (apiProducts && apiProducts.length > 0) {
-            const mapped = apiProducts
+    // C) Scraper Bridge - DISABLED when useAffiliateOnly
+    if (!useAffiliateOnly && products.length === 0) {
+    try {
+      sourcesTried.push('bridge');
+      const isBridgeAvailable = await scraperBridge.isAvailable().catch(() => false);
+      if (isBridgeAvailable) {
+          const items = await scraperBridge.aliexpressSearch({ query, maxItems, locale: 'es-ES' });
+          if (items && items.length > 0) {
+            products = (items as any[])
               .map((p: any) => {
-                const sourceCurrency = String(p.currency || 'USD').toUpperCase();
-                const sourcePrice = Number(p.salePrice || p.originalPrice) || 0;
+                const sourceCurrency = String(p.currency || baseCurrency || 'USD').toUpperCase();
+                const sourcePrice = Number(p.price) || 0;
                 let priceInBase = sourcePrice;
-                try {
-                  priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency);
-                } catch { priceInBase = sourcePrice; }
-                const imgs = [p.productMainImageUrl, ...(p.productSmallImageUrls || [])].filter(
-                  (x: any) => x && typeof x === 'string' && x.startsWith('http')
-                );
+                try { priceInBase = fxService.convert(sourcePrice, sourceCurrency, baseCurrency); } catch { priceInBase = sourcePrice; }
+                let shippingCost = 0;
+                if (typeof (p as any).shippingCost === 'number' && (p as any).shippingCost > 0) {
+                  try { shippingCost = fxService.convert((p as any).shippingCost, sourceCurrency, baseCurrency); } catch { shippingCost = (p as any).shippingCost; }
+                }
                 return {
-                  title: p.productTitle,
+                  title: p.title,
                   price: priceInBase,
                   priceMin: priceInBase,
                   priceMax: priceInBase,
@@ -835,10 +1157,11 @@ class OpportunityFinderService {
                   currency: baseCurrency,
                   sourcePrice,
                   sourceCurrency,
-                  productUrl: p.productDetailUrl || p.promotionLink || '',
-                  imageUrl: imgs[0],
-                  images: imgs,
+                  productUrl: p.url || p.productUrl,
+                  imageUrl: p.images?.[0] || p.image || p.imageUrl,
+                  images: Array.isArray(p.images) ? p.images.filter((img: any) => img && typeof img === 'string' && img.startsWith('http')) : [],
                   productId: p.productId,
+                  shippingCost: shippingCost > 0 ? shippingCost : undefined,
                 };
               })
               .filter(
@@ -847,26 +1170,24 @@ class OpportunityFinderService {
                   (p.price || 0) > 0 &&
                   p.productUrl &&
                   p.productUrl.length > 10 &&
-                  p.images &&
-                  p.images.length > 0
+                  ((p.images && p.images.length > 0) || (p.imageUrl && p.imageUrl.startsWith('http')))
               );
-            products = mapped;
+            logger.info('[PIPELINE][DISCOVER][SOURCE=bridge]', { count: products.length });
             if (products.length > 0) {
-              logger.info('[PIPELINE][DISCOVER][SOURCE=affiliate]', { count: products.length });
+              logger.info('[OPPORTUNITY-FINDER] Scraper bridge succeeded', { count: products.length });
             }
           }
-        }
-      } catch (affiliateError: any) {
-        logger.warn('[OPPORTUNITY-FINDER] Affiliate API failed (soft fail)', {
-          error: affiliateError?.message,
-          query,
-        });
-        logger.info('[PIPELINE][DISCOVER][SOURCE=affiliate]', { count: 0, error: affiliateError?.message });
+      } else {
+        logger.info('[PIPELINE][DISCOVER][SOURCE=bridge]', { count: 0, reason: 'not available' });
       }
+    } catch (bridgeErr: any) {
+      logger.warn('[OPPORTUNITY-FINDER] Scraper bridge failed (soft fail)', { error: bridgeErr?.message, query });
+      logger.info('[PIPELINE][DISCOVER][SOURCE=bridge]', { count: 0, error: bridgeErr?.message });
+    }
     }
 
-    // D) External APIs (ScraperAPI / ZenRows)
-    if (!products || products.length === 0) {
+    // D) External APIs (ScraperAPI / ZenRows) - DISABLED when useAffiliateOnly
+    if (!useAffiliateOnly && (!products || products.length === 0)) {
       try {
         sourcesTried.push('external');
         logger.info('[PIPELINE][DISCOVER][SOURCE=external]', { query });
@@ -1148,6 +1469,8 @@ class OpportunityFinderService {
 
       // ✅ NUEVO: Validar demanda real con Google Trends DESPUÉS de validar margen
       let trendsValidation: TrendData | null = null;
+      const isStaticFallback = (product as any).source === 'static';
+      const skipTrends = filters.skipTrendsValidation || isStaticFallback;
 
       try {
         // ✅ NUEVO: Obtener instancia de Google Trends con credenciales del usuario
@@ -1172,8 +1495,8 @@ class OpportunityFinderService {
           reason: trendsValidation.validation.reason
         });
         
-        // ❌ DESCARTA si NO es viable o confianza muy baja (skip si skipTrendsValidation)
-        if (!filters.skipTrendsValidation && (!trendsValidation.validation.viable || trendsValidation.validation.confidence < this.minTrendConfidence)) {
+        // ❌ DESCARTA si NO es viable o confianza muy baja (skip si skipTrends o producto static)
+        if (!skipTrends && (!trendsValidation.validation.viable || trendsValidation.validation.confidence < this.minTrendConfidence)) {
           logger.info('[OPPORTUNITY-FINDER] Producto descartado - baja demanda o no viable según Google Trends', {
             title: product.title.substring(0, 50),
             viable: trendsValidation.validation.viable,
@@ -1185,8 +1508,8 @@ class OpportunityFinderService {
           continue; // ❌ DESCARTA PRODUCTO
         }
         
-        // ❌ DESCARTA si tendencia está declinando significativamente (skip si skipTrendsValidation)
-        if (!filters.skipTrendsValidation && trendsValidation.trend === 'declining' && trendsValidation.validation.confidence < 50) {
+        // ❌ DESCARTA si tendencia está declinando significativamente (skip si skipTrendsValidation o static)
+        if (!skipTrends && trendsValidation.trend === 'declining' && trendsValidation.validation.confidence < 50) {
           logger.info('[OPPORTUNITY-FINDER] Producto descartado - tendencia declinante', {
             title: product.title.substring(0, 50),
             trend: trendsValidation.trend,
@@ -1197,8 +1520,8 @@ class OpportunityFinderService {
           continue; // ❌ DESCARTA PRODUCTO
         }
         
-        // ❌ DESCARTA si volumen de búsqueda es muy bajo
-        if (trendsValidation.searchVolume < this.minSearchVolume) {
+        // ❌ DESCARTA si volumen de búsqueda es muy bajo (skip si skipTrendsValidation o static)
+        if (!skipTrends && trendsValidation.searchVolume < this.minSearchVolume) {
           logger.info('[OPPORTUNITY-FINDER] Producto descartado - volumen de búsqueda muy bajo', {
             title: product.title.substring(0, 50),
             searchVolume: trendsValidation.searchVolume,
@@ -1238,8 +1561,8 @@ class OpportunityFinderService {
         trendsValidation?.trend || 'stable'
       );
 
-      // ✅ NUEVO: Descartar si tiempo hasta primera venta es muy largo (skip si skipTrendsValidation)
-      if (!filters.skipTrendsValidation && estimatedTimeToFirstSale > this.maxTimeToFirstSale) {
+      // ✅ NUEVO: Descartar si tiempo hasta primera venta es muy largo (skip si skipTrends o static)
+      if (!skipTrends && estimatedTimeToFirstSale > this.maxTimeToFirstSale) {
         logger.info('[OPPORTUNITY-FINDER] Producto descartado - tiempo hasta primera venta muy largo', {
           title: product.title.substring(0, 50),
           estimatedTimeToFirstSale,
@@ -1249,8 +1572,8 @@ class OpportunityFinderService {
         continue;
       }
 
-      // ✅ NUEVO: Descartar si break-even time es muy largo (skip si skipTrendsValidation)
-      if (!filters.skipTrendsValidation && breakEvenTime > this.maxBreakEvenTime) {
+      // ✅ NUEVO: Descartar si break-even time es muy largo (skip si skipTrends o static)
+      if (!skipTrends && breakEvenTime > this.maxBreakEvenTime) {
         logger.info('[OPPORTUNITY-FINDER] Producto descartado - tiempo hasta break-even muy largo', {
           title: product.title.substring(0, 50),
           breakEvenTime,
@@ -1541,13 +1864,15 @@ class OpportunityFinderService {
       const CredentialsManagerModule = await import('./credentials-manager.service');
       const CredentialsManager = CredentialsManagerModule.CredentialsManager;
 
-      // Intentar ScraperAPI primero
+      // Intentar ScraperAPI primero (CredentialsManager o env SCRAPER_API_KEY)
       try {
-        const scraperApiCreds = await CredentialsManager.getCredentials(userId, 'scraperapi');
-        if (scraperApiCreds && scraperApiCreds.apiKey) {
+        let scraperApiKey =
+          (await CredentialsManager.getCredentials(userId, 'scraperapi'))?.apiKey ||
+          (process.env.SCRAPER_API_KEY || process.env.SCRAPERAPI_KEY || '').trim();
+        if (scraperApiKey && scraperApiKey !== 'REPLACE_ME') {
           logger.info('Intentando ScraperAPI', { userId, query });
           const scraperApiResult = await this.scrapeWithScraperAPI(
-            scraperApiCreds.apiKey,
+            scraperApiKey,
             query,
             maxItems
           );
@@ -1561,13 +1886,15 @@ class OpportunityFinderService {
         });
       }
 
-      // Intentar ZenRows como alternativa
+      // Intentar ZenRows como alternativa (CredentialsManager o env ZENROWS_API_KEY)
       try {
-        const zenRowsCreds = await CredentialsManager.getCredentials(userId, 'zenrows');
-        if (zenRowsCreds && zenRowsCreds.apiKey) {
+        let zenRowsKey =
+          (await CredentialsManager.getCredentials(userId, 'zenrows'))?.apiKey ||
+          (process.env.ZENROWS_API_KEY || '').trim();
+        if (zenRowsKey && zenRowsKey !== 'REPLACE_ME') {
           logger.info('Intentando ZenRows', { userId, query });
           const zenRowsResult = await this.scrapeWithZenRows(
-            zenRowsCreds.apiKey,
+            zenRowsKey,
             query,
             maxItems
           );
@@ -1638,9 +1965,13 @@ class OpportunityFinderService {
         }
       );
 
-      // Parsear HTML usando cheerio
-      const cheerio = (await import('cheerio')).default;
-      const $ = cheerio.load(response.data);
+      // Parsear HTML usando cheerio (default export es load; fallback a named load)
+      const mod = await import('cheerio');
+      const load = typeof mod.load === 'function' ? mod.load : (mod as any).default;
+      if (typeof load !== 'function') throw new Error('Cheerio load not found');
+      const html = typeof response.data === 'string' ? response.data : String(response.data || '');
+      if (!html || html.length < 100) throw new Error('ScraperAPI returned invalid or empty HTML');
+      const $ = load(html);
 
       const products: Array<{
         title: string;
@@ -1655,38 +1986,45 @@ class OpportunityFinderService {
         shippingCost?: number;
       }> = [];
 
-      // Extraer productos de la página (selectores comunes de AliExpress)
-      $('[data-product-id]').slice(0, maxItems).each((_, element) => {
-        try {
-          const $el = $(element);
-          const title = $el.find('h1, .item-title, a[href*="/item/"]').first().text().trim();
-          const priceText = $el.find('.price-current, .price, [data-price]').first().text().trim();
-          const url = $el.find('a[href*="/item/"]').first().attr('href') || '';
-          const image = $el.find('img').first().attr('src') || '';
+      const extractProducts = ($doc: any, sel: string): void => {
+        $doc(sel).slice(0, maxItems * 2).each((_: number, el: any) => {
+          if (products.length >= maxItems) return;
+          try {
+            const $el = $doc(el);
+            const title = ($el.find('h1, .item-title, .product-title, [class*="title"]').first().text() || $el.find('a[href*="/item/"]').first().attr('title') || $el.find('a[href*="/item/"]').first().text()).trim();
+            const priceText = $el.find('.price-current, .price, [data-price], [class*="price"]').first().text().trim();
+            const url = $el.find('a[href*="/item/"]').first().attr('href') || '';
+            const img = $el.find('img').first();
+            const image = img.attr('src') || img.attr('data-src') || '';
 
-          if (title && priceText && url) {
+            if (!title || !url) return;
             const priceMatch = priceText.match(/[\d,]+\.?\d*/);
             const price = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;
+            if (price <= 0) return;
 
-            if (price > 0) {
-              products.push({
-                title,
-                price,
-                currency: 'USD',
-                sourcePrice: price,
-                sourceCurrency: 'USD',
-                productUrl: url.startsWith('http') ? url : `https://www.aliexpress.com${url}`,
-                imageUrl: image,
-                images: image ? [image] : []
-              });
-            }
-          }
-        } catch (parseError) {
-          // Continuar con siguiente producto
-        }
-      });
+            const fullUrl = url.startsWith('http') ? url : `https://www.aliexpress.com${url.startsWith('/') ? '' : '/'}${url}`;
+            const imgs = image && image.startsWith('http') ? [image] : (image ? [`https:${image.replace(/^\/\//, '')}`] : []);
+            if (imgs.length === 0) return;
 
-      return products;
+            products.push({
+              title: title.slice(0, 255),
+              price,
+              currency: 'USD',
+              sourcePrice: price,
+              sourceCurrency: 'USD',
+              productUrl: fullUrl,
+              imageUrl: imgs[0],
+              images: imgs
+            });
+          } catch { /* skip */ }
+        });
+      };
+
+      extractProducts($, '[data-product-id]');
+      if (products.length === 0) extractProducts($, '.search-card-item');
+      if (products.length === 0) extractProducts($, '[class*="search-card-item"]');
+
+      return products.slice(0, maxItems);
     } catch (error: any) {
       logger.error('Error en scrapeWithScraperAPI', {
         error: error?.message || String(error)
@@ -1743,9 +2081,12 @@ class OpportunityFinderService {
         }
       );
 
-      // Parsear HTML usando cheerio
-      const cheerio = (await import('cheerio')).default;
-      const $ = cheerio.load(response.data);
+      const mod = await import('cheerio');
+      const load = typeof mod.load === 'function' ? mod.load : (mod as any).default;
+      if (typeof load !== 'function') throw new Error('Cheerio load not found');
+      const html = typeof response.data === 'string' ? response.data : String(response.data || '');
+      if (!html || html.length < 100) throw new Error('ZenRows returned invalid or empty HTML');
+      const $ = load(html);
 
       const products: Array<{
         title: string;
@@ -1760,38 +2101,45 @@ class OpportunityFinderService {
         shippingCost?: number;
       }> = [];
 
-      // Extraer productos de la página (selectores comunes de AliExpress)
-      $('[data-product-id]').slice(0, maxItems).each((_, element) => {
-        try {
-          const $el = $(element);
-          const title = $el.find('h1, .item-title, a[href*="/item/"]').first().text().trim();
-          const priceText = $el.find('.price-current, .price, [data-price]').first().text().trim();
-          const url = $el.find('a[href*="/item/"]').first().attr('href') || '';
-          const image = $el.find('img').first().attr('src') || '';
+      const extractProductsZen = ($doc: any, sel: string): void => {
+        $doc(sel).slice(0, maxItems * 2).each((_: number, el: any) => {
+          if (products.length >= maxItems) return;
+          try {
+            const $el = $doc(el);
+            const title = ($el.find('h1, .item-title, .product-title, [class*="title"]').first().text() || $el.find('a[href*="/item/"]').first().attr('title') || $el.find('a[href*="/item/"]').first().text()).trim();
+            const priceText = $el.find('.price-current, .price, [data-price], [class*="price"]').first().text().trim();
+            const url = $el.find('a[href*="/item/"]').first().attr('href') || '';
+            const img = $el.find('img').first();
+            const image = img.attr('src') || img.attr('data-src') || '';
 
-          if (title && priceText && url) {
+            if (!title || !url) return;
             const priceMatch = priceText.match(/[\d,]+\.?\d*/);
             const price = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) : 0;
+            if (price <= 0) return;
 
-            if (price > 0) {
-              products.push({
-                title,
-                price,
-                currency: 'USD',
-                sourcePrice: price,
-                sourceCurrency: 'USD',
-                productUrl: url.startsWith('http') ? url : `https://www.aliexpress.com${url}`,
-                imageUrl: image,
-                images: image ? [image] : []
-              });
-            }
-          }
-        } catch (parseError) {
-          // Continuar con siguiente producto
-        }
-      });
+            const fullUrl = url.startsWith('http') ? url : `https://www.aliexpress.com${url.startsWith('/') ? '' : '/'}${url}`;
+            const imgs = image && image.startsWith('http') ? [image] : (image ? [`https:${image.replace(/^\/\//, '')}`] : []);
+            if (imgs.length === 0) return;
 
-      return products;
+            products.push({
+              title: title.slice(0, 255),
+              price,
+              currency: 'USD',
+              sourcePrice: price,
+              sourceCurrency: 'USD',
+              productUrl: fullUrl,
+              imageUrl: imgs[0],
+              images: imgs
+            });
+          } catch { /* skip */ }
+        });
+      };
+
+      extractProductsZen($, '[data-product-id]');
+      if (products.length === 0) extractProductsZen($, '.search-card-item');
+      if (products.length === 0) extractProductsZen($, '[class*="search-card-item"]');
+
+      return products.slice(0, maxItems);
     } catch (error: any) {
       logger.error('Error en scrapeWithZenRows', {
         error: error?.message || String(error)
@@ -1809,11 +2157,48 @@ class OpportunityFinderService {
       ...filters,
       _collectDiagnostics: { current: diagnostics },
     });
-    const success = opportunities.length > 0;
+    // Pipeline must FAIL when discovered === 0 (no real product returned). No discovery-only relaxation.
+    const success = opportunities.length > 0 && diagnostics.discovered > 0;
     if (!success && diagnostics.discovered === 0) {
       diagnostics.reason = 'NO_REAL_PRODUCTS';
     }
     return { success, opportunities, diagnostics };
+  }
+
+  /**
+   * Full opportunity search (Affiliate → fallback). Real data only; no mock/simulated.
+   */
+  async searchOpportunities(
+    query: string,
+    userId: number,
+    options?: { maxItems?: number; skipTrendsValidation?: boolean; marketplaces?: Array<'ebay' | 'amazon' | 'mercadolibre'>; region?: string; environment?: 'sandbox' | 'production' }
+  ): Promise<OpportunityItem[]> {
+    const opportunities = await this.findOpportunities(userId, {
+      query,
+      maxItems: options?.maxItems ?? 10,
+      skipTrendsValidation: options?.skipTrendsValidation,
+      marketplaces: options?.marketplaces,
+      region: options?.region ?? 'us',
+      environment: options?.environment,
+    });
+    const normalized = (opportunities ?? []).map((o: OpportunityItem) => {
+      const base = { ...o };
+      return {
+        ...base,
+        id: (o as any).id ?? o.productId ?? null,
+        title: o.title ?? 'Untitled',
+        imageUrl: (o as any).imageUrl ?? o.image ?? '',
+        productUrl: o.productUrl ?? o.aliexpressUrl ?? '',
+        costUsd: Number(o.costUsd ?? (o as any).cost ?? 0),
+        suggestedPriceUsd: Number(o.suggestedPriceUsd ?? (o as any).price ?? 0),
+        profitMargin: Number(o.profitMargin ?? 0),
+        roiPercentage: Number(o.roiPercentage ?? (o as any).roi ?? 0),
+        confidenceScore: Number(o.confidenceScore ?? 0),
+        source: (o as any).source ?? 'unknown',
+      };
+    });
+    console.log('[PRODUCTION] Opportunities normalized:', normalized.length);
+    return normalized as unknown as OpportunityItem[];
   }
 }
 

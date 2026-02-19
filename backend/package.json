@@ -29,6 +29,8 @@
     "run:ebay-real-cycle": "tsx src/scripts/run-ebay-real-cycle.ts",
     "test:post-sale-flow": "tsx scripts/test-post-sale-flow.ts",
     "test-full-dropshipping-cycle": "tsx scripts/test-full-dropshipping-cycle.ts",
+    "test:dropshipping-cycle": "tsx scripts/test-full-dropshipping-cycle.ts",
+    "run-autopilot-cycle": "tsx scripts/run-autopilot-cycle-now.ts",
     "test-production-cycle": "tsx scripts/test-production-cycle.ts",
     "test-evolution-cycle": "tsx scripts/test-evolution-cycle.ts",
     "test-dynamic-pricing": "tsx scripts/test-dynamic-pricing.ts",
@@ -120,7 +122,7 @@
     "typescript": "^5.9.3"
   },
   "engines": {
-    "node": "24.x",
+    "node": ">=20.x",
     "npm": ">=9.0.0"
   }
 }
