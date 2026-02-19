@@ -48,10 +48,12 @@ const navItems: NavItem[] = [
   { path: '/users', label: 'Usuarios', icon: Users, roles: ['ADMIN'] },
   { path: '/regional', label: 'Configuración regional', icon: Globe },
   { path: '/logs', label: 'Registros del sistema', icon: Terminal, roles: ['ADMIN'] },
+  { path: '/system-status', label: 'Estado del sistema', icon: Activity },
   { path: '/workflow-config', label: 'Config. workflows', icon: Settings },
   { path: '/settings', label: 'Configuración', icon: Settings },
   { path: '/meeting-room', label: 'Sala de reuniones', icon: Video },
   { path: '/help', label: 'Centro de ayuda', icon: HelpCircle },
+  { path: '/onboarding', label: 'Asistente de configuración', icon: Settings },
 ];
 
 export default function Sidebar() {
