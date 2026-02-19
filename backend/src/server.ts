@@ -16,8 +16,10 @@ if (process.env.NODE_ENV === 'production') {
 
 // Phase 4: dist safety - fail fast if build incomplete
 if (process.env.NODE_ENV === 'production') {
-  if (!fs.existsSync('./dist/server.js')) {
-    console.error('DIST BUILD MISSING');
+  const hasServer = fs.existsSync('./dist/server.js');
+  const hasBootstrap = fs.existsSync('./dist/server-bootstrap.js');
+  if (!hasServer || !hasBootstrap) {
+    console.error('DIST BUILD MISSING (server.js=%s, server-bootstrap.js=%s)', hasServer, hasBootstrap);
     process.exit(1);
   }
 }
@@ -574,70 +576,30 @@ async function startServer() {
   bootstrapStartTime = startTime;
   updateReadinessState(); // Initialize __isDatabaseReady, __isRedisReady for /health
 
+  const earlyServer = (global as any).__earlyHttpServer as http.Server | undefined;
+  const earlyPort = (global as any).__earlyPort as number | undefined;
+
   try {
-    // Phase 7: ENV hard fail in production - required vars must exist
-    const dbUrl = (env.DATABASE_URL || process.env.DATABASE_URL || '').trim();
-    const hasDb = !!(dbUrl && dbUrl.startsWith('postgres'));
-    const hasJwt = !!(process.env.JWT_SECRET && process.env.JWT_SECRET.length >= 32);
-    const hasEnc = !!(process.env.ENCRYPTION_KEY?.trim() && process.env.ENCRYPTION_KEY.length >= 32) || hasJwt;
-    if (env.NODE_ENV === 'production') {
-      if (!hasDb || !hasJwt || !hasEnc) {
-        console.error('❌ FATAL: Missing required env in production');
-        if (!hasDb) console.error('   - DATABASE_URL');
-        if (!hasJwt) console.error('   - JWT_SECRET (min 32 chars)');
-        if (!hasEnc) console.error('   - ENCRYPTION_KEY or JWT_SECRET (min 32 chars)');
-        process.exit(1);
+    let expressApp: any = null;
+    let httpServer: http.Server;
+
+    if (earlyServer) {
+      // ✅ RAILWAY: Bootstrap already listening - attach Socket.IO and run post-listen logic
+      httpServer = earlyServer;
+      const effectivePort = earlyPort ?? PORT;
+      const listenStartTime = startTime;
+      try {
+        notificationService.initialize(httpServer);
+      } catch (sockErr: any) {
+        console.warn('[BOOT] Socket.IO init failed (non-fatal):', sockErr?.message);
       }
-    } else if (!hasDb || !hasJwt || !hasEnc) {
-      console.error('⚠️ [Phase 6] Missing env (server will start, affected subsystems disabled):');
-      if (!hasDb) console.error('   - DATABASE_URL');
-      if (!hasJwt) console.error('   - JWT_SECRET (min 32 chars)');
-      if (!hasEnc) console.error('   - ENCRYPTION_KEY or JWT_SECRET (min 32 chars)');
+      setImmediate(() => doOnListenSuccess(httpServer, effectivePort, listenStartTime, startTime, (app: any) => {
+        (global as any).__expressApp = app;
+      }));
+      return;
     }
 
-    // ✅ BOOT: Logging obligatorio al boot
-    console.log('');
-    console.log('🚀 BOOT START');
-    console.log('================================');
-    console.log(`   pid=${process.pid}`);
-    console.log(`   NODE_ENV=${env.NODE_ENV}`);
-    console.log(`   SAFE_BOOT=${env.SAFE_BOOT || false}`);
-    console.log(`   PORT=${PORT}`);
-    console.log(`   PORT env exists=${!!process.env.PORT} value=${process.env.PORT || 'N/A'}`);
-    console.log(`   cwd=${process.cwd()}`);
-    console.log(`   build sha=${(process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_SHA || 'unknown').toString().substring(0, 7)}`);
-    console.log('================================');
-    console.log('');
-    
-    // ✅ BOOT: Express siempre inicia - modo completo
-    logMilestone('[BOOT] Starting Express server initialization');
-    console.log('[BOOT] Express will ALWAYS start - SAFE_BOOT only disables heavy workers');
-    console.log('');
-    
-    // ✅ FIX 502: Validar ENCRYPTION_KEY antes de iniciar cualquier servicio
-    // NO crashea el servidor si falta, pero marca como "degraded"
-    logMilestone('[BOOT] Validating encryption key');
-    validateEncryptionKey();
-    // Actualizar estado global después de validar
-    (global as any).__isEncryptionKeyValid = isEncryptionKeyValid;
-    
-    // ✅ FIX: Usar env ya importado estáticamente (no import dinámico)
-    // El env ya está disponible desde la línea 3: import { env } from './config/env';
-    logMilestone(`[BOOT] Environment: ${env.NODE_ENV}, Port: ${PORT}`);
-    
-    // ✅ GO-LIVE: Log configuración sanitizada (sin secretos)
-    // ✅ FIX AUTH: Validar JWT_SECRET antes de iniciar servidor
-    validateJwtSecret();
-    
-    // ✅ FIX LOGGING: Pasar PORT y portSource para logging consistente
-    logConfiguration(env, PORT, portSource);
-    
-    // ✅ FASE 0: Initialize build info (for /version endpoint and X-App-Commit header)
-    initBuildInfo();
-    
-    // ✅ RAILWAY FIX: Listen FIRST with minimal /health, load Express in background
-    // This ensures /health returns 200 within seconds for healthcheck
-    let expressApp: any = null;
+    // Fallback: create server and listen (dev or non-bootstrap)
     const wrapperHandler = (req: http.IncomingMessage, res: http.ServerResponse) => {
       const url = req.url || '';
       if (req.method === 'GET' && (url === '/health' || url === '/health/' || url.startsWith('/health?'))) {
@@ -649,23 +611,50 @@ async function startServer() {
       res.writeHead(503, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'loading' }));
     };
-    logMilestone('[BOOT] Creating HTTP server (listen first, load Express in background)');
-    const httpServer = http.createServer(wrapperHandler);
-    
-    // ✅ CRÍTICO: Inicializar Socket.io antes de que el servidor escuche
-    logMilestone('Initializing Socket.IO');
-    notificationService.initialize(httpServer);
-    logMilestone('Socket.IO initialized');
-    
-    // ✅ FASE A CRÍTICO: Start listening IMMEDIATELY (NO awaits before this point)
-    logMilestone('BEFORE_LISTEN - About to call httpServer.listen()');
+    httpServer = http.createServer(wrapperHandler);
+    try {
+      notificationService.initialize(httpServer);
+    } catch (sockErr: any) {
+      console.warn('[BOOT] Socket.IO init failed (non-fatal):', sockErr?.message);
+    }
+
     const listenStartTime = Date.now();
     let effectivePort = PORT;
 
     const onListenSuccess = () => {
-      console.log('[STARTUP] Listening on port', effectivePort);
-      const listenTime = Date.now() - listenStartTime;
-      const address = httpServer.address();
+      doOnListenSuccess(httpServer, effectivePort, listenStartTime, startTime, (app: any) => {
+        expressApp = app;
+      });
+    };
+
+    // Shared post-listen logic (bootstrap path and normal path)
+    function doOnListenSuccess(
+      svr: http.Server,
+      effPort: number,
+      listenStart: number,
+      start: number,
+      setExpressApp: (app: any) => void
+    ) {
+      // Deferred: validation and logging (after /health already works)
+      const dbUrl = (env.DATABASE_URL || process.env.DATABASE_URL || '').trim();
+      const hasDb = !!(dbUrl && dbUrl.startsWith('postgres'));
+      const hasJwt = !!(process.env.JWT_SECRET && process.env.JWT_SECRET.length >= 32);
+      const hasEnc = !!(process.env.ENCRYPTION_KEY?.trim() && process.env.ENCRYPTION_KEY.length >= 32) || hasJwt;
+      if (env.NODE_ENV === 'production' && (!hasDb || !hasJwt || !hasEnc)) {
+        console.error('❌ WARNING: Missing required env in production');
+        if (!hasDb) console.error('   - DATABASE_URL');
+        if (!hasJwt) console.error('   - JWT_SECRET');
+        if (!hasEnc) console.error('   - ENCRYPTION_KEY or JWT_SECRET (min 32 chars)');
+      }
+      try { validateEncryptionKey(); } catch { /* non-fatal */ }
+      (global as any).__isEncryptionKeyValid = isEncryptionKeyValid;
+      try { validateJwtSecret(); } catch { /* non-fatal */ }
+      logConfiguration(env, effPort, portSource);
+      initBuildInfo();
+
+      console.log('[STARTUP] Listening on port', effPort);
+      const listenTime = Date.now() - listenStart;
+      const address = svr.address();
       const addressStr = typeof address === 'string' 
         ? address 
         : address ? `${address.address}:${address.port}` : 'unknown';
@@ -675,7 +664,7 @@ async function startServer() {
       console.log('SERVER_BOOT_OK');
       console.log('✅ LISTENING OK');
       console.log('================================');
-      console.log(`   LISTENING host=0.0.0.0 port=${effectivePort}`);
+      console.log(`   LISTENING host=0.0.0.0 port=${effPort}`);
       const addressInfo = typeof address === 'object' && address !== null
         ? `ADDR actual=${address.address}:${address.port} family=${address.family}`
         : `ADDR actual=${addressStr}`;
@@ -683,19 +672,19 @@ async function startServer() {
       console.log(`   PORT source: ${portSource}`);
       console.log(`   PORT env exists: ${!!process.env.PORT} value=${process.env.PORT || 'N/A'}`);
       console.log(`   Listen time: ${listenTime}ms`);
-      console.log(`   Total boot time: ${Date.now() - startTime}ms`);
+      console.log(`   Total boot time: ${Date.now() - start}ms`);
       console.log(`   Environment: ${env.NODE_ENV}`);
       console.log(`   SAFE_BOOT: ${env.SAFE_BOOT} (workers ${env.SAFE_BOOT ? 'disabled' : 'enabled'})`);
       console.log(`   pid: ${process.pid}`);
       console.log('');
       console.log('📡 Express endpoints available:');
-      console.log(`   Health: http://0.0.0.0:${effectivePort}/health`);
-      console.log(`   Health API: http://0.0.0.0:${effectivePort}/api/health`);
-      console.log(`   Ready: http://0.0.0.0:${effectivePort}/ready`);
-      console.log(`   Auth: http://0.0.0.0:${effectivePort}/api/auth/login`);
-      console.log(`   Auth Me: http://0.0.0.0:${effectivePort}/api/auth/me`);
-      console.log(`   Debug Ping: http://0.0.0.0:${effectivePort}/api/debug/ping`);
-      console.log(`   Debug AliExpress: http://0.0.0.0:${effectivePort}/api/debug/aliexpress/test-search`);
+      console.log(`   Health: http://0.0.0.0:${effPort}/health`);
+      console.log(`   Health API: http://0.0.0.0:${effPort}/api/health`);
+      console.log(`   Ready: http://0.0.0.0:${effPort}/ready`);
+      console.log(`   Auth: http://0.0.0.0:${effPort}/api/auth/login`);
+      console.log(`   Auth Me: http://0.0.0.0:${effPort}/api/auth/me`);
+      console.log(`   Debug Ping: http://0.0.0.0:${effPort}/api/debug/ping`);
+      console.log(`   Debug AliExpress: http://0.0.0.0:${effPort}/api/debug/aliexpress/test-search`);
       console.log('================================');
       console.log('✅ Express server ready - ALL endpoints available');
       console.log('✅ Minimal server is NOT active (Express handles all requests)');
@@ -710,8 +699,9 @@ async function startServer() {
         try {
           console.log('[BOOT] Loading full Express app (background)...');
           const appModule = await import('./app');
-          expressApp = appModule.default;
-          if (expressApp) {
+          const app = appModule.default;
+          if (app) {
+            setExpressApp(app);
             console.log('[BOOT] Express app loaded - full routing active');
           }
         } catch (appErr: any) {
@@ -763,7 +753,7 @@ async function startServer() {
             logMilestone('[BOOT] SAFE_BOOT=false: Using full bootstrap (DB, Redis, migrations, etc.)');
             console.log('[BOOT] Initializing: Database, Redis, BullMQ, scheduled tasks');
             const { fullBootstrap } = await import('./bootstrap/full-bootstrap');
-            await fullBootstrap(startTime);
+            await fullBootstrap(start);
           }
         } catch (bootstrapError: any) {
           // ✅ BOOT: Startup guard - nunca crashear el proceso
@@ -776,7 +766,7 @@ async function startServer() {
           console.log('');
         }
       });
-    };
+    }
 
     // ✅ FASE 1: EADDRINUSE → try next ports automatically (PORT, PORT+1, ..., PORT+5)
     const MAX_PORT_ATTEMPTS = 6;
