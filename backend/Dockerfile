@@ -3,4 +3,4 @@ WORKDIR /app
 COPY . .
 RUN npm install
 RUN npm run build
-CMD ["npm","run","start:with-migrations"]
+CMD ["npm","run","start"]
