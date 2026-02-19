@@ -12,6 +12,18 @@
  * All operations are protected with try/catch to prevent crashes.
  */
 
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local'), override: true });
+
+console.log('[ENV CHECK]', {
+  SCRAPERAPI_KEY: !!process.env.SCRAPERAPI_KEY,
+  ZENROWS_API_KEY: !!process.env.ZENROWS_API_KEY,
+  EBAY_APP_ID: !!process.env.EBAY_APP_ID,
+});
+
 import { prisma, connectWithRetry } from '../config/database';
 import { redis, isRedisAvailable } from '../config/redis';
 import { env } from '../config/env';
@@ -235,7 +247,16 @@ export async function fullBootstrap(startTime: number): Promise<void> {
       console.warn('[BOOT] ⚠️  Warning: Could not initialize scheduled tasks service (Express still works):', error.message);
       console.warn('[BOOT] Server continues running - scheduled tasks disabled');
     }
-    
+
+    // Load AliExpress OAuth token from DB (for refresh job and any OAuth flows)
+    try {
+      const { aliexpressAffiliateAPIService } = await import('../services/aliexpress-affiliate-api.service');
+      await aliexpressAffiliateAPIService.loadTokenFromDatabase();
+      logMilestone('AliExpress token loaded from DB (if any)');
+    } catch (tokenErr: any) {
+      // Non-critical: token refresh job will load from DB when needed
+    }
+
     // Initialize scheduled reports
     try {
       logMilestone('Initializing scheduled reports');
@@ -298,7 +319,17 @@ export async function fullBootstrap(startTime: number): Promise<void> {
     } catch (error: any) {
       console.warn('??  Warning: Could not initialize workflow scheduler:', error.message);
     }
-    
+
+    // Autopilot: init and auto-start when config.enabled (done inside initializeAutopilot)
+    try {
+      logMilestone('Initializing Autopilot');
+      const { initializeAutopilot } = await import('../autopilot-init');
+      await initializeAutopilot();
+      logMilestone('Autopilot initialized (start triggered from autopilot-init if enabled)');
+    } catch (autopilotError: any) {
+      console.warn('??  Warning: Could not initialize or start autopilot:', autopilotError?.message || autopilotError);
+    }
+
     const totalInitTime = Date.now() - startTime;
     logMilestone(`Full bootstrap completed (total: ${totalInitTime}ms)`);
     console.log('');

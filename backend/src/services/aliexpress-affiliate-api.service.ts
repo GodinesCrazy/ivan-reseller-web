@@ -348,10 +348,15 @@ export class AliExpressAffiliateAPIService {
         throw new Error(`ALIEXPRESS_API_ERROR: ${msg} (Code: ${code})`);
       }
 
-      const products =
+      // AliExpress API returns product as single object when 1 result, array when multiple
+      const rawProduct =
         data?.aliexpress_affiliate_product_query_response?.result?.products?.product ||
-        data?.result?.products?.product ||
-        [];
+        data?.result?.products?.product;
+      const products = Array.isArray(rawProduct)
+        ? rawProduct
+        : rawProduct && typeof rawProduct === 'object'
+          ? [rawProduct]
+          : [];
 
       if (products.length === 0) {
         console.log('[AUTOPILOT] Affiliate empty');

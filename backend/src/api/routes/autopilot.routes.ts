@@ -164,6 +164,45 @@ router.post('/start', async (req: Request, res: Response, next) => {
 });
 
 /**
+ * ✅ POST /api/autopilot/run-cycle - Ejecutar un ciclo manualmente (forzar ciclo real)
+ */
+router.post('/run-cycle', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const query = typeof req.body?.query === 'string' ? req.body.query : undefined;
+    const environment = (req.body?.environment === 'production' ? 'production' : 'sandbox') as 'sandbox' | 'production';
+
+    const result = await autopilotSystem.runSingleCycle(query, userId, environment);
+
+    res.json({
+      success: true,
+      result: {
+        success: result.success,
+        message: result.message,
+        category: result.category,
+        query: result.query,
+        opportunitiesFound: result.opportunitiesFound,
+        opportunitiesProcessed: result.opportunitiesProcessed,
+        productsPublished: result.productsPublished,
+        productsApproved: result.productsApproved,
+        capitalUsed: result.capitalUsed,
+        errors: result.errors,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Error running autopilot cycle', { error: error?.message, userId: req.user?.userId });
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to run cycle',
+    });
+  }
+});
+
+/**
  * ✅ POST /api/autopilot/stop - Detener autopilot
  */
 router.post('/stop', async (req: Request, res: Response, next) => {

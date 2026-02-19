@@ -18,11 +18,13 @@ import {
   testAffiliateLink,
   searchProducts,
   getHealthStatus,
+  getStatusHandler,
   getAffiliateHealth,
   getDebugAuth,
   getCandidates,
   getOAuthStatusHandler,
   getOAuthUrl,
+  getOAuthStart,
   oauthCallback,
 } from './aliexpress.controller';
 import { aliexpressAffiliateAPIService } from '../../services/aliexpress-affiliate-api.service';
@@ -134,19 +136,41 @@ router.get('/search', searchProducts);
 router.get('/health', getHealthStatus);
 
 /**
+ * GET /api/aliexpress/status - Estado unificado (OAuth + Affiliate)
+ */
+router.get('/status', getStatusHandler);
+
+/**
  * GET /api/aliexpress/affiliate/health - Token status (hasToken, expiresAt, expired)
  */
 router.get('/affiliate/health', getAffiliateHealth);
 router.get('/affiliate/debug-auth', getDebugAuth);
 router.get('/affiliate/debug-search', async (_req, res) => {
   try {
-    const data = await aliexpressAffiliateAPIService.debugProductQuery('phone case');
-    res.json({ success: true, data });
+    const result = await aliexpressAffiliateAPIService.searchProducts({
+      keywords: 'phone case',
+      pageNo: 1,
+      pageSize: 20,
+      shipToCountry: 'US',
+    });
+    const products = result?.products ?? [];
+    if (products.length === 0) {
+      res.status(403).json({
+        success: false,
+        error: 'ALIEXPRESS_PERMISSION_MISSING: Affiliate Product Data Feed not enabled',
+        products: [],
+        productsLength: 0,
+      });
+      return;
+    }
+    res.json({ success: true, products, productsLength: products.length });
   } catch (err: any) {
     console.error('[AFFILIATE-DEBUG] ERROR:', err);
     res.status(500).json({
       success: false,
       error: err?.message || 'debug failed',
+      products: [],
+      productsLength: 0,
     });
   }
 });
@@ -160,9 +184,13 @@ router.get('/oauth/status', getOAuthStatusHandler);
  */
 router.get('/oauth/test-flow', getOAuthUrl);
 /**
- * GET /api/aliexpress/oauth/url - Get OAuth authorization URL
+ * GET /api/aliexpress/oauth/url - Get OAuth authorization URL (JSON)
  */
 router.get('/oauth/url', getOAuthUrl);
+/**
+ * GET /api/aliexpress/oauth/start - Redirect to AliExpress authorize page
+ */
+router.get('/oauth/start', getOAuthStart);
 
 /**
  * GET /api/aliexpress/callback - OAuth callback: exchange code for tokens

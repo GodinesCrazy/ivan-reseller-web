@@ -514,6 +514,29 @@ export const getAffiliateHealth = async (_req: Request, res: Response) => {
 };
 
 /**
+ * GET /api/aliexpress/status - Estado unificado (OAuth + Affiliate credentials)
+ */
+export const getStatusHandler = async (_req: Request, res: Response) => {
+  try {
+    const oauthStatus = getOAuthStatus();
+    const hasCredentials =
+      !!(process.env.ALIEXPRESS_APP_KEY || '').trim() &&
+      !!(process.env.ALIEXPRESS_APP_SECRET || '').trim();
+    return res.status(200).json({
+      oauth: oauthStatus,
+      affiliate: { hasCredentials, hasTrackingId: !!(process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim() },
+      ready: oauthStatus.hasToken || hasCredentials,
+    });
+  } catch (err: any) {
+    return res.status(200).json({
+      oauth: { hasToken: false, expiresAt: null, expired: true },
+      affiliate: { hasCredentials: false, hasTrackingId: false },
+      ready: false,
+    });
+  }
+};
+
+/**
  * GET /api/aliexpress/oauth/status - Token status (hasToken, expiresAt, expired)
  */
 export const getOAuthStatusHandler = async (_req: Request, res: Response) => {
