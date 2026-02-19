@@ -13,9 +13,9 @@ cmds = [
 ]
 
 [start]
-command = "npm run start:with-migrations"
+command = "npm run start"
 
 [healthcheck]
 path = "/health"
-timeout = 1000
+timeout = 120
 

@@ -30,10 +30,22 @@ const handler = (req: http.IncomingMessage, res: http.ServerResponse) => {
   res.end(JSON.stringify({ status: 'loading' }));
 };
 
+// Prevent uncaught errors from killing the process - /health must stay up
+process.on('uncaughtException', (err) => {
+  console.error('[BOOT] Uncaught exception (keeping /health alive):', err?.message || err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[BOOT] Unhandled rejection (keeping /health alive):', reason);
+});
+
 const server = http.createServer(handler);
 server.listen(PORT, '0.0.0.0', () => {
   console.log('[BOOT] Health listening on port', PORT);
   (global as any).__earlyHttpServer = server;
   (global as any).__earlyPort = PORT;
-  require('./server'); // eslint-disable-line
+  try {
+    require('./server'); // eslint-disable-line
+  } catch (err: any) {
+    console.error('[BOOT] Server load failed (/health still works):', err?.message || err);
+  }
 });
