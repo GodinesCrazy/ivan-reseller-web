@@ -46,7 +46,6 @@ const OrderDetail = lazy(() => import('@pages/OrderDetail'));
 const Checkout = lazy(() => import('@pages/Checkout'));
 const Diagnostics = lazy(() => import('@pages/Diagnostics'));
 const SetupRequired = lazy(() => import('@pages/SetupRequired'));
-const OnboardingWizard = lazy(() => import('@components/OnboardingWizard'));
 import Layout from '@components/layout/Layout';
 import { ErrorBanner } from '@/components/ErrorBanner';
 
@@ -186,7 +185,6 @@ function AppContent() {
         element={isAuthenticated ? <Layout /> : <Navigate to="/login" />}
       >
         <Route index element={<Navigate to="/dashboard" />} />
-        <Route path="onboarding" element={<OnboardingWizard onComplete={() => window.location.href = '/dashboard'} />} />
         <Route path="dashboard" element={<Dashboard />} />
         
         {/* Opportunities System */}

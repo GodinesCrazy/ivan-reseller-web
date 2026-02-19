@@ -52,7 +52,6 @@ const navItems: NavItem[] = [
   { path: '/settings', label: 'Configuración', icon: Settings },
   { path: '/meeting-room', label: 'Sala de reuniones', icon: Video },
   { path: '/help', label: 'Centro de ayuda', icon: HelpCircle },
-  { path: '/onboarding', label: 'Asistente de configuración', icon: Settings },
 ];
 
 export default function Sidebar() {
