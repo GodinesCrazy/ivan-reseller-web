@@ -3,18 +3,37 @@
  * 
  * Implements Case 2: System Interfaces signature method according to AliExpress Open Platform documentation.
  * 
- * Signature formula:
- * hex(sha256(api_path + concatenated_sorted_parameters))
- * 
- * Rules:
- * - Parameters must be sorted by ASCII order
- * - Do NOT include app_secret in parameters
- * - Do NOT include sign in signature base string
- * - The api_path MUST start with "/" (example: /rest/auth/token/create)
+ * CRITICAL for token/create: NO app_secret, NO separators, NO redirect_uri in params.
+ * Formula: hex(sha256(api_path + key1value1key2value2...)).toUpperCase()
  */
 
 import crypto from 'crypto';
 import logger from '../config/logger';
+
+/**
+ * Generate AliExpress signature (Case 2 - NO appSecret, NO extra params).
+ * Used for /rest/auth/token/create - params: app_key, code, sign_method, timestamp ONLY.
+ * @param apiPath - e.g. "/rest/auth/token/create"
+ * @param params - params for signing (exclude 'sign')
+ */
+export function generateAliExpressSignatureNoSecret(
+  apiPath: string,
+  params: Record<string, string>
+): string {
+  const sortedKeys = Object.keys(params)
+    .filter((k) => k !== 'sign')
+    .sort();
+  let base = apiPath.startsWith('/') ? apiPath : `/${apiPath}`;
+  for (const key of sortedKeys) {
+    base += key + params[key];
+  }
+  const hash = crypto
+    .createHash('sha256')
+    .update(base, 'utf8')
+    .digest('hex')
+    .toUpperCase();
+  return hash;
+}
 
 /**
  * Generate AliExpress signature according to Case 2: System Interfaces

@@ -5,10 +5,17 @@
 import fs from 'fs';
 import path from 'path';
 
+export type TokenAuthStatus = 'active' | 'NEEDS_REAUTH';
+
 export interface TokenData {
   accessToken: string;
   refreshToken: string;
+  /** Unix timestamp ms when token expires */
   expiresAt: number;
+  /** Seconds until expiry (optional, derived from expiresAt when set) */
+  expires_in?: number;
+  /** Set to NEEDS_REAUTH when refresh fails */
+  authStatus?: TokenAuthStatus;
 }
 
 let memoryStore: TokenData | null = null;
@@ -55,4 +62,15 @@ export function getToken(): TokenData | null {
 export function setToken(tokenData: TokenData): void {
   memoryStore = tokenData;
   writeToFile(tokenData);
+}
+
+/**
+ * Mark token as NEEDS_REAUTH (e.g. when refresh fails).
+ */
+export function markNeedsReauth(): void {
+  const data = getToken();
+  if (data) {
+    memoryStore = { ...data, authStatus: 'NEEDS_REAUTH' as const };
+    writeToFile(memoryStore);
+  }
 }

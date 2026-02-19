@@ -15,9 +15,9 @@ import axios, { AxiosInstance } from 'axios';
 import crypto from 'crypto';
 import logger from '../config/logger';
 import type { AliExpressAffiliateCredentials } from '../types/api-credentials.types';
-import { getToken, setToken } from './aliexpress-token.store';
+import { getToken, setToken, markNeedsReauth } from './aliexpress-token.store';
 import { refreshAccessToken } from './aliexpress-oauth.service';
-
+import { AffiliatePermissionMissingError } from '../errors/affiliate-permission-missing.error';
 // Tipos de datos de la API
 export interface AffiliateProduct {
   productId: string;
@@ -36,6 +36,8 @@ export interface AffiliateProduct {
   promotionLink?: string; // Link de afiliado
   currency?: string;
   commissionRate?: number;
+  /** Estimated profit (e.g. salePrice * commissionRate/100). */
+  estimatedProfit?: number;
 }
 
 export interface AffiliateProductDetail extends AffiliateProduct {
@@ -76,6 +78,13 @@ export interface ProductSearchParams {
   trackingId?: string;
 }
 
+/** Result of affiliate product search. empty: true when API returned 0 products (triggers fallback). */
+export interface AffiliateSearchResult {
+  products: AffiliateProduct[];
+  source: 'affiliate';
+  empty: boolean;
+}
+
 export interface ProductDetailParams {
   productIds: string; // Coma separada para múltiples productos
   targetCurrency?: string;
@@ -92,25 +101,27 @@ export class AliExpressAffiliateAPIService {
   private tokenExpiresAt: Date | null = null;
   private readonly appKey: string;
   private readonly appSecret: string;
+  private readonly trackingId: string;
   private readonly apiBaseUrl: string;
 
-  // Endpoints base de la API
-  private readonly ENDPOINT_LEGACY = 'https://gw.api.taobao.com/router/rest';
-  private readonly ENDPOINT_NEW = 'https://api-sg.aliexpress.com/sync';
-  
-  // Usar endpoint legacy por defecto (más documentado y estable)
-  private endpoint: string = this.ENDPOINT_LEGACY;
+  // Production: APP_KEY mode only, no OAuth
+  private static readonly ENDPOINT = 'https://api-sg.aliexpress.com/sync';
+  private readonly ENDPOINT_SYNC = AliExpressAffiliateAPIService.ENDPOINT;
+  private endpoint: string = AliExpressAffiliateAPIService.ENDPOINT;
 
   constructor() {
     const rawKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
     const rawSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
     this.appKey = rawKey && rawKey !== 'PUT_YOUR_APP_KEY_HERE' ? rawKey : '';
     this.appSecret = rawSecret && rawSecret !== 'PUT_YOUR_APP_SECRET_HERE' ? rawSecret : '';
-    const trackingId = (process.env.ALIEXPRESS_TRACKING_ID || '').trim();
-    console.log('[ALIEXPRESS-AFFILIATE] APP KEY:', this.appKey ? 'SET' : 'MISSING');
-    console.log('[ALIEXPRESS-AFFILIATE] APP SECRET:', this.appSecret ? 'SET' : 'MISSING');
-    console.log('[ALIEXPRESS-AFFILIATE] TRACKING ID:', trackingId || 'MISSING');
-    this.apiBaseUrl = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || this.ENDPOINT_NEW).replace(/\/$/, '');
+    this.trackingId = (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim();
+    if (!this.appKey || !this.appSecret) {
+      throw new Error('ALIEXPRESS_API_NOT_CONFIGURED');
+    }
+    console.log('[AUTOPILOT] Affiliate API credentials loaded');
+    console.log('[AUTOPILOT] Using APP_KEY mode');
+    console.log('[ALIEXPRESS-AFFILIATE] TRACKING ID:', this.trackingId || 'MISSING');
+    this.apiBaseUrl = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || this.ENDPOINT_SYNC).replace(/\/$/, '');
 
     this.client = axios.create({
       timeout: 30000, // ✅ CRÍTICO: Timeout aumentado a 30s para dar tiempo a AliExpress TOP API
@@ -133,11 +144,7 @@ export class AliExpressAffiliateAPIService {
    */
   setCredentials(credentials: AliExpressAffiliateCredentials): void {
     this.credentials = credentials;
-    
-    // ✅ CRÍTICO: Según la documentación de AliExpress, ambos endpoints funcionan para sandbox y production
-    // El endpoint legacy es más estable y documentado, así que lo usamos siempre
-    // Sin embargo, podríamos intentar el endpoint nuevo si el legacy falla
-    this.endpoint = this.ENDPOINT_LEGACY;
+    this.endpoint = this.ENDPOINT_SYNC;
     
     // ✅ CRÍTICO: Si las credenciales incluyen accessToken, usarlo (opcional - Affiliate API no lo requiere)
     // Note: Affiliate API uses signature auth, not OAuth tokens
@@ -150,7 +157,7 @@ export class AliExpressAffiliateAPIService {
     
     const logger = require('../config/logger').default;
     logger.info('[ALIEXPRESS-AFFILIATE-API] Credentials set', {
-      endpoint: this.ENDPOINT_LEGACY,
+      endpoint: this.ENDPOINT_SYNC,
       sandbox: credentials.sandbox,
       appKey: credentials.appKey ? `${credentials.appKey.substring(0, 6)}...` : 'missing',
       hasAccessToken: !!this.accessToken,
@@ -203,43 +210,11 @@ export class AliExpressAffiliateAPIService {
   }
 
   /**
-   * Get valid access token: from store, then DB; if expired refresh. Throws if missing.
+   * FINAL PROFIT MODE: OAuth disabled. Always use APP_KEY + APP_SECRET only.
+   * Never throw NEEDS_REAUTH.
    */
   async getValidAccessToken(): Promise<string> {
-    let tokenData = getToken();
-    if (!tokenData) {
-      await this.loadTokenFromDatabase();
-      if (this.accessToken && this.tokenExpiresAt) {
-        setToken({
-          accessToken: this.accessToken,
-          refreshToken: '',
-          expiresAt: this.tokenExpiresAt.getTime(),
-        });
-        tokenData = getToken();
-      }
-    } else {
-      this.accessToken = tokenData.accessToken;
-      this.tokenExpiresAt = new Date(tokenData.expiresAt);
-    }
-    if (!tokenData?.accessToken) {
-      throw new Error('AliExpress OAuth not completed');
-    }
-    const now = Date.now();
-    const bufferMs = 5 * 60 * 1000;
-    if (tokenData.expiresAt <= now + bufferMs && tokenData.refreshToken) {
-      try {
-        const refreshed = await refreshAccessToken(tokenData.refreshToken);
-        tokenData = refreshed;
-        this.accessToken = refreshed.accessToken;
-        this.tokenExpiresAt = new Date(refreshed.expiresAt);
-      } catch (e: any) {
-        logger.warn('[ALIEXPRESS-AFFILIATE] Token refresh failed', { message: e?.message });
-      }
-    }
-    if (!tokenData.accessToken) {
-      throw new Error('AliExpress OAuth not completed');
-    }
-    return tokenData.accessToken;
+    return '';
   }
 
   /**
@@ -253,326 +228,169 @@ export class AliExpressAffiliateAPIService {
     }
   }
 
-  /**
-   * Calcular firma (sign) para autenticación
-   * Algoritmo: MD5 o SHA256 según sign_method
-   */
-  private calculateSign(params: Record<string, any>, appSecret: string, signMethod: 'md5' | 'sha256' = 'md5'): string {
-    // Ordenar parámetros alfabéticamente
-    const sortedKeys = Object.keys(params).sort();
-    const signString = sortedKeys
-      .map(key => `${key}${params[key]}`)
-      .join('');
-    
-    const fullSignString = `${appSecret}${signString}${appSecret}`;
-    
-    if (signMethod === 'sha256') {
-      return crypto.createHash('sha256').update(fullSignString, 'utf8').digest('hex').toUpperCase();
-    } else {
-      return crypto.createHash('md5').update(fullSignString, 'utf8').digest('hex').toUpperCase();
-    }
-  }
-
-  /**
-   * Realizar petición a la API con autenticación
-   */
-  private setCredentialsFromEnv(): void {
-    if (this.appKey && this.appSecret) {
-      this.credentials = {
-        appKey: this.appKey,
-        appSecret: this.appSecret,
-        trackingId: (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim(),
-        sandbox: false,
-      };
-    }
-  }
-
-  private async makeRequest(method: string, params: Record<string, any>, providedToken?: string): Promise<any> {
-    if (!this.appKey || !this.appSecret) {
-      throw new Error('AliExpress Affiliate API credentials not configured');
-    }
-    if (!this.credentials) {
-      this.setCredentialsFromEnv();
-    }
-
-    let accessToken: string;
-    try {
-      accessToken = providedToken || (await this.getValidAccessToken());
-    } catch (e: any) {
-      if (e?.message === 'AliExpress OAuth not completed') {
-        throw e;
-      }
-      throw new Error('AliExpress OAuth not completed');
-    }
-    params.access_token = accessToken;
-    console.log('[AFFILIATE] USING ACCESS TOKEN:', accessToken.slice(-6));
-    logger.info('[ALIEXPRESS-AFFILIATE] Using access_token', { method, last6: '****' + accessToken.slice(-6) });
-
-    // Parámetros comunes para todas las peticiones
-    // ✅ MEJORADO: Formato de timestamp correcto para AliExpress TOP API
+  /** AliExpress SYNC: YYYY-MM-DD HH:mm:ss, server local time. */
+  private getTimestamp(): string {
     const now = new Date();
-    const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
-    
-    const commonParams: Record<string, any> = {
-      method,
-      app_key: this.credentials.appKey,
-      timestamp, // Formato: YYYYMMDDHHmmss
-      format: 'json',
-      v: '2.0',
-      sign_method: 'md5',
-    };
-
-    // ✅ CRÍTICO: Agregar access_token a commonParams si existe (debe estar en la firma)
-    if (accessToken) {
-      commonParams.access_token = accessToken;
-    }
-
-    // Combinar parámetros comunes con específicos
-    const allParams: Record<string, any> = { ...commonParams, ...params };
-
-    // ✅ CRÍTICO: Calcular firma ANTES de agregar sign (sign no debe estar en el cálculo)
-    const sign = this.calculateSign(allParams, this.credentials.appSecret, commonParams.sign_method as 'md5' | 'sha256');
-    allParams.sign = sign;
-
-    // Agregar trackingId si está disponible
-    if (this.credentials.trackingId && !allParams.tracking_id) {
-      allParams.tracking_id = this.credentials.trackingId;
-    }
-
-    const requestStartTime = Date.now();
-    
-    // ✅ LOG OBLIGATORIO: ANTES de la llamada HTTP
-    const requestPayloadSize = JSON.stringify(allParams).length;
-    logger.info('[ALIEXPRESS-AFFILIATE-API] Request →', {
-      endpoint: this.endpoint,
-      method: method,
-      httpMethod: 'POST',
-      query: params.keywords || 'N/A',
-      timestamp: allParams.timestamp,
-      app_key: allParams.app_key?.substring(0, 8) + '...',
-      params_count: Object.keys(allParams).length,
-      payloadSize: `${requestPayloadSize} bytes`,
-      timeout: '30000ms (axios)',
-      hasCredentials: !!this.credentials,
-      credentialsSandbox: this.credentials?.sandbox
-    });
-
-    try {
-      // ✅ MEJORADO: Usar URLSearchParams para enviar datos correctamente
-      const formData = new URLSearchParams();
-      Object.keys(allParams).forEach(key => {
-        const value = allParams[key];
-        if (value !== undefined && value !== null) {
-          formData.append(key, String(value));
-        }
-      });
-
-      // ✅ CRÍTICO: Timeout aumentado a 30s para dar más tiempo a la API
-      // Si falla por timeout, el sistema hará fallback a scraping nativo
-      // Nota: El Promise.race en advanced-scraper tiene 35s, así que este timeout
-      // debe ser menor para que el race funcione correctamente
-      const response = await this.client.post(this.endpoint, formData.toString(), {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        timeout: 30000, // ✅ Aumentado a 30s - AliExpress TOP API puede ser lenta
-      });
-      console.log('[ALIEXPRESS-AFFILIATE] RAW RESPONSE:', JSON.stringify(response.data, null, 2));
-
-      const elapsedMs = Date.now() - requestStartTime;
-
-      // La respuesta de TOP API viene en formato: { response: { result: { ... } } }
-      if (response.data.error_response) {
-        const error = response.data.error_response;
-        const errorCode = error.code || 'UNKNOWN';
-        const errorMsg = error.msg || error.sub_msg || 'Unknown error';
-        
-        // ✅ LOG OBLIGATORIO: Error de la API
-        logger.error('[ALIEXPRESS-AFFILIATE-API] Error ←', {
-          status: response.status,
-          code: errorCode,
-          message: errorMsg,
-          elapsedMs: `${elapsedMs}ms`,
-          endpoint: this.endpoint,
-          method: method,
-          errorType: 'api_error_response'
-        });
-        
-        throw new Error(`AliExpress API Error: ${errorMsg} (Code: ${errorCode})`);
-      }
-
-      const result = response.data[`${method.replace(/\./g, '_')}_response`] || response.data.response?.result;
-      
-      if (!result) {
-        // ✅ LOG OBLIGATORIO: Formato inesperado
-        logger.error('[ALIEXPRESS-AFFILIATE-API] Error ←', {
-          status: response.status,
-          code: 'UNEXPECTED_FORMAT',
-          message: 'Unexpected response format from AliExpress API',
-          elapsedMs: `${elapsedMs}ms`,
-          endpoint: this.endpoint,
-          method: method,
-          errorType: 'unexpected_response_format',
-          responseKeys: Object.keys(response.data || {})
-        });
-        throw new Error('Unexpected response format from AliExpress API');
-      }
-
-      // ✅ LOG OBLIGATORIO: Éxito
-      const resultSize = JSON.stringify(result).length;
-      logger.info('[ALIEXPRESS-AFFILIATE-API] Success ←', {
-        status: response.status,
-        elapsedMs: `${elapsedMs}ms`,
-        endpoint: this.endpoint,
-        method: method,
-        resultSize: `${resultSize} bytes`,
-        hasData: !!result
-      });
-
-      return result;
-    } catch (error: any) {
-      const elapsedMs = Date.now() - requestStartTime;
-      
-      if (axios.isAxiosError(error)) {
-        const httpStatus = error.response?.status;
-        const statusText = error.response?.statusText;
-        const errorData = error.response?.data;
-        const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
-        const isNetworkError = error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT';
-        
-        // ✅ LOG OBLIGATORIO: Error HTTP detallado
-        logger.error('[ALIEXPRESS-AFFILIATE-API] Error ←', {
-          status: httpStatus || 'NO_STATUS',
-          statusText: statusText || 'NO_STATUS_TEXT',
-          code: error.code || 'UNKNOWN',
-          message: error.message,
-          elapsedMs: `${elapsedMs}ms`,
-          endpoint: this.endpoint,
-          method: method,
-          errorType: isTimeout ? 'timeout' : isNetworkError ? 'network_error' : 'http_error',
-          isTimeout,
-          isNetworkError,
-          errorResponseData: errorData ? (typeof errorData === 'object' ? JSON.stringify(errorData).substring(0, 200) : String(errorData).substring(0, 200)) : undefined
-        });
-        
-        // Clasificar el error para mejor manejo
-        if (isTimeout) {
-          throw new Error(`AliExpress API timeout after ${elapsedMs}ms: ${error.message}`);
-        } else if (isNetworkError) {
-          throw new Error(`AliExpress API network error: ${error.message}`);
-        } else if (httpStatus === 401 || httpStatus === 403) {
-          throw new Error(`AliExpress API authentication error (${httpStatus}): ${errorData?.msg || error.message}`);
-        } else if (httpStatus === 429) {
-          throw new Error(`AliExpress API rate limit exceeded (429): ${errorData?.msg || error.message}`);
-        } else {
-          throw new Error(`AliExpress API request failed (${httpStatus || 'NO_STATUS'}): ${error.message}`);
-        }
-      }
-      
-      // ✅ LOG OBLIGATORIO: Error no-HTTP
-      logger.error('[ALIEXPRESS-AFFILIATE-API] Error ←', {
-        status: 'NO_HTTP_RESPONSE',
-        code: error?.code || 'UNKNOWN',
-        message: error?.message || String(error),
-        elapsedMs: `${elapsedMs}ms`,
-        endpoint: this.endpoint,
-        method: method,
-        errorType: 'non_http_error',
-        stack: error?.stack?.substring(0, 500)
-      });
-      
-      throw error;
-    }
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return (
+      now.getFullYear() +
+      '-' +
+      pad(now.getMonth() + 1) +
+      '-' +
+      pad(now.getDate()) +
+      ' ' +
+      pad(now.getHours()) +
+      ':' +
+      pad(now.getMinutes()) +
+      ':' +
+      pad(now.getSeconds())
+    );
   }
 
   /**
-   * Buscar productos (aliexpress.affiliate.product.query)
+   * SYNC endpoint signature: sorted key+value only (no secret in base string).
+   * Use HMAC-SHA256 with APP_SECRET as key. createHash causes IncompleteSignature.
    */
-  async searchProducts(params: ProductSearchParams): Promise<AffiliateProduct[]> {
+  private generateSignature(params: Record<string, string>): string {
+    const sortedKeys = Object.keys(params)
+      .filter((k) => k !== 'sign')
+      .sort();
+    const baseString = sortedKeys.map((k) => k + params[k]).join('');
+    return crypto
+      .createHmac('sha256', this.appSecret)
+      .update(baseString, 'utf8')
+      .digest('hex')
+      .toUpperCase();
+  }
+
+  /**
+   * Build params (all values string), add sign after generation. No access_token.
+   */
+  private async makeRequest(method: string, requestParams: Record<string, any>): Promise<any> {
+    const params: Record<string, string> = {
+      app_key: String(this.appKey),
+      method: String(method),
+      format: 'json',
+      sign_method: 'sha256',
+      timestamp: String(this.getTimestamp()),
+      v: '2.0',
+    };
+    Object.entries(requestParams || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        params[key] = String(value);
+      }
+    });
+    params.sign = this.generateSignature(params);
+
+    console.log('[AUTOPILOT] Affiliate request signed correctly');
+
+    const response = await axios.get('https://api-sg.aliexpress.com/sync', {
+      params,
+      timeout: 30000,
+    });
+    return response.data;
+  }
+
+  /** Common keywords that should return results when affiliate permission is granted */
+  private static readonly COMMON_KEYWORDS = new Set([
+    'phone', 'case', 'wireless', 'bluetooth', 'watch', 'bag', 'shoes', 'earbuds',
+    'phone case', 'gaming keyboard', 'usb cable', 'charging cable', 'led light',
+  ]);
+
+  private isCommonKeyword(keyword: string): boolean {
+    const normalized = String(keyword || '').toLowerCase().trim();
+    if (AliExpressAffiliateAPIService.COMMON_KEYWORDS.has(normalized)) return true;
+    return Array.from(AliExpressAffiliateAPIService.COMMON_KEYWORDS).some(k => normalized.includes(k));
+  }
+
+  /** Estimated profit from sale price and commission rate (or 30% fallback). */
+  private static calculateProfit(p: any): number {
+    const price = parseFloat(p.target_sale_price || p.sale_price || '0');
+    const rate = parseFloat(p.commission_rate || '0');
+    if (rate > 0) return (price * rate) / 100;
+    return price * 0.3;
+  }
+
+  /**
+   * Buscar productos (aliexpress.affiliate.product.query). APP_KEY only.
+   * When 0 products: returns { products: [], source: 'affiliate', empty: true } so callers can activate fallback.
+   */
+  async searchProducts(params: ProductSearchParams): Promise<AffiliateSearchResult> {
+    if (!this.trackingId) {
+      throw new Error('TRACKING_ID_MISSING');
+    }
     try {
-      logger.info('[ALIEXPRESS-AFFILIATE-API] Searching products', {
-        keywords: params.keywords,
-        pageNo: params.pageNo || 1,
-        pageSize: params.pageSize || 20,
-      });
-      const token = await this.getValidAccessToken();
+      const keywords = params.keywords;
+      const pageNo = (params.pageNo ?? 1).toString();
+      const pageSize = Math.min(params.pageSize ?? 20, 20).toString();
 
-      const apiParams: Record<string, any> = {
-        keywords: params.keywords,
-        page_no: params.pageNo || 1,
-        page_size: Math.min(params.pageSize || 10, 20), // ✅ MEJORADO: Reducir pageSize a 10 para evitar timeouts
+      const requestParams: Record<string, string> = {
+        keywords,
+        page_no: pageNo,
+        page_size: pageSize,
+        target_currency: 'USD',
+        target_language: 'EN',
+        ship_to_country: 'US',
+        tracking_id: this.trackingId,
+        fields:
+          'product_id,product_title,product_main_image_url,product_small_image_urls,sale_price,original_price,target_sale_price,target_sale_price_currency,product_detail_url,promotion_link,commission_rate,currency',
       };
+      if (params.targetCurrency) requestParams.target_currency = params.targetCurrency;
+      if (params.targetLanguage) requestParams.target_language = params.targetLanguage;
+      if (params.shipToCountry) requestParams.ship_to_country = params.shipToCountry;
 
-      if (params.categoryIds) apiParams.category_ids = params.categoryIds;
-      if (params.minSalePrice) apiParams.min_sale_price = params.minSalePrice;
-      if (params.maxSalePrice) apiParams.max_sale_price = params.maxSalePrice;
-      if (params.sort) apiParams.sort = params.sort;
-      if (params.targetCurrency) apiParams.target_currency = params.targetCurrency;
-      if (params.targetLanguage) apiParams.target_language = params.targetLanguage;
-      if (params.shipToCountry) apiParams.ship_to_country = params.shipToCountry;
-      if (params.deliveryDays) apiParams.delivery_days = params.deliveryDays;
-      if (params.trackingId) apiParams.tracking_id = params.trackingId;
+      const data = await this.makeRequest('aliexpress.affiliate.product.query', requestParams);
 
-      // ✅ MEJORADO: Campos mínimos esenciales para respuesta rápida
-      // Solo campos críticos para reducir tamaño de respuesta y tiempo de procesamiento
-      apiParams.fields = 'product_id,product_title,product_main_image_url,product_small_image_urls,sale_price,original_price,currency';
+      if (data?.error_response) {
+        const err = data.error_response;
+        const msg = err.msg || err.error_msg || err.sub_msg || 'Unknown error';
+        const code = err.code || err.error_code || 'UNKNOWN';
+        throw new Error(`ALIEXPRESS_API_ERROR: ${msg} (Code: ${code})`);
+      }
 
-      logger.info('[ALIEXPRESS-AFFILIATE-API] Request parameters prepared', {
-        keywords: params.keywords,
-        pageNo: params.pageNo || 1,
-        pageSize: apiParams.page_size,
-        targetCurrency: params.targetCurrency,
-        shipToCountry: params.shipToCountry,
-        endpoint: this.endpoint
-      });
+      const products =
+        data?.aliexpress_affiliate_product_query_response?.result?.products?.product ||
+        data?.result?.products?.product ||
+        [];
 
-      const result = await this.makeRequest('aliexpress.affiliate.product.query', apiParams, token);
-
-      // ✅ MEJORADO: Procesar respuesta con mejor manejo de imágenes
-      const products = result.products?.product || [];
-      
-      logger.debug('[ALIEXPRESS-AFFILIATE-API] Processing API response', {
-        productsCount: products.length,
-        firstProductId: products[0]?.product_id,
-        firstProductTitle: products[0]?.product_title?.substring(0, 50),
-        hasMainImage: !!products[0]?.product_main_image_url,
-        hasSmallImages: !!products[0]?.product_small_image_urls
-      });
-      
-      return products.map((p: any) => {
-        // ✅ MEJORADO: Normalizar productSmallImageUrls - puede venir como array, string o objeto
-        let smallImages: string[] = [];
-        if (p.product_small_image_urls) {
-          if (Array.isArray(p.product_small_image_urls)) {
-            smallImages = p.product_small_image_urls.filter(Boolean);
-          } else if (Array.isArray(p.product_small_image_urls.string)) {
-            smallImages = p.product_small_image_urls.string.filter(Boolean);
-          } else if (typeof p.product_small_image_urls === 'string') {
-            smallImages = [p.product_small_image_urls];
-          } else if (p.product_small_image_urls.string) {
-            smallImages = [p.product_small_image_urls.string].filter(Boolean);
+      if (products.length === 0) {
+        console.log('[AUTOPILOT] Affiliate empty');
+        const resp = data?.aliexpress_affiliate_product_query_response;
+        const result = resp?.result;
+        if (result && typeof result === 'object') {
+          const msg = (result as any).resp_msg ?? (result as any).msg ?? (result as any).message;
+          const code = (result as any).resp_code ?? (result as any).code;
+          if (code != null || msg) {
+            logger.info('[AUTOPILOT] Affiliate 0 products', { code, msg: msg || '(none)' });
           }
         }
-        
+        return { products: [], source: 'affiliate', empty: true };
+      }
+
+      const mapped = products.map((p: any) => {
+        const price = parseFloat(p.target_sale_price || p.sale_price || '0');
+        const currency = p.target_sale_price_currency || p.currency || 'USD';
+        const commissionRate = parseFloat(p.commission_rate || '0');
+        const estimatedProfit = AliExpressAffiliateAPIService.calculateProfit(p);
         return {
           productId: String(p.product_id || ''),
           productTitle: p.product_title || '',
           productMainImageUrl: p.product_main_image_url || '',
-          productSmallImageUrls: smallImages,
-          salePrice: parseFloat(p.sale_price || '0'),
+          productSmallImageUrls: Array.isArray(p.product_small_image_urls?.string)
+            ? p.product_small_image_urls.string
+            : (p.product_small_image_urls ? [p.product_small_image_urls] : []),
+          salePrice: price,
           originalPrice: parseFloat(p.original_price || '0'),
           discount: parseFloat(p.discount || '0'),
-          evaluateScore: p.evaluate_score ? parseFloat(p.evaluate_score) : undefined,
-          evaluateRate: p.evaluate_rate ? parseFloat(p.evaluate_rate) : undefined,
-          volume: p.volume ? parseInt(p.volume, 10) : undefined,
-          storeName: p.store_name,
-          storeUrl: p.store_url,
           productDetailUrl: p.product_detail_url,
           promotionLink: p.promotion_link,
-          currency: p.currency || 'USD',
-          commissionRate: p.commission_rate ? parseFloat(p.commission_rate) : undefined,
+          currency,
+          commissionRate: Number.isFinite(commissionRate) ? commissionRate : undefined,
+          estimatedProfit,
         };
       });
+      console.log('[AUTOPILOT] Affiliate SUCCESS:', mapped.length);
+      return { products: mapped, source: 'affiliate', empty: false };
     } catch (error: any) {
       logger.error('[ALIEXPRESS-AFFILIATE-API] Search products failed', {
         error: error.message,
@@ -586,8 +404,12 @@ export class AliExpressAffiliateAPIService {
    * Debug raw search for diagnostics.
    */
   async debugSearchRaw(params: Record<string, any>): Promise<any> {
-    const token = await this.getValidAccessToken();
-    return this.makeRequest('aliexpress.affiliate.product.query', params, token);
+    const stringParams: Record<string, string> = {};
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null) stringParams[k] = String(v);
+    }
+    const data = await this.makeRequest('aliexpress.affiliate.product.query', stringParams);
+    return data;
   }
 
   /**
@@ -598,27 +420,21 @@ export class AliExpressAffiliateAPIService {
       logger.info('[ALIEXPRESS-AFFILIATE-API] Getting product details', {
         productIds: params.productIds,
       });
-      const token = await this.getValidAccessToken();
-
       const apiParams: Record<string, any> = {
         product_ids: params.productIds,
       };
-
       if (params.targetCurrency) apiParams.target_currency = params.targetCurrency;
       if (params.targetLanguage) apiParams.target_language = params.targetLanguage;
       if (params.country) apiParams.country = params.country;
       if (params.shipToCountry) apiParams.ship_to_country = params.shipToCountry;
       if (params.trackingId) apiParams.tracking_id = params.trackingId;
-
-      // Campos a solicitar
       apiParams.fields = 'product_id,product_title,product_main_image_url,product_small_image_urls,sale_price,original_price,discount,evaluate_score,evaluate_rate,volume,store_name,store_url,product_detail_url,promotion_link,commission_rate,description,category_id,category_name,shipping_info';
 
-      const result = await this.makeRequest('aliexpress.affiliate.productdetail.get', apiParams, token);
-
-      // Procesar respuesta
-      const products = Array.isArray(result.products?.product) 
-        ? result.products.product 
-        : (result.product ? [result.product] : []);
+      const data = await this.makeRequest('aliexpress.affiliate.productdetail.get', apiParams);
+      const result = data?.result ?? data?.response?.result ?? data?.aliexpress_affiliate_productdetail_get_response ?? data;
+      const products = Array.isArray(result?.products?.product)
+        ? result.products.product
+        : (result?.product ? [result.product] : []);
 
       return products.map((p: any) => ({
         productId: String(p.product_id || ''),
@@ -669,20 +485,14 @@ export class AliExpressAffiliateAPIService {
       logger.info('[ALIEXPRESS-AFFILIATE-API] Getting SKU details', {
         productId,
       });
-      const token = await this.getValidAccessToken();
-
-      const apiParams: Record<string, any> = {
-        product_id: productId,
-      };
-
+      const apiParams: Record<string, any> = { product_id: productId };
       if (params?.shipToCountry) apiParams.ship_to_country = params.shipToCountry;
       if (params?.targetCurrency) apiParams.target_currency = params.targetCurrency;
       if (params?.targetLanguage) apiParams.target_language = params.targetLanguage;
 
-      const result = await this.makeRequest('aliexpress.affiliate.product.sku.detail.get', apiParams, token);
-
-      // Procesar respuesta
-      const skus = result.skus?.sku || [];
+      const data = await this.makeRequest('aliexpress.affiliate.product.sku.detail.get', apiParams);
+      const result = data?.result ?? data?.response?.result ?? data?.aliexpress_affiliate_product_sku_detail_get_response ?? data;
+      const skus = result?.skus?.sku || [];
       
       return skus.map((s: any) => ({
         skuId: String(s.sku_id || ''),
@@ -752,34 +562,10 @@ export class AliExpressAffiliateAPIService {
   /**
    * Convertir producto de Affiliate API a formato ScrapedProduct para compatibilidad
    */
+  /** @deprecated Use searchProducts or debugSearchRaw instead. Kept for manual raw diagnostics. */
   async debugProductQuery(keyword: string): Promise<any> {
-    if (!this.appKey || !this.appSecret) {
-      throw new Error('AliExpress Affiliate API credentials not configured');
-    }
-    const accessToken = await this.getValidAccessToken();
-    console.log('[AFFILIATE] USING ACCESS TOKEN:', accessToken.slice(-6));
-    const now = new Date();
-    const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
-    const params: Record<string, any> = {
-      method: 'aliexpress.affiliate.product.query',
-      app_key: this.appKey,
-      sign_method: 'sha256',
-      timestamp,
-      v: '2.0',
-      format: 'json',
-      keywords: keyword,
-      page_no: 1,
-      page_size: 20,
-      ship_to_country: 'US',
-      sort: 'volume_desc',
-      access_token: accessToken,
-    };
-    const sign = this.calculateSign(params, this.appSecret, 'sha256');
-    const signedParams = { ...params, sign };
-    console.log('[AFFILIATE-DEBUG] PARAMS', signedParams);
-    const res = await axios.post(this.apiBaseUrl, null, { params: signedParams, timeout: 30000 });
-    console.log('[AFFILIATE-DEBUG] RAW RESPONSE', res.data);
-    return res.data;
+    const params = { keywords: keyword, page_no: 1, page_size: 20, ship_to_country: 'US', sort: 'volume_desc' };
+    return this.debugSearchRaw(params);
   }
 
   toScrapedProduct(product: AffiliateProductDetail, productUrl?: string): {

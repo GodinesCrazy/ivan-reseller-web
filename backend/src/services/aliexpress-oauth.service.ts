@@ -7,7 +7,31 @@
 import axios from 'axios';
 import logger from '../config/logger';
 import { getToken, setToken, type TokenData } from './aliexpress-token.store';
-import { generateAliExpressSignatureWithSecret } from './aliexpress-signature.service';
+
+const GLOBAL_TOKEN_ID = 'global';
+
+async function persistTokenToDatabase(tokenData: TokenData): Promise<void> {
+  try {
+    const { prisma } = await import('../config/database');
+    await prisma.aliExpressToken.upsert({
+      where: { id: GLOBAL_TOKEN_ID },
+      create: {
+        id: GLOBAL_TOKEN_ID,
+        accessToken: tokenData.accessToken,
+        refreshToken: tokenData.refreshToken || null,
+        expiresAt: new Date(tokenData.expiresAt),
+      },
+      update: {
+        accessToken: tokenData.accessToken,
+        refreshToken: tokenData.refreshToken || null,
+        expiresAt: new Date(tokenData.expiresAt),
+      },
+    });
+  } catch (err: any) {
+    logger.error('[ALIEXPRESS-OAUTH] Failed to persist token to DB', { error: err?.message });
+  }
+}
+import { generateAliExpressSignatureNoSecret } from './aliexpress-signature.service';
 
 const PLACEHOLDERS = ['PUT_YOUR_APP_KEY_HERE', 'PUT_YOUR_APP_SECRET_HERE'];
 function fromEnv(key: string): string {
@@ -79,9 +103,8 @@ export async function exchangeCodeForToken(code: string): Promise<TokenData> {
     code: code,
     sign_method: 'sha256',
     timestamp: Date.now().toString(),
-    redirect_uri: redirectUriExact,
   };
-  const signature = generateAliExpressSignatureWithSecret(TOKEN_SIGN_PATH, params, APP_SECRET);
+  const signature = generateAliExpressSignatureNoSecret(TOKEN_SIGN_PATH, params);
   const fullUrl =
     TOKEN_URL +
     '?' +
@@ -170,7 +193,8 @@ export async function exchangeCodeForToken(code: string): Promise<TokenData> {
   };
   
   setToken(tokenData);
-  console.log('[ALIEXPRESS-OAUTH] TOKEN STORED OK');
+  await persistTokenToDatabase(tokenData);
+  console.log('[ALIEXPRESS-OAUTH] TOKEN STORED OK (memory + DB)');
   console.log('[ALIEXPRESS-OAUTH] Access token (masked):', access_token.substring(0, 10) + '...' + access_token.slice(-6));
   logger.info('[ALIEXPRESS-OAUTH] Tokens stored', { 
     expires_in, 
@@ -213,6 +237,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenDat
   const expiresAt = Date.now() + expires_in * 1000;
   const tokenData: TokenData = { accessToken: access_token, refreshToken: new_refresh, expiresAt };
   setToken(tokenData);
-  logger.info('[ALIEXPRESS-OAUTH] Token refreshed', { expiresAt: new Date(expiresAt).toISOString() });
+  await persistTokenToDatabase(tokenData);
+  logger.info('[ALIEXPRESS-OAUTH] Token refreshed and persisted to DB', { expiresAt: new Date(expiresAt).toISOString() });
   return tokenData;
 }

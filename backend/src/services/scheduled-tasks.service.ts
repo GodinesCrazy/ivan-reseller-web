@@ -9,6 +9,9 @@ import { prisma } from '../config/database';
 import { PayPalPayoutService } from './paypal-payout.service';
 import { notificationService } from './notification.service';
 import { aliExpressAuthMonitor } from './ali-auth-monitor.service';
+import { refreshAccessToken } from './aliexpress-oauth.service';
+import { getToken } from './aliexpress-token.store';
+import { aliexpressAffiliateAPIService } from './aliexpress-affiliate-api.service';
 import fxService from './fx.service';
 import { toNumber } from '../utils/decimal.utils';
 
@@ -23,12 +26,16 @@ export class ScheduledTasksService {
   private fxRatesQueue: Queue | null = null;
   private listingLifetimeQueue: Queue | null = null;
   private productUnpublishQueue: Queue | null = null;
+  private dynamicPricingQueue: Queue | null = null;
+  private aliExpressTokenRefreshQueue: Queue | null = null;
   private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
   private fxRatesWorker: Worker | null = null;
   private listingLifetimeWorker: Worker | null = null;
   private productUnpublishWorker: Worker | null = null;
+  private dynamicPricingWorker: Worker | null = null;
+  private aliExpressTokenRefreshWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
 
@@ -75,6 +82,16 @@ export class ScheduledTasksService {
 
     // ✅ NUEVO: Cola para despublicar artículos automáticamente
     this.productUnpublishQueue = new Queue('product-unpublish', {
+      connection: this.bullMQRedis as any
+    });
+
+    // ✅ Evolution: Dynamic pricing every 6 hours
+    this.dynamicPricingQueue = new Queue('dynamic-pricing', {
+      connection: this.bullMQRedis as any
+    });
+
+    // AliExpress OAuth token refresh: cada 1 hora
+    this.aliExpressTokenRefreshQueue = new Queue('ali-express-token-refresh', {
       connection: this.bullMQRedis as any
     });
   }
@@ -215,6 +232,71 @@ export class ScheduledTasksService {
         });
       });
     }
+
+    // ✅ Evolution: Dynamic pricing worker (every 6 hours)
+    if (this.dynamicPricingQueue) {
+      this.dynamicPricingWorker = new Worker(
+        'dynamic-pricing',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running dynamic pricing', { jobId: job.id });
+          return await this.runDynamicPricing();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.dynamicPricingWorker.on('completed', (job) => {
+        logger.info('Scheduled Tasks: Dynamic pricing completed', { jobId: job.id });
+      });
+      this.dynamicPricingWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Dynamic pricing failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
+
+    // AliExpress OAuth token refresh worker
+    if (this.aliExpressTokenRefreshQueue) {
+      this.aliExpressTokenRefreshWorker = new Worker(
+        'ali-express-token-refresh',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running AliExpress token refresh', { jobId: job.id });
+          return await this.runAliExpressTokenRefresh();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+    }
+  }
+
+  private async runAliExpressTokenRefresh(): Promise<{ refreshed: boolean; reason?: string }> {
+    let token = getToken();
+    if (!token) {
+      try {
+        await aliexpressAffiliateAPIService.loadTokenFromDatabase();
+        token = getToken();
+      } catch {
+        return { refreshed: false, reason: 'load_from_db_failed' };
+      }
+    }
+    if (!token?.refreshToken) {
+      return { refreshed: false, reason: 'no_refresh_token' };
+    }
+    const expiresIn = token.expiresAt - Date.now();
+    if (expiresIn > 2 * 60 * 60 * 1000) {
+      return { refreshed: false, reason: 'token_still_valid' };
+    }
+    try {
+      await refreshAccessToken(token.refreshToken);
+      return { refreshed: true };
+    } catch (err: any) {
+      logger.error('Scheduled Tasks: AliExpress token refresh failed', { error: err?.message });
+      return { refreshed: false, reason: err?.message };
+    }
   }
 
   /**
@@ -305,6 +387,36 @@ export class ScheduledTasksService {
           removeOnComplete: 10,
           removeOnFail: 5,
           attempts: 2
+        }
+      );
+    }
+
+    // ✅ Evolution: Dynamic pricing every 6 hours
+    if (this.dynamicPricingQueue) {
+      this.dynamicPricingQueue.add(
+        'reprice-products',
+        {},
+        {
+          repeat: {
+            pattern: '0 */6 * * *' // Every 6 hours
+          },
+          removeOnComplete: 10,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // AliExpress OAuth token refresh: cada 1 hora
+    if (this.aliExpressTokenRefreshQueue) {
+      this.aliExpressTokenRefreshQueue.add(
+        'refresh-ali-token',
+        {},
+        {
+          repeat: {
+            pattern: '0 * * * *' // Cada hora en el minuto 0
+          },
+          removeOnComplete: 5,
+          removeOnFail: 5,
         }
       );
     }
@@ -1034,6 +1146,43 @@ export class ScheduledTasksService {
     if (this.productUnpublishWorker) {
       await this.productUnpublishWorker.close();
     }
+    if (this.dynamicPricingQueue) {
+      await this.dynamicPricingQueue.close();
+    }
+    if (this.dynamicPricingWorker) {
+      await this.dynamicPricingWorker.close();
+    }
+  }
+
+  /**
+   * ✅ Evolution: Run dynamic pricing for published products
+   */
+  private async runDynamicPricing(): Promise<{ processed: number; errors: number }> {
+    const { dynamicPricingService } = await import('./dynamic-pricing.service');
+    const products = await prisma.product.findMany({
+      where: { isPublished: true, status: { in: ['PUBLISHED', 'APPROVED'] } },
+      select: { id: true, userId: true, aliexpressPrice: true, totalCost: true },
+      take: 50,
+    });
+    let processed = 0;
+    let errors = 0;
+    for (const p of products) {
+      try {
+        const supplierPrice = Number(p.totalCost ?? p.aliexpressPrice ?? 0);
+        if (supplierPrice <= 0) continue;
+        const result = await dynamicPricingService.repriceByProduct(
+          p.id,
+          supplierPrice,
+          'ebay',
+          p.userId
+        );
+        if (result.success) processed++;
+        else errors++;
+      } catch (e) {
+        errors++;
+      }
+    }
+    return { processed, errors };
   }
 
   /**
