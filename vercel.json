@@ -3,14 +3,14 @@
   "installCommand": "cd frontend && npm install",
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
-  "routes": [
+  "rewrites": [
     {
-      "src": "^/api/(.*)",
-      "dest": "https://ivan-reseller-backend-production.up.railway.app/api/$1"
+      "source": "/api/:path*",
+      "destination": "https://ivan-reseller-backend-production.up.railway.app/api/:path*"
     },
     {
-      "src": "^/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
