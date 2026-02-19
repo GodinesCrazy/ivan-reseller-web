@@ -1094,7 +1094,7 @@ router.get('/aliexpress/test-search', authenticate, async (req: Request, res: Re
       });
       logger.info('[DEBUG-API] ════════════════════════════════════════════════════════');
 
-      const products = await apiService.searchProducts({
+      const searchResult = await apiService.searchProducts({
         keywords: query,
         pageSize: 5,
         targetCurrency: 'USD',
@@ -1102,6 +1102,8 @@ router.get('/aliexpress/test-search', authenticate, async (req: Request, res: Re
         shipToCountry: 'CL',
         sort: 'LAST_VOLUME_DESC',
       });
+      const rawProducts = (searchResult as any)?.products;
+      const products = Array.isArray(rawProducts) ? rawProducts : [];
 
       const duration = Date.now() - apiCallStartTime;
 
@@ -1381,15 +1383,17 @@ router.get('/aliexpress/diagnostic', authenticate, async (req: Request, res: Res
         apiService.setCredentials(affiliateCreds);
         // Note: Affiliate API doesn't use OAuth tokens - uses signature auth
 
-        const testProducts = await apiService.searchProducts({
+        const testResult = await apiService.searchProducts({
           keywords: 'test',
           pageSize: 1,
           targetCurrency: 'USD'
         });
+        const rawTestProducts = (testResult as any)?.products;
+        const testProducts = Array.isArray(rawTestProducts) ? rawTestProducts : [];
 
-        apiTestOk = Array.isArray(testProducts);
+        apiTestOk = testProducts.length > 0;
         apiTestResponse = {
-          productsCount: testProducts?.length || 0,
+          productsCount: testProducts.length,
           hasData: apiTestOk
         };
       } catch (apiError: any) {
