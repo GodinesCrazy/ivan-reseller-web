@@ -553,13 +553,30 @@ router.get('/:apiName', authenticate, async (req: Request, res: Response, next) 
     if (!entry) {
       // ✅ REFACTOR: Usar resolver para mapeo frontend
       const displayApiName = resolveToFrontend(backendApiName);
+      // ✅ FIX eBay OAuth: Si no hay credenciales en BD pero hay env vars de eBay, devolver fallbacks
+      // para que el frontend no bloquee OAuth por falta de redirectUri
+      let fallbackCredentials: Record<string, string> | null = null;
+      if (backendApiName === 'ebay') {
+        const envRedirect = (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim();
+        const envAppId = (process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
+        const envDevId = (process.env.EBAY_DEV_ID || '').trim();
+        const envCertId = (process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
+        if (envRedirect || envAppId || envDevId || envCertId) {
+          fallbackCredentials = {
+            ...(envAppId && { appId: envAppId }),
+            ...(envDevId && { devId: envDevId }),
+            ...(envCertId && { certId: envCertId }),
+            ...(envRedirect && { redirectUri: envRedirect }),
+          };
+        }
+      }
       return res.json({
         success: true,
         data: {
           apiName: displayApiName,
           originalApiName: backendApiName !== displayApiName ? backendApiName : undefined,
           environment,
-          credentials: null,
+          credentials: fallbackCredentials,
           isActive: false,
           supportsEnvironments: supportsEnv,
         }
@@ -567,7 +584,16 @@ router.get('/:apiName', authenticate, async (req: Request, res: Response, next) 
     }
 
     const shouldMaskCredentials = entry.scope === 'global' && role !== 'ADMIN';
-    const credentials = shouldMaskCredentials ? {} : entry.credentials;
+    let credentials = shouldMaskCredentials ? {} : entry.credentials;
+    // ✅ FIX eBay OAuth: Usar EBAY_REDIRECT_URI de env como fallback si no está en credenciales guardadas
+    if (backendApiName === 'ebay' && !shouldMaskCredentials && credentials && typeof credentials === 'object') {
+      const creds = credentials as Record<string, unknown>;
+      const envRedirect = (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim();
+      const hasRedirect = !!(creds.redirectUri || creds.ruName || creds.RuName);
+      if (!hasRedirect && envRedirect) {
+        credentials = { ...creds, redirectUri: envRedirect };
+      }
+    }
     
     // ✅ REFACTOR: Usar resolver para mapeo frontend
     const displayApiName = resolveToFrontend(backendApiName);

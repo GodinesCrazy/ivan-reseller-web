@@ -416,8 +416,11 @@ export const CredentialsManager = {
       out.certId = out.certId || out.clientSecret || out.EBAY_CERT_ID;
       out.devId = out.devId || out.EBAY_DEV_ID;
       out.redirectUri = out.redirectUri || out.EBAY_RUNAME;
-      out.token = out.token || out.authToken || out.EBAY_OAUTH_TOKEN;
-      out.refreshToken = out.refreshToken || out.EBAY_REFRESH_TOKEN;
+      // Token/refreshToken: DB first (token|authToken|accessToken), then env fallback (Railway)
+      const envToken = (process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN || '').trim() || undefined;
+      const envRefresh = (process.env.EBAY_REFRESH_TOKEN || '').trim() || undefined;
+      out.token = out.token || out.authToken || out.accessToken || out.EBAY_OAUTH_TOKEN || envToken;
+      out.refreshToken = out.refreshToken || out.EBAY_REFRESH_TOKEN || envRefresh;
       out.sandbox = environment === 'sandbox';
     }
 

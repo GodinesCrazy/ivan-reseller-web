@@ -3,6 +3,7 @@ import { logger } from '../../config/logger';
 import { runEbayRealCycle } from '../../scripts/run-ebay-real-cycle';
 import opportunityFinder from '../../services/opportunity-finder.service';
 import { runTestFullDropshippingCycle } from '../handlers/test-full-dropshipping-cycle.handler';
+import { runTestFullCycleSearchToPublish } from '../handlers/test-full-cycle-search-to-publish.handler';
 
 const router = Router();
 
@@ -52,6 +53,7 @@ router.get('/health', (_req: Request, res: Response) => {
       'POST /api/internal/test-opportunity-cycle',
       'POST /api/internal/test-full-cycle',
       'POST /api/internal/test-full-dropshipping-cycle',
+      'POST /api/internal/test-full-cycle-search-to-publish',
     ],
   });
 });
