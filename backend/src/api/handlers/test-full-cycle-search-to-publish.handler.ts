@@ -43,7 +43,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
     const result = await opportunityFinder.findOpportunitiesWithDiagnostics(userId, {
       query: keyword,
       maxItems: 5,
-      skipTrendsValidation: false,
+      skipTrendsValidation: true, // Railway: evitar dependencia SerpAPI para búsqueda
     });
     const opportunities = result.opportunities;
 
