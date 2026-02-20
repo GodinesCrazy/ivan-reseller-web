@@ -17,7 +17,15 @@ const marketplaceService = new MarketplaceService();
 router.get('/authorize/ebay', async (req: Request, res: Response) => {
   try {
     const clientId = (process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
-    const redirectUri = (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim();
+    let redirectUri = (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim();
+    // eBay requiere RuName como redirect_uri, no URL completa (ej: Ivan_Marty-IvanMart-IVANRe-cgcqu)
+    if (redirectUri && (redirectUri.startsWith('http') || redirectUri.includes('/'))) {
+      const ruName = (process.env.EBAY_RUNAME || '').trim();
+      if (ruName && /^[A-Za-z0-9_-]+$/.test(ruName)) {
+        redirectUri = ruName;
+        logger.info('[OAuth Authorize] Using EBAY_RUNAME as redirect_uri (eBay requires RuName, not URL)');
+      }
+    }
     const certId = (process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
 
     if (!clientId || !redirectUri) {
@@ -28,15 +36,15 @@ router.get('/authorize/ebay', async (req: Request, res: Response) => {
       });
     }
 
+    // eBay requiere scopes en formato URL completo
     const scope = [
       'https://api.ebay.com/oauth/api_scope',
+      'https://api.ebay.com/oauth/api_scope/sell.inventory.readonly',
       'https://api.ebay.com/oauth/api_scope/sell.inventory',
+      'https://api.ebay.com/oauth/api_scope/sell.marketing.readonly',
+      'https://api.ebay.com/oauth/api_scope/sell.marketing',
       'https://api.ebay.com/oauth/api_scope/sell.account',
       'https://api.ebay.com/oauth/api_scope/sell.fulfillment',
-      'sell.inventory.readonly',
-      'sell.inventory',
-      'sell.marketing.readonly',
-      'sell.marketing',
     ].filter((v, i, a) => a.indexOf(v) === i).join(' ');
 
     const userId = 1;

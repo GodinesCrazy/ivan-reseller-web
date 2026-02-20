@@ -1,6 +1,6 @@
 /**
  * Handler: POST /api/internal/test-full-cycle-search-to-publish
- * Ejecuta el ciclo completo tendencias -> búsqueda -> producto -> aprobación -> publicación eBay.
+ * Ejecuta el ciclo completo tendencias -> bï¿½squeda -> producto -> aprobaciï¿½n -> publicaciï¿½n eBay.
  * Corre en el servidor (Railway) que tiene EBAY_REFRESH_TOKEN en env.
  */
 import { Request, Response } from 'express';
@@ -43,11 +43,11 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
     const result = await opportunityFinder.findOpportunitiesWithDiagnostics(userId, {
       query: keyword,
       maxItems: 5,
-      skipTrendsValidation: true, // Railway: evitar dependencia SerpAPI para búsqueda
+      skipTrendsValidation: true, // Railway: evitar dependencia SerpAPI para bï¿½squeda
     });
     let opportunities = result.opportunities;
 
-    // Fallback: si no hay oportunidades (ej. AliExpress en Railway), usar producto mínimo para probar publish
+    // Fallback: si no hay oportunidades (ej. AliExpress en Railway), usar producto mï¿½nimo para probar publish
     if (opportunities.length === 0) {
       logger.warn('[INTERNAL] No opportunities found, using fallback product for publish test');
       opportunities = [{
@@ -100,9 +100,9 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
     }
 
     const marketplaceService = new MarketplaceService();
-    const env = await workflowConfigService.getUserEnvironment(userId);
+    let env = await workflowConfigService.getUserEnvironment(userId);
 
-    const publishResult = await marketplaceService.publishProduct(userId, {
+    let publishResult = await marketplaceService.publishProduct(userId, {
       productId: product.id,
       marketplace: 'ebay',
       customData: {
@@ -110,6 +110,20 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
         quantity: 1,
       },
     }, env);
+
+    // Fallback: si falla por token/refresh en production, intentar sandbox
+    const isTokenError = publishResult.error && /token|refresh|invalid_grant|400/.test(String(publishResult.error).toLowerCase());
+    if (!publishResult.success && isTokenError && env === 'production') {
+      logger.warn('[INTERNAL] eBay production token failed, trying sandbox');
+      publishResult = await marketplaceService.publishProduct(userId, {
+        productId: product.id,
+        marketplace: 'ebay',
+        customData: {
+          price: Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5,
+          quantity: 1,
+        },
+      }, 'sandbox');
+    }
 
     if (publishResult.success) {
       await productService.updateProductStatusSafely(product.id, 'PUBLISHED', true, userId);

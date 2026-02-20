@@ -350,6 +350,71 @@ router.post('/test-full-cycle', validateInternalSecret, async (req: Request, res
 router.post('/test-full-dropshipping-cycle', validateInternalSecret, runTestFullDropshippingCycle);
 router.post('/test-full-cycle-search-to-publish', validateInternalSecret, runTestFullCycleSearchToPublish);
 
+// GET /api/internal/ebay-oauth-url - URL OAuth eBay firmada con claves del servidor (para callback válido)
+router.get('/ebay-oauth-url', validateInternalSecret, async (_req: Request, res: Response) => {
+  try {
+    const { MarketplaceService } = await import('../../services/marketplace.service');
+    const ms = new MarketplaceService();
+    const url = await ms.getEbayOAuthStartUrl(1, 'production');
+    res.json({ success: true, url });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e?.message });
+  }
+});
+
+// POST /api/internal/set-ebay-token - Guardar refreshToken/accessToken eBay en api_credentials (userId=1)
+router.post('/set-ebay-token', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const { prisma } = await import('../../config/database');
+    const { CredentialsManager, clearCredentialsCache } = await import('../../services/credentials-manager.service');
+    const refreshToken = (req.body?.refreshToken || req.body?.refresh_token || '').trim();
+    const accessToken = (req.body?.accessToken || req.body?.access_token || req.body?.token || '').trim();
+    const expiresIn = Number(req.body?.expiresIn || req.body?.expires_in) || 7200;
+
+    if (!refreshToken && !accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'refreshToken o accessToken requerido',
+        hint: 'Desde eBay Developer Portal > User Tokens > Get a Token, copia el refresh token',
+      });
+    }
+
+    const userId = 1;
+    const entry = await CredentialsManager.getCredentialEntry(userId, 'ebay', 'production');
+    const baseCreds = (entry?.credentials as Record<string, any>) || {
+      appId: process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID,
+      certId: process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET,
+      devId: process.env.EBAY_DEV_ID,
+      redirectUri: process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME,
+    };
+    if (!baseCreds.appId || !baseCreds.certId) {
+      return res.status(400).json({
+        success: false,
+        error: 'EBAY_APP_ID y EBAY_CERT_ID requeridos en env. Configura eBay en Railway Variables.',
+      });
+    }
+
+    const expiresAt = new Date(Date.now() + expiresIn * 1000);
+    const newCreds = {
+      ...baseCreds,
+      token: accessToken || baseCreds.token,
+      refreshToken: refreshToken || baseCreds.refreshToken,
+      expiresAt: expiresAt.toISOString(),
+      sandbox: false,
+    };
+
+    await CredentialsManager.saveCredentials(userId, 'ebay', newCreds, 'production', { scope: 'user' });
+    clearCredentialsCache(userId, 'ebay', 'production');
+
+    res.json({
+      success: true,
+      message: 'eBay token guardado. Ejecuta el ciclo real.',
+    });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e?.message });
+  }
+});
+
 router.post('/reprice-product', validateInternalSecret, async (req: Request, res: Response) => {
   try {
     const { dynamicPricingService } = await import('../../services/dynamic-pricing.service');
