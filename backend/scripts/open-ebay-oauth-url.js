@@ -11,10 +11,10 @@ const crypto = require('crypto');
 const { execSync } = require('child_process');
 
 const clientId = (process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
-let redirectUri = (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim();
-if (redirectUri && (redirectUri.startsWith('http') || redirectUri.includes('/'))) {
-  const ruName = (process.env.EBAY_RUNAME || '').trim();
-  if (ruName && /^[A-Za-z0-9_-]+$/.test(ruName)) redirectUri = ruName;
+let redirectUri = (process.env.EBAY_RUNAME || process.env.EBAY_REDIRECT_URI || '').trim();
+// eBay requiere RuName, NO URL. Fallback conocido.
+if (!redirectUri || redirectUri.startsWith('http') || redirectUri.includes('/')) {
+  redirectUri = (process.env.EBAY_RUNAME || '').trim() || 'Ivan_Marty-IvanMart-IVANRe-cgcqu';
 }
 
 if (!clientId || !redirectUri) {
