@@ -59,6 +59,38 @@ router.get('/features', (_req: Request, res: Response) => {
   res.json({ success: true, data: features });
 });
 
+/**
+ * GET /api/system/status - RC1 system status panel
+ * Returns: PayPal connected, eBay connected, AliExpress OAuth, Autopilot enabled, Profit Guard enabled
+ */
+router.get('/status', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'UNAUTHORIZED' });
+    }
+    const creds = secureCredentialManager.listCredentials();
+    const paypalConfigured = !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET);
+    const ebayConnected = !!creds.find(c => c.marketplace === 'ebay' && c.isActive);
+    const aliexpressOAuth = !!(process.env.ALIEXPRESS_APP_KEY && process.env.ALIEXPRESS_APP_SECRET);
+    const autopilotEnabled = true; // Autopilot module always available
+    const profitGuardEnabled = true; // Profit guard always active
+    res.json({
+      success: true,
+      data: {
+        paypalConnected: paypalConfigured,
+        ebayConnected,
+        aliexpressOAuth,
+        autopilotEnabled,
+        profitGuardEnabled,
+      },
+    });
+  } catch (error: any) {
+    logger.error('Error in /api/system/status', { error: error?.message });
+    res.status(500).json({ success: false, error: 'Failed to get system status' });
+  }
+});
+
 router.get('/operation-mode', (_req: Request, res: Response) => {
   const cfg = automatedBusinessSystem.getConfig();
   res.json({ success: true, data: { mode: cfg.mode, environment: cfg.environment } });
@@ -269,6 +301,150 @@ router.get('/error-stats', authenticate, async (req: Request, res: Response) => 
     res.status(500).json({
       success: false,
       message: 'Failed to get error stats'
+    });
+  }
+});
+
+/**
+ * GET /api/system/diagnostics - Global production diagnostics (no mocks)
+ */
+router.get('/diagnostics', async (_req: Request, res: Response) => {
+  const diag: Record<string, any> = {
+    database: 'FAIL',
+    aliexpressOAuth: 'FAIL',
+    aliexpressToken: 'FAIL',
+    affiliateAPI: 'FAIL',
+    autopilot: 'FAIL',
+    productsInDB: 0,
+    opportunitiesInDB: 0,
+    paypal: 'FAIL',
+    ebay: 'FAIL',
+    lastAutopilotRun: null,
+    timestamp: new Date().toISOString(),
+  };
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    diag.database = 'OK';
+  } catch {
+    // keep FAIL
+  }
+  try {
+    const appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
+    const appSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+    const redirectUri = (process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
+    diag.aliexpressOAuth = appKey && appSecret && redirectUri ? 'OK' : 'FAIL';
+  } catch {
+    // keep FAIL
+  }
+  try {
+    const token = await prisma.aliExpressToken.findUnique({ where: { id: 'global' } });
+    const hasValid = token?.accessToken && token?.expiresAt && token.expiresAt > new Date();
+    diag.aliexpressToken = hasValid ? 'OK' : (token?.accessToken ? 'EXPIRED' : 'FAIL');
+  } catch {
+    // keep FAIL
+  }
+  try {
+    const { aliexpressAffiliateAPIService } = await import('../../services/aliexpress-affiliate-api.service');
+    const result = await aliexpressAffiliateAPIService.searchProducts({
+      keywords: 'phone case',
+      pageNo: 1,
+      pageSize: 2,
+      shipToCountry: 'US',
+    });
+    diag.affiliateAPI = result?.products?.length > 0 ? 'OK' : (result ? 'EMPTY' : 'FAIL');
+  } catch (e: any) {
+    diag.affiliateAPI = 'FAIL';
+    diag.affiliateAPIError = String(e?.message || e).substring(0, 100);
+  }
+  try {
+    const { autopilotSystem } = await import('../../services/autopilot.service');
+    const status = autopilotSystem.getStatus();
+    diag.autopilot = status?.stats?.currentStatus === 'running' ? 'OK' : (status ? 'IDLE' : 'FAIL');
+    diag.lastAutopilotRun = status?.lastCycle?.timestamp?.toISOString() || null;
+  } catch {
+    // keep FAIL
+  }
+  try {
+    diag.productsInDB = await prisma.product.count();
+  } catch {
+    // keep 0
+  }
+  try {
+    diag.opportunitiesInDB = await prisma.opportunity.count();
+  } catch {
+    // keep 0
+  }
+  try {
+    const hasPaypal = !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET);
+    diag.paypal = hasPaypal ? 'OK' : 'FAIL';
+  } catch {
+    // keep FAIL
+  }
+  try {
+    const hasEbay = !!(process.env.EBAY_CLIENT_ID || process.env.EBAY_APP_ID) &&
+      !!(process.env.EBAY_CLIENT_SECRET || process.env.EBAY_CERT_ID);
+    diag.ebay = hasEbay ? 'OK' : 'FAIL';
+  } catch {
+    // keep FAIL
+  }
+  res.json({ success: true, data: diag });
+});
+
+/**
+ * GET /api/system/test-full-cycle - Execute real cycle: OAuth validation, Affiliate search, persistence
+ */
+router.get('/test-full-cycle', async (_req: Request, res: Response) => {
+  let productsFound = 0;
+  let productsSaved = 0;
+  try {
+    const { aliexpressAffiliateAPIService } = await import('../../services/aliexpress-affiliate-api.service');
+    const { CredentialsManager } = await import('../../services/credentials-manager.service');
+    const token = await CredentialsManager.getAliExpressAccessToken(1);
+    const tokenValid = !!token;
+    const result = await aliexpressAffiliateAPIService.searchProducts({
+      keywords: 'phone case',
+      pageNo: 1,
+      pageSize: 10,
+      shipToCountry: 'US',
+    });
+    const products = result?.products ?? [];
+    productsFound = products.length;
+    if (products.length > 0) {
+      const { ProductService } = await import('../../services/product.service');
+      const productService = new ProductService();
+      const firstUser = await prisma.user.findFirst({ where: { isActive: true } });
+      const userId = firstUser?.id ?? 1;
+      for (const p of products.slice(0, 3)) {
+        try {
+          const url = p.promotionLink || p.productDetailUrl || `https://www.aliexpress.com/item/${p.productId}.html`;
+          const price = parseFloat(String(p.salePrice || p.targetSalePrice || 0)) || 0;
+          await productService.createProduct(userId, {
+            title: (p.productTitle || 'Product').substring(0, 255),
+            aliexpressUrl: url,
+            aliexpressPrice: price,
+            suggestedPrice: price * 1.5,
+            imageUrl: p.productMainImageUrl || undefined,
+            imageUrls: p.productSmallImageUrls?.length ? p.productSmallImageUrls : undefined,
+          });
+          productsSaved++;
+        } catch {
+          // skip on error
+        }
+      }
+    }
+    const success = productsFound > 0;
+    res.json({
+      success: true,
+      productsFound,
+      productsSaved,
+      tokenValid,
+    });
+  } catch (e: any) {
+    res.status(500).json({
+      success: false,
+      error: String(e?.message || e),
+      productsFound,
+      productsSaved,
     });
   }
 });

@@ -194,6 +194,12 @@ export async function exchangeCodeForToken(code: string): Promise<TokenData> {
   
   setToken(tokenData);
   await persistTokenToDatabase(tokenData);
+  try {
+    const { clearAliExpressTokenCache } = await import('./credentials-manager.service');
+    clearAliExpressTokenCache();
+  } catch {
+    // ignore
+  }
   console.log('[ALIEXPRESS-OAUTH] TOKEN STORED OK (memory + DB)');
   console.log('[ALIEXPRESS-OAUTH] Access token (masked):', access_token.substring(0, 10) + '...' + access_token.slice(-6));
   logger.info('[ALIEXPRESS-OAUTH] Tokens stored', { 
@@ -238,6 +244,12 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenDat
   const tokenData: TokenData = { accessToken: access_token, refreshToken: new_refresh, expiresAt };
   setToken(tokenData);
   await persistTokenToDatabase(tokenData);
+  try {
+    const { clearAliExpressTokenCache } = await import('./credentials-manager.service');
+    clearAliExpressTokenCache();
+  } catch {
+    // ignore
+  }
   logger.info('[ALIEXPRESS-OAUTH] Token refreshed and persisted to DB', { expiresAt: new Date(expiresAt).toISOString() });
   return tokenData;
 }

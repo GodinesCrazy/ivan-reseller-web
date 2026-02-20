@@ -26,7 +26,7 @@ import { logger } from './config/logger';
  */
 const DEFAULT_AUTOPILOT_CONFIG = {
   enabled: false,
-  cycleIntervalMinutes: 60,
+  cycleIntervalMinutes: 15, // FASE 11: 15 min scheduler for production
   publicationMode: 'manual' as const,
   targetMarketplace: 'ebay',
   maxOpportunitiesPerCycle: 5,
@@ -103,6 +103,7 @@ export async function initializeAutopilot(): Promise<void> {
       }
     }
     logger.info('Autopilot: System initialized successfully');
+    console.log('[SYSTEM] AUTOPILOT ENGINE READY');
 
   } catch (error) {
     logger.error('Autopilot: Failed to initialize', { error });

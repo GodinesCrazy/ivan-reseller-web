@@ -162,7 +162,42 @@ function tryDecrypt(raw: string): Record<string, any> | null {
   }
 }
 
+/** AliExpress OAuth token cache (global, not per-user) */
+let aliexpressTokenCache: { token: string; expiresAt: number } | null = null;
+
+export function clearAliExpressTokenCache(): void {
+  aliexpressTokenCache = null;
+}
+
 export const CredentialsManager = {
+  /**
+   * Get valid AliExpress OAuth access_token. Reads from DB, refreshes if expired.
+   * AliExpress uses app-level OAuth (global token). userId kept for future per-user support.
+   */
+  async getAliExpressAccessToken(_userId?: number): Promise<string | null> {
+    if (aliexpressTokenCache && aliexpressTokenCache.expiresAt > Date.now() + 60000) {
+      return aliexpressTokenCache.token;
+    }
+    try {
+      const tokenRecord = await prisma.aliExpressToken.findUnique({
+        where: { id: 'global' },
+      });
+      if (!tokenRecord?.accessToken) return null;
+      const expiresAt = tokenRecord.expiresAt.getTime();
+      if (expiresAt <= Date.now() + 60000 && tokenRecord.refreshToken) {
+        const { refreshAccessToken } = await import('./aliexpress-oauth.service');
+        const refreshed = await refreshAccessToken(tokenRecord.refreshToken);
+        aliexpressTokenCache = { token: refreshed.accessToken, expiresAt: refreshed.expiresAt };
+        return refreshed.accessToken;
+      }
+      aliexpressTokenCache = { token: tokenRecord.accessToken, expiresAt };
+      return tokenRecord.accessToken;
+    } catch (err: any) {
+      logger.warn('[CredentialsManager] getAliExpressAccessToken failed', { error: err?.message });
+      return null;
+    }
+  },
+
   async getCredentials(
     userId: number,
     apiName: ApiName | string,

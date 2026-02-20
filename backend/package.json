@@ -32,6 +32,7 @@
     "test:dropshipping-cycle": "tsx scripts/test-full-dropshipping-cycle.ts",
     "run-autopilot-cycle": "tsx scripts/run-autopilot-cycle-now.ts",
     "test-production-cycle": "tsx scripts/test-production-cycle.ts",
+    "verify-production-system": "tsx scripts/verify-production-system.ts",
     "test-evolution-cycle": "tsx scripts/test-evolution-cycle.ts",
     "test-dynamic-pricing": "tsx scripts/test-dynamic-pricing.ts",
     "test-purchase-retry": "tsx scripts/test-purchase-retry.ts",

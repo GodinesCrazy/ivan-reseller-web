@@ -193,6 +193,11 @@ router.get('/oauth/url', getOAuthUrl);
 router.get('/oauth/start', getOAuthStart);
 
 /**
+ * GET /api/aliexpress/auth - Alias for OAuth start (redirect to authorize)
+ */
+router.get('/auth', getOAuthStart);
+
+/**
  * GET /api/aliexpress/callback - OAuth callback: exchange code for tokens
  */
 router.get('/callback', oauthCallback);
