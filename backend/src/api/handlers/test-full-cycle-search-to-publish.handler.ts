@@ -102,19 +102,8 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
     const marketplaceService = new MarketplaceService();
     let env = await workflowConfigService.getUserEnvironment(userId);
 
-    let publishResult = await marketplaceService.publishProduct(userId, {
-      productId: product.id,
-      marketplace: 'ebay',
-      customData: {
-        price: Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5,
-        quantity: 1,
-      },
-    }, env);
-
-    // Fallback: si falla por token/refresh en production, intentar sandbox
-    const isTokenError = publishResult.error && /token|refresh|invalid_grant|400/.test(String(publishResult.error).toLowerCase());
-    if (!publishResult.success && isTokenError && env === 'production') {
-      logger.warn('[INTERNAL] eBay production token failed, trying sandbox');
+    let publishResult: { success: boolean; error?: string; listingId?: string; listingUrl?: string };
+    try {
       publishResult = await marketplaceService.publishProduct(userId, {
         productId: product.id,
         marketplace: 'ebay',
@@ -122,7 +111,24 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
           price: Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5,
           quantity: 1,
         },
-      }, 'sandbox');
+      }, env);
+
+      // Fallback: si falla por token/refresh en production, intentar sandbox
+      const isTokenError = publishResult.error && /token|refresh|invalid_grant|400/.test(String(publishResult.error).toLowerCase());
+      if (!publishResult.success && isTokenError && env === 'production') {
+        logger.warn('[INTERNAL] eBay production token failed, trying sandbox');
+        publishResult = await marketplaceService.publishProduct(userId, {
+          productId: product.id,
+          marketplace: 'ebay',
+          customData: {
+            price: Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5,
+            quantity: 1,
+          },
+        }, 'sandbox');
+      }
+    } catch (publishErr: any) {
+      const errMsg = publishErr?.message || String(publishErr);
+      publishResult = { success: false, error: errMsg };
     }
 
     if (publishResult.success) {
