@@ -16,7 +16,8 @@ import { AppError, ErrorCode } from '../middleware/error.middleware';
 import { resolvePrice, resolvePriceRange, parseLocalizedNumber } from '../utils/currency.utils';
 import fxService from './fx.service';
 import logger from '../config/logger';
-import { DISABLE_SCRAPING } from '../config/env';
+import * as envConfig from '../config/env';
+const DISABLE_SCRAPING = (envConfig as any).DISABLE_SCRAPING ?? true;
 
 // ✅ FASE 3: Types para puppeteer dinámico
 type Browser = any;

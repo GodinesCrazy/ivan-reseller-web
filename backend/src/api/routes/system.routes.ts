@@ -385,7 +385,7 @@ router.get('/diagnostics', async (_req: Request, res: Response) => {
     const { autopilotSystem } = await import('../../services/autopilot.service');
     const status = autopilotSystem.getStatus();
     const lastCycle = status?.lastCycle?.timestamp;
-    const productsPublished = status?.stats?.productsPublished ?? 0;
+    const productsPublished = status?.stats?.totalProductsPublished ?? 0;
     diag.autopilot = {
       running: status?.stats?.currentStatus === 'running',
       lastCycle: lastCycle ? lastCycle.toISOString() : null,
