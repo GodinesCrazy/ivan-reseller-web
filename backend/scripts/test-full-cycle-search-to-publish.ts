@@ -40,11 +40,20 @@ async function runRemote(): Promise<number> {
     },
     body: JSON.stringify({ keyword: keyword || undefined, dryRun }),
   });
-  const data = (await res.json()) as any;
+  let data: any;
+  try {
+    data = (await res.json()) as any;
+  } catch {
+    data = {};
+  }
 
   if (!res.ok) {
     if (res.status === 404) {
       console.warn('Endpoint no disponible (404) - Railway aun sin deploy. Usando modo local...\n');
+      return -1;
+    }
+    if (res.status === 401) {
+      console.warn('HTTP 401 - Secret invalido. Comprueba INTERNAL_RUN_SECRET en .env.local. Usando modo local...\n');
       return -1;
     }
     console.error('HTTP', res.status, data?.error || data?.message || JSON.stringify(data));

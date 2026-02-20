@@ -348,6 +348,7 @@ router.post('/test-full-cycle', validateInternalSecret, async (req: Request, res
 });
 
 router.post('/test-full-dropshipping-cycle', validateInternalSecret, runTestFullDropshippingCycle);
+router.post('/test-full-cycle-search-to-publish', validateInternalSecret, runTestFullCycleSearchToPublish);
 
 router.post('/reprice-product', validateInternalSecret, async (req: Request, res: Response) => {
   try {
