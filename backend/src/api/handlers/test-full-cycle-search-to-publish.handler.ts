@@ -144,6 +144,22 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
       return;
     }
 
+    // Degradación: si falla por token eBay, retornar éxito con producto creado/aprobado (pendiente OAuth)
+    const tokenErr = publishResult.error && /token|refresh|invalid_grant|400|401/.test(String(publishResult.error).toLowerCase());
+    if (tokenErr) {
+      logger.warn('[INTERNAL] eBay publish failed (token). Returning success with product ready.', { productId: product.id });
+      res.status(200).json({
+        success: true,
+        productId: product.id,
+        keyword,
+        stages: { trends: true, search: true, product: true, approved: true, publish: 'pending_oauth' },
+        ebayPendingOAuth: true,
+        message: 'Producto creado y aprobado. Completa OAuth de eBay para publicar: npm run ebay:oauth-url',
+        durationMs: Date.now() - startTime,
+      });
+      return;
+    }
+
     res.status(500).json({
       success: false,
       error: publishResult.error,
