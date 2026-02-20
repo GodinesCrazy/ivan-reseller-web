@@ -41,8 +41,13 @@ fetch(url, {
     console.log('[DONE] Ciclo completo OK');
     if (data.listingId) console.log('  listingId:', data.listingId);
     if (data.listingUrl) console.log('  URL:', data.listingUrl);
+    if (data.ebayPendingOAuth) {
+      console.log('  (eBay pendiente OAuth - tokens aun no guardados o no detectados)');
+      if (data.message) console.log('  message:', data.message);
+    }
     console.log('  productId:', data.productId);
     console.log('  durationMs:', data.durationMs);
+    if (process.env.VERBOSE) console.log('  raw:', JSON.stringify(data, null, 2));
     process.exit(0);
   })
   .catch((e) => {

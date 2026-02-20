@@ -350,6 +350,18 @@ router.post('/test-full-cycle', validateInternalSecret, async (req: Request, res
 router.post('/test-full-dropshipping-cycle', validateInternalSecret, runTestFullDropshippingCycle);
 router.post('/test-full-cycle-search-to-publish', validateInternalSecret, runTestFullCycleSearchToPublish);
 
+// GET /api/internal/ebay-connection-test - Probar si credenciales eBay son válidas
+router.get('/ebay-connection-test', validateInternalSecret, async (_req: Request, res: Response) => {
+  try {
+    const { MarketplaceService } = await import('../../services/marketplace.service');
+    const ms = new MarketplaceService();
+    const result = await ms.testConnection(1, 'ebay', 'production');
+    res.json({ success: result.success, message: result.message });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e?.message });
+  }
+});
+
 // GET /api/internal/ebay-oauth-url - URL OAuth eBay firmada con claves del servidor (para callback válido)
 router.get('/ebay-oauth-url', validateInternalSecret, async (_req: Request, res: Response) => {
   try {
