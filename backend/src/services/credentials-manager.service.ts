@@ -1,1451 +1,486 @@
 /**
- * Servicio centralizado para manejo de credenciales de APIs
- * 
- * Este servicio proporciona una interfaz unificada para:
- * - Obtener credenciales desde la base de datos
- * - Guardar credenciales con encriptación
- * - Validar credenciales según el tipo de API
- * - Soportar ambientes sandbox/production
+ * Credentials Manager Service
+ * Centralizes credential loading from DB (api_credentials) and process.env fallback.
+ * Supports: ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, EBAY_CLIENT_ID, PAYPAL_CLIENT_ID, etc.
  */
 
-import { PrismaClient, type CredentialScope } from '@prisma/client';
 import { trace } from '../utils/boot-trace';
 trace('loading credentials-manager.service');
 
-import crypto from 'crypto';
-import { z } from 'zod';
-import type { 
-  ApiName, 
-  ApiEnvironment, 
-  ApiCredentialsMap 
-} from '../types/api-credentials.types';
-import { API_KEY_NAMES, supportsEnvironments } from '../config/api-keys.config';
-import logger from '../config/logger';
+import { prisma } from '../config/database';
+import { decrypt, encrypt } from '../utils/encryption';
+import { logger } from '../config/logger';
+import type { ApiName } from '../types/api-credentials.types';
 
-const prisma = new PrismaClient();
-
-// 🚀 PERFORMANCE: Caché de credenciales desencriptadas (TTL: 5 minutos)
-// Evita desencriptar repetidamente las mismas credenciales
-interface CachedCredential {
-  credentials: any;
-  timestamp: number;
-  environment: ApiEnvironment;
+export interface CredentialEntry {
+  credentials: Record<string, any> | null;
+  isActive: boolean;
+  scope: 'user' | 'global';
+  ownerUserId: number;
+  sharedByUserId?: number | null;
 }
 
-const credentialsCache = new Map<string, CachedCredential>();
-const CREDENTIALS_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+const credentialsCache = new Map<string, CredentialEntry | null>();
 
-/**
- * Get cache key for credentials
- */
-function getCredentialsCacheKey(userId: number, apiName: string, environment: ApiEnvironment): string {
-  return `creds_${userId}_${apiName}_${environment}`;
+function cacheKey(userId: number, apiName: string, environment: string): string {
+  return `${userId}:${apiName}:${environment}`;
 }
 
 /**
- * Clear credentials cache for a specific user/API/environment
+ * Clear credentials cache (optionally scoped)
  */
-export function clearCredentialsCache(userId: number, apiName: string, environment: ApiEnvironment): void {
-  const key = getCredentialsCacheKey(userId, apiName, environment);
-  credentialsCache.delete(key);
-}
-
-/**
- * Clear all credentials cache for a user
- */
-export function clearAllCredentialsCacheForUser(userId: number): void {
-  const keysToDelete: string[] = [];
+export function clearCredentialsCache(
+  userId?: number,
+  apiName?: string,
+  environment?: string
+): void {
+  if (!userId && !apiName && !environment) {
+    credentialsCache.clear();
+    return;
+  }
   for (const key of credentialsCache.keys()) {
-    if (key.startsWith(`creds_${userId}_`)) {
-      keysToDelete.push(key);
+    const [u, a, e] = key.split(':');
+    const matchUser = !userId || u === String(userId);
+    const matchApi = !apiName || a === apiName;
+    const matchEnv = !environment || e === environment;
+    if (matchUser && matchApi && matchEnv) {
+      credentialsCache.delete(key);
     }
-  }
-  keysToDelete.forEach(key => credentialsCache.delete(key));
-}
-
-// Configuración de encriptación
-const ALGORITHM = 'aes-256-gcm';
-
-// 🔒 SEGURIDAD CRÍTICA: FALLAR si no hay clave de encriptación configurada
-// No usar claves por defecto o fallback - esto es un riesgo de seguridad crítico
-const RAW_ENCRYPTION_SECRET = (process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY.trim())
-  || (process.env.JWT_SECRET && process.env.JWT_SECRET.trim());
-
-if (!RAW_ENCRYPTION_SECRET || RAW_ENCRYPTION_SECRET.length < 32) {
-  const error = new Error(
-    'CRITICAL SECURITY ERROR: ENCRYPTION_KEY or JWT_SECRET environment variable must be set and be at least 32 characters long. ' +
-    'Without a proper encryption key, credentials cannot be securely stored. ' +
-    'Please set ENCRYPTION_KEY in your environment variables before starting the application.'
-  );
-  console.error('❌', error.message);
-  throw error;
-}
-
-const ENCRYPTION_KEY = crypto.createHash('sha256').update(RAW_ENCRYPTION_SECRET).digest('hex');
-const IV_LENGTH = 16;
-const TAG_LENGTH = 16;
-
-/**
- * Esquemas de validación Zod para cada tipo de API
- */
-const apiSchemas = {
-  ebay: z.object({
-    appId: z.string()
-      .min(1, 'App ID is required')
-      .max(255, 'App ID must not exceed 255 characters'),
-    devId: z.string()
-      .min(1, 'Dev ID is required')
-      .max(255, 'Dev ID must not exceed 255 characters'),
-    certId: z.string()
-      .min(1, 'Cert ID is required')
-      .max(255, 'Cert ID must not exceed 255 characters'),
-    token: z.string().max(1000, 'Token must not exceed 1000 characters').optional(),
-    authToken: z.string().max(1000, 'Auth Token must not exceed 1000 characters').optional(),
-    refreshToken: z.string().max(1000, 'Refresh Token must not exceed 1000 characters').optional(),
-    redirectUri: z.string()
-      .min(3, 'Redirect URI must be at least 3 characters')
-      .max(255, 'Redirect URI must not exceed 255 characters')
-      .refine(
-        (uri) => !/[<>"{}|\\^`\[\]]/.test(uri),
-        { message: 'Redirect URI contains invalid characters' }
-      )
-      .optional(),
-    sandbox: z.boolean(),
-  }),
-  amazon: z.object({
-    sellerId: z.string()
-      .min(1, 'Seller ID is required')
-      .max(255, 'Seller ID must not exceed 255 characters'),
-    clientId: z.string()
-      .min(1, 'Client ID is required')
-      .max(255, 'Client ID must not exceed 255 characters'),
-    clientSecret: z.string()
-      .min(1, 'Client Secret is required')
-      .max(500, 'Client Secret must not exceed 500 characters'),
-    refreshToken: z.string()
-      .min(1, 'Refresh Token is required')
-      .max(1000, 'Refresh Token must not exceed 1000 characters'),
-    accessToken: z.string().max(1000, 'Access Token must not exceed 1000 characters').optional(),
-    awsAccessKeyId: z.string()
-      .min(1, 'AWS Access Key ID is required')
-      .max(255, 'AWS Access Key ID must not exceed 255 characters'),
-    awsSecretAccessKey: z.string()
-      .min(1, 'AWS Secret Access Key is required')
-      .max(500, 'AWS Secret Access Key must not exceed 500 characters'),
-    awsSessionToken: z.string().max(2000, 'AWS Session Token must not exceed 2000 characters').optional(),
-    region: z.string().max(50, 'Region must not exceed 50 characters').default('us-east-1'),
-    marketplaceId: z.string()
-      .min(1, 'Marketplace ID is required')
-      .max(255, 'Marketplace ID must not exceed 255 characters'),
-    sandbox: z.boolean(),
-  }),
-  mercadolibre: z.object({
-    clientId: z.string()
-      .min(1, 'Client ID is required')
-      .max(255, 'Client ID must not exceed 255 characters'),
-    clientSecret: z.string()
-      .min(1, 'Client Secret is required')
-      .max(500, 'Client Secret must not exceed 500 characters'),
-    accessToken: z.string()
-      .min(1, 'Access Token is required')
-      .max(1000, 'Access Token must not exceed 1000 characters'),
-    refreshToken: z.string()
-      .min(1, 'Refresh Token is required')
-      .max(1000, 'Refresh Token must not exceed 1000 characters'),
-    userId: z.string().max(255, 'User ID must not exceed 255 characters').optional(),
-    siteId: z.string().max(10, 'Site ID must not exceed 10 characters').optional(),
-    sandbox: z.boolean(),
-  }),
-  groq: z.object({
-    apiKey: z.string()
-      .min(1, 'API Key is required')
-      .max(500, 'API Key must not exceed 500 characters'),
-    model: z.string().max(100, 'Model name must not exceed 100 characters').optional(),
-    maxTokens: z.number().int().min(1).max(100000).optional(),
-  }),
-  openai: z.object({
-    apiKey: z.string()
-      .min(1, 'API Key is required')
-      .max(500, 'API Key must not exceed 500 characters'),
-    organization: z.string().max(255, 'Organization must not exceed 255 characters').optional(),
-    model: z.string().max(100, 'Model name must not exceed 100 characters').optional(),
-  }),
-  scraperapi: z.object({
-    apiKey: z.string()
-      .min(1, 'API Key is required')
-      .max(500, 'API Key must not exceed 500 characters'),
-    premium: z.boolean().optional(),
-  }),
-  zenrows: z.object({
-    apiKey: z.string()
-      .min(1, 'API Key is required')
-      .max(500, 'API Key must not exceed 500 characters'),
-    premium: z.boolean().optional(),
-  }),
-  '2captcha': z.object({
-    apiKey: z.string()
-      .min(1, 'API Key is required')
-      .max(500, 'API Key must not exceed 500 characters'),
-  }),
-  serpapi: z.object({
-    apiKey: z.string()
-      .min(1, 'API Key is required')
-      .max(500, 'API Key must not exceed 500 characters'),
-  }),
-  googletrends: z.object({
-    apiKey: z.string()
-      .min(1, 'API Key is required')
-      .max(500, 'API Key must not exceed 500 characters'),
-  }),
-  paypal: z.object({
-    clientId: z.string()
-      .min(1, 'Client ID is required')
-      .max(255, 'Client ID must not exceed 255 characters'),
-    clientSecret: z.string()
-      .min(1, 'Client Secret is required')
-      .max(500, 'Client Secret must not exceed 500 characters'),
-    environment: z.enum(['sandbox', 'live']),
-  }),
-  aliexpress: z.object({
-    email: z.string().email('Valid email is required'),
-    password: z.string().min(1, 'Password is required'),
-    twoFactorEnabled: z.boolean().default(false),
-    twoFactorSecret: z.string().optional(),
-    cookies: z.array(z.any()).optional(),
-  }),
-  email: z.object({
-    host: z.string().min(1, 'SMTP Host is required'),
-    port: z.number().int().min(1).max(65535),
-    user: z.string().min(1, 'User is required'),
-    password: z.string().min(1, 'Password is required'),
-    from: z.string().email('Valid email is required'),
-    fromName: z.string().optional(),
-    secure: z.boolean(),
-  }),
-  twilio: z.object({
-    accountSid: z.string().min(1, 'Account SID is required'),
-    authToken: z.string().min(1, 'Auth Token is required'),
-    phoneNumber: z.string().min(1, 'Phone Number is required'),
-    whatsappNumber: z.string().optional(),
-  }),
-  slack: z.object({
-    webhookUrl: z.string().url().optional(),
-    botToken: z.string().optional(),
-    channel: z.string().optional(),
-  }).refine(data => data.webhookUrl || data.botToken, {
-    message: 'Either webhookUrl or botToken is required',
-  }),
-  stripe: z.object({
-    publicKey: z.string().min(1, 'Public Key is required'),
-    secretKey: z.string().min(1, 'Secret Key is required'),
-    webhookSecret: z.string().optional(),
-    sandbox: z.boolean(),
-  }),
-  'aliexpress-affiliate': z.object({
-    appKey: z.string().min(1, 'App Key is required'),
-    appSecret: z.string().min(1, 'App Secret is required'),
-    trackingId: z.string().optional(),
-    sandbox: z.boolean(),
-  }),
-  'aliexpress-dropshipping': z.object({
-    appKey: z.string().min(1, 'App Key is required'),
-    appSecret: z.string().min(1, 'App Secret is required'),
-    accessToken: z.string().optional(), // Opcional inicialmente, se obtiene después de OAuth
-    refreshToken: z.string().optional(),
-    userId: z.string().optional(),
-    sandbox: z.boolean(),
-  }),
-};
-
-/**
- * Encriptar credenciales
- */
-function encryptCredentials(credentials: Record<string, any>): string {
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const key = Buffer.from(ENCRYPTION_KEY, 'hex');
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-  
-  const encrypted = Buffer.concat([
-    cipher.update(JSON.stringify(credentials), 'utf8'),
-    cipher.final(),
-  ]);
-  
-  const tag = cipher.getAuthTag();
-  
-  // Combinar iv + tag + encrypted
-  const result = Buffer.concat([iv, tag, encrypted]);
-  return result.toString('base64');
-}
-
-/**
- * Desencriptar credenciales
- */
-function decryptCredentials(encryptedData: string): Record<string, any> {
-  try {
-    const data = Buffer.from(encryptedData, 'base64');
-    
-    // Validar que el tamaño mínimo sea correcto
-    const minSize = IV_LENGTH + TAG_LENGTH + 1;
-    if (data.length < minSize) {
-      throw new Error(`Encrypted data too short: expected at least ${minSize} bytes, got ${data.length}`);
-    }
-    
-    const key = Buffer.from(ENCRYPTION_KEY, 'hex');
-    const iv = data.slice(0, IV_LENGTH);
-    const tag = data.slice(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
-    const encrypted = data.slice(IV_LENGTH + TAG_LENGTH);
-    
-    // ✅ FIX SIGSEGV: Validar buffers antes de usar crypto nativo
-    if (!iv || iv.length !== IV_LENGTH) {
-      throw new Error(`Invalid IV: expected ${IV_LENGTH} bytes, got ${iv?.length || 0}`);
-    }
-    if (!tag || tag.length !== TAG_LENGTH) {
-      throw new Error(`Invalid tag: expected ${TAG_LENGTH} bytes, got ${tag?.length || 0}`);
-    }
-    if (!encrypted || encrypted.length === 0) {
-      throw new Error(`Invalid encrypted data: empty or null`);
-    }
-    
-    // ✅ FIX SIGSEGV: Usar try-catch más robusto para prevenir crashes
-    let decipher;
-    try {
-      decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-      if (!decipher) {
-        throw new Error('Failed to create decipher');
-      }
-      decipher.setAuthTag(tag);
-    } catch (cryptoError: any) {
-      // Si falla la creación del decipher, retornar error controlado
-      logger.error('Crypto decipher creation failed', { 
-        error: cryptoError.message,
-        code: cryptoError.code 
-      });
-      throw new Error(`CRYPTO_INIT_ERROR: ${cryptoError.message || String(cryptoError)}`);
-    }
-    
-    let decrypted: Buffer;
-    try {
-      decrypted = Buffer.concat([
-        decipher.update(encrypted),
-        decipher.final(),
-      ]);
-    } catch (decryptError: any) {
-      // Si falla la desencriptación, retornar error controlado en lugar de crashear
-      logger.error('Crypto decryption failed', { 
-        error: decryptError.message,
-        code: decryptError.code 
-      });
-      const errorType = decryptError?.code === 'ERR_CRYPTO_INVALID_TAG' 
-        ? 'INVALID_ENCRYPTION_KEY' 
-        : decryptError?.code === 'ERR_OSSL_BAD_DECRYPT'
-        ? 'CORRUPTED_DATA'
-        : 'DECRYPTION_FAILED';
-      throw new Error(`${errorType}: ${decryptError.message || String(decryptError)}`);
-    }
-    
-    try {
-      return JSON.parse(decrypted.toString('utf8'));
-    } catch (parseError: any) {
-      throw new Error(`JSON_PARSE_ERROR: ${parseError.message || String(parseError)}`);
-    }
-  } catch (error: any) {
-    // ✅ FIX SIGSEGV: Capturar TODOS los errores posibles, incluyendo SIGSEGV
-    // Si el error ya tiene un tipo, re-lanzarlo
-    if (error.message?.includes('CRYPTO_') || error.message?.includes('INVALID_') || 
-        error.message?.includes('CORRUPTED_') || error.message?.includes('JSON_PARSE_')) {
-      throw error;
-    }
-    
-    // Mejorar el mensaje de error para diagnóstico
-    const errorType = error?.code === 'ERR_CRYPTO_INVALID_TAG' 
-      ? 'INVALID_ENCRYPTION_KEY' 
-      : error?.code === 'ERR_OSSL_BAD_DECRYPT'
-      ? 'CORRUPTED_DATA'
-      : error?.code?.includes('CRYPTO') || error?.code?.includes('OSSL')
-      ? 'CRYPTO_ERROR'
-      : 'UNKNOWN_ERROR';
-    
-    throw new Error(`${errorType}: ${error?.message || String(error)}`);
   }
 }
 
 /**
- * Servicio de gestión de credenciales
+ * Load credentials from env for APIs that support it
  */
-export class CredentialsManager {
-  /**
-   * Normalize credentials for a specific API
-   * This is the CENTRALIZED place for credential normalization
-   * All other services should use this method instead of duplicating logic
-   */
-  static normalizeCredential(
-    apiName: ApiName,
-    credential: Record<string, any>,
-    environment: ApiEnvironment
-  ): Record<string, any> {
-    if (!credential || typeof credential !== 'object') {
-      return credential || {};
-    }
+function loadFromEnv(
+  apiName: string,
+  environment: 'sandbox' | 'production'
+): Record<string, any> | null {
+  const n = apiName.toLowerCase();
 
-    // Create a copy to avoid mutating the original
-    const creds = { ...credential };
-
-    // General normalization: trim string fields
-    if (creds.apiKey && typeof creds.apiKey === 'string') {
-      creds.apiKey = creds.apiKey.trim();
-    }
-
-    // API-specific normalization
-    if (apiName === 'ebay') {
-      // ✅ FIX: Normalizar nombres de campos UPPER_CASE → camelCase (bidireccional)
-      // El frontend envía EBAY_APP_ID pero el backend busca appId
-      if (creds.EBAY_APP_ID && !creds.appId) {
-        creds.appId = creds.EBAY_APP_ID;
-      }
-      if (creds.EBAY_DEV_ID && !creds.devId) {
-        creds.devId = creds.EBAY_DEV_ID;
-      }
-      if (creds.EBAY_CERT_ID && !creds.certId) {
-        creds.certId = creds.EBAY_CERT_ID;
-      }
-      // También normalizar en dirección inversa para compatibilidad
-      if (creds.appId && !creds.EBAY_APP_ID) {
-        creds.EBAY_APP_ID = creds.appId;
-      }
-      if (creds.devId && !creds.EBAY_DEV_ID) {
-        creds.EBAY_DEV_ID = creds.devId;
-      }
-      if (creds.certId && !creds.EBAY_CERT_ID) {
-        creds.EBAY_CERT_ID = creds.certId;
-      }
-      
-      // Normalize token field: use 'token' as primary, 'authToken' as alias
-      if (creds.authToken && !creds.token) {
-        creds.token = creds.authToken;
-      }
-      if (creds.EBAY_TOKEN && !creds.token && !creds.authToken) {
-        creds.token = creds.EBAY_TOKEN;
-      }
-      
-      // Normalize sandbox flag based on environment
-      if (typeof creds.sandbox === 'undefined') {
-        creds.sandbox = environment === 'sandbox';
-      }
-      
-      // Normalize redirectUri: eBay uses 'redirectUri' (not 'ruName' or 'redirect_uri')
-      // Support legacy field names for backward compatibility
-      if (creds.ruName && !creds.redirectUri) {
-        creds.redirectUri = creds.ruName;
-      }
-      if (creds.redirect_uri && !creds.redirectUri) {
-        creds.redirectUri = creds.redirect_uri;
-      }
-      if (creds.EBAY_REDIRECT_URI && !creds.redirectUri) {
-        creds.redirectUri = creds.EBAY_REDIRECT_URI;
-      }
-      
-      // Trim redirectUri (eBay is strict about exact matching)
-      if (creds.redirectUri && typeof creds.redirectUri === 'string') {
-        creds.redirectUri = creds.redirectUri.trim();
-        
-        // 🔒 VALIDACIÓN: Limpiar prefijos comunes que pueden copiarse por error
-        // Caso 1: Si tiene prefijo "redirect_uri=" (copiado de una URL)
-        if (creds.redirectUri.startsWith('redirect_uri=')) {
-          const cleaned = creds.redirectUri.replace(/^redirect_uri=/, '').trim();
-          logger.warn('[CredentialsManager] Detected redirect_uri= prefix, removing it', {
-            original: creds.redirectUri.substring(0, 50) + '...',
-            cleaned: cleaned.substring(0, 50) + '...'
-          });
-          creds.redirectUri = cleaned;
-        }
-        
-        // 🔒 VALIDACIÓN: Prevenir que se guarde una URL completa de OAuth en lugar del RuName
-        // Detectar URLs de eBay (auth.sandbox.ebay.com, auth.ebay.com, signin.sandbox.ebay.com, signin.ebay.com)
-        const isEbayUrl = creds.redirectUri.length > 255 || 
-          creds.redirectUri.includes('auth.sandbox.ebay.com') || 
-          creds.redirectUri.includes('auth.ebay.com') ||
-          creds.redirectUri.includes('signin.sandbox.ebay.com') ||
-          creds.redirectUri.includes('signin.ebay.com');
-        
-        if (isEbayUrl) {
-          try {
-            const originalRedirectUri = creds.redirectUri;
-            // Intentar parsear como URL
-            const url = new URL(creds.redirectUri);
-            
-            // Intentar extraer el RuName de diferentes parámetros posibles
-            let extractedRuName: string | null = null;
-            
-            // Caso 1: Parámetro redirect_uri (OAuth estándar)
-            extractedRuName = url.searchParams.get('redirect_uri');
-            
-            // Caso 2: Parámetro runame (eBay SignIn legacy)
-            if (!extractedRuName) {
-              extractedRuName = url.searchParams.get('runame');
-            }
-            
-            if (extractedRuName) {
-              // El parámetro puede estar codificado, decodificarlo
-              const decoded = decodeURIComponent(extractedRuName).trim();
-              creds.redirectUri = decoded;
-              logger.warn('[CredentialsManager] Detected eBay URL instead of RuName, extracted parameter', {
-                originalLength: originalRedirectUri.length,
-                extractedLength: decoded.length,
-                preview: decoded.substring(0, 50) + '...',
-                source: url.searchParams.has('redirect_uri') ? 'redirect_uri' : 'runame'
-              });
-            } else {
-              // Si no tiene parámetros conocidos, es probable que sea una URL incorrecta
-              logger.error('[CredentialsManager] redirectUri appears to be an eBay URL but missing redirect_uri or runame parameter', {
-                urlPreview: originalRedirectUri.substring(0, 100) + '...',
-                hasParams: url.searchParams.toString().length > 0
-              });
-              // No modificar, dejar que la validación de Zod lo rechace
-            }
-          } catch (urlError) {
-            // No es una URL válida, continuar con el valor original
-            // La validación de Zod lo rechazará si excede 255 caracteres
-            logger.debug('[CredentialsManager] redirectUri is not a valid URL, keeping original value', {
-              preview: creds.redirectUri.substring(0, 50) + '...'
-            });
-          }
-        }
-      }
-    }
-
-    // ✅ AliExpress Dropshipping API normalization
-    if (apiName === 'aliexpress-dropshipping') {
-      // Normalize sandbox flag based on environment
-      if (typeof creds.sandbox === 'undefined') {
-        creds.sandbox = environment === 'sandbox';
-      }
-      // accessToken and refreshToken are optional initially (obtained via OAuth)
-    }
-
-    // ✅ AliExpress Affiliate API normalization
-    if (apiName === 'aliexpress-affiliate') {
-      // ✅ CRÍTICO: Siempre normalizar sandbox flag basándose en el environment actual
-      // Esto asegura que si las credenciales se guardaron con sandbox:false pero están en ambiente sandbox,
-      // se corrijan al recuperarlas
-      creds.sandbox = environment === 'sandbox';
-    }
-
-    // ✅ Stripe API normalization
-    if (apiName === 'stripe') {
-      // Normalize field names from UPPER_CASE to camelCase
-      if (creds.STRIPE_PUBLIC_KEY && !creds.publicKey) creds.publicKey = creds.STRIPE_PUBLIC_KEY;
-      if (creds.STRIPE_PUBLISHABLE_KEY && !creds.publicKey) creds.publicKey = creds.STRIPE_PUBLISHABLE_KEY;
-      if (creds.STRIPE_SECRET_KEY && !creds.secretKey) creds.secretKey = creds.STRIPE_SECRET_KEY;
-      if (creds.STRIPE_WEBHOOK_SECRET && !creds.webhookSecret) creds.webhookSecret = creds.STRIPE_WEBHOOK_SECRET;
-      
-      // Normalize sandbox flag based on environment
-      if (typeof creds.sandbox === 'undefined') {
-        creds.sandbox = environment === 'sandbox';
-      }
-      
-      // Normalize environment-specific keys
-      if (environment === 'sandbox') {
-        if (creds.STRIPE_SANDBOX_PUBLIC_KEY && !creds.publicKey) creds.publicKey = creds.STRIPE_SANDBOX_PUBLIC_KEY;
-        if (creds.STRIPE_SANDBOX_SECRET_KEY && !creds.secretKey) creds.secretKey = creds.STRIPE_SANDBOX_SECRET_KEY;
-        if (creds.STRIPE_SANDBOX_WEBHOOK_SECRET && !creds.webhookSecret) creds.webhookSecret = creds.STRIPE_SANDBOX_WEBHOOK_SECRET;
-      } else {
-        if (creds.STRIPE_PRODUCTION_PUBLIC_KEY && !creds.publicKey) creds.publicKey = creds.STRIPE_PRODUCTION_PUBLIC_KEY;
-        if (creds.STRIPE_PRODUCTION_SECRET_KEY && !creds.secretKey) creds.secretKey = creds.STRIPE_PRODUCTION_SECRET_KEY;
-        if (creds.STRIPE_PRODUCTION_WEBHOOK_SECRET && !creds.webhookSecret) creds.webhookSecret = creds.STRIPE_PRODUCTION_WEBHOOK_SECRET;
-      }
-      
-      // Trim keys
-      if (creds.publicKey && typeof creds.publicKey === 'string') {
-        creds.publicKey = creds.publicKey.trim();
-      }
-      if (creds.secretKey && typeof creds.secretKey === 'string') {
-        creds.secretKey = creds.secretKey.trim();
-      }
-      if (creds.webhookSecret && typeof creds.webhookSecret === 'string') {
-        creds.webhookSecret = creds.webhookSecret.trim();
-      }
-    }
-
-    // ✅ Email/SMTP API normalization
-    if (apiName === 'email') {
-      // Normalize field names from UPPER_CASE to camelCase
-      if (creds.EMAIL_HOST && !creds.host) creds.host = creds.EMAIL_HOST;
-      if (creds.SMTP_HOST && !creds.host) creds.host = creds.SMTP_HOST;
-      if (creds.EMAIL_PORT && !creds.port) creds.port = typeof creds.EMAIL_PORT === 'number' ? creds.EMAIL_PORT : parseInt(String(creds.EMAIL_PORT));
-      if (creds.SMTP_PORT && !creds.port) creds.port = typeof creds.SMTP_PORT === 'number' ? creds.SMTP_PORT : parseInt(String(creds.SMTP_PORT));
-      if (creds.EMAIL_USER && !creds.user) creds.user = creds.EMAIL_USER;
-      if (creds.SMTP_USER && !creds.user) creds.user = creds.SMTP_USER;
-      if (creds.EMAIL_PASSWORD && !creds.password) creds.password = creds.EMAIL_PASSWORD;
-      if (creds.SMTP_PASS && !creds.password) creds.password = creds.SMTP_PASS;
-      if (creds.EMAIL_FROM && !creds.from) creds.from = creds.EMAIL_FROM;
-      if (creds.SMTP_FROM && !creds.from) creds.from = creds.SMTP_FROM;
-      if (creds.EMAIL_FROM_NAME && !creds.fromName) creds.fromName = creds.EMAIL_FROM_NAME;
-      if (creds.SMTP_FROM_NAME && !creds.fromName) creds.fromName = creds.SMTP_FROM_NAME;
-      
-      // Normalize secure flag
-      if (typeof creds.secure === 'undefined' || creds.secure === null) {
-        if (creds.EMAIL_SECURE !== undefined) {
-          creds.secure = creds.EMAIL_SECURE === 'true' || creds.EMAIL_SECURE === true;
-        } else if (creds.SMTP_SECURE !== undefined) {
-          creds.secure = creds.SMTP_SECURE === 'true' || creds.SMTP_SECURE === true;
-        } else {
-          // Default: true if port is 465, false otherwise
-          const port = creds.port || 587;
-          creds.secure = port === 465;
-        }
-      }
-      
-      // Normalize port to number
-      if (creds.port && typeof creds.port === 'string') {
-        creds.port = parseInt(creds.port);
-      }
-      
-      // Trim string fields
-      if (creds.host && typeof creds.host === 'string') {
-        creds.host = creds.host.trim();
-      }
-      if (creds.user && typeof creds.user === 'string') {
-        creds.user = creds.user.trim();
-      }
-      if (creds.password && typeof creds.password === 'string') {
-        creds.password = creds.password.trim();
-      }
-      if (creds.from && typeof creds.from === 'string') {
-        creds.from = creds.from.trim();
-      }
-      if (creds.fromName && typeof creds.fromName === 'string') {
-        creds.fromName = creds.fromName.trim();
-      }
-    }
-
-    // ✅ Twilio API normalization
-    if (apiName === 'twilio') {
-      // Normalize field names from UPPER_CASE to camelCase
-      if (creds.TWILIO_ACCOUNT_SID && !creds.accountSid) creds.accountSid = creds.TWILIO_ACCOUNT_SID;
-      if (creds.TWILIO_AUTH_TOKEN && !creds.authToken) creds.authToken = creds.TWILIO_AUTH_TOKEN;
-      if (creds.TWILIO_PHONE_NUMBER && !creds.phoneNumber) creds.phoneNumber = creds.TWILIO_PHONE_NUMBER;
-      if (creds.TWILIO_FROM_NUMBER && !creds.phoneNumber) creds.phoneNumber = creds.TWILIO_FROM_NUMBER; // Fallback
-      if (creds.TWILIO_WHATSAPP_NUMBER && !creds.whatsappNumber) creds.whatsappNumber = creds.TWILIO_WHATSAPP_NUMBER;
-      
-      // Trim string fields
-      if (creds.accountSid && typeof creds.accountSid === 'string') {
-        creds.accountSid = creds.accountSid.trim();
-      }
-      if (creds.authToken && typeof creds.authToken === 'string') {
-        creds.authToken = creds.authToken.trim();
-      }
-      if (creds.phoneNumber && typeof creds.phoneNumber === 'string') {
-        creds.phoneNumber = creds.phoneNumber.trim();
-      }
-      if (creds.whatsappNumber && typeof creds.whatsappNumber === 'string') {
-        creds.whatsappNumber = creds.whatsappNumber.trim();
-      }
-    }
-
-    // ✅ Slack API normalization
-    if (apiName === 'slack') {
-      // Normalize field names from UPPER_CASE to camelCase
-      if (creds.SLACK_WEBHOOK_URL && !creds.webhookUrl) creds.webhookUrl = creds.SLACK_WEBHOOK_URL;
-      if (creds.SLACK_BOT_TOKEN && !creds.botToken) creds.botToken = creds.SLACK_BOT_TOKEN;
-      if (creds.SLACK_CHANNEL && !creds.channel) creds.channel = creds.SLACK_CHANNEL;
-      
-      // Trim string fields
-      if (creds.webhookUrl && typeof creds.webhookUrl === 'string') {
-        creds.webhookUrl = creds.webhookUrl.trim();
-      }
-      if (creds.botToken && typeof creds.botToken === 'string') {
-        creds.botToken = creds.botToken.trim();
-      }
-      if (creds.channel && typeof creds.channel === 'string') {
-        creds.channel = creds.channel.trim();
-      }
-    }
-
-    // ✅ OpenAI API normalization
-    if (apiName === 'openai') {
-      // Normalize field names from UPPER_CASE to camelCase
-      if (creds.OPENAI_API_KEY && !creds.apiKey) creds.apiKey = creds.OPENAI_API_KEY;
-      if (creds.OPENAI_ORGANIZATION && !creds.organization) creds.organization = creds.OPENAI_ORGANIZATION;
-      if (creds.OPENAI_MODEL && !creds.model) creds.model = creds.OPENAI_MODEL;
-      
-      // Trim string fields
-      if (creds.apiKey && typeof creds.apiKey === 'string') {
-        creds.apiKey = creds.apiKey.trim();
-      }
-      if (creds.organization && typeof creds.organization === 'string') {
-        creds.organization = creds.organization.trim();
-      }
-      if (creds.model && typeof creds.model === 'string') {
-        creds.model = creds.model.trim();
-      }
-    }
-
-    // ✅ SerpAPI/Google Trends normalization
-    if (apiName === 'serpapi' || apiName === 'googletrends') {
-      // Normalize field names from UPPER_CASE to camelCase
-      if (creds.SERP_API_KEY && !creds.apiKey) creds.apiKey = creds.SERP_API_KEY;
-      if (creds.GOOGLE_TRENDS_API_KEY && !creds.apiKey) creds.apiKey = creds.GOOGLE_TRENDS_API_KEY;
-      
-      // Trim string fields
-      if (creds.apiKey && typeof creds.apiKey === 'string') {
-        creds.apiKey = creds.apiKey.trim();
-      }
-    }
-
-    return creds;
-  }
-
-  /**
-   * 📝 MANTENIBILIDAD: Obtener credenciales de una API para un usuario
-   * 
-   * @template T - Tipo de API (eBay, Amazon, etc.)
-   * @param userId - ID del usuario
-   * @param apiName - Nombre de la API
-   * @param environment - Ambiente (sandbox/production)
-   * @param options - Opciones adicionales (includeGlobal)
-   * @returns Credenciales desencriptadas y normalizadas, o null si no existen
-   * 
-   * @example
-   * ```typescript
-   * const creds = await CredentialsManager.getCredentials(1, 'ebay', 'sandbox');
-   * if (creds) {
-   *   console.log(creds.appId);
-   * }
-   * ```
-   */
-  static async getCredentials<T extends ApiName>(
-    userId: number,
-    apiName: T,
-    environment: ApiEnvironment = 'production',
-    options: {
-      includeGlobal?: boolean;
-    } = {}
-  ): Promise<ApiCredentialsMap[T] | null> {
-    try {
-      const entry = await this.getCredentialEntry(userId, apiName, environment, options);
-      return entry?.credentials ?? null;
-    } catch (error: any) {
-      logger.error('Error getting credentials', {
-        service: 'credentials-manager',
-        apiName,
-        userId,
-        error: error?.message || String(error)
-      });
-      return null;
-    }
-  }
-
-  /**
-   * 📝 MANTENIBILIDAD: Obtener entrada completa de credenciales (incluye metadata)
-   * 
-   * @template T - Tipo de API
-   * @param userId - ID del usuario
-   * @param apiName - Nombre de la API
-   * @param environment - Ambiente (sandbox/production)
-   * @param options - Opciones (includeGlobal para incluir credenciales globales)
-   * @returns Objeto con credenciales, scope, ownerUserId, etc., o null si no existen
-   * 
-   * @remarks
-   * - Prioriza credenciales personales sobre globales
-   * - Usa caché de credenciales desencriptadas (TTL: 5 min)
-   * - Optimiza consultas (1 query en lugar de 2)
-   * 
-   * @example
-   * ```typescript
-   * const entry = await CredentialsManager.getCredentialEntry(1, 'ebay', 'production');
-   * if (entry) {
-   *   console.log(`Scope: ${entry.scope}, Active: ${entry.isActive}`);
-   * }
-   * ```
-   */
-  static async getCredentialEntry<T extends ApiName>(
-    userId: number,
-    apiName: T,
-    environment: ApiEnvironment = 'production',
-    options: {
-      includeGlobal?: boolean;
-    } = {}
-  ): Promise<{
-    id: number;
-    credentials: ApiCredentialsMap[T];
-    scope: CredentialScope;
-    ownerUserId: number;
-    sharedByUserId: number | null;
-    isActive: boolean;
-  } | null> {
-    const finalEnvironment = supportsEnvironments(apiName) ? environment : 'production';
-
-    // 🚀 PERFORMANCE: Optimizar consultas - usar una sola query con OR en lugar de 2 queries
-    const whereClause: any = {
-      apiName,
-      environment: finalEnvironment,
-      isActive: true,
+  // AliExpress Affiliate (also ALIEXPRESS_APP_KEY for legacy)
+  if (n === 'aliexpress-affiliate' || n === 'aliexpress_affiliate') {
+    const appKey =
+      (process.env.ALIEXPRESS_APP_KEY || process.env.ALIEXPRESS_AFFILIATE_APP_KEY || '').trim();
+    const appSecret =
+      (process.env.ALIEXPRESS_APP_SECRET ||
+        process.env.ALIEXPRESS_AFFILIATE_APP_SECRET ||
+        '').trim();
+    if (!appKey || !appSecret) return null;
+    return {
+      appKey,
+      appSecret,
+      trackingId: (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim(),
+      sandbox: environment === 'sandbox',
     };
+  }
 
-    if (options.includeGlobal === false) {
-      // Solo buscar credenciales personales
-      whereClause.userId = userId;
-      whereClause.scope = 'user';
-    } else {
-      // Buscar credenciales personales O globales en una sola query
-      whereClause.OR = [
-        { userId, scope: 'user' },
-        { scope: 'global' }
-      ];
-    }
+  // eBay
+  if (n === 'ebay') {
+    const clientId = (
+      process.env.EBAY_CLIENT_ID ||
+      process.env.EBAY_APP_ID ||
+      (environment === 'sandbox' ? process.env.EBAY_SANDBOX_APP_ID : process.env.EBAY_PRODUCTION_APP_ID) ||
+      ''
+    ).trim();
+    const clientSecret = (
+      process.env.EBAY_CLIENT_SECRET ||
+      process.env.EBAY_CERT_ID ||
+      (environment === 'sandbox'
+        ? process.env.EBAY_SANDBOX_CERT_ID
+        : process.env.EBAY_PRODUCTION_CERT_ID) ||
+      ''
+    ).trim();
+    if (!clientId || !clientSecret) return null;
+    return {
+      appId: clientId,
+      devId: (process.env.EBAY_DEV_ID || '').trim() || undefined,
+      certId: clientSecret,
+      redirectUri: (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim() || undefined,
+      token: (process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN || '').trim() || undefined,
+      refreshToken: (process.env.EBAY_REFRESH_TOKEN || '').trim() || undefined,
+      sandbox: environment === 'sandbox',
+    };
+  }
 
-    // 🚀 PERFORMANCE: Una sola query en lugar de N+1
-    const credentials = await prisma.apiCredential.findMany({
-      where: whereClause,
-      orderBy: [
-        { scope: 'asc' }, // Priorizar 'user' sobre 'global'
-        { updatedAt: 'desc' }
-      ],
-      take: 1, // Solo necesitamos la primera (prioridad: user > global)
+  // PayPal
+  if (n === 'paypal') {
+    const clientId =
+      (environment === 'sandbox'
+        ? process.env.PAYPAL_SANDBOX_CLIENT_ID
+        : process.env.PAYPAL_PRODUCTION_CLIENT_ID) ||
+      process.env.PAYPAL_CLIENT_ID ||
+      '';
+    const clientSecret =
+      (environment === 'sandbox'
+        ? process.env.PAYPAL_SANDBOX_CLIENT_SECRET
+        : process.env.PAYPAL_PRODUCTION_CLIENT_SECRET) ||
+      process.env.PAYPAL_CLIENT_SECRET ||
+      '';
+    if (!clientId || !clientSecret) return null;
+    return {
+      clientId: clientId.trim(),
+      clientSecret: clientSecret.trim(),
+      environment: environment === 'sandbox' ? 'sandbox' : 'live',
+    };
+  }
+
+  // ScraperAPI
+  if (n === 'scraperapi' || n === 'scraper_api') {
+    const apiKey =
+      (process.env.SCRAPERAPI_KEY || process.env.SCRAPER_API_KEY || '').trim();
+    if (!apiKey) return null;
+    return { apiKey };
+  }
+
+  // ZenRows
+  if (n === 'zenrows' || n === 'zen_rows') {
+    const apiKey = (process.env.ZENROWS_API_KEY || '').trim();
+    if (!apiKey) return null;
+    return { apiKey };
+  }
+
+  // GROQ
+  if (n === 'groq') {
+    const apiKey = (process.env.GROQ_API_KEY || '').trim();
+    if (!apiKey) return null;
+    return { apiKey };
+  }
+
+  return null;
+}
+
+/**
+ * Try to decrypt stored credentials
+ */
+function tryDecrypt(raw: string): Record<string, any> | null {
+  try {
+    const decrypted = decrypt(raw);
+    return JSON.parse(decrypted) as Record<string, any>;
+  } catch {
+    return null;
+  }
+}
+
+export const CredentialsManager = {
+  async getCredentials(
+    userId: number,
+    apiName: ApiName | string,
+    environment: 'sandbox' | 'production'
+  ): Promise<Record<string, any> | null> {
+    const entry = await this.getCredentialEntry(userId, apiName, environment);
+    return entry?.credentials ?? null;
+  },
+
+  async getCredentialEntry(
+    userId: number,
+    apiName: ApiName | string,
+    environment: 'sandbox' | 'production',
+    options?: { includeGlobal?: boolean }
+  ): Promise<CredentialEntry | null> {
+    const name = String(apiName).toLowerCase();
+    const key = cacheKey(userId, name, environment);
+    const cached = credentialsCache.get(key);
+    if (cached !== undefined) return cached;
+
+    const includeGlobal = options?.includeGlobal !== false;
+
+    // 1) User credentials
+    const userEntry = await prisma.apiCredential.findFirst({
+      where: {
+        userId,
+        apiName: name,
+        environment,
+        scope: 'user',
+        isActive: true,
+      },
     });
 
-    const credential = credentials[0];
-    if (!credential) {
-      return null;
+    if (userEntry?.credentials) {
+      const creds = tryDecrypt(userEntry.credentials);
+      if (creds) {
+        const entry: CredentialEntry = {
+          credentials: creds,
+          isActive: userEntry.isActive,
+          scope: 'user',
+          ownerUserId: userEntry.userId,
+          sharedByUserId: userEntry.sharedById,
+        };
+        credentialsCache.set(key, entry);
+        return entry;
+      }
     }
 
-    // 🚀 PERFORMANCE: Verificar caché de credenciales desencriptadas
-    const cacheKey = getCredentialsCacheKey(credential.userId, apiName, finalEnvironment);
-    const cached = credentialsCache.get(cacheKey);
-    const now = Date.now();
-
-    if (cached && (now - cached.timestamp) < CREDENTIALS_CACHE_TTL && cached.environment === finalEnvironment) {
-      // Usar credenciales del caché
-      return {
-        id: credential.id,
-        credentials: cached.credentials as ApiCredentialsMap[T],
-        scope: credential.scope,
-        ownerUserId: credential.userId,
-        sharedByUserId: credential.sharedById ?? null,
-        isActive: credential.isActive,
-      };
-    }
-
-    // ✅ FIX SIGSEGV: Desencriptar con protección robusta para prevenir crashes
-    try {
-      let decrypted: Record<string, any>;
-      try {
-        // ✅ FIX SIGSEGV: Wrapper de seguridad para prevenir crashes en crypto nativo
-        decrypted = decryptCredentials(credential.credentials);
-      } catch (decryptError: any) {
-        const errorMsg = decryptError?.message || String(decryptError);
-        const isCryptoError = errorMsg.includes('CRYPTO_') || 
-                             errorMsg.includes('INVALID_ENCRYPTION_KEY') || 
-                             errorMsg.includes('CORRUPTED_DATA') ||
-                             errorMsg.includes('ERR_CRYPTO') ||
-                             errorMsg.includes('ERR_OSSL') ||
-                             decryptError?.code?.includes('CRYPTO') ||
-                             decryptError?.code?.includes('OSSL');
-        
-        // ✅ FIX SIGSEGV: Si es error de crypto, retornar null en lugar de lanzar error
-        // Esto previene que el error se propague y cause SIGSEGV
-        if (isCryptoError) {
-          logger.error('✅ FIX SIGSEGV: Error de desencriptación detectado, retornando null', {
-            service: 'credentials-manager',
-            apiName,
-            environment: finalEnvironment,
-            userId,
-            credentialId: credential.id,
-            error: errorMsg,
-            errorCode: decryptError?.code,
-            possibleCauses: [
-              'La clave de encriptación (ENCRYPTION_KEY o JWT_SECRET) cambió',
-              'Las credenciales fueron encriptadas con una clave diferente',
-              'Los datos están corruptos en la base de datos',
-              'Problema con módulo nativo crypto (posible SIGSEGV)'
-            ],
-            solution: 'Elimina y vuelve a guardar las credenciales en API Settings'
-          });
-          
-          // Desactivar credenciales corruptas automáticamente para evitar logs repetitivos
-          try {
-            await prisma.apiCredential.update({
-              where: { id: credential.id },
-              data: { isActive: false },
-            });
-            logger.info('Credencial corrupta desactivada automáticamente', {
-              service: 'credentials-manager',
-              credentialId: credential.id,
-              apiName,
-              userId
-            });
-          } catch (updateError: any) {
-            logger.warn('No se pudo desactivar credencial corrupta', {
-              credentialId: credential.id,
-              error: updateError.message
-            });
-          }
-          
-          // ✅ FIX SIGSEGV: Retornar null en lugar de lanzar error
-          // Esto previene que el error se propague y cause SIGSEGV en el caller
-          return null;
-        }
-        
-        // Si no es error de crypto, re-lanzar el error
-        throw decryptError;
-      }
-      
-      // ✅ CRÍTICO: Normalizar credenciales ANTES de guardar en caché
-      // Esto asegura que el flag sandbox siempre coincida con el environment
-      const normalized = this.normalizeCredential(apiName, decrypted, finalEnvironment);
-      
-      // ✅ CRÍTICO: Para AliExpress Affiliate API, forzar normalización del flag sandbox
-      // incluso si ya estaba definido, para asegurar consistencia
-      if (apiName === 'aliexpress-affiliate' && normalized) {
-        (normalized as any).sandbox = finalEnvironment === 'sandbox';
-      }
-      
-      // 🚀 PERFORMANCE: Guardar en caché
-      credentialsCache.set(cacheKey, {
-        credentials: normalized,
-        timestamp: now,
-        environment: finalEnvironment,
+    // 2) Global credentials (if includeGlobal)
+    if (includeGlobal) {
+      const globalEntry = await prisma.apiCredential.findFirst({
+        where: {
+          apiName: name,
+          environment,
+          scope: 'global',
+          isActive: true,
+        },
       });
 
-      return {
-        id: credential.id,
-        credentials: normalized as ApiCredentialsMap[T],
-        scope: credential.scope,
-        ownerUserId: credential.userId,
-        sharedByUserId: credential.sharedById ?? null,
-        isActive: credential.isActive,
+      if (globalEntry?.credentials) {
+        const creds = tryDecrypt(globalEntry.credentials);
+        if (creds) {
+          const entry: CredentialEntry = {
+            credentials: creds,
+            isActive: globalEntry.isActive,
+            scope: 'global',
+            ownerUserId: globalEntry.userId,
+            sharedByUserId: globalEntry.sharedById,
+          };
+          credentialsCache.set(key, entry);
+          return entry;
+        }
+      }
+    }
+
+    // 3) Env fallback
+    const envCreds = loadFromEnv(name, environment);
+    if (envCreds) {
+      const entry: CredentialEntry = {
+        credentials: envCreds,
+        isActive: true,
+        scope: 'user',
+        ownerUserId: userId,
       };
-    } catch (error: any) {
-      const errorMsg = error?.message || String(error);
-      const isCorrupted = errorMsg.includes('INVALID_ENCRYPTION_KEY') || 
-                         errorMsg.includes('CORRUPTED_DATA') ||
-                         errorMsg.includes('Unsupported state') ||
-                         errorMsg.includes('CRYPTO_') ||
-                         error?.code?.includes('CRYPTO') ||
-                         error?.code?.includes('OSSL');
-      
-      // 📝 MANTENIBILIDAD: Logging estructurado con contexto consistente
-      if (isCorrupted) {
-        logger.error('Credenciales corruptas detectadas', {
-          service: 'credentials-manager',
-          apiName,
-          environment: finalEnvironment,
-          userId,
-          credentialId: credential.id,
-          error: errorMsg,
-          possibleCauses: [
-            'La clave de encriptación (ENCRYPTION_KEY o JWT_SECRET) cambió',
-            'Las credenciales fueron encriptadas con una clave diferente',
-            'Los datos están corruptos en la base de datos'
-          ],
-          solution: 'Elimina y vuelve a guardar las credenciales en API Settings'
-        });
-        
-        // Desactivar credenciales corruptas automáticamente para evitar logs repetitivos
-        try {
-          await prisma.apiCredential.update({
-            where: { id: credential.id },
-            data: { isActive: false },
-          });
-          logger.info('Credencial corrupta desactivada automáticamente', {
-            service: 'credentials-manager',
-            credentialId: credential.id,
-            apiName,
-            userId
-          });
-        } catch (updateError: any) {
-          logger.error('No se pudo desactivar la credencial corrupta', {
-            service: 'credentials-manager',
-            credentialId: credential.id,
-            error: updateError?.message || String(updateError)
-          });
-        }
-      } else {
-        // Para otros errores, solo un warning simple
-        logger.warn('Unable to decrypt credentials', {
-          service: 'credentials-manager',
-          apiName,
-          environment: finalEnvironment,
-          userId,
-          error: errorMsg
-        });
-      }
-      
-      return null;
+      credentialsCache.set(key, entry);
+      return entry;
     }
-  }
 
-  /**
-   * Guardar credenciales de una API para un usuario
-   */
-  static async saveCredentials<T extends ApiName>(
-    ownerUserId: number,
-    apiName: T,
-    credentials: ApiCredentialsMap[T],
-    environment: ApiEnvironment = 'production',
-    options: {
-      scope?: CredentialScope;
-      sharedByUserId?: number | null;
-    } = {}
+    credentialsCache.set(key, null);
+    return null;
+  },
+
+  async saveCredentials(
+    userId: number,
+    apiName: ApiName | string,
+    credentials: Record<string, any>,
+    environment: 'sandbox' | 'production',
+    options?: { scope?: 'user' | 'global'; sharedByUserId?: number | null }
   ): Promise<void> {
-    // ✅ Limpiar y validar credenciales antes de validar con Zod
-    if (credentials && typeof credentials === 'object') {
-      const creds = credentials as any;
-      
-      // Limpiar API keys (eliminar espacios en blanco)
-      if (creds.apiKey && typeof creds.apiKey === 'string') {
-        creds.apiKey = creds.apiKey.trim();
-      }
+    const name = String(apiName).toLowerCase();
+    const scope = options?.scope ?? 'user';
+    const ownerUserId = scope === 'global' ? userId : userId;
 
-      if (apiName === 'ebay') {
-        if (creds.authToken && !creds.token) {
-          creds.token = creds.authToken;
-        }
-        if (creds.token && typeof creds.token === 'string') {
-          creds.token = creds.token.trim();
-        }
-        if (creds.authToken && typeof creds.authToken === 'string') {
-          creds.authToken = creds.authToken.trim();
-        }
-        if (creds.sandbox === undefined) {
-          creds.sandbox = environment === 'sandbox';
-        }
-      }
-      
-      // ✅ CORRECCIÓN PAYPAL: Normalizar campos y environment
-      if (apiName === 'paypal') {
-        // Normalizar nombres de campos (aceptar UPPER_CASE y camelCase)
-        if (creds.PAYPAL_CLIENT_ID && !creds.clientId) {
-          creds.clientId = creds.PAYPAL_CLIENT_ID;
-        }
-        if (creds.PAYPAL_CLIENT_SECRET && !creds.clientSecret) {
-          creds.clientSecret = creds.PAYPAL_CLIENT_SECRET;
-        }
-        if (creds.PAYPAL_MODE && !creds.environment) {
-          // PAYPAL_MODE puede ser 'sandbox' o 'live'
-          creds.environment = creds.PAYPAL_MODE === 'live' ? 'live' : 'sandbox';
-        }
-        if (creds.PAYPAL_ENVIRONMENT && !creds.environment) {
-          creds.environment = creds.PAYPAL_ENVIRONMENT === 'live' || creds.PAYPAL_ENVIRONMENT === 'production' ? 'live' : 'sandbox';
-        }
-        // Asegurar que environment esté en formato correcto ('sandbox' o 'live')
-        if (creds.environment === 'production') {
-          creds.environment = 'live';
-        }
-        // Sincronizar con environment si no está definido
-        if (!creds.environment) {
-          creds.environment = environment === 'sandbox' ? 'sandbox' : 'live';
-        }
-      }
-      
-      // Para AliExpress, asegurar que twoFactorEnabled sea boolean
-      if (apiName === 'aliexpress') {
-        if (typeof creds.twoFactorEnabled === 'string') {
-          creds.twoFactorEnabled = creds.twoFactorEnabled.toLowerCase() === 'true';
-        }
-        if (creds.twoFactorEnabled === undefined || creds.twoFactorEnabled === null) {
-          creds.twoFactorEnabled = false;
-        }
-        if (typeof creds.cookies === 'string') {
-          try {
-            const parsed = JSON.parse(creds.cookies);
-            if (Array.isArray(parsed)) {
-              creds.cookies = parsed;
-            } else {
-              delete creds.cookies;
-            }
-          } catch {
-            delete creds.cookies;
-          }
-        }
-      }
-    }
-    
-    // Validar credenciales con Zod
-    const schema = apiSchemas[apiName];
-    if (schema) {
-      try {
-        schema.parse(credentials);
-      } catch (error) {
-        if (error instanceof z.ZodError) {
-          console.error(`[CredentialsManager] Validation error for ${apiName}:`, error.errors);
-          throw error;
-        }
-        throw error;
-      }
-    }
+    const encrypted = encrypt(JSON.stringify(credentials));
 
-    // Determinar ambiente correcto
-    const finalEnvironment = supportsEnvironments(apiName) ? environment : 'production';
-    const scope: CredentialScope = options.scope ?? 'user';
-    const sharedById =
-      scope === 'global'
-        ? options.sharedByUserId ?? ownerUserId
-        : options.sharedByUserId ?? null;
-
-    // Encriptar credenciales
-    const encrypted = encryptCredentials(credentials);
-
-    // Guardar en la base de datos
     await prisma.apiCredential.upsert({
       where: {
         userId_apiName_environment_scope: {
           userId: ownerUserId,
-          apiName,
-          environment: finalEnvironment,
+          apiName: name,
+          environment,
           scope,
         },
       },
       create: {
         userId: ownerUserId,
-        apiName,
-        environment: finalEnvironment,
+        apiName: name,
+        environment,
         credentials: encrypted,
-        isActive: true,
         scope,
-        sharedById,
+        sharedById: options?.sharedByUserId ?? null,
       },
       update: {
         credentials: encrypted,
-        updatedAt: new Date(),
-        scope,
-        sharedById,
+        sharedById: options?.sharedByUserId ?? null,
       },
     });
-  }
 
-  /**
-   * Eliminar credenciales de una API para un usuario
-   */
-  static async deleteCredentials(
-    ownerUserId: number,
-    apiName: ApiName,
-    environment: ApiEnvironment = 'production',
-    scope: CredentialScope = 'user'
-  ): Promise<void> {
-    const finalEnvironment = supportsEnvironments(apiName) ? environment : 'production';
+    clearCredentialsCache(userId, name, environment);
+  },
 
-    await prisma.apiCredential.delete({
-      where: {
-        userId_apiName_environment_scope: {
-          userId: ownerUserId,
-          apiName,
-          environment: finalEnvironment,
-          scope,
-        },
-      },
-    });
-  }
-
-  /**
-   * Verificar si un usuario tiene credenciales configuradas para una API
-   */
-  static async hasCredentials(
+  async toggleCredentials(
     userId: number,
-    apiName: ApiName,
-    environment: ApiEnvironment = 'production',
-    options: {
-      scope?: CredentialScope;
-      includeGlobal?: boolean;
-    } = {}
-  ): Promise<boolean> {
-    const entry = await this.getCredentialEntry(userId, apiName, environment, {
-      includeGlobal: options.includeGlobal,
-    });
-
-    if (!entry) {
-      return false;
-    }
-
-    if (options.scope && entry.scope !== options.scope) {
-      return false;
-    }
-
-    return entry.isActive;
-  }
-
-  /**
-   * Listar todas las APIs configuradas para un usuario
-   */
-  static async listConfiguredApis(userId: number): Promise<Array<{
-    id: number;
-    apiName: ApiName;
-    environment: ApiEnvironment;
-    isActive: boolean;
-    updatedAt: Date;
-    scope: CredentialScope;
-    ownerUserId: number;
-    sharedByUserId: number | null;
-    owner: {
-      id: number;
-      username: string;
-      role: string;
-      fullName?: string | null;
-    } | null;
-    sharedBy: {
-      id: number;
-      username: string;
-      role: string;
-      fullName?: string | null;
-    } | null;
-  }>> {
-    const credentials = await prisma.apiCredential.findMany({
-      where: {
-        OR: [
-          { userId, scope: 'user' },
-          { scope: 'global' },
-        ],
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            username: true,
-            role: true,
-            fullName: true,
-          },
-        },
-        sharedBy: {
-          select: {
-            id: true,
-            username: true,
-            role: true,
-            fullName: true,
-          },
-        },
-      },
-      orderBy: [
-        { scope: 'asc' },
-        { apiName: 'asc' },
-        { environment: 'asc' },
-      ],
-    });
-
-    return credentials.map((credential) => {
-      const owner =
-        credential.scope === 'user'
-          ? credential.user
-          : credential.sharedBy ?? credential.user;
-
-      return {
-        id: credential.id,
-        apiName: credential.apiName as ApiName,
-        environment: credential.environment as ApiEnvironment,
-        isActive: credential.isActive,
-        updatedAt: credential.updatedAt,
-        scope: credential.scope,
-        ownerUserId: credential.userId,
-        sharedByUserId: credential.sharedById ?? null,
-        owner: owner
-          ? {
-              id: owner.id,
-              username: owner.username,
-              role: owner.role,
-              fullName: owner.fullName,
-            }
-          : null,
-        sharedBy:
-          credential.scope === 'user' && credential.sharedBy
-            ? {
-                id: credential.sharedBy.id,
-                username: credential.sharedBy.username,
-                role: credential.sharedBy.role,
-                fullName: credential.sharedBy.fullName,
-              }
-            : credential.scope === 'global'
-            ? credential.user
-              ? {
-                  id: credential.user.id,
-                  username: credential.user.username,
-                  role: credential.user.role,
-                  fullName: credential.user.fullName,
-                }
-              : null
-            : null,
-      };
-    });
-  }
-
-  /**
-   * Activar/desactivar credenciales
-   */
-  static async toggleCredentials(
-    ownerUserId: number,
-    apiName: ApiName,
-    environment: ApiEnvironment,
-    scope: CredentialScope,
+    apiName: ApiName | string,
+    environment: 'sandbox' | 'production',
+    scope: 'user' | 'global',
     isActive: boolean
   ): Promise<void> {
-    const finalEnvironment = supportsEnvironments(apiName) ? environment : 'production';
+    const name = String(apiName).toLowerCase();
+    const ownerUserId = scope === 'global' ? userId : userId;
 
-    await prisma.apiCredential.update({
+    await prisma.apiCredential.updateMany({
       where: {
-        userId_apiName_environment_scope: {
-          userId: ownerUserId,
-          apiName,
-          environment: finalEnvironment,
-          scope,
-        },
+        userId: ownerUserId,
+        apiName: name,
+        environment,
+        scope,
       },
       data: { isActive },
     });
-  }
 
-  /**
-   * Validar credenciales sin guardarlas
-   */
-  static validateCredentials<T extends ApiName>(
-    apiName: T,
-    credentials: ApiCredentialsMap[T]
-  ): { valid: boolean; errors?: string[] } {
-    const schema = apiSchemas[apiName];
-    if (!schema) {
-      return { valid: true }; // No hay schema, se asume válido
-    }
+    clearCredentialsCache(userId, name, environment);
+  },
 
-    try {
-      schema.parse(credentials);
-      return { valid: true };
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return {
-          valid: false,
-          errors: error.errors.map(e => `${e.path.join('.')}: ${e.message}`),
-        };
-      }
-      return { valid: false, errors: ['Unknown validation error'] };
-    }
-  }
+  async deleteCredentials(
+    userId: number,
+    apiName: ApiName | string,
+    environment: 'sandbox' | 'production',
+    scope: 'user' | 'global'
+  ): Promise<void> {
+    const name = String(apiName).toLowerCase();
 
-  /**
-   * Detectar y limpiar credenciales corruptas
-   * Útil para mantenimiento y diagnóstico
-   */
-  static async detectAndCleanCorruptedCredentials(
-    options: {
-      autoDeactivate?: boolean;
-      dryRun?: boolean;
-    } = {}
-  ): Promise<{
-    total: number;
-    corrupted: number;
-    cleaned: number;
-    details: Array<{
-      id: number;
-      apiName: string;
-      environment: string;
-      scope: string;
-      userId: number;
-      error: string;
-    }>;
-  }> {
-    const { autoDeactivate = true, dryRun = false } = options;
-    const corrupted: Array<{
-      id: number;
-      apiName: string;
-      environment: string;
-      scope: string;
-      userId: number;
-      error: string;
-    }> = [];
-
-    // Obtener todas las credenciales activas
-    const allCredentials = await prisma.apiCredential.findMany({
-      where: { isActive: true },
-      select: {
-        id: true,
-        apiName: true,
-        environment: true,
-        scope: true,
-        userId: true,
-        credentials: true,
+    await prisma.apiCredential.deleteMany({
+      where: {
+        userId: scope === 'global' ? userId : userId,
+        apiName: name,
+        environment,
+        scope,
       },
     });
 
-    console.log(`🔍 Verificando ${allCredentials.length} credenciales activas...`);
+    clearCredentialsCache(userId, name, environment);
+  },
 
-    for (const cred of allCredentials) {
+  async listConfiguredApis(userId: number): Promise<Array<{ apiName: string; environment: string; isActive: boolean; updatedAt: Date }>> {
+    const rows = await prisma.apiCredential.findMany({
+      where: {
+        OR: [{ userId, scope: 'user' }, { scope: 'global' }],
+      },
+      select: { apiName: true, environment: true, isActive: true, updatedAt: true, scope: true },
+    });
+
+    const byKey = new Map<string, { apiName: string; environment: string; isActive: boolean; updatedAt: Date }>();
+    for (const r of rows) {
+      const k = `${r.apiName}:${r.environment}`;
+      const existing = byKey.get(k);
+      // Prefer user credentials over global
+      if (!existing || (r.scope === 'user' && existing.apiName === r.apiName)) {
+        byKey.set(k, {
+          apiName: r.apiName,
+          environment: r.environment,
+          isActive: r.isActive,
+          updatedAt: r.updatedAt,
+        });
+      }
+    }
+
+    return Array.from(byKey.values());
+  },
+
+  normalizeCredential(
+    apiName: string,
+    credentials: Record<string, any>,
+    environment: 'sandbox' | 'production'
+  ): Record<string, any> {
+    const n = apiName.toLowerCase();
+    const out = { ...credentials };
+
+    if (n === 'ebay') {
+      out.appId = out.appId || out.clientId || out.EBAY_APP_ID;
+      out.certId = out.certId || out.clientSecret || out.EBAY_CERT_ID;
+      out.devId = out.devId || out.EBAY_DEV_ID;
+      out.redirectUri = out.redirectUri || out.EBAY_RUNAME;
+      out.token = out.token || out.authToken || out.EBAY_OAUTH_TOKEN;
+      out.refreshToken = out.refreshToken || out.EBAY_REFRESH_TOKEN;
+      out.sandbox = environment === 'sandbox';
+    }
+
+    if (n === 'paypal') {
+      out.clientId = out.clientId || out.PAYPAL_CLIENT_ID;
+      out.clientSecret = out.clientSecret || out.PAYPAL_CLIENT_SECRET;
+    }
+
+    return out;
+  },
+
+  validateCredentials(
+    apiName: ApiName | string,
+    credentials: Record<string, any>
+  ): { valid: boolean; errors?: string[] } {
+    const n = String(apiName).toLowerCase();
+    const err: string[] = [];
+
+    if (n === 'ebay') {
+      const appId = credentials?.appId || credentials?.clientId;
+      const devId = credentials?.devId;
+      const certId = credentials?.certId || credentials?.clientSecret;
+      if (!appId || String(appId).trim() === '') err.push('appId (EBAY_APP_ID) is required');
+      if (!devId || String(devId).trim() === '') err.push('devId (EBAY_DEV_ID) is required');
+      if (!certId || String(certId).trim() === '') err.push('certId (EBAY_CERT_ID) is required');
+    } else if (n === 'amazon') {
+      const required = [
+        'sellerId',
+        'clientId',
+        'clientSecret',
+        'refreshToken',
+        'awsAccessKeyId',
+        'awsSecretAccessKey',
+      ];
+      for (const k of required) {
+        if (!credentials?.[k] || String(credentials[k]).trim() === '') {
+          err.push(`${k} is required`);
+        }
+      }
+    } else if (n === 'mercadolibre') {
+      if (!credentials?.clientId || String(credentials.clientId).trim() === '')
+        err.push('clientId is required');
+      if (!credentials?.clientSecret || String(credentials.clientSecret).trim() === '')
+        err.push('clientSecret is required');
+    } else if (n === 'groq') {
+      if (!credentials?.apiKey || String(credentials.apiKey).trim() === '')
+        err.push('apiKey is required');
+    } else if (n === 'scraperapi') {
+      if (!credentials?.apiKey || String(credentials.apiKey).trim() === '')
+        err.push('apiKey is required');
+    } else if (n === 'zenrows') {
+      if (!credentials?.apiKey || String(credentials.apiKey).trim() === '')
+        err.push('apiKey is required');
+    } else if (n === '2captcha') {
+      if (!credentials?.apiKey || String(credentials.apiKey).trim() === '')
+        err.push('apiKey is required');
+    } else if (n === 'paypal') {
+      if (!credentials?.clientId || String(credentials.clientId).trim() === '')
+        err.push('clientId is required');
+      if (!credentials?.clientSecret || String(credentials.clientSecret).trim() === '')
+        err.push('clientSecret is required');
+    } else if (n === 'aliexpress' || n === 'aliexpress_affiliate') {
+      if (!credentials?.appKey || String(credentials.appKey).trim() === '')
+        err.push('appKey is required');
+      if (!credentials?.appSecret || String(credentials.appSecret).trim() === '')
+        err.push('appSecret is required');
+    }
+
+    return {
+      valid: err.length === 0,
+      errors: err.length > 0 ? err : undefined,
+    };
+  },
+
+  async detectAndCleanCorruptedCredentials(options?: {
+    dryRun?: boolean;
+    autoDeactivate?: boolean;
+  }): Promise<{ total: number; corrupted: number; cleaned: number }> {
+    const dryRun = options?.dryRun ?? false;
+    const autoDeactivate = options?.autoDeactivate ?? true;
+
+    const all = await prisma.apiCredential.findMany();
+    let corrupted = 0;
+    let cleaned = 0;
+
+    for (const row of all) {
+      let valid = false;
       try {
-        decryptCredentials(cred.credentials);
-      } catch (error: any) {
-        const errorMsg = error?.message || String(error);
-        const isCorrupted = errorMsg.includes('INVALID_ENCRYPTION_KEY') || 
-                           errorMsg.includes('CORRUPTED_DATA') ||
-                           errorMsg.includes('Unsupported state');
-        
-        if (isCorrupted) {
-          corrupted.push({
-            id: cred.id,
-            apiName: cred.apiName,
-            environment: cred.environment,
-            scope: cred.scope,
-            userId: cred.userId,
-            error: errorMsg,
+        const dec = decrypt(row.credentials);
+        JSON.parse(dec);
+        valid = true;
+      } catch {
+        corrupted++;
+        if (!dryRun && autoDeactivate) {
+          await prisma.apiCredential.update({
+            where: { id: row.id },
+            data: { isActive: false },
           });
-
-          if (!dryRun && autoDeactivate) {
-            try {
-              await prisma.apiCredential.update({
-                where: { id: cred.id },
-                data: { isActive: false },
-              });
-            } catch (updateError) {
-              console.error(`Error desactivando credencial ${cred.id}:`, updateError);
-            }
-          }
+          cleaned++;
         }
       }
     }
 
-    const result = {
-      total: allCredentials.length,
-      corrupted: corrupted.length,
-      cleaned: dryRun ? 0 : corrupted.length,
-      details: corrupted,
-    };
-
-    if (corrupted.length > 0) {
-      console.log(`⚠️  Se encontraron ${corrupted.length} credenciales corruptas de ${allCredentials.length} totales`);
-      if (dryRun) {
-        console.log(`   (Modo dry-run: no se realizaron cambios)`);
-      } else {
-        console.log(`   ✅ ${corrupted.length} credenciales desactivadas automáticamente`);
-      }
-    } else {
-      console.log(`✅ Todas las credenciales están válidas`);
-    }
-
-    return result;
-  }
-
-  /**
-   * Obtener credenciales con fallback a variables de entorno (legacy)
-   * 
-   * @deprecated Usar getCredentials() sin fallback para forzar uso de DB
-   */
-  static async getCredentialsWithFallback<T extends ApiName>(
-    userId: number,
-    apiName: T,
-    environment: ApiEnvironment = 'production'
-  ): Promise<ApiCredentialsMap[T] | null> {
-    // Primero intentar desde DB
-    const dbCredentials = await this.getCredentials(userId, apiName, environment);
-    if (dbCredentials) {
-      return dbCredentials;
-    }
-
-    // Fallback a process.env (solo para migración gradual)
-    console.warn(`[CredentialsManager] Usando fallback a process.env para ${apiName}. Migrar a DB.`);
-    
-    const envKeys = API_KEY_NAMES[apiName.toUpperCase() as keyof typeof API_KEY_NAMES];
-    if (!envKeys) return null;
-
-    // Construir credenciales desde env vars
-    // NOTA: Esto es solo para compatibilidad temporal
-    // TODO: Remover después de migración completa
-    return null; // Deshabilitado por defecto
-  }
-}
-
-// Exportar funciones de encriptación para uso externo si es necesario
-export { encryptCredentials, decryptCredentials };
+    return { total: all.length, corrupted, cleaned };
+  },
+};

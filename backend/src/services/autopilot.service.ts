@@ -339,9 +339,10 @@ export class AutopilotSystem extends EventEmitter {
       throw err;
     }
 
+    // ✅ When user explicitly starts from UI, enable so the cycle actually runs
     if (!this.config.enabled) {
-      logger.warn('Autopilot: System is disabled in configuration');
-      return;
+      this.config.enabled = true;
+      logger.info('Autopilot: Enabled on start (user requested)');
     }
 
     this.currentUserId = userId;
@@ -621,7 +622,8 @@ export class AutopilotSystem extends EventEmitter {
       this.stats.currentStatus = 'running';
       this.stats.lastRunTimestamp = new Date();
       this.emit('cycle:started', { timestamp: new Date(), query });
-      console.log('[AUTOPILOT] CYCLE STARTED at', new Date().toISOString());
+      console.log('[AUTOPILOT] CYCLE START');
+      console.log('[AUTOPILOT] CYCLE STARTED');
 
       logger.info('Autopilot: Starting new cycle', { query, userId: currentUserId, environment: userEnvironment });
 
@@ -664,10 +666,11 @@ export class AutopilotSystem extends EventEmitter {
       }
 
       // 3. Search opportunities (con userId y environment)
-      console.log('[AUTOPILOT] Searching opportunities');
+      console.log('[AUTOPILOT] PRODUCTS FOUND: searching...');
       logger.info('[AUTOPILOT] Searching opportunities');
       const opportunities = await this.searchOpportunities(selectedQuery, currentUserId, userEnvironment);
-      console.log('[AUTOPILOT] Opportunities generated:', opportunities.length);
+      console.log('[AUTOPILOT] PRODUCTS FOUND:', opportunities.length);
+      console.log('[AUTOPILOT] opportunities found:', opportunities.length);
       if (opportunities.length === 0) {
         const result: CycleResult = {
           success: true,
@@ -683,8 +686,7 @@ export class AutopilotSystem extends EventEmitter {
         };
 
         logger.info('Autopilot: Cycle completed - no opportunities');
-        console.log('[AUTOPILOT] Cycle complete');
-        logger.info('[AUTOPILOT] Cycle complete');
+        console.log('[AUTOPILOT] CYCLE COMPLETE (0 opportunities)');
         this.emit('cycle:completed', result);
         return result;
       }
@@ -713,8 +715,7 @@ export class AutopilotSystem extends EventEmitter {
         };
 
         logger.info('Autopilot: Cycle completed - no affordable opportunities');
-        console.log('[AUTOPILOT] Cycle complete');
-        logger.info('[AUTOPILOT] Cycle complete');
+        console.log('[AUTOPILOT] CYCLE COMPLETE (0 affordable)');
         this.emit('cycle:completed', result);
         return result;
       }
@@ -723,6 +724,7 @@ export class AutopilotSystem extends EventEmitter {
         count: affordable.length, 
         capitalReserved 
       });
+      console.log('[AUTOPILOT] PRODUCTS ANALYZED:', affordable.length);
 
       // ✅ FULL AUTOMATIC MODE: Override publish stage - never pause for manual publish
       const publishModeFromConfig = await workflowConfigService.getStageMode(currentUserId, 'publish');
@@ -732,7 +734,18 @@ export class AutopilotSystem extends EventEmitter {
       }
 
       // 5. Process opportunities (con userId y environment) - always automatic
-      const { published, approved } = await this.processOpportunities(affordable, currentUserId, userEnvironment, effectivePublishMode);
+      const { published, approved, capitalActuallyUsed } = await this.processOpportunities(affordable, currentUserId, userEnvironment, effectivePublishMode);
+      console.log('[AUTOPILOT] PRODUCTS PUBLISHED:', published);
+      console.log('[AUTOPILOT] products saved:', published);
+      if (published === 0 && affordable.length > 0) {
+        logger.info('Autopilot: 0 published - all opportunities were duplicates (products already in catalog)', {
+          affordableCount: affordable.length,
+          hint: 'Enable ScraperAPI/ZenRows or fix AliExpress Affiliate API to get new product URLs'
+        });
+      }
+
+      // ✅ Usar capital realmente usado (solo productos creados), no capitalReserved (que incluye duplicados saltados)
+      const capitalUsed = capitalActuallyUsed ?? 0;
 
       // 6. Update category performance
       this.updateCategoryPerformance(category, {
@@ -740,7 +753,7 @@ export class AutopilotSystem extends EventEmitter {
         productsProcessed: affordable.length,
         productsPublished: published,
         productsApproved: approved,
-        capitalUsed: capitalReserved,
+        capitalUsed,
         successRate: (published + approved) / Math.max(opportunities.length, 1)
       });
 
@@ -749,7 +762,7 @@ export class AutopilotSystem extends EventEmitter {
         published,
         approved,
         processed: affordable.length,
-        capitalUsed: capitalReserved
+        capitalUsed
       });
 
       // 8. Persist data
@@ -766,7 +779,7 @@ export class AutopilotSystem extends EventEmitter {
         opportunitiesProcessed: affordable.length,
         productsPublished: published,
         productsApproved: approved,
-        capitalUsed: capitalReserved,
+        capitalUsed,
         timestamp: new Date()
       };
 
@@ -774,10 +787,9 @@ export class AutopilotSystem extends EventEmitter {
         duration: `${cycleDuration}ms`,
         published,
         approved,
-        capitalUsed: capitalReserved
+        capitalUsed
       });
-      console.log('[AUTOPILOT] Cycle complete');
-      console.log('[AUTOPILOT] Profit cycle completed');
+      console.log('[AUTOPILOT] CYCLE COMPLETE');
       logger.info('[AUTOPILOT] Cycle complete');
 
       this.lastCycleResult = result;
@@ -844,7 +856,7 @@ export class AutopilotSystem extends EventEmitter {
         marketplaces,
         region: 'us',
         environment: env,
-        skipTrendsValidation: false,
+        skipTrendsValidation: true,
       });
       const foundItems = Array.isArray(raw) ? raw : [];
 
@@ -893,6 +905,17 @@ export class AutopilotSystem extends EventEmitter {
     const profit = this.calculateProfit(cost);
     const roi = (profit / cost) * 100;
     return Math.round(roi * 100) / 100;
+  }
+
+  /**
+   * ✅ FASE 13: Ensure product has at least one image (fallback placeholder if none)
+   */
+  private ensureProductImages(opportunity: Opportunity): string[] {
+    const imgs = opportunity.images;
+    if (Array.isArray(imgs) && imgs.length > 0 && imgs.every((u) => typeof u === 'string' && u.startsWith('http'))) {
+      return imgs;
+    }
+    return ['https://placehold.co/150x150?text=Product'];
   }
 
   /**
@@ -1052,6 +1075,7 @@ export class AutopilotSystem extends EventEmitter {
     
     let published = 0;
     let approved = 0;
+    let capitalActuallyUsed = 0; // ✅ Solo capital de productos realmente creados (no duplicados)
     const currentUserId = userId;
     const currentEnvironment = environment || 'sandbox';
     const currentPublishMode = publishMode || this.config.publicationMode;
@@ -1067,6 +1091,7 @@ export class AutopilotSystem extends EventEmitter {
           const result = await this.publishToMarketplace(opp, currentUserId, currentEnvironment);
           if (result.success) {
             published++;
+            capitalActuallyUsed += opp.estimatedCost || 0;
             console.log('[AUTOPILOT] Product published automatically:', opp.title);
             logger.info('Autopilot: Product published automatically', {
               title: opp.title
@@ -1134,9 +1159,10 @@ export class AutopilotSystem extends EventEmitter {
             title: opp.title
           });
         } else if (currentPublishMode === 'manual') {
-          // ✅ Send to manual approval queue (con userId)
+          // ✅ Send to manual approval queue (con userId) - crea producto, reserva capital
           await this.sendToApprovalQueue(opp, currentUserId);
           approved++;
+          capitalActuallyUsed += opp.estimatedCost || 0;
           logger.info('Autopilot: Product sent to approval queue', {
             title: opp.title
           });
@@ -1149,7 +1175,7 @@ export class AutopilotSystem extends EventEmitter {
       }
     }
 
-    return { published, approved };
+    return { published, approved, capitalActuallyUsed };
   }
 
   /**
@@ -1265,7 +1291,7 @@ export class AutopilotSystem extends EventEmitter {
               suggestedPrice: calculatedSuggestedPrice,
               currency: (opportunity as any).currency || 'USD', // ✅ Guardar moneda original (si está disponible)
               category: opportunity.category,
-              images: JSON.stringify(opportunity.images || []),
+              images: JSON.stringify(this.ensureProductImages(opportunity)),
               productData: JSON.stringify({
                 ...opportunity,
                 optimalPublicationDuration: optimization.durationDays,
@@ -1293,7 +1319,7 @@ export class AutopilotSystem extends EventEmitter {
                 suggestedPrice: calculatedSuggestedPrice,
                 // currency: omitido temporalmente hasta que se ejecute la migración
                 category: opportunity.category,
-                images: JSON.stringify(opportunity.images || []),
+                images: JSON.stringify(this.ensureProductImages(opportunity)),
                 productData: JSON.stringify({
                   ...opportunity,
                   optimalPublicationDuration: optimization.durationDays,
@@ -2091,3 +2117,6 @@ export class AutopilotSystem extends EventEmitter {
 
 // Singleton instance
 export const autopilotSystem = new AutopilotSystem();
+
+/** Alias for runSingleCycle (FASE 1 auditoría) */
+(autopilotSystem as any).executeCycle = autopilotSystem.runSingleCycle.bind(autopilotSystem);

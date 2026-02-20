@@ -164,9 +164,64 @@ router.post('/start', async (req: Request, res: Response, next) => {
 });
 
 /**
+ * ✅ FASE 5: GET /api/autopilot/test-cycle - Endpoint diagnóstico que ejecuta findOpportunities y guarda resultados
+ */
+router.get('/test-cycle', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const opportunityFinder = (await import('../../services/opportunity-finder.service')).default;
+    const query = typeof req.query.query === 'string' ? req.query.query : 'phone case';
+    const opportunities = await opportunityFinder.findOpportunities(userId, {
+      query,
+      maxItems: 10,
+      environment: 'production',
+    });
+
+    let saved = 0;
+    if (opportunities.length > 0) {
+      try {
+        const { ProductService } = await import('../../services/product.service');
+        const productServiceInstance = new ProductService();
+        for (const opp of opportunities.slice(0, 5)) {
+          const url = opp.aliexpressUrl || opp.productUrl || '';
+          const costUsd = Number(opp.costUsd ?? (opp as any).price ?? 0) || 0;
+          const suggestedPrice = Number(opp.suggestedPriceUsd ?? (opp as any).suggestedPriceAmount ?? costUsd * 1.5) || costUsd * 1.5;
+          const imageUrl = (opp as any).image || (opp as any).imageUrl || (Array.isArray(opp.images) && opp.images[0]) || '';
+          await productServiceInstance.createProduct(userId, {
+            title: opp.title || 'Product',
+            aliexpressUrl: url,
+            aliexpressPrice: costUsd,
+            suggestedPrice,
+            imageUrl: imageUrl || undefined,
+            imageUrls: Array.isArray(opp.images) ? opp.images : undefined,
+          });
+          saved++;
+        }
+      } catch (saveErr: any) {
+        logger.warn('test-cycle: partial save failed', { error: saveErr?.message, saved });
+      }
+    }
+
+    res.json({
+      success: true,
+      count: opportunities.length,
+      saved,
+      query,
+    });
+  } catch (error: any) {
+    logger.error('Error in test-cycle', { error: error?.message });
+    next(error);
+  }
+});
+
+/**
  * ✅ POST /api/autopilot/run-cycle - Ejecutar un ciclo manualmente (forzar ciclo real)
  */
-router.post('/run-cycle', async (req: Request, res: Response, next) => {
+router.post('/run-cycle', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
