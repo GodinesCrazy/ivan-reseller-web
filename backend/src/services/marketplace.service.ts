@@ -118,6 +118,42 @@ export class MarketplaceService {
         }
       }
 
+      // ✅ PRODUCTION: Env fallback for eBay when no DB credentials (Railway / APIS2.txt)
+      if ((!resolvedEnv || !resolvedCredentials) && marketplace === 'ebay') {
+        const clientId = (process.env.EBAY_CLIENT_ID || process.env.EBAY_APP_ID || '').trim();
+        const clientSecret = (process.env.EBAY_CLIENT_SECRET || process.env.EBAY_CERT_ID || '').trim();
+        const redirectUri = (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim();
+        if (clientId && clientSecret) {
+          const tokenVal = (process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN || '').trim();
+          const refreshVal = (process.env.EBAY_REFRESH_TOKEN || '').trim();
+          const envCreds = {
+            appId: clientId,
+            devId: (process.env.EBAY_DEV_ID || '').trim() || undefined,
+            certId: clientSecret,
+            redirectUri: redirectUri || undefined,
+            token: tokenVal || undefined,
+            refreshToken: refreshVal || undefined,
+            sandbox: preferredEnvironment === 'sandbox',
+          };
+          const envWarnings: string[] = redirectUri ? [] : ['EBAY_REDIRECT_URI not set; OAuth may require it'];
+          const envIssues: string[] = [];
+          if (!tokenVal && !refreshVal) {
+            envIssues.push('Falta token OAuth de eBay. Completa la autorización en Settings → API Settings → eBay.');
+          }
+          return {
+            id: undefined,
+            userId,
+            marketplace: marketplace as any,
+            credentials: envCreds as any,
+            isActive: envIssues.length === 0,
+            environment: preferredEnvironment,
+            scope: 'user',
+            warnings: envWarnings.length ? envWarnings : undefined,
+            issues: envIssues.length ? envIssues : undefined,
+          };
+        }
+      }
+
       if (!resolvedEnv || !resolvedCredentials || !resolvedEntry) {
         return null;
       }
@@ -139,16 +175,16 @@ export class MarketplaceService {
         const hasValidToken = normalizedCreds.token && String(normalizedCreds.token).trim().length > 0;
         const hasValidRefreshToken = normalizedCreds.refreshToken && String(normalizedCreds.refreshToken).trim().length > 0;
         
-        // ✅ CORRECCIÓN: Verificar si las credenciales básicas están presentes
-        const hasBasicCredentials = normalizedCreds.appId && normalizedCreds.devId && normalizedCreds.certId;
+        // App ID + Cert ID son suficientes para OAuth; Dev ID es opcional
+        const hasBasicCredentials = normalizedCreds.appId && normalizedCreds.certId;
         
-        // ✅ CORRECCIÓN: Si las credenciales básicas están correctas pero falta OAuth,
-        // mostrar como WARNING (amarillo) en lugar de ISSUE (rojo)
-        // Solo mostrar como ISSUE si faltan las credenciales básicas
+        // ✅ CORRECCIÓN CICLO COMPLETO: Sin token OAuth, la publicación falla. Marcar como issue para que
+        // el autopilot skipee publicación y notifique al usuario (en lugar de intentar y fallar en EbayService).
         if (!hasValidToken && !hasValidRefreshToken) {
           if (hasBasicCredentials) {
-            // Credenciales básicas guardadas, solo falta OAuth - es un warning, no un issue
-            warnings.push('Credenciales básicas guardadas. Completa la autorización OAuth para activar.');
+            // Credenciales básicas guardadas pero falta OAuth - es un ISSUE para bloquear publicación
+            issues.push('Falta token OAuth de eBay. Completa la autorización en Settings → API Settings → eBay.');
+            warnings.push('Credenciales básicas guardadas. Completa la autorización OAuth para poder publicar.');
           } else {
             // Faltan credenciales básicas - es un issue crítico
             issues.push('Faltan credenciales básicas (App ID, Dev ID, Cert ID). Guárdalas primero.');
@@ -245,6 +281,51 @@ export class MarketplaceService {
     } catch (error) {
       throw new AppError(`Failed to save marketplace credentials: ${error.message}`, 500);
     }
+  }
+
+  /**
+   * Build eBay OAuth start URL for redirect (production: https://auth.ebay.com/oauth2/authorize)
+   * Used by GET /api/marketplace-oauth/oauth/start/ebay
+   */
+  async getEbayOAuthStartUrl(userId: number, environment?: 'sandbox' | 'production'): Promise<string> {
+    const cred = await this.getCredentials(userId, 'ebay', environment);
+    const appId = (cred?.credentials?.appId || process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
+    const certId = (cred?.credentials?.certId || process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
+    let redirectUri = (cred?.credentials?.redirectUri || process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim();
+    if (!appId || !certId || !redirectUri) {
+      throw new AppError(
+        'eBay OAuth requiere EBAY_APP_ID, EBAY_CERT_ID y EBAY_REDIRECT_URI. Configúralos en Settings o variables de entorno.',
+        400
+      );
+    }
+    const { resolveEnvironment } = await import('../utils/environment-resolver');
+    const resolvedEnv = await resolveEnvironment({
+      explicit: environment,
+      fromCredentials: cred?.environment as 'sandbox' | 'production' | undefined,
+      userId,
+      default: 'production'
+    });
+    const sandbox = resolvedEnv === 'sandbox';
+    const authBase = sandbox ? 'https://auth.sandbox.ebay.com/oauth2/authorize' : 'https://auth.ebay.com/oauth2/authorize';
+    const ts = Date.now().toString();
+    const nonce = crypto.randomBytes(8).toString('hex');
+    const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-key';
+    const redirB64 = Buffer.from(redirectUri).toString('base64url');
+    const expirationTime = Date.now() + 10 * 60 * 1000;
+    const payload = [userId, 'ebay', ts, nonce, redirB64, resolvedEnv, expirationTime.toString()].join('|');
+    const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+    const state = Buffer.from([payload, sig].join('|')).toString('base64url');
+    const scopes = ['sell.inventory.readonly', 'sell.inventory', 'sell.marketing.readonly', 'sell.marketing'];
+    const needsEncoding = /[^a-zA-Z0-9\-_.]/.test(redirectUri);
+    const encodedRedirectUri = needsEncoding ? encodeURIComponent(redirectUri) : redirectUri;
+    const params = [
+      `client_id=${encodeURIComponent(appId)}`,
+      `redirect_uri=${encodedRedirectUri}`,
+      `response_type=code`,
+      `scope=${encodeURIComponent(scopes.join(' '))}`,
+      `state=${encodeURIComponent(state)}`
+    ].join('&');
+    return `${authBase}?${params}`;
   }
 
   /**
