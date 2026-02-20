@@ -1068,7 +1068,7 @@ export class AutopilotSystem extends EventEmitter {
     userId: number,
     environment?: 'sandbox' | 'production',
     publishMode?: 'manual' | 'automatic' | 'guided'
-  ): Promise<{ published: number; approved: number }> {
+  ): Promise<{ published: number; approved: number; capitalActuallyUsed: number }> {
     if (!userId || userId <= 0) {
       throw new Error('processOpportunities: userId is required and must be greater than 0');
     }

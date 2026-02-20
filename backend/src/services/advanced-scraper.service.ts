@@ -16,6 +16,7 @@ import { AppError, ErrorCode } from '../middleware/error.middleware';
 import { resolvePrice, resolvePriceRange, parseLocalizedNumber } from '../utils/currency.utils';
 import fxService from './fx.service';
 import logger from '../config/logger';
+import { DISABLE_SCRAPING } from '../config/env';
 
 // ✅ FASE 3: Types para puppeteer dinámico
 type Browser = any;
@@ -79,6 +80,9 @@ export class AdvancedMarketplaceScraper {
 
   // ✅ FASE 3: Lazy load puppeteer solo cuando se necesite
   private async loadPuppeteer(): Promise<any> {
+    if (DISABLE_SCRAPING) {
+      throw new Error('SCRAPING_DISABLED');
+    }
     if (this.puppeteerModule) {
       return this.puppeteerModule;
     }
@@ -625,6 +629,9 @@ export class AdvancedMarketplaceScraper {
     userBaseCurrency?: string,
     options?: { nativeOnly?: boolean }
   ): Promise<ScrapedProduct[]> {
+    if (DISABLE_SCRAPING) {
+      throw new Error('SCRAPING_DISABLED');
+    }
     const { logger } = await import('../config/logger');
     const entryTime = Date.now();
     
@@ -870,7 +877,7 @@ export class AdvancedMarketplaceScraper {
             });
             logger.info('[ALIEXPRESS-API] ════════════════════════════════════════════════════════');
             
-            affiliateProducts = await Promise.race([
+            const searchResult = await Promise.race([
               aliexpressAffiliateAPIService.searchProducts({
                 keywords: query,
                 pageSize: 5, // ✅ CRÍTICO: Reducir a 5 productos para respuesta más rápida
@@ -881,7 +888,7 @@ export class AdvancedMarketplaceScraper {
               }),
               timeoutPromise
             ]);
-            
+            affiliateProducts = (searchResult as any)?.products ?? [];
             const apiCallDuration = Date.now() - apiCallStartTime;
             logger.info('[ALIEXPRESS-API] Llamada exitosa', {
               duration: `${apiCallDuration}ms`,
@@ -5566,7 +5573,7 @@ export class AdvancedMarketplaceScraper {
         cookies: storedCookies,
       } as AliExpressCredentials;
 
-      await CredentialsManager.saveCredentials(userId, 'aliexpress', payload);
+      await CredentialsManager.saveCredentials(userId, 'aliexpress', payload, 'production');
       this.isLoggedIn = true;
       this.loggedInUserId = userId;
       logger.info('[SCRAPER] Stored AliExpress cookies', { userId, cookieCount: storedCookies.length });

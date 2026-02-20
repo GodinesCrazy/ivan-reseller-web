@@ -307,63 +307,96 @@ router.get('/error-stats', authenticate, async (req: Request, res: Response) => 
 
 /**
  * GET /api/system/diagnostics - Global production diagnostics (no mocks)
+ * Estructura completa: ebay.connected, ebay.tokenValid, autopilot, database, etc.
  */
 router.get('/diagnostics', async (_req: Request, res: Response) => {
   const diag: Record<string, any> = {
-    database: 'FAIL',
-    aliexpressOAuth: 'FAIL',
-    aliexpressToken: 'FAIL',
-    affiliateAPI: 'FAIL',
-    autopilot: 'FAIL',
+    database: { connected: false },
+    ebay: { connected: false, tokenValid: false, expiresAt: null, envReady: false },
+    aliexpress: { connected: false, tokenValid: false },
+    paypal: { connected: false },
+    autopilot: { running: false, lastCycle: null, productsPublished: 0 },
     productsInDB: 0,
     opportunitiesInDB: 0,
-    paypal: 'FAIL',
-    ebay: 'FAIL',
-    lastAutopilotRun: null,
+    EBAY_OAUTH_READY: false,
+    EBAY_PUBLICATION_READY: false,
+    AUTOPILOT_PUBLICATION_READY: false,
+    SYSTEM_PRODUCTION_READY: false,
     timestamp: new Date().toISOString(),
   };
+
   try {
     await prisma.$queryRaw`SELECT 1`;
-    diag.database = 'OK';
+    diag.database = { connected: true };
   } catch {
-    // keep FAIL
+    diag.database = { connected: false };
   }
+
   try {
     const appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
     const appSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
-    const redirectUri = (process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
-    diag.aliexpressOAuth = appKey && appSecret && redirectUri ? 'OK' : 'FAIL';
-  } catch {
-    // keep FAIL
-  }
-  try {
     const token = await prisma.aliExpressToken.findUnique({ where: { id: 'global' } });
     const hasValid = token?.accessToken && token?.expiresAt && token.expiresAt > new Date();
-    diag.aliexpressToken = hasValid ? 'OK' : (token?.accessToken ? 'EXPIRED' : 'FAIL');
+    diag.aliexpress = {
+      connected: !!(appKey && appSecret),
+      tokenValid: hasValid,
+    };
   } catch {
-    // keep FAIL
+    // keep default
   }
+
   try {
-    const { aliexpressAffiliateAPIService } = await import('../../services/aliexpress-affiliate-api.service');
-    const result = await aliexpressAffiliateAPIService.searchProducts({
-      keywords: 'phone case',
-      pageNo: 1,
-      pageSize: 2,
-      shipToCountry: 'US',
-    });
-    diag.affiliateAPI = result?.products?.length > 0 ? 'OK' : (result ? 'EMPTY' : 'FAIL');
-  } catch (e: any) {
-    diag.affiliateAPI = 'FAIL';
-    diag.affiliateAPIError = String(e?.message || e).substring(0, 100);
+    diag.paypal = {
+      connected: !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET),
+    };
+  } catch {
+    // keep default
   }
+
+  try {
+    const appId = (process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
+    const certId = (process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
+    const redirectUri = (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim();
+    diag.ebay.envReady = !!(appId && certId && redirectUri);
+
+    const { CredentialsManager } = await import('../../services/credentials-manager.service');
+    const firstUser = await prisma.user.findFirst({ where: { isActive: true }, select: { id: true } });
+    const userId = firstUser?.id ?? 1;
+    const entryProd = await CredentialsManager.getCredentialEntry(userId, 'ebay', 'production');
+    const entrySandbox = await CredentialsManager.getCredentialEntry(userId, 'ebay', 'sandbox');
+    const entry = entryProd || entrySandbox;
+    const creds = entry?.credentials;
+    const hasToken = creds?.token || creds?.refreshToken;
+    const expiresAtStr = creds?.expiresAt;
+    const expiresAt = expiresAtStr ? new Date(expiresAtStr) : null;
+    const tokenValid = hasToken && (!expiresAt || expiresAt > new Date()) || !!creds?.refreshToken;
+
+    diag.ebay.connected = !!hasToken;
+    diag.ebay.tokenValid = !!tokenValid;
+    diag.ebay.expiresAt = expiresAt?.toISOString() || null;
+
+    diag.EBAY_OAUTH_READY = diag.ebay.envReady && diag.ebay.connected;
+    diag.EBAY_PUBLICATION_READY = diag.ebay.connected && diag.ebay.tokenValid;
+  } catch (e: any) {
+    diag.ebayError = String(e?.message || e).substring(0, 150);
+  }
+
   try {
     const { autopilotSystem } = await import('../../services/autopilot.service');
     const status = autopilotSystem.getStatus();
-    diag.autopilot = status?.stats?.currentStatus === 'running' ? 'OK' : (status ? 'IDLE' : 'FAIL');
-    diag.lastAutopilotRun = status?.lastCycle?.timestamp?.toISOString() || null;
+    const lastCycle = status?.lastCycle?.timestamp;
+    const productsPublished = status?.stats?.productsPublished ?? 0;
+    diag.autopilot = {
+      running: status?.stats?.currentStatus === 'running',
+      lastCycle: lastCycle ? lastCycle.toISOString() : null,
+      productsPublished,
+    };
+    diag.AUTOPILOT_PUBLICATION_READY =
+      diag.ebay?.tokenValid === true && diag.database?.connected === true;
   } catch {
-    // keep FAIL
+    // keep default
   }
+
   try {
     diag.productsInDB = await prisma.product.count();
   } catch {
@@ -374,19 +407,12 @@ router.get('/diagnostics', async (_req: Request, res: Response) => {
   } catch {
     // keep 0
   }
-  try {
-    const hasPaypal = !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET);
-    diag.paypal = hasPaypal ? 'OK' : 'FAIL';
-  } catch {
-    // keep FAIL
-  }
-  try {
-    const hasEbay = !!(process.env.EBAY_CLIENT_ID || process.env.EBAY_APP_ID) &&
-      !!(process.env.EBAY_CLIENT_SECRET || process.env.EBAY_CERT_ID);
-    diag.ebay = hasEbay ? 'OK' : 'FAIL';
-  } catch {
-    // keep FAIL
-  }
+
+  diag.SYSTEM_PRODUCTION_READY =
+    diag.database?.connected === true &&
+    diag.ebay?.EBAY_PUBLICATION_READY === true &&
+    (diag.aliexpress?.connected === true || diag.aliexpress?.tokenValid === true);
+
   res.json({ success: true, data: diag });
 });
 
@@ -417,7 +443,7 @@ router.get('/test-full-cycle', async (_req: Request, res: Response) => {
       for (const p of products.slice(0, 3)) {
         try {
           const url = p.promotionLink || p.productDetailUrl || `https://www.aliexpress.com/item/${p.productId}.html`;
-          const price = parseFloat(String(p.salePrice || p.targetSalePrice || 0)) || 0;
+          const price = parseFloat(String(p.salePrice || (p as any).targetSalePrice || 0)) || 0;
           await productService.createProduct(userId, {
             title: (p.productTitle || 'Product').substring(0, 255),
             aliexpressUrl: url,

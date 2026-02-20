@@ -792,7 +792,7 @@ class OpportunityFinderService {
           logger.info('[OPPORTUNITY-FINDER] Using Affiliate API credentials from env (fallback)');
         }
         if (affiliateCreds) {
-          aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
+          aliexpressAffiliateAPIService.setCredentials(affiliateCreds as import('../types/api-credentials.types').AliExpressAffiliateCredentials);
           const countryCode = baseCurrency === 'CLP' ? 'CL' : baseCurrency === 'MXN' ? 'MX' : 'US';
           const affiliateResultB = await aliexpressAffiliateAPIService.searchProducts({
             keywords: query,
@@ -1867,7 +1867,7 @@ class OpportunityFinderService {
       // Intentar ScraperAPI primero (CredentialsManager o env SCRAPER_API_KEY)
       try {
         let scraperApiKey =
-          (await CredentialsManager.getCredentials(userId, 'scraperapi'))?.apiKey ||
+          (await CredentialsManager.getCredentials(userId, 'scraperapi', 'production'))?.apiKey ||
           (process.env.SCRAPER_API_KEY || process.env.SCRAPERAPI_KEY || '').trim();
         if (scraperApiKey && scraperApiKey !== 'REPLACE_ME') {
           logger.info('Intentando ScraperAPI', { userId, query });
@@ -1889,7 +1889,7 @@ class OpportunityFinderService {
       // Intentar ZenRows como alternativa (CredentialsManager o env ZENROWS_API_KEY)
       try {
         let zenRowsKey =
-          (await CredentialsManager.getCredentials(userId, 'zenrows'))?.apiKey ||
+          (await CredentialsManager.getCredentials(userId, 'zenrows', 'production'))?.apiKey ||
           (process.env.ZENROWS_API_KEY || '').trim();
         if (zenRowsKey && zenRowsKey !== 'REPLACE_ME') {
           logger.info('Intentando ZenRows', { userId, query });
@@ -2183,12 +2183,17 @@ class OpportunityFinderService {
     });
     const normalized = (opportunities ?? []).map((o: OpportunityItem) => {
       const base = { ...o };
+      const imageVal = (o as any).image ?? (o as any).imageUrl ?? '';
+      const urlVal = o.productUrl ?? o.aliexpressUrl ?? '';
       return {
         ...base,
         id: (o as any).id ?? o.productId ?? null,
         title: o.title ?? 'Untitled',
-        imageUrl: (o as any).imageUrl ?? o.image ?? '',
-        productUrl: o.productUrl ?? o.aliexpressUrl ?? '',
+        image: imageVal,
+        imageUrl: imageVal,
+        aliexpressUrl: urlVal,
+        productUrl: urlVal,
+        baseCurrency: (o as any).baseCurrency ?? 'USD',
         costUsd: Number(o.costUsd ?? (o as any).cost ?? 0),
         suggestedPriceUsd: Number(o.suggestedPriceUsd ?? (o as any).price ?? 0),
         profitMargin: Number(o.profitMargin ?? 0),

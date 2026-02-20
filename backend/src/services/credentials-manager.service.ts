@@ -13,6 +13,7 @@ import { logger } from '../config/logger';
 import type { ApiName } from '../types/api-credentials.types';
 
 export interface CredentialEntry {
+  id?: number;
   credentials: Record<string, any> | null;
   isActive: boolean;
   scope: 'user' | 'global';
@@ -235,6 +236,7 @@ export const CredentialsManager = {
       const creds = tryDecrypt(userEntry.credentials);
       if (creds) {
         const entry: CredentialEntry = {
+          id: userEntry.id,
           credentials: creds,
           isActive: userEntry.isActive,
           scope: 'user',
@@ -261,6 +263,7 @@ export const CredentialsManager = {
         const creds = tryDecrypt(globalEntry.credentials);
         if (creds) {
           const entry: CredentialEntry = {
+            id: globalEntry.id,
             credentials: creds,
             isActive: globalEntry.isActive,
             scope: 'global',
@@ -372,25 +375,27 @@ export const CredentialsManager = {
     clearCredentialsCache(userId, name, environment);
   },
 
-  async listConfiguredApis(userId: number): Promise<Array<{ apiName: string; environment: string; isActive: boolean; updatedAt: Date }>> {
+  async listConfiguredApis(userId: number): Promise<Array<{ apiName: string; environment: string; isActive: boolean; updatedAt: Date; scope: string; ownerUserId: number; sharedByUserId: number | null }>> {
     const rows = await prisma.apiCredential.findMany({
       where: {
         OR: [{ userId, scope: 'user' }, { scope: 'global' }],
       },
-      select: { apiName: true, environment: true, isActive: true, updatedAt: true, scope: true },
+      select: { apiName: true, environment: true, isActive: true, updatedAt: true, scope: true, userId: true, sharedById: true },
     });
 
-    const byKey = new Map<string, { apiName: string; environment: string; isActive: boolean; updatedAt: Date }>();
+    const byKey = new Map<string, { apiName: string; environment: string; isActive: boolean; updatedAt: Date; scope: string; ownerUserId: number; sharedByUserId: number | null }>();
     for (const r of rows) {
       const k = `${r.apiName}:${r.environment}`;
       const existing = byKey.get(k);
-      // Prefer user credentials over global
       if (!existing || (r.scope === 'user' && existing.apiName === r.apiName)) {
         byKey.set(k, {
           apiName: r.apiName,
           environment: r.environment,
           isActive: r.isActive,
           updatedAt: r.updatedAt,
+          scope: r.scope,
+          ownerUserId: r.userId,
+          sharedByUserId: r.sharedById,
         });
       }
     }
