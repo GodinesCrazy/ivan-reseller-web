@@ -2,11 +2,96 @@ import { Router, Request, Response } from 'express';
 import { MarketplaceService } from '../../services/marketplace.service';
 import { EbayService } from '../../services/ebay.service';
 import { MercadoLibreService } from '../../services/mercadolibre.service';
+import { authenticate } from '../../middleware/auth.middleware';
 import crypto from 'crypto';
 import logger from '../../config/logger';
 
 const router = Router();
 const marketplaceService = new MarketplaceService();
+
+/**
+ * GET /api/marketplace-oauth/authorize/ebay
+ * Redirects to eBay OAuth page. NO auth required (direct link for production).
+ * Uses userId=1 by default; callback saves tokens to api_credentials.
+ */
+router.get('/authorize/ebay', async (req: Request, res: Response) => {
+  try {
+    const clientId = (process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
+    const redirectUri = (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim();
+    const certId = (process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
+
+    if (!clientId || !redirectUri) {
+      logger.error('[OAuth Authorize] Missing eBay env vars', { hasClientId: !!clientId, hasRedirectUri: !!redirectUri });
+      return res.status(500).json({
+        success: false,
+        message: 'Missing EBAY_APP_ID or EBAY_REDIRECT_URI. Configure in Railway env vars.',
+      });
+    }
+
+    const scope = [
+      'https://api.ebay.com/oauth/api_scope',
+      'https://api.ebay.com/oauth/api_scope/sell.inventory',
+      'https://api.ebay.com/oauth/api_scope/sell.account',
+      'https://api.ebay.com/oauth/api_scope/sell.fulfillment',
+      'sell.inventory.readonly',
+      'sell.inventory',
+      'sell.marketing.readonly',
+      'sell.marketing',
+    ].filter((v, i, a) => a.indexOf(v) === i).join(' ');
+
+    const userId = 1;
+    const ts = Date.now().toString();
+    const nonce = crypto.randomBytes(8).toString('hex');
+    const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-key';
+    const redirB64 = Buffer.from(redirectUri).toString('base64url');
+    const expirationTime = Date.now() + 10 * 60 * 1000;
+    const payload = [userId, 'ebay', ts, nonce, redirB64, 'production', expirationTime.toString()].join('|');
+    const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+    const state = Buffer.from([payload, sig].join('|')).toString('base64url');
+
+    const authUrl =
+      `https://auth.ebay.com/oauth2/authorize` +
+      `?client_id=${encodeURIComponent(clientId)}` +
+      `&response_type=code` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&scope=${encodeURIComponent(scope)}` +
+      `&state=${encodeURIComponent(state)}`;
+
+    logger.info('[OAuth Authorize] Redirecting to eBay', { userId });
+    return res.redirect(302, authUrl);
+  } catch (e: any) {
+    logger.error('[OAuth Authorize] eBay authorize failed', { error: e?.message });
+    return res.status(500).json({
+      success: false,
+      message: e?.message || 'Failed to build eBay authorize URL',
+    });
+  }
+});
+
+/**
+ * GET /api/marketplace-oauth/oauth/start/ebay
+ * Redirects to eBay OAuth page. Requires auth.
+ */
+router.get('/oauth/start/ebay', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized', message: 'Debes estar autenticado' });
+    }
+    const env = (req.query.environment as string)?.toLowerCase();
+    const environment = env === 'sandbox' ? 'sandbox' as const : 'production' as const;
+    const url = await marketplaceService.getEbayOAuthStartUrl(userId, environment);
+    logger.info('[OAuth Start] Redirecting to eBay', { userId, environment });
+    return res.redirect(302, url);
+  } catch (e: any) {
+    logger.error('[OAuth Start] eBay OAuth start failed', { error: e?.message });
+    return res.status(400).json({
+      success: false,
+      error: e?.message || 'No se pudo iniciar OAuth de eBay',
+      message: 'Verifica EBAY_APP_ID, EBAY_CERT_ID y EBAY_REDIRECT_URI en Settings o variables de entorno.'
+    });
+  }
+});
 
 function parseState(state: string) {
   try {
@@ -661,7 +746,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       
       const cred = await marketplaceService.getCredentials(userId, 'ebay', environment);
       const appId = cred?.credentials?.appId || process.env.EBAY_APP_ID || '';
-      const devId = cred?.credentials?.devId || process.env.EBAY_DEV_ID || '';
+      const devId = (cred?.credentials?.devId || process.env.EBAY_DEV_ID || '').trim();
       const certId = cred?.credentials?.certId || process.env.EBAY_CERT_ID || '';
       const sandbox = !!(cred?.credentials?.sandbox || (process.env.EBAY_SANDBOX === 'true'));
       
@@ -676,18 +761,18 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         sandbox
       });
       
-      if (!appId || !devId || !certId) {
+      // Token exchange solo requiere App ID y Cert ID; Dev ID es opcional
+      if (!appId || !certId) {
         logger.error('[OAuth Callback] Missing eBay base credentials', {
           service: 'marketplace-oauth',
           userId,
           environment,
           hasAppId: !!appId,
-          hasDevId: !!devId,
           hasCertId: !!certId
         });
         return res
           .status(400)
-          .send('<html><body>Base credentials missing. Please save App ID, Dev ID and Cert ID before authorizing.</body></html>');
+          .send('<html><body>Base credentials missing. Please save App ID and Cert ID before authorizing.</body></html>');
       }
       
       const ebay = new EbayService({ appId, devId, certId, sandbox });
@@ -703,6 +788,8 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       
       const tokens = await ebay.exchangeCodeForToken(code, redirectUri);
       
+      const expiresAt = tokens.expiresIn ? new Date(Date.now() + tokens.expiresIn * 1000) : null;
+      
       logger.info('[OAuth Callback] Token exchange successful', {
         service: 'marketplace-oauth',
         userId,
@@ -711,15 +798,16 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         tokenLength: tokens.token?.length || 0,
         hasRefreshToken: !!tokens.refreshToken,
         refreshTokenLength: tokens.refreshToken?.length || 0,
-        expiresIn: tokens.expiresIn
+        expiresIn: tokens.expiresIn,
+        expiresAt: expiresAt?.toISOString()
       });
       
-      // ✅ CORRECCIÓN: Sincronizar sandbox flag con environment y asegurar que tokens se guarden correctamente
+      // ✅ Tokens + expiresAt para auto-refresh y diagnóstico
       const newCreds = { 
         ...(cred?.credentials || {}), 
         token: tokens.token, 
         refreshToken: tokens.refreshToken,
-        // ✅ CRÍTICO: Sincronizar sandbox flag con environment para que la validación funcione
+        expiresAt: expiresAt ? expiresAt.toISOString() : undefined,
         sandbox: environment === 'sandbox'
       };
       
