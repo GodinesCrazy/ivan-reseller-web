@@ -17,14 +17,12 @@ const marketplaceService = new MarketplaceService();
 router.get('/authorize/ebay', async (req: Request, res: Response) => {
   try {
     const clientId = (process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
-    let redirectUri = (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim();
-    // eBay requiere RuName como redirect_uri, no URL completa (ej: Ivan_Marty-IvanMart-IVANRe-cgcqu)
-    if (redirectUri && (redirectUri.startsWith('http') || redirectUri.includes('/'))) {
-      const ruName = (process.env.EBAY_RUNAME || '').trim();
-      if (ruName && /^[A-Za-z0-9_-]+$/.test(ruName)) {
-        redirectUri = ruName;
-        logger.info('[OAuth Authorize] Using EBAY_RUNAME as redirect_uri (eBay requires RuName, not URL)');
-      }
+    let redirectUri = (process.env.EBAY_RUNAME || process.env.EBAY_REDIRECT_URI || '').trim();
+    // eBay requiere RuName como redirect_uri, NO URL completa. Fallback si env tiene URL.
+    const RUNAME_PRODUCTION = 'Ivan_Marty-IvanMart-IVANRe-cgcqu';
+    if (!redirectUri || redirectUri.startsWith('http') || redirectUri.includes('/')) {
+      redirectUri = (process.env.EBAY_RUNAME || '').trim() || RUNAME_PRODUCTION;
+      logger.info('[OAuth Authorize] Using RuName as redirect_uri', { redirectUri: redirectUri?.substring(0, 20) + '...' });
     }
     const certId = (process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
 
