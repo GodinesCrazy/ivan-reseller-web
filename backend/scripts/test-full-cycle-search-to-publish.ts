@@ -21,6 +21,7 @@ const INTERNAL_SECRET = process.env.INTERNAL_RUN_SECRET;
 
 async function runRemote(): Promise<number> {
   if (!REMOTE_URL || !INTERNAL_SECRET) return -1;
+  if (process.env.FORCE_LOCAL === '1' || process.env.FORCE_LOCAL === 'true') return -1;
   const base = REMOTE_URL.replace(/\/$/, '');
   const url = `${base}/api/internal/test-full-cycle-search-to-publish`;
   const keyword = process.env.keyword;
@@ -42,6 +43,10 @@ async function runRemote(): Promise<number> {
   const data = (await res.json()) as any;
 
   if (!res.ok) {
+    if (res.status === 404) {
+      console.warn('Endpoint no disponible (404) - Railway aun sin deploy. Usando modo local...\n');
+      return -1;
+    }
     console.error('HTTP', res.status, data?.error || data?.message || JSON.stringify(data));
     return 1;
   }
