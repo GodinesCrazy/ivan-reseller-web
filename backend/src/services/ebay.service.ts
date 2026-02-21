@@ -120,7 +120,6 @@ export class EbayService {
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
-        'Content-Language': 'en_US',
         'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
         ...(credentials?.devId && { 'X-EBAY-API-DEV-NAME': credentials.devId }),
         ...(credentials?.appId && { 'X-EBAY-API-APP-NAME': credentials.appId }),
@@ -422,7 +421,11 @@ export class EbayService {
           },
         };
 
-        const response = await this.apiClient.put(`/sell/inventory/v1/inventory_item/${sku}`, inventoryData);
+        const response = await this.apiClient.put(
+          `/sell/inventory/v1/inventory_item/${sku}`,
+          inventoryData,
+          { headers: { 'Content-Language': 'en-US' } }
+        );
         return response.data;
       });
     } catch (error: any) {
@@ -464,10 +467,19 @@ export class EbayService {
           }),
         };
 
+        const invHeaders = { 'Content-Language': 'en-US' };
         const result = await retryMarketplaceOperation(
           async () => {
-            const response = await this.apiClient.post(`/sell/inventory/v1/inventory_item/${sku}/offer`, listingData);
-            const publishResponse = await this.apiClient.post(`/sell/inventory/v1/offer/${response.data.offerId}/publish`);
+            const response = await this.apiClient.post(
+              `/sell/inventory/v1/inventory_item/${sku}/offer`,
+              listingData,
+              { headers: invHeaders }
+            );
+            const publishResponse = await this.apiClient.post(
+              `/sell/inventory/v1/offer/${response.data.offerId}/publish`,
+              {},
+              { headers: invHeaders }
+            );
             return { publishResponse };
           },
           'ebay',
