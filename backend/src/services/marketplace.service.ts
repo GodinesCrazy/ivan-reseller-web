@@ -362,12 +362,34 @@ export class MarketplaceService {
       }
 
       switch (marketplace) {
-        case 'ebay':
-          const ebayService = new EbayService({
-            ...(credentials.credentials as EbayCredentials),
-            sandbox: credentials.environment === 'sandbox',
-          });
+        case 'ebay': {
+          const { CredentialsManager, clearCredentialsCache } = await import('./credentials-manager.service');
+          const ebayService = new EbayService(
+            {
+              ...(credentials.credentials as EbayCredentials),
+              sandbox: credentials.environment === 'sandbox',
+            },
+            {
+              onCredentialsUpdate: async (updatedCreds) => {
+                try {
+                  const { sandbox, ...persistable } = updatedCreds;
+                  await CredentialsManager.saveCredentials(
+                    userId,
+                    'ebay',
+                    { ...persistable, sandbox },
+                    credentials.environment,
+                    { scope: (credentials.scope as 'user' | 'global') || 'user' }
+                  );
+                  clearCredentialsCache(userId, 'ebay', credentials.environment);
+                  logger.info('[Marketplace] eBay token refreshed and persisted after test', { userId, env: credentials.environment });
+                } catch (err: any) {
+                  logger.warn('[Marketplace] Failed to persist refreshed eBay token', { userId, error: err?.message });
+                }
+              },
+            }
+          );
           return await ebayService.testConnection();
+        }
 
         case 'mercadolibre':
           const mlService = new MercadoLibreService(credentials.credentials as MercadoLibreCredentials);
