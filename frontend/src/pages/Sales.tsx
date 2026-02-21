@@ -35,6 +35,7 @@ import {
 } from 'recharts';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
+import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 
 interface Sale {
   id: string;
@@ -187,16 +188,19 @@ export default function Sales() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Sales Dashboard</h1>
-          <p className="text-gray-600 mt-1">Track and analyze your sales performance</p>
+          <h1 className="text-3xl font-bold text-gray-900">Ventas</h1>
+          <p className="text-gray-600 mt-1">Ventas de productos publicados en marketplaces</p>
+          <div className="mt-3">
+            <CycleStepsBreadcrumb currentStep={4} />
+          </div>
         </div>
         <Button onClick={exportToCSV} className="flex items-center gap-2">
           <Download className="w-4 h-4" />
-          Export CSV
+          Exportar CSV
         </Button>
       </div>
 
@@ -206,7 +210,7 @@ export default function Sales() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Total Revenue</p>
+                <p className="text-sm text-gray-600">Ingresos totales</p>
                 <p className="text-2xl font-bold">{formatCurrencySimple(stats.totalRevenue, 'USD')}</p>
                 <p className={`text-xs flex items-center gap-1 mt-1 ${stats.revenueChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   <TrendingUp className="w-3 h-3" />
@@ -221,7 +225,7 @@ export default function Sales() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Total Profit</p>
+                <p className="text-sm text-gray-600">Beneficio total</p>
                 <p className="text-2xl font-bold text-green-600">{formatCurrencySimple(stats.totalProfit, 'USD')}</p>
                 <p className={`text-xs flex items-center gap-1 mt-1 ${stats.profitChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   <TrendingUp className="w-3 h-3" />
@@ -238,7 +242,7 @@ export default function Sales() {
               <div>
                 <p className="text-sm text-gray-600">Total Sales</p>
                 <p className="text-2xl font-bold">{stats.totalSales}</p>
-                <p className="text-xs text-gray-500 mt-1">orders processed</p>
+                <p className="text-xs text-gray-500 mt-1">pedidos procesados</p>
               </div>
               <ShoppingCart className="w-8 h-8 text-purple-600" />
             </div>
@@ -250,7 +254,7 @@ export default function Sales() {
               <div>
                 <p className="text-sm text-gray-600">Avg Order Value</p>
                 <p className="text-2xl font-bold">{formatCurrencySimple(stats.avgOrderValue, 'USD')}</p>
-                <p className="text-xs text-gray-500 mt-1">per transaction</p>
+                <p className="text-xs text-gray-500 mt-1">por transacción</p>
               </div>
               <Package className="w-8 h-8 text-orange-600" />
             </div>
@@ -271,7 +275,7 @@ export default function Sales() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle>Revenue & Profit Trend</CardTitle>
+                <CardTitle>Evolución ingresos y beneficio</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -290,7 +294,7 @@ export default function Sales() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Sales by Marketplace</CardTitle>
+                <CardTitle>Ventas por marketplace</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>

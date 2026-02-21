@@ -19,6 +19,7 @@ import { formatCurrencySimple } from '../utils/currency';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 
 interface PendingSale {
   id: number;
@@ -98,6 +99,9 @@ export default function PendingPurchases() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Compras Pendientes</h1>
           <p className="text-gray-600 mt-1">Ventas que requieren compra manual en AliExpress</p>
+          <div className="mt-3">
+            <CycleStepsBreadcrumb currentStep={5} />
+          </div>
         </div>
         <Button onClick={fetchPendingPurchases} variant="outline">
           Actualizar

@@ -26,6 +26,7 @@ import { metricTooltips } from '@/config/metricTooltips';
 import { formatCurrencySimple } from '@/utils/currency';
 import WorkflowStatusIndicator from '@/components/WorkflowStatusIndicator';
 import WorkflowProgressBar from '@/components/WorkflowProgressBar';
+import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 
 interface Product {
   id: string;
@@ -63,11 +64,11 @@ export default function Products() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Refetch products every 15s so Autopilot-published products appear without manual refresh
+  // Refetch products every 10s so Autopilot-published products appear without manual refresh
   useEffect(() => {
     const interval = setInterval(() => {
       fetchProducts(true).catch(() => {});
-    }, 15000);
+    }, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -183,14 +184,20 @@ export default function Products() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">Products Management</h1>
-        <Button className="flex items-center gap-2">
-          <Package className="w-4 h-4" />
-          Add Product
-        </Button>
+      <div>
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-gray-900">Productos</h1>
+          <Button className="flex items-center gap-2" onClick={() => navigate('/opportunities')}>
+            <Package className="w-4 h-4" />
+            Buscar oportunidades
+          </Button>
+        </div>
+        <p className="text-gray-600 mt-0.5">Productos aprobados y publicados en marketplaces</p>
+        <div className="mt-3">
+          <CycleStepsBreadcrumb currentStep={3} />
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -210,7 +217,7 @@ export default function Products() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Pending</p>
+                <p className="text-sm text-gray-600">Pendientes</p>
                 <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
               </div>
               <Clock className="w-8 h-8 text-yellow-600" />
@@ -232,7 +239,7 @@ export default function Products() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Published</p>
+                <p className="text-sm text-gray-600">Publicados</p>
                 <p className="text-2xl font-bold text-blue-600">{stats.published}</p>
               </div>
               <Upload className="w-8 h-8 text-blue-600" />
@@ -254,7 +261,7 @@ export default function Products() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
-                placeholder="Search by title or SKU..."
+                placeholder="Buscar por título o SKU..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -276,7 +283,7 @@ export default function Products() {
               onChange={(e) => setMarketplaceFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
             >
-              <option value="ALL">All Marketplaces</option>
+              <option value="ALL">Todos los marketplaces</option>
               <option value="EBAY">eBay</option>
               <option value="AMAZON">Amazon</option>
               <option value="MERCADOLIBRE">MercadoLibre</option>
@@ -294,14 +301,14 @@ export default function Products() {
           {loading ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading products...</p>
+              <p className="mt-4 text-gray-600">Cargando productos...</p>
             </div>
           ) : paginatedProducts.length === 0 ? (
             <div className="text-center py-12 max-w-md mx-auto">
               <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <p className="font-medium text-gray-700 mb-2">Sin productos</p>
-              <p className="text-sm text-gray-600 mb-4">No tienes productos importados o publicados. Ve a Oportunidades, selecciona un producto y publícalo. Los productos aparecen aquí tras publicar.</p>
-              <Button onClick={() => navigate('/opportunities')}>Ir a Oportunidades</Button>
+              <p className="text-sm text-gray-600 mb-4">No tienes productos publicados. El ciclo comienza en Tendencias → Oportunidades → Publicación. Los productos aparecen aquí tras aprobar y publicar.</p>
+              <Button onClick={() => navigate('/dashboard?tab=trends')}>Comenzar ciclo (Tendencias)</Button>
             </div>
           ) : (
             <>
@@ -309,15 +316,15 @@ export default function Products() {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SKU</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Marketplace</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Precio</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Workflow</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Beneficio</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">

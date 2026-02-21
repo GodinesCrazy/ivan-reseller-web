@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Search, 
   TrendingUp, 
@@ -36,17 +36,31 @@ import LoadingSpinner, { CardSkeleton } from '@/components/ui/LoadingSpinner';
 import AIOpportunityFinder from '../components/AIOpportunityFinder';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
 import WorkflowSummaryWidget from '@/components/WorkflowSummaryWidget';
+import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { log } from '@/utils/logger';
+import { getTrendingKeywords, type TrendKeyword } from '@/services/trends.api';
+import { useAuthStore } from '@stores/authStore';
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState('overview');
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(tabParam && ['overview', 'trends', 'search', 'opportunities', 'suggestions', 'automation'].includes(tabParam) ? tabParam : 'overview');
   const [isAutomaticMode, setIsAutomaticMode] = useState(true);
   const [isProductionMode, setIsProductionMode] = useState(false);
 
-  // Datos del dashboard principal
+  // Real backend health state
+  const [backendHealthy, setBackendHealthy] = useState<boolean | null>(null);
+  const [trendingKeywords, setTrendingKeywords] = useState<TrendKeyword[]>([]);
+  const [trendsLoading, setTrendsLoading] = useState(false);
+
+  // Datos del dashboard principal (desde GET /api/dashboard/stats)
   const [dashboardData, setDashboardData] = useState({
-    totalSales: 0,
+    totalRevenue: 0,
     totalProfit: 0,
+    platformCommissionPaid: 0,
+    salesCount: 0,
     activeProducts: 0,
     totalOpportunities: 0,
     aiSuggestions: 0,
@@ -64,14 +78,67 @@ export default function Dashboard() {
     status: string;
   }>>([]);
 
+  const [platformRevenue, setPlatformRevenue] = useState<{
+    totalPlatformRevenue: number;
+    totalCommissionsCollected: number;
+    salesCount: number;
+    perUser: Array<{ userId: number; username: string; email: string; salesCount: number; grossProfit: number; platformCommission: number; userProfit: number }>;
+  } | null>(null);
+
   useEffect(() => {
-    // ✅ FIX: Pequeño delay para permitir que useSetupCheck verifique primero
-    // Esto previene llamadas innecesarias si setup está incompleto
     const timer = setTimeout(() => {
       loadDashboardData();
     }, 100);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (user?.role?.toUpperCase() !== 'ADMIN') return;
+    api.get('/api/admin/platform-revenue')
+      .then((res) => {
+        if (res.data?.success && res.data.totalPlatformRevenue !== undefined) {
+          setPlatformRevenue({
+            totalPlatformRevenue: res.data.totalPlatformRevenue ?? 0,
+            totalCommissionsCollected: res.data.totalCommissionsCollected ?? 0,
+            salesCount: res.data.salesCount ?? 0,
+            perUser: res.data.perUser ?? [],
+          });
+        }
+      })
+      .catch(() => {});
+  }, [user?.role]);
+
+  // Real backend health check
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/api/health')
+      .then((res) => {
+        if (!cancelled) setBackendHealthy(res.status === 200);
+      })
+      .catch(() => {
+        if (!cancelled) setBackendHealthy(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Sincronizar tab desde URL (p. ej. /dashboard?tab=trends)
+  useEffect(() => {
+    if (tabParam && ['overview', 'trends', 'search', 'opportunities', 'suggestions', 'automation'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  // Load real trends when trends tab is active
+  useEffect(() => {
+    if (activeTab !== 'trends') return;
+    let cancelled = false;
+    setTrendsLoading(true);
+    getTrendingKeywords({ region: 'US', maxKeywords: 20 })
+      .then((kw) => { if (!cancelled) setTrendingKeywords(kw); })
+      .catch(() => { if (!cancelled) setTrendingKeywords([]); })
+      .finally(() => { if (!cancelled) setTrendsLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab]);
 
   const loadDashboardData = async () => {
     try {
@@ -147,19 +214,22 @@ export default function Dashboard() {
       const automationWorkflows = automationRes.data?.workflows || [];
       const automationRulesCount = automationWorkflows.length || 0;
 
-      // Calcular total de ventas y ganancias desde estadísticas reales
-      // El backend devuelve: { products: {...}, sales: {...}, commissions: {...} }
-      const totalSales = stats?.sales?.totalRevenue || stats?.sales?.total || 0;
-      const totalProfit = stats?.commissions?.totalAmount || stats?.commissions?.total || 0;
-      const activeProducts = stats?.products?.published || stats?.products?.active || 0;
+      // Backend: { products, sales: { totalSales (count), totalRevenue, totalProfit, totalCommissions, platformCommissionPaid }, commissions }
+      const totalRevenue = Number(stats?.sales?.totalRevenue ?? stats?.sales?.total ?? 0);
+      const totalProfit = Number(stats?.sales?.totalProfit ?? stats?.commissions?.totalAmount ?? stats?.commissions?.total ?? 0);
+      const platformCommissionPaid = Number(stats?.sales?.platformCommissionPaid ?? stats?.sales?.totalCommissions ?? 0);
+      const salesCount = Number(stats?.sales?.totalSales ?? 0);
+      const activeProducts = Number(stats?.products?.published ?? stats?.products?.active ?? 0);
 
       setDashboardData({
-        totalSales,
+        totalRevenue,
         totalProfit,
+        platformCommissionPaid,
+        salesCount,
         activeProducts,
-        totalOpportunities: opportunitiesCount, // ✅ B6: Cargado desde API
-        aiSuggestions: aiSuggestionsCount, // ✅ B6: Cargado desde API
-        automationRules: automationRulesCount // ✅ B6: Cargado desde API
+        totalOpportunities: opportunitiesCount,
+        aiSuggestions: aiSuggestionsCount,
+        automationRules: automationRulesCount
       });
 
       // Formatear actividad reciente desde datos reales
@@ -223,6 +293,7 @@ export default function Dashboard() {
 
   const tabs = [
     { id: 'overview', label: 'Resumen', icon: BarChart3 },
+    { id: 'trends', label: 'Tendencias', icon: TrendingUp },
     { id: 'search', label: 'Búsqueda Universal', icon: Search },
     { id: 'opportunities', label: 'Oportunidades IA', icon: Brain },
     { id: 'suggestions', label: 'Sugerencias IA', icon: Lightbulb },
@@ -256,11 +327,11 @@ export default function Dashboard() {
         <CardSkeleton count={6} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors" title="Suma de los precios de venta de todas las ventas confirmadas.">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Ventas Totales</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${dashboardData.totalSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Ingresos totales</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${dashboardData.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                 <DollarSign className="h-6 w-6 text-green-600" />
@@ -268,10 +339,10 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors" title="Utilidad real después de costos, comisiones, PayPal y comisión de plataforma.">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Comisiones Totales</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Ganancia neta</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${dashboardData.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -283,7 +354,31 @@ export default function Dashboard() {
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Productos Publicados</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Comisión plataforma pagada</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${(dashboardData.platformCommissionPaid ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              </div>
+              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                <DollarSign className="h-6 w-6 text-amber-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors" title="Número de ventas registradas.">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Nº de ventas</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{dashboardData.salesCount}</p>
+              </div>
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <BarChart3 className="h-6 w-6 text-emerald-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors" title="Productos publicados en el marketplace.">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Productos publicados</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{dashboardData.activeProducts}</p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
@@ -316,7 +411,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Automatización</p>
@@ -328,6 +423,47 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* Admin: ingresos plataforma y comisiones por usuario */}
+      {user?.role?.toUpperCase() === 'ADMIN' && platformRevenue && (
+        <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Ingresos plataforma (Admin)</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Total comisiones cobradas</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-gray-100">${platformRevenue.totalPlatformRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Ventas con comisión</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{platformRevenue.salesCount}</p>
+            </div>
+          </div>
+          {platformRevenue.perUser.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm text-left text-gray-700 dark:text-gray-300">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-600">
+                    <th className="py-2 pr-4">Usuario</th>
+                    <th className="py-2 pr-4">Ventas</th>
+                    <th className="py-2 pr-4">Comisión plataforma</th>
+                    <th className="py-2 pr-4">Ganancia usuario</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {platformRevenue.perUser.map((row) => (
+                    <tr key={row.userId} className="border-b border-gray-100 dark:border-gray-700">
+                      <td className="py-2 pr-4">{row.username || row.email}</td>
+                      <td className="py-2 pr-4">{row.salesCount}</td>
+                      <td className="py-2 pr-4">${row.platformCommission.toFixed(2)}</td>
+                      <td className="py-2 pr-4">${row.userProfit.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Workflow Summary Widget */}
@@ -374,17 +510,29 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Estado del sistema */}
+        {/* Estado del sistema - Real backend status */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Estado del Sistema</h3>
           
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+            <div className={`flex items-center justify-between p-3 rounded-lg border ${
+              backendHealthy === true ? 'bg-green-50 border-green-200' :
+              backendHealthy === false ? 'bg-red-50 border-red-200' :
+              'bg-gray-50 border-gray-200'
+            }`}>
               <div className="flex items-center space-x-3">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span className="text-sm font-medium text-gray-900">Sistema Principal</span>
+                <div className={`w-2 h-2 rounded-full ${
+                  backendHealthy === true ? 'bg-green-400 animate-pulse' :
+                  backendHealthy === false ? 'bg-red-500' : 'bg-gray-400'
+                }`}></div>
+                <span className="text-sm font-medium text-gray-900">Backend</span>
               </div>
-              <span className="text-sm text-green-600 font-medium">Óptimo</span>
+              <span className={`text-sm font-medium ${
+                backendHealthy === true ? 'text-green-600' :
+                backendHealthy === false ? 'text-red-600' : 'text-gray-500'
+              }`}>
+                {backendHealthy === true ? 'Conectado' : backendHealthy === false ? 'No disponible' : 'Verificando...'}
+              </span>
             </div>
             
             <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
@@ -392,7 +540,9 @@ export default function Dashboard() {
                 <Brain className="h-4 w-4 text-blue-600" />
                 <span className="text-sm font-medium text-gray-900">Motor IA</span>
               </div>
-              <span className="text-sm text-blue-600 font-medium">Procesando</span>
+              <span className="text-sm text-blue-600 font-medium">
+                {backendHealthy === true ? 'Disponible' : backendHealthy === false ? 'Revisar backend' : '—'}
+              </span>
             </div>
             
             <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-200">
@@ -494,9 +644,17 @@ export default function Dashboard() {
                 </span>
               </div>
               
-              <div className="flex items-center space-x-2 text-green-600 bg-green-50 px-3 py-2 rounded-lg">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span className="text-sm font-medium">Sistema Óptimo</span>
+              <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
+                backendHealthy === true ? 'text-green-600 bg-green-50' :
+                backendHealthy === false ? 'text-red-600 bg-red-50' : 'text-gray-600 bg-gray-50'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  backendHealthy === true ? 'bg-green-400 animate-pulse' :
+                  backendHealthy === false ? 'bg-red-500' : 'bg-gray-400'
+                }`}></div>
+                <span className="text-sm font-medium">
+                  {backendHealthy === true ? 'Backend conectado' : backendHealthy === false ? 'Backend no disponible' : 'Verificando...'}
+                </span>
               </div>
             </div>
           </div>
@@ -511,7 +669,10 @@ export default function Dashboard() {
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      setSearchParams(tab.id === 'overview' ? {} : { tab: tab.id });
+                    }}
                     className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm transition-all ${
                       activeTab === tab.id
                         ? 'border-blue-500 text-blue-600'
@@ -530,6 +691,59 @@ export default function Dashboard() {
         {/* Contenido del tab activo */}
         <div className="tab-content">
           {activeTab === 'overview' && renderOverview()}
+          {activeTab === 'trends' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Tendencias (Google Trends)</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Inicio del ciclo: selecciona una tendencia para buscar oportunidades de negocio con esa palabra.
+                </p>
+                <div className="mt-3">
+                  <CycleStepsBreadcrumb currentStep={1} />
+                </div>
+              </div>
+              {trendsLoading ? (
+                <LoadingSpinner text="Cargando tendencias..." />
+              ) : trendingKeywords.length === 0 ? (
+                <div className="p-12 text-center text-gray-500 bg-gray-50 rounded-xl border border-gray-200">
+                  <TrendingUp className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                  <p>No hay tendencias cargadas</p>
+                  <p className="text-sm mt-2">Las tendencias se obtienen del backend (SerpAPI / Google Trends)</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {trendingKeywords.map((kw, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        const params = new URLSearchParams({
+                          keyword: kw.keyword,
+                          autoSearch: 'true',
+                        });
+                        navigate(`/opportunities?${params.toString()}`);
+                        toast.success(`Buscando oportunidades para "${kw.keyword}"...`);
+                      }}
+                      className="p-4 bg-white border rounded-lg shadow-sm hover:shadow-md hover:border-primary-500 transition text-left w-full group"
+                    >
+                      <div className="font-medium text-gray-900 group-hover:text-primary-600">{kw.keyword}</div>
+                      <div className="flex gap-2 mt-2 text-xs flex-wrap">
+                        {kw.trend && <span className={`px-2 py-0.5 rounded ${
+                          kw.trend === 'rising' ? 'bg-green-100 text-green-800' :
+                          kw.trend === 'declining' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700'
+                        }`}>{kw.trend}</span>}
+                        {kw.priority && <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded">{kw.priority}</span>}
+                        {kw.searchVolume != null && <span className="text-gray-500">Vol: {kw.searchVolume}</span>}
+                      </div>
+                      <div className="mt-2 text-xs text-primary-600 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
+                        <Search className="w-3 h-3" /> Buscar oportunidades
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {activeTab === 'search' && <UniversalSearchDashboard />}
           {activeTab === 'opportunities' && <AIOpportunityFinder />}
           {activeTab === 'suggestions' && <AISuggestionsPanel />}

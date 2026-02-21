@@ -4,7 +4,8 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStatusStore } from '@stores/authStatusStore';
 import { formatCurrencySimple } from '../utils/currency';
-import { Download, Info, Package, Truck, Receipt } from 'lucide-react'; // ✅ MEJORADO: Iconos para tooltips
+import { Download, Info, Package, Truck, Receipt } from 'lucide-react';
+import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 
 type Marketplace = 'ebay' | 'amazon' | 'mercadolibre';
 
@@ -101,6 +102,10 @@ export default function Opportunities() {
   const [showAliExpressModal, setShowAliExpressModal] = useState(false);
   const [pendingSearchUrl, setPendingSearchUrl] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (items.length >= 0) console.log('[UI] Opportunities rendered:', items.length);
+  }, [items.length]);
+
   const marketplacesParam = useMemo(() => marketplaces.join(','), [marketplaces]);
   const hasEstimatedValues = useMemo(
     () => items.some((it) => (it.estimatedFields?.length || 0) > 0),
@@ -123,10 +128,10 @@ export default function Opportunities() {
       const response = await api.get('/api/opportunities', {
         params: { query, maxItems, marketplaces: marketplacesParam, region }
       });
-      
+
       const data = response.data;
       const status = response.status;
-      
+
       // ✅ Manejar respuesta de CAPTCHA requerido (código 202 o en data)
       if (status === 202 || data?.captchaRequired || data?.requiresManualAuth) {
         const resolveUrl = data?.resolveCaptchaUrl || (data?.token ? `/resolve-captcha/${data.token}` : null);
@@ -141,8 +146,14 @@ export default function Opportunities() {
           return;
         }
       }
-      
-      setItems(data?.items || []);
+
+      const items =
+        response?.data?.items ??
+        response?.data?.data ??
+        response?.data?.opportunities ??
+        [];
+      console.log('[FRONTEND] Opportunities received:', items.length);
+      setItems(items);
       await fetchAuthStatuses();
     } catch (e: any) {
       // ✅ Manejar respuesta 202 (Accepted) cuando se requiere CAPTCHA
@@ -544,7 +555,13 @@ export default function Opportunities() {
 
   return (
     <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-semibold">Real Opportunities</h1>
+      <div>
+        <h1 className="text-2xl font-semibold">Oportunidades</h1>
+        <p className="text-sm text-gray-600 mt-0.5">Busca oportunidades de negocio desde tendencias o términos libres</p>
+        <div className="mt-3">
+          <CycleStepsBreadcrumb currentStep={2} />
+        </div>
+      </div>
       <div className="bg-white border rounded p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
         <input
           value={query}
@@ -710,15 +727,15 @@ export default function Opportunities() {
               {items.map((it, idx) => (
               <tr key={idx} className="border-t hover:bg-gray-50">
                 <td className="p-3 text-center">
-                  {it.image ? (
+                  {(it.image || it.imageUrl) ? (
                     <a
-                      href={it.aliexpressUrl}
+                      href={it.aliexpressUrl || it.productUrl}
                       target="_blank"
                       rel="noreferrer"
                       title="Abrir en AliExpress"
                     >
                       <img
-                        src={it.image}
+                        src={it.image || it.imageUrl}
                         alt={it.title}
                         className="w-16 h-16 object-cover rounded border border-gray-200 hover:opacity-90 transition"
                         onError={(e) => {
@@ -734,7 +751,7 @@ export default function Opportunities() {
                 </td>
                 <td className="p-3">
                   <a
-                    href={it.aliexpressUrl}
+                    href={it.aliexpressUrl || it.productUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="font-medium line-clamp-2 max-w-xs text-primary-600 hover:underline"
@@ -743,12 +760,12 @@ export default function Opportunities() {
                     {it.title}
                   </a>
                   <div className="text-xs text-gray-500 mt-1">
-                    Confianza: {Math.round((it.confidenceScore || 0) * 100)}% |
+                    Confianza: {(Number(it.confidenceScore ?? 0) * 100).toFixed(2)}% |
                     ID: {it.productId || 'N/A'}
                   </div>
                   {it.feesConsidered && Object.keys(it.feesConsidered).length > 0 && (
-                    <div className="text-xs text-blue-600 mt-1 cursor-help" title={Object.entries(it.feesConsidered).map(([k, v]) => `${k}: $${v.toFixed(2)}`).join(', ')}>
-                      Fees: ${Object.values(it.feesConsidered).reduce((a, b) => a + b, 0).toFixed(2)}
+                    <div className="text-xs text-blue-600 mt-1 cursor-help" title={Object.entries(it.feesConsidered).map(([k, v]) => `${k}: $${Number(v ?? 0).toFixed(2)}`).join(', ')}>
+                      Fees: ${Number(Object.values(it.feesConsidered).reduce((a, b) => a + (Number(b ?? 0)), 0)).toFixed(2)}
                     </div>
                   )}
                   {it.estimationNotes?.length ? (
@@ -838,7 +855,7 @@ export default function Opportunities() {
                           : 'text-red-600'
                       }`}
                     >
-                      {Math.round(it.profitMargin * 100)}%
+                      {(Number(it.profitMargin ?? 0) * 100).toFixed(2)}%
                     </span>
                     {it.totalCost && it.totalCost > it.costUsd && (
                       <Info className="w-3 h-3 text-gray-400 cursor-help group relative" title="Margen calculado con costo total (producto + envío + impuestos)" />
@@ -861,7 +878,7 @@ export default function Opportunities() {
                           : 'text-red-600'
                       }`}
                     >
-                      {Math.round(it.roiPercentage)}%
+                      {Number(it.roiPercentage ?? 0).toFixed(2)}%
                     </span>
                     {it.estimatedFields?.includes('roiPercentage') && (
                       <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 uppercase text-[10px] font-semibold">
@@ -919,7 +936,15 @@ export default function Opportunities() {
               </tr>
             ))}
               {items.length === 0 && (
-                <tr><td className="p-6 text-center text-gray-500" colSpan={9}>No se encontraron resultados</td></tr>
+                <tr>
+                  <td className="p-8 text-center" colSpan={9}>
+                    <div className="max-w-md mx-auto text-left">
+                      <p className="font-medium text-gray-700 mb-2">Sin oportunidades</p>
+                      <p className="text-sm text-gray-600 mb-3">Aún no hay productos candidatos. Realiza una búsqueda con un término o URL de AliExpress. Los resultados suelen aparecer en segundos.</p>
+                      <p className="text-xs text-gray-500">Verifica que tengas la API de búsqueda configurada (AliExpress Affiliate, ScraperAPI o ZenRows) en Configuración.</p>
+                    </div>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

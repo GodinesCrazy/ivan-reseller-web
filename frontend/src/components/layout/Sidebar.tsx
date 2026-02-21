@@ -32,6 +32,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/dashboard', label: 'Panel', icon: LayoutDashboard },
+  { path: '/dashboard?tab=trends', label: 'Ciclo (Tendencias)', icon: TrendingUp },
   { path: '/opportunities', label: 'Oportunidades', icon: Search },
   { path: '/autopilot', label: 'Autopilot', icon: Bot },
   { path: '/products', label: 'Productos', icon: Package },
