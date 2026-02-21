@@ -778,30 +778,49 @@ export class EbayService {
    */
   async testConnection(): Promise<{ success: boolean; message: string }> {
     try {
-      // ✅ Si no hay token OAuth, no es un error crítico (aún se pueden guardar credenciales)
-      if (!this.accessToken && !this.credentials.token) {
+      // ✅ Si no hay token ni refreshToken, pedir OAuth
+      if (!this.credentials?.token && !this.credentials?.refreshToken) {
         return { 
           success: false, 
-          message: 'OAuth token required. Complete OAuth authorization first. This is normal if you just saved credentials.' 
+          message: 'OAuth token required. Complete OAuth authorization in Settings → API Credentials → eBay.' 
         };
+      }
+
+      // ✅ Intentar refrescar token si está expirado (tener refreshToken permite renovar)
+      try {
+        await this.ensureAccessToken();
+      } catch (refreshErr: any) {
+        const msg = refreshErr?.message || String(refreshErr);
+        if (/invalid_grant|refresh_token|expired/i.test(msg)) {
+          return { success: false, message: 'eBay session expired. Reconnect eBay in Settings → API Credentials.' };
+        }
+        return { success: false, message: msg };
       }
 
       await this.getAccountInfo();
       return { success: true, message: 'eBay connection successful' };
     } catch (error: any) {
-      // ✅ Si es "Resource not found", puede ser normal en Sandbox o si la cuenta no tiene seller profile configurado
+      const status = error?.response?.status;
       const errorMessage = error.response?.data?.errors?.[0]?.message || error.message || 'Unknown error';
-      
+
+      // ✅ 401 = token inválido/expirado, sugerir reconectar
+      if (status === 401 || /token.*expired|invalid.*token|invalid_grant/i.test(errorMessage)) {
+        return { 
+          success: false, 
+          message: 'eBay session expired or invalid. Reconnect eBay in Settings → API Credentials.' 
+        };
+      }
+
+      // ✅ Resource not found puede ser normal en Sandbox
       if (errorMessage.includes('Resource not found') || errorMessage.includes('not found')) {
-        // En Sandbox, esto puede ser normal - las cuentas de prueba pueden no tener todos los recursos
-        if (this.credentials.sandbox) {
+        if (this.credentials?.sandbox) {
           return { 
             success: false, 
-            message: 'Account info not available (common in Sandbox). Credentials saved successfully. Complete OAuth to use eBay API.' 
+            message: 'Account info not available (common in Sandbox). Complete OAuth to use eBay API.' 
           };
         }
       }
-      
+
       return { success: false, message: errorMessage };
     }
   }

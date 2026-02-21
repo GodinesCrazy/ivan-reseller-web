@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { API_BASE_URL } from '@/config/runtime';
 import { Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -16,6 +16,7 @@ function toProxyUrl(url: string): string {
 
 export default function IntelligentPublisher() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [pending, setPending] = useState<any[]>([]);
   const [listings, setListings] = useState<any[]>([]);
   const [url, setUrl] = useState('');
@@ -71,10 +72,29 @@ export default function IntelligentPublisher() {
         toast.success('Producto aprobado');
       }
     } catch (e: any) {
-      const errorMessage = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Error al aprobar producto';
-      toast.error(errorMessage);
+      const res = e?.response?.data;
+      const errorMessage = res?.message || res?.error || e?.message || 'Error al aprobar producto';
+      const settingsUrl = res?.settingsUrl || '/settings?tab=api-credentials';
+      if (res?.action === 'update_credentials' || res?.invalidCredentials?.length || /credential|ebay|expired/i.test(errorMessage)) {
+        toast.error(
+          (t) => (
+            <div className="flex flex-col gap-2">
+              <span>{errorMessage}</span>
+              <button
+                onClick={() => { toast.dismiss(t.id); navigate(settingsUrl); }}
+                className="text-sm font-medium text-primary-600 hover:text-primary-700 underline"
+              >
+                Ir a Configuración →
+              </button>
+            </div>
+          ),
+          { duration: 8000 }
+        );
+      } else {
+        toast.error(errorMessage);
+      }
     }
-  }, []);
+  }, [navigate]);
 
   // Memoizar productos pendientes limitados
   const pendingLimited = useMemo(() => pending.slice(0, 20), [pending]);
