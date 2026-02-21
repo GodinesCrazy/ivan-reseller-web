@@ -6,6 +6,7 @@ import { logger } from '../../config/logger';
 import { toNumber } from '../../utils/decimal.utils';
 import { MarketplaceService } from '../../services/marketplace.service';
 import { productWorkflowStatusService } from '../../services/product-workflow-status.service';
+import { prisma } from '../../config/database';
 import { queryWithTimeout } from '../../utils/queryWithTimeout';
 import { handleSetupCheck } from '../../utils/setup-check';
 import { wrapAsync } from '../../utils/async-route-wrapper';
@@ -561,7 +562,6 @@ router.get('/:id/workflow-status', async (req: Request, res: Response, next: Nex
 router.post('/approve-pending', wrapAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId;
   if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
-  const { prisma } = await import('../config/database');
   const pending = await prisma.product.findMany({
     where: { userId, status: 'PENDING' },
     take: 100,
