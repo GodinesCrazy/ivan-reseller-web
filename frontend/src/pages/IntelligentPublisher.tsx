@@ -10,7 +10,8 @@ import toast from 'react-hot-toast';
 function toProxyUrl(url: string): string {
   if (!url || !url.startsWith('http')) return url;
   const base = API_BASE_URL.replace(/\/+$/, '');
-  return `${base}/api/publisher/proxy-image?url=${encodeURIComponent(url)}`;
+  const path = base.endsWith('/api') ? '/publisher/proxy-image' : '/api/publisher/proxy-image';
+  return `${base}${path}?url=${encodeURIComponent(url)}`;
 }
 
 export default function IntelligentPublisher() {
