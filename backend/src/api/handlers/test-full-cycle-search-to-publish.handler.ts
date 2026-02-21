@@ -86,8 +86,8 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
       ? rawImages.filter((u: unknown): u is string => typeof u === 'string' && u.startsWith('http'))
       : [];
     const enlarged = filtered.map(enlargeImageUrl);
-    // Fallback 500x500 garantizado: eBay requiere mínimo 500px; evita fallo si AliCDN no sirve el tamaño
-    const images = enlarged.length > 0 ? [...enlarged, FALLBACK_IMAGE] : [FALLBACK_IMAGE];
+    // Solo placeholder 500x500: evita validación fallida por imágenes AliExpress pequeñas
+    const images = [FALLBACK_IMAGE];
 
     const productService = new ProductService();
     const product = await productService.createProduct(userId, {
