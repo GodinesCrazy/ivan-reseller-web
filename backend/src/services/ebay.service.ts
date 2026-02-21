@@ -454,9 +454,33 @@ export class EbayService {
       const locations = locRes.data?.locations;
       if (locations?.length > 0) {
         merchantLocationKey = locations[0].merchantLocationKey || merchantLocationKey;
+      } else {
+        try {
+          await this.apiClient.put(
+            '/sell/inventory/v1/location/default_location',
+            {
+              location: {
+                address: {
+                  addressLine1: '123 Main St',
+                  city: 'Miami',
+                  stateOrProvince: 'FL',
+                  postalCode: '33101',
+                  country: 'US',
+                },
+              },
+              locationTypes: ['WAREHOUSE'],
+              name: 'Default Warehouse',
+            },
+            { headers: invHeaders }
+          );
+          merchantLocationKey = 'default_location';
+          logger.info('Created default eBay inventory location');
+        } catch (createLocErr: any) {
+          logger.warn('Could not create default location', { error: (createLocErr as Error).message });
+        }
       }
     } catch (e) {
-      logger.warn('Could not fetch inventory locations, using default', { error: (e as Error).message });
+      logger.warn('Could not fetch inventory locations', { error: (e as Error).message });
     }
 
     try {
@@ -520,8 +544,10 @@ export class EbayService {
               listingData,
               { headers: invHeaders }
             );
+            const offerId = response.data?.offerId;
+            if (!offerId) throw new Error('No offerId in createOffer response');
             const publishResponse = await this.apiClient.post(
-              `/sell/inventory/v1/offer/${response.data.offerId}/publish`,
+              `/sell/inventory/v1/offer/${offerId}/publish`,
               {},
               { headers: invHeaders }
             );
@@ -541,7 +567,17 @@ export class EbayService {
         );
 
         if (!result.success || !result.data) {
-          throw new AppError(`Failed to create eBay listing after retries: ${result.error?.message || 'Unknown error'}`, 400);
+          const err = result.error as any;
+          const status = err?.response?.status;
+          const body = err?.response?.data;
+          const hint = status === 404
+            ? ' Crea ubicación y políticas en eBay: Seller Hub → Account → Business Policies; y en Inventory → Locations.'
+            : '';
+          logger.error('eBay createListing failed', { status, body, defaults });
+          throw new AppError(
+            `Failed to create eBay listing: ${err?.message || 'Unknown'}${hint}`,
+            400
+          );
         }
 
         const { publishResponse } = result.data;
