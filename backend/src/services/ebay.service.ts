@@ -120,7 +120,7 @@ export class EbayService {
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
-        'Content-Language': 'en-US',
+        'Content-Language': 'en_US',
         'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
         ...(credentials?.devId && { 'X-EBAY-API-DEV-NAME': credentials.devId }),
         ...(credentials?.appId && { 'X-EBAY-API-APP-NAME': credentials.appId }),
