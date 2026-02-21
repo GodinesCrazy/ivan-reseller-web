@@ -63,7 +63,7 @@ function HelpOnlyPage() {
 
 function AppContent() {
   const location = useLocation();
-  const { isAuthenticated, isCheckingAuth, checkAuth, token } = useAuthStore();
+  const { isAuthenticated, isCheckingAuth, checkAuth, setCheckingAuth, token } = useAuthStore();
   const [isInitialized, setIsInitialized] = useState(false);
   
   // ✅ CORRECCIÓN TEMA: Inicializar tema al cargar la app
@@ -111,9 +111,8 @@ function AppContent() {
           clearTimeout(timeoutId);
         }
         log.warn('Error o timeout validando token, continuando:', error);
-        // Si falla, limpiar token inválido y continuar
+        setCheckingAuth(false);
         if (isMounted) {
-          // No limpiar el token aquí, solo continuar
           setIsInitialized(true);
         }
       }
@@ -130,9 +129,11 @@ function AppContent() {
   }, []); // Solo ejecutar una vez al montar
 
   const Fallback = (
-    <div className="flex items-center justify-center min-h-[30vh] text-gray-600">
-      <div className="h-5 w-5 mr-2 rounded-full border-2 border-gray-300 border-t-gray-700 animate-spin" />
-      Cargando...
+    <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 rounded-full border-2 border-gray-300 dark:border-gray-600 border-t-primary-600 animate-spin" />
+        <span>Cargando...</span>
+      </div>
     </div>
   );
 
@@ -157,10 +158,10 @@ function AppContent() {
   // No bloquear /help: siempre renderizar para que el centro de ayuda sea accesible
   if (!isLoginPage && !isHelpPage && hasToken && !isInitialized && isCheckingAuth) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
-          <div className="h-8 w-8 mx-auto mb-4 rounded-full border-4 border-gray-300 border-t-blue-600 animate-spin" />
-          <p className="text-gray-600">Verificando sesión...</p>
+          <div className="h-8 w-8 mx-auto mb-4 rounded-full border-4 border-gray-300 dark:border-gray-600 border-t-primary-600 animate-spin" />
+          <p className="text-gray-600 dark:text-gray-400">Verificando sesión...</p>
         </div>
       </div>
     );
@@ -177,6 +178,7 @@ function AppContent() {
         element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />}
       />
       <Route path="/request-access" element={<RequestAccess />} />
+      <Route path="/manual-login" element={<Navigate to="/manual-login/new" replace />} />
       <Route path="/manual-login/:token" element={<ManualLogin />} />
       <Route path="/resolve-captcha/:token" element={<ResolveCaptcha />} />
       <Route path="/setup-required" element={<SetupRequired />} />

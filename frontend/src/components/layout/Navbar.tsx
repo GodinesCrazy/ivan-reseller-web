@@ -111,12 +111,26 @@ export default function Navbar() {
             <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
               Estado de AliExpress
             </span>
-            <div
-              className={`mt-1 inline-flex items-center gap-2 px-3 py-1 border rounded-full text-xs font-semibold ${styleInfo.className}`}
-            >
-              {styleInfo.icon}
-              <span>{styleInfo.label}</span>
-            </div>
+            {statusKey === 'manual_required' ? (
+              <button
+                onClick={() => {
+                  const token = aliStatus?.manualSession?.token;
+                  navigate(token ? `/manual-login/${token}` : '/manual-login/new');
+                }}
+                className={`mt-1 inline-flex items-center gap-2 px-3 py-1 border rounded-full text-xs font-semibold ${styleInfo.className} hover:opacity-90 transition cursor-pointer`}
+                title="Haz clic para completar el login manual"
+              >
+                {styleInfo.icon}
+                <span>{styleInfo.label}</span>
+              </button>
+            ) : (
+              <div
+                className={`mt-1 inline-flex items-center gap-2 px-3 py-1 border rounded-full text-xs font-semibold ${styleInfo.className}`}
+              >
+                {styleInfo.icon}
+                <span>{styleInfo.label}</span>
+              </div>
+            )}
             {aliStatus?.message ? (
               <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xs line-clamp-1">
                 {aliStatus.message}
