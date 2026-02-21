@@ -67,6 +67,19 @@ export class ImageValidationService {
     };
 
     try {
+      // 0. Placeholders conocidos con dimensión >= 500 (eBay min): confiar sin fetch
+      const placeholdMatch = imageUrl.match(/placehold\.co\/(\d+)x(\d+)/i);
+      if (placeholdMatch) {
+        const w = parseInt(placeholdMatch[1], 10);
+        const h = parseInt(placeholdMatch[2], 10);
+        if (w >= this.config.minWidth && h >= this.config.minHeight) {
+          result.width = w;
+          result.height = h;
+          result.format = imageUrl.toLowerCase().includes('.png') ? 'png' : 'jpg';
+          return result;
+        }
+      }
+
       // 1. Validar formato de URL
       if (!this.isValidUrl(imageUrl)) {
         result.valid = false;
