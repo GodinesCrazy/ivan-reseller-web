@@ -13,7 +13,7 @@ import { workflowConfigService } from '../../services/workflow-config.service';
 import { logger } from '../../config/logger';
 
 const EBAY_MIN_IMAGE = 500;
-const FALLBACK_IMAGE = `https://placehold.co/${EBAY_MIN_IMAGE}x${EBAY_MIN_IMAGE}?text=Product`;
+const FALLBACK_IMAGE = `https://placehold.co/${EBAY_MIN_IMAGE}x${EBAY_MIN_IMAGE}.png`;
 
 /** Convierte URLs de miniaturas a 500x500+ (eBay mínimo). AliCDN acepta _500x500, _800x800. */
 function enlargeImageUrl(url: string): string {
