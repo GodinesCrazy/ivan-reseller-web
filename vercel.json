@@ -9,6 +9,10 @@
       "destination": "https://ivan-reseller-backend-production.up.railway.app/api/:path*"
     },
     {
+      "source": "/aliexpress/callback",
+      "destination": "https://ivan-reseller-backend-production.up.railway.app/aliexpress/callback"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

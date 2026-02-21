@@ -473,8 +473,8 @@ router.get('/callback', async (req: Request, res: Response) => {
       }
 
       // ✅ FIX OAUTH: Redirect a frontend con query params para SPA routing
-      const successUrl = `${webBaseUrl}/#/api-settings?oauth=success&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
-      const errorUrl = `${webBaseUrl}/#/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
+      const successUrl = `${webBaseUrl}/api-settings?oauth=success&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
+      const errorUrl = `${webBaseUrl}/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
       
       // ✅ REDIRIGIR A PÁGINA DE ÉXITO con fallback HTML
       res.send(`
@@ -544,7 +544,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       });
 
       // ✅ FIX OAUTH: Redirect a frontend con error
-      const errorUrl = `${webBaseUrl}/#/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}&error=${encodeURIComponent(tokenError?.message || 'Token exchange failed')}`;
+      const errorUrl = `${webBaseUrl}/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}&error=${encodeURIComponent(tokenError?.message || 'Token exchange failed')}`;
       
       // ✅ ERROR HANDLING: Responder con error sin exponer secretos (redirect a frontend)
       const errorMessage = tokenError?.message || 'Token exchange failed';
