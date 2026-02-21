@@ -558,7 +558,7 @@ router.post('/:id/unpublish', wrapAsync(async (req: Request, res: Response) => {
     }
   }
 
-  await productService.updateProductStatusSafely(productId, 'APPROVED', false, userId, 'Despublicación manual');
+  await productService.updateProductStatusSafely(productId, 'APPROVED', false, userId);
 
   return res.json({
     success: true,
