@@ -658,6 +658,9 @@ export class AutopilotSystem extends EventEmitter {
 
       logger.info('Autopilot: Available capital', { capital: availableCapital });
 
+      // ✅ FIX CICLO INFINITO ANALYZE: Aprobar productos PENDING existentes para que avancen a PUBLISH
+      await this.approvePendingProducts(currentUserId);
+
       // ✅ FULL AUTOMATIC MODE: Override analyze stage - never pause for manual analyze
       const analyzeModeFromConfig = await workflowConfigService.getStageMode(currentUserId, 'analyze');
       const effectiveAnalyzeMode = 'automatic' as const; // Force full automatic profit mode
@@ -916,6 +919,44 @@ export class AutopilotSystem extends EventEmitter {
       return imgs;
     }
     return ['https://placehold.co/150x150?text=Product'];
+  }
+
+  /**
+   * ✅ Aprobar productos PENDING existentes para desbloquear etapa ANALYZE
+   * Evita el "ciclo infinito" donde productos quedan en "Análisis en curso..."
+   */
+  private async approvePendingProducts(userId: number): Promise<void> {
+    try {
+      const pending = await prisma.product.findMany({
+        where: { userId, status: 'PENDING' },
+        take: 100,
+        orderBy: { createdAt: 'desc' }
+      });
+      if (pending.length === 0) return;
+      const { productService } = await import('./product.service');
+      let approved = 0;
+      for (const p of pending) {
+        try {
+          const cost = toNumber(p.aliexpressPrice || 0);
+          const suggested = toNumber((p as any).suggestedPrice || 0);
+          const price = suggested > 0 ? suggested : cost * 2;
+          const margin = cost > 0 && price > cost ? ((price - cost) / price) * 100 : 0;
+          const status = margin >= 5 ? 'APPROVED' : 'REJECTED';
+          const reason = margin >= 5
+            ? 'Autopilot: aprobación automática de PENDING (margen válido)'
+            : `Autopilot: rechazo por margen insuficiente (${margin.toFixed(1)}%)`;
+          await productService.updateProductStatusSafely(p.id, status, userId, reason);
+          if (status === 'APPROVED') approved++;
+        } catch (e: any) {
+          logger.warn('[AUTOPILOT] Error aprobando producto PENDING', { productId: p.id, error: e?.message });
+        }
+      }
+      if (approved > 0) {
+        logger.info('[AUTOPILOT] Productos PENDING aprobados para avanzar a PUBLISH', { count: approved, total: pending.length });
+      }
+    } catch (e: any) {
+      logger.warn('[AUTOPILOT] Error en approvePendingProducts', { error: e?.message });
+    }
   }
 
   /**

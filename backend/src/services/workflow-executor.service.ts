@@ -299,6 +299,7 @@ export class WorkflowExecutorService {
 
   /**
    * ✅ Ejecutar workflow de tipo 'analyze'
+   * Aprueba productos PENDING que cumplan criterios básicos (margen positivo) para que avancen a PUBLISH
    */
   private async executeAnalyzeWorkflow(
     workflow: any,
@@ -307,28 +308,73 @@ export class WorkflowExecutorService {
   ): Promise<WorkflowExecutionResult> {
     try {
       const actions = workflow.actions as any || {};
-      
-      // Obtener productos pendientes de análisis
-      const statusFilter = actions.statusFilter || 'PENDING';
-      const limit = actions.limit || 10;
+      const limit = Math.min(actions.limit || 50, 100);
 
       const products = await prisma.product.findMany({
         where: {
           userId,
-          status: statusFilter
+          status: 'PENDING'
         },
         take: limit,
         orderBy: { createdAt: 'desc' }
       });
 
-      // Por ahora, solo retornar productos pendientes
-      // En el futuro se puede agregar análisis más profundo
+      if (products.length === 0) {
+        return {
+          success: true,
+          message: 'No hay productos pendientes de análisis',
+          data: { productsAnalyzed: 0, productsApproved: 0 }
+        };
+      }
+
+      let approved = 0;
+      const { productService } = await import('./product.service');
+      const { toNumber } = await import('../utils/decimal.utils');
+
+      for (const product of products) {
+        try {
+          const cost = toNumber(product.aliexpressPrice || 0);
+          const suggested = toNumber(product.suggestedPrice || 0);
+          const price = suggested > 0 ? suggested : cost * 2;
+          const margin = cost > 0 && price > cost ? ((price - cost) / price) * 100 : 0;
+          if (margin < 5) {
+            logger.info('[WorkflowExecutor] Producto rechazado por margen bajo', {
+              productId: product.id,
+              margin: margin.toFixed(1)
+            });
+            await productService.updateProductStatusSafely(
+              product.id,
+              'REJECTED',
+              userId,
+              `Workflow Analyze: margen insuficiente (${margin.toFixed(1)}%)`
+            );
+            continue;
+          }
+          await productService.updateProductStatusSafely(
+            product.id,
+            'APPROVED',
+            userId,
+            'Workflow Analyze: aprobación automática (margen válido)'
+          );
+          approved++;
+          logger.info('[WorkflowExecutor] Producto aprobado en analyze workflow', {
+            productId: product.id,
+            margin: margin.toFixed(1)
+          });
+        } catch (err: any) {
+          logger.warn('[WorkflowExecutor] Error aprobando producto', {
+            productId: product.id,
+            error: err?.message
+          });
+        }
+      }
+
       return {
         success: true,
-        message: `Análisis completado. ${products.length} productos encontrados`,
+        message: `Análisis completado. ${approved} de ${products.length} productos aprobados`,
         data: {
           productsAnalyzed: products.length,
-          products
+          productsApproved: approved
         }
       };
     } catch (error: any) {
