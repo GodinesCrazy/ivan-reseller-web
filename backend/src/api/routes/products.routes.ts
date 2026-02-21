@@ -110,7 +110,8 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
         status: product.status,
         sku: String(product.id), // SKU temporal basado en ID
         marketplace: marketplace, // ✅ Marketplace del listing más reciente
-        marketplaceUrl: marketplaceUrl, // ✅ URL del listing en el marketplace (para botón "View on Marketplace")
+        marketplaceUrl: marketplaceUrl, // ✅ URL del listing en el marketplace (donde está a la venta)
+        aliexpressUrl: product.aliexpressUrl || null, // ✅ URL del proveedor (origen)
         price: product.finalPrice || product.suggestedPrice || product.aliexpressPrice || 0,
         currency: product.currency || 'USD', // ✅ Incluir moneda del producto
         stock: 0, // Valor por defecto

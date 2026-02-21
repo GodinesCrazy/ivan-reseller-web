@@ -11,7 +11,9 @@ import {
   Eye,
   Trash2,
   ExternalLink,
-  Calculator
+  Calculator,
+  Store,
+  Link2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,10 +35,11 @@ interface Product {
   title: string;
   sku: string;
   price: number;
-  currency?: string; // ✅ Moneda del producto
+  currency?: string;
   stock: number;
   marketplace: string;
-  marketplaceUrl?: string | null; // ✅ URL del listing en el marketplace (si está publicado)
+  marketplaceUrl?: string | null; // URL del listing en el marketplace (donde está a la venta)
+  aliexpressUrl?: string | null; // URL del proveedor (origen AliExpress)
   status: 'PENDING' | 'APPROVED' | 'PUBLISHED' | 'REJECTED';
   imageUrl?: string;
   profit?: number;
@@ -371,6 +374,7 @@ export default function Products() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SKU</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Marketplace</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Enlaces</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Precio</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
@@ -384,7 +388,10 @@ export default function Products() {
                       <>
                         <tr key={product.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3">
-                            <div className="flex items-center gap-3">
+                            <div
+                              className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 -m-2 p-2 rounded"
+                              onClick={() => { setSelectedProduct(product); setShowModal(true); }}
+                            >
                               {product.imageUrl ? (
                                 <img src={product.imageUrl} alt={product.title} className="w-10 h-10 rounded object-cover" />
                               ) : (
@@ -477,7 +484,7 @@ export default function Products() {
                         </tr>
                         {/* Barra de progreso del workflow */}
                         <tr key={`${product.id}-workflow`} className="bg-gray-50">
-                          <td colSpan={9} className="px-4 py-2">
+                          <td colSpan={10} className="px-4 py-2">
                             <WorkflowProgressBar 
                               productId={Number(product.id)} 
                               preloadedStatus={workflowByProduct[product.id]}
@@ -632,23 +639,46 @@ export default function Products() {
                   <p className="font-medium">{new Date(selectedProduct.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>
+              {/* Enlaces: Marketplace (a la venta) y Proveedor (origen) */}
+              {(selectedProduct.marketplaceUrl || selectedProduct.aliexpressUrl) && (
+                <div className="pt-4 border-t">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Enlaces</p>
+                  <div className="flex flex-wrap gap-3">
+                    {selectedProduct.marketplaceUrl && (
+                      <a
+                        href={selectedProduct.marketplaceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+                      >
+                        <Store className="w-4 h-4" />
+                        Ver en {selectedProduct.marketplace}
+                      </a>
+                    )}
+                    {selectedProduct.aliexpressUrl && (
+                      <a
+                        href={selectedProduct.aliexpressUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        <Link2 className="w-4 h-4" />
+                        Proveedor (AliExpress)
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="p-6 border-t flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setShowModal(false)}>
                 Close
               </Button>
-              {selectedProduct.status === 'PUBLISHED' && (
+              {selectedProduct.status === 'PUBLISHED' && selectedProduct.marketplaceUrl && (
                 <Button
                   className="flex items-center gap-2"
-                  onClick={() => {
-                    if (selectedProduct.marketplaceUrl) {
-                      window.open(selectedProduct.marketplaceUrl, '_blank', 'noopener,noreferrer');
-                    } else {
-                      toast.error('URL del marketplace no disponible. El producto fue publicado pero no se registró la URL. Intenta reprocesar la publicación.');
-                    }
-                  }}
-                  disabled={!selectedProduct.marketplaceUrl}
-                  title={!selectedProduct.marketplaceUrl ? 'Publicación creada sin URL registrada. Intenta reprocesar la publicación o revisa la configuración del marketplace.' : `Abrir en ${selectedProduct.marketplace}`}
+                  onClick={() => window.open(selectedProduct.marketplaceUrl!, '_blank', 'noopener,noreferrer')}
+                  title={`Abrir en ${selectedProduct.marketplace}`}
                 >
                   <ExternalLink className="w-4 h-4" />
                   View on Marketplace
