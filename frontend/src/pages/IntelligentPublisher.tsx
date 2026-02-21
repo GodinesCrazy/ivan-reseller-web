@@ -1,9 +1,17 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { api } from '../services/api';
+import { API_BASE_URL } from '@/config/runtime';
 import { Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
+
+// Usar proxy de imágenes para evitar bloqueo de hotlink de AliExpress
+function toProxyUrl(url: string): string {
+  if (!url || !url.startsWith('http')) return url;
+  const base = API_BASE_URL.replace(/\/+$/, '');
+  return `${base}/api/publisher/proxy-image?url=${encodeURIComponent(url)}`;
+}
 
 export default function IntelligentPublisher() {
   const location = useLocation();
@@ -186,57 +194,13 @@ export default function IntelligentPublisher() {
       </div>
       <div className="bg-white border rounded">
         {pendingLimited.map((p: any) => (
-          <div key={p.id} className="p-4 border-b flex items-center justify-between gap-4">
-            <div className="flex items-start gap-3 flex-1">
-              <input type="checkbox" className="mt-1" checked={!!selected[p.id]} onChange={(e)=>setSelected(s=>({ ...s, [p.id]: e.target.checked }))} />
-              {/* ✅ MEJORADO: Carrusel de imágenes múltiples */}
-              <ImageCarousel 
-                images={p.images || (p.imageUrl ? [p.imageUrl] : [])} 
-                title={p.title}
-              />
-              <div className="flex-1">
-                <div className="font-medium">{p.title}</div>
-                <div className="text-xs text-gray-500 mt-1 space-y-1">
-                  <div>Cost: ${p.estimatedCost || p.aliexpressPrice} → Suggested: ${p.suggestedPrice}</div>
-                  {p.estimatedProfit !== undefined && (
-                    <div className="flex items-center gap-2">
-                      <span>Profit: <span className="font-semibold text-green-600">${p.estimatedProfit.toFixed(2)}</span></span>
-                      {p.estimatedROI !== undefined && (
-                        <span>ROI: <span className="font-semibold text-blue-600">{p.estimatedROI.toFixed(1)}%</span></span>
-                      )}
-                    </div>
-                  )}
-                  {p.source && (
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`px-2 py-0.5 rounded text-xs ${
-                        p.source === 'autopilot' 
-                          ? 'bg-blue-100 text-blue-700' 
-                          : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {p.source === 'autopilot' ? '🤖 Autopilot' : '👤 Manual'}
-                      </span>
-                      {p.queuedAt && (
-                        <span className="text-gray-400">
-                          Queued: {new Date(p.queuedAt).toLocaleString()}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="text-sm"><input type="checkbox" value="ebay" defaultChecked className="mr-1" /> eBay</label>
-              <label className="text-sm"><input type="checkbox" value="mercadolibre" className="mr-1" /> ML</label>
-              <label className="text-sm"><input type="checkbox" value="amazon" className="mr-1" /> Amazon</label>
-              <button onClick={(e)=>{
-                const parent = (e.currentTarget.closest('div')!);
-                const mks = Array.from(parent.querySelectorAll('input[type=checkbox]')) as HTMLInputElement[];
-                const selected = mks.filter(i=>i.checked).map(i=>i.value);
-                approve(p.id, selected);
-              }} className="px-3 py-2 bg-blue-600 text-white rounded text-sm flex items-center gap-1"><Check className="w-4 h-4"/>Approve & Publish</button>
-            </div>
-          </div>
+          <PendingProductCard
+            key={p.id}
+            product={p}
+            selected={!!selected[p.id]}
+            onSelectChange={(checked) => setSelected(s => ({ ...s, [p.id]: checked }))}
+            onApprove={(marketplaces) => approve(p.id, marketplaces)}
+          />
         ))}
         {pending.length===0 && <div className="p-4 text-sm text-gray-600">No pending products.</div>}
       </div>
@@ -260,11 +224,88 @@ export default function IntelligentPublisher() {
   );
 }
 
-// ✅ MEJORADO: Componente de carrusel de imágenes
+// ✅ Tarjeta de producto pendiente con imágenes y más detalle
+function PendingProductCard({
+  product: p,
+  selected,
+  onSelectChange,
+  onApprove,
+}: {
+  product: any;
+  selected: boolean;
+  onSelectChange: (checked: boolean) => void;
+  onApprove: (marketplaces: string[]) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [marketplaces, setMarketplaces] = useState<Record<string, boolean>>({ ebay: true, mercadolibre: false, amazon: false });
+  const imgSources = Array.isArray(p.images) ? p.images : (p.imageUrl ? [p.imageUrl] : []);
+
+  const handleApprove = () => {
+    const mks = (['ebay', 'mercadolibre', 'amazon'] as const).filter(m => marketplaces[m]);
+    onApprove(mks);
+  };
+
+  const desc = p.description || '';
+  const showDesc = desc.length > 0;
+  const descShort = desc.length > 150 ? desc.slice(0, 150) + '...' : desc;
+
+  return (
+    <div className="p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex items-start gap-3 flex-1 w-full">
+        <input type="checkbox" className="mt-1 flex-shrink-0" checked={selected} onChange={(e) => onSelectChange(e.target.checked)} />
+        <ImageCarousel images={imgSources} title={p.title} />
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-gray-900">{p.title}</div>
+          {showDesc && (
+            <div className="text-xs text-gray-600 mt-1">
+              {expanded ? desc : descShort}
+              {desc.length > 150 && (
+                <button type="button" onClick={() => setExpanded(!expanded)} className="ml-1 text-primary-600 hover:underline">
+                  {expanded ? 'Ver menos' : 'Ver más'}
+                </button>
+              )}
+            </div>
+          )}
+          <div className="text-xs text-gray-500 mt-1 space-y-1">
+            <div>Cost: ${p.estimatedCost ?? p.aliexpressPrice} → Suggested: ${p.suggestedPrice}</div>
+            {(p.estimatedProfit !== undefined && p.estimatedProfit !== null) && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span>Profit: <span className="font-semibold text-green-600">${Number(p.estimatedProfit).toFixed(2)}</span></span>
+                {(p.estimatedROI !== undefined && p.estimatedROI !== null) && (
+                  <span>ROI: <span className="font-semibold text-blue-600">{Number(p.estimatedROI).toFixed(1)}%</span></span>
+                )}
+              </div>
+            )}
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className={`px-2 py-0.5 rounded text-xs ${p.source === 'autopilot' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+                {p.source === 'autopilot' ? '🤖 Autopilot' : '👤 Manual'}
+              </span>
+              {p.queuedAt && <span className="text-gray-400">Queued: {new Date(p.queuedAt).toLocaleString()}</span>}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 flex-shrink-0">
+        <label className="text-sm"><input type="checkbox" checked={marketplaces.ebay} onChange={(e) => setMarketplaces(m => ({ ...m, ebay: e.target.checked }))} className="mr-1" /> eBay</label>
+        <label className="text-sm"><input type="checkbox" checked={marketplaces.mercadolibre} onChange={(e) => setMarketplaces(m => ({ ...m, mercadolibre: e.target.checked }))} className="mr-1" /> ML</label>
+        <label className="text-sm"><input type="checkbox" checked={marketplaces.amazon} onChange={(e) => setMarketplaces(m => ({ ...m, amazon: e.target.checked }))} className="mr-1" /> Amazon</label>
+        <button onClick={handleApprove} className="px-3 py-2 bg-blue-600 text-white rounded text-sm flex items-center gap-1 whitespace-nowrap">
+          <Check className="w-4 h-4" /> Approve & Publish
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ✅ MEJORADO: Carrusel de imágenes (usa proxy para AliExpress para evitar bloqueo de hotlink)
 function ImageCarousel({ images, title }: { images: string[]; title: string }) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  if (!images || images.length === 0) {
+  const rawImages = images || [];
+  const isAliCdn = (u: string) => /alicdn\.com|aliexpress\.com/i.test(u);
+  const displayImages = rawImages.map(u => (isAliCdn(u) ? toProxyUrl(u) : u));
+
+  if (!rawImages.length) {
     return (
       <div className="w-20 h-20 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
         <span className="text-gray-400 text-xs">No img</span>
@@ -272,24 +313,20 @@ function ImageCarousel({ images, title }: { images: string[]; title: string }) {
     );
   }
 
-  const nextImage = () => {
-    setCurrentIndex((prev) => (prev + 1) % images.length);
-  };
-
-  const prevImage = () => {
-    setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
-  };
+  const len = rawImages.length;
+  const nextImage = () => setCurrentIndex((prev) => (prev + 1) % len);
+  const prevImage = () => setCurrentIndex((prev) => (prev - 1 + len) % len);
 
   return (
     <div className="relative w-20 h-20 rounded overflow-hidden flex-shrink-0 group">
       <img 
-        src={images[currentIndex]} 
+        src={displayImages[currentIndex]} 
         alt={`${title} - Imagen ${currentIndex + 1}`}
         className="w-full h-full object-cover"
+        referrerPolicy="no-referrer"
         onError={(e) => {
-          // Si la imagen falla, intentar siguiente o mostrar placeholder
-          if (images.length > 1) {
-            const nextIndex = (currentIndex + 1) % images.length;
+          if (len > 1) {
+            const nextIndex = (currentIndex + 1) % len;
             if (nextIndex !== currentIndex) {
               setCurrentIndex(nextIndex);
             } else {
@@ -327,7 +364,7 @@ function ImageCarousel({ images, title }: { images: string[]; title: string }) {
           
           {/* Indicador de posición */}
           <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs text-center py-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            {currentIndex + 1} / {images.length}
+            {currentIndex + 1} / {len}
           </div>
         </>
       )}

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import axios from 'axios';
 import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { productService, CreateProductDto } from '../../services/product.service';
 import { MarketplaceService } from '../../services/marketplace.service';
@@ -9,6 +10,36 @@ import { toNumber } from '../../utils/decimal.utils';
 
 const router = Router();
 router.use(authenticate);
+
+// GET /api/publisher/proxy-image?url=... - Proxy de imágenes (evita hotlink blocking de AliExpress)
+const ALLOWED_IMAGE_HOSTS = ['alicdn.com', 'aliexpress.com', 'ae01.alicdn.com', 'ae02.alicdn.com', 'ae03.alicdn.com', 'placehold.co', 'via.placeholder.com'];
+router.get('/proxy-image', async (req: Request, res: Response) => {
+  try {
+    const rawUrl = req.query.url as string;
+    if (!rawUrl || typeof rawUrl !== 'string') {
+      return res.status(400).json({ error: 'Missing url parameter' });
+    }
+    const decoded = decodeURIComponent(rawUrl.trim());
+    let parsed: URL;
+    try {
+      parsed = new URL(decoded);
+    } catch {
+      return res.status(400).json({ error: 'Invalid URL' });
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (!ALLOWED_IMAGE_HOSTS.some(h => host === h || host.endsWith('.' + h))) {
+      return res.status(403).json({ error: 'Domain not allowed' });
+    }
+    const resp = await axios.get(decoded, { responseType: 'arraybuffer', timeout: 10000, maxContentLength: 5 * 1024 * 1024 });
+    const ct = resp.headers['content-type'] || 'image/jpeg';
+    res.setHeader('Content-Type', ct);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(resp.data);
+  } catch (e: any) {
+    logger.warn('[PUBLISHER] Proxy image failed', { url: req.query.url, error: e?.message });
+    res.status(502).json({ error: 'Failed to fetch image' });
+  }
+});
 
 // POST /api/publisher/send_for_approval/:productId
 // ✅ OBJETIVO: Enviar un producto existente a Intelligent Publisher (asegurar status PENDING)
@@ -224,54 +255,63 @@ router.get('/pending', async (req: Request, res: Response) => {
       productIds: products.slice(0, 5).map((i: any) => i.id)
     });
     
-    // ✅ Helper para extraer imageUrl del campo images (JSON string)
-    const extractImageUrl = (images: string | null | undefined): string | null => {
-      if (!images) return null;
+    // ✅ Helper para extraer images como array y imageUrl del campo images (JSON string)
+    const parseImages = (images: string | null | undefined): { images: string[]; imageUrl: string | null } => {
+      if (!images) return { images: [], imageUrl: null };
       try {
         const parsed = typeof images === 'string' ? JSON.parse(images) : images;
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return String(parsed[0]);
+        if (Array.isArray(parsed)) {
+          const urls = parsed.filter((x: any) => typeof x === 'string' && x.startsWith('http'));
+          return { images: urls, imageUrl: urls[0] || null };
         }
-        if (typeof parsed === 'string') {
-          return parsed;
+        if (typeof parsed === 'string' && parsed.startsWith('http')) {
+          return { images: [parsed], imageUrl: parsed };
         }
       } catch (error) {
         logger.warn('[PUBLISHER] Failed to parse images field', { error });
       }
-      return null;
+      return { images: [], imageUrl: null };
     };
 
-    // ✅ Enriquecer con información adicional
-    const enrichedItems = await Promise.all(
-      products.map(async (item) => {
-        try {
-          const productData = item.productData ? JSON.parse(item.productData as string) : {};
-          const imageUrl = extractImageUrl(item.images) || null;
-          return {
-            ...item,
-            imageUrl: imageUrl || undefined, // ✅ Incluir imageUrl extraído
-            source: (productData as any).source || 'manual',
-            queuedAt: (productData as any).queuedAt || item.createdAt,
-            queuedBy: (productData as any).queuedBy || 'user',
-            estimatedCost: (productData as any).estimatedCost || item.aliexpressPrice,
-            estimatedProfit: (productData as any).estimatedProfit || (toNumber(item.suggestedPrice) - toNumber(item.aliexpressPrice)),
-            estimatedROI: (productData as any).estimatedROI || 
-              ((toNumber(item.suggestedPrice) - toNumber(item.aliexpressPrice)) / toNumber(item.aliexpressPrice) * 100)
-          };
-        } catch (parseError) {
-          logger.warn('[PUBLISHER] Failed to parse productData', {
-            productId: item.id,
-            error: parseError instanceof Error ? parseError.message : String(parseError)
-          });
-          // Incluso si falla el parse, incluir imageUrl
-          const imageUrl = extractImageUrl(item.images) || null;
-          return {
-            ...item,
-            imageUrl: imageUrl || undefined
-          };
-        }
-      })
-    );
+    // ✅ Enriquecer con información adicional: images (array), imageUrl, description, más detalle
+    const enrichedItems = products.map((item) => {
+      try {
+        const productData = item.productData ? JSON.parse(item.productData as string) : {};
+        const { images: imagesArr, imageUrl } = parseImages(item.images);
+        return {
+          ...item,
+          images: imagesArr, // ✅ Array de URLs para carrusel
+          imageUrl: imageUrl || undefined,
+          description: item.description || (productData as any).description || '',
+          source: (productData as any).source || 'manual',
+          queuedAt: (productData as any).queuedAt || item.createdAt,
+          queuedBy: (productData as any).queuedBy || 'user',
+          estimatedCost: (productData as any).estimatedCost ?? item.aliexpressPrice,
+          estimatedProfit: (productData as any).estimatedProfit ?? (toNumber(item.suggestedPrice) - toNumber(item.aliexpressPrice)),
+          estimatedROI: (productData as any).estimatedROI ??
+            (toNumber(item.aliexpressPrice) > 0
+              ? ((toNumber(item.suggestedPrice) - toNumber(item.aliexpressPrice)) / toNumber(item.aliexpressPrice) * 100)
+              : 0)
+        };
+      } catch (parseError) {
+        logger.warn('[PUBLISHER] Failed to parse productData', {
+          productId: item.id,
+          error: parseError instanceof Error ? parseError.message : String(parseError)
+        });
+        const { images: imagesArr, imageUrl } = parseImages(item.images);
+        return {
+          ...item,
+          images: imagesArr,
+          imageUrl: imageUrl || undefined,
+          description: item.description || '',
+          source: 'manual',
+          queuedAt: item.createdAt,
+          estimatedCost: item.aliexpressPrice,
+          estimatedProfit: toNumber(item.suggestedPrice) - toNumber(item.aliexpressPrice),
+          estimatedROI: 0
+        };
+      }
+    });
     
     return res.json({ 
       success: true, 
