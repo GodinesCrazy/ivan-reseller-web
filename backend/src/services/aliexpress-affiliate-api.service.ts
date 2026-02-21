@@ -12,12 +12,12 @@ import { trace } from '../utils/boot-trace';
 trace('loading aliexpress-affiliate-api.service');
 
 import axios, { AxiosInstance } from 'axios';
-import crypto from 'crypto';
 import logger from '../config/logger';
 import type { AliExpressAffiliateCredentials } from '../types/api-credentials.types';
 import { getToken, setToken, markNeedsReauth } from './aliexpress-token.store';
 import { refreshAccessToken } from './aliexpress-oauth.service';
 import { AffiliatePermissionMissingError } from '../errors/affiliate-permission-missing.error';
+import crypto from 'crypto';
 // Tipos de datos de la API
 export interface AffiliateProduct {
   productId: string;
@@ -61,6 +61,26 @@ export interface AffiliateSKU {
   skuSalePrice: number;
   skuStock: number;
   skuImageUrl?: string;
+}
+
+/**
+ * Normaliza product_small_image_urls de la API (puede venir como { string: [] }, { string: "url" } o array).
+ * Asegura que siempre devolvemos string[] con URLs válidas.
+ */
+function normalizeSmallImageUrls(raw: any): string[] {
+  if (!raw) return [];
+  const arr: string[] = [];
+  if (Array.isArray(raw)) {
+    raw.forEach((x: any) => { if (typeof x === 'string' && x.startsWith('http')) arr.push(x); });
+    return arr;
+  }
+  const inner = raw.string;
+  if (Array.isArray(inner)) {
+    inner.forEach((x: any) => { if (typeof x === 'string' && x.startsWith('http')) arr.push(x); });
+    return arr;
+  }
+  if (typeof inner === 'string' && inner.startsWith('http')) arr.push(inner);
+  return arr;
 }
 
 export interface ProductSearchParams {
@@ -137,6 +157,13 @@ export class AliExpressAffiliateAPIService {
       httpAgent: new (require('http').Agent)({ keepAlive: true }),
       httpsAgent: new (require('https').Agent)({ keepAlive: true }),
     });
+  }
+
+  /** Skip tracking_id when invalid (causes 402). User must set valid ALIEXPRESS_TRACKING_ID in portals.aliexpress.com. */
+  private getEffectiveTrackingId(): string {
+    const t = (this.trackingId || '').trim();
+    if (!t || t === 'ivanreseller_web' || t === 'ivanreseller') return '';
+    return t;
   }
 
   /**
@@ -228,28 +255,29 @@ export class AliExpressAffiliateAPIService {
     }
   }
 
-  /** AliExpress SYNC: YYYY-MM-DD HH:mm:ss, server local time. */
+  /** AliExpress SYNC: YYYY-MM-DD HH:mm:ss in GMT+8 (required by AliExpress TOP API). */
   private getTimestamp(): string {
     const now = new Date();
+    const gmt8 = new Date(now.getTime() + 8 * 3600000);
     const pad = (n: number) => String(n).padStart(2, '0');
     return (
-      now.getFullYear() +
+      gmt8.getUTCFullYear() +
       '-' +
-      pad(now.getMonth() + 1) +
+      pad(gmt8.getUTCMonth() + 1) +
       '-' +
-      pad(now.getDate()) +
+      pad(gmt8.getUTCDate()) +
       ' ' +
-      pad(now.getHours()) +
+      pad(gmt8.getUTCHours()) +
       ':' +
-      pad(now.getMinutes()) +
+      pad(gmt8.getUTCMinutes()) +
       ':' +
-      pad(now.getSeconds())
+      pad(gmt8.getUTCSeconds())
     );
   }
 
   /**
-   * SYNC endpoint signature: sorted key+value only (no secret in base string).
-   * Use HMAC-SHA256 with APP_SECRET as key. createHash causes IncompleteSignature.
+   * TOP API HMAC-SHA256: sign = HMAC-SHA256(app_secret, sorted_key1+value1+key2+value2+...).
+   * sign_method must be 'hmac-sha256' for this.
    */
   private generateSignature(params: Record<string, string>): string {
     const sortedKeys = Object.keys(params)
@@ -264,14 +292,14 @@ export class AliExpressAffiliateAPIService {
   }
 
   /**
-   * Build params (all values string), add sign after generation. No access_token.
+   * Build params, sign with HMAC-SHA256. POST to sync endpoint.
    */
   private async makeRequest(method: string, requestParams: Record<string, any>): Promise<any> {
     const params: Record<string, string> = {
       app_key: String(this.appKey),
       method: String(method),
       format: 'json',
-      sign_method: 'sha256',
+      sign_method: 'hmac-sha256',
       timestamp: String(this.getTimestamp()),
       v: '2.0',
     };
@@ -282,12 +310,14 @@ export class AliExpressAffiliateAPIService {
     });
     params.sign = this.generateSignature(params);
 
-    console.log('[AUTOPILOT] Affiliate request signed correctly');
-
-    const response = await axios.get('https://api-sg.aliexpress.com/sync', {
-      params,
-      timeout: 30000,
-    });
+    const response = await this.client.post(
+      'https://api-sg.aliexpress.com/sync',
+      new URLSearchParams(params).toString(),
+      {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 30000,
+      }
+    );
     return response.data;
   }
 
@@ -316,9 +346,6 @@ export class AliExpressAffiliateAPIService {
    * When 0 products: returns { products: [], source: 'affiliate', empty: true } so callers can activate fallback.
    */
   async searchProducts(params: ProductSearchParams): Promise<AffiliateSearchResult> {
-    if (!this.trackingId) {
-      throw new Error('TRACKING_ID_MISSING');
-    }
     try {
       const keywords = params.keywords;
       const pageNo = (params.pageNo ?? 1).toString();
@@ -331,13 +358,14 @@ export class AliExpressAffiliateAPIService {
         target_currency: 'USD',
         target_language: 'EN',
         ship_to_country: 'US',
-        tracking_id: this.trackingId,
         fields:
           'product_id,product_title,product_main_image_url,product_small_image_urls,sale_price,original_price,target_sale_price,target_sale_price_currency,product_detail_url,promotion_link,commission_rate,currency',
       };
       if (params.targetCurrency) requestParams.target_currency = params.targetCurrency;
       if (params.targetLanguage) requestParams.target_language = params.targetLanguage;
       if (params.shipToCountry) requestParams.ship_to_country = params.shipToCountry;
+      const effectiveTrackingId = this.getEffectiveTrackingId();
+      if (effectiveTrackingId) requestParams.tracking_id = effectiveTrackingId;
 
       const data = await this.makeRequest('aliexpress.affiliate.product.query', requestParams);
 
@@ -349,9 +377,9 @@ export class AliExpressAffiliateAPIService {
       }
 
       // AliExpress API returns product as single object when 1 result, array when multiple
-      const rawProduct =
-        data?.aliexpress_affiliate_product_query_response?.result?.products?.product ||
-        data?.result?.products?.product;
+      const resp = data?.aliexpress_affiliate_product_query_response;
+      const result = resp?.resp_result?.result ?? resp?.result;
+      const rawProduct = result?.products?.product ?? data?.result?.products?.product;
       const products = Array.isArray(rawProduct)
         ? rawProduct
         : rawProduct && typeof rawProduct === 'object'
@@ -360,8 +388,6 @@ export class AliExpressAffiliateAPIService {
 
       if (products.length === 0) {
         console.log('[AUTOPILOT] Affiliate empty');
-        const resp = data?.aliexpress_affiliate_product_query_response;
-        const result = resp?.result;
         if (result && typeof result === 'object') {
           const msg = (result as any).resp_msg ?? (result as any).msg ?? (result as any).message;
           const code = (result as any).resp_code ?? (result as any).code;
@@ -381,9 +407,7 @@ export class AliExpressAffiliateAPIService {
           productId: String(p.product_id || ''),
           productTitle: p.product_title || '',
           productMainImageUrl: p.product_main_image_url || '',
-          productSmallImageUrls: Array.isArray(p.product_small_image_urls?.string)
-            ? p.product_small_image_urls.string
-            : (p.product_small_image_urls ? [p.product_small_image_urls] : []),
+          productSmallImageUrls: normalizeSmallImageUrls(p.product_small_image_urls),
           salePrice: price,
           originalPrice: parseFloat(p.original_price || '0'),
           discount: parseFloat(p.discount || '0'),
@@ -445,9 +469,7 @@ export class AliExpressAffiliateAPIService {
         productId: String(p.product_id || ''),
         productTitle: p.product_title || '',
         productMainImageUrl: p.product_main_image_url || '',
-        productSmallImageUrls: Array.isArray(p.product_small_image_urls?.string) 
-          ? p.product_small_image_urls.string 
-          : (p.product_small_image_urls ? [p.product_small_image_urls] : []),
+        productSmallImageUrls: normalizeSmallImageUrls(p.product_small_image_urls),
         salePrice: parseFloat(p.sale_price || '0'),
         originalPrice: parseFloat(p.original_price || '0'),
         discount: parseFloat(p.discount || '0'),
