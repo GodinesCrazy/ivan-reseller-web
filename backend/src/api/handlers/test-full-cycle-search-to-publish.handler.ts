@@ -12,18 +12,21 @@ import MarketplaceService from '../../services/marketplace.service';
 import { workflowConfigService } from '../../services/workflow-config.service';
 import { logger } from '../../config/logger';
 
-/** Convierte URLs de miniaturas (AliExpress _220x220, placehold 400x400) a alta resolución. eBay min 500x500. */
+const EBAY_MIN_IMAGE = 500;
+const FALLBACK_IMAGE = `https://placehold.co/${EBAY_MIN_IMAGE}x${EBAY_MIN_IMAGE}?text=Product`;
+
+/** Convierte URLs de miniaturas a 500x500+ (eBay mínimo). AliCDN acepta _500x500, _800x800. */
 function enlargeImageUrl(url: string): string {
   if (!url || typeof url !== 'string') return url;
   let u = url.trim();
   u = u.replace(/placehold\.co\/(\d+)x(\d+)/i, (_, w, h) => {
-    const s = Math.max(500, parseInt(w, 10) || 500, parseInt(h, 10) || 500);
+    const s = Math.max(EBAY_MIN_IMAGE, parseInt(w, 10) || EBAY_MIN_IMAGE, parseInt(h, 10) || EBAY_MIN_IMAGE);
     return `placehold.co/${s}x${s}`;
   });
-  // AliExpress: .jpg_220x220.jpg -> .jpg
-  u = u.replace(/\.(jpg|jpeg|png|webp|gif)_[0-9]+x[0-9]+\.\1$/i, '.$1');
-  // AliExpress: _220x220.jpg al final
-  u = u.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, '.$1');
+  // AliExpress/AliCDN: reemplazar _220x220, _225x225 etc por _500x500 (CDN sirve ese tamaño)
+  u = u.replace(/_[0-9]+x[0-9]+\.(jpg|jpeg|png|webp|gif)$/i, `_${EBAY_MIN_IMAGE}x${EBAY_MIN_IMAGE}.$1`);
+  // Doble extensión: .jpg_220x220.jpg -> _500x500.jpg
+  u = u.replace(/\.(jpg|jpeg|png|webp|gif)_[0-9]+x[0-9]+\.\1$/i, `_${EBAY_MIN_IMAGE}x${EBAY_MIN_IMAGE}.$1`);
   return u;
 }
 
@@ -81,8 +84,10 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
     const rawImages = opp.images ?? (opp as any).image ? [(opp as any).image] : [];
     const filtered = Array.isArray(rawImages) && rawImages.length > 0
       ? rawImages.filter((u: unknown): u is string => typeof u === 'string' && u.startsWith('http'))
-      : ['https://placehold.co/500x500?text=Product'];
-    const images = filtered.map(enlargeImageUrl);
+      : [];
+    const enlarged = filtered.map(enlargeImageUrl);
+    // Fallback 500x500 garantizado: eBay requiere mínimo 500px; evita fallo si AliCDN no sirve el tamaño
+    const images = enlarged.length > 0 ? [...enlarged, FALLBACK_IMAGE] : [FALLBACK_IMAGE];
 
     const productService = new ProductService();
     const product = await productService.createProduct(userId, {
