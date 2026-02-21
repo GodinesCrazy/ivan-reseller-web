@@ -11,7 +11,7 @@
 ### Paso 1: Ir a la p?gina de login manual
 Cuando ves el banner rojo "ESTADO DE ALIEXPRESS - Acci?n requerida":
 
-1. Haz clic en el badge **"Acci?n requerida"** (recuadro rojo en el Navbar) (arriba), haz clic en **"Iniciar sesi?n manual"** (el enlace que aparece junto al estado de AliExpress).
+1. **Haz clic en el badge "Acción requerida"** (recuadro rojo en el Navbar, arriba). Te lleva a la página de login manual.
 2. O ve a: **Oportunidades** ? busca algo (ej. "organizador cocina") ? si el sistema detecta que necesita login, te redirigir? autom?ticamente.
 3. O escribe en el navegador: `https://www.ivanreseller.com/manual-login/new` (generar?s una nueva sesi?n).
 
