@@ -154,9 +154,15 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
 
     if (publishResult.success) {
       await productService.updateProductStatusSafely(product.id, 'PUBLISHED', true, userId);
+      const verified = await prisma.product.findUnique({
+        where: { id: product.id },
+        select: { status: true, isPublished: true, publishedAt: true },
+      });
       logger.info('[INTERNAL] Full cycle search-to-publish OK', {
         productId: product.id,
         listingId: publishResult.listingId,
+        status: verified?.status,
+        isPublished: verified?.isPublished,
         durationMs: Date.now() - startTime,
       });
       res.status(200).json({
@@ -166,6 +172,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
         listingUrl: publishResult.listingUrl,
         keyword,
         stages: { trends: true, search: true, product: true, approved: true, publish: true },
+        verified: verified ? { status: verified.status, isPublished: verified.isPublished } : undefined,
         durationMs: Date.now() - startTime,
       });
       return;

@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
+import AliexpressOverlayGate from '@/components/AliexpressOverlayGate';
 import { useSetupCheck } from '@/hooks/useSetupCheck';
 
 export default function Layout() {
@@ -9,6 +10,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+      <AliexpressOverlayGate />
       <Navbar />
       <div className="flex">
         <Sidebar />

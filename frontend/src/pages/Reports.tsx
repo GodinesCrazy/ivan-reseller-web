@@ -40,6 +40,9 @@ import {
 import { toast } from 'sonner';
 import { log } from '@/utils/logger';
 
+const safeNumber = (v: unknown): number =>
+  typeof v === 'number' && !Number.isNaN(v) ? v : 0;
+
 interface ReportFilters {
   startDate?: Date;
   endDate?: Date;
@@ -288,7 +291,7 @@ export default function Reports() {
   const renderSummaryCards = (summary: ReportSummary) => {
     const cards = [
       { title: 'Ventas Totales', value: summary.totalSales || 0, icon: DollarSign },
-      { title: 'Ingresos', value: `$${(summary.totalRevenue || 0).toLocaleString()}`, icon: TrendingUp },
+      { title: 'Ingresos', value: `$${safeNumber(summary.totalRevenue).toLocaleString()}`, icon: TrendingUp },
       { title: 'Productos', value: summary.totalProducts || 0, icon: Package },
       { title: 'Usuarios', value: summary.totalUsers || 0, icon: Users }
     ];
@@ -362,7 +365,7 @@ export default function Reports() {
             </div>
             <div className="text-right">
               <p className="font-bold text-green-600">
-                ${performer.totalRevenue.toLocaleString()}
+                ${safeNumber(performer.totalRevenue).toLocaleString()}
               </p>
               <p className="text-sm text-gray-600">
                 {performer.conversionRate.toFixed(1)}% conversión
@@ -453,7 +456,7 @@ export default function Reports() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">
-                {successStats.avgProfitAccuracy?.toFixed(1) || 0}%
+                {safeNumber(successStats.avgProfitAccuracy).toFixed(1)}%
               </div>
               <p className="text-xs text-gray-500 mt-1">Exactitud de predicción</p>
             </CardContent>
@@ -509,7 +512,7 @@ export default function Reports() {
               <div>
                 <h4 className="font-semibold mb-2">Precisión Promedio de Predicción</h4>
                 <div className="text-2xl font-bold text-purple-600">
-                  {learningPatterns.avgProfitAccuracy?.toFixed(1) || 0}%
+                  {safeNumber(learningPatterns.avgProfitAccuracy).toFixed(1)}%
                 </div>
                 <p className="text-sm text-gray-600 mt-1">
                   La IA predice correctamente la ganancia en promedio
@@ -557,7 +560,7 @@ export default function Reports() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-green-600">
-                {successStats.avgCustomerSatisfaction?.toFixed(1) || 0}/5
+                {safeNumber(successStats.avgCustomerSatisfaction).toFixed(1)}/5
               </div>
               <p className="text-sm text-gray-600 mt-2">Calificación promedio de clientes</p>
             </CardContent>

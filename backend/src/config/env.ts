@@ -260,8 +260,13 @@ const envSchema = z.object({
   
   // Optional external APIs
   EBAY_APP_ID: z.string().optional(),
+  EBAY_CLIENT_ID: z.string().optional(),
+  EBAY_CLIENT_SECRET: z.string().optional(),
+  EBAY_REDIRECT_URI: z.string().optional(),
   EBAY_DEV_ID: z.string().optional(),
   EBAY_CERT_ID: z.string().optional(),
+  SCRAPER_API_KEY: z.string().optional(),
+  ZENROWS_API_KEY: z.string().optional(),
   MERCADOLIBRE_CLIENT_ID: z.string().optional(),
   MERCADOLIBRE_CLIENT_SECRET: z.string().optional(),
   PAYPAL_CLIENT_ID: z.string().optional(),
@@ -507,3 +512,6 @@ try {
 
 export { env };
 export default env;
+
+/** When true, scraping (Puppeteer, ScraperAPI, ZenRows, bridge) is disabled; Autopilot uses Affiliate API only. */
+export const DISABLE_SCRAPING = true;

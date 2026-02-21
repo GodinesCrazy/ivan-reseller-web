@@ -63,7 +63,7 @@ export default function OrderDetail() {
           onClick={() => navigate('/orders')}
           className="mt-4 text-blue-600 hover:underline"
         >
-          ? Back to Orders
+          ← Back to Orders
         </button>
       </div>
     );

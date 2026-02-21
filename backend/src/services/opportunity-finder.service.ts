@@ -32,6 +32,8 @@ export interface OpportunityFilters {
   region?: string; // e.g., 'us', 'uk', 'mx'
   environment?: 'sandbox' | 'production'; // Environment para credenciales
   skipTrendsValidation?: boolean; // For smoke test: skip Google Trends filter
+  /** Margen relajado (5%) para búsqueda web - muestra más oportunidades cuando el margen estricto devuelve 0 */
+  relaxedMargin?: boolean;
   /** Internal: collect pipeline diagnostics for test-full-cycle */
   _collectDiagnostics?: { current: PipelineDiagnostics };
 }
@@ -1237,6 +1239,7 @@ class OpportunityFinderService {
     logger.info('[PIPELINE][NORMALIZED]', { count: products.length });
     // 2) Analizar competencia real (placeholder hasta integrar servicios específicos)
     logger.info('[OPPORTUNITY-FINDER] Processing scraped products to find opportunities', { productCount: products.length });
+    const effectiveMinMargin = filters.relaxedMargin ? Math.min(this.minMargin, 0.05) : this.minMargin;
     const opportunities: OpportunityItem[] = [];
     let skippedInvalid = 0;
     let skippedLowMargin = 0;
@@ -1403,18 +1406,18 @@ class OpportunityFinderService {
         logger.debug('Margen calculado con datos reales', {
           service: 'opportunity-finder',
           margin: (best.margin * 100).toFixed(1),
-          minRequired: (this.minMargin * 100).toFixed(1),
+          minRequired: (effectiveMinMargin * 100).toFixed(1),
           marketplace: best.mp,
           costPrice: product.price.toFixed(2),
           suggestedPrice: best.priceBase.toFixed(2)
         });
-        if (best.margin < this.minMargin) {
+        if (best.margin < effectiveMinMargin) {
           skippedLowMargin++;
           logger.info('Producto descartado por margen bajo', {
             service: 'opportunity-finder',
             title: product.title.substring(0, 50),
             marginCalculated: (best.margin * 100).toFixed(1) + '%',
-            minRequired: (this.minMargin * 100).toFixed(1) + '%',
+            minRequired: (effectiveMinMargin * 100).toFixed(1) + '%',
             costPrice: product.price.toFixed(2),
             suggestedPrice: best.priceBase.toFixed(2),
             marketplace: best.mp
@@ -1428,17 +1431,17 @@ class OpportunityFinderService {
         logger.debug('Margen estimado (sin datos de competencia)', {
           service: 'opportunity-finder',
           margin: (fallbackMargin * 100).toFixed(1),
-          minRequired: (this.minMargin * 100).toFixed(1),
+          minRequired: (effectiveMinMargin * 100).toFixed(1),
           costPrice: product.price.toFixed(2),
           estimatedPrice: fallbackPriceBase.toFixed(2)
         });
-        if (fallbackMargin < this.minMargin) {
+        if (fallbackMargin < effectiveMinMargin) {
           skippedLowMargin++;
           logger.info('Producto descartado por margen estimado bajo', {
             service: 'opportunity-finder',
             title: product.title.substring(0, 50),
             marginEstimated: (fallbackMargin * 100).toFixed(1) + '%',
-            minRequired: (this.minMargin * 100).toFixed(1) + '%',
+            minRequired: (effectiveMinMargin * 100).toFixed(1) + '%',
             costPrice: product.price.toFixed(2),
             estimatedPrice: fallbackPriceBase.toFixed(2),
             note: 'Sin datos de competencia - usando estimación heurística'
@@ -2171,12 +2174,13 @@ class OpportunityFinderService {
   async searchOpportunities(
     query: string,
     userId: number,
-    options?: { maxItems?: number; skipTrendsValidation?: boolean; marketplaces?: Array<'ebay' | 'amazon' | 'mercadolibre'>; region?: string; environment?: 'sandbox' | 'production' }
+    options?: { maxItems?: number; skipTrendsValidation?: boolean; relaxedMargin?: boolean; marketplaces?: Array<'ebay' | 'amazon' | 'mercadolibre'>; region?: string; environment?: 'sandbox' | 'production' }
   ): Promise<OpportunityItem[]> {
     const opportunities = await this.findOpportunities(userId, {
       query,
       maxItems: options?.maxItems ?? 10,
       skipTrendsValidation: options?.skipTrendsValidation,
+      relaxedMargin: options?.relaxedMargin,
       marketplaces: options?.marketplaces,
       region: options?.region ?? 'us',
       environment: options?.environment,

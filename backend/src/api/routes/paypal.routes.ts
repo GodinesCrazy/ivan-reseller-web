@@ -3,10 +3,13 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { authenticate } from '../../middleware/auth.middleware';
 import { PayPalCheckoutService } from '../../services/paypal-checkout.service';
 import { orderFulfillmentService } from '../../services/order-fulfillment.service';
 import { prisma } from '../../config/database';
 import logger from '../../config/logger';
+import { checkDailyLimits } from '../../services/daily-limits.service';
+import { checkProfitGuard } from '../../services/profit-guard.service';
 
 const router = Router();
 const service = PayPalCheckoutService.fromEnv();
@@ -40,7 +43,7 @@ router.post('/create-order', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/capture-order', async (req: Request, res: Response) => {
+router.post('/capture-order', authenticate, async (req: Request, res: Response) => {
   if (!service) {
     return res.status(503).json({ success: false, error: 'PayPal not configured' });
   }
@@ -54,9 +57,31 @@ router.post('/capture-order', async (req: Request, res: Response) => {
       customerName,
       customerEmail,
       shippingAddress,
+      supplierPriceUsd,
+      productId: bodyProductId,
     } = req.body;
     if (!paypalOrderId) {
       return res.status(400).json({ success: false, error: 'orderId (PayPal token) required' });
+    }
+    const sellingPriceUsd = parseFloat(price) || 0;
+    const limitCheck = await checkDailyLimits(undefined, sellingPriceUsd);
+    if (!limitCheck.ok) {
+      return res.status(429).json({ success: false, error: limitCheck.error });
+    }
+    const supplierUsd = typeof supplierPriceUsd === 'number' ? supplierPriceUsd : parseFloat(supplierPriceUsd) || 0;
+    if (supplierUsd > 0) {
+      const profitResult = checkProfitGuard({
+        sellingPriceUsd,
+        supplierPriceUsd: supplierUsd,
+        taxUsd: 0,
+        shippingUsd: 0,
+      });
+      if (!profitResult.allowed) {
+        return res.status(400).json({
+          success: false,
+          error: profitResult.error || 'Profit guard: selling price must exceed supplier cost + fees',
+        });
+      }
     }
     const result = await service.captureOrder(paypalOrderId);
     if (!result.success) {
@@ -66,8 +91,12 @@ router.post('/capture-order', async (req: Request, res: Response) => {
       typeof shippingAddress === 'string'
         ? shippingAddress
         : JSON.stringify(shippingAddress || {});
+    const userId = req.user?.userId ?? undefined;
+    const productId = bodyProductId != null ? Number(bodyProductId) : undefined;
     const order = await prisma.order.create({
       data: {
+        userId: userId ?? undefined,
+        productId: Number.isNaN(productId) ? undefined : productId,
         title: productTitle || 'Order',
         price: parseFloat(price) || 0,
         currency: currency || 'USD',
@@ -78,6 +107,11 @@ router.post('/capture-order', async (req: Request, res: Response) => {
         paypalOrderId,
         productUrl: productUrl || undefined,
       },
+    });
+    logger.info('[CAPTURE_ORDER]', {
+      userId: userId ?? null,
+      productId: Number.isNaN(productId) ? null : productId ?? null,
+      orderId: order.id,
     });
     const fulfill = await orderFulfillmentService.fulfillOrder(order.id);
     return res.status(200).json({

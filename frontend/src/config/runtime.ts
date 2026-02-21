@@ -43,8 +43,8 @@ export function getApiBaseUrl(): string {
   const rawUrl = import.meta.env.VITE_API_URL?.trim();
   
   if (!rawUrl && isDevelopment) {
-    console.warn('⚠️  VITE_API_URL no configurada, usando fallback: http://localhost:3000');
-    return 'http://localhost:3000';
+    console.warn('⚠️  VITE_API_URL no configurada, usando fallback: http://localhost:4000');
+    return 'http://localhost:4000';
   }
   
   // Normalizar: eliminar trailing slashes

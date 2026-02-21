@@ -242,20 +242,28 @@ export class GoogleTrendsService {
         }
       });
 
-      // Procesar respuesta de SerpAPI
-      const interestOverTime = response.data.interest_over_time?.map((item: any) => ({
-        date: item.date,
-        value: item.values?.[0]?.value || 0
-      })) || [];
-
-      const relatedQueries = (response.data.related_queries?.rising || []).slice(0, 5).map((q: any) => ({
-        query: q.query,
-        value: q.value || 0
+      // Procesar respuesta de SerpAPI - interest_over_time puede ser objeto con timeline_data o array directo
+      const iotRaw = response.data?.interest_over_time;
+      const iotArray = Array.isArray(iotRaw)
+        ? iotRaw
+        : (iotRaw?.timeline_data && Array.isArray(iotRaw.timeline_data) ? iotRaw.timeline_data : []);
+      const interestOverTime = iotArray.map((item: any) => ({
+        date: item.date || String(item.timestamp || ''),
+        value: typeof item.values?.[0]?.value === 'number' ? item.values[0].value : (parseInt(String(item.values?.[0]?.value || 0), 10) || 0)
       }));
 
-      const regionalInterest = (response.data.interest_by_region || []).slice(0, 10).map((r: any) => ({
-        region: r.geoName,
-        value: r.value?.[0]?.value || 0
+      const rqRaw = response.data?.related_queries;
+      const rising = (rqRaw && typeof rqRaw === 'object' && Array.isArray(rqRaw.rising)) ? rqRaw.rising : [];
+      const relatedQueries = rising.slice(0, 5).map((q: any) => ({
+        query: q.query || q,
+        value: typeof q.value === 'number' ? q.value : (parseInt(String(q.value || 0), 10) || 0)
+      }));
+
+      const regionRaw = response.data?.interest_by_region;
+      const regionArray = Array.isArray(regionRaw) ? regionRaw : [];
+      const regionalInterest = regionArray.slice(0, 10).map((r: any) => ({
+        region: r.geoName || r.geo_code || r.region || '',
+        value: typeof r.value?.[0]?.value === 'number' ? r.value[0].value : (parseInt(String(r.value?.[0]?.value || r.value || 0), 10) || 0)
       }));
 
       // Calcular tendencia general

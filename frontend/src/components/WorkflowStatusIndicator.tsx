@@ -7,6 +7,7 @@ import api from '@/services/api';
 interface WorkflowStatusIndicatorProps {
   productId: number;
   currentStage?: string;
+  preloadedCurrentStage?: string | null;
   className?: string;
 }
 
@@ -22,28 +23,26 @@ const stageLabels: Record<string, string> = {
 export default function WorkflowStatusIndicator({
   productId,
   currentStage,
+  preloadedCurrentStage,
   className = '',
 }: WorkflowStatusIndicatorProps) {
   const [showModal, setShowModal] = useState(false);
   const [fetchedStage, setFetchedStage] = useState<string | null>(null);
 
-  // Si no se proporciona currentStage, intentar obtenerlo
+  // Si hay preloadedCurrentStage o currentStage, no hacer fetch (reduce rate limit)
   useEffect(() => {
-    if (!currentStage && productId) {
-      // Cargar el stage desde el endpoint (solo si es necesario)
-      api.get(`/api/products/${productId}/workflow-status`)
-        .then(response => {
-          if (response.data?.success && response.data?.data?.currentStage) {
-            setFetchedStage(response.data.data.currentStage);
-          }
-        })
-        .catch(() => {
-          // Silenciar error - solo es un indicador, no crítico
-        });
-    }
-  }, [productId, currentStage]);
+    if (currentStage || preloadedCurrentStage !== undefined) return;
+    if (!productId) return;
+    api.get(`/api/products/${productId}/workflow-status`)
+      .then(response => {
+        if (response.data?.success && response.data?.data?.currentStage) {
+          setFetchedStage(response.data.data.currentStage);
+        }
+      })
+      .catch(() => {});
+  }, [productId, currentStage, preloadedCurrentStage]);
 
-  const displayStage = currentStage || fetchedStage;
+  const displayStage = currentStage || preloadedCurrentStage ?? fetchedStage;
   const showBadge = displayStage && stageLabels[displayStage];
 
   return (

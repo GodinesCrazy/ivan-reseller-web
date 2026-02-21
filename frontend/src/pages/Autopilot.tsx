@@ -19,7 +19,8 @@ import {
   Save,
   X,
   Copy,
-  RefreshCw
+  RefreshCw,
+  Link2
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
@@ -83,6 +84,10 @@ export default function Autopilot() {
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
+
+  // eBay OAuth: detectar si falta conectar y ofrecer hacerlo desde aquí (sin ir a Settings)
+  const [ebayNeedsOAuth, setEbayNeedsOAuth] = useState(false);
+  const [ebayOAuthing, setEbayOAuthing] = useState(false);
 
   // Form state
   const [workflowForm, setWorkflowForm] = useState({
@@ -260,6 +265,70 @@ export default function Autopilot() {
     return () => clearInterval(interval);
   }, []);
 
+  // Detectar si eBay tiene credenciales base pero falta OAuth (para mostrar "Conectar eBay" automáticamente)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get('/api/workflow/environment');
+        const env = data?.environment || 'sandbox';
+        const credRes = await api.get(`/api/marketplace/credentials/ebay?environment=${env}`);
+        const body = credRes.data?.data ?? credRes.data;
+        if (cancelled) return;
+        // Si hay credenciales base pero falta OAuth (issues/warnings lo indican)
+        const issues = body?.issues || [];
+        const warnings = body?.warnings || [];
+        const present = body?.present ?? credRes.data?.present;
+        const needsOAuth =
+          !!present &&
+          (issues.some((s: string) => /oauth|token/i.test(s)) ||
+            warnings.some((s: string) => /oauth|token|autoriz/i.test(s)));
+        setEbayNeedsOAuth(!!needsOAuth);
+      } catch {
+        if (!cancelled) setEbayNeedsOAuth(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Listener para OAuth completado (callback envía postMessage)
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'oauth_success') {
+        setEbayNeedsOAuth(false);
+        setEbayOAuthing(false);
+        toast.success('eBay conectado correctamente');
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  const handleConnectEbay = async () => {
+    setEbayOAuthing(true);
+    try {
+      const { data: envData } = await api.get('/api/workflow/environment');
+      const env = envData?.environment || 'sandbox';
+      const { data } = await api.get(`/api/marketplace/auth-url/ebay?environment=${env}`);
+      const authUrl = data?.data?.authUrl || data?.authUrl || data?.url;
+      if (!authUrl) {
+        toast.error('No se pudo obtener la URL de autorización de eBay');
+        return;
+      }
+      const win = window.open(authUrl, '_blank', 'noopener,noreferrer,width=800,height=600');
+      if (!win || win.closed) {
+        toast('Si la ventana fue bloqueada, habilita popups o abre Configuración → APIs → eBay para conectar.', { duration: 5000 });
+      } else {
+        toast('Completa el inicio de sesión en la ventana de eBay y vuelve aquí.');
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message || (err as Error)?.message || 'Error';
+      toast.error('Error al iniciar OAuth: ' + msg);
+    } finally {
+      setEbayOAuthing(false);
+    }
+  };
+
   const loadData = async () => {
     try {
       const [workflowsRes, statsRes] = await Promise.all([
@@ -310,12 +379,22 @@ export default function Autopilot() {
         await api.post('/api/autopilot/stop');
         toast.success('Autopilot stopped');
         setAutopilotRunning(false);
+        loadData();
       } else {
         await api.post('/api/autopilot/start');
-        toast.success('Autopilot started');
+        toast.success('Autopilot started. First cycle running…');
         setAutopilotRunning(true);
+        // Refetch status and stats so "Last run" and cycle results appear when first cycle finishes
+        checkAutopilotStatus();
+        loadData();
+        const refresh = () => {
+          checkAutopilotStatus();
+          loadData();
+        };
+        setTimeout(refresh, 2000);
+        setTimeout(refresh, 6000);
+        setTimeout(refresh, 12000);
       }
-      loadData();
     } catch (error: any) {
       toast.error('Error toggling autopilot: ' + (error.response?.data?.error || error.message));
     }
@@ -490,6 +569,27 @@ export default function Autopilot() {
 
   return (
     <div className="p-6 space-y-4">
+      {/* eBay OAuth banner: conectar automáticamente sin ir a Settings */}
+      {ebayNeedsOAuth && (
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 p-4">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <p className="font-medium text-amber-900 dark:text-amber-100">eBay requiere autorización</p>
+              <p className="text-sm text-amber-800 dark:text-amber-200">Conecta tu cuenta eBay para que el Autopilot encuentre más productos. Un clic y listo.</p>
+            </div>
+          </div>
+          <button
+            onClick={handleConnectEbay}
+            disabled={ebayOAuthing}
+            className="shrink-0 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg flex items-center gap-2 font-medium"
+          >
+            <Link2 className="w-4 h-4" />
+            {ebayOAuthing ? 'Abriendo...' : 'Conectar eBay'}
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -542,19 +642,19 @@ export default function Autopilot() {
           </div>
           <div className="text-sm text-gray-600 dark:text-gray-400">
             {autopilotRunning 
-              ? `${stats?.activeWorkflows || 0} active workflows executing automatically`
-              : 'No workflows are running. Start autopilot to enable scheduled executions.'}
+              ? 'Ciclo automático activo: buscar oportunidades → publicar. Se ejecuta según el intervalo configurado.'
+              : 'Inicia el autopilot para ejecutar ciclos automáticos (buscar oportunidades y publicar).'}
           </div>
-          {(autopilotStatus?.opportunitiesGenerated != null || autopilotStatus?.productsPublished != null || autopilotStatus?.lastRun) && (
+          {(autopilotStatus?.lastRun != null || autopilotStatus?.opportunitiesGenerated != null || autopilotStatus?.productsPublished != null) && (
             <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-500 dark:text-gray-400">
+              {autopilotStatus.lastRun != null && autopilotStatus.lastRun && (
+                <span>Última ejecución: {new Date(autopilotStatus.lastRun).toLocaleString()}</span>
+              )}
               {autopilotStatus.opportunitiesGenerated != null && (
-                <span>Last cycle opportunities: {autopilotStatus.opportunitiesGenerated}</span>
+                <span>Oportunidades último ciclo: {autopilotStatus.opportunitiesGenerated}</span>
               )}
               {autopilotStatus.productsPublished != null && (
-                <span>Published: {autopilotStatus.productsPublished}</span>
-              )}
-              {autopilotStatus.lastRun && (
-                <span>Last run: {new Date(autopilotStatus.lastRun).toLocaleString()}</span>
+                <span>Publicados: {autopilotStatus.productsPublished}</span>
               )}
             </div>
           )}

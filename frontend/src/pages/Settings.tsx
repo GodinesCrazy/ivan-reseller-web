@@ -36,6 +36,8 @@ interface UserProfile {
   name: string;
   email: string;
   phone: string;
+  paypalPayoutEmail?: string | null;
+  payoneerPayoutEmail?: string | null;
   avatar?: string;
 }
 
@@ -78,7 +80,9 @@ export default function Settings() {
     id: 1,
     name: '',
     email: '',
-    phone: ''
+    phone: '',
+    paypalPayoutEmail: null,
+    payoneerPayoutEmail: null
   });
 
   // Notification Settings
@@ -196,7 +200,9 @@ export default function Settings() {
           id: user.id,
           name: user.fullName || user.username || '',
           email: user.email || '',
-          phone: ''
+          phone: '',
+          paypalPayoutEmail: user.paypalPayoutEmail ?? null,
+          payoneerPayoutEmail: user.payoneerPayoutEmail ?? null
         });
       }
     } catch (error: any) {
@@ -210,7 +216,8 @@ export default function Settings() {
             id: user.id,
             name: user.fullName || user.username || '',
             email: user.email || '',
-            phone: ''
+            phone: '',
+            paypalPayoutEmail: (user as any).paypalPayoutEmail ?? null
           });
         }
       } catch (e) {
@@ -343,8 +350,14 @@ export default function Settings() {
   const saveProfile = async () => {
     setSaving(true);
     try {
-      await api.put(`/api/users/${profile.id}`, profile);
-      toast.success('Profile updated successfully');
+      const payload: Record<string, any> = {
+        email: profile.email,
+        paypalPayoutEmail: profile.paypalPayoutEmail?.trim() || null,
+        payoneerPayoutEmail: profile.payoneerPayoutEmail?.trim() || null
+      };
+      await api.put(`/api/users/${profile.id}`, payload);
+      toast.success('Perfil actualizado correctamente');
+      useAuthStore.getState().checkAuth();
     } catch (error: any) {
       toast.error('Error updating profile: ' + (error.response?.data?.error || error.message));
     } finally {
@@ -378,7 +391,7 @@ export default function Settings() {
 
     setSaving(true);
     try {
-      await api.post(`/api/users/${profile.id}/password`, {
+      await api.post('/api/auth/change-password', {
         currentPassword: passwordData.currentPassword,
         newPassword: passwordData.newPassword
       });
@@ -948,6 +961,40 @@ export default function Settings() {
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
                   placeholder="+1 (555) 123-4567"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <LinkIcon className="w-4 h-4 inline mr-2" />
+                  Email PayPal (recibir ganancias)
+                </label>
+                <input
+                  type="email"
+                  value={profile.paypalPayoutEmail ?? ''}
+                  onChange={(e) => setProfile({ ...profile, paypalPayoutEmail: e.target.value || null })}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  placeholder="tu@paypal.com"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Email de tu cuenta PayPal para recibir las ganancias de tus ventas
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <LinkIcon className="w-4 h-4 inline mr-2" />
+                  Email Payoneer (recibir pagos de eBay)
+                </label>
+                <input
+                  type="email"
+                  value={profile.payoneerPayoutEmail ?? ''}
+                  onChange={(e) => setProfile({ ...profile, payoneerPayoutEmail: e.target.value || null })}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
+                  placeholder="tu@payoneer.com"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Email de tu cuenta Payoneer para recibir pagos de eBay y otros marketplaces
+                </p>
               </div>
 
               <div className="flex justify-end pt-4 border-t">

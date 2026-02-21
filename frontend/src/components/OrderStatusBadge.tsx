@@ -1,5 +1,6 @@
 /**
- * Order status badge - CREATED (gray), PAID (blue), PURCHASING (yellow), PURCHASED (green), FAILED (red)
+ * Order status badge - CREATED (gray), PAID (blue), PURCHASING (yellow + spinner), PURCHASED (green), FAILED (red)
+ * Shows spinner when status = PURCHASING (order being fulfilled on AliExpress)
  */
 
 import { Badge } from '@/components/ui/badge';
@@ -14,8 +15,13 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function OrderStatusBadge({ status }: { status: string }) {
   const style = STATUS_STYLES[status] || STATUS_STYLES.CREATED;
+  const isPurchasing = status === 'PURCHASING';
+
   return (
-    <Badge variant="secondary" className={style}>
+    <Badge variant="secondary" className={`${style} flex items-center gap-1.5`}>
+      {isPurchasing && (
+        <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+      )}
       {status}
     </Badge>
   );

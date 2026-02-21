@@ -94,6 +94,23 @@ export class PayPalPayoutService {
     const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
     const environment = (process.env.PAYPAL_ENVIRONMENT || 'sandbox') as 'sandbox' | 'production';
 
+    // Log temporal para verificación de variables (no expone valores)
+    console.log('[PAYPAL_ENV_CHECK]', {
+      clientIdPresent: !!process.env.PAYPAL_CLIENT_ID,
+      secretPresent: !!process.env.PAYPAL_CLIENT_SECRET,
+      env: process.env.PAYPAL_ENVIRONMENT,
+    });
+    logger.info('[PAYPAL_ENV_FINAL_CHECK]', {
+      env: process.env.PAYPAL_ENVIRONMENT,
+      clientIdLength: process.env.PAYPAL_CLIENT_ID?.length,
+      secretLength: process.env.PAYPAL_CLIENT_SECRET?.length,
+    });
+    logger.info('[PAYPAL_ENV_READY]', {
+      clientIdPresent: !!clientId,
+      secretPresent: !!clientSecret,
+      environment: environment,
+    });
+
     if (!clientId || !clientSecret) {
       logger.warn('PayPal credentials not configured');
       return null;

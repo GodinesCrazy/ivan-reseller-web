@@ -142,6 +142,37 @@ export const metricTooltips = {
   marketplace: {
     title: 'Marketplace',
     body: 'Plataforma donde se publica o se publicará el producto. Puede ser eBay, Amazon, MercadoLibre u otros marketplaces configurados en el sistema.'
+  },
+
+  // ==================== DASHBOARD / NEGOCIO ====================
+
+  gananciaNeta: {
+    title: 'Ganancia neta',
+    body: 'Utilidad real después de costos del producto, envío, impuestos, comisiones del marketplace, comisiones de PayPal y comisión de plataforma.'
+  },
+  comisionPlataforma: {
+    title: 'Comisión plataforma',
+    body: 'Porcentaje retenido por la plataforma de la ganancia bruta de cada venta. El resto se envía a tu PayPal.'
+  },
+  ventasTotales: {
+    title: 'Ventas totales',
+    body: 'Suma de los precios de venta de todas las ventas confirmadas.'
+  },
+  autopilot: {
+    title: 'Autopilot',
+    body: 'Ejecución automática de workflows (búsqueda, publicación, precios) según la programación definida. Configura límites diarios de órdenes y gasto.'
+  },
+  profitGuard: {
+    title: 'Profit Guard',
+    body: 'Protección que bloquea ventas cuando el precio no cubre costos, comisiones y envío. Evita pérdidas por márgenes negativos.'
+  },
+  dynamicPricing: {
+    title: 'Precios dinámicos',
+    body: 'Ajuste automático de precios según competencia. Nunca baja del margen mínimo (Profit Guard).'
+  },
+  dailyLimits: {
+    title: 'Límites diarios',
+    body: 'Máximo de órdenes y gasto por día. El sistema bloquea nuevas órdenes al alcanzar el límite.'
   }
 } as const;
 

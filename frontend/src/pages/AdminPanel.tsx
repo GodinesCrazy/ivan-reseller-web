@@ -94,6 +94,13 @@ export default function AdminPanel() {
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [tempPassword, setTempPassword] = useState('');
+  const [showPlatformConfigTab, setShowPlatformConfigTab] = useState(false);
+  const [platformConfig, setPlatformConfig] = useState<{
+    platformCommissionPct: number;
+    adminPaypalEmail: string;
+  } | null>(null);
+  const [savingPlatformConfig, setSavingPlatformConfig] = useState(false);
+  const [platformConfigForm, setPlatformConfigForm] = useState({ platformCommissionPct: 10, adminPaypalEmail: '' });
 
   const {
     register,
@@ -115,6 +122,50 @@ export default function AdminPanel() {
     loadAdminCommissions();
     loadAccessRequests();
   }, []);
+
+  const loadPlatformConfig = async () => {
+    try {
+      const { data } = await api.get('/api/admin/platform-config');
+      if (data?.success) {
+        setPlatformConfig({
+          platformCommissionPct: data.platformCommissionPct ?? 10,
+          adminPaypalEmail: data.adminPaypalEmail ?? ''
+        });
+        setPlatformConfigForm({
+          platformCommissionPct: data.platformCommissionPct ?? 10,
+          adminPaypalEmail: data.adminPaypalEmail ?? ''
+        });
+      }
+    } catch (error) {
+      console.error('Error loading platform config:', error);
+      toast.error('Error cargando configuración de plataforma');
+    }
+  };
+
+  const savePlatformConfig = async () => {
+    setSavingPlatformConfig(true);
+    try {
+      const { data } = await api.patch('/api/admin/platform-config', {
+        platformCommissionPct: platformConfigForm.platformCommissionPct,
+        adminPaypalEmail: platformConfigForm.adminPaypalEmail || undefined
+      });
+      if (data?.success) {
+        setPlatformConfig({
+          platformCommissionPct: data.platformCommissionPct ?? 10,
+          adminPaypalEmail: data.adminPaypalEmail ?? ''
+        });
+        setPlatformConfigForm({
+          platformCommissionPct: data.platformCommissionPct ?? 10,
+          adminPaypalEmail: data.adminPaypalEmail ?? ''
+        });
+        toast.success('Configuración de plataforma actualizada');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Error guardando configuración');
+    } finally {
+      setSavingPlatformConfig(false);
+    }
+  };
 
   const loadAdminCommissions = async () => {
     try {
@@ -302,6 +353,15 @@ export default function AdminPanel() {
         </button>
         <button
           onClick={() => {
+            setShowPlatformConfigTab(!showPlatformConfigTab);
+            if (!showPlatformConfigTab) loadPlatformConfig();
+          }}
+          className="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-lg font-medium"
+        >
+          {showPlatformConfigTab ? '👁️ Ocultar' : '⚙️ Config'} Plataforma
+        </button>
+        <button
+          onClick={() => {
             setShowAccessRequestsTab(!showAccessRequestsTab);
             if (!showAccessRequestsTab) {
               loadAccessRequests();
@@ -438,6 +498,67 @@ export default function AdminPanel() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* Configuración Plataforma (comisión %, PayPal admin) */}
+      {showPlatformConfigTab && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md mb-6 transition-colors">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Configuración de Plataforma</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              Comisión por venta y email PayPal para recibir las comisiones de la plataforma
+            </p>
+          </div>
+          <div className="p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Comisión plataforma (%)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                value={platformConfigForm.platformCommissionPct}
+                onChange={(e) => setPlatformConfigForm({
+                  ...platformConfigForm,
+                  platformCommissionPct: parseFloat(e.target.value) || 0
+                })}
+                className="w-full max-w-xs border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Porcentaje que se retiene de la ganancia del usuario en cada venta (0-100%)
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Email PayPal (admin)
+              </label>
+              <input
+                type="email"
+                value={platformConfigForm.adminPaypalEmail}
+                onChange={(e) => setPlatformConfigForm({
+                  ...platformConfigForm,
+                  adminPaypalEmail: e.target.value
+                })}
+                className="w-full max-w-md border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                placeholder="admin@paypal.com"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Cuenta PayPal donde se reciben las comisiones de la plataforma
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={savePlatformConfig}
+                disabled={savingPlatformConfig || platformConfigForm.platformCommissionPct < 0 || platformConfigForm.platformCommissionPct > 100}
+                className="bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-md disabled:opacity-50"
+              >
+                {savingPlatformConfig ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -68,3 +68,4 @@ secrets/
 # Railway URL local (never commit)
 docs/RAILWAY_URL.local
 *.local
+.vercel

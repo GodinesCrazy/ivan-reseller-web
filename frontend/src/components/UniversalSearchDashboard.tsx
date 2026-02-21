@@ -81,47 +81,39 @@ const UniversalSearchDashboard: React.FC = () => {
 
       const items = response.data?.items || [];
       
-      // Convertir items de la API al formato que espera el componente
+      // Backend is source of truth — use costUsd, suggestedPriceUsd, profitMargin, roiPercentage, confidenceScore only
       const formattedOpportunities: SearchOpportunity[] = items.map((item: any, index: number) => {
-        // Calcular precio de compra (AliExpress) y precio de venta (marketplace más bajo)
-        const buyPrice = item.aliexpressPrice || item.price || 0;
-        const marketplacePrices = item.marketplacePrices || {};
-        const sellPrice = Math.min(
-          marketplacePrices.ebay || buyPrice * 1.5,
-          marketplacePrices.amazon || buyPrice * 1.5,
-          marketplacePrices.mercadolibre || buyPrice * 1.5
-        );
-        const margin = sellPrice - buyPrice;
-        const marginPercent = buyPrice > 0 ? (margin / buyPrice) * 100 : 0;
+        const buyPrice = Number(item.costUsd ?? item.aliexpressPrice ?? 0);
+        const suggestedPrice = Number(item.suggestedPriceUsd ?? item.suggestedPrice ?? 0);
+        const margin = suggestedPrice - buyPrice;
+        const marginPercent = typeof item.roiPercentage === 'number' ? item.roiPercentage : (buyPrice > 0 ? (margin / buyPrice) * 100 : 0);
+        const confidence = typeof item.confidenceScore === 'number' ? item.confidenceScore : 75;
 
         return {
-          id: String(item.productId || index),
+          id: String(item.productId ?? index),
           name: item.title || 'Producto sin título',
           buyPrice,
-          sellPrice,
+          sellPrice: suggestedPrice,
           margin,
-          confidence: Math.min(85 + Math.floor(marginPercent / 2), 95),
-          aiAnalysis: `Margen estimado: ${marginPercent.toFixed(1)}%`,
-          marketplace: item.bestMarketplace || 'ebay',
-          imageUrl: item.imageUrl || '',
-          externalUrl: item.productUrl || '',
+          confidence,
+          aiAnalysis: `Margen: ${marginPercent.toFixed(1)}% (backend)`,
+          marketplace: item.targetMarketplaces?.[0] ?? item.bestMarketplace ?? 'ebay',
+          imageUrl: item.images?.[0] ?? item.image ?? item.imageUrl ?? '',
+          externalUrl: item.aliexpressUrl ?? item.productUrl ?? '',
           riskLevel: marginPercent > 50 ? 'LOW' : marginPercent > 30 ? 'MEDIUM' : 'HIGH',
           recommendedAction: marginPercent > 50 ? 'BUY' : marginPercent > 30 ? 'MONITOR' : 'RESEARCH',
           category: item.category || 'General',
-          // ✅ CORREGIDO: Usar datos reales del backend en lugar de valores aleatorios
           trends: {
-            demand: item.trendData?.searchVolume 
-              ? Math.min(100, Math.round((item.trendData.searchVolume / 5000) * 100)) // Escalar volumen real (máx 5000 = 100)
+            demand: item.trendData?.searchVolume
+              ? Math.min(100, Math.round((item.trendData.searchVolume / 5000) * 100))
               : (item.marketDemand === 'high' ? 80 : item.marketDemand === 'medium' ? 50 : item.marketDemand === 'low' ? 30 : undefined),
-            competition: item.competitionLevel === 'low' ? 20 : 
-                        item.competitionLevel === 'medium' ? 50 : 
-                        item.competitionLevel === 'high' ? 80 : 50,
+            competition: item.competitionLevel === 'low' ? 20 : item.competitionLevel === 'medium' ? 50 : item.competitionLevel === 'high' ? 80 : 50,
             trend: item.trendData?.trend || 'stable',
             searchVolume: item.trendData?.searchVolume || undefined,
             timeToFirstSale: item.estimatedTimeToFirstSale || undefined,
             breakEvenTime: item.breakEvenTime || undefined,
-            seasonality: 'Stable' // TODO: Implementar análisis de estacionalidad
-          }
+            seasonality: 'Stable',
+          },
         };
       });
 
@@ -131,6 +123,7 @@ const UniversalSearchDashboard: React.FC = () => {
         ? totalPotentialMargin / formattedOpportunities.length 
         : 0;
 
+      console.log('[FRONTEND] UniversalSearchDashboard opportunities:', formattedOpportunities.length);
       const searchResultsData: SearchResults = {
         searchQuery: searchTerm,
         mode: useRealScraping ? 'real' : 'real', // Siempre real ahora

@@ -103,7 +103,7 @@ export default function SetupRequired() {
             Configuración Requerida
           </h1>
           <p className="text-gray-600">
-            Necesitas configurar tus APIs para comenzar a usar el sistema
+            Configura tus APIs y tu email de PayPal para comenzar a vender y recibir ganancias
           </p>
         </div>
 
@@ -193,7 +193,16 @@ export default function SetupRequired() {
           </button>
         </div>
 
-        <div className="mt-6 text-center">
+        <div className="mt-6 text-center space-y-2">
+          <p className="text-sm text-gray-500">
+            ¿Primera vez?{' '}
+            <a
+              href="/onboarding"
+              className="text-blue-600 hover:text-blue-700 underline"
+            >
+              Completa el asistente de configuración
+            </a>
+          </p>
           <p className="text-sm text-gray-500">
             ¿Necesitas ayuda?{' '}
             <a

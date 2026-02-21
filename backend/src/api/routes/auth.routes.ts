@@ -139,6 +139,13 @@ router.get('/me', authenticate, async (req: Request, res: Response, next: NextFu
         isActive: true,
         lastLoginAt: true,
         createdAt: true,
+        onboardingStep: true,
+        onboardingCompleted: true,
+        paypalPayoutEmail: true,
+        payoneerPayoutEmail: true,
+        ebayConnected: true,
+        amazonConnected: true,
+        mercadolibreConnected: true,
       },
     });
 

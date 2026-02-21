@@ -5,6 +5,7 @@ import { Search, Brain, Send, ShoppingCart, Package, MessageCircle } from 'lucid
 
 interface WorkflowProgressBarProps {
   productId: number;
+  preloadedStatus?: ProductWorkflowStatus | null;
   className?: string;
 }
 
@@ -17,13 +18,18 @@ const stageConfig: Record<WorkflowStage, { label: string; icon: any; shortLabel:
   customerService: { label: 'SERVICE', icon: MessageCircle, shortLabel: 'Servicio' },
 };
 
-export default function WorkflowProgressBar({ productId, className = '' }: WorkflowProgressBarProps) {
-  const [workflowStatus, setWorkflowStatus] = useState<ProductWorkflowStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function WorkflowProgressBar({ productId, preloadedStatus, className = '' }: WorkflowProgressBarProps) {
+  const [workflowStatus, setWorkflowStatus] = useState<ProductWorkflowStatus | null>(preloadedStatus ?? null);
+  const [loading, setLoading] = useState(!preloadedStatus);
 
   useEffect(() => {
+    if (preloadedStatus !== undefined) {
+      setWorkflowStatus(preloadedStatus ?? null);
+      setLoading(false);
+      return;
+    }
     fetchWorkflowStatus();
-  }, [productId]);
+  }, [productId, preloadedStatus]);
 
   const fetchWorkflowStatus = async () => {
     try {
@@ -40,14 +46,15 @@ export default function WorkflowProgressBar({ productId, className = '' }: Workf
     }
   };
 
-  if (loading || !workflowStatus) {
+  const effectiveStatus = preloadedStatus ?? workflowStatus;
+  if (loading || !effectiveStatus) {
     return (
       <div className={`h-2 bg-gray-200 rounded-full animate-pulse ${className}`} />
     );
   }
 
   const stages: WorkflowStage[] = ['scrape', 'analyze', 'publish', 'purchase', 'fulfillment', 'customerService'];
-  const currentStageIndex = stages.indexOf(workflowStatus.currentStage);
+  const currentStageIndex = stages.indexOf(effectiveStatus.currentStage);
   const progress = ((currentStageIndex + 1) / stages.length) * 100;
 
   return (
@@ -61,9 +68,9 @@ export default function WorkflowProgressBar({ productId, className = '' }: Workf
         {/* Indicadores de etapas */}
         <div className="absolute inset-0 flex items-center">
           {stages.map((stage, index) => {
-            const stageInfo = workflowStatus.stages[stage];
+            const stageInfo = effectiveStatus.stages[stage];
             const isCompleted = stageInfo.status === 'completed';
-            const isCurrent = workflowStatus.currentStage === stage;
+            const isCurrent = effectiveStatus.currentStage === stage;
             const isPending = index > currentStageIndex;
             
             return (
@@ -93,8 +100,8 @@ export default function WorkflowProgressBar({ productId, className = '' }: Workf
       {/* Etiquetas de etapas */}
       <div className="flex justify-between text-xs text-gray-600 mt-1">
         {stages.map((stage) => {
-          const stageInfo = workflowStatus.stages[stage];
-          const isCurrent = workflowStatus.currentStage === stage;
+          const stageInfo = effectiveStatus.stages[stage];
+          const isCurrent = effectiveStatus.currentStage === stage;
           const isCompleted = stageInfo.status === 'completed';
           const Icon = stageConfig[stage].icon;
 

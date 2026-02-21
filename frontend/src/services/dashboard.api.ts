@@ -39,17 +39,17 @@ export interface RecentActivity {
 
 export const dashboardApi = {
   async getStats(): Promise<DashboardStats> {
-    const response = await api.get('/dashboard/stats');
+    const response = await api.get('/api/dashboard/stats');
     return response.data;
   },
 
   async getRecentActivity(limit = 10): Promise<RecentActivity> {
-    const response = await api.get(`/dashboard/recent-activity?limit=${limit}`);
+    const response = await api.get(`/api/dashboard/recent-activity?limit=${limit}`);
     return response.data;
   },
 
   async getSalesChart(days = 30) {
-    const response = await api.get(`/dashboard/charts/sales?days=${days}`);
+    const response = await api.get(`/api/dashboard/charts/sales?days=${days}`);
     return response.data;
   },
 };

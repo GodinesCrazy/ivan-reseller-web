@@ -5,9 +5,10 @@
 
 import { prisma } from '../config/database';
 import logger from '../config/logger';
-import { aliexpressCheckoutService } from './aliexpress-checkout.service';
+import { purchaseRetryService } from './purchase-retry.service';
+import { checkDailyLimits } from './daily-limits.service';
 
-export type OrderStatus = 'CREATED' | 'PAID' | 'PURCHASING' | 'PURCHASED' | 'FAILED';
+export type OrderStatus = 'CREATED' | 'PAID' | 'PURCHASING' | 'PURCHASED' | 'FAILED' | 'SIMULATED';
 
 export interface FulfillOrderResult {
   success: boolean;
@@ -37,6 +38,17 @@ export class OrderFulfillmentService {
       };
     }
 
+    const limitCheck = await checkDailyLimits(undefined, Number(order.price));
+    if (!limitCheck.ok) {
+      logger.warn('[ORDER-FULFILLMENT] Daily limits exceeded', { orderId, error: limitCheck.error });
+      return {
+        success: false,
+        orderId,
+        status: 'FAILED',
+        error: limitCheck.error || 'MAX_DAILY_ORDERS or MAX_DAILY_SPEND_USD exceeded',
+      };
+    }
+
     await prisma.order.update({
       where: { id: orderId },
       data: { status: 'PURCHASING' },
@@ -57,24 +69,27 @@ export class OrderFulfillmentService {
     }
 
     const fullName = order.customerName || shippingObj.fullName || 'Customer';
+    const shippingAddr = {
+      fullName,
+      addressLine1: shippingObj.addressLine1 || '',
+      addressLine2: shippingObj.addressLine2 || '',
+      city: shippingObj.city || '',
+      state: shippingObj.state || '',
+      zipCode: shippingObj.zipCode || '',
+      country: shippingObj.country || 'US',
+      phoneNumber: shippingObj.phoneNumber || '',
+    };
     try {
-      const result = await aliexpressCheckoutService.placeOrder({
+      const result = await purchaseRetryService.attemptPurchase(
         productUrl,
-        quantity: 1,
-        maxPrice: Number(order.price) * 1.5, // Allow some margin
-        shippingAddress: {
-          fullName,
-          addressLine1: shippingObj.addressLine1 || '',
-          addressLine2: shippingObj.addressLine2 || '',
-          city: shippingObj.city || '',
-          state: shippingObj.state || '',
-          zipCode: shippingObj.zipCode || '',
-          country: shippingObj.country || 'US',
-          phoneNumber: shippingObj.phoneNumber || '',
-        },
-      });
+        1,
+        Number(order.price) * 1.5,
+        shippingAddr,
+        undefined,
+        orderId
+      );
 
-      if (result.success && result.orderId) {
+      if (result.success && result.orderId && result.orderId !== 'SIMULATED_ORDER_ID') {
         await prisma.order.update({
           where: { id: orderId },
           data: {
@@ -85,6 +100,14 @@ export class OrderFulfillmentService {
         });
         console.log('[FULFILLMENT] ALIEXPRESS OK', { orderId, aliexpressOrderId: result.orderId });
         logger.info('[FULFILLMENT] PURCHASED', { orderId, aliexpressOrderId: result.orderId });
+        // Crear Sale automática (comisión + payout) si el Order tiene userId
+        logger.info('[AUTO_SALE_TRIGGER]', { orderId });
+        try {
+          const { saleService } = await import('./sale.service');
+          await saleService.createSaleFromOrder(orderId);
+        } catch (autoErr: any) {
+          logger.warn('[FULFILLMENT] createSaleFromOrder failed (non-fatal)', { orderId, error: autoErr?.message });
+        }
         return {
           success: true,
           orderId,
@@ -93,7 +116,7 @@ export class OrderFulfillmentService {
         };
       }
 
-      await this.markFailed(orderId, result.error || 'AliExpress purchase failed');
+      await this.markFailed(orderId, result.error || 'Purchase retry exhausted');
       return {
         success: false,
         orderId,

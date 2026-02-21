@@ -393,6 +393,17 @@ export class SaleService {
       data: { adminPayoutId, userPayoutId } as any,
     });
 
+    logger.info('[PAYOUT_EXECUTED]', {
+      saleId: sale.id,
+      adminPayoutId: adminPayoutId ?? null,
+      userPayoutId: userPayoutId ?? null,
+    });
+    logger.info('[REAL_PAYOUT_EXECUTED]', {
+      saleId: sale.id,
+      adminPayoutId: adminPayoutId ?? null,
+      userPayoutId: userPayoutId ?? null,
+    });
+
     await prisma.user.update({
       where: { id: userId },
       data: {
@@ -901,6 +912,67 @@ export class SaleService {
       salesCount: totalCommission._count.id,
       perUser: perUserTable,
     };
+  }
+
+  /**
+   * Crea una Sale a partir de un Order en estado PURCHASED (tras fulfillment).
+   * Requiere Order.userId y un Product (por order.productId o por productUrl del usuario).
+   */
+  async createSaleFromOrder(orderId: string): Promise<{ id: number } | null> {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, userId: true, productId: true, productUrl: true, price: true, currency: true, customerEmail: true, shippingAddress: true },
+    });
+    if (!order || !order.userId) {
+      logger.debug('[SALE] createSaleFromOrder skipped: no order or no userId', { orderId });
+      return null;
+    }
+    const userId = order.userId;
+    let product: { id: number; aliexpressPrice: any; userId: number } | null = null;
+    if (order.productId) {
+      product = await prisma.product.findFirst({
+        where: { id: order.productId, userId },
+        select: { id: true, aliexpressPrice: true, userId: true },
+      }) as any;
+    }
+    if (!product && order.productUrl) {
+      const normalized = order.productUrl.trim();
+      product = await prisma.product.findFirst({
+        where: { userId, aliexpressUrl: { contains: normalized.length > 50 ? normalized.slice(0, 50) : normalized } },
+        select: { id: true, aliexpressPrice: true, userId: true },
+      }) as any;
+    }
+    if (!product) {
+      logger.warn('[SALE] createSaleFromOrder skipped: no product found for order', { orderId, userId, productId: order.productId, productUrl: order.productUrl?.slice(0, 60) });
+      return null;
+    }
+    const costPrice = toNumber(product.aliexpressPrice ?? 0);
+    const salePrice = toNumber(order.price);
+    if (costPrice <= 0 || salePrice <= 0) {
+      logger.warn('[SALE] createSaleFromOrder skipped: invalid prices', { orderId, costPrice, salePrice });
+      return null;
+    }
+    try {
+      const sale = await this.createSale(userId, {
+        orderId: order.id,
+        productId: product.id,
+        marketplace: 'paypal',
+        salePrice,
+        costPrice,
+        currency: order.currency || 'USD',
+        buyerEmail: order.customerEmail || undefined,
+        shippingAddress: order.shippingAddress || undefined,
+      });
+      logger.info('[AUTO_SALE_CREATED]', {
+        orderId,
+        saleId: sale.id,
+        userId: sale.userId,
+      });
+      return { id: sale.id };
+    } catch (err: any) {
+      logger.error('[SALE] createSaleFromOrder failed', { orderId, error: err?.message });
+      return null;
+    }
   }
 }
 

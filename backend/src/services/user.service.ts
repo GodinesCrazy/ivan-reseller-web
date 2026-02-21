@@ -33,6 +33,8 @@ export class UserService {
         role: true,
         commissionRate: true,
         fixedMonthlyCost: true,
+        paypalPayoutEmail: true,
+        payoneerPayoutEmail: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -112,9 +114,10 @@ export class UserService {
       role?: string;
       commissionRate?: number;
       fixedMonthlyCost?: number;
+      paypalPayoutEmail?: string | null;
+      payoneerPayoutEmail?: string | null;
     }
   ) {
-    // Check if user exists
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -123,7 +126,6 @@ export class UserService {
       throw new Error('User not found');
     }
 
-    // Prepare update data
     const updateData: any = {};
 
     if (data.username) updateData.username = data.username;
@@ -131,6 +133,8 @@ export class UserService {
     if (data.role) updateData.role = data.role;
     if (data.commissionRate !== undefined) updateData.commissionRate = data.commissionRate;
     if (data.fixedMonthlyCost !== undefined) updateData.fixedMonthlyCost = data.fixedMonthlyCost;
+    if (data.paypalPayoutEmail !== undefined) updateData.paypalPayoutEmail = data.paypalPayoutEmail;
+    if (data.payoneerPayoutEmail !== undefined) updateData.payoneerPayoutEmail = data.payoneerPayoutEmail;
 
     // Hash password if provided
     if (data.password) {
@@ -148,6 +152,8 @@ export class UserService {
         role: true,
         commissionRate: true,
         fixedMonthlyCost: true,
+        paypalPayoutEmail: true,
+        payoneerPayoutEmail: true,
         updatedAt: true,
       },
     });

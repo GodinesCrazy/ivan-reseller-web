@@ -22,6 +22,7 @@ const createUserSchema = z.object({
   fixedMonthlyCost: z.number().min(0).optional(),
   isActive: z.boolean().optional().default(true),
   paypalPayoutEmail: z.string().email().optional().nullable(),
+  payoneerPayoutEmail: z.string().email().optional().nullable(),
 });
 
 /**
@@ -102,6 +103,7 @@ router.post('/users', authenticate, authorize('ADMIN'), async (req, res, next) =
       fixedMonthlyCost: validatedData.fixedMonthlyCost ?? 0.0, // $0 USD por defecto
       isActive: validatedData.isActive !== undefined ? validatedData.isActive : true,
       paypalPayoutEmail: validatedData.paypalPayoutEmail?.trim() || null,
+      payoneerPayoutEmail: validatedData.payoneerPayoutEmail?.trim() || null,
     };
 
     const result = await adminService.createUser(adminId, normalizedData);

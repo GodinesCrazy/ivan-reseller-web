@@ -71,6 +71,10 @@ export interface CapturePayPalOrderParams {
   customerName: string;
   customerEmail: string;
   shippingAddress: string | object;
+  /** Product ID (backend uses it for automatic Sale creation after fulfillment) */
+  productId?: number;
+  /** Supplier cost in USD (for profit guard and optional Sale cost) */
+  supplierPriceUsd?: number;
 }
 
 export interface CapturePayPalOrderResponse {

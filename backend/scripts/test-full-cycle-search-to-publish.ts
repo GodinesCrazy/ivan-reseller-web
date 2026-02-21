@@ -53,7 +53,7 @@ async function runRemote(): Promise<number> {
       return -1;
     }
     if (res.status === 401) {
-      console.warn('HTTP 401 - Secret invalido. Comprueba INTERNAL_RUN_SECRET en .env.local. Usando modo local...\n');
+      console.warn('HTTP 401 - INTERNAL_RUN_SECRET no coincide con Railway. Copia el valor de Railway Variables.\n');
       return -1;
     }
     console.error('HTTP', res.status, data?.error || data?.message || JSON.stringify(data));

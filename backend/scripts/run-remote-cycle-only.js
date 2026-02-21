@@ -6,7 +6,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 require('dotenv').config({ path: require('path').join(__dirname, '../.env.local'), override: true });
 
-const url = (process.env.VERIFIER_TARGET_URL || process.env.API_URL || 'https://ivan-reseller-backend-production.up.railway.app')
+const url = (process.env.VERIFIER_TARGET_URL || process.env.API_URL || 'https://ivan-reseller-backend-production.up.railway.app').replace(/\/$/, '')
   .replace(/\/$/, '') + '/api/internal/test-full-cycle-search-to-publish';
 const secret = process.env.INTERNAL_RUN_SECRET;
 const keyword = process.env.keyword;

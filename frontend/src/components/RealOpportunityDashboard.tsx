@@ -58,13 +58,45 @@ export default function RealOpportunityDashboard() {
   const fetchOpportunities = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/dashboard', {
-        credentials: 'include', // ✅ FIX AUTH: Incluir cookies
+      // ✅ FIX: Backend no tiene GET /api/dashboard; usar GET /api/opportunities (datos reales)
+      const { default: api } = await import('@/services/api');
+      const response = await api.get('/api/opportunities', {
+        params: { query: searchTerm || 'product', maxItems: 20 },
       });
-      const data = await response.json();
-      setOpportunities(data.opportunities || []);
+      const items = response.data?.items ?? response.data?.data?.items ?? [];
+      // Use backend as single source of truth — no recalculation of profit/margin/ROI/confidence
+      const mapped: RealOpportunity[] = (Array.isArray(items) ? items : []).map((o: any, i: number) => {
+        const costUsd = Number(o.costUsd ?? o.estimatedCost ?? 0);
+        const suggestedPriceUsd = Number(o.suggestedPriceUsd ?? o.suggestedPrice ?? 0);
+        const profit = suggestedPriceUsd - costUsd;
+        const profitMarginPct = typeof o.profitMargin === 'number' ? o.profitMargin * 100 : (typeof o.roiPercentage === 'number' ? o.roiPercentage : 0);
+        return {
+          id: o.productId ?? o.id ?? String(i),
+          product: o.title ?? o.product ?? '',
+          buyPrice: costUsd,
+          sellPrice: suggestedPriceUsd,
+          profit,
+          margin: `${profitMarginPct.toFixed(0)}%`,
+          confidence: typeof o.confidenceScore === 'number' ? o.confidenceScore : 75,
+          marketplace: o.targetMarketplaces?.[0] ?? o.marketplace ?? 'ebay',
+          sourceUrl: o.aliexpressUrl ?? o.productUrl ?? o.url ?? '',
+          targetUrl: o.targetUrl ?? '',
+          image: Array.isArray(o.images) ? o.images[0] : o.image ?? o.imageUrl ?? '',
+          description: o.description ?? '',
+          aiAnalysis: {
+            recommendation: o.aiAnalysis?.recommendation ?? (profit > 0 ? 'Favorable' : 'Revisar'),
+            riskLevel: o.aiAnalysis?.riskLevel ?? 'MEDIUM',
+            demandScore: o.aiAnalysis?.demandScore ?? 70,
+            competitionLevel: o.aiAnalysis?.competitionLevel ?? 'MEDIUM',
+            profitabilityScore: typeof o.roiPercentage === 'number' ? o.roiPercentage : profitMarginPct,
+          },
+        };
+      });
+      setOpportunities(mapped);
+      console.log('[FRONTEND] RealOpportunityDashboard opportunities:', mapped.length);
     } catch (error) {
       console.error('Error fetching opportunities:', error);
+      setOpportunities([]);
     } finally {
       setLoading(false);
     }

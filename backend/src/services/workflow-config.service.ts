@@ -24,7 +24,7 @@ export interface UpdateWorkflowConfigDto {
   autoApproveThreshold?: number;
   autoPublishThreshold?: number;
   maxAutoInvestment?: number;
-  workingCapital?: number; // ✅ Capital de trabajo disponible en PayPal (USD)
+  workingCapital?: number; // ⚠️ Capital de trabajo declarado por el usuario (USD). NO verificado contra saldo PayPal.
 }
 
 export class WorkflowConfigService {

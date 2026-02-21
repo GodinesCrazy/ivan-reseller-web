@@ -7,39 +7,29 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Iniciando seed de la base de datos...');
 
-  // Crear usuario admin por defecto
+  // Crear usuario admin por defecto (upsert: existe → actualizar password/role, no existe → crear)
   const adminPassword = bcrypt.hashSync('admin123', 10);
-  
-  // Verificar si existe primero para evitar problemas con columna plan
-  const existingAdmin = await prisma.user.findUnique({
+  const admin = await prisma.user.upsert({
     where: { username: 'admin' },
-    select: { id: true },
+    update: {
+      password: adminPassword,
+      email: 'admin@ivanreseller.com',
+      role: 'ADMIN',
+      isActive: true,
+    },
+    create: {
+      username: 'admin',
+      email: 'admin@ivanreseller.com',
+      password: adminPassword,
+      role: 'ADMIN',
+      commissionRate: 0.15,
+      fixedMonthlyCost: 17.0,
+      balance: 0,
+      totalEarnings: 0,
+      isActive: true,
+    },
   });
-  
-  const admin = existingAdmin
-    ? await prisma.user.update({
-        where: { id: existingAdmin.id },
-        data: {
-          password: adminPassword,
-          role: 'ADMIN',
-          isActive: true,
-        },
-      })
-    : await prisma.user.create({
-        data: {
-          username: 'admin',
-          email: 'admin@ivanreseller.com',
-          password: adminPassword,
-          role: 'ADMIN',
-          commissionRate: 0.15, // ✅ 15% comisión por defecto
-          fixedMonthlyCost: 17.0, // ✅ $17 costo fijo mensual
-          balance: 0,
-          totalEarnings: 0,
-          isActive: true,
-        },
-      });
-
-  console.log('✅ Usuario admin creado:', admin.username);
+  console.log('✅ Usuario admin creado/actualizado:', admin.username);
 
   // Crear usuario demo
   const demoPassword = bcrypt.hashSync('demo123', 10);

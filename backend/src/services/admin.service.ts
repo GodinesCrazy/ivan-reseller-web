@@ -16,6 +16,7 @@ export interface UserCreationData {
   fixedMonthlyCost: number; // Costo fijo mensual en USD
   isActive?: boolean;
   paypalPayoutEmail?: string | null;
+  payoneerPayoutEmail?: string | null;
 }
 
 export interface CommissionSettings {
@@ -84,6 +85,7 @@ export class AdminService {
         isActive: userData.isActive ?? true,
         createdBy: adminId,
         paypalPayoutEmail: userData.paypalPayoutEmail?.trim() || null,
+        payoneerPayoutEmail: userData.payoneerPayoutEmail?.trim() || null,
       } as any,
       select: {
         id: true,
@@ -97,6 +99,7 @@ export class AdminService {
         createdAt: true,
         onboardingStep: true,
         paypalPayoutEmail: true,
+        payoneerPayoutEmail: true,
       } as any,
     });
 

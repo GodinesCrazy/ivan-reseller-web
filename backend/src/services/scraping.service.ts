@@ -65,7 +65,8 @@ export class AdvancedScrapingService {
   private userAgentIndex = 0;
   private requestCount = 0;
   private lastRequestTime = 0;
-  private readonly PROXY_API_KEY = process.env.SCRAPERAPI_KEY;
+  private readonly PROXY_API_KEY = (process.env.SCRAPER_API_KEY || process.env.SCRAPERAPI_KEY || '').trim() || undefined;
+  private readonly ZENROWS_API_KEY = (process.env.ZENROWS_API_KEY || '').trim() || undefined;
   private readonly AI_API_KEY = process.env.GROQ_API_KEY;
 
   constructor(config?: Partial<ScrapingConfig>) {

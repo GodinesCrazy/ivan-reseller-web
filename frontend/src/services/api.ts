@@ -3,6 +3,7 @@ import { useAuthStore } from '@stores/authStore';
 import { API_BASE_URL, API_BASE_HAS_SUFFIX } from '../config/runtime';
 
 // ✅ GO-LIVE: Usar módulo centralizado para API_BASE_URL
+// baseURL = import.meta.env.VITE_API_URL || http://localhost:4000 (via runtime.ts)
 const baseHasApiSuffix = API_BASE_HAS_SUFFIX;
 
 export const api = axios.create({

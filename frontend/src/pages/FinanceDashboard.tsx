@@ -69,6 +69,9 @@ interface TaxSummary {
   netTax: number;
 }
 
+const safeNumber = (v: unknown): number =>
+  typeof v === 'number' && !Number.isNaN(v) ? v : 0;
+
 export default function FinanceDashboard() {
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
@@ -154,7 +157,7 @@ export default function FinanceDashboard() {
   };
 
   const formatPercentage = (value: number) => {
-    return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+    return `${value >= 0 ? '+' : ''}${safeNumber(value).toFixed(2)}%`;
   };
 
   if (loading) {
@@ -362,7 +365,7 @@ export default function FinanceDashboard() {
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm text-gray-600">Utilization Rate</span>
                   <span className="text-sm font-semibold text-gray-900">
-                    {financialData.workingCapital.utilizationRate.toFixed(1)}%
+                    {safeNumber(financialData.workingCapital?.utilizationRate).toFixed(1)}%
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3">
@@ -374,7 +377,7 @@ export default function FinanceDashboard() {
                         ? 'bg-yellow-500'
                         : 'bg-red-500'
                     }`}
-                    style={{ width: `${Math.min(financialData.workingCapital.utilizationRate, 100)}%` }}
+                    style={{ width: `${Math.min(safeNumber(financialData.workingCapital?.utilizationRate), 100)}%` }}
                   ></div>
                 </div>
               </div>
@@ -400,7 +403,7 @@ export default function FinanceDashboard() {
               <div className="flex items-center justify-between py-2 border-b">
                 <div className="text-sm text-gray-600">Avg. Recovery Time</div>
                 <div className="text-lg font-semibold text-gray-900">
-                  {financialData.capitalMetrics.averageRecoveryDays.toFixed(1)} days
+                  {safeNumber(financialData.capitalMetrics?.averageRecoveryDays).toFixed(1)} days
                 </div>
               </div>
               <div className="text-xs text-gray-500 mb-4">
@@ -465,7 +468,7 @@ export default function FinanceDashboard() {
                     />
                   </div>
                   <span className="text-sm text-gray-600 min-w-[60px] text-right">
-                    {category.percentage.toFixed(1)}%
+                    {safeNumber(category.percentage).toFixed(1)}%
                   </span>
                 </div>
               </div>
@@ -584,7 +587,7 @@ export default function FinanceDashboard() {
             <div className="flex items-center justify-between py-3 border-b">
               <div className="text-sm text-gray-600">Tax Rate</div>
               <div className="text-sm font-semibold text-gray-900">
-                {taxSummary.taxRate.toFixed(2)}%
+                {safeNumber(taxSummary.taxRate).toFixed(2)}%
               </div>
             </div>
             <div className="flex items-center justify-between py-3 border-b">

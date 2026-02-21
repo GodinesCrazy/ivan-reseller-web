@@ -576,14 +576,8 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         );
       }
       
-      if (!devId || !devId.trim()) {
-        throw new AppError(
-          'El Dev ID de eBay es requerido. Por favor, guarda las credenciales primero.',
-          400,
-          ErrorCode.MISSING_REQUIRED_FIELD,
-          { field: 'devId', apiName: 'ebay' }
-        );
-      }
+      // Dev ID es opcional para OAuth (el token exchange solo usa App ID + Cert ID)
+      // Se usa '' si no está configurado; EbayService no envía el header si devId está vacío
       
       if (!certId || !certId.trim()) {
         throw new AppError(

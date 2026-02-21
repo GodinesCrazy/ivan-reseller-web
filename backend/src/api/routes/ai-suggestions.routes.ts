@@ -9,6 +9,32 @@ const router = Router();
 // Require authentication for all endpoints
 router.use(authenticate);
 
+// GET /api/ai-suggestions/keywords - Keywords para sugerencias (frontend alignment)
+router.get('/keywords', wrapAsync(async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const max = Math.min(parseInt(String(req.query.max || '5'), 10) || 5, 20);
+    try {
+      const { TrendsService } = await import('../../services/trends.service');
+      const trendsService = new TrendsService();
+      const keywords = await trendsService.getTrendingKeywords({ region: 'US', maxKeywords: max, userId });
+      const suggestions = keywords.map((k: { keyword?: string }) => ({
+        keyword: k.keyword ?? '',
+        type: 'keyword',
+        category: 'trends',
+      }));
+      return res.json({ success: true, suggestions });
+    } catch {
+      return res.json({ success: true, suggestions: [] });
+    }
+  } catch (error) {
+    next(error);
+  }
+}, { route: '/api/ai-suggestions/keywords', serviceName: 'ai-suggestions' }));
+
 // GET /api/ai-suggestions - Obtener sugerencias del usuario
 router.get('/', wrapAsync(async (req: Request, res: Response, next) => {
   console.log('[ROUTE_ENTRY] GET /api/ai-suggestions');

@@ -155,6 +155,21 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
   }
 }, { route: '/api/products', serviceName: 'products' }));
 
+// GET /api/products/workflow-status-batch - Estado de workflow para múltiples productos (reduce rate limit)
+router.get('/workflow-status-batch', wrapAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+  const idsParam = (req.query.ids as string) || '';
+  const ids = idsParam.split(',').map((id) => parseInt(id.trim(), 10)).filter((n) => !isNaN(n) && n > 0).slice(0, 50);
+  if (ids.length === 0) return res.json({ success: true, data: {} });
+  const data: Record<number, any> = {};
+  for (const id of ids) {
+    const status = await productWorkflowStatusService.getProductWorkflowStatus(id, userId);
+    if (status) data[id] = status;
+  }
+  return res.json({ success: true, data });
+}));
+
 // GET /api/products/stats - Estadísticas
 router.get('/stats', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -541,6 +556,43 @@ router.get('/:id/workflow-status', async (req: Request, res: Response, next: Nex
     next(error);
   }
 });
+
+// POST /api/products/approve-pending - Aprobar productos PENDING para desbloquear etapa ANALYZE
+router.post('/approve-pending', wrapAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+  const { prisma } = await import('../config/database');
+  const pending = await prisma.product.findMany({
+    where: { userId, status: 'PENDING' },
+    take: 100,
+    orderBy: { createdAt: 'desc' }
+  });
+  let approved = 0;
+  let rejected = 0;
+  for (const p of pending) {
+    try {
+      const cost = toNumber(p.aliexpressPrice || 0);
+      const suggested = toNumber((p as any).suggestedPrice || 0);
+      const price = suggested > 0 ? suggested : cost * 2;
+      const margin = cost > 0 && price > cost ? ((price - cost) / price) * 100 : 0;
+      const status = margin >= 5 ? 'APPROVED' : 'REJECTED';
+      const reason = margin >= 5
+        ? 'Aprobación manual por endpoint (margen válido)'
+        : `Rechazo por margen insuficiente (${margin.toFixed(1)}%)`;
+      await productService.updateProductStatusSafely(p.id, status, userId, reason);
+      if (status === 'APPROVED') approved++; else rejected++;
+    } catch (e: any) {
+      logger.warn('[approve-pending] Error procesando producto', { productId: p.id, error: e?.message });
+    }
+  }
+  return res.json({
+    success: true,
+    message: `Procesados ${pending.length} productos: ${approved} aprobados, ${rejected} rechazados`,
+    approved,
+    rejected,
+    total: pending.length
+  });
+}));
 
 // ✅ P3: POST /api/products/maintenance/fix-inconsistencies - Corregir inconsistencias de estado (Admin only)
 router.post('/maintenance/fix-inconsistencies', authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {

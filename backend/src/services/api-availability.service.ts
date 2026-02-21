@@ -43,6 +43,8 @@ interface APICapabilities {
   canSolveCaptchas: boolean;
   canPayCommissions: boolean;
   canAutoPurchaseAliExpress: boolean;
+  /** Optional: legacy eBay Trading (SOAP) API detected. Not required for Autopilot; REST APIs are used for publishing. */
+  ebayTradingApi?: boolean;
 }
 
 export class APIAvailabilityService {
@@ -2713,15 +2715,28 @@ export class APIAvailabilityService {
     const paypal = byApi('paypal')[0];
     const aliexpress = byApi('aliexpress')[0];
 
+    // ✅ PRODUCTION: Env fallback so Autopilot can start with APIS2.txt credentials in Railway
+    const scrapingFromEnv = Boolean(
+      (process.env.SCRAPER_API_KEY || process.env.SCRAPERAPI_KEY || '').trim() ||
+      (process.env.ZENROWS_API_KEY || '').trim()
+    );
+    const ebayFromEnv = Boolean(
+      (process.env.EBAY_CLIENT_ID || process.env.EBAY_APP_ID || '').trim() &&
+      (process.env.EBAY_CLIENT_SECRET || process.env.EBAY_CERT_ID || '').trim()
+    );
+
+    const ebayTradingApiDetected = ebayStatuses.some((status) => status && status.isAvailable === true);
+
     return {
-      canPublishToEbay: ebayStatuses.some((status) => status && status.isAvailable === true),
+      canPublishToEbay: ebayTradingApiDetected || ebayFromEnv,
       canPublishToAmazon: amazonStatuses.some((status) => status && status.isAvailable === true),
       canPublishToMercadoLibre: mercadolibreStatuses.some((status) => status && status.isAvailable === true),
-      canScrapeAliExpress: Boolean(scraperapi?.isAvailable || zenrows?.isAvailable),
+      canScrapeAliExpress: Boolean(scraperapi?.isAvailable || zenrows?.isAvailable) || scrapingFromEnv,
       canUseAI: Boolean(groq?.isAvailable),
       canSolveCaptchas: Boolean(captcha?.isAvailable),
       canPayCommissions: Boolean(paypal?.isAvailable),
-      canAutoPurchaseAliExpress: Boolean(aliexpress?.isAvailable)
+      canAutoPurchaseAliExpress: Boolean(aliexpress?.isAvailable),
+      ebayTradingApi: ebayTradingApiDetected
     };
   }
 

@@ -32,15 +32,21 @@ export default function Checkout() {
     state: '',
     zip: '',
     country: 'US',
+    productId: '' as string,
+    supplierPriceUsd: '' as string,
   });
 
   useEffect(() => {
     const urlProduct = searchParams.get('productUrl');
     const urlTitle = searchParams.get('title');
     const urlPrice = searchParams.get('price');
+    const urlProductId = searchParams.get('productId');
+    const urlSupplierPrice = searchParams.get('supplierPriceUsd');
     if (urlProduct) setForm((f) => ({ ...f, productUrl: urlProduct }));
     if (urlTitle) setForm((f) => ({ ...f, productTitle: urlTitle }));
     if (urlPrice) setForm((f) => ({ ...f, price: urlPrice }));
+    if (urlProductId) setForm((f) => ({ ...f, productId: urlProductId }));
+    if (urlSupplierPrice) setForm((f) => ({ ...f, supplierPriceUsd: urlSupplierPrice }));
   }, [searchParams]);
 
   useEffect(() => {
@@ -56,6 +62,7 @@ export default function Checkout() {
             productUrl: data.productUrl,
             productTitle: data.productTitle,
             price: data.price,
+            currency: 'USD',
             customerName: data.customerName,
             customerEmail: data.customerEmail,
             shippingAddress: JSON.stringify({
@@ -66,6 +73,8 @@ export default function Checkout() {
               zipCode: data.zip,
               country: data.country,
             }),
+            productId: data.productId ? Number(data.productId) : undefined,
+            supplierPriceUsd: data.supplierPriceUsd != null ? Number(data.supplierPriceUsd) : undefined,
           })
             .then((res) => {
               sessionStorage.removeItem(PENDING_KEY);
@@ -117,6 +126,8 @@ export default function Checkout() {
           state: form.state,
           zip: form.zip,
           country: form.country,
+          productId: form.productId || undefined,
+          supplierPriceUsd: form.supplierPriceUsd ? parseFloat(form.supplierPriceUsd) : undefined,
         })
       );
       const approveUrl = res.approveUrl.replace('{token}', res.paypalOrderId);

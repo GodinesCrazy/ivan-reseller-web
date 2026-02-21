@@ -81,10 +81,10 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8 p-10 bg-white rounded-2xl shadow-xl border border-gray-100">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
+      <div className="max-w-md w-full space-y-8 p-10 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700">
         <div className="text-center flex flex-col items-center space-y-4">
-          <div className="h-16 w-16 rounded-3xl overflow-hidden shadow-lg ring-2 ring-primary-200/60">
+          <div className="h-16 w-16 rounded-3xl overflow-hidden shadow-lg ring-2 ring-primary-200/60 dark:ring-primary-500/40">
             <img
               src="/brand-logo.png"
               alt="Logotipo Ivan Reseller"
@@ -93,14 +93,14 @@ export default function Login() {
             />
           </div>
           <div>
-            <h2 className="text-3xl font-bold text-gray-900">Ivan Reseller</h2>
-            <p className="mt-1 text-sm text-gray-600">Ingresá para detectar oportunidades de negocio</p>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Ivan Reseller</h2>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Ingresá para detectar oportunidades de negocio</p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-6">
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Username
             </label>
             <input
@@ -108,15 +108,15 @@ export default function Login() {
               id="username"
               type="text"
               autoComplete="username"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
             {errors.username && (
-              <p className="mt-1 text-sm text-red-600">{errors.username.message}</p>
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.username.message}</p>
             )}
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Password
             </label>
             <input
@@ -124,32 +124,32 @@ export default function Login() {
               id="password"
               type="password"
               autoComplete="current-password"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
             {errors.password && (
-              <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.password.message}</p>
             )}
           </div>
 
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
+            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 transition-colors"
           >
-            {isLoading ? 'Signing in...' : 'Sign in'}
+            {isLoading ? 'Ingresando...' : 'Ingresar'}
           </button>
 
           {/* ✅ P0.5: Botón para solicitar acceso */}
           <div className="mt-4 text-center">
-            <p className="text-sm text-gray-600 mb-2">
-              Don't have an account?
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+              ¿No tenés cuenta?
             </p>
             <button
               type="button"
               onClick={() => navigate('/request-access')}
-              className="text-sm font-medium text-primary-600 hover:text-primary-700"
+              className="text-sm font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
             >
-              Request Access
+              Solicitar acceso
             </button>
           </div>
         </form>

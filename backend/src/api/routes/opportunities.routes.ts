@@ -42,7 +42,7 @@ router.get('/', async (req, res) => {
     const environment = validatedQuery.environment; // Opcional, se obtiene del usuario si no se especifica
 
     if (!query) {
-      return res.json({ success: true, items: [], count: 0, query, targetMarketplaces: marketplaces, data_source: 'real_analysis' });
+      return res.json({ success: true, items: [], count: 0, data_source: 'profit_engine_real', timestamp: new Date().toISOString() });
     }
 
     // Notify start
@@ -89,10 +89,19 @@ router.get('/', async (req, res) => {
         } as any);
       } catch {}
     }, Math.max(60000, warnMs));
-    // Find real opportunities (may return empty until marketplace analyzers are fully wired)
-    let items: any[] = [];
+    // Find real opportunities via profit engine (searchOpportunities)
+    let opportunities: any[] = [];
     try {
-      items = await opportunityFinder.findOpportunities(userId, { query, maxItems, marketplaces, region, environment });
+      // ✅ skipTrendsValidation: true para evitar filtrar productos por tendencias
+      // ✅ relaxedMargin: true para búsqueda web - usa 5% mínimo cuando el 10% devolvería 0 resultados
+      opportunities = await opportunityFinder.searchOpportunities(query, userId, {
+        maxItems,
+        marketplaces,
+        region,
+        environment,
+        skipTrendsValidation: true,
+        relaxedMargin: true
+      });
     } catch (error: any) {
       // ✅ Si es error de CAPTCHA manual, retornar respuesta especial para que el frontend maneje
       if (error instanceof ManualAuthRequiredError) {
@@ -167,7 +176,7 @@ router.get('/', async (req, res) => {
 
     // Debug info para cuando no se encuentran productos
     const debugInfo: any = {};
-    if (items.length === 0) {
+    if (opportunities.length === 0) {
       debugInfo.message = 'No se encontraron productos en AliExpress. Posibles causas:';
       debugInfo.possibleCauses = [
         'El scraping puede estar fallando (Puppeteer no inició correctamente en Railway)',
@@ -189,10 +198,10 @@ router.get('/', async (req, res) => {
     notificationService.sendToUser(userId, {
       type: 'JOB_COMPLETED',
       title: 'Búsqueda de oportunidades completada',
-      message: `Resultados: ${items.length} en ${(durationMs/1000).toFixed(1)}s`,
-      priority: items.length > 0 ? 'NORMAL' : 'HIGH',
+      message: `Resultados: ${opportunities.length} en ${(durationMs/1000).toFixed(1)}s`,
+      priority: opportunities.length > 0 ? 'NORMAL' : 'HIGH',
       category: 'JOB',
-      data: { query, count: items.length, durationMs, marketplaces, region, debugInfo: items.length === 0 ? debugInfo : undefined },
+      data: { query, count: opportunities.length, durationMs, marketplaces, region, debugInfo: opportunities.length === 0 ? debugInfo : undefined },
       actions: [
         { id: 'view_opportunities', label: 'Ver Oportunidades', url: '/opportunities', variant: 'primary' }
       ]
@@ -201,29 +210,14 @@ router.get('/', async (req, res) => {
     if (progressTimer) clearInterval(progressTimer);
     if (warnTimer) clearTimeout(warnTimer);
 
-    // ✅ LOGGING: Verificar qué imágenes se están enviando al frontend
-    if (items.length > 0) {
-      logger.info('[OPPORTUNITIES-API] Enviando oportunidades al frontend', {
-        userId: req.user?.userId,
-        itemsCount: items.length,
-        firstItem: {
-          title: items[0]?.title?.substring(0, 50),
-          hasImages: Array.isArray(items[0]?.images),
-          imagesCount: Array.isArray(items[0]?.images) ? items[0].images.length : 0,
-          imagesPreview: Array.isArray(items[0]?.images) ? items[0].images.slice(0, 3).map((img: string) => img?.substring(0, 60)) : []
-        }
-      });
-    }
+    console.log('[OPPORTUNITIES API] Found opportunities:', opportunities?.length ?? 0);
 
     return res.json({
       success: true,
-      items,
-      count: items.length,
-      query,
-      targetMarketplaces: marketplaces,
-      timestamp: new Date().toISOString(),
-      data_source: 'real_analysis',
-      ...(items.length === 0 && Object.keys(debugInfo).length > 0 ? { debug: debugInfo } : {})
+      items: opportunities ?? [],
+      count: opportunities?.length ?? 0,
+      data_source: 'profit_engine_real',
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
     // ✅ FIX: Single declaration of correlationId at the top of catch block

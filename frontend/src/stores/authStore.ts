@@ -18,6 +18,7 @@ interface AuthState {
   login: (user: User, token?: string) => void; // token es opcional ahora
   logout: () => Promise<void>;
   clearSession: () => void; // Clear local state only (no API call); use on 401 to avoid logout loop
+  setCheckingAuth: (checking: boolean) => void; // Evitar overlay "Verificando sesión" bloqueado
   checkAuth: () => Promise<boolean>;
 }
 
@@ -63,6 +64,7 @@ export const useAuthStore = create<AuthState>()(
         localStorage.removeItem('auth_refresh_token');
         set({ user: null, token: null, isAuthenticated: false });
       },
+      setCheckingAuth: (checking) => set({ isCheckingAuth: checking }),
       checkAuth: async () => {
         // Si ya está verificando, no hacer nada
         if (get().isCheckingAuth) {

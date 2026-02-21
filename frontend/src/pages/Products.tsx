@@ -54,7 +54,35 @@ export default function Products() {
   const [showModal, setShowModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [workflowByProduct, setWorkflowByProduct] = useState<Record<string, any>>({});
+  const [approvingPending, setApprovingPending] = useState(false);
   const { formatMoney } = useCurrency();
+
+  // Batch fetch workflow status para los productos visibles (evita rate limit)
+  useEffect(() => {
+    const filtered = products.filter(product => {
+      const matchesSearch = product.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.sku.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = statusFilter === 'ALL' || product.status === statusFilter;
+      const matchesMarketplace = marketplaceFilter === 'ALL' || product.marketplace === marketplaceFilter;
+      return matchesSearch && matchesStatus && matchesMarketplace;
+    });
+    const paginated = filtered.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+    const ids = paginated.map((p) => p.id).filter(Boolean);
+    if (ids.length === 0) return;
+    api.get(`/api/products/workflow-status-batch?ids=${ids.join(',')}`)
+      .then((res) => {
+        if (res.data?.success && res.data?.data) {
+          const byId: Record<string, any> = {};
+          Object.entries(res.data.data).forEach(([k, v]) => { byId[k] = v; });
+          setWorkflowByProduct(byId);
+        }
+      })
+      .catch(() => {});
+  }, [products, currentPage, itemsPerPage, searchTerm, statusFilter, marketplaceFilter]);
 
   useEffect(() => {
     // ✅ FIX: Pequeño delay para permitir que useSetupCheck verifique primero
@@ -187,12 +215,36 @@ export default function Products() {
     <div className="space-y-6 p-6">
       {/* Header */}
       <div>
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center flex-wrap gap-2">
           <h1 className="text-3xl font-bold text-gray-900">Productos</h1>
-          <Button className="flex items-center gap-2" onClick={() => navigate('/opportunities')}>
-            <Package className="w-4 h-4" />
-            Buscar oportunidades
-          </Button>
+          <div className="flex gap-2">
+            {stats.pending > 0 && (
+              <Button
+                variant="outline"
+                className="flex gap-2"
+                disabled={approvingPending}
+                onClick={async () => {
+                  setApprovingPending(true);
+                  try {
+                    const res = await api.post('/api/products/approve-pending');
+                    const msg = res.data?.message || 'Productos procesados';
+                    toast.success(msg);
+                    fetchProducts();
+                  } catch (e: any) {
+                    toast.error(e?.response?.data?.error || 'Error al procesar pendientes');
+                  } finally {
+                    setApprovingPending(false);
+                  }
+                }}
+              >
+                {approvingPending ? 'Procesando...' : `Procesar ${stats.pending} pendientes`}
+              </Button>
+            )}
+            <Button className="flex gap-2" onClick={() => navigate('/opportunities')}>
+              <Package className="w-4 h-4" />
+              Buscar oportunidades
+            </Button>
+          </div>
         </div>
         <p className="text-gray-600 mt-0.5">Productos aprobados y publicados en marketplaces</p>
         <div className="mt-3">
@@ -355,7 +407,7 @@ export default function Products() {
                           <td className="px-4 py-3">
                             <WorkflowStatusIndicator 
                               productId={Number(product.id)} 
-                              currentStage={undefined} // Se obtendrá del endpoint
+                              preloadedCurrentStage={workflowByProduct[product.id]?.currentStage}
                             />
                           </td>
                           <td className="px-4 py-3">
@@ -426,7 +478,10 @@ export default function Products() {
                         {/* Barra de progreso del workflow */}
                         <tr key={`${product.id}-workflow`} className="bg-gray-50">
                           <td colSpan={9} className="px-4 py-2">
-                            <WorkflowProgressBar productId={Number(product.id)} />
+                            <WorkflowProgressBar 
+                              productId={Number(product.id)} 
+                              preloadedStatus={workflowByProduct[product.id]}
+                            />
                           </td>
                         </tr>
                       </>

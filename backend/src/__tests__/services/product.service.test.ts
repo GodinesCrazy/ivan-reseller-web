@@ -167,5 +167,76 @@ describe('ProductService', () => {
       expect(result).toEqual(mockProduct);
     });
   });
+
+  describe('updateProductStatusSafely - PUBLISHED consistency', () => {
+    it('should set isPublished=true when status is PUBLISHED', async () => {
+      const productId = 1;
+      const userId = 1;
+      const currentProduct = {
+        id: productId,
+        userId,
+        status: 'APPROVED',
+        isPublished: false,
+        publishedAt: null,
+        title: 'Test',
+      };
+      const updatedProduct = {
+        ...currentProduct,
+        status: 'PUBLISHED',
+        isPublished: true,
+        publishedAt: new Date(),
+      };
+
+      const { prisma } = require('../../config/database');
+      prisma.product.findUnique.mockResolvedValue(currentProduct);
+      prisma.product.update.mockResolvedValue(updatedProduct);
+
+      await productService.updateProductStatusSafely(
+        productId,
+        'PUBLISHED',
+        true,
+        userId
+      );
+
+      expect(prisma.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: productId },
+          data: expect.objectContaining({
+            status: 'PUBLISHED',
+            isPublished: true,
+          }),
+        })
+      );
+    });
+
+    it('should enforce isPublished=true for PUBLISHED even if passed false', async () => {
+      const productId = 1;
+      const currentProduct = {
+        id: productId,
+        userId: 1,
+        status: 'APPROVED',
+        isPublished: false,
+        publishedAt: null,
+        title: 'Test',
+      };
+
+      const { prisma } = require('../../config/database');
+      prisma.product.findUnique.mockResolvedValue(currentProduct);
+      prisma.product.update.mockImplementation((args: any) =>
+        Promise.resolve({ ...currentProduct, ...args.data })
+      );
+
+      await productService.updateProductStatusSafely(productId, 'PUBLISHED', false, 1);
+
+      expect(prisma.product.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'PUBLISHED',
+            isPublished: true,
+          }),
+        })
+      );
+    });
+  });
 });
 

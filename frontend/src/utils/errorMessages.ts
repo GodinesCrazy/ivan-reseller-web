@@ -75,6 +75,35 @@ export const ERROR_MESSAGES: Record<string, ErrorSolution> = {
     message: 'Acceso denegado',
     solution: 'Esta acción requiere permisos de administrador. Contacta a un administrador si necesitas realizar esta acción.',
   },
+
+  // RC1 human error codes
+  'PAYPAL_NOT_CONFIGURED': {
+    message: 'PayPal no está configurado',
+    solution: 'Configura PAYPAL_CLIENT_ID y PAYPAL_CLIENT_SECRET en el servidor, o tu email de PayPal en Configuración.',
+    link: '/settings',
+  },
+  'EBAY_AUTH_REQUIRED': {
+    message: 'Se requiere autorización eBay',
+    solution: 'Conecta tu cuenta eBay en Configuración de APIs. Inicia el flujo OAuth.',
+    link: '/api-settings',
+  },
+  'ALIEXPRESS_REAUTH_REQUIRED': {
+    message: 'Se requiere reautorizar AliExpress',
+    solution: 'El token de AliExpress expiró. Conecta AliExpress nuevamente en Configuración de APIs.',
+    link: '/api-settings',
+  },
+  'INSUFFICIENT_MARGIN': {
+    message: 'Margen insuficiente',
+    solution: 'El precio de venta no cubre costos, comisiones y envío. Aumenta el precio o reduce costos.',
+  },
+  'AFFILIATE_PERMISSION_MISSING': {
+    message: 'Faltan permisos de afiliado',
+    solution: 'Configura AliExpress Affiliate API con APP_KEY y APP_SECRET en el servidor.',
+  },
+  'MAX_DAILY_LIMIT_REACHED': {
+    message: 'Límite diario alcanzado',
+    solution: 'Se alcanzó el máximo de órdenes o gasto diario. Espera al día siguiente o contacta al administrador.',
+  },
 };
 
 /**

@@ -1,3 +1,22 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Evitar pantalla negra al cargar: fondo explícito en light y dark */
+@layer base {
+  html {
+    @apply bg-gray-50;
+  }
+  html.dark {
+    @apply bg-gray-900;
+  }
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+  html.dark body {
+    @apply bg-gray-900 text-gray-100;
+  }
+  #root {
+    @apply min-h-screen;
+  }
+}

@@ -1,13 +1,13 @@
 /**
- * Trends Service - FASE 1: DetecciÛn de Tendencias
+ * Trends Service - FASE 1: Detecciùn de Tendencias
  * 
- * Objetivo: Determinar QU… productos buscar en AliExpress
- * bas·ndose en tendencias reales de b˙squeda.
+ * Objetivo: Determinar QUù productos buscar en AliExpress
+ * basùndose en tendencias reales de bùsqueda.
  * 
  * Fuentes de tendencias:
  * - Google Trends (via SerpAPI o fallback)
  * - Datos internos del sistema
- * - An·lisis de estacionalidad
+ * - Anùlisis de estacionalidad
  */
 
 import { trace } from '../utils/boot-trace';
@@ -21,19 +21,19 @@ import { prisma } from '../config/database';
 export interface TrendKeyword {
   keyword: string;
   score: number; // Score de tendencia (0-100)
-  region: string; // CÛdigo de regiÛn (US, ES, MX, etc.)
+  region: string; // Cùdigo de regiùn (US, ES, MX, etc.)
   date: string; // Fecha ISO de la tendencia
   trend: 'rising' | 'stable' | 'declining';
-  searchVolume: number; // Volumen estimado de b˙squeda
+  searchVolume: number; // Volumen estimado de bùsqueda
   category?: string;
   segment?: string;
   priority: 'high' | 'medium' | 'low';
 }
 
 export interface TrendsConfig {
-  region?: string; // CÛdigo de regiÛn (default: 'US')
-  days?: number; // DÌas hacia atr·s para analizar (default: 30)
-  maxKeywords?: number; // M·ximo de keywords a retornar (default: 50)
+  region?: string; // Cùdigo de regiùn (default: 'US')
+  days?: number; // Dùas hacia atrùs para analizar (default: 30)
+  maxKeywords?: number; // Mùximo de keywords a retornar (default: 50)
   userId?: number; // Usuario para obtener credenciales personalizadas
 }
 
@@ -41,7 +41,7 @@ export class TrendsService {
   /**
    * Obtener keywords priorizadas basadas en tendencias
    * 
-   * @param config - ConfiguraciÛn de b˙squeda de tendencias
+   * @param config - Configuraciùn de bùsqueda de tendencias
    * @returns Lista de keywords priorizadas con score de tendencia
    */
   async getTrendingKeywords(config: TrendsConfig = {}): Promise<TrendKeyword[]> {
@@ -62,7 +62,7 @@ export class TrendsService {
     try {
       const keywords: TrendKeyword[] = [];
 
-      // 1. Obtener keywords de Google Trends (si est· disponible)
+      // 1. Obtener keywords de Google Trends (si estù disponible)
       const googleTrendsKeywords = await this.getGoogleTrendsKeywords(region, days, userId);
       keywords.push(...googleTrendsKeywords);
 
@@ -72,8 +72,9 @@ export class TrendsService {
         keywords.push(...internalKeywords);
       }
 
-      // 3. Agregar keywords de categorÌas populares (fallback)
-      if (keywords.length < 10) {
+      // 3. Agregar keywords de categorùas populares (fallback) ù only when no trends API key (SERP/GOOGLE_TRENDS)
+      const hasTrendsApiKey = !!(process.env.SERP_API_KEY || process.env.GOOGLE_TRENDS_API_KEY);
+      if (!hasTrendsApiKey && keywords.length < 10) {
         const fallbackKeywords = this.getFallbackKeywords(region);
         keywords.push(...fallbackKeywords);
       }
@@ -90,8 +91,9 @@ export class TrendsService {
         stack: error.stack,
         config,
       });
-
-      // Retornar keywords de fallback en caso de error
+      // When SERP/GOOGLE_TRENDS key exists, do NOT fall back to static keywords (real API only)
+      const hasTrendsApiKey = !!(process.env.SERP_API_KEY || process.env.GOOGLE_TRENDS_API_KEY);
+      if (hasTrendsApiKey) return [];
       return this.getFallbackKeywords(region).slice(0, maxKeywords);
     }
   }
@@ -140,11 +142,11 @@ export class TrendsService {
           else if (trendData.trend === 'stable') score = 50;
           else score = 20;
 
-          // Ajustar score basado en volumen de b˙squeda
+          // Ajustar score basado en volumen de bùsqueda
           if (trendData.searchVolume > 1000) score += 15;
           else if (trendData.searchVolume > 100) score += 5;
 
-          // Ajustar score basado en validaciÛn
+          // Ajustar score basado en validaciùn
           if (trendData.validation.viable) score += 10;
           score += trendData.validation.confidence * 0.1;
 
@@ -210,7 +212,7 @@ export class TrendsService {
         // Convertir sugerencia a TrendKeyword
         let score = 0;
         
-        // Calcular score basado en mÈtricas
+        // Calcular score basado en mùtricas
         if (suggestion.supportingMetric.type === 'trend') {
           score = Math.min(100, 60 + suggestion.supportingMetric.value * 0.4);
         } else if (suggestion.supportingMetric.type === 'margin') {
@@ -235,7 +237,7 @@ export class TrendsService {
           region: 'US', // Default, puede mejorarse
           date: new Date().toISOString(),
           trend,
-          searchVolume: suggestion.estimatedOpportunities * 50, // EstimaciÛn
+          searchVolume: suggestion.estimatedOpportunities * 50, // Estimaciùn
           category: suggestion.category,
           segment: suggestion.segment,
           priority: suggestion.priority,
@@ -259,18 +261,18 @@ export class TrendsService {
   }
 
   /**
-   * Obtener keywords de fallback (categorÌas populares)
+   * Obtener keywords de fallback (categorùas populares)
    */
   private getFallbackKeywords(region: string): TrendKeyword[] {
     const fallbackKeywords = [
-      { keyword: 'wireless earbuds', category: 'ElectrÛnica', segment: 'Audio', score: 75 },
-      { keyword: 'gaming keyboard', category: 'ElectrÛnica', segment: 'Gaming', score: 70 },
-      { keyword: 'smart watch', category: 'ElectrÛnica', segment: 'Wearables', score: 65 },
+      { keyword: 'wireless earbuds', category: 'Electrùnica', segment: 'Audio', score: 75 },
+      { keyword: 'gaming keyboard', category: 'Electrùnica', segment: 'Gaming', score: 70 },
+      { keyword: 'smart watch', category: 'Electrùnica', segment: 'Wearables', score: 65 },
       { keyword: 'phone case', category: 'Accesorios', segment: 'Accesorios', score: 60 },
-      { keyword: 'kitchen organizer', category: 'Hogar', segment: 'OrganizaciÛn', score: 55 },
-      { keyword: 'wireless charger', category: 'ElectrÛnica', segment: 'Carga', score: 50 },
-      { keyword: 'bluetooth speaker', category: 'ElectrÛnica', segment: 'Audio', score: 45 },
-      { keyword: 'fitness tracker', category: 'ElectrÛnica', segment: 'Fitness', score: 40 },
+      { keyword: 'kitchen organizer', category: 'Hogar', segment: 'Organizaciùn', score: 55 },
+      { keyword: 'wireless charger', category: 'Electrùnica', segment: 'Carga', score: 50 },
+      { keyword: 'bluetooth speaker', category: 'Electrùnica', segment: 'Audio', score: 45 },
+      { keyword: 'fitness tracker', category: 'Electrùnica', segment: 'Fitness', score: 40 },
     ];
 
     return fallbackKeywords.map(item => ({
@@ -279,7 +281,7 @@ export class TrendsService {
       region,
       date: new Date().toISOString(),
       trend: 'stable' as const,
-      searchVolume: item.score * 20, // EstimaciÛn
+      searchVolume: item.score * 20, // Estimaciùn
       category: item.category,
       segment: item.segment,
       priority: item.score >= 60 ? 'high' : item.score >= 45 ? 'medium' : 'low',
@@ -287,7 +289,7 @@ export class TrendsService {
   }
 
   /**
-   * Priorizar keywords combinando m˙ltiples fuentes
+   * Priorizar keywords combinando mùltiples fuentes
    */
   private prioritizeKeywords(keywords: TrendKeyword[]): TrendKeyword[] {
     // Agrupar por keyword (puede haber duplicados de diferentes fuentes)
@@ -318,7 +320,7 @@ export class TrendsService {
         else if (trends.includes('stable')) bestTrend = 'stable';
         else bestTrend = 'declining';
 
-        // Sumar vol˙menes
+        // Sumar volùmenes
         const totalVolume = instances.reduce((sum, kw) => sum + kw.searchVolume, 0);
 
         // Tomar mejor prioridad

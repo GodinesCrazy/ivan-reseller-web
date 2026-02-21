@@ -25,10 +25,12 @@ const createUserSchema = z.object({
 const updateUserSchema = z.object({
   username: z.string().min(3).optional(),
   email: z.string().email().optional(),
-  password: registerPasswordSchema.optional(), // Validación de contraseña fuerte si se proporciona
+  password: registerPasswordSchema.optional(),
   role: z.enum(['ADMIN', 'USER']).optional(),
-  commissionRate: z.number().min(0).max(1).optional(), // 0.0 a 1.0 (0% a 100%)
-  fixedMonthlyCost: z.number().min(0).optional(), // Costo fijo mensual en USD
+  commissionRate: z.number().min(0).max(1).optional(),
+  fixedMonthlyCost: z.number().min(0).optional(),
+  paypalPayoutEmail: z.string().email().optional().nullable(), // PayPal email for profit payouts
+  payoneerPayoutEmail: z.string().email().optional().nullable(), // Payoneer email for eBay/marketplace payouts
 });
 
 // GET /api/users (Admin only)
