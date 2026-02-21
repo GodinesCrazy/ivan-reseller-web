@@ -434,17 +434,62 @@ export class EbayService {
   }
 
   /**
+   * Obtener políticas y ubicación del vendedor (requerido para createOffer)
+   */
+  private async getListingDefaults(): Promise<{
+    merchantLocationKey: string;
+    fulfillmentPolicyId: string;
+    paymentPolicyId: string;
+    returnPolicyId: string;
+  }> {
+    const invHeaders = { 'Content-Language': 'en-US' };
+    const marketplaceId = 'EBAY_US';
+    let merchantLocationKey = 'default_location';
+    let fulfillmentPolicyId = 'default_fulfillment';
+    let paymentPolicyId = 'default_payment';
+    let returnPolicyId = 'default_return';
+
+    try {
+      const locRes = await this.apiClient.get('/sell/inventory/v1/location?limit=5', { headers: invHeaders });
+      const locations = locRes.data?.locations;
+      if (locations?.length > 0) {
+        merchantLocationKey = locations[0].merchantLocationKey || merchantLocationKey;
+      }
+    } catch (e) {
+      logger.warn('Could not fetch inventory locations, using default', { error: (e as Error).message });
+    }
+
+    try {
+      const [fulfillRes, payRes, returnRes] = await Promise.all([
+        this.apiClient.get(`/sell/account/v1/fulfillment_policy?marketplace_id=${marketplaceId}`, { headers: invHeaders }),
+        this.apiClient.get(`/sell/account/v1/payment_policy?marketplace_id=${marketplaceId}`, { headers: invHeaders }),
+        this.apiClient.get(`/sell/account/v1/return_policy?marketplace_id=${marketplaceId}`, { headers: invHeaders }),
+      ]);
+      const fp = fulfillRes.data?.fulfillmentPolicies?.[0];
+      const pp = payRes.data?.paymentPolicies?.[0];
+      const rp = returnRes.data?.returnPolicies?.[0];
+      if (fp?.fulfillmentPolicyId) fulfillmentPolicyId = fp.fulfillmentPolicyId;
+      if (pp?.paymentPolicyId) paymentPolicyId = pp.paymentPolicyId;
+      if (rp?.returnPolicyId) returnPolicyId = rp.returnPolicyId;
+    } catch (e) {
+      logger.warn('Could not fetch account policies, using defaults', { error: (e as Error).message });
+    }
+
+    return { merchantLocationKey, fulfillmentPolicyId, paymentPolicyId, returnPolicyId };
+  }
+
+  /**
    * Create eBay listing from inventory item
    */
   async createListing(sku: string, product: EbayProduct): Promise<EbayListingResponse> {
     try {
       return await this.withAuthRetry(async () => {
-        // First create inventory item
         await this.createInventoryItem(sku, product);
 
+        const defaults = await this.getListingDefaults();
         const listingData = {
           categoryId: product.categoryId,
-          merchantLocationKey: 'default_location',
+          merchantLocationKey: defaults.merchantLocationKey,
           pricingSummary: {
             price: {
               currency: 'USD',
@@ -453,9 +498,9 @@ export class EbayService {
           },
           quantityLimitPerBuyer: 10,
           listingPolicies: {
-            fulfillmentPolicyId: 'default_fulfillment',
-            paymentPolicyId: 'default_payment',
-            returnPolicyId: 'default_return',
+            fulfillmentPolicyId: defaults.fulfillmentPolicyId,
+            paymentPolicyId: defaults.paymentPolicyId,
+            returnPolicyId: defaults.returnPolicyId,
           },
           ...(product.buyItNowPrice && {
             pricingSummary: {
