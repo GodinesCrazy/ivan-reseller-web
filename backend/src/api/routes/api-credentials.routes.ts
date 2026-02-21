@@ -966,9 +966,21 @@ router.post('/', async (req: Request, res: Response, next) => {
       // Continuar aunque falle el encolado - el usuario puede verificar manualmente después
     }
     
-    // ✅ REFACTOR: Retornar jobId en lugar de immediateStatus
-    // El frontend puede verificar el estado del job o esperar evento WebSocket
-    const immediateStatus = null; // Ya no retornamos status síncrono
+    // ✅ Para SerpAPI/Google Trends: retornar immediateStatus para actualizar UI al instante
+    let immediateStatus: { isConfigured: boolean; isAvailable: boolean; status?: string; message?: string } | null = null;
+    if (normalizedApiName === 'serpapi') {
+      try {
+        const status = await apiAvailability.checkSerpAPI(targetUserId);
+        immediateStatus = {
+          isConfigured: status.isConfigured ?? false,
+          isAvailable: status.isAvailable ?? false,
+          status: status.status,
+          message: status.message,
+        };
+      } catch (e) {
+        /* ignorar */
+      }
+    }
 
     // ✅ FIX: Enviar respuesta inmediatamente, antes de cualquier operación que pueda causar crash
     res.json({
@@ -988,7 +1000,8 @@ router.post('/', async (req: Request, res: Response, next) => {
         warnings: validation.errors && validation.errors.length > 0 ? validation.errors : undefined,
         // ✅ REFACTOR: Retornar jobId para que frontend pueda rastrear el health check
         healthCheckJobId: healthCheckJobId || undefined,
-        // Nota: El estado se emitirá vía WebSocket cuando el health check complete
+        // ✅ SerpAPI/Google Trends: immediateStatus para actualizar UI sin esperar refetch
+        immediateStatus: immediateStatus || undefined,
       }
     });
   } catch (error: any) {

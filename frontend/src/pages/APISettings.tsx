@@ -819,10 +819,13 @@ export default function APISettings() {
               const apiNameKey = apiNameRaw.toLowerCase();
               const envKey = makeEnvKey(apiNameKey, env);
               const messageValue = item.message ?? item.error;
+              const available = Boolean(item.isAvailable ?? item.available);
               statusMap[envKey] = {
                 apiName: apiNameKey,
                 environment: env,
-                available: Boolean(item.isAvailable ?? item.available),
+                available,
+                isConfigured: Boolean(item.isConfigured ?? available),
+                status: item.status,
                 message:
                   messageValue !== undefined && messageValue !== null ? String(messageValue) : undefined,
                 lastChecked: item.lastChecked ? String(item.lastChecked) : undefined,
@@ -839,6 +842,7 @@ export default function APISettings() {
           const match = statusLookup.get(normalize(normalizedApiName)) || statusLookup.get(normalize(cred.apiName));
           if (match) {
             const available = match.isAvailable ?? match.available ?? cred.isActive;
+            const isConfigured = match.isConfigured ?? available ?? cred.isActive;
             const messageRaw = match.message ?? match.error;
             const lastCheckedRaw = match.lastChecked ?? match.checkedAt ?? match.timestamp ?? null;
             const key = makeEnvKey(cred.apiName, cred.environment);
@@ -847,6 +851,8 @@ export default function APISettings() {
               apiName: cred.apiName,
               environment: cred.environment,
               available: !!available,
+              isConfigured: !!isConfigured,
+              status: match.status,
               message: messageRaw ? String(messageRaw) : statusMap[key]?.message,
               lastChecked: lastCheckedRaw ? String(lastCheckedRaw) : statusMap[key]?.lastChecked,
               optional: statusMap[key]?.optional ?? Boolean(match.isOptional),
@@ -3586,11 +3592,12 @@ export default function APISettings() {
             // Para eBay, MercadoLibre y otras APIs, usar statusMap desde /api/credentials/status
             const apiStatus = statuses[statusKey];
             if (apiStatus) {
-              // Convertir APIStatus al formato esperado
+              // Convertir APIStatus al formato esperado (incluir isConfigured para Google Trends/SerpAPI)
               statusInfo = {
-                status: apiStatus.available ? 'healthy' : (diag?.issues?.length ? 'unhealthy' : 'degraded'),
+                status: apiStatus.available ? 'healthy' : (apiStatus.status || (diag?.issues?.length ? 'unhealthy' : 'degraded')),
                 message: apiStatus.message,
                 isAvailable: apiStatus.available,
+                isConfigured: apiStatus.isConfigured ?? apiStatus.available,
                 error: diag?.issues?.[0],
               } as APIStatus;
             }
