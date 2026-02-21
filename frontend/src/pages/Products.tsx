@@ -6,6 +6,7 @@ import {
   XCircle,
   Clock,
   Upload,
+  Archive,
   Filter,
   Search,
   Eye,
@@ -163,6 +164,19 @@ export default function Products() {
       console.error('Error publishing product:', error);
       const errorMessage = error?.response?.data?.error || error?.response?.data?.message || 'Error al publicar producto';
       toast.error(errorMessage);
+    }
+  };
+
+  const handleUnpublish = async (productId: string) => {
+    if (!confirm('¿Despublicar este producto? Se retirará de los marketplaces y el estado pasará a APPROVED.')) return;
+    try {
+      const response = await api.post(`/api/products/${productId}/unpublish`);
+      const message = response.data?.message || 'Producto despublicado';
+      toast.success(message);
+      fetchProducts();
+    } catch (error: any) {
+      const err = error?.response?.data?.error || error?.response?.data?.message || 'Error al despublicar';
+      toast.error(err);
     }
   };
 
@@ -470,6 +484,15 @@ export default function Products() {
                                   title="Publish"
                                 >
                                   <Upload className="w-4 h-4" />
+                                </button>
+                              )}
+                              {product.status === 'PUBLISHED' && (
+                                <button
+                                  onClick={() => handleUnpublish(product.id)}
+                                  className="p-1 text-amber-600 hover:bg-amber-50 rounded"
+                                  title="Despublicar"
+                                >
+                                  <Archive className="w-4 h-4" />
                                 </button>
                               )}
                               <button

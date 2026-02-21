@@ -42,7 +42,7 @@ export default function WorkflowStatusIndicator({
       .catch(() => {});
   }, [productId, currentStage, preloadedCurrentStage]);
 
-  const displayStage = currentStage || preloadedCurrentStage ?? fetchedStage;
+  const displayStage = (currentStage || preloadedCurrentStage) ?? fetchedStage;
   const showBadge = displayStage && stageLabels[displayStage];
 
   return (

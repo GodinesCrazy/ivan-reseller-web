@@ -507,6 +507,66 @@ router.patch('/:id/price', async (req: Request, res: Response, next: NextFunctio
   }
 });
 
+// POST /api/products/:id/unpublish - Despublicar producto manualmente (retira listings de marketplaces)
+router.post('/:id/unpublish', wrapAsync(async (req: Request, res: Response) => {
+  const productId = Number(req.params.id);
+  const userId = req.user!.userId;
+  const userRole = req.user?.role?.toUpperCase();
+  const isAdmin = userRole === 'ADMIN';
+
+  const product = await prisma.product.findFirst({
+    where: { id: productId, ...(isAdmin ? {} : { userId }) },
+    include: { marketplaceListings: true }
+  });
+  if (!product) return res.status(404).json({ success: false, error: 'Producto no encontrado' });
+  if (product.status !== 'PUBLISHED') {
+    return res.status(400).json({ success: false, error: 'Solo se pueden despublicar productos con estado PUBLISHED' });
+  }
+
+  const { EbayService } = await import('../../services/ebay.service');
+  const { MercadoLibreService } = await import('../../services/mercadolibre.service');
+  const { AmazonService } = await import('../../services/amazon.service');
+  const { resolveEnvironment } = await import('../../utils/environment-resolver');
+
+  const marketplaceService = new MarketplaceService();
+  const results: { marketplace: string; success: boolean; error?: string }[] = [];
+  const env = await resolveEnvironment({ userId: product.userId, default: 'production' });
+
+  for (const listing of product.marketplaceListings || []) {
+    const mp = listing.marketplace?.toLowerCase();
+    try {
+      const creds = await marketplaceService.getCredentials(product.userId, mp as 'ebay' | 'amazon' | 'mercadolibre', env);
+      const c = creds?.credentials as any;
+      if (!creds || !c || creds.issues?.length) { results.push({ marketplace: mp, success: false, error: 'Sin credenciales' }); continue; }
+
+      if (mp === 'ebay') {
+        const ebay = new EbayService({ ...c, sandbox: env === 'sandbox' });
+        await ebay.endListing(listing.listingId, 'NotAvailable');
+      } else if (mp === 'mercadolibre') {
+        const ml = new MercadoLibreService(c);
+        await ml.closeListing(listing.listingId);
+      } else if (mp === 'amazon') {
+        const amazon = new AmazonService();
+        await amazon.setCredentials(c);
+        const sku = listing.sku || listing.listingId;
+        if (sku) await amazon.deleteListing(sku);
+      }
+      results.push({ marketplace: mp, success: true });
+    } catch (e: any) {
+      logger.warn('[unpublish] Error despublicando en marketplace', { productId, marketplace: mp, error: e?.message });
+      results.push({ marketplace: mp, success: false, error: e?.message });
+    }
+  }
+
+  await productService.updateProductStatusSafely(productId, 'APPROVED', false, userId, 'Despublicación manual');
+
+  return res.json({
+    success: true,
+    message: 'Producto despublicado. Estado actualizado a APPROVED.',
+    marketplaceResults: results
+  });
+}));
+
 // DELETE /api/products/:id - Eliminar producto
 router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
