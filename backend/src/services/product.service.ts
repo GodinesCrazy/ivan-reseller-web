@@ -200,12 +200,18 @@ export class ProductService {
             }))
           });
 
-          // Si TODAS las imágenes son inválidas, lanzar error
+          // Si TODAS las imágenes son inválidas, usar fallback 500x500 (eBay mínimo) en vez de fallar
           if (validationResults.valid.length === 0) {
-            throw new AppError(
-              `Todas las imágenes proporcionadas fallaron la validación. Errores: ${validationResults.invalid.map(i => i.errors.join('; ')).join(' | ')}`,
-              400
-            );
+            const fallback = 'https://placehold.co/500x500?text=Product';
+            logger.warn('[PRODUCT-SERVICE] Todas las imágenes fallaron validación, usando fallback 500x500', {
+              userId,
+              invalidCount: validationResults.invalid.length,
+              errors: validationResults.invalid.map(i => i.errors.join('; ')).slice(0, 3),
+            });
+            finalImageUrl = fallback;
+            finalImageUrls = [];
+            data.imageUrl = fallback;
+            data.imageUrls = [];
           }
         }
 
