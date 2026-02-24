@@ -3,6 +3,7 @@ import { MarketplaceService } from '../../services/marketplace.service';
 import { EbayService } from '../../services/ebay.service';
 import { MercadoLibreService } from '../../services/mercadolibre.service';
 import { authenticate } from '../../middleware/auth.middleware';
+import { verifyStateAliExpressSafe } from '../../utils/oauth-state';
 import crypto from 'crypto';
 import logger from '../../config/logger';
 
@@ -18,11 +19,9 @@ router.get('/authorize/ebay', async (req: Request, res: Response) => {
   try {
     const clientId = (process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
     let redirectUri = (process.env.EBAY_RUNAME || process.env.EBAY_REDIRECT_URI || '').trim();
-    // eBay requiere RuName como redirect_uri, NO URL completa. Fallback si env tiene URL.
-    const RUNAME_PRODUCTION = 'Ivan_Marty-IvanMart-IVANRe-cgcqu';
-    if (!redirectUri || redirectUri.startsWith('http') || redirectUri.includes('/')) {
-      redirectUri = (process.env.EBAY_RUNAME || '').trim() || RUNAME_PRODUCTION;
-      logger.info('[OAuth Authorize] Using RuName as redirect_uri', { redirectUri: redirectUri?.substring(0, 20) + '...' });
+    // eBay requiere RuName como redirect_uri (no URL). Debe estar en EBAY_RUNAME o EBAY_REDIRECT_URI.
+    if (redirectUri && (redirectUri.startsWith('http') || redirectUri.includes('/'))) {
+      logger.warn('[OAuth Authorize] EBAY_RUNAME should be RuName, not URL. Using as-is.');
     }
     const certId = (process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
 
@@ -202,6 +201,9 @@ router.get('/callback', async (req: Request, res: Response) => {
       });
     }
     
+    const webBaseUrlForRedirect = process.env.WEB_BASE_URL ||
+      (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
+
     // Validar que no haya error en los parámetros de query
     if (errorStr) {
       logger.error('[OAuth Callback] OAuth error from provider', {
@@ -211,14 +213,10 @@ router.get('/callback', async (req: Request, res: Response) => {
         error: errorStr,
         errorDescription: req.query.error_description || 'No description'
       });
-      return res.status(400).json({
-        success: false,
-        error: errorStr,
-        message: `Authorization error: ${errorStr}`,
-        correlationId
-      });
+      const errorUrl = `${webBaseUrlForRedirect}/api-settings?oauth=error&provider=aliexpress-dropshipping&reason=${encodeURIComponent(errorStr)}&correlationId=${correlationId}`;
+      return res.redirect(302, errorUrl);
     }
-    
+
     // Validar que el código no esté vacío
     if (!codeStr || codeStr.trim().length === 0) {
       logger.error('[OAuth Callback] Missing authorization code', {
@@ -227,11 +225,8 @@ router.get('/callback', async (req: Request, res: Response) => {
         correlationId,
         hasState: !!state
       });
-      return res.status(400).json({
-        success: false,
-        message: 'Missing authorization code',
-        correlationId
-      });
+      const errorUrl = `${webBaseUrlForRedirect}/api-settings?oauth=error&provider=aliexpress-dropshipping&reason=missing_code&correlationId=${correlationId}`;
+      return res.redirect(302, errorUrl);
     }
     
     // Validar que el state no esté vacío (para flujo real)
@@ -242,48 +237,35 @@ router.get('/callback', async (req: Request, res: Response) => {
         correlationId,
         hasCode: !!code
       });
-      return res.status(400).json({
-        success: false,
-        message: 'Missing state parameter',
-        correlationId
-      });
+      const errorUrl = `${webBaseUrlForRedirect}/api-settings?oauth=error&provider=aliexpress-dropshipping&reason=missing_state&correlationId=${correlationId}`;
+      return res.redirect(302, errorUrl);
     }
-    
-    // Parsear y validar el state
-    const parsed = parseState(stateStr);
+
+    // Validar state JWT stateless (AliExpress Dropshipping)
+    const parsed = verifyStateAliExpressSafe(stateStr);
     if (!parsed.ok) {
-      let errorMessage = 'Invalid or expired authorization state';
-      if (parsed.reason === 'expired') {
-        errorMessage = 'Authorization state has expired. Please try again.';
-      } else if (parsed.reason === 'invalid_signature') {
-        errorMessage = 'Invalid authorization state signature';
-      }
-      
+      let reason = parsed.reason;
       logger.error('[OAuth Callback] Invalid state', {
         service: 'marketplace-oauth',
         marketplace,
         correlationId,
-        reason: parsed.reason,
+        reason,
         stateLength: stateStr.length
       });
-      
-      return res.status(400).json({
-        success: false,
-        message: errorMessage,
-        correlationId
-      });
+      const errorUrl = `${webBaseUrlForRedirect}/api-settings?oauth=error&provider=aliexpress-dropshipping&reason=${encodeURIComponent(reason)}&correlationId=${correlationId}`;
+      return res.redirect(302, errorUrl);
     }
-    
-    const { userId, redirectUri, environment } = parsed as any;
-    
-    logger.info('[OAuth Callback] State parsed successfully', {
+
+    const userId = parsed.userId;
+    const environment = 'production' as const;
+    const redirectUri: string | null = null; // JWT stateless: usar defaultCallbackUrl más abajo
+
+    logger.info('[OAuth Callback] State verified successfully', {
       service: 'marketplace-oauth',
       marketplace,
       correlationId,
       userId,
-      environment,
-      redirectUriLength: redirectUri?.length || 0,
-      redirectUriPreview: redirectUri ? redirectUri.substring(0, 50) + '...' : 'N/A'
+      environment
     });
 
     // ✅ REUTILIZAR LÓGICA EXISTENTE: Procesar AliExpress Dropshipping OAuth

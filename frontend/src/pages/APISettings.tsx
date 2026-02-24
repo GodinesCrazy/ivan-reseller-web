@@ -325,6 +325,10 @@ export default function APISettings() {
   }>>({});
   const [oauthing, setOauthing] = useState<string | null>(null);
   const [oauthBlockedModal, setOauthBlockedModal] = useState<{ open: boolean; authUrl: string; apiName: string; warning?: string }>({ open: false, authUrl: '', apiName: '', warning: undefined });
+  /** Evita abrir dos ventanas OAuth: si ya hay una abierta para esta API, la enfocamos en lugar de abrir otra */
+  const openOAuthWindowRef = useRef<{ apiName: string; win: Window } | null>(null);
+  /** Evita doble ejecución de handleOAuth (doble clic o Strict Mode) */
+  const oauthInProgressRef = useRef<Record<string, boolean>>({});
   const [manualCookieModalOpen, setManualCookieModalOpen] = useState(false);
   const [manualCookieInput, setManualCookieInput] = useState('');
   const [manualCookieError, setManualCookieError] = useState<string | null>(null);
@@ -2330,6 +2334,10 @@ export default function APISettings() {
   }, [searchParams, navigate, fetchAuthStatuses]);
 
   const handleOAuth = async (apiName: string, environment: string) => {
+    if (oauthInProgressRef.current[apiName]) {
+      return;
+    }
+    oauthInProgressRef.current[apiName] = true;
     setOauthing(apiName);
     setError(null);
     try {
@@ -2516,9 +2524,21 @@ export default function APISettings() {
       // Esto previene que modales de sesiones anteriores se muestren
       setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined });
       
+      // ✅ Evitar dos ventanas: si ya hay una ventana OAuth abierta para esta API, enfocarla y no abrir otra
+      const existing = openOAuthWindowRef.current;
+      if (existing?.apiName === apiName && existing?.win && !existing.win.closed) {
+        try {
+          existing.win.focus();
+        } catch (_) {}
+        delete oauthInProgressRef.current[apiName];
+        setOauthing(null);
+        return;
+      }
+      openOAuthWindowRef.current = null;
+      
       let oauthWindow: Window | null = null;
       try {
-        oauthWindow = window.open(authUrl, '_blank', 'noopener,noreferrer,width=800,height=600');
+        oauthWindow = window.open(authUrl, 'oauth', 'noopener,noreferrer,width=500,height=700');
         log.debug('[APISettings] window.open() result:', {
           oauthWindow: !!oauthWindow,
           oauthWindowType: typeof oauthWindow,
@@ -2571,6 +2591,7 @@ export default function APISettings() {
         oauthWindowType: typeof oauthWindow,
         // No verificar .closed aquí porque puede ser true para cross-origin
       });
+      openOAuthWindowRef.current = { apiName, win: oauthWindow };
       
       // ✅ CORRECCIÓN: Asegurar que el modal esté cerrado cuando la ventana se abre correctamente
       // Usar setTimeout para asegurar que el estado se actualice después de cualquier renderizado previo
@@ -2656,6 +2677,9 @@ export default function APISettings() {
           if (isClosed && !windowClosed) {
             windowClosed = true;
             clearInterval(checkInterval);
+            if (openOAuthWindowRef.current?.apiName === apiName) {
+              openOAuthWindowRef.current = null;
+            }
             
             log.info('[APISettings] OAuth window closed, starting token polling', {
               apiName,
@@ -2684,6 +2708,9 @@ export default function APISettings() {
       // Limpiar intervalo después de 5 minutos
       setTimeout(() => {
         clearInterval(checkInterval);
+        if (openOAuthWindowRef.current?.apiName === apiName) {
+          openOAuthWindowRef.current = null;
+        }
         if (!windowClosed) {
           log.info('[APISettings] OAuth window monitoring timeout (5 minutes)');
         }
@@ -2694,6 +2721,7 @@ export default function APISettings() {
       const message = axiosError?.response?.data?.message || axiosError?.response?.data?.error || (err instanceof Error ? err.message : String(err)) || 'Error iniciando OAuth';
       toast.error(message);
     } finally {
+      delete oauthInProgressRef.current[apiName];
       setOauthing(null);
     }
   };

@@ -1031,11 +1031,9 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         });
       }
 
-      // Generar state para CSRF protection
-      const redirB64 = Buffer.from(String(callbackUrl)).toString('base64url');
-      const payload = [userId, normalizedMarketplace, ts, nonce, redirB64, resolvedEnv].join('|');
-      const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
-      const state = Buffer.from([payload, sig].join('|')).toString('base64url');
+      // State como JWT stateless (sin memoria/Redis) para evitar "Invalid authorization state signature"
+      const { signStateAliExpress } = await import('../../utils/oauth-state');
+      const state = signStateAliExpress(userId);
 
       // Generar URL de autorización
       const { aliexpressDropshippingAPIService } = await import('../../services/aliexpress-dropshipping-api.service');
