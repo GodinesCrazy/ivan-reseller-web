@@ -343,6 +343,7 @@ router.post('/test-fulfillment-only', validateInternalSecret, async (req: Reques
       orderId: order.id,
       aliexpressOrderId: fulfill.aliexpressOrderId,
       finalStatus,
+      error: fulfill.error,
       duration: `${duration}ms`,
     });
   } catch (err: any) {
