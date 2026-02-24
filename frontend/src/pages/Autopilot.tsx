@@ -70,6 +70,7 @@ interface AutopilotStatusResponse {
   opportunitiesGenerated?: number;
   successRate?: number;
   lastRun?: string | null;
+  config?: { targetMarketplaces?: string[]; targetMarketplace?: string };
 }
 
 export default function Autopilot() {
@@ -89,6 +90,10 @@ export default function Autopilot() {
   const [ebayNeedsOAuth, setEbayNeedsOAuth] = useState(false);
   const [ebayOAuthing, setEbayOAuthing] = useState(false);
 
+  // Autopilot config: marketplaces destino
+  const [targetMarketplaces, setTargetMarketplaces] = useState<string[]>(['ebay']);
+  const [savingConfig, setSavingConfig] = useState(false);
+
   // Form state
   const [workflowForm, setWorkflowForm] = useState({
     name: '',
@@ -99,6 +104,7 @@ export default function Autopilot() {
     conditions: {},
     actions: {}
   });
+  const [workflowFormMarketplaces, setWorkflowFormMarketplaces] = useState<string[]>(['ebay']);
 
   // Predefined schedules
   const schedules = [
@@ -367,10 +373,39 @@ export default function Autopilot() {
         opportunitiesGenerated: data.opportunitiesGenerated,
         productsPublished: data.productsPublished,
         lastRun: data.lastRun ?? undefined,
+        config: data.config,
       } : null);
+      // Sincronizar marketplaces destino desde config
+      const cfg = data?.config;
+      if (cfg?.targetMarketplaces && Array.isArray(cfg.targetMarketplaces) && cfg.targetMarketplaces.length > 0) {
+        setTargetMarketplaces(cfg.targetMarketplaces);
+      } else if (cfg?.targetMarketplace) {
+        setTargetMarketplaces([cfg.targetMarketplace]);
+      }
     } catch (error: any) {
       // Silent fail
     }
+  };
+
+  const saveAutopilotMarketplaces = async (marketplaces: string[]) => {
+    setSavingConfig(true);
+    try {
+      await api.put('/api/autopilot/config', { targetMarketplaces: marketplaces });
+      setTargetMarketplaces(marketplaces);
+      toast.success('Marketplaces de destino actualizados');
+    } catch (error: any) {
+      toast.error('Error al guardar: ' + (error?.response?.data?.error || error?.message || 'Error'));
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const toggleMarketplace = (mp: string) => {
+    const next = targetMarketplaces.includes(mp)
+      ? targetMarketplaces.filter(m => m !== mp)
+      : [...targetMarketplaces, mp];
+    if (next.length === 0) return; // Al menos uno debe estar seleccionado
+    saveAutopilotMarketplaces(next);
   };
 
   const toggleAutopilot = async () => {
@@ -401,8 +436,13 @@ export default function Autopilot() {
   };
 
   const openWorkflowModal = (workflow?: Workflow) => {
+    const defaultMarketplaces = ['ebay'];
     if (workflow) {
       setSelectedWorkflow(workflow);
+      const acts = workflow.actions || {};
+      const mps = Array.isArray(acts.marketplaces) && acts.marketplaces.length > 0
+        ? acts.marketplaces
+        : defaultMarketplaces;
       setWorkflowForm({
         name: workflow.name,
         description: workflow.description || '',
@@ -410,7 +450,7 @@ export default function Autopilot() {
         enabled: workflow.enabled,
         schedule: workflow.schedule,
         conditions: workflow.conditions || {},
-        actions: workflow.actions || {}
+        actions: { ...acts, marketplaces: mps }
       });
     } else {
       setSelectedWorkflow(null);
@@ -421,7 +461,7 @@ export default function Autopilot() {
         enabled: true,
         schedule: 'manual',
         conditions: {},
-        actions: {}
+        actions: { marketplaces: defaultMarketplaces }
       });
     }
     setShowWorkflowModal(true);
@@ -445,8 +485,15 @@ export default function Autopilot() {
     }
 
     try {
+      const actions = { ...workflowForm.actions };
+      if (workflowForm.type === 'publish' || workflowForm.type === 'search') {
+        actions.marketplaces = Array.isArray(actions.marketplaces) && actions.marketplaces.length > 0
+          ? actions.marketplaces
+          : ['ebay'];
+      }
       const workflowData = {
         ...workflowForm,
+        actions,
         schedule: workflowForm.schedule === 'custom' ? customCron : workflowForm.schedule
       };
 
@@ -658,6 +705,31 @@ export default function Autopilot() {
               )}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Marketplaces destino para publicación */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Target className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+          <span className="font-medium text-gray-900 dark:text-gray-100">Marketplaces de publicación</span>
+        </div>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          El Autopilot publicará en los marketplaces seleccionados. Selecciona al menos uno.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          {['ebay', 'amazon', 'mercadolibre'].map((mp) => (
+            <label key={mp} className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={targetMarketplaces.includes(mp)}
+                onChange={() => toggleMarketplace(mp)}
+                disabled={savingConfig || (targetMarketplaces.length === 1 && targetMarketplaces.includes(mp))}
+                className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+              />
+              <span className="text-sm font-medium capitalize">{mp === 'mercadolibre' ? 'Mercado Libre' : mp}</span>
+            </label>
+          ))}
         </div>
       </div>
 
@@ -896,7 +968,14 @@ export default function Autopilot() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Workflow Type</label>
                   <select
                     value={workflowForm.type}
-                    onChange={(e) => setWorkflowForm({ ...workflowForm, type: e.target.value as any })}
+                    onChange={(e) => {
+                      const newType = e.target.value as typeof workflowForm.type;
+                      const acts = { ...workflowForm.actions };
+                      if ((newType === 'publish' || newType === 'search') && (!Array.isArray(acts.marketplaces) || acts.marketplaces.length === 0)) {
+                        acts.marketplaces = ['ebay'];
+                      }
+                      setWorkflowForm({ ...workflowForm, type: newType, actions: acts });
+                    }}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500"
                   >
                     <option value="search">Search Opportunities</option>
@@ -963,6 +1042,45 @@ export default function Autopilot() {
                   )}
                 </div>
               </div>
+
+              {/* Marketplaces (para publish y search) */}
+              {(workflowForm.type === 'publish' || workflowForm.type === 'search') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Marketplaces</label>
+                  <div className="flex flex-wrap gap-4">
+                    {['ebay', 'amazon', 'mercadolibre'].map((mp) => {
+                      const mps = Array.isArray(workflowForm.actions?.marketplaces)
+                        ? workflowForm.actions.marketplaces
+                        : ['ebay'];
+                      const checked = mps.includes(mp);
+                      return (
+                        <label key={mp} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const current = mps;
+                              const next = checked
+                                ? current.filter(m => m !== mp)
+                                : [...current, mp];
+                              if (next.length === 0) return;
+                              setWorkflowForm({
+                                ...workflowForm,
+                                actions: { ...workflowForm.actions, marketplaces: next }
+                              });
+                            }}
+                            className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                          />
+                          <span className="text-sm capitalize">{mp === 'mercadolibre' ? 'Mercado Libre' : mp}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {workflowForm.type === 'publish' ? 'Publicar productos en estos marketplaces' : 'Buscar oportunidades en estos marketplaces'}
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="flex items-center gap-2">

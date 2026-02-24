@@ -57,6 +57,8 @@ prisma/migrations/**/migration.sql
 # API Keys - NEVER commit these files
 API.txt
 APIS.txt
+APIS2.txt
+rail.txt
 *.api.txt
 REVISION_CREDENCIALES_EBAY.md
 *CREDENCIALES*.md

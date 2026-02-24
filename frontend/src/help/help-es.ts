@@ -1,0 +1,182 @@
+/**
+ * Contenido de ayuda en espa?ol para Ivan Reseller
+ * Lenguaje profesional, sin emojis, orientado a usuarios no t�cnicos
+ */
+
+import type { HelpSection, HelpSectionId } from './help-sections';
+
+export const helpEs: Record<HelpSectionId, HelpSection> = {
+  dashboard: {
+    id: 'dashboard',
+    title: 'Panel principal',
+    whatItDoes: 'Muestra las m�tricas principales de tu negocio de dropshipping.',
+    howItMakesMoney: 'Las ventas generan ganancia neta. Parte va a tu cuenta PayPal y otra parte se retiene como comisi�n de plataforma.',
+    systemAutomation: 'El sistema calcula ventas totales, ganancia neta y comisi�n de plataforma desde las ventas confirmadas.',
+    userMustConfigure: 'Debes tener PayPal configurado para recibir pagos y al menos un marketplace conectado.',
+    tooltipShort: 'Resumen de ventas, ganancias y comisi�n de plataforma.',
+  },
+  'ganancia-neta': {
+    id: 'ganancia-neta',
+    title: 'Ganancia neta',
+    whatItDoes: 'Es la utilidad real que te queda despu�s de todos los costos.',
+    howItMakesMoney: 'Se calcula: precio de venta menos costo del producto, env�o, impuestos, comisi�n del marketplace, comisiones de PayPal y comisi�n de plataforma.',
+    systemAutomation: 'El sistema calcula la ganancia neta en cada venta y la suma en el dashboard.',
+    expectedResults: 'Ver�s el total acumulado de ganancia neta en el dashboard.',
+    tooltipShort: 'Utilidad real despu�s de costos, comisiones, PayPal y comisi�n de plataforma.',
+  },
+  'comision-plataforma': {
+    id: 'comision-plataforma',
+    title: 'Comisi�n plataforma',
+    whatItDoes: 'Porcentaje que la plataforma retiene de cada venta como comisi�n.',
+    howItMakesMoney: 'Se descuenta de la ganancia bruta. El resto es tu ganancia neta que se env�a a tu PayPal.',
+    systemAutomation: 'El sistema aplica el porcentaje configurado por el administrador en cada venta.',
+    userMustConfigure: 'Nada. El administrador configura el porcentaje.',
+    tooltipShort: 'Porcentaje retenido por la plataforma de la ganancia bruta de cada venta.',
+  },
+  autopilot: {
+    id: 'autopilot',
+    title: 'Autopilot',
+    whatItDoes: 'Ejecuta workflows autom�ticamente seg�n la programaci�n definida.',
+    howItMakesMoney: 'Puede buscar oportunidades, publicar productos o ajustar precios sin intervenci�n manual.',
+    systemAutomation: 'El sistema ejecuta los workflows habilitados seg�n el cronograma (manual, cada hora, diario, etc.).',
+    userMustConfigure: 'Debes crear y habilitar workflows. Configurar l�mites diarios de �rdenes y gasto m�ximo.',
+    commonMistakes: 'Activar Autopilot sin configurar PayPal o sin l�mites diarios puede generar gastos no deseados.',
+    expectedResults: 'Los workflows se ejecutan en segundo plano. Revisa los logs para ver resultados.',
+    tooltipShort: 'Ejecuci�n autom�tica de workflows seg�n la programaci�n definida.',
+  },
+  'dynamic-pricing': {
+    id: 'dynamic-pricing',
+    title: 'Precios din�micos',
+    whatItDoes: 'Ajusta autom�ticamente el precio de venta seg�n la competencia y el profit guard.',
+    howItMakesMoney: 'Intenta maximizar margen manteniendo precios competitivos.',
+    systemAutomation: 'El sistema analiza precios de competidores peri�dicamente y actualiza precios sugeridos.',
+    userMustConfigure: 'Productos publicados. El sistema aplica cambios autom�ticamente si est� habilitado.',
+    tooltipShort: 'Ajuste autom�tico de precios seg�n competencia, sin bajar del margen m�nimo.',
+  },
+  'profit-guard': {
+    id: 'profit-guard',
+    title: 'Profit Guard',
+    whatItDoes: 'Bloquea ventas cuando el precio no cubre costos, comisiones y env�o.',
+    howItMakesMoney: 'Evita perder dinero en ventas con margen negativo.',
+    systemAutomation: 'El sistema rechaza autom�ticamente �rdenes cuyo precio de venta sea menor o igual al costo total.',
+    commonMistakes: 'Configurar precios demasiado bajos o ignorar costos de env�o e impuestos.',
+    tooltipShort: 'Protecci�n que bloquea ventas sin margen de ganancia.',
+  },
+  'learning-engine': {
+    id: 'learning-engine',
+    title: 'Motor de aprendizaje',
+    whatItDoes: 'Analiza el rendimiento de productos y categor�as para mejorar recomendaciones.',
+    howItMakesMoney: 'Prioriza oportunidades con mayor historial de ventas y rentabilidad.',
+    systemAutomation: 'El sistema registra resultados de ventas y ajusta las sugerencias de oportunidades.',
+    tooltipShort: 'Aprendizaje autom�tico que mejora las recomendaciones seg�n resultados reales.',
+  },
+  'account-rotation': {
+    id: 'account-rotation',
+    title: 'Rotaci�n de cuentas',
+    whatItDoes: 'Distribuye el uso entre m�ltiples cuentas de marketplace, PayPal y AliExpress.',
+    howItMakesMoney: 'Reduce riesgo de bloqueo por uso excesivo de una sola cuenta.',
+    systemAutomation: 'El sistema selecciona la cuenta con menor uso reciente para cada operaci�n.',
+    userMustConfigure: 'Debes tener varias cuentas configuradas en clusters.',
+    tooltipShort: 'Uso distribuido entre cuentas para evitar bloqueos.',
+  },
+  'daily-limits': {
+    id: 'daily-limits',
+    title: 'L�mites diarios',
+    whatItDoes: 'Limita el n�mero de �rdenes y el gasto m�ximo por d�a.',
+    howItMakesMoney: 'Controla el riesgo y evita sobregastos.',
+    systemAutomation: 'El sistema bloquea nuevas �rdenes cuando se alcanzan MAX_DAILY_ORDERS o MAX_DAILY_SPEND_USD.',
+    userMustConfigure: 'Configurable por variables de entorno (administrador).',
+    tooltipShort: 'L�mite de �rdenes y gasto diario para control de riesgo.',
+  },
+  opportunities: {
+    id: 'opportunities',
+    title: 'Oportunidades',
+    whatItDoes: 'Productos potencialmente rentables detectados por b�squeda o IA.',
+    howItMakesMoney: 'Publicas estos productos en tu marketplace. Cuando vendes, obtienes ganancia.',
+    systemAutomation: 'El sistema busca en AliExpress, analiza precios y competencia, y sugiere oportunidades.',
+    userMustConfigure: 'AliExpress Affiliate o API de b�squeda. Marketplaces conectados.',
+    expectedResults: 'Lista de productos con margen estimado, ROI y nivel de competencia.',
+    tooltipShort: 'Productos candidatos a publicar con estimaci�n de rentabilidad.',
+  },
+  products: {
+    id: 'products',
+    title: 'Productos',
+    whatItDoes: 'Cat�logo de productos que has importado o publicado.',
+    howItMakesMoney: 'Cada venta de un producto genera ganancia seg�n el margen configurado.',
+    systemAutomation: 'El sistema sincroniza estados entre AliExpress, marketplace y ventas.',
+    userMustConfigure: 'Importar desde oportunidades o publicar manualmente.',
+    tooltipShort: 'Productos importados, publicados o vendidos.',
+  },
+  sales: {
+    id: 'sales',
+    title: 'Ventas',
+    whatItDoes: 'Registro de ventas confirmadas y su estado.',
+    howItMakesMoney: 'Cada venta genera ganancia neta (precio menos costos y comisiones). Parte se env�a a tu PayPal.',
+    systemAutomation: 'El sistema registra ventas, aplica comisi�n de plataforma y ejecuta pagos duales (admin y usuario).',
+    expectedResults: 'Lista de ventas con precio, costos, ganancia y estado.',
+    tooltipShort: 'Ventas confirmadas con desglose de ganancia y comisiones.',
+  },
+  'paypal-payout': {
+    id: 'paypal-payout',
+    title: 'Pago por PayPal',
+    whatItDoes: 'Env�o de tu ganancia neta a tu email de PayPal configurado.',
+    howItMakesMoney: 'Recibes el dinero en tu cuenta PayPal tras cada venta confirmada.',
+    systemAutomation: 'El sistema env�a dos pagos: comisi�n al admin y ganancia al usuario. Si uno falla, la venta queda en PAYOUT_FAILED.',
+    userMustConfigure: 'Debes configurar tu email de PayPal en Configuraci�n o Perfil.',
+    commonMistakes: 'Email de PayPal incorrecto o cuenta no verificada.',
+    tooltipShort: 'Tu ganancia se env�a a tu email de PayPal configurado.',
+  },
+  'admin-revenue': {
+    id: 'admin-revenue',
+    title: 'Ingresos plataforma (Admin)',
+    whatItDoes: 'Total de comisiones cobradas por la plataforma a todos los usuarios.',
+    howItMakesMoney: 'Cada venta genera un porcentaje de comisi�n que va al PayPal del administrador.',
+    systemAutomation: 'El sistema agrega comisiones por venta y las muestra por usuario.',
+    userMustConfigure: 'Solo visible para administradores.',
+    tooltipShort: 'Comisiones totales cobradas por la plataforma.',
+  },
+  'empty-opportunities': {
+    id: 'empty-opportunities',
+    title: 'Sin oportunidades',
+    whatItDoes: 'A�n no hay productos candidatos cargados.',
+    howItMakesMoney: 'Las oportunidades son la fuente de productos para publicar y vender.',
+    userMustConfigure: 'Realiza una b�squeda con t�rmino o URL de AliExpress. Verifica que tengas API de b�squeda configurada.',
+    expectedResults: 'Los resultados suelen aparecer en segundos. Si no hay resultados, prueba otro t�rmino o verifica credenciales.',
+    tooltipShort: 'Busca productos o URLs para generar oportunidades.',
+  },
+  'empty-products': {
+    id: 'empty-products',
+    title: 'Sin productos',
+    whatItDoes: 'No tienes productos importados o publicados.',
+    howItMakesMoney: 'Los productos son la base para vender en el marketplace.',
+    userMustConfigure: 'Ve a Oportunidades, selecciona un producto y publ�calo. O importa manualmente.',
+    expectedResults: 'Los productos aparecen tras publicar desde oportunidades.',
+    tooltipShort: 'Publica productos desde Oportunidades para comenzar.',
+  },
+  'empty-sales': {
+    id: 'empty-sales',
+    title: 'Sin ventas',
+    whatItDoes: 'A�n no hay ventas registradas.',
+    howItMakesMoney: 'Las ventas generan tu ganancia neta.',
+    userMustConfigure: 'Publica productos en el marketplace. Las ventas se registran cuando un cliente compra.',
+    expectedResults: 'Las ventas pueden tardar d�as o semanas seg�n tu cat�logo y estrategia.',
+    tooltipShort: 'Las ventas aparecen cuando un cliente compra tus productos.',
+  },
+  'empty-accounts': {
+    id: 'empty-accounts',
+    title: 'Sin cuentas conectadas',
+    whatItDoes: 'No hay marketplaces, PayPal o AliExpress configurados.',
+    howItMakesMoney: 'Necesitas al menos un marketplace y PayPal para vender y recibir pagos.',
+    userMustConfigure: 'Configura APIs en Configuraci�n. Conecta PayPal para recibir ganancias.',
+    expectedResults: 'Tras conectar cuentas, podr�s buscar oportunidades y publicar.',
+    tooltipShort: 'Configura marketplaces y PayPal para operar.',
+  },
+};
+
+export function getHelpSection(id: HelpSectionId): HelpSection {
+  return helpEs[id];
+}
+
+export function getTooltipShort(id: HelpSectionId): string {
+  return helpEs[id]?.tooltipShort ?? '';
+}

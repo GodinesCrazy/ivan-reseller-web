@@ -342,11 +342,10 @@ const envSchema = z.object({
   
   // ✅ FIX SIGSEGV: Disable Browser Automation - flag absoluto para deshabilitar Puppeteer/Chromium en producción
   // Si está en true, NUNCA se inicializará Chromium/Puppeteer, incluso si se importa el servicio
-  // Default: true en producción, false en desarrollo
-  DISABLE_BROWSER_AUTOMATION: z.enum(['true', 'false']).optional().transform((val, ctx) => {
-    // Si está explícitamente seteado, usar ese valor
+  // Default: true en producción, false en desarrollo. Si ALLOW_BROWSER_AUTOMATION=true, default false (activar compras reales).
+  DISABLE_BROWSER_AUTOMATION: z.enum(['true', 'false']).optional().transform((val) => {
     if (val !== undefined) return val === 'true';
-    // Si no está seteado, default true en producción, false en desarrollo
+    if (process.env.ALLOW_BROWSER_AUTOMATION === 'true') return false;
     const nodeEnv = process.env.NODE_ENV || 'development';
     return nodeEnv === 'production';
   }),

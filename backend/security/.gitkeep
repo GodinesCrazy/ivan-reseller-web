@@ -1,0 +1,2 @@
+# Certificates payoneer.key and payoneer.crt are generated here.
+# Run: scripts/generate-payoneer-cert.ps1 (requires OpenSSL)

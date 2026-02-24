@@ -76,6 +76,16 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
     
     const result = await queryWithTimeout(queryPromise, timeoutMs);
     
+    // ✅ Construir URL del marketplace cuando listingUrl falta pero listingId existe
+    const buildMarketplaceUrl = (marketplace: string, listingId: string | null | undefined): string | null => {
+      if (!marketplace || !listingId || typeof listingId !== 'string') return null;
+      const m = marketplace.toLowerCase().trim();
+      if (m === 'ebay') return `https://www.ebay.com/itm/${listingId}`;
+      if (m === 'mercadolibre' || m === 'ml') return `https://articulo.mercadolibre.com.mx/${listingId}`;
+      if (m === 'amazon') return `https://www.amazon.com/dp/${listingId}`;
+      return null;
+    };
+
     // ✅ Función helper para extraer imageUrl del campo images (JSON)
     const extractImageUrl = (imagesString: string | null | undefined): string | null => {
       if (!imagesString) return null;
@@ -101,7 +111,7 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
       // ✅ Obtener información del marketplace más reciente (si está publicado)
       const mostRecentListing = product.marketplaceListings?.[0] || null;
       const marketplace = mostRecentListing?.marketplace?.toUpperCase() || 'unknown';
-      const marketplaceUrl = mostRecentListing?.listingUrl || null;
+      const marketplaceUrl = mostRecentListing?.listingUrl || buildMarketplaceUrl(mostRecentListing?.marketplace ?? '', mostRecentListing?.listingId) || null;
       
       return {
         id: String(product.id),

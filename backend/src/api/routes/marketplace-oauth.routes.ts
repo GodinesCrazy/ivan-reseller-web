@@ -476,12 +476,11 @@ router.get('/callback', async (req: Request, res: Response) => {
       const successUrl = `${webBaseUrl}/api-settings?oauth=success&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
       const errorUrl = `${webBaseUrl}/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
       
-      // ✅ REDIRIGIR A PÁGINA DE ÉXITO con fallback HTML
+      // ✅ REDIRIGIR A PÁGINA DE ÉXITO: Si es popup, enviar mensaje y cerrar; si no, redirect directo
       res.send(`
         <html>
           <head>
             <title>Autorización completada</title>
-            <meta http-equiv="refresh" content="2;url=${successUrl}" />
             <style>
               body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
               .success { color: green; font-size: 18px; margin: 20px 0; }
@@ -494,36 +493,51 @@ router.get('/callback', async (req: Request, res: Response) => {
             <div class="info" style="font-size: 12px; margin-top: 30px;">Si no eres redirigido, <a href="${successUrl}">haz clic aquí</a></div>
             <div class="info" style="font-size: 12px; margin-top: 10px;">Correlation ID: ${correlationId}</div>
             <script>
-              // Intentar postMessage primero
-              const sendMessage = () => {
-                if (window.opener && !window.opener.closed) {
-                  try {
-                    window.opener.postMessage({ 
-                      type: 'oauth_success', 
-                      marketplace: 'aliexpress-dropshipping',
-                      correlationId: '${correlationId}',
-                      timestamp: Date.now()
-                    }, '*');
-                    console.log('[OAuth Callback] Success message sent to opener');
-                  } catch (e) {
-                    console.error('[OAuth Callback] Error sending message to opener:', e);
+              (function() {
+                const successUrl = '${successUrl}';
+                let messageSent = false;
+                let redirected = false;
+                
+                // Función para enviar mensaje a la ventana padre (si es popup)
+                const sendMessage = () => {
+                  if (messageSent) return;
+                  if (window.opener && !window.opener.closed) {
+                    try {
+                      window.opener.postMessage({ 
+                        type: 'oauth_success', 
+                        marketplace: 'aliexpress-dropshipping',
+                        correlationId: '${correlationId}',
+                        timestamp: Date.now()
+                      }, '*');
+                      console.log('[OAuth Callback] Success message sent to opener');
+                      messageSent = true;
+                      // Si es popup, cerrar después de enviar el mensaje
+                      setTimeout(() => {
+                        if (window.opener && !window.opener.closed) {
+                          window.close();
+                        }
+                      }, 500);
+                      return true;
+                    } catch (e) {
+                      console.error('[OAuth Callback] Error sending message to opener:', e);
+                    }
                   }
-                } else {
-                  console.warn('[OAuth Callback] No opener window found or opener is closed');
+                  return false;
+                };
+                
+                // Intentar enviar mensaje inmediatamente
+                if (sendMessage()) {
+                  // Si se envió el mensaje (es popup), no hacer redirect
+                  return;
                 }
-              };
-              
-              sendMessage();
-              setTimeout(sendMessage, 500);
-              setTimeout(sendMessage, 1000);
-              setTimeout(sendMessage, 2000);
-              
-              // Fallback: redirect si no hay opener
-              setTimeout(() => {
-                if (!window.opener || window.opener.closed) {
-                  window.location.href = '${successUrl}';
+                
+                // Si no hay opener (no es popup), hacer redirect inmediato
+                if (!redirected) {
+                  redirected = true;
+                  console.log('[OAuth Callback] No opener found, redirecting to:', successUrl);
+                  window.location.href = successUrl;
                 }
-              }, 2000);
+              })();
             </script>
           </body>
         </html>

@@ -29,6 +29,7 @@ const DEFAULT_AUTOPILOT_CONFIG = {
   cycleIntervalMinutes: 15, // FASE 11: 15 min scheduler for production
   publicationMode: 'manual' as const,
   targetMarketplace: 'ebay',
+  targetMarketplaces: ['ebay'],
   maxOpportunitiesPerCycle: 5,
   workingCapital: 500,
   minProfitUsd: 10,

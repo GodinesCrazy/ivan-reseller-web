@@ -50,6 +50,7 @@ router.get('/health', (_req: Request, res: Response) => {
     routes: [
       'POST /api/internal/run-ebay-cycle',
       'POST /api/internal/test-post-sale-flow',
+      'POST /api/internal/test-fulfillment-only',
       'POST /api/internal/test-opportunity-cycle',
       'POST /api/internal/test-full-cycle',
       'POST /api/internal/test-full-dropshipping-cycle',
@@ -281,6 +282,72 @@ router.post('/test-post-sale-flow', validateInternalSecret, async (req: Request,
   } catch (err: any) {
     const duration = Date.now() - startTime;
     logger.error('[INTERNAL] test-post-sale-flow failed', { error: err?.message, duration });
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Unknown error',
+      finalStatus: 'ERROR',
+      duration: `${duration}ms`,
+    });
+  }
+});
+
+// POST /api/internal/test-fulfillment-only - Test AliExpress purchase without PayPal capture (for production)
+router.post('/test-fulfillment-only', validateInternalSecret, async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  const body = req.body || {};
+  const productUrl = (body.productUrl as string) || 'https://www.aliexpress.com/item/example.html';
+  const price = parseFloat(body.price as string) || 10.99;
+  const customer = body.customer as Record<string, string> || {};
+  const name = customer.name || 'John Doe';
+  const email = customer.email || 'john@test.com';
+  const address = customer.address || '123 Main St, Miami, FL, US';
+
+  logger.info('[INTERNAL] POST /api/internal/test-fulfillment-only', { productUrl, price });
+
+  try {
+    const { prisma } = await import('../../config/database');
+    const { orderFulfillmentService } = await import('../../services/order-fulfillment.service');
+
+    const shippingAddress = JSON.stringify({
+      fullName: name,
+      addressLine1: address.split(',')[0]?.trim() || address,
+      city: address.split(',')[1]?.trim() || 'Miami',
+      state: address.split(',')[2]?.trim() || 'FL',
+      country: address.split(',')[3]?.trim() || 'US',
+      zipCode: '33101',
+      phoneNumber: '+15551234567',
+    });
+
+    const order = await prisma.order.create({
+      data: {
+        title: 'Test Fulfillment',
+        price,
+        currency: 'USD',
+        customerName: name,
+        customerEmail: email,
+        shippingAddress,
+        status: 'PAID',
+        paypalOrderId: `TEST_FULFILLMENT_${Date.now()}`,
+        productUrl,
+      },
+    });
+
+    const fulfill = await orderFulfillmentService.fulfillOrder(order.id);
+
+    const duration = Date.now() - startTime;
+    const finalStatus = fulfill.status;
+    const success = finalStatus === 'PURCHASED' || (finalStatus as string) === 'SIMULATED' || fulfill.aliexpressOrderId === 'SIMULATED_ORDER_ID';
+
+    return res.status(200).json({
+      success,
+      orderId: order.id,
+      aliexpressOrderId: fulfill.aliexpressOrderId,
+      finalStatus,
+      duration: `${duration}ms`,
+    });
+  } catch (err: any) {
+    const duration = Date.now() - startTime;
+    logger.error('[INTERNAL] test-fulfillment-only failed', { error: err?.message, duration });
     return res.status(500).json({
       success: false,
       error: err?.message || 'Unknown error',

@@ -368,7 +368,8 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
     
     // ✅ Obtener ambiente del usuario si no se proporciona
     const { workflowConfigService } = await import('../../services/workflow-config.service');
-    const userEnvironment = environment || await workflowConfigService.getUserEnvironment(product.userId);
+    const requestedEnvironment = environment || await workflowConfigService.getUserEnvironment(product.userId);
+    const resolvedMarketplaceEnvironments: Record<string, 'sandbox' | 'production'> = {};
     
     // ✅ P0.4: Validar credenciales antes de publicar
     if (Array.isArray(marketplaces) && marketplaces.length > 0) {
@@ -379,22 +380,49 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
       // Verificar credenciales para cada marketplace
       for (const marketplace of marketplaces) {
         try {
-          const credentials = await service.getCredentials(
+          const typedMarketplace = marketplace as 'ebay' | 'amazon' | 'mercadolibre';
+          let environmentForMarketplace: 'sandbox' | 'production' = requestedEnvironment;
+          let credentials = await service.getCredentials(
             product.userId, 
-            marketplace as 'ebay' | 'amazon' | 'mercadolibre', 
-            userEnvironment
+            typedMarketplace, 
+            environmentForMarketplace
           );
+
+          // ✅ Fallback automático de entorno cuando no se envía uno explícito
+          if ((!credentials || !credentials.isActive) && !environment) {
+            const fallbackEnvironment: 'sandbox' | 'production' =
+              environmentForMarketplace === 'production' ? 'sandbox' : 'production';
+            const fallbackCredentials = await service.getCredentials(
+              product.userId,
+              typedMarketplace,
+              fallbackEnvironment
+            );
+
+            if (fallbackCredentials && fallbackCredentials.isActive) {
+              credentials = fallbackCredentials;
+              environmentForMarketplace = fallbackEnvironment;
+              logger.warn('[PUBLISHER] Using fallback environment for marketplace credentials', {
+                userId: product.userId,
+                marketplace,
+                requestedEnvironment,
+                fallbackEnvironment
+              });
+            }
+          }
           
           if (!credentials || !credentials.isActive) {
             missingCredentials.push(marketplace);
             continue;
           }
+
+          environmentForMarketplace = credentials.environment || environmentForMarketplace;
+          resolvedMarketplaceEnvironments[marketplace] = environmentForMarketplace;
           
           // Validar conexión si las credenciales existen
           const testResult = await service.testConnection(
             product.userId,
-            marketplace as 'ebay' | 'amazon' | 'mercadolibre',
-            userEnvironment
+            typedMarketplace,
+            environmentForMarketplace
           );
           
           if (!testResult.success) {
@@ -440,13 +468,22 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
     let publishResults: Array<{ success: boolean; marketplace?: string; error?: string }> = [];
     if (Array.isArray(marketplaces) && marketplaces.length > 0) {
       const service = new MarketplaceService();
-      // ✅ Usar ambiente del usuario al publicar
-      publishResults = await service.publishToMultipleMarketplaces(
-        product.userId, 
-        product.id, 
-        marketplaces,
-        userEnvironment
-      );
+      // ✅ Publicar por marketplace usando el entorno resuelto en validación
+      for (const marketplace of marketplaces) {
+        const typedMarketplace = marketplace as 'ebay' | 'amazon' | 'mercadolibre';
+        const environmentForMarketplace =
+          resolvedMarketplaceEnvironments[marketplace] || requestedEnvironment;
+        const result = await service.publishProduct(
+          product.userId,
+          {
+            productId: product.id,
+            marketplace: typedMarketplace,
+            customData
+          },
+          environmentForMarketplace
+        );
+        publishResults.push(result);
+      }
 
       // ✅ P1: Manejo mejorado de fallos parciales de publicación
       const successResults = publishResults.filter(r => r.success);
@@ -487,7 +524,8 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
               ...currentProductData,
               approvedAt: new Date().toISOString(),
               approvedBy: req.user!.userId,
-              publishedEnvironment: userEnvironment,
+              publishedEnvironment: requestedEnvironment,
+              resolvedMarketplaceEnvironments,
               publishStatus: 'FULLY_PUBLISHED',
               publicationStatus,
               publishedMarketplaces: successResults.map(r => r.marketplace),
@@ -518,7 +556,8 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
               ...currentProductData,
               approvedAt: new Date().toISOString(),
               approvedBy: req.user!.userId,
-              publishedEnvironment: userEnvironment,
+              publishedEnvironment: requestedEnvironment,
+              resolvedMarketplaceEnvironments,
               publishStatus: 'PARTIALLY_PUBLISHED',
               publicationStatus,
               publishedMarketplaces: successResults.map(r => r.marketplace),
@@ -556,7 +595,8 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
               ...currentProductData,
               approvedAt: new Date().toISOString(),
               approvedBy: req.user!.userId,
-              publishedEnvironment: userEnvironment,
+              publishedEnvironment: requestedEnvironment,
+              resolvedMarketplaceEnvironments,
               publishStatus: 'NOT_PUBLISHED',
               publicationStatus,
               failedMarketplaces: failedResults.map(r => ({ 
@@ -595,7 +635,8 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
       success: true, 
       message,
       publishResults,
-      environment: userEnvironment,
+      environment: requestedEnvironment,
+      resolvedMarketplaceEnvironments,
       publishSummary: {
         total: totalMarketplaces,
         successful: successCount,

@@ -1,0 +1,31 @@
+PS C:\Ivan_Reseller_Web\backend> npm run test:dropshipping-cycle
+
+> ivan-reseller-backend@1.0.0 test:dropshipping-cycle
+> tsx scripts/test-full-dropshipping-cycle.ts
+
+=== Test: Ciclo de Dropshipping ===
+URL: http://localhost:4000/api/internal/test-full-dropshipping-cycle
+Keyword: phone case, skipPostSale: true
+
+
+--- Stages ---
+  trends: ✓ (real)
+  aliexpressSearch: ✓ (real)
+  pricing: ✓ (real)
+  marketplaceCompare: ✓ (real)
+  publish: ✓ (fallback/skip)
+  sale: ✓ (real)
+  paypalCapture: ✗ (fallback/skip) - Request failed with status code 401
+  aliexpressPurchase: ✗ (fallback/skip)
+  tracking: ✗ (fallback/skip)
+  accounting: ✗ (fallback/skip)
+
+--- Diagnostics ---
+  - paypalCapture: create failed
+
+❌ Test FAILED: success=false. Posibles causas:
+   - APIs no configuradas (AliExpress, eBay, PayPal, Trends)
+   - Errores en alguna etapa (ver diagnostics arriba)
+
+   Usa TEST_STRUCTURE_ONLY=1 para pasar si solo la estructura es válida.
+PS C:\Ivan_Reseller_Web\backend>

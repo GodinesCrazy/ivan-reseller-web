@@ -1,0 +1,1084 @@
+================================================================================
+GUIDA MAESTRA - IVAN RESELLER
+Master Guide for External Development Teams
+================================================================================
+Version: 1.0
+Last Updated: 2025-01-30
+================================================================================
+
+================================================================================
+1. EXECUTIVE SUMMARY
+================================================================================
+
+1.1 WHAT THE SYSTEM IS
+Ivan Reseller is a production-grade SaaS platform for dropshipping and multi-marketplace e-commerce. It enables resellers to discover products on AliExpress, analyze opportunities, publish listings to marketplaces (eBay, MercadoLibre, Amazon), manage inventory, track sales and commissions, and automate workflows.
+
+1.2 PROBLEM IT SOLVES
+- Manual dropshipping is time-consuming and error-prone
+- Resellers need a unified dashboard across multiple marketplaces
+- Product discovery, pricing, and publishing require coordination
+- Commission tracking and financial reporting are complex
+- Marketplace API authentication and credential management are fragmented
+
+1.3 TARGET USERS
+- Resellers (USER role): discover opportunities, manage products, track sales
+- Admins (ADMIN role): manage users, configure system, view all data, approve access requests
+
+1.4 BUSINESS PURPOSE
+Centralize dropshipping operations, automate repetitive tasks, provide AI-assisted suggestions, and enable scalable multi-marketplace selling.
+
+
+================================================================================
+2. HIGH-LEVEL ARCHITECTURE
+================================================================================
+
+2.1 FRONTEND STACK
+- React 18.2
+- TypeScript 5.2
+- Vite 5.x (build tool)
+- React Router 6.x
+- Zustand (state management)
+- Axios (API client)
+- Tailwind CSS
+- Recharts (charts)
+- React Hot Toast (notifications)
+- Socket.io Client (real-time)
+
+2.2 BACKEND STACK
+- Node.js 20+
+- Express 4.x
+- TypeScript 5.x
+- Prisma ORM (PostgreSQL)
+- JWT (jsonwebtoken) + bcryptjs
+- Socket.io (real-time)
+- Bull/BullMQ (job queues)
+- ioredis (Redis client)
+- Winston (logging)
+- Zod (validation)
+
+2.3 HOSTING PROVIDERS
+- Frontend: Vercel
+- Backend: Railway
+- Database: Railway PostgreSQL (or linked Postgres)
+- Redis: Railway Redis (or localhost for dev)
+- Domain: ivanreseller.com
+
+2.4 NETWORKING TOPOLOGY
+- User browser -> Vercel (frontend static)
+- Frontend API calls -> Vercel rewrites -> Railway backend
+- Backend talks to PostgreSQL, Redis, external APIs (eBay, MercadoLibre, Amazon, AliExpress, etc.)
+
+2.5 REVERSE PROXIES
+- Vercel acts as reverse proxy: /api/* rewrites to Railway backend
+- Same-origin requests: frontend at ivanreseller.com, API at ivanreseller.com/api/* (proxied)
+
+2.6 DOMAIN FLOW
+- Production: https://ivanreseller.com (Vercel) -> /api/* -> https://ivan-reseller-backend-production.up.railway.app/api/*
+- /health, /ready also proxied to Railway
+
+2.7 ENVIRONMENTS
+- Local: Frontend localhost:5173, Backend localhost:3000, Vite proxy /api -> backend
+- Production: Vercel + Railway
+- Staging: UNKNOWN / NEEDS CONFIRMATION (may use same as production with different env vars)
+
+
+================================================================================
+3. REPOSITORY STRUCTURE MAP
+================================================================================
+
+ROOT (c:\Ivan_Reseller_Web)
+|
++-- api/                      - Root API placeholder (1 file)
++-- backend/                  - Node.js/Express backend
+|   +-- prisma/               - Schema, migrations, seed
+|   |   +-- schema.prisma     - Main Prisma schema (PostgreSQL)
+|   |   +-- migrations/       - SQL migrations
+|   |   +-- seed.ts           - Database seeding
+|   +-- src/
+|   |   +-- api/              - API layer
+|   |   |   +-- controllers/  - Request handlers (minimal, logic in services)
+|   |   |   +-- routes/       - Express route modules (~50 route files)
+|   |   +-- app.ts            - Express app initialization
+|   |   +-- server.ts         - Entry point, bootstrap, HTTP server
+|   |   +-- bootstrap/        - full-bootstrap.ts, safe-bootstrap.ts
+|   |   +-- config/           - env, database, redis, logger, swagger
+|   |   +-- middleware/       - auth, CORS, rate-limit, error, etc.
+|   |   +-- modules/          - aliexpress, marketplace, profitability
+|   |   +-- services/         - Business logic (~90 service files)
+|   |   +-- utils/            - Helpers, async-route-wrapper, chromium
+|   |   +-- types/            - TypeScript types
+|   +-- scripts/              - Utility scripts (provision, verify, smoke tests)
+|   +-- Procfile, railway.json
+|
++-- frontend/                 - React/Vite frontend
+|   +-- src/
+|   |   +-- components/       - Reusable UI components
+|   |   |   +-- layout/       - Layout, Navbar, Sidebar
+|   |   |   +-- ui/           - Button, Card, Input, etc.
+|   |   |   +-- api-configuration/
+|   |   |   +-- help/
+|   |   +-- pages/            - Route pages (~40 pages)
+|   |   +-- services/         - api.ts, auth.api.ts, dashboard.api.ts, products.api.ts
+|   |   +-- stores/           - authStore.ts, authStatusStore.ts
+|   |   +-- hooks/            - useCurrency, useSetupCheck, useTheme, etc.
+|   |   +-- config/           - runtime.ts, metricTooltips
+|   |   +-- content/docs/     - Synced markdown docs
+|   +-- public/
+|   +-- index.html, vite.config.ts
+|
++-- docs/                     - Documentation (250+ files)
++-- scripts/                  - sync_help_docs.mjs, etc.
++-- nginx/                    - Nginx config (optional)
++-- vercel.json               - Vercel build and rewrites
+
+
+================================================================================
+4. FRONTEND ARCHITECTURE
+================================================================================
+
+4.1 FRAMEWORK AND BUILD TOOL
+- React 18 with Vite 5
+- Vite config: path aliases (@, @components, @pages, @services, @stores, @hooks, @utils)
+- Dev server: port 5173, proxy /api -> http://localhost:3000
+
+4.2 ROUTING SYSTEM
+- react-router-dom v6
+- Lazy-loaded pages via React.lazy()
+- Routes defined in App.tsx:
+  - Public: /login, /request-access, /manual-login/:token, /resolve-captcha/:token, /setup-required
+  - Protected (Layout): /dashboard, /opportunities, /products, /sales, /commissions, /finance, /settings, etc.
+  - Diagnostics: /diagnostics (accessible without auth)
+
+4.3 STATE MANAGEMENT
+- Zustand with persist middleware
+- authStore: user, token, isAuthenticated, login, logout, clearSession, checkAuth
+- authStatusStore: marketplace auth status (aliexpress, ebay, etc.)
+
+4.4 API CLIENT DESIGN
+- Single Axios instance in frontend/src/services/api.ts
+- baseURL: API_BASE_URL (from runtime.ts)
+  - Production: "/api" (Vercel proxy)
+  - Development: VITE_API_URL or http://localhost:3000
+- withCredentials: true (required for cookies)
+- Request interceptor: adds Authorization Bearer from localStorage if present (fallback for Safari)
+- Response interceptor: handles 401 (clearSession, redirect to /login), 403, 429, 502/503/504
+
+4.5 AUTHENTICATION FLOW
+- Login: POST /auth/login with { username, password }
+- Backend sets httpOnly cookie (token)
+- Frontend receives { success, user } in body
+- authStore.login(user, token) - token may be "cookie" if httpOnly
+- checkAuth: GET /auth/me to validate session
+- Logout: POST /auth/logout, clear localStorage, clear store
+
+4.6 ERROR HANDLING STRATEGY
+- 401 on non-login: clearSession, toast "Session expired", redirect /login
+- 401 on login: do nothing (reject)
+- 403: toast "No tienes permisos"
+- 429: toast "Demasiadas solicitudes"
+- 502/503/504: single toast "Backend no disponible"
+- setup_required: no toast, SetupRequired page handles
+
+4.7 UI LAYOUT SYSTEM
+- Layout.tsx wraps protected routes
+- Navbar (top), Sidebar (left), main content area
+- Tailwind CSS for styling
+- Lucide React icons
+
+
+================================================================================
+5. BACKEND ARCHITECTURE
+================================================================================
+
+5.1 SERVER BOOTSTRAP SEQUENCE
+1. server.ts loads
+2. Process listeners: unhandledRejection, uncaughtException (full stack logs)
+3. PORT validation (Railway injects PORT in production)
+4. validateJwtSecret(), validateEncryptionKey(), logConfiguration()
+5. Dynamic import of app.ts (Express)
+6. http.createServer(app)
+7. notificationService.initialize(httpServer) - Socket.io
+8. httpServer.listen(PORT, '0.0.0.0')
+9. setImmediate: fullBootstrap or safeBootstrap (DB, Redis, migrations, workers)
+
+5.2 APP INITIALIZATION ORDER (app.ts)
+1. Request logging middleware [REQ] timestamp method path
+2. Health-first: /health, /ready (no DB, minimal deps)
+3. Vercel proxy detection middleware
+4. CORS hardened middleware (manual + cors package)
+5. helmet (CSP, security headers)
+6. cookieParser
+7. correlationMiddleware
+8. versionHeaderMiddleware
+9. Body parsers (express.json, urlencoded)
+10. safeJsonErrorHandler
+11. compression
+12. requestLoggerMiddleware
+13. overloadProtectionMiddleware, timeoutMiddleware
+14. Rate limiting (createRoleBasedRateLimit)
+15. API routes (see section 7)
+16. 404 handler
+17. errorHandler (must be last)
+
+5.3 MIDDLEWARE STACK (in order)
+- Request logging
+- Health/ready (early return)
+- Vercel proxy headers
+- CORS hardened
+- helmet
+- cors (backup)
+- cookieParser
+- correlationMiddleware
+- versionHeaderMiddleware
+- Body parsers + safeJsonErrorHandler
+- compression
+- requestLoggerMiddleware
+- overloadProtectionMiddleware
+- timeoutMiddleware
+- Rate limit
+- Routes
+- 404
+- errorHandler
+
+5.4 ROUTING SYSTEM
+- All API routes under /api/*
+- Route files in backend/src/api/routes/
+- Each route file exports default router
+- app.use('/api/xxx', xxxRoutes)
+
+5.5 SERVICES LAYER PHILOSOPHY
+- Business logic lives in services/
+- Routes are thin: validate, call service, respond
+- Services are singletons or factory functions
+- Prisma for data access
+
+5.6 LAZY-LOADING VS TOP-LEVEL IMPORTS
+- Heavy modules (Puppeteer, Chromium) must NOT be top-level imports
+- Use dynamic import() inside functions when needed
+- selector-adapter.service uses "import type" (compile-time only)
+- manual-captcha.service uses dynamic import for Puppeteer
+- chromium.ts uses require inside async function
+- SAFE_BOOT: skips heavy bootstrap (BullMQ, Redis workers)
+
+5.7 CRASH PROTECTION DESIGN
+- process.on('unhandledRejection'), process.on('uncaughtException') with full stack logs
+- wrapAsync() for route handlers logs [ROUTE_ERROR]
+- [REQ], [ROUTE_ENTRY] logs for debugging 502
+- ERR_HTTP_HEADERS_SENT ignored (non-fatal)
+- Non-critical uncaughtException: log and continue (no process.exit)
+
+5.8 ASYNC ERROR HANDLING STRATEGY
+- wrapAsync() catches Promise rejections, logs, calls next(err)
+- errorHandler middleware normalizes errors, returns JSON
+- Timeout middleware rejects long-running requests (504)
+
+
+================================================================================
+6. AUTHENTICATION AND AUTHORIZATION
+================================================================================
+
+6.1 LOGIN FLOW
+- POST /api/auth/login with { username, password }
+- Backend: prisma.user.findUnique, bcrypt.compare
+- On success: authService.generateToken, res.cookie('token', token, { httpOnly, secure, sameSite: 'none', path: '/', maxAge: 1h })
+- Response: { success: true, user: { id, username, role } }
+- Frontend: authStore.login(user), redirect to /dashboard
+
+6.2 COOKIE USAGE
+- token: JWT in httpOnly cookie
+- Cookie options: httpOnly: true, secure: true, sameSite: 'none', path: '/'
+- Cross-origin: Vercel (frontend) and Railway (backend) are different origins, hence sameSite: 'none'
+- withCredentials: true on all API requests
+
+6.3 TOKEN USAGE
+- Primary: cookie (token)
+- Fallback: Authorization: Bearer <token> (for Safari iOS, localStorage)
+- auth.middleware reads: req.cookies?.token || parseCookiesFromHeader || Authorization header
+
+6.4 SESSION MODEL
+- Stateless JWT in cookie
+- No server-side session store
+- Refresh token: optional, stored in cookie or DB (RefreshToken model)
+
+6.5 AUTH-STATUS ENDPOINT
+- GET /api/auth-status (authenticate required)
+- Returns marketplace auth statuses (aliexpress, etc.) from marketplaceAuthStatusService.listByUser
+- SAFE_AUTH_STATUS_MODE: no active checks, DB only (default in production)
+
+6.6 ROLE SYSTEM
+- ADMIN: full access, user management, admin panel
+- USER: own products, sales, opportunities, settings
+- authorize(roles) middleware checks req.user.role
+
+
+================================================================================
+7. API DESIGN
+================================================================================
+
+7.1 GLOBAL API PREFIX
+- /api for all API routes
+- /health, /ready at root (also /api/health alias)
+
+7.2 ROUTE GROUPING
+- /api/auth - login, logout, me, register (disabled)
+- /api/users - user CRUD
+- /api/products - product CRUD, stats, preview
+- /api/sales - sales
+- /api/commissions - commissions
+- /api/dashboard - stats, recent-activity, charts
+- /api/opportunities - opportunities
+- /api/ai-suggestions - AI suggestions
+- /api/marketplace, /api/marketplace-oauth - marketplace integration
+- /api/aliexpress - AliExpress Affiliate API
+- /api/amazon - Amazon SP-API
+- /api/credentials, /api/api-credentials - API credentials
+- /api/reports, /api/jobs, /api/notifications
+- /api/admin - admin operations
+- /api/auth-status - marketplace auth status
+- /api/manual-auth, /api/manual-captcha - manual login flows
+- /api/debug, /api/diag - debugging
+- Plus ~30 more route groups
+
+7.3 MAJOR ROUTE CATEGORIES
+- Auth: auth.routes
+- Core: products, sales, commissions, dashboard
+- Marketplaces: marketplace, marketplace-oauth, aliexpress, amazon
+- Automation: autopilot, jobs, workflow
+- Admin: admin, users, access-requests
+- Config: settings, workflow-config, api-credentials
+- Reports: reports, advanced-reports
+- AI: ai-suggestions, ai-improvements
+
+7.4 EXPECTED RESPONSE SHAPES
+- Success: { success: true, data?: ..., ... }
+- Error: { success: false, error: string, errorCode?, errorId?, correlationId? }
+- Pagination: { success, data, pagination: { page, limit, total } }
+
+7.5 ERROR FORMAT
+- statusCode, message, errorCode (ErrorCode enum), errorId (UUID)
+- Validation: details with validationErrors
+- 401: "Invalid token" or "Authentication required"
+- 500: "Ha ocurrido un error interno..."
+
+
+================================================================================
+8. SERVICES CATALOG
+================================================================================
+
+For each service, format: Filename | Responsibility | Main methods/exports | Depends on | Called by
+
+access-request.service.ts
+  Access request management (request access flow)
+  Used by: access-requests.routes
+
+admin.service.ts
+  Admin operations, user management
+  Used by: admin.routes
+
+advanced-reports.service.ts
+  Advanced report generation
+  Used by: advanced-reports.routes
+
+advanced-scraper.service.ts
+  Web scraping with Puppeteer (dynamic import)
+  Depends on: marketplace-auth-status, selector-adapter
+  Used by: scraping flows
+
+ai-improvements.service.ts
+  AI-driven improvements
+  Used by: ai-improvements.routes
+
+ai-learning.service.ts
+  AI learning from successful operations
+  Depends on: successful-operation
+  Used by: learning loops
+
+ai-opportunity.service.ts
+  AI-powered opportunity detection
+  Used by: opportunities
+
+ai-suggestions.service.ts
+  AI suggestions for pricing, inventory, marketing
+  Depends on: prisma, CredentialsManager
+  Used by: ai-suggestions.routes
+
+ali-auth-monitor.service.ts
+  AliExpress auth monitoring (dynamic import, not at boot)
+  Depends on: marketplace-auth-status
+  Used by: auth-status refresh
+
+aliexpress-affiliate-api.service.ts
+  AliExpress Affiliate API (product links, OAuth)
+  Used by: aliexpress routes
+
+aliexpress-auto-purchase.service.ts
+  Auto-purchase on AliExpress
+  Used by: purchase flows
+
+aliexpress-dropshipping-api.service.ts
+  AliExpress Dropshipping API
+  Used by: product import
+
+amazon.service.ts
+  Amazon SP-API integration
+  Depends on: credentials-manager
+  Used by: amazon.routes
+
+anti-captcha.service.ts
+  2Captcha / CAPTCHA solving
+  Used by: captcha.routes, manual-captcha
+
+anti-churn.service.ts
+  Anti-churn metrics and alerts
+  Used by: anti-churn.routes
+
+api-availability.service.ts
+  API availability tracking
+  Used by: config-audit, health
+
+api-health-check-queue.service.ts
+  Queue for API health checks
+  Used by: api-health-monitor
+
+api-health-monitor.service.ts
+  Monitors external API health
+  Used by: server (SIGINT/SIGTERM stop)
+
+api-health.service.ts
+  runAllApiTests, API health service
+  Used by: diag, config
+
+api-credentials-audit.service.ts
+  Audits API credential configuration
+  Used by: config-audit
+
+auth.service.ts
+  JWT generation, token refresh, password validation
+  Depends on: prisma, jwt, bcrypt
+  Used by: auth.routes, auth.middleware
+
+auto-purchase-guardrails.service.ts
+  Guardrails for auto-purchase (limits, validation)
+  Used by: purchase flows
+
+auto-recovery.service.ts
+  Auto-recovery from failures
+  Used by: recovery flows
+
+automated-business.service.ts
+  Automated business logic
+  Used by: automation
+
+automation.service.ts
+  Automation workflows
+  Used by: automation.routes
+
+autopilot.service.ts
+  Autopilot workflows (search, analyze, publish)
+  Used by: autopilot.routes
+
+business-metrics.service.ts
+  Business metrics calculation
+  Used by: business-metrics.routes
+
+cache.service.ts
+  Caching (Redis or in-memory)
+  Used by: various services
+
+ceo-agent.service.ts
+  CEO-style decision agent
+  Used by: automation
+
+circuit-breaker.service.ts
+  Circuit breaker for external calls
+  Used by: external API calls
+
+commission.service.ts
+  Commission calculation and CRUD
+  Depends on: prisma
+  Used by: commissions.routes, dashboard
+
+competitor-analyzer.service.ts
+  Competitor analysis
+  Used by: opportunity finder
+
+config-audit.service.ts
+  Configuration audit
+  Depends on: marketplace-auth-status
+  Used by: config-audit.routes
+
+cost-calculator.service.ts
+  Cost calculations
+  Used by: products, opportunities
+
+cost-optimization.service.ts
+  Cost optimization suggestions
+  Used by: cost-optimization.routes
+
+credentials-manager.service.ts
+  Encrypted API credential management
+  Depends on: prisma, secure credential manager
+  Used by: ebay, amazon, mercadolibre, ai-suggestions
+
+ebay.service.ts
+  eBay Trading API integration
+  Used by: marketplace flows
+
+email.service.ts
+  Email sending (nodemailer)
+  Used by: notifications
+
+financial-alerts.service.ts
+  Financial alerts
+  Used by: financial-alerts.routes
+
+financial-calculations.service.ts
+  Financial calculations
+  Used by: finance, reports
+
+fx.service.ts
+  FX/currency conversion
+  Used by: multi-currency flows
+
+google-trends.service.ts
+  Google Trends / SerpAPI integration
+  Used by: trends
+
+guided-action-tracker.service.ts
+  Tracks guided user actions
+  Used by: onboarding
+
+image-validation.service.ts
+  Image validation for products
+  Used by: product creation
+
+job.service.ts
+  BullMQ job queues (scraping, publishing, payout, sync)
+  Depends on: redis
+  Used by: jobs.routes, full-bootstrap
+
+listing-lifetime.service.ts
+  Listing lifetime metrics
+  Used by: listing-lifetime.routes
+
+manual-auth.service.ts
+  Manual auth session management (CAPTCHA, etc.)
+  Depends on: marketplace-auth-status
+  Used by: auth-status.routes, manual-auth.routes
+
+manual-captcha.service.ts
+  Manual CAPTCHA resolution (Puppeteer, dynamic import)
+  Used by: manual-captcha.routes
+
+marketplace-auth-status.service.ts
+  Marketplace auth status (DB persistence)
+  Depends on: prisma
+  Used by: auth-status.routes, manual-auth, ali-auth-monitor
+
+marketplace.service.ts
+  Multi-marketplace abstraction
+  Used by: products, publisher
+
+meeting-room.service.ts
+  Meeting room (Jitsi integration)
+  Used by: meeting-room.routes
+
+mercadolibre.service.ts
+  MercadoLibre API integration
+  Used by: marketplace flows
+
+notification.service.ts
+  Real-time notifications (Socket.io), in-app
+  Used by: server, various routes
+
+notifications.service.ts
+  Notification preferences and delivery
+  Used by: notifications.routes
+
+opportunity.service.ts
+  Opportunity persistence
+  Used by: opportunities.routes
+
+opportunity-finder.service.ts
+  Opportunity discovery
+  Used by: opportunities, autopilot
+
+paypal-payout.service.ts
+  PayPal payouts
+  Used by: commissions
+
+paypal-rest.service.ts
+  PayPal REST API
+  Used by: credentials, payout
+
+pending-products-limit.service.ts
+  Limits for pending products
+  Used by: products
+
+pricing-tiers.service.ts
+  Pricing plan tiers
+  Used by: pricing-tiers.routes
+
+product.service.ts
+  Product CRUD, stats, workflow
+  Depends on: prisma
+  Used by: products.routes, dashboard
+
+product-state-machine.service.ts
+  Product status state machine
+  Used by: product.service
+
+product-workflow-status.service.ts
+  Product workflow status tracking
+  Used by: products
+
+proxy-manager.service.ts
+  Proxy management for scraping
+  Used by: scraper
+
+publication-optimizer.service.ts
+  Publication optimization
+  Used by: publisher
+
+real-scraper.service.ts
+  Real opportunity finder (RealOpportunityFinder)
+  Used by: opportunities
+
+referral.service.ts
+  Referral tracking
+  Used by: referral.routes
+
+reports.service.ts
+  Report generation (Excel, etc.)
+  Used by: reports.routes
+
+revenue-change.service.ts
+  Revenue change tracking
+  Used by: revenue-change.routes
+
+sale.service.ts
+  Sale CRUD, stats
+  Depends on: prisma
+  Used by: sales.routes, dashboard
+
+scheduled-reports.service.ts
+  Scheduled report generation
+  Used by: server, full-bootstrap
+
+scheduled-tasks.service.ts
+  Cron-like scheduled tasks
+  Used by: server, full-bootstrap
+
+scraper-bridge.service.ts
+  External scraper bridge (SCRAPER_BRIDGE_URL)
+  Used by: scraping (when enabled)
+
+scraping.service.ts
+  Advanced scraping (AdvancedScrapingService)
+  Used by: opportunity finder
+
+security.service.ts
+  Secure credential encryption (SecureCredentialManager)
+  Used by: credentials-manager
+
+selector-adapter.service.ts
+  Adaptive selectors for scraping (import type from puppeteer)
+  Used by: advanced-scraper
+
+stealth-scraping.service.ts
+  Stealth scraping (Puppeteer-extra)
+  Used by: scraping (lazy)
+
+successful-operation.service.ts
+  Successful operation tracking
+  Used by: commissions, learning
+
+tax-calculator.service.ts
+  Tax calculations
+  Used by: cost calculations
+
+trend-suggestions.service.ts
+  Trend-based suggestions
+  Used by: trends
+
+trends.service.ts
+  Trends analysis
+  Used by: trends.routes
+
+user.service.ts
+  User CRUD
+  Used by: users.routes
+
+user-settings.service.ts
+  User settings (language, timezone, etc.)
+  Used by: settings
+
+workflow-config.service.ts
+  User workflow configuration
+  Used by: workflow-config.routes
+
+workflow-executor.service.ts
+  Workflow execution
+  Used by: automation
+
+workflow-scheduler.service.ts
+  Workflow scheduling
+  Used by: server (SIGINT/SIGTERM shutdown)
+
+workflow.service.ts
+  Workflow definitions
+  Used by: workflow-executor
+
+
+================================================================================
+9. DATA LAYER
+================================================================================
+
+9.1 ORM
+- Prisma 5.x
+- PostgreSQL
+
+9.2 ENTITIES (from schema.prisma)
+- User: id, username, email, password, role, commissionRate, balance, etc.
+- ApiCredential: userId, apiName, environment, credentials (encrypted)
+- Product: userId, aliexpressUrl, title, status, prices, etc.
+- Sale: userId, productId, orderId, marketplace, amounts, status
+- Commission: userId, saleId, amount, status
+- Activity: userId, action, description
+- UserWorkflowConfig, UserSettings
+- AdminCommission, SuccessfulOperation
+- MarketplaceListing, MarketplacePublication
+- Opportunity, CompetitionSnapshot
+- AISuggestion
+- ManualAuthSession, MarketplaceAuthStatus
+- RefreshToken, PasswordResetToken
+- APIStatusHistory, APIStatusSnapshot
+- ReportHistory, ScheduledReport
+- AccessRequest
+- AutopilotWorkflow
+- MeetingRoom
+- PurchaseLog
+- AliExpressToken
+
+9.3 RELATIONSHIPS
+- User -> Products, Sales, Commissions, ApiCredentials, etc.
+- Product -> Sales, MarketplaceListings
+- Sale -> Commission, SuccessfulOperation
+- ApiCredential -> User (userId)
+
+9.4 MIGRATION STRATEGY
+- prisma migrate deploy (production)
+- prisma migrate dev (development)
+- Migrations in prisma/migrations/
+- full-bootstrap runs migrations before other init
+- P3009 (failed migration) auto-resolution attempted
+
+
+================================================================================
+10. EXTERNAL INTEGRATIONS
+================================================================================
+
+10.1 ALIEXPRESS
+- Purpose: Product sourcing, affiliate links, OAuth
+- Auth: OAuth (ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET), AliExpressToken model
+- API: AliExpress Affiliate API, Dropshipping API
+- Data source: api (default) or scrape (ALIEXPRESS_DATA_SOURCE)
+- Status: Primary integration
+
+10.2 AMAZON
+- Purpose: Amazon SP-API (Selling Partner)
+- Auth: LWA (Login with Amazon), credentials in ApiCredential
+- Used by: amazon.service, amazon.routes
+- Status: Configured, requires user credentials
+
+10.3 EBAY
+- Purpose: eBay Trading API, listing management
+- Auth: OAuth 2.0, credentials in ApiCredential
+- Used by: ebay.service, marketplace flows
+- Status: Configured, OAuth callback at /api/marketplace-oauth/oauth/callback/ebay
+
+10.4 MERCADOLIBRE
+- Purpose: MercadoLibre API, listing management
+- Auth: OAuth, credentials in ApiCredential
+- Callback: https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre
+- Status: Configured
+
+10.5 PAYPAL
+- Purpose: Payouts, balance checks
+- Auth: Client ID/Secret (PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET)
+- Environment: sandbox or production (PAYPAL_ENVIRONMENT)
+- Status: Optional, used for commissions
+
+10.6 CAPTCHA SERVICES
+- 2Captcha (anti-captcha.service)
+- Manual CAPTCHA (manual-captcha.service with Puppeteer)
+- Status: Optional
+
+10.7 AI PROVIDERS
+- Groq (GROQ_API_KEY) - AI suggestions
+- SerpAPI - Google Trends, optional
+- Status: Optional, ai-suggestions works with or without
+
+
+================================================================================
+11. AI SUBSYSTEM
+================================================================================
+
+11.1 AI ROLES
+- Opportunity scoring (confidence, ROI)
+- Suggestion generation (pricing, inventory, marketing)
+- Trend-based recommendations
+
+11.2 SUGGESTION GENERATION
+- ai-suggestions.service: getSuggestions(userId, filter), generateSuggestions(userId, category)
+- Uses CredentialsManager for user data
+- AISuggestion model stores suggestions
+- Types: pricing, inventory, marketing, listing, optimization, automation
+
+11.3 OPPORTUNITY DETECTION
+- opportunity-finder.service, ai-opportunity.service
+- Confidence scores, profit margins
+- Competition snapshots
+
+11.4 LEARNING/IMPROVEMENT LOOPS
+- ai-learning.service learns from SuccessfulOperation
+- Compares AI predictions vs actual outcomes
+- UNKNOWN / NEEDS CONFIRMATION: extent of feedback loop
+
+
+================================================================================
+12. AUTOMATION AND WORKFLOWS
+================================================================================
+
+12.1 SCHEDULER
+- scheduled-tasks.service: cron-like tasks
+- Node-cron or similar
+- Runs in full-bootstrap, skipped in SAFE_BOOT
+
+12.2 WORKFLOW ENGINE
+- workflow-scheduler.service, workflow-executor.service
+- UserWorkflowConfig defines per-stage mode (manual, automatic, guided)
+- Stages: scrape, analyze, publish, purchase, fulfillment, customerService
+
+12.3 EXECUTION MODEL
+- BullMQ queues: scrapingQueue, publishingQueue, payoutQueue, syncQueue
+- Workers initialized in full-bootstrap
+- Jobs: scrape, publish, payout, sync
+
+
+================================================================================
+13. DEPLOYMENT ARCHITECTURE
+================================================================================
+
+13.1 GITHUB
+- Repository: source of truth
+- Main branch deploys to production (Vercel + Railway)
+- Push triggers Vercel build, Railway deploy
+
+13.2 VERCEL
+- Build: cd frontend && npm run build
+- Output: frontend/dist
+- Install: cd frontend && npm ci --include=dev
+- Rewrites: /api/(.*) -> Railway, /health -> Railway, /ready -> Railway, /(.*) -> /index.html
+- Domain: ivanreseller.com
+
+13.3 RAILWAY
+- Builder: NIXPACKS
+- Start: npm start (node dist/server.js)
+- Healthcheck: /health, timeout 1000ms
+- Restart: ON_FAILURE, max 10 retries
+- PORT injected by Railway
+
+13.4 BUILD PIPELINES
+- Backend: npm run build (tsc, prisma generate)
+- Frontend: npm run build (vite build, preceded by sync-docs)
+
+13.5 STARTUP COMMANDS
+- Backend: npm start (node dist/server.js)
+- Alternative: start:with-migrations (prisma migrate deploy && node dist/server.js)
+- Development: npm run dev (tsx watch src/server.ts)
+
+
+================================================================================
+14. ENVIRONMENT VARIABLES
+================================================================================
+
+REQUIRED (backend):
+- PORT - Injected by Railway in production
+- JWT_SECRET - Min 32 chars
+- DATABASE_URL - PostgreSQL connection string (optional for degraded boot)
+- CORS_ORIGIN - Comma-separated origins (e.g. https://www.ivanreseller.com,https://ivanreseller.com)
+
+OPTIONAL (backend):
+- NODE_ENV - development|production|test
+- SAFE_BOOT - true|false (skip heavy workers)
+- API_URL, FRONTEND_URL
+- REDIS_URL - Default redis://localhost:6379
+- ENCRYPTION_KEY - Min 32 chars (fallback: JWT_SECRET)
+- EBAY_APP_ID, EBAY_DEV_ID, EBAY_CERT_ID
+- MERCADOLIBRE_CLIENT_ID, MERCADOLIBRE_CLIENT_SECRET
+- PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_ENVIRONMENT
+- GROQ_API_KEY, SCRAPERAPI_KEY
+- ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, ALIEXPRESS_CALLBACK_URL
+- SCRAPER_BRIDGE_URL, SCRAPER_BRIDGE_ENABLED
+- SAFE_DASHBOARD_MODE, SAFE_AUTH_STATUS_MODE
+- DISABLE_BROWSER_AUTOMATION
+- ALLOW_BROWSER_AUTOMATION
+- RATE_LIMIT_ENABLED, RATE_LIMIT_DEFAULT, RATE_LIMIT_LOGIN
+- LOG_LEVEL - error|warn|info|debug
+- DEBUG_KEY - for debug endpoints
+
+FRONTEND:
+- VITE_API_URL - /api in production (ignored if absolute), or http://localhost:3000 in dev
+- VITE_LOG_LEVEL
+
+
+================================================================================
+15. LOGGING AND OBSERVABILITY
+================================================================================
+
+15.1 REQUEST LOGS
+- [REQ] timestamp method path - every request before routing
+- [VERCEL-PROXY] method path - when from Vercel or /api/*
+
+15.2 ROUTE ENTRY LOGS
+- [ROUTE_ENTRY] GET /api/auth-status
+- [ROUTE_ENTRY] GET /api/products
+- [ROUTE_ENTRY] GET /api/dashboard/stats
+- [ROUTE_ENTRY] GET /api/ai-suggestions
+
+15.3 CRASH LOGS
+- [ROUTE_ERROR] - unhandled async error in wrapAsync routes
+- UNHANDLED REJECTION - full stack trace
+- UNCAUGHT EXCEPTION - full stack trace
+- Correlation IDs for debugging
+
+15.4 WHERE LOGS ARE VIEWED
+- Railway: Dashboard -> Service -> Logs
+- Local: stdout (console)
+- Winston logger for structured logs (config/logger.ts)
+
+
+================================================================================
+16. KNOWN FAILURE MODES
+================================================================================
+
+16.1 PAST 502 ISSUES
+- Backend crash during startup: fixed by lazy-loading Puppeteer/Chromium
+- UTF-16 encoding in ai-suggestions.service.ts caused esbuild error: fixed by converting to UTF-8
+- Heavy top-level imports (manual-captcha, selector-adapter): fixed with dynamic/type-only imports
+
+16.2 ENCODING CRASHES
+- Files must be UTF-8 without BOM
+- ai-suggestions.service.ts was UTF-16 LE -> crash on import
+
+16.3 HEAVY IMPORT CRASHES
+- Puppeteer, Playwright, Chromium at top-level cause SIGSEGV or timeout on Railway
+- Solution: import type, dynamic import(), require inside async function
+
+16.4 PROXY MISCONFIGURATIONS
+- Frontend must use baseURL "/api" and withCredentials true
+- vercel.json rewrites must match /api/(.*) -> Railway
+- CORS_ORIGIN must include ivanreseller.com (with and without www)
+
+
+================================================================================
+17. SECURITY CONSIDERATIONS
+================================================================================
+
+17.1 COOKIES
+- httpOnly: true (no JS access)
+- secure: true (HTTPS only)
+- sameSite: 'none' (cross-origin)
+- path: '/'
+
+17.2 CORS
+- Allowlist: CORS_ORIGIN, CORS_ORIGINS, FRONTEND_URL
+- credentials: true required
+- Preflight OPTIONS handled
+- Dynamic patterns for *.aliexpress.*
+
+17.3 SECRETS
+- JWT_SECRET, ENCRYPTION_KEY never in code
+- ApiCredential.credentials encrypted at rest
+- .env files gitignored
+
+17.4 RATE LIMITING
+- Global: 200 req/15min (configurable)
+- Login: 5 req/15min
+- Admin: higher limit
+- Auth routes (/auth/login, /auth/logout, /auth/refresh) skipped from global limit
+
+
+================================================================================
+18. LOCAL DEVELOPMENT GUIDE
+================================================================================
+
+18.1 PREREQUISITES
+- Node.js 20+
+- npm 9+
+- PostgreSQL (local or Docker)
+- Redis (optional, for queues)
+
+18.2 SETUP STEPS
+1. Clone repository
+2. Backend: cd backend, copy .env.example to .env, set DATABASE_URL, JWT_SECRET, ENCRYPTION_KEY
+3. Backend: npm install, npx prisma generate, npx prisma migrate dev
+4. Backend: npm run prisma:seed (optional)
+5. Frontend: cd frontend, npm install
+6. Frontend: VITE_API_URL can be unset (defaults to http://localhost:3000) or /api if using proxy
+
+18.3 RUN COMMANDS
+- Backend: cd backend && npm run dev
+- Frontend: cd frontend && npm run dev
+- Frontend will proxy /api to http://localhost:3000
+- Access: http://localhost:5173
+- Default admin: admin / admin123
+
+
+================================================================================
+19. PRODUCTION OPERATIONS GUIDE
+================================================================================
+
+19.1 HOW TO DEPLOY
+- Push to main triggers Vercel and Railway
+- Vercel: builds frontend, deploys to ivanreseller.com
+- Railway: builds backend (nixpacks), runs npm start
+
+19.2 HOW TO ROLLBACK
+- Vercel: Deployments tab -> select previous -> Promote to Production
+- Railway: Deployments -> Rollback to previous
+- Git: git revert, push
+
+19.3 HOW TO VERIFY HEALTH
+- GET https://ivanreseller.com/api/health - expect 200, status: healthy
+- GET https://ivanreseller.com/health - proxied to Railway
+- Login at https://ivanreseller.com/login
+- Check Railway logs for [REQ], [ROUTE_ENTRY], errors
+
+
+================================================================================
+20. ROADMAP SUGGESTIONS
+================================================================================
+
+20.1 TECHNICAL DEBT
+- Reduce duplicate CORS logic (hardened + cors package)
+- Consolidate rate-limit skip paths
+- Remove temporary [API] request/response console.logs in production
+- Standardize error response shape across all routes
+
+20.2 STABILIZATION IDEAS
+- Add integration tests for auth flow (login, me, auth-status)
+- Add health check for Redis, DB in /ready
+- Staging environment with separate Railway project
+- Structured logging (JSON) for production
+
+20.3 SCALABILITY IDEAS
+- Database connection pooling (Prisma default)
+- Redis-backed rate limiting
+- CDN for frontend static assets (Vercel handles)
+- Horizontal scaling: Railway supports multiple instances, but Socket.io would need sticky sessions or Redis adapter
+
+================================================================================
+END OF GUIDA MAESTRA
+================================================================================

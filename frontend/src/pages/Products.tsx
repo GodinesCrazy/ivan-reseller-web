@@ -420,6 +420,31 @@ export default function Products() {
                           <td className="px-4 py-3">
                             <Badge variant="outline">{product.marketplace}</Badge>
                           </td>
+                          <td className="px-4 py-3">
+                            {product.marketplaceUrl ? (
+                              <a
+                                href={product.marketplaceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-blue-600 hover:underline text-sm"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                                Ver en {product.marketplace}
+                              </a>
+                            ) : product.aliexpressUrl ? (
+                              <a
+                                href={product.aliexpressUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-gray-600 hover:underline text-sm"
+                              >
+                                <Link2 className="w-4 h-4" />
+                                Proveedor
+                              </a>
+                            ) : (
+                              <span className="text-gray-400 text-sm">—</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">
                             {formatCurrencySimple(product.price, product.currency || 'USD')}
                           </td>

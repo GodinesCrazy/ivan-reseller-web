@@ -88,11 +88,11 @@ function AppContent() {
         return;
       }
 
-      // Timeout de 2 segundos - si tarda más, continuar de todas formas
+      // Timeout de 1.5 segundos - si tarda más, continuar de todas formas (evitar pantalla opaca bloqueada)
       const timeoutPromise = new Promise((_, reject) => {
         timeoutId = setTimeout(() => {
           reject(new Error('Timeout'));
-        }, 2000);
+        }, 1500);
       });
 
       try {

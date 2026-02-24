@@ -136,11 +136,12 @@ export class AliExpressAffiliateAPIService {
     this.appSecret = rawSecret && rawSecret !== 'PUT_YOUR_APP_SECRET_HERE' ? rawSecret : '';
     this.trackingId = (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim();
     if (!this.appKey || !this.appSecret) {
-      throw new Error('ALIEXPRESS_API_NOT_CONFIGURED');
+      console.log('[ALIEXPRESS-AFFILIATE] Not configured (ALIEXPRESS_APP_KEY/APP_SECRET missing). Server will start; AliExpress features will use fallbacks.');
+    } else {
+      console.log('[AUTOPILOT] Affiliate API credentials loaded');
+      console.log('[AUTOPILOT] Using APP_KEY mode');
+      console.log('[ALIEXPRESS-AFFILIATE] TRACKING ID:', this.trackingId || 'MISSING');
     }
-    console.log('[AUTOPILOT] Affiliate API credentials loaded');
-    console.log('[AUTOPILOT] Using APP_KEY mode');
-    console.log('[ALIEXPRESS-AFFILIATE] TRACKING ID:', this.trackingId || 'MISSING');
     this.apiBaseUrl = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || this.ENDPOINT_SYNC).replace(/\/$/, '');
 
     this.client = axios.create({
@@ -157,6 +158,11 @@ export class AliExpressAffiliateAPIService {
       httpAgent: new (require('http').Agent)({ keepAlive: true }),
       httpsAgent: new (require('https').Agent)({ keepAlive: true }),
     });
+  }
+
+  /** Indica si la API está configurada (APP_KEY y APP_SECRET presentes). */
+  isConfigured(): boolean {
+    return !!(this.appKey && this.appSecret);
   }
 
   /** Skip tracking_id when invalid (causes 402). User must set valid ALIEXPRESS_TRACKING_ID in portals.aliexpress.com. */
@@ -295,6 +301,9 @@ export class AliExpressAffiliateAPIService {
    * Build params, sign with HMAC-SHA256. POST to sync endpoint.
    */
   private async makeRequest(method: string, requestParams: Record<string, any>): Promise<any> {
+    if (!this.isConfigured()) {
+      throw new Error('ALIEXPRESS_API_NOT_CONFIGURED');
+    }
     const params: Record<string, string> = {
       app_key: String(this.appKey),
       method: String(method),

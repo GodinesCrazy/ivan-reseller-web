@@ -103,6 +103,48 @@ router.get('/health', async (req: Request, res: Response, next) => {
 });
 
 /**
+ * ✅ GET /api/autopilot/config - Obtener configuración (incluye targetMarketplaces)
+ */
+router.get('/config', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const status = autopilotSystem.getStatus();
+    res.json({ success: true, config: status.config });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const updateConfigSchema = z.object({
+  targetMarketplaces: z.array(z.enum(['ebay', 'mercadolibre', 'amazon'])).optional(),
+  targetMarketplace: z.enum(['ebay', 'mercadolibre', 'amazon']).optional(),
+  enabled: z.boolean().optional(),
+  cycleIntervalMinutes: z.number().min(1).max(1440).optional(),
+  publicationMode: z.enum(['automatic', 'manual']).optional(),
+  maxOpportunitiesPerCycle: z.number().min(1).max(100).optional(),
+  searchQueries: z.array(z.string()).optional(),
+  workingCapital: z.number().min(0).optional(),
+  minProfitUsd: z.number().min(0).optional(),
+  minRoiPct: z.number().min(0).max(100).optional(),
+});
+
+/**
+ * ✅ PUT /api/autopilot/config - Actualizar configuración (targetMarketplaces, etc.)
+ */
+router.put('/config', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const data = updateConfigSchema.parse(req.body);
+    await autopilotSystem.updateConfig(data);
+    res.json({ success: true, message: 'Configuración actualizada', config: autopilotSystem.getStatus().config });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * ✅ GET /api/autopilot/status - Estado del autopilot (production)
  */
 router.get('/status', async (req: Request, res: Response, next) => {
@@ -123,6 +165,7 @@ router.get('/status', async (req: Request, res: Response, next) => {
       running: isRunning,
       status: stats.currentStatus,
       workflowMode,
+      config: status.config,
       totalRuns: stats.totalRuns,
       itemsProcessed: stats.totalProductsProcessed,
       productsPublished: stats.totalProductsPublished,

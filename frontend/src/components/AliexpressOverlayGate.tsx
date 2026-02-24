@@ -1,5 +1,5 @@
 /**
- * Overlay desmontable cuando AliExpress requiere sesión manual.
+ * Overlay desmontable cuando AliExpress requiere sesiï¿½n manual.
  * Permite continuar usando el dashboard sin bloquear indefinidamente.
  */
 import { useState, useEffect } from 'react';
@@ -20,10 +20,12 @@ export default function AliexpressOverlayGate() {
   }, [fetchStatuses]);
 
   const aliStatus = statuses?.aliexpress;
+  // Solo mostrar overlay si hay sesiï¿½n manual ACTIVA pendiente (token), no por requiresManual genï¿½rico
+  const hasActiveManualSession = !!(aliStatus?.manualSession?.token);
   const shouldShow =
     !dismissed &&
-    aliStatus?.status === 'manual_required' &&
-    (aliStatus?.manualSession?.token || aliStatus?.requiresManual);
+    hasActiveManualSession &&
+    aliStatus?.status === 'manual_required';
 
   useEffect(() => {
     try {
@@ -33,6 +35,13 @@ export default function AliexpressOverlayGate() {
       // ignore
     }
   }, []);
+
+  // Auto-dismiss si no hay sesiï¿½n manual activa (evitar overlay bloqueante por estado antiguo)
+  useEffect(() => {
+    if (!hasActiveManualSession && !dismissed) {
+      setDismissed(true);
+    }
+  }, [hasActiveManualSession, dismissed]);
 
   const handleContinue = () => {
     setDismissed(true);
@@ -68,12 +77,12 @@ export default function AliexpressOverlayGate() {
             <ShieldAlert className="w-5 h-5" />
             ESTADO DE ALIEXPRESS
           </h2>
-          <p className="text-red-100 text-sm mt-1">Acción requerida</p>
+          <p className="text-red-100 text-sm mt-1">Acciï¿½n requerida</p>
         </div>
         <div className="p-6 space-y-4">
           <p className="text-gray-700 dark:text-gray-300">
-            Sesión manual requerida para completar el login en AliExpress. Puedes configurarlo ahora
-            o continuar usando el dashboard y hacerlo más tarde.
+            Sesiï¿½n manual requerida para completar el login en AliExpress. Puedes configurarlo ahora
+            o continuar usando el dashboard y hacerlo mï¿½s tarde.
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <button

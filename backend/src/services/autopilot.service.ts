@@ -24,6 +24,8 @@ export interface AutopilotConfig {
   cycleIntervalMinutes: number;
   publicationMode: 'automatic' | 'manual';
   targetMarketplace: string;
+  /** Marketplaces donde publicar (array). Si está definido y no vacío, se usa en lugar de targetMarketplace. */
+  targetMarketplaces?: string[];
   maxOpportunitiesPerCycle: number;
   searchQueries: string[];
   workingCapital: number;
@@ -850,10 +852,15 @@ export class AutopilotSystem extends EventEmitter {
       const mod = await import('./opportunity-finder.service');
       const finder = mod.default as unknown as { searchOpportunities: (q: string, uid: number, opts?: Record<string, unknown>) => Promise<unknown[]> };
       const env = environment || (process.env.NODE_ENV === 'production' ? 'production' : 'sandbox');
-      const marketplaces: Array<'ebay' | 'amazon' | 'mercadolibre'> =
-        this.config.targetMarketplace && ['ebay', 'amazon', 'mercadolibre'].includes(this.config.targetMarketplace)
-          ? [this.config.targetMarketplace as 'ebay' | 'amazon' | 'mercadolibre']
-          : ['ebay'];
+      const mpList: Array<'ebay' | 'amazon' | 'mercadolibre'> = (this.config.targetMarketplaces && this.config.targetMarketplaces.length > 0)
+        ? this.config.targetMarketplaces
+            .map((m) => String(m).toLowerCase())
+            .filter((m): m is 'ebay' | 'amazon' | 'mercadolibre' =>
+              ['ebay', 'amazon', 'mercadolibre'].includes(m))
+        : (this.config.targetMarketplace && ['ebay', 'amazon', 'mercadolibre'].includes(String(this.config.targetMarketplace).toLowerCase())
+          ? [String(this.config.targetMarketplace).toLowerCase() as 'ebay' | 'amazon' | 'mercadolibre']
+          : ['ebay']);
+      const marketplaces: Array<'ebay' | 'amazon' | 'mercadolibre'> = mpList;
       const raw = await finder.searchOpportunities(query, userId, {
         maxItems: this.config.maxOpportunitiesPerCycle || 20,
         marketplaces,
@@ -1430,92 +1437,59 @@ export class AutopilotSystem extends EventEmitter {
         optimization.durationDays
       );
 
-      // ✅ P4: Validar credenciales antes de intentar publicar
-      const marketplace = this.config.targetMarketplace as 'ebay' | 'mercadolibre' | 'amazon';
-      
-      // Validar que las credenciales existan y sean válidas
-      try {
-        const credentials = await this.marketplaceService.getCredentials(
-          currentUserId,
-          marketplace,
-          currentEnvironment
-        );
-        
-        if (!credentials || !credentials.isActive) {
-          logger.warn('Autopilot: Missing or inactive credentials, skipping publication', {
-            service: 'autopilot',
-            userId: currentUserId,
-            productId: product.id,
-            marketplace,
-            environment: currentEnvironment
-          });
-          
-          // Enviar notificación al usuario sobre credenciales faltantes
-          const { notificationService } = await import('./notification.service');
-          notificationService.sendToUser(currentUserId, {
-            type: 'SYSTEM_ALERT', // ✅ FIX: Changed from 'WARNING' to valid type
-            title: 'Autopilot: Publicación omitida',
-            message: `No se pudo publicar producto en ${marketplace} porque faltan credenciales válidas. Por favor, configura tus credenciales en Settings → API Settings.`,
-            priority: 'NORMAL',
-            category: 'SYSTEM', // ✅ FIX: Changed from 'AUTOPILOT' to valid category
-            data: { productId: product.id, marketplace, environment: currentEnvironment }
-          });
-          
-          // Mantener producto en APPROVED sin publicar
-          return { success: false };
-        }
-        
-        // Verificar issues con las credenciales
-        if (credentials.issues && credentials.issues.length > 0) {
-          logger.warn('Autopilot: Credentials have issues, skipping publication', {
-            service: 'autopilot',
-            userId: currentUserId,
-            productId: product.id,
-            marketplace,
-            environment: currentEnvironment,
-            issues: credentials.issues
-          });
-          
-          // Enviar notificación al usuario sobre problemas con credenciales
-          const { notificationService } = await import('./notification.service');
-          notificationService.sendToUser(currentUserId, {
-            type: 'SYSTEM_ALERT', // ✅ FIX: Changed from 'WARNING' to valid type
-            title: 'Autopilot: Publicación omitida',
-            message: `No se pudo publicar producto en ${marketplace} debido a problemas con las credenciales: ${credentials.issues.join(', ')}. Por favor, revisa tus credenciales en Settings → API Settings.`,
-            priority: 'NORMAL',
-            category: 'SYSTEM', // ✅ FIX: Changed from 'AUTOPILOT' to valid category
-            data: { productId: product.id, marketplace, environment: currentEnvironment, issues: credentials.issues }
-          });
-          
-          return { success: false };
-        }
-      } catch (credError: any) {
-        logger.error('Autopilot: Error validating credentials', {
-          service: 'autopilot',
-          userId: currentUserId,
-          productId: product.id,
-          marketplace,
-          environment: currentEnvironment,
-          error: credError.message
+      // ✅ P4: Obtener marketplaces destino (targetMarketplaces o fallback targetMarketplace)
+      const marketplacesToPublish: Array<'ebay' | 'mercadolibre' | 'amazon'> = (
+        this.config.targetMarketplaces && this.config.targetMarketplaces.length > 0
+          ? this.config.targetMarketplaces.filter((m): m is 'ebay' | 'mercadolibre' | 'amazon' =>
+              ['ebay', 'amazon', 'mercadolibre'].includes(String(m).toLowerCase()))
+          : [this.config.targetMarketplace as 'ebay' | 'mercadolibre' | 'amazon']
+      );
+      if (marketplacesToPublish.length === 0) {
+        logger.warn('Autopilot: No target marketplaces configured', { productId: product.id });
+        return { success: false };
+      }
+
+      // Validar que al menos un marketplace tenga credenciales válidas
+      let hasValidCreds = false;
+      for (const mp of marketplacesToPublish) {
+        try {
+          const credentials = await this.marketplaceService.getCredentials(
+            currentUserId, mp, currentEnvironment
+          );
+          if (credentials?.isActive && (!credentials.issues || credentials.issues.length === 0)) {
+            hasValidCreds = true;
+            break;
+          }
+        } catch { /* continuar */ }
+      }
+      if (!hasValidCreds) {
+        logger.warn('Autopilot: No valid credentials for any target marketplace', {
+          productId: product.id, marketplaces: marketplacesToPublish
+        });
+        const { notificationService } = await import('./notification.service');
+        notificationService.sendToUser(currentUserId, {
+          type: 'SYSTEM_ALERT',
+          title: 'Autopilot: Publicación omitida',
+          message: `No hay credenciales válidas para ${marketplacesToPublish.join(', ')}. Configura tus credenciales en Settings → API Settings.`,
+          priority: 'NORMAL',
+          category: 'SYSTEM',
+          data: { productId: product.id, marketplaces: marketplacesToPublish }
         });
         return { success: false };
       }
-      
-      // ✅ ALTA PRIORIDAD: Integrar MarketplaceService para publicar automáticamente
-      try {
-        const publishResult = await this.marketplaceService.publishProduct(currentUserId, {
-          productId: product.id,
-          marketplace,
-          customData: {
-            categoryId: opportunity.category,
-            price: opportunity.estimatedCost * 2,
-            quantity: 1,
-            title: opportunity.title,
-            description: opportunity.description
-          }
-        }, currentEnvironment);
 
-        if (publishResult.success) {
+      // ✅ Publicar en uno o varios marketplaces
+      try {
+        const publishResults = await this.marketplaceService.publishToMultipleMarketplaces(
+          currentUserId,
+          product.id,
+          marketplacesToPublish,
+          currentEnvironment
+        );
+        const successResults = publishResults.filter(r => r.success);
+        const firstSuccess = successResults[0];
+
+        if (firstSuccess) {
           // ✅ CORREGIDO: Usar función helper para sincronizar estado e isPublished
           const { productService } = await import('./product.service');
           await productService.updateProductStatusSafely(
@@ -1525,35 +1499,35 @@ export class AutopilotSystem extends EventEmitter {
             currentUserId
           );
           
-          // Actualizar productData con información de publicación
+          // Actualizar productData con información de publicación (primer éxito)
           await prisma.product.update({
             where: { id: product.id },
             data: {
               productData: JSON.stringify({
                 ...JSON.parse(product.productData || '{}'),
-                marketplaceListingId: publishResult.listingId,
-                marketplaceListingUrl: publishResult.listingUrl,
+                marketplaceListingId: firstSuccess.listingId,
+                marketplaceListingUrl: firstSuccess.listingUrl,
                 publishedAt: new Date().toISOString()
               })
             }
           });
 
           console.log('[AUTOPILOT] Product published automatically');
-          logger.info('Autopilot: Product published to marketplace successfully', {
+          logger.info('Autopilot: Product published to marketplace(s) successfully', {
             service: 'autopilot',
             userId: currentUserId,
             productId: product.id,
-            marketplace,
-            listingId: publishResult.listingId,
+            marketplaces: successResults.map(r => r.marketplace),
+            listingId: firstSuccess.listingId,
             environment: currentEnvironment
           });
         } else {
-          logger.warn('Autopilot: Failed to publish product to marketplace', {
+          logger.warn('Autopilot: Failed to publish product to marketplace(s)', {
             service: 'autopilot',
             userId: currentUserId,
             productId: product.id,
-            marketplace,
-            error: publishResult.error,
+            marketplaces: marketplacesToPublish,
+            errors: publishResults.map(r => r.error),
             environment: currentEnvironment
           });
           
@@ -1577,7 +1551,7 @@ export class AutopilotSystem extends EventEmitter {
             data: {
               productData: JSON.stringify({
                 ...JSON.parse(product.productData || '{}'),
-                publishError: publishResult.error,
+                publishError: publishResults.find((r) => !r.success)?.error || 'Publication failed',
                 publishAttemptedAt: new Date().toISOString()
               })
             }
@@ -1588,7 +1562,7 @@ export class AutopilotSystem extends EventEmitter {
           service: 'autopilot',
           userId: currentUserId,
           productId: product.id,
-          marketplace: this.config.targetMarketplace,
+          marketplaces: marketplacesToPublish,
           error: publishError?.message || String(publishError),
           environment: currentEnvironment
         });

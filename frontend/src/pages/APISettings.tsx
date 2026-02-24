@@ -22,7 +22,7 @@ import {
   Wand2,
   HelpCircle
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuthStatusStore } from '@stores/authStatusStore';
 import { useAuthStore } from '@stores/authStore';
@@ -302,6 +302,8 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
 
 export default function APISettings() {
   const { token, user } = useAuthStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [credentials, setCredentials] = useState<APICredential[]>([]);
   const [statuses, setStatuses] = useState<Record<string, APIStatus>>({});
   const [loading, setLoading] = useState(true);
@@ -814,6 +816,12 @@ export default function APISettings() {
             const normalizedName = normalize(item.apiName || item.name || '');
             if (normalizedName) {
               statusLookup.set(normalizedName, item);
+              // ✅ FIX: Para googletrends/serpapi, agregar entrada también con el nombre alternativo
+              // El backend puede devolver 'googletrends' pero el frontend busca con 'serpapi' normalizado
+              if (normalizedName === 'googletrends' || normalizedName === 'serpapi') {
+                const alternateName = normalizedName === 'googletrends' ? 'serpapi' : 'googletrends';
+                statusLookup.set(alternateName, item);
+              }
               const env = typeof item.environment === 'string' ? item.environment : 'production';
               const apiNameRaw = (item.apiName || item.name || normalizedName) as string;
               const apiNameKey = apiNameRaw.toLowerCase();
@@ -831,6 +839,15 @@ export default function APISettings() {
                 lastChecked: item.lastChecked ? String(item.lastChecked) : undefined,
                 optional: Boolean(item.isOptional ?? item.optional),
               };
+              // ✅ FIX: También agregar al statusMap con el nombre alternativo para googletrends/serpapi
+              if (apiNameKey === 'googletrends' || apiNameKey === 'serpapi') {
+                const alternateApiName = apiNameKey === 'googletrends' ? 'serpapi' : 'googletrends';
+                const alternateEnvKey = makeEnvKey(alternateApiName, env);
+                statusMap[alternateEnvKey] = {
+                  ...statusMap[envKey],
+                  apiName: alternateApiName,
+                };
+              }
             }
           });
         }
@@ -838,8 +855,14 @@ export default function APISettings() {
         creds.forEach((cred) => {
           // ✅ FIX: Normalizar 'googletrends' a 'serpapi' para búsqueda de estado
           // El backend usa 'serpapi' pero el frontend puede usar 'googletrends'
+          // El backend mapea 'serpapi' a 'googletrends' en la respuesta, así que debemos buscar ambos
           const normalizedApiName = cred.apiName === 'googletrends' ? 'serpapi' : cred.apiName;
-          const match = statusLookup.get(normalize(normalizedApiName)) || statusLookup.get(normalize(cred.apiName));
+          // Buscar primero con el nombre normalizado (serpapi), luego con el nombre original (googletrends)
+          // porque el backend puede devolver cualquiera de los dos
+          const match = statusLookup.get(normalize(normalizedApiName)) 
+            || statusLookup.get(normalize(cred.apiName))
+            || (cred.apiName === 'googletrends' ? statusLookup.get('serpapi') : null)
+            || (cred.apiName === 'googletrends' ? statusLookup.get('googletrends') : null);
           if (match) {
             const available = match.isAvailable ?? match.available ?? cred.isActive;
             const isConfigured = match.isConfigured ?? available ?? cred.isActive;
@@ -2242,6 +2265,69 @@ export default function APISettings() {
     window.addEventListener('message', handleOAuthMessage);
     return () => window.removeEventListener('message', handleOAuthMessage);
   }, []);
+
+  // ✅ FIX OAUTH: Detectar query params de OAuth en la URL (cuando el callback redirige)
+  useEffect(() => {
+    const oauthStatus = searchParams.get('oauth');
+    const provider = searchParams.get('provider');
+    const correlationId = searchParams.get('correlationId');
+    const errorParam = searchParams.get('error');
+
+    if (oauthStatus === 'success' && provider) {
+      log.info('[APISettings] OAuth success detected from URL', {
+        provider,
+        correlationId,
+      });
+
+      toast.success('✅ Autorización OAuth completada exitosamente');
+      
+      // Recargar credenciales y estados
+      setTimeout(async () => {
+        try {
+          await fetchAuthStatuses();
+          await loadCredentials();
+          // Recarga adicional para asegurar que el token se detecte
+          setTimeout(async () => {
+            try {
+              await loadCredentials();
+              await fetchAuthStatuses();
+              toast.success('✅ Credenciales actualizadas correctamente');
+            } catch (err) {
+              log.warn('Error en recarga adicional después de OAuth success:', err);
+            }
+          }, 2000);
+        } catch (err) {
+          log.warn('Error al recargar después de OAuth success:', err);
+        }
+      }, 1500);
+
+      // Limpiar query params de la URL
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.delete('oauth');
+      newSearchParams.delete('provider');
+      newSearchParams.delete('correlationId');
+      newSearchParams.delete('error');
+      navigate(`/api-settings?${newSearchParams.toString()}`, { replace: true });
+    } else if (oauthStatus === 'error' && provider) {
+      const errorMsg = errorParam || 'Error desconocido en OAuth';
+      log.error('[APISettings] OAuth error detected from URL', {
+        provider,
+        correlationId,
+        error: errorMsg,
+      });
+
+      toast.error(`❌ Error en autorización OAuth: ${errorMsg}`);
+      setError(`Error en autorización OAuth: ${errorMsg}`);
+
+      // Limpiar query params de la URL
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.delete('oauth');
+      newSearchParams.delete('provider');
+      newSearchParams.delete('correlationId');
+      newSearchParams.delete('error');
+      navigate(`/api-settings?${newSearchParams.toString()}`, { replace: true });
+    }
+  }, [searchParams, navigate, fetchAuthStatuses]);
 
   const handleOAuth = async (apiName: string, environment: string) => {
     setOauthing(apiName);

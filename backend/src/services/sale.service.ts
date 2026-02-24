@@ -305,7 +305,7 @@ export class SaleService {
     });
 
     // ✅ Dual PayPal payout: admin (commission) then user (userProfit). Both must succeed.
-    const payoutService = (await import('./paypal-payout.service')).PayPalPayoutService.fromEnv();
+    const payoutService = await (await import('./paypal-payout.service')).PayPalPayoutService.fromUserCredentials(userId);
     const adminPaypalEmail = await platformConfigService.getAdminPaypalEmail();
     const userPaypalEmail = (user as any).paypalPayoutEmail?.trim() || null;
 
@@ -370,22 +370,42 @@ export class SaleService {
     }
 
     if (netProfitNum > 0) {
-      const userRes = await payoutService.sendPayout({
-        recipientEmail: userPaypalEmail,
-        amount: netProfitNum,
-        currency: sale.currency,
-        note: `Your profit - Sale ${sale.orderId}`,
-        senderItemId: `sale-${sale.id}-user`,
-      });
-      if (!userRes.success) {
-        await prisma.sale.update({
-          where: { id: sale.id },
-          data: { status: 'PAYOUT_FAILED', adminPayoutId } as any,
+      let userPayoutOk = false;
+      const userPayoneerEmail = (user as any).payoneerPayoutEmail?.trim() || null;
+      const payoneerService = (await import('./payoneer.service')).PayoneerService.fromEnv();
+      const preferPayoneer = process.env.PAYOUT_PROVIDER === 'payoneer';
+      if (payoneerService && userPayoneerEmail && preferPayoneer) {
+        const payoneerRes = await payoneerService.withdrawFunds({
+          recipientEmail: userPayoneerEmail,
+          amount: netProfitNum,
+          currency: sale.currency,
+          note: `Your profit - Sale ${sale.orderId}`,
+          senderItemId: `sale-${sale.id}-user`,
         });
-        logger.error('[SALE] User payout failed', { saleId: sale.id, error: userRes.error });
-        throw new AppError(`User payout failed: ${userRes.error}`, 502);
+        if (payoneerRes.success) {
+          userPayoutId = payoneerRes.batchId || payoneerRes.transactionId || 'payoneer';
+          userPayoutOk = true;
+          logger.info('[SALE] User payout via Payoneer', { saleId: sale.id });
+        }
       }
-      userPayoutId = userRes.batchId || null;
+      if (!userPayoutOk) {
+        const userRes = await payoutService.sendPayout({
+          recipientEmail: userPaypalEmail,
+          amount: netProfitNum,
+          currency: sale.currency,
+          note: `Your profit - Sale ${sale.orderId}`,
+          senderItemId: `sale-${sale.id}-user`,
+        });
+        if (!userRes.success) {
+          await prisma.sale.update({
+            where: { id: sale.id },
+            data: { status: 'PAYOUT_FAILED', adminPayoutId } as any,
+          });
+          logger.error('[SALE] User payout failed', { saleId: sale.id, error: userRes.error });
+          throw new AppError(`User payout failed: ${userRes.error}`, 502);
+        }
+        userPayoutId = userRes.batchId || null;
+      }
     }
 
     await prisma.sale.update({

@@ -28,6 +28,7 @@
     "diagnose:connectivity": "tsx scripts/diagnose-connectivity.ts",
     "run:ebay-real-cycle": "tsx src/scripts/run-ebay-real-cycle.ts",
     "test:post-sale-flow": "tsx scripts/test-post-sale-flow.ts",
+    "test:fulfillment-only": "tsx scripts/test-fulfillment-only.ts",
     "test-full-dropshipping-cycle": "tsx scripts/test-full-dropshipping-cycle.ts",
     "test:dropshipping-cycle": "tsx scripts/test-full-dropshipping-cycle.ts",
     "test:search-to-publish": "tsx scripts/test-full-cycle-search-to-publish.ts",
@@ -50,6 +51,7 @@
     "bootstrap-env": "node scripts/ensure-env-local.js",
     "bootstrap-verifier-env": "node scripts/bootstrap-verifier-env.js",
     "inject-apis": "node scripts/inject-apis-from-file.js",
+    "generate:payoneer-cert": "tsx scripts/generate-payoneer-cert-pem.ts",
     "kill-port": "powershell -ExecutionPolicy Bypass -File scripts/kill-port.ps1",
     "dev:clean": "npm run kill-port && npm run dev"
   },
