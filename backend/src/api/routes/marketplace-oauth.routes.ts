@@ -244,7 +244,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     // Validar state JWT stateless (AliExpress Dropshipping)
     const parsed = verifyStateAliExpressSafe(stateStr);
     if (!parsed.ok) {
-      const reason = parsed.reason;
+      const reason = (parsed as { ok: false; reason: string }).reason;
       logger.error('[OAuth Callback] Invalid state', {
         service: 'marketplace-oauth',
         marketplace,
