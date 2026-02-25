@@ -93,11 +93,14 @@ function loadFromEnv(
       ''
     ).trim();
     if (!clientId || !clientSecret) return null;
+    const rawRedirect = (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim();
+    const ruNameOnly = (process.env.EBAY_RUNAME || '').trim();
+    const redirectUri = ruNameOnly || (rawRedirect && !/^https?:\/\//i.test(rawRedirect) ? rawRedirect : undefined);
     return {
       appId: clientId,
       devId: (process.env.EBAY_DEV_ID || '').trim() || undefined,
       certId: clientSecret,
-      redirectUri: (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim() || undefined,
+      redirectUri: redirectUri || undefined,
       token: (process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN || '').trim() || undefined,
       refreshToken: (process.env.EBAY_REFRESH_TOKEN || '').trim() || undefined,
       sandbox: environment === 'sandbox',
@@ -415,7 +418,11 @@ export const CredentialsManager = {
       out.appId = out.appId || out.clientId || out.EBAY_APP_ID;
       out.certId = out.certId || out.clientSecret || out.EBAY_CERT_ID;
       out.devId = out.devId || out.EBAY_DEV_ID;
-      out.redirectUri = out.redirectUri || out.EBAY_RUNAME;
+      let ru = out.redirectUri || out.EBAY_RUNAME || out.ruName || out.RuName;
+      if (ru && /^https?:\/\//i.test(String(ru))) {
+        ru = (process.env.EBAY_RUNAME || '').trim() || undefined;
+      }
+      out.redirectUri = ru || undefined;
       // Token/refreshToken: DB first (token|authToken|accessToken), then env fallback (Railway)
       const envToken = (process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN || '').trim() || undefined;
       const envRefresh = (process.env.EBAY_REFRESH_TOKEN || '').trim() || undefined;

@@ -547,7 +547,11 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const { CredentialsManager } = await import('../../services/credentials-manager.service');
       const normalizedCreds = CredentialsManager.normalizeCredential('ebay', { redirectUri }, resolvedEnv);
       redirectUri = normalizedCreds.redirectUri || redirectUri;
-      
+      // Si aún es una URL (p. ej. guardada antes del fix), usar solo RuName desde env
+      if (redirectUri && /^https?:\/\//i.test(redirectUri.trim())) {
+        const ruFromEnv = (process.env.EBAY_RUNAME || process.env.EBAY_REDIRECT_URI || '').trim();
+        if (ruFromEnv && !/^https?:\/\//i.test(ruFromEnv)) redirectUri = ruFromEnv;
+      }
       // Limpiar el Redirect URI - eBay es muy estricto con esto
       // Remover espacios al inicio y final, pero NO modificar el contenido interno
       // porque eBay requiere que coincida EXACTAMENTE con el registrado
@@ -699,9 +703,16 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         
         // Construir parámetros manualmente con codificación explícita
         // eBay requiere que redirect_uri coincida EXACTAMENTE con el registrado
-        // IMPORTANTE: El RuName NO debe codificarse si solo contiene caracteres alfanuméricos, guiones y guiones bajos
-        // Solo codificar si tiene caracteres especiales que realmente necesiten codificación
-        const scopes = ['sell.inventory.readonly', 'sell.inventory', 'sell.marketing.readonly', 'sell.marketing'];
+        // IMPORTANTE: eBay OAuth requiere scopes en formato URL completo (invalid_scope si se usan cortos)
+        const scopes = [
+          'https://api.ebay.com/oauth/api_scope',
+          'https://api.ebay.com/oauth/api_scope/sell.inventory.readonly',
+          'https://api.ebay.com/oauth/api_scope/sell.inventory',
+          'https://api.ebay.com/oauth/api_scope/sell.marketing.readonly',
+          'https://api.ebay.com/oauth/api_scope/sell.marketing',
+          'https://api.ebay.com/oauth/api_scope/sell.account',
+          'https://api.ebay.com/oauth/api_scope/sell.fulfillment',
+        ];
         
         // ✅ CORRECCIÓN: Verificar si el redirectUri necesita codificación
         // eBay RuName típicamente solo contiene: letras, números, guiones (-), guiones bajos (_)
@@ -764,11 +775,12 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
           });
         }
         
+        const scopeStr = scopes.join(' ');
         const finalParams = [
           `client_id=${encodeURIComponent(finalAppId)}`,
           `redirect_uri=${encodedRedirectUri}`, // Codificar solo si es necesario
           `response_type=${encodeURIComponent('code')}`,
-          `scope=${encodeURIComponent(scopes.join(' '))}`,
+          `scope=${encodeURIComponent(scopeStr)}`,
           `state=${encodeURIComponent(state)}`, // Usar nuestro state personalizado
         ].join('&');
         
@@ -887,7 +899,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
               `client_id=${encodeURIComponent(finalAppId)}`,
               `redirect_uri=${redirectUri}`, // Sin codificar
               `response_type=${encodeURIComponent('code')}`,
-              `scope=${encodeURIComponent(scopes.join(' '))}`,
+              `scope=${encodeURIComponent(scopeStr)}`,
               `state=${encodeURIComponent(state)}`,
             ].join('&');
             authUrl = `${authBase}?${retryParams}`;
@@ -901,13 +913,23 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
           });
         }
       } catch (urlError: any) {
+        // Preservar AppError (400) para que el cliente reciba el mensaje correcto y no 500
+        if (urlError && typeof urlError.statusCode === 'number' && urlError.statusCode < 500) {
+          return res.status(urlError.statusCode).json({
+            success: false,
+            message: urlError.message,
+            code: urlError.errorCode,
+            hint: urlError.message?.includes('RuName') ? 'En eBay, el campo "Redirect URI" debe ser solo el RuName (ej: Ivan_Marty-IvanMart-IVANRe-xxxx), no la URL completa. Cópialo desde eBay Developer → User Tokens → RuName.' : undefined,
+            correlationId,
+          });
+        }
         logger.error('[eBay OAuth] Error generating auth URL', {
-          error: urlError.message,
-          stack: urlError.stack,
-          appId: finalAppId.substring(0, 8) + '...' + finalAppId.substring(finalAppId.length - 4),
-          redirectUri: redirectUri.substring(0, 30) + '...',
+          error: urlError?.message,
+          stack: urlError?.stack,
+          appId: finalAppId?.substring(0, 8) + '...' + finalAppId?.substring(finalAppId?.length - 4),
+          redirectUri: redirectUri?.substring(0, 30) + '...',
         });
-        throw new Error(`Error al generar URL de autorización: ${urlError.message}`);
+        throw new Error(`Error al generar URL de autorización: ${urlError?.message}`);
       }
       
       // Si hay advertencia de formato, incluirla en la respuesta pero no bloquear
@@ -965,10 +987,10 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         default: 'production'
       });
 
-      // ✅ DEFAULT SEGURO: Callback URL con dominio público
+      // ✅ DEFAULT SEGURO: Callback URL que apunta al handler JWT (marketplace-oauth), no al Affiliate
       const webBaseUrl = process.env.WEB_BASE_URL || 
                         (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
-      const defaultCallbackUrl = `${webBaseUrl}/api/aliexpress/callback`;
+      const defaultCallbackUrl = `${webBaseUrl}/api/marketplace-oauth/callback`;
       
       const callbackUrl = typeof redirect_uri === 'string' && redirect_uri.length > 0
         ? redirect_uri.trim()

@@ -29,7 +29,7 @@ import { useAuthStore } from '@stores/authStore';
 import toast from 'react-hot-toast';
 import { log } from '../utils/logger';
 import { io, Socket } from 'socket.io-client';
-import { API_BASE_URL } from '../config/runtime';
+import { API_BASE_URL, getSocketOptions } from '../config/runtime';
 import APIConfigurationWizard, { WizardData } from '../components/api-configuration/APIConfigurationWizard';
 import FieldTooltip from '../components/api-configuration/FieldTooltip';
 import ValidationIndicator from '../components/api-configuration/ValidationIndicator';
@@ -166,7 +166,7 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
       { key: 'EBAY_APP_ID', label: 'App ID (Client ID)', required: true, type: 'text', placeholder: 'IvanMart-IVANRese-PRD-...', helpText: 'Formato: Nombre-Nombre-[SBX|PRD]-hash. Ejemplo: IvanMart-IVANRese-PRD-febbdcd65-626be473' },
       { key: 'EBAY_DEV_ID', label: 'Dev ID', required: true, type: 'text', placeholder: 'Your-DevI-PRD-...' },
       { key: 'EBAY_CERT_ID', label: 'Cert ID (Client Secret)', required: true, type: 'password', placeholder: 'PRD-...' },
-      { key: 'EBAY_REDIRECT_URI', label: 'Redirect URI (RuName)', required: true, type: 'text', placeholder: 'IvMart_IvanRese-IvanMart... (RuName)' },
+      { key: 'EBAY_REDIRECT_URI', label: 'Redirect URI (RuName)', required: true, type: 'text', placeholder: 'Ivan_Marty-IvanMart-IVANRe-cgcqu', helpText: 'Solo el RuName (ej. Ivan_Marty-IvanMart-IVANRe-xxx). NO pegues la URL completa: en eBay Developer el RuName es el nombre que asignas a la URL de callback.' },
       { key: 'EBAY_TOKEN', label: 'User Token (opcional)', required: false, type: 'password', placeholder: 'v^1.1#i^1#...' },
     ],
   },
@@ -439,10 +439,13 @@ export default function APISettings() {
   }, [authStatuses, fetchAuthStatuses]);
 
   // ✅ NUEVO: Listener de Socket.IO para actualizaciones de estado de APIs en tiempo real
+  // path /api/socket.io para Vercel rewrite; VITE_SOCKET_URL para conexión directa a Railway si falla proxy
   useEffect(() => {
     if (!token || !user) return;
 
-    const socket = io(API_BASE_URL, {
+    const { url, path } = getSocketOptions();
+    const socket = io(url || API_BASE_URL, {
+      path,
       auth: { token },
       transports: ['websocket', 'polling'],
       timeout: 20000,
@@ -506,9 +509,8 @@ export default function APISettings() {
     });
 
     socket.on('connect_error', (error: Error) => {
-      // ✅ FASE 7: Log error pero no bloquear (reconexión automática)
-      log.warn('WebSocket connection error (will retry)', { error: error.message });
-      log.error('[APISettings] Socket.IO connection error:', error);
+      // ✅ FIX WebSocket: Un solo warn (evitar spam); reconexión automática sigue activa
+      log.warn('[APISettings] Socket.IO connection error (will retry):', error.message);
     });
 
     return () => {
@@ -1715,6 +1717,11 @@ export default function APISettings() {
       // Agregar campos específicos según el tipo de API
       if (apiName === 'ebay') {
         credentials.sandbox = currentEnvironment === 'sandbox';
+        if (credentials.redirectUri && /^https?:\/\//i.test(String(credentials.redirectUri).trim())) {
+          toast.error('El campo "Redirect URI (RuName)" debe ser solo el RuName (ej. Ivan_Marty-IvanMart-IVANRe-cgcqu), no la URL completa. En eBay Developer copia el nombre del Redirect URL, no la URL.');
+          setSaving(null);
+          return;
+        }
       } else if (apiName === 'amazon') {
         credentials.sandbox = currentEnvironment === 'sandbox';
         // Si no se proporciona region, usar default
@@ -2457,7 +2464,7 @@ export default function APISettings() {
         }
         
         toast.error(fullMessage);
-        setError(errorMsg);
+        setError(`[${apiName}] ${errorMsg}`);
         setOauthing(null);
         return;
       }
@@ -2720,6 +2727,7 @@ export default function APISettings() {
       const axiosError = err && typeof err === 'object' && 'response' in err ? err as { response?: { data?: { message?: string; error?: string } } } : null;
       const message = axiosError?.response?.data?.message || axiosError?.response?.data?.error || (err instanceof Error ? err.message : String(err)) || 'Error iniciando OAuth';
       toast.error(message);
+      setError(`[${apiName}] ${message}`);
     } finally {
       delete oauthInProgressRef.current[apiName];
       setOauthing(null);

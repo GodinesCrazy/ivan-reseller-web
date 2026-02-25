@@ -103,18 +103,23 @@ function parseState(state: string) {
     const decoded = Buffer.from(state, 'base64url').toString('utf8');
     const parts = decoded.split('|');
     
-    // 🔒 SEGURIDAD: Validar que el state tenga el formato correcto con expiración
-    // Formato esperado: userId|marketplace|timestamp|nonce|redirectUri|environment|expirationTime|signature
-    // O formato legacy: userId|marketplace|timestamp|nonce|redirectUri|environment|signature (sin expiración)
-    if (parts.length < 6) return { ok: false, reason: 'invalid_format' };
+    // Formato con expiración (8): userId|marketplace|ts|nonce|redirB64|env|expirationTime|signature
+    // Formato legacy (7): userId|marketplace|ts|nonce|redirB64|env|signature
+    if (parts.length < 7) return { ok: false, reason: 'invalid_format' };
     
-    // Determinar si tiene expiración (8 partes) o es legacy (7 partes)
     const hasExpiration = parts.length === 8;
-    const [userIdStr, mk, ts, nonce, redirB64, env = 'production', expirationTimeOrSig, sig] = hasExpiration
-      ? parts
-      : [...parts, null, 'production'];
+    const userIdStr = parts[0];
+    const mk = parts[1];
+    const ts = parts[2];
+    const nonce = parts[3];
+    const redirB64 = parts[4];
+    const env = parts[5] || 'production';
+    const expirationTimeOrSig = parts[6];
+    const sig = hasExpiration ? parts[7] : parts[6];
+    const payloadForSig = hasExpiration
+      ? [userIdStr, mk, ts, nonce, redirB64, env, expirationTimeOrSig].join('|')
+      : [userIdStr, mk, ts, nonce, redirB64, env].join('|');
     
-    // Si tiene expiración, validarla
     if (hasExpiration && expirationTimeOrSig) {
       const expirationTime = parseInt(expirationTimeOrSig, 10);
       if (isNaN(expirationTime) || expirationTime < Date.now()) {
@@ -122,28 +127,23 @@ function parseState(state: string) {
       }
     }
     
-    // Validar firma
-    const payload = hasExpiration 
-      ? [userIdStr, mk, ts, nonce, redirB64, env, expirationTimeOrSig].join('|')
-      : [userIdStr, mk, ts, nonce, redirB64, env].join('|');
-    
     const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-key';
     if (!secret || secret === 'default-key') {
       return { ok: false, reason: 'missing_secret' };
     }
     
-    const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+    const expectedSig = crypto.createHmac('sha256', secret).update(payloadForSig).digest('hex');
     if (expectedSig !== sig) return { ok: false, reason: 'invalid_signature' };
     
     const redirectUri = Buffer.from(redirB64, 'base64url').toString('utf8');
     const userId = parseInt(userIdStr, 10);
     if (!userId || !mk) return { ok: false, reason: 'invalid_user_or_marketplace' };
     
-    return { 
-      ok: true, 
-      userId, 
-      marketplace: mk, 
-      redirectUri, 
+    return {
+      ok: true,
+      userId,
+      marketplace: mk,
+      redirectUri,
       environment: env as 'sandbox' | 'production',
       hasExpiration,
       expirationTime: hasExpiration ? parseInt(expirationTimeOrSig, 10) : null
@@ -244,7 +244,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     // Validar state JWT stateless (AliExpress Dropshipping)
     const parsed = verifyStateAliExpressSafe(stateStr);
     if (!parsed.ok) {
-      let reason = parsed.reason;
+      const reason = parsed.reason;
       logger.error('[OAuth Callback] Invalid state', {
         service: 'marketplace-oauth',
         marketplace,
@@ -256,8 +256,8 @@ router.get('/callback', async (req: Request, res: Response) => {
       return res.redirect(302, errorUrl);
     }
 
-    const userId = parsed.userId;
-    const environment = 'production' as const;
+    const userId: number = parsed.userId;
+    const environment: 'sandbox' | 'production' = 'production';
     const redirectUri: string | null = null; // JWT stateless: usar defaultCallbackUrl más abajo
 
     logger.info('[OAuth Callback] State verified successfully', {
@@ -334,9 +334,8 @@ router.get('/callback', async (req: Request, res: Response) => {
       (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
 
     try {
-      // Intercambiar code por tokens
-      // ✅ CORRECCIÓN: Callback debe incluir /api porque el serverless function está en /api/aliexpress/callback
-      const defaultCallbackUrl = `${webBaseUrl}/api/aliexpress/callback`;
+      // Intercambiar code por tokens (redirect_uri debe coincidir con el registrado en AliExpress)
+      const defaultCallbackUrl = `${webBaseUrl}/api/marketplace-oauth/callback`;
       
       const tokens = await aliexpressDropshippingAPIService.exchangeCodeForToken(
         codeStr,
@@ -390,7 +389,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         refreshTokenExpiresAt: tokens.refreshExpiresIn 
           ? new Date(Date.now() + tokens.refreshExpiresIn * 1000).toISOString()
           : null,
-        sandbox: environment === 'sandbox',
+        sandbox: (environment as string) === 'sandbox',
         updatedAt: new Date().toISOString(),
       };
 
@@ -410,12 +409,14 @@ router.get('/callback', async (req: Request, res: Response) => {
       // Limpiar cache de credenciales
       const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
       clearCredentialsCache(userId, 'aliexpress-dropshipping', environment);
-      clearCredentialsCache(userId, 'aliexpress-dropshipping', environment === 'sandbox' ? 'production' : 'sandbox');
+      clearCredentialsCache(userId, 'aliexpress-dropshipping', (environment as string) === 'sandbox' ? 'production' : 'sandbox');
       
-      // Limpiar cache de API availability para forzar re-verificación
-      const { APIAvailabilityService } = await import('../../services/api-availability.service');
-      const apiAvailabilityService = new APIAvailabilityService();
-      await apiAvailabilityService.checkAliExpressDropshippingAPI(userId, environment, true).catch((err) => {
+      // Limpiar cache de API availability del singleton para que /api/credentials/status devuelva estado actualizado
+      const { apiAvailability } = await import('../../services/api-availability.service');
+      await apiAvailability.clearAPICache(userId, 'aliexpress-dropshipping').catch((err) => {
+        logger.warn('[OAuth Callback] Error clearing API cache', { error: err?.message || String(err), correlationId });
+      });
+      await apiAvailability.checkAliExpressDropshippingAPI(userId, environment, true).catch((err) => {
         logger.warn('[OAuth Callback] Error forcing AliExpress Dropshipping API status refresh', {
           error: err?.message || String(err),
           correlationId,
@@ -539,12 +540,10 @@ router.get('/callback', async (req: Request, res: Response) => {
         stack: tokenError?.stack?.substring(0, 500),
       });
 
-      // ✅ FIX OAUTH: Redirect a frontend con error
+      // ✅ FIX OAUTH: Redirect a frontend con error (una sola respuesta)
       const errorUrl = `${webBaseUrl}/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}&error=${encodeURIComponent(tokenError?.message || 'Token exchange failed')}`;
-      
-      // ✅ ERROR HANDLING: Responder con error sin exponer secretos (redirect a frontend)
       const errorMessage = tokenError?.message || 'Token exchange failed';
-      res.send(`
+      res.status(500).send(`
         <html>
           <head>
             <title>Error de autorización</title>
@@ -552,49 +551,24 @@ router.get('/callback', async (req: Request, res: Response) => {
             <style>
               body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
               .error { color: red; font-size: 18px; margin: 20px 0; }
-              .info { color: #666; font-size: 14px; margin-top: 20px; }
-            </style>
-          </head>
-          <body>
-            <div class="error">❌ Error en la autorización</div>
-            <div class="info">${errorMessage}</div>
-            <div class="info" style="font-size: 12px; margin-top: 30px;">Redirigiendo a la aplicación...</div>
-            <div class="info" style="font-size: 12px; margin-top: 10px;">Si no eres redirigido, <a href="${errorUrl}">haz clic aquí</a></div>
-            <div class="info" style="font-size: 12px; margin-top: 10px;">Correlation ID: ${correlationId}</div>
-            <script>
-              setTimeout(() => {
-                window.location.href = '${errorUrl}';
-              }, 3000);
-            </script>
-          </body>
-        </html>
-      `);
-      res.status(500).send(`
-        <html>
-          <head>
-            <title>Error de autorización</title>
-            <style>
-              body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
-              .error { color: red; font-size: 18px; margin: 20px 0; }
               .details { color: #666; font-size: 12px; margin-top: 10px; }
             </style>
           </head>
           <body>
-            <div class="error">❌ Error al completar la autorización OAuth</div>
-            <div class="details">Error técnico: ${tokenError?.message || 'Unknown error'}</div>
+            <div class="error">❌ Error en la autorización</div>
+            <div class="details">${errorMessage}</div>
+            <div style="font-size: 12px; margin-top: 20px;">Redirigiendo a la aplicación...</div>
+            <div style="font-size: 12px; margin-top: 10px;">Si no eres redirigido, <a href="${errorUrl}">haz clic aquí</a></div>
             <div style="text-align: center; margin-top: 30px;">
-              <button onclick="window.close()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
-                Cerrar ventana
-              </button>
+              <button onclick="window.close()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">Cerrar ventana</button>
             </div>
             <script>
-              if (window.opener) {
-                window.opener.postMessage({ 
-                  type: 'oauth_error', 
-                  marketplace: 'aliexpress-dropshipping',
-                  error: '${(tokenError?.message || 'Unknown error').replace(/'/g, "\\'")}'
-                }, '*');
+              if (window.opener && !window.opener.closed) {
+                try {
+                  window.opener.postMessage({ type: 'oauth_error', marketplace: 'aliexpress-dropshipping', error: '${(tokenError?.message || 'Unknown error').replace(/'/g, "\\'")}' }, '*');
+                } catch (e) {}
               }
+              setTimeout(function() { window.location.href = '${errorUrl}'; }, 3000);
             </script>
           </body>
         </html>
@@ -662,26 +636,36 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       queryParams: Object.keys(req.query)
     });
     
-    // Validar que no haya error en los parámetros de query
+    // Validar que no haya error en los parámetros de query (eBay devuelve error=invalid_scope, etc.)
     if (errorParam) {
+      const errorDesc = String(req.query.error_description || 'Please try again.');
+      const webBase = process.env.WEB_BASE_URL || 'https://www.ivanreseller.com';
+      const returnUrl = `${webBase}/api-settings`;
       logger.error('[OAuth Callback] OAuth error from provider', {
         service: 'marketplace-oauth',
         marketplace,
         error: errorParam,
-        errorDescription: req.query.error_description || 'No description'
+        errorDescription: errorDesc
       });
-      return res.status(400).send(`
+      // Devolver 200 para que la página cargue y el usuario pueda volver (400 dejaba "Bad Request" y confusión)
+      return res.status(200).send(`
+        <!DOCTYPE html>
         <html>
-          <body>
-            <h2>Authorization Error</h2>
-            <p>eBay returned an error: ${errorParam}</p>
-            <p>${req.query.error_description || 'Please try again.'}</p>
-            <p>Please return to the application and try again.</p>
-          </body>
+        <head><meta charset="utf-8"><title>Error de autorización</title></head>
+        <body style="font-family: sans-serif; max-width: 560px; margin: 2rem auto; padding: 1.5rem;">
+          <h2>Error de autorización</h2>
+          <p><strong>${marketplace === 'ebay' ? 'eBay' : marketplace}</strong> devolvió: ${errorParam}</p>
+          <p>${errorDesc}</p>
+          <p><a href="${returnUrl}" style="display: inline-block; margin-top: 1rem; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Volver a API Settings</a></p>
+          <p style="color: #666; font-size: 14px;">Si el error es "invalid_scope", verifica en el portal de desarrollador que tu aplicación tenga los permisos (scopes) necesarios.</p>
+        </body>
         </html>
       `);
     }
     
+    const webBase = process.env.WEB_BASE_URL || 'https://www.ivanreseller.com';
+    const returnUrl = `${webBase}/api-settings`;
+
     // Validar que el código no esté vacío
     if (!code || code.trim().length === 0) {
       logger.error('[OAuth Callback] Missing authorization code', {
@@ -689,25 +673,32 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         marketplace,
         hasState: !!state
       });
-      return res.status(400).send(`
+      return res.status(200).send(`
+        <!DOCTYPE html>
         <html>
-          <body>
-            <h2>Authorization Error</h2>
-            <p>No authorization code received from eBay.</p>
-            <p>Please return to the application and try again.</p>
-          </body>
+        <head><meta charset="utf-8"><title>Error de autorización</title></head>
+        <body style="font-family: sans-serif; max-width: 560px; margin: 2rem auto; padding: 1.5rem;">
+          <h2>Error de autorización</h2>
+          <p>No se recibió código de autorización. Vuelve a intentar desde API Settings.</p>
+          <p><a href="${returnUrl}" style="display: inline-block; margin-top: 1rem; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Volver a API Settings</a></p>
+        </body>
         </html>
       `);
     }
     
     const parsed = parseState(state);
     if (!parsed.ok) {
-      // 🔒 SEGURIDAD: Mensajes de error más específicos pero sin exponer detalles
-      let errorMessage = 'Invalid or expired authorization state';
+      let errorMessage = 'Invalid or expired authorization state.';
+      let hint = 'Vuelve a Configuración → API Settings, guarda las credenciales de eBay y pulsa de nuevo "Autorizar OAuth".';
       if (parsed.reason === 'expired') {
-        errorMessage = 'Authorization state has expired. Please try again.';
+        errorMessage = 'El enlace de autorización ha caducado (válido 10 minutos).';
+        hint = 'Pulsa "Autorizar OAuth" de nuevo en API Settings.';
       } else if (parsed.reason === 'invalid_signature') {
-        errorMessage = 'Invalid authorization state signature';
+        errorMessage = 'Error de verificación del estado de autorización.';
+        hint = 'Asegúrate de usar la misma sesión (misma ventana de ivanreseller.com) y de que en eBay Developer el Redirect URL del RuName sea exactamente: ' +
+          (process.env.WEB_BASE_URL || 'https://www.ivanreseller.com') + '/api/marketplace-oauth/oauth/callback/ebay';
+      } else if (parsed.reason === 'invalid_format') {
+        errorMessage = 'El enlace de autorización no es válido.';
       }
       
       logger.error('[OAuth Callback] Invalid state', {
@@ -717,13 +708,17 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         stateLength: state.length
       });
       
-      return res.status(400).send(`
+      const returnUrlState = (process.env.WEB_BASE_URL || 'https://www.ivanreseller.com') + '/api-settings';
+      return res.status(200).send(`
+        <!DOCTYPE html>
         <html>
-          <body>
-            <h2>Authorization Error</h2>
-            <p>${errorMessage}</p>
-            <p>Please return to the application and try again.</p>
-          </body>
+        <head><meta charset="utf-8"><title>Error de autorización</title></head>
+        <body style="font-family: sans-serif; max-width: 560px; margin: 2rem auto; padding: 1.5rem;">
+          <h2>Error de autorización</h2>
+          <p>${errorMessage}</p>
+          <p><strong>Qué hacer:</strong> ${hint}</p>
+          <p><a href="${returnUrlState}" style="display: inline-block; margin-top: 1rem; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Volver a API Settings</a></p>
+        </body>
         </html>
       `);
     }
@@ -832,12 +827,11 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       clearCredentialsCache(userId, 'ebay', environment);
       clearCredentialsCache(userId, 'ebay', environment === 'sandbox' ? 'production' : 'sandbox');
       
-      // ✅ CORRECCIÓN: Limpiar también el cache de API availability para forzar re-verificación del token
-      const { APIAvailabilityService } = await import('../../services/api-availability.service');
-      const apiAvailabilityService = new APIAvailabilityService();
-      // Invalidar cache de status para forzar re-verificación
-      await apiAvailabilityService.checkEbayAPI(userId, environment, true).catch((err) => {
-        logger.warn('[OAuth Callback] Error forcing API status refresh', {
+      // ✅ CORRECCIÓN: Limpiar cache del singleton para que /api/credentials/status y la UI reflejen el token
+      const { apiAvailability } = await import('../../services/api-availability.service');
+      await apiAvailability.clearAPICache(userId, 'ebay').catch(() => {});
+      await apiAvailability.checkEbayAPI(userId, environment, true).catch((err) => {
+        logger.warn('[OAuth Callback] Error forcing eBay API status refresh', {
           error: err?.message || String(err),
           userId,
           environment
@@ -928,11 +922,10 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       clearCredentialsCache(userId, 'mercadolibre', environment);
       clearCredentialsCache(userId, 'mercadolibre', environment === 'sandbox' ? 'production' : 'sandbox');
       
-      // ✅ CORRECCIÓN: Limpiar también el cache de API availability para forzar re-verificación
-      const { APIAvailabilityService } = await import('../../services/api-availability.service');
-      const apiAvailabilityService = new APIAvailabilityService();
-      // Invalidar cache de status para forzar re-verificación
-      await apiAvailabilityService.checkMercadoLibreAPI(userId, environment).catch((err) => {
+      // ✅ CORRECCIÓN: Limpiar cache del singleton para que la UI refleje el token
+      const { apiAvailability } = await import('../../services/api-availability.service');
+      await apiAvailability.clearAPICache(userId, 'mercadolibre').catch(() => {});
+      await apiAvailability.checkMercadoLibreAPI(userId, environment).catch((err) => {
         logger.warn('[OAuth Callback] Error forcing MercadoLibre API status refresh', {
           error: err?.message || String(err),
           userId,
@@ -1053,11 +1046,10 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         clearCredentialsCache(userId, 'aliexpress-dropshipping', environment);
         clearCredentialsCache(userId, 'aliexpress-dropshipping', environment === 'sandbox' ? 'production' : 'sandbox');
         
-        // ✅ CORRECCIÓN: Limpiar también el cache de API availability para forzar re-verificación
-        const { APIAvailabilityService } = await import('../../services/api-availability.service');
-        const apiAvailabilityService = new APIAvailabilityService();
-        // Invalidar cache de status para forzar re-verificación
-        await apiAvailabilityService.checkAliExpressDropshippingAPI(userId, environment, true).catch((err) => {
+        // ✅ CORRECCIÓN: Limpiar cache de API availability del singleton para que la UI muestre estado actualizado
+        const { apiAvailability } = await import('../../services/api-availability.service');
+        await apiAvailability.clearAPICache(userId, 'aliexpress-dropshipping').catch(() => {});
+        await apiAvailability.checkAliExpressDropshippingAPI(userId, environment, true).catch((err) => {
           logger.warn('[OAuth Callback] Error forcing AliExpress Dropshipping API status refresh', {
             error: err?.message || String(err),
             userId,

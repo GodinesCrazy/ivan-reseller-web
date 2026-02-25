@@ -292,11 +292,7 @@ export class MarketplaceService {
     const appId = (cred?.credentials?.appId || process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
     const certId = (cred?.credentials?.certId || process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
     let redirectUri = (cred?.credentials?.redirectUri || process.env.EBAY_RUNAME || process.env.EBAY_REDIRECT_URI || '').trim();
-    // eBay requiere RuName, NO URL completa. Fallback si env tiene URL.
-    const RUNAME_PRODUCTION = 'Ivan_Marty-IvanMart-IVANRe-cgcqu';
-    if (!redirectUri || redirectUri.startsWith('http') || redirectUri.includes('/')) {
-      redirectUri = (process.env.EBAY_RUNAME || '').trim() || RUNAME_PRODUCTION;
-    }
+    // eBay requiere RuName (no URL). Configurar EBAY_RUNAME o EBAY_REDIRECT_URI en env.
     if (!appId || !certId || !redirectUri) {
       throw new AppError(
         'eBay OAuth requiere EBAY_APP_ID, EBAY_CERT_ID y EBAY_REDIRECT_URI. Configúralos en Settings o variables de entorno.',
@@ -320,13 +316,15 @@ export class MarketplaceService {
     const payload = [userId, 'ebay', ts, nonce, redirB64, resolvedEnv, expirationTime.toString()].join('|');
     const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
     const state = Buffer.from([payload, sig].join('|')).toString('base64url');
-    // eBay requiere scopes en formato URL completo
+    // eBay requiere scopes en formato URL completo (evitar invalid_scope)
     const scopes = [
       'https://api.ebay.com/oauth/api_scope',
       'https://api.ebay.com/oauth/api_scope/sell.inventory.readonly',
       'https://api.ebay.com/oauth/api_scope/sell.inventory',
       'https://api.ebay.com/oauth/api_scope/sell.marketing.readonly',
       'https://api.ebay.com/oauth/api_scope/sell.marketing',
+      'https://api.ebay.com/oauth/api_scope/sell.account',
+      'https://api.ebay.com/oauth/api_scope/sell.fulfillment',
     ];
     const needsEncoding = /[^a-zA-Z0-9\-_.]/.test(redirectUri);
     const encodedRedirectUri = needsEncoding ? encodeURIComponent(redirectUri) : redirectUri;
