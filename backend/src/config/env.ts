@@ -248,8 +248,10 @@ const envSchema = z.object({
   // Express SIEMPRE debe iniciar para que la app funcione
   SAFE_BOOT: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
   API_URL: z.string().url().default('http://localhost:4000'),
+  BACKEND_URL: z.string().url().optional(), // Canonical backend public URL (used for OAuth callbacks)
+  RAILWAY_STATIC_URL: z.string().optional(), // Railway host, often without protocol
   FRONTEND_URL: z.string().url().optional(),
-  WEB_BASE_URL: z.string().url().optional(), // Base URL for OAuth callbacks (defaults to www.ivanreseller.com in production)
+  WEB_BASE_URL: z.string().url().optional(), // Frontend web URL (used for post-OAuth UI redirects)
   DATABASE_URL: databaseUrlSchema,
   REDIS_URL: redisUrlSchema,
   JWT_SECRET: z.string().default(''), // Phase 6: optional at parse - server validates without exit

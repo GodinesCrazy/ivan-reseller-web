@@ -1000,7 +1000,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         correlationId,
         userId,
         callbackUrl: callbackUrl.substring(0, 50) + '...',
-        source: process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI ? 'env_var_canonical' : 'web_base_url_canonical',
+        source: 'backend_canonical',
       });
 
       // Obtener credenciales base (appKey y appSecret)

@@ -11,6 +11,14 @@ import logger from '../../config/logger';
 const router = Router();
 const marketplaceService = new MarketplaceService();
 
+function getFrontendReturnBaseUrl(): string {
+  return (
+    process.env.FRONTEND_URL ||
+    process.env.WEB_BASE_URL ||
+    'https://www.ivanreseller.com'
+  ).replace(/\/$/, '');
+}
+
 /**
  * GET /api/marketplace-oauth/authorize/ebay
  * Redirects to eBay OAuth page. NO auth required (direct link for production).
@@ -202,8 +210,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       });
     }
     
-    const webBaseUrlForRedirect = process.env.WEB_BASE_URL ||
-      (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
+    const webBaseUrlForRedirect = getFrontendReturnBaseUrl();
 
     // Validar que no haya error en los parámetros de query
     if (errorStr) {
@@ -622,7 +629,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
     // Validar que no haya error en los parámetros de query (eBay devuelve error=invalid_scope, etc.)
     if (errorParam) {
       const errorDesc = String(req.query.error_description || 'Please try again.');
-      const webBase = process.env.WEB_BASE_URL || 'https://www.ivanreseller.com';
+      const webBase = getFrontendReturnBaseUrl();
       const returnUrl = `${webBase}/api-settings`;
       logger.error('[OAuth Callback] OAuth error from provider', {
         service: 'marketplace-oauth',
@@ -646,7 +653,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       `);
     }
     
-    const webBaseCallback = process.env.WEB_BASE_URL || 'https://www.ivanreseller.com';
+    const webBaseCallback = getFrontendReturnBaseUrl();
     const returnUrlCallback = `${webBaseCallback}/api-settings`;
 
     // Validar que el código no esté vacío
@@ -686,7 +693,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
           reason,
           stateLength: state.length,
         });
-        const returnUrlState = (process.env.WEB_BASE_URL || 'https://www.ivanreseller.com') + '/api-settings';
+        const returnUrlState = getFrontendReturnBaseUrl() + '/api-settings';
         return res.status(200).send(`
           <!DOCTYPE html>
           <html>
@@ -715,7 +722,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       } else if (parsed.reason === 'invalid_signature') {
         errorMessage = 'Error de verificación del estado de autorización.';
         hint = 'Asegúrate de usar la misma sesión (misma ventana de ivanreseller.com) y de que en eBay Developer el Redirect URL del RuName sea exactamente: ' +
-          (process.env.WEB_BASE_URL || 'https://www.ivanreseller.com') + '/api/marketplace-oauth/oauth/callback/ebay';
+          getFrontendReturnBaseUrl() + '/api/marketplace-oauth/oauth/callback/ebay';
       } else if (parsed.reason === 'invalid_format') {
         errorMessage = 'El enlace de autorización no es válido.';
       }
@@ -727,7 +734,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         stateLength: state.length
       });
       
-      const returnUrlState = (process.env.WEB_BASE_URL || 'https://www.ivanreseller.com') + '/api-settings';
+      const returnUrlState = getFrontendReturnBaseUrl() + '/api-settings';
         return res.status(200).send(`
           <!DOCTYPE html>
           <html>
@@ -1125,7 +1132,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       return res.status(400).send('<html><body>Marketplace not supported</body></html>');
     }
 
-    const successReturnUrl = (process.env.WEB_BASE_URL || 'https://www.ivanreseller.com') + '/api-settings?oauth=success&provider=' + req.params.marketplace;
+    const successReturnUrl = getFrontendReturnBaseUrl() + '/api-settings?oauth=success&provider=' + req.params.marketplace;
     res.send(`
       <!DOCTYPE html>
       <html>

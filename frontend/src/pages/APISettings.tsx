@@ -2424,7 +2424,7 @@ export default function APISettings() {
       let ruName: string | null = null;
       
       if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') {
-        // Callback canonical: backend usa /api/marketplace-oauth/callback (WEB_BASE_URL); no enviar redirect_uri
+        // Callback canonical: backend usa /api/marketplace-oauth/callback sobre dominio backend; no enviar redirect_uri
         // para que el backend use siempre la misma URL (evita pérdida de autorización y mismatch en token exchange)
         ruName = null;
         
