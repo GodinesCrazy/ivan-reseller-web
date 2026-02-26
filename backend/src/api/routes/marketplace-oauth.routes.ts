@@ -330,16 +330,16 @@ router.get('/callback', async (req: Request, res: Response) => {
       redirectUriLength: redirectUri?.length || 0,
     });
 
-    const webBaseUrl = process.env.WEB_BASE_URL ||
-      (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
+    const webBaseUrl = (process.env.WEB_BASE_URL || 
+      (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173')).replace(/\/$/, '');
+    const canonicalCallbackUrl = process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI ||
+      `${webBaseUrl}/api/marketplace-oauth/callback`;
 
     try {
-      // Intercambiar code por tokens (redirect_uri debe coincidir con el registrado en AliExpress)
-      const defaultCallbackUrl = `${webBaseUrl}/api/marketplace-oauth/callback`;
-      
+      // redirect_uri EXACTAMENTE el mismo que en getAuthUrl (canonical)
       const tokens = await aliexpressDropshippingAPIService.exchangeCodeForToken(
         codeStr,
-        redirectUri || defaultCallbackUrl,
+        canonicalCallbackUrl,
         appKey,
         appSecret
       );
@@ -455,70 +455,51 @@ router.get('/callback', async (req: Request, res: Response) => {
         });
       }
 
-      // ✅ FIX OAUTH: Redirect a frontend con query params para SPA routing
+      // ✅ Redirect a frontend (una sola ventana; postMessage + redirect para volver a la app)
       const successUrl = `${webBaseUrl}/api-settings?oauth=success&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
       const errorUrl = `${webBaseUrl}/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
       
-      // ✅ REDIRIGIR A PÁGINA DE ÉXITO: Si es popup, enviar mensaje y cerrar; si no, redirect directo
       res.send(`
+        <!DOCTYPE html>
         <html>
           <head>
+            <meta charset="utf-8">
             <title>Autorización completada</title>
             <style>
-              body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+              body { font-family: Arial, sans-serif; padding: 20px; text-align: center; max-width: 500px; margin: 2rem auto; }
               .success { color: green; font-size: 18px; margin: 20px 0; }
               .info { color: #666; font-size: 14px; margin-top: 20px; }
+              .btn { display: inline-block; margin-top: 1rem; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; }
+              .btn:hover { background: #1d4ed8; }
             </style>
           </head>
           <body>
-            <div class="success">✅ Autorización completada exitosamente</div>
-            <div class="info">Redirigiendo a la aplicación...</div>
-            <div class="info" style="font-size: 12px; margin-top: 30px;">Si no eres redirigido, <a href="${successUrl}">haz clic aquí</a></div>
-            <div class="info" style="font-size: 12px; margin-top: 10px;">Correlation ID: ${correlationId}</div>
+            <div class="success">✅ Autorización AliExpress completada</div>
+            <div class="info" id="msg">Comprobando ventana...</div>
+            <p><a href="${successUrl}" class="btn">Volver a API Settings</a></p>
             <script>
               (function() {
-                const successUrl = '${successUrl}';
-                let messageSent = false;
-                let redirected = false;
-                
-                // Función para enviar mensaje a la ventana padre (si es popup)
-                const sendMessage = () => {
-                  if (messageSent) return;
+                var u = '${successUrl.replace(/'/g, "\\'")}';
+                var sendMessage = function() {
                   if (window.opener && !window.opener.closed) {
                     try {
-                      window.opener.postMessage({ 
-                        type: 'oauth_success', 
-                        marketplace: 'aliexpress-dropshipping',
-                        correlationId: '${correlationId}',
-                        timestamp: Date.now()
-                      }, '*');
-                      console.log('[OAuth Callback] Success message sent to opener');
-                      messageSent = true;
-                      // Si es popup, cerrar después de enviar el mensaje
-                      setTimeout(() => {
-                        if (window.opener && !window.opener.closed) {
-                          window.close();
-                        }
-                      }, 500);
+                      window.opener.postMessage({ type: 'oauth_success', marketplace: 'aliexpress-dropshipping', correlationId: '${correlationId}', timestamp: Date.now() }, '*');
                       return true;
-                    } catch (e) {
-                      console.error('[OAuth Callback] Error sending message to opener:', e);
-                    }
+                    } catch (e) { return false; }
                   }
                   return false;
                 };
-                
-                // Intentar enviar mensaje inmediatamente
-                if (sendMessage()) {
-                  // Si se envió el mensaje (es popup), no hacer redirect
-                  return;
-                }
-                
-                // Si no hay opener (no es popup), hacer redirect inmediato
-                if (!redirected) {
-                  redirected = true;
-                  console.log('[OAuth Callback] No opener found, redirecting to:', successUrl);
-                  window.location.href = successUrl;
+                sendMessage();
+                setTimeout(function() { sendMessage(); }, 300);
+                setTimeout(function() { sendMessage(); }, 800);
+                if (window.opener && !window.opener.closed) {
+                  var msg = document.getElementById('msg');
+                  if (msg) msg.textContent = 'Ventana se cerrar\u00e1. La app se actualizar\u00e1 autom\u00e1ticamente.';
+                  setTimeout(function() { window.close(); }, 600);
+                } else {
+                  var msg = document.getElementById('msg');
+                  if (msg) msg.textContent = 'Redirigiendo a la aplicaci\u00f3n en unos segundos...';
+                  setTimeout(function() { window.location.href = u; }, 2000);
                 }
               })();
             </script>
@@ -1100,47 +1081,42 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       return res.status(400).send('<html><body>Marketplace not supported</body></html>');
     }
 
+    const webBase = process.env.WEB_BASE_URL || 'https://www.ivanreseller.com';
+    const returnUrl = webBase + '/api-settings?oauth=success&provider=' + req.params.marketplace;
     res.send(`
+      <!DOCTYPE html>
       <html>
         <head>
+          <meta charset="utf-8">
           <title>Autorización completada</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+            body { font-family: Arial, sans-serif; padding: 20px; text-align: center; max-width: 500px; margin: 2rem auto; }
             .success { color: green; font-size: 18px; margin: 20px 0; }
-            .error { color: red; font-size: 18px; margin: 20px 0; }
             .info { color: #666; font-size: 14px; margin-top: 20px; }
+            .btn { display: inline-block; margin-top: 1rem; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; }
+            .btn:hover { background: #1d4ed8; }
           </style>
         </head>
         <body>
           <div class="success">✅ Autorización completada exitosamente</div>
-          <div class="info">Puedes cerrar esta ventana y regresar a la aplicación.</div>
+          <div class="info">Redirigiendo a la aplicación en unos segundos...</div>
+          <p><a href="${returnUrl}" class="btn">Volver a API Settings</a></p>
           <script>
-            // ✅ CORRECCIÓN: Enviar mensaje inmediatamente y también después de un delay
-            // Esto asegura que el mensaje se envíe incluso si hay problemas de timing
-            const sendMessage = () => {
-              if (window.opener && !window.opener.closed) {
-                try {
-                  window.opener.postMessage({ 
-                    type: 'oauth_success', 
-                    marketplace: '${req.params.marketplace}',
-                    timestamp: Date.now()
-                  }, '*');
-                  console.log('[OAuth Callback] Success message sent to opener');
-                } catch (e) {
-                  console.error('[OAuth Callback] Error sending message to opener:', e);
+            (function() {
+              var sendMessage = function() {
+                if (window.opener && !window.opener.closed) {
+                  try {
+                    window.opener.postMessage({ type: 'oauth_success', marketplace: '${req.params.marketplace}', timestamp: Date.now() }, '*');
+                  } catch (e) {}
                 }
-              } else {
-                console.warn('[OAuth Callback] No opener window found or opener is closed');
-              }
-            };
-            
-            // Intentar enviar inmediatamente
-            sendMessage();
-            
-            // También intentar después de un delay (por si el opener aún no está listo)
-            setTimeout(sendMessage, 500);
-            setTimeout(sendMessage, 1000);
-            setTimeout(sendMessage, 2000);
+              };
+              sendMessage();
+              setTimeout(sendMessage, 300);
+              setTimeout(sendMessage, 800);
+              setTimeout(function() {
+                window.location.href = '${returnUrl}';
+              }, 2000);
+            })();
           </script>
         </body>
       </html>

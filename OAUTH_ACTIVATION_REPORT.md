@@ -33,10 +33,10 @@
 - **GET /api/marketplace/auth-url/:marketplace** (authenticated).
 - For **aliexpress-dropshipping:**
   - Resolves environment (sandbox/production).
-  - Default callback: `WEB_BASE_URL + '/api/aliexpress/callback'` (e.g. `https://www.ivanreseller.com/api/aliexpress/callback`). Can be overridden by `redirect_uri` query, or from stored credentials, or `ALIEXPRESS_DROPSHIPPING_REDIRECT_URI`.
+  - **Callback canonical:** `ALIEXPRESS_DROPSHIPPING_REDIRECT_URI` or `WEB_BASE_URL + '/api/marketplace-oauth/callback'`. Frontend does **not** send `redirect_uri`; backend always uses this canonical URL (avoids mismatch and session issues).
   - Loads creds: **CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', resolvedEnv)**. Requires **appKey** and **appSecret** already saved (returns 422 if missing).
-  - Builds **state** (signed payload with userId, marketplace, redirectUri, environment).
-  - **aliexpressDropshippingAPIService.getAuthUrl(callbackUrl, state, appKey)** ? authUrl.
+  - Builds **state** via **signStateAliExpress(userId)** (JWT stateless).
+  - **aliexpressDropshippingAPIService.getAuthUrl(callbackUrl, state, appKey)** → authUrl.
   - Returns **JSON: { success: true, data: { authUrl } }**.
 
 ### auth.service.ts
@@ -193,4 +193,12 @@ El flujo OAuth est� implementado de extremo a extremo (auth URL, callback, exc
 
 ---
 
-*End of report. Last updated: 2026-02-24 (OAuth state: JWT stateless; ver OAUTH_ALIEXPRESS_DROPSHIPPING_FIX_REPORT.md).*
+---
+
+## ACTUALIZACIÓN 2026-02-24 — Una ventana y sesión persistente
+
+- **Una sola ventana OAuth:** Target `oauth_<apiName>`; comprobación de ventana existente al inicio de `handleOAuth`; ref "abriendo" antes de `window.open` para evitar doble clic; eliminado botón "Abrir aquí" en AliExpress Dropshipping.
+- **Sin pérdida de sesión:** En el callback de éxito, si existe `window.opener` (popup), solo se envía `postMessage` y se cierra el popup (`window.close()`); no se redirige el popup a api-settings, así la sesión permanece en la ventana principal.
+- **Callback canonical:** Backend usa siempre `/api/marketplace-oauth/callback`; frontend no envía `redirect_uri` para aliexpress-dropshipping.
+
+*End of report. Last updated: 2026-02-24.*

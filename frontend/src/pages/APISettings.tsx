@@ -2344,6 +2344,15 @@ export default function APISettings() {
     if (oauthInProgressRef.current[apiName]) {
       return;
     }
+    if (openOAuthWindowRef.current?.apiName === apiName) {
+      const w = openOAuthWindowRef.current.win;
+      if (w && !w.closed) {
+        try { w.focus(); } catch (_) {}
+        return;
+      }
+      if (!w) return;
+      openOAuthWindowRef.current = null;
+    }
     oauthInProgressRef.current[apiName] = true;
     setOauthing(apiName);
     setError(null);
@@ -2368,13 +2377,9 @@ export default function APISettings() {
       let ruName: string | null = null;
       
       if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') {
-        // Usar el callback URL fijo para AliExpress Dropshipping
-        // Debe coincidir exactamente con el configurado en AliExpress Open Service
-        // En producción: https://ivanreseller.com/aliexpress/callback
-        const callbackUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-          ? 'https://ivanreseller.com/aliexpress/callback' // Usar producción incluso en desarrollo
-          : `${window.location.protocol}//${window.location.host}/aliexpress/callback`;
-        ruName = callbackUrl;
+        // Callback canonical: backend usa /api/marketplace-oauth/callback (WEB_BASE_URL); no enviar redirect_uri
+        // para que el backend use siempre la misma URL (evita pérdida de autorización y mismatch en token exchange)
+        ruName = null;
         
         // Validar que App Key y App Secret estén configurados
         const missing = ['appKey', 'appSecret'].filter((field) => !String(storedCreds[field] || '').trim());
@@ -2451,10 +2456,9 @@ export default function APISettings() {
       }
 
       const { data } = await api.get(`/api/marketplace/auth-url/${apiName}`, {
-        params: {
-          redirect_uri: ruName,
-          environment,
-        },
+        params: (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping')
+          ? { environment }
+          : { redirect_uri: ruName, environment },
       });
       
       // Verificar si hay errores en la respuesta
@@ -2543,18 +2547,18 @@ export default function APISettings() {
       // ✅ Evitar dos ventanas: si ya hay una ventana OAuth abierta para esta API, enfocarla y no abrir otra
       const existing = openOAuthWindowRef.current;
       if (existing?.apiName === apiName && existing?.win && !existing.win.closed) {
-        try {
-          existing.win.focus();
-        } catch (_) {}
+        try { existing.win.focus(); } catch (_) {}
         delete oauthInProgressRef.current[apiName];
         setOauthing(null);
         return;
       }
       openOAuthWindowRef.current = null;
-      
+      // ✅ Marcar "abriendo" de inmediato para que un segundo clic no abra otra ventana
+      const openTarget = 'oauth_' + apiName;
+      openOAuthWindowRef.current = { apiName, win: null as unknown as Window };
       let oauthWindow: Window | null = null;
       try {
-        oauthWindow = window.open(authUrl, 'oauth', 'noopener,noreferrer,width=500,height=700');
+        oauthWindow = window.open(authUrl, openTarget, 'noopener,noreferrer,width=500,height=700');
         log.debug('[APISettings] window.open() result:', {
           oauthWindow: !!oauthWindow,
           oauthWindowType: typeof oauthWindow,
@@ -2579,34 +2583,18 @@ export default function APISettings() {
       
       // ✅ FASE A: Verificar explícitamente null Y undefined (algunos navegadores pueden retornar undefined)
       if (oauthWindow === null || oauthWindow === undefined) {
-        // ✅ FASE A: Si popup falla, usar redirect en misma pestaña como fallback
+        openOAuthWindowRef.current = null;
         log.error('[APISettings] OAuth window blocked - window.open() returned null/undefined, using redirect fallback', {
-          oauthWindow: oauthWindow,
-          isNull: oauthWindow === null,
-          isUndefined: oauthWindow === undefined,
           apiName,
         });
-        
-        // ✅ FASE A: Para TODOS los marketplaces, usar redirect si popup falla (no solo aliexpress-dropshipping)
         log.info('[APISettings] Using redirect fallback for OAuth (popup blocked)', { apiName });
-        try {
-          toast('Abriendo OAuth en esta pestaña...', { icon: 'ℹ️' });
-        } catch (toastError) {
-          // ✅ FASE A: Fallback silencioso si toast falla - NO romper flujo OAuth
-          console.log('[APISettings] Toast failed, continuing with redirect:', toastError);
-        }
+        try { toast('Abriendo OAuth en esta pestaña...', { icon: 'ℹ️' }); } catch (_) {}
         window.location.href = authUrl;
         setOauthing(null);
         return;
       }
       
-      // ✅ Si oauthWindow existe (no es null ni undefined), se abrió correctamente (incluso si es cross-origin)
-      // NO verificar .closed porque puede ser true inmediatamente para cross-origin
-      log.info('[APISettings] OAuth window opened successfully', {
-        oauthWindow: !!oauthWindow,
-        oauthWindowType: typeof oauthWindow,
-        // No verificar .closed aquí porque puede ser true para cross-origin
-      });
+      log.info('[APISettings] OAuth window opened successfully', { apiName });
       openOAuthWindowRef.current = { apiName, win: oauthWindow };
       
       // ✅ CORRECCIÓN: Asegurar que el modal esté cerrado cuando la ventana se abre correctamente
@@ -3826,18 +3814,14 @@ export default function APISettings() {
                             });
                             const storedCreds = credResponse.data?.data?.credentials || {};
                             
-                            const callbackUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-                              ? 'https://ivanreseller.com/aliexpress/callback'
-                              : `${window.location.protocol}//${window.location.host}/aliexpress/callback`;
-                            
                             const missing = ['appKey', 'appSecret'].filter((field) => !String(storedCreds[field] || '').trim());
                             if (missing.length) {
                               toast.error('Completa y guarda App Key y App Secret antes de autorizar con OAuth.');
                               return null;
                             }
-                            
+                            // Backend usa callback canonical /api/marketplace-oauth/callback; no enviar redirect_uri
                             const { data: authData } = await api.get(`/api/marketplace/auth-url/${apiDef.name}`, {
-                              params: { redirect_uri: callbackUrl, environment: env },
+                              params: { environment: env },
                             });
                             
                             const url = authData?.data?.authUrl || authData?.authUrl || authData?.url;
@@ -3895,24 +3879,14 @@ export default function APISettings() {
                                 )}
                                 {/* ✅ FIX OAUTH ROBUSTO: Botones alternativos para aliexpress-dropshipping */}
                                 {isAliExpressDropshipping && (
-                                  <>
-                                    <button
-                                      onClick={handleOpenOAuthInSameTab}
-                                      disabled={oauthing === apiDef.name}
-                                      className="px-3 py-1 text-xs font-semibold bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50"
-                                      title="Abrir OAuth en esta pestaña"
-                                    >
-                                      Abrir aquí
-                                    </button>
-                                    <button
-                                      onClick={handleCopyOAuthUrl}
-                                      disabled={oauthing === apiDef.name}
-                                      className="px-3 py-1 text-xs font-semibold bg-gray-600 text-white rounded hover:bg-gray-700 transition disabled:opacity-50"
-                                      title="Copiar link OAuth"
-                                    >
-                                      Copiar link
-                                    </button>
-                                  </>
+                                  <button
+                                    onClick={handleCopyOAuthUrl}
+                                    disabled={oauthing === apiDef.name}
+                                    className="px-3 py-1 text-xs font-semibold bg-gray-600 text-white rounded hover:bg-gray-700 transition disabled:opacity-50"
+                                    title="Copiar link OAuth"
+                                  >
+                                    Copiar link
+                                  </button>
                                 )}
                               </div>
                             </div>
