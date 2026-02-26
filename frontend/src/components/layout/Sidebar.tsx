@@ -52,6 +52,7 @@ const navItems: NavItem[] = [
   { path: '/system-status', label: 'Estado del sistema', icon: Activity },
   { path: '/workflow-config', label: 'Config. workflows', icon: Settings },
   { path: '/settings', label: 'Configuración', icon: Settings },
+  { path: '/api-settings', label: 'API Settings', icon: Settings },
   { path: '/meeting-room', label: 'Sala de reuniones', icon: Video },
   { path: '/help', label: 'Centro de ayuda', icon: HelpCircle },
   { path: '/onboarding', label: 'Asistente de configuración', icon: Settings },
