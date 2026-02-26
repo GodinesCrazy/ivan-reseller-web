@@ -972,12 +972,12 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
 
       try {
         // 🔥 PASO 4: Intercambiar code por tokens
-        // ✅ CANONICAL DOMAIN: Usar WEB_BASE_URL para mantener consistencia con el redirect_uri usado en getAuthUrl
-        const webBaseUrl = process.env.WEB_BASE_URL || 
-                          (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
-        // ✅ CORRECCIÓN: Callback debe incluir /api porque el serverless function está en /api/aliexpress/callback
-        const defaultCallbackUrl = `${webBaseUrl}/api/aliexpress/callback`;
-        
+        // ✅ CANONICAL: Mismo redirect_uri que getAuthUrl en marketplace.routes (/api/marketplace-oauth/callback)
+        const webBaseUrl = (process.env.WEB_BASE_URL || 
+          (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173')).replace(/\/$/, '');
+        const defaultCallbackUrl = process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI ||
+          `${webBaseUrl}/api/marketplace-oauth/callback`;
+
         const tokens = await aliexpressDropshippingAPIService.exchangeCodeForToken(
           code,
           redirectUri || defaultCallbackUrl,

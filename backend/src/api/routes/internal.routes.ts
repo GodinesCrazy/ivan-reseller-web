@@ -291,18 +291,20 @@ router.post('/test-post-sale-flow', validateInternalSecret, async (req: Request,
   }
 });
 
-// POST /api/internal/test-fulfillment-only - Test AliExpress purchase without PayPal capture (for production)
+// POST /api/internal/test-fulfillment-only - Test AliExpress purchase (real Dropshipping API when userId provided)
 router.post('/test-fulfillment-only', validateInternalSecret, async (req: Request, res: Response) => {
   const startTime = Date.now();
   const body = req.body || {};
   const productUrl = (body.productUrl as string) || 'https://www.aliexpress.com/item/example.html';
   const price = parseFloat(body.price as string) || 10.99;
+  const userId = body.userId != null ? Number(body.userId) : undefined;
+  const productId = body.productId != null ? Number(body.productId) : undefined;
   const customer = body.customer as Record<string, string> || {};
   const name = customer.name || 'John Doe';
   const email = customer.email || 'john@test.com';
   const address = customer.address || '123 Main St, Miami, FL, US';
 
-  logger.info('[INTERNAL] POST /api/internal/test-fulfillment-only', { productUrl, price });
+  logger.info('[INTERNAL] POST /api/internal/test-fulfillment-only', { productUrl, price, userId: userId ?? null, productId: productId ?? null });
 
   try {
     const { prisma } = await import('../../config/database');
@@ -320,6 +322,8 @@ router.post('/test-fulfillment-only', validateInternalSecret, async (req: Reques
 
     const order = await prisma.order.create({
       data: {
+        userId: userId ?? undefined,
+        productId: Number.isNaN(productId as number) ? undefined : productId,
         title: 'Test Fulfillment',
         price,
         currency: 'USD',
