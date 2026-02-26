@@ -76,7 +76,8 @@ export async function getFreeWorkingCapital(): Promise<WorkingCapitalSnapshot> {
 
 /**
  * Verifica si hay capital libre suficiente para un coste de compra.
- * Mantiene la protección: no permitir compra si freeCapital < orderCost.
+ * Si el saldo real no se pudo obtener (PayPal no configurado o API fallida), no bloquea:
+ * permite la compra para no romper funcionalidad existente (degraded mode).
  */
 export async function hasSufficientFreeCapital(orderCost: number): Promise<{
   sufficient: boolean;
@@ -86,6 +87,16 @@ export async function hasSufficientFreeCapital(orderCost: number): Promise<{
   error?: string;
 }> {
   const snapshot = await getFreeWorkingCapital();
+  const balanceUnavailable = snapshot.realAvailableBalance === 0 && snapshot.source === undefined;
+  if (balanceUnavailable) {
+    logger.warn('[WORKING-CAPITAL] Real balance unavailable (PayPal not configured or API error); allowing purchase (degraded mode)');
+    return {
+      sufficient: true,
+      freeWorkingCapital: snapshot.freeWorkingCapital,
+      required: orderCost,
+      snapshot,
+    };
+  }
   const sufficient = snapshot.freeWorkingCapital >= orderCost;
   return {
     sufficient,

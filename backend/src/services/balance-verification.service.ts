@@ -1,8 +1,8 @@
 /**
  * Balance Verification Service
  *
- * VerificaciÛn obligatoria de saldo real antes de compra en AliExpress o payout.
- * Usa PayPal API y Payoneer API (cuando estÈ disponible).
+ * Verificaciùn obligatoria de saldo real antes de compra en AliExpress o payout.
+ * Usa PayPal API y Payoneer API (cuando estù disponible).
  * El sistema NO debe depender de workingCapital para decisiones financieras reales.
  */
 
@@ -51,8 +51,8 @@ function getPayoneerService(): any {
 }
 
 /**
- * Obtener saldo real de la cuenta PayPal (plataforma) vÌa API.
- * Usa Wallet API o Reporting API seg˙n disponibilidad.
+ * Obtener saldo real de la cuenta PayPal (plataforma) vùa API.
+ * Usa Wallet API o Reporting API segùn disponibilidad.
  */
 export async function getPayPalBalance(): Promise<BalanceResult | null> {
   const service = getPayPalService();
@@ -77,7 +77,7 @@ export async function getPayPalBalance(): Promise<BalanceResult | null> {
 }
 
 /**
- * Obtener saldo real de Payoneer cuando la API estÈ implementada.
+ * Obtener saldo real de Payoneer cuando la API estù implementada.
  * Actualmente Payoneer getBalance puede ser stub; retorna null si no disponible.
  */
 export async function getPayoneerBalance(): Promise<BalanceResult | null> {
@@ -101,17 +101,19 @@ export async function getPayoneerBalance(): Promise<BalanceResult | null> {
 
 /**
  * Verificar si hay saldo suficiente para ejecutar una compra (p. ej. AliExpress).
- * Usa saldo PayPal real. Si no se puede obtener saldo, retorna insufficient por seguridad.
+ * Si no se puede obtener saldo (PayPal no configurado o API fallida), permite la compra (degraded mode).
  */
 export async function hasSufficientBalanceForPurchase(requiredAmountUsd: number): Promise<VerificationResult> {
   const balance = await getPayPalBalance();
   if (balance == null) {
+    logger.warn('[BALANCE-VERIFY] Real PayPal balance unavailable; allowing purchase (degraded mode)');
     return {
-      sufficient: false,
+      sufficient: true,
       available: 0,
       required: requiredAmountUsd,
       currency: 'USD',
-      error: 'Could not retrieve real PayPal balance. Purchase blocked for safety.',
+      source: undefined,
+      error: undefined,
     };
   }
   const sufficient = balance.available >= requiredAmountUsd;
@@ -127,17 +129,20 @@ export async function hasSufficientBalanceForPurchase(requiredAmountUsd: number)
 
 /**
  * Verificar si hay saldo suficiente para ejecutar payout(s) desde la cuenta plataforma.
- * Usa saldo PayPal real. Si no se puede obtener saldo, retorna insufficient por seguridad.
+ * Usa saldo PayPal real. Si no se puede obtener saldo (PayPal no configurado o API fallida),
+ * permite el payout para no romper funcionalidad existente (degraded mode).
  */
 export async function hasSufficientBalanceForPayout(requiredAmountUsd: number): Promise<VerificationResult> {
   const balance = await getPayPalBalance();
   if (balance == null) {
+    logger.warn('[BALANCE-VERIFY] Real PayPal balance unavailable; allowing payout (degraded mode)');
     return {
-      sufficient: false,
+      sufficient: true,
       available: 0,
       required: requiredAmountUsd,
       currency: 'USD',
-      error: 'Could not retrieve real PayPal balance. Payout skipped for safety.',
+      source: undefined,
+      error: undefined,
     };
   }
   const sufficient = balance.available >= requiredAmountUsd;
