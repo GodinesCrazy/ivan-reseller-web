@@ -13,11 +13,15 @@ import fs from 'fs';
 const envLocalPath = path.join(process.cwd(), '.env.local');
 config({ path: envLocalPath, override: true });
 
-// Credentials from user
-const APP_KEY = '524880';
-const APP_SECRET = 'OKxmE8VLJfgkfrlP0JWs3N9vzQnwXJY6';
-const REDIRECT_URI = 'https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback';
-const TRACKING_ID = 'ivanreseller';
+// Credentials from env only (never hardcode)
+const APP_KEY = (process.env.ALIEXPRESS_APP_KEY || '').trim();
+const APP_SECRET = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+const REDIRECT_URI = (process.env.ALIEXPRESS_REDIRECT_URI || process.env.ALIEXPRESS_CALLBACK_URL || 'https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback').trim();
+const TRACKING_ID = (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim();
+if (!APP_KEY || !APP_SECRET) {
+  console.error('Configure ALIEXPRESS_APP_KEY and ALIEXPRESS_APP_SECRET in .env.local (never in code).');
+  process.exit(1);
+}
 
 console.log('========================================================');
 console.log('ALIEXPRESS CREDENTIALS SETUP & TEST');

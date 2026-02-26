@@ -35,7 +35,7 @@
 **Estado:** ✅ **Configurada**  
 **Credenciales Encontradas:**
 - ✅ AppKey: `522578` (presente)
-- ✅ App Secret: `uWGIINO42wgJWP2RiIiZnPJv0VSeoI27` (presente)
+- ✅ App Secret: [REDACTED – set via ALIEXPRESS_DROPSHIPPING_APP_SECRET in env]
 - ✅ Callback URL: `https://ivanreseller.com/aliexpress/callback` (presente)
 
 **⚠️ ACCIÓN REQUERIDA:**

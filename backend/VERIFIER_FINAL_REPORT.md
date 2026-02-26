@@ -10,16 +10,18 @@
 
 ## Env vars set (from APIS.txt / APIS2.txt)
 
+**All credential values must be set via environment or gitignored files. Never commit secrets.**
+
 | Variable | Source |
 |----------|--------|
-| **SERP_API_KEY** | 09092b14341c43ee95ef9a800d45038f19650a62d9e50ef6d139235f207eaac0 |
-| **ALIEXPRESS_APP_KEY** | 524880 (Affiliates API) |
-| **ALIEXPRESS_APP_SECRET** | OKxmE8VLJfgkfrlP0JWs3N9vzQnwXJY6 |
-| **SCRAPER_API_KEY** | dcf670062204cca55c67994fde6011d6 |
-| **ZENROWS_API_KEY** | 4aec1ce3759a849e17a74b6dbc20b13742548d7a |
-| **INTERNAL_RUN_SECRET** | Generated (crypto.randomBytes) when missing |
-| **JWT_SECRET** | Generated (≥32 chars) when missing |
-| **ENCRYPTION_KEY** | Generated (≥32 chars) when missing |
+| **SERP_API_KEY** | Set via env / APIS2 (redacted) |
+| **ALIEXPRESS_APP_KEY** | Set via env / APIS2 (redacted) |
+| **ALIEXPRESS_APP_SECRET** | Set via env / APIS2 (redacted) |
+| **SCRAPER_API_KEY** | Set via env / APIS2 (redacted) |
+| **ZENROWS_API_KEY** | Set via env / APIS2 (redacted) |
+| **INTERNAL_RUN_SECRET** | Generated (crypto.randomBytes) when missing, or set via env |
+| **JWT_SECRET** | Generated (≥32 chars) when missing, or set via env |
+| **ENCRYPTION_KEY** | Generated (≥32 chars) when missing, or set via env |
 | **DATABASE_URL** | From existing .env / .env.local |
 
 ---

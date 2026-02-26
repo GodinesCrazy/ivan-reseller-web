@@ -51,10 +51,15 @@ export function verifyStateAliExpress(state: string): OAuthStatePayload {
   return decoded;
 }
 
+/** Result of safe state verification (discriminated union for strict narrowing). */
+export type VerifyStateResult =
+  | { ok: true; userId: number }
+  | { ok: false; reason: string };
+
 /**
- * Safe verify: returns null if invalid/expired instead of throwing.
+ * Safe verify: returns result object; use parsed.ok === false then parsed.reason.
  */
-export function verifyStateAliExpressSafe(state: string): { ok: true; userId: number } | { ok: false; reason: string } {
+export function verifyStateAliExpressSafe(state: string): VerifyStateResult {
   try {
     const payload = verifyStateAliExpress(state);
     return { ok: true, userId: payload.userId };

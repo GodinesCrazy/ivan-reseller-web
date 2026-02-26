@@ -2,48 +2,46 @@
 
 ## ? Credenciales Configuradas
 
-- **AppKey**: `524880`
-- **App Secret**: `OKxmE8VLJfgkfrlP0JWs3N9vzQnwXJY6` ? Configurado
+- **AppKey**: Configurar `ALIEXPRESS_APP_KEY` en env (nunca en cùdigo).
+- **App Secret**: Configurar `ALIEXPRESS_APP_SECRET` en env (nunca en cùdigo).
 - **Redirect URI**: `https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback`
 - **Tracking ID**: `ivanreseller`
 
-## ?? URL de AutorizaciÛn
+## ?? URL de Autorizaciùn
 
 Abre esta URL en tu navegador:
 
-```
-https://api-sg.aliexpress.com/oauth/authorize?response_type=code&client_id=524880&redirect_uri=https%3A%2F%2Fivan-reseller-backend-production.up.railway.app%2Fapi%2Faliexpress%2Fcallback
-```
+Genera la URL con: `cd backend && npx tsx scripts/generate-auth-url-direct.ts` (usa ALIEXPRESS_APP_KEY de .env.local). O desde frontend: API Settings ? Conectar AliExpress.
 
-## ?? Pasos para Obtener el CÛdigo
+## ?? Pasos para Obtener el Cùdigo
 
 1. **Abre la URL de arriba** en tu navegador
-2. **Inicia sesiÛn** en AliExpress si es necesario
-3. **Autoriza la aplicaciÛn** "IvanReseller Affiliate API"
-4. Ser·s **redirigido** a una URL como esta:
+2. **Inicia sesiùn** en AliExpress si es necesario
+3. **Autoriza la aplicaciùn** "IvanReseller Affiliate API"
+4. Serùs **redirigido** a una URL como esta:
    ```
    https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback?code=ABC123XYZ789...
    ```
-5. **Copia el valor del par·metro `code`** de esa URL
+5. **Copia el valor del parùmetro `code`** de esa URL
    - Ejemplo: Si la URL es `...?code=ABC123XYZ789`, copia `ABC123XYZ789`
 
 ## ?? Ejecutar el Test Completo
 
-Una vez que tengas el cÛdigo, ejecuta:
+Una vez que tengas el cùdigo, ejecuta:
 
 ```bash
 cd backend
 npx tsx scripts/test-aliexpress-full-flow.ts TU_CODIGO_AQUI
 ```
 
-Reemplaza `TU_CODIGO_AQUI` con el cÛdigo que copiaste.
+Reemplaza `TU_CODIGO_AQUI` con el cùdigo que copiaste.
 
-## ? QuÈ Hace el Test
+## ? Quù Hace el Test
 
-El script verificar·:
+El script verificarù:
 1. ? Variables de entorno configuradas
-2. ? Intercambio de cÛdigo por access_token
-3. ? ValidaciÛn del token
+2. ? Intercambio de cùdigo por access_token
+3. ? Validaciùn del token
 4. ? Prueba de API de afiliados con 4 keywords:
    - `phone case`
    - `wireless earbuds`
@@ -53,7 +51,7 @@ El script verificar·:
 
 ## ?? Resultado Esperado
 
-Si todo funciona correctamente, ver·s:
+Si todo funciona correctamente, verùs:
 ```
 ? VERIFICATION COMPLETE
    Successful keywords: 4/4
@@ -66,10 +64,10 @@ Si todo funciona correctamente, ver·s:
 
 ## ?? Si Algo Falla
 
-- **Si no hay productos**: Puede indicar que el permiso de Affiliate API no est· habilitado en AliExpress Open Platform
-- **Si el token falla**: Verifica que el cÛdigo no haya expirado (los cÛdigos expiran en 10 minutos)
-- **Si hay errores de signature**: El script mostrar· logs detallados para debugging
+- **Si no hay productos**: Puede indicar que el permiso de Affiliate API no estù habilitado en AliExpress Open Platform
+- **Si el token falla**: Verifica que el cùdigo no haya expirado (los cùdigos expiran en 10 minutos)
+- **Si hay errores de signature**: El script mostrarù logs detallados para debugging
 
 ---
 
-**Estado Actual**: ? Credenciales configuradas, listo para obtener cÛdigo y testear
+**Estado Actual**: ? Credenciales configuradas, listo para obtener cùdigo y testear

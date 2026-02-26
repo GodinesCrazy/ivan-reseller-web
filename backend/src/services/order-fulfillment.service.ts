@@ -7,6 +7,7 @@ import { prisma } from '../config/database';
 import logger from '../config/logger';
 import { purchaseRetryService } from './purchase-retry.service';
 import { checkDailyLimits } from './daily-limits.service';
+import { hasSufficientFreeCapital } from './working-capital.service';
 
 export type OrderStatus = 'CREATED' | 'PAID' | 'PURCHASING' | 'PURCHASED' | 'FAILED' | 'SIMULATED';
 
@@ -79,6 +80,37 @@ export class OrderFulfillmentService {
       country: shippingObj.country || 'US',
       phoneNumber: shippingObj.phoneNumber || '',
     };
+
+    // Verificación por capital libre: freeCapital >= orderCost (saldo real − capital comprometido)
+    const purchaseCost = Number(order.price) || 0;
+    if (purchaseCost > 0) {
+      const capitalCheck = await hasSufficientFreeCapital(purchaseCost);
+      if (!capitalCheck.sufficient) {
+        const errMsg = `FAILED_INSUFFICIENT_FUNDS: ${capitalCheck.error || 'Insufficient free working capital'}`;
+        await this.markFailed(orderId, errMsg);
+        logger.warn('[ORDER-FULFILLMENT] Purchase blocked: insufficient free working capital', {
+          orderId,
+          required: capitalCheck.required,
+          freeWorkingCapital: capitalCheck.freeWorkingCapital,
+          realBalance: capitalCheck.snapshot.realAvailableBalance,
+          committedCapital: capitalCheck.snapshot.committedCapital,
+        });
+        return {
+          success: false,
+          orderId,
+          status: 'FAILED',
+          error: errMsg,
+        };
+      }
+      logger.info('[ORDER-FULFILLMENT] Free working capital verified', {
+        orderId,
+        required: capitalCheck.required,
+        freeWorkingCapital: capitalCheck.freeWorkingCapital,
+        realBalance: capitalCheck.snapshot.realAvailableBalance,
+        committedCapital: capitalCheck.snapshot.committedCapital,
+      });
+    }
+
     try {
       const result = await purchaseRetryService.attemptPurchase(
         productUrl,
@@ -86,7 +118,8 @@ export class OrderFulfillmentService {
         Number(order.price) * 1.5,
         shippingAddr,
         undefined,
-        orderId
+        orderId,
+        order.userId ?? undefined
       );
 
       if (result.success && result.orderId && result.orderId !== 'SIMULATED_ORDER_ID') {

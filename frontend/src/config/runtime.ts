@@ -71,6 +71,25 @@ export function getApiBaseUrl(): string {
 export const API_BASE_URL = getApiBaseUrl();
 
 /**
+ * Obtiene la URL y opciones para Socket.IO.
+ * Vercel no soporta WebSocket proxying; en producción con proxy /api usamos path
+ * /api/socket.io para que el rewrite envíe al backend. Si VITE_SOCKET_URL está
+ * definida, conectamos directamente al backend (evita proxy).
+ */
+export function getSocketOptions(): { url: string; path: string } {
+  const socketUrl = import.meta.env.VITE_SOCKET_URL?.trim();
+  if (socketUrl) {
+    return { url: socketUrl.replace(/\/+$/, ''), path: '/socket.io' };
+  }
+  if (API_BASE_URL.startsWith('/')) {
+    // Misma origin; path /api/socket.io para que el rewrite de Vercel lo envíe al backend
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    return { url: origin, path: '/api/socket.io' };
+  }
+  return { url: API_BASE_URL, path: '/socket.io' };
+}
+
+/**
  * Verifica si la URL base tiene el sufijo /api
  * Útil para normalizar rutas que ya incluyen /api
  */
@@ -85,9 +104,12 @@ export const LOG_LEVEL = (import.meta.env.VITE_LOG_LEVEL || 'warn').toLowerCase(
  * Información de diagnóstico (para página de diagnostics)
  */
 export function getDiagnosticsInfo() {
+  const socketOpts = getSocketOptions();
   return {
     apiBaseUrl: API_BASE_URL,
     apiBaseHasSuffix: API_BASE_HAS_SUFFIX,
+    socketUrl: socketOpts.url || '(same-origin)',
+    socketPath: socketOpts.path,
     logLevel: LOG_LEVEL,
     isProduction,
     isDevelopment,

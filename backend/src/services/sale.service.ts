@@ -347,6 +347,31 @@ export class SaleService {
       return sale;
     }
 
+    // Verificación obligatoria de saldo real antes de payout (no workingCapital)
+    const totalPayoutAmount = commissionAmountNum + netProfitNum;
+    const { hasSufficientBalanceForPayout } = await import('./balance-verification.service');
+    const payoutBalanceCheck = await hasSufficientBalanceForPayout(totalPayoutAmount);
+    if (!payoutBalanceCheck.sufficient) {
+      await prisma.sale.update({
+        where: { id: sale.id },
+        data: { status: 'PAYOUT_SKIPPED_INSUFFICIENT_FUNDS' as any },
+      });
+      logger.warn('[SALE] Payout skipped: insufficient real balance', {
+        saleId: sale.id,
+        required: payoutBalanceCheck.required,
+        available: payoutBalanceCheck.available,
+        source: payoutBalanceCheck.source,
+        error: payoutBalanceCheck.error,
+      });
+      return sale;
+    }
+    logger.info('[SALE] Real balance verified for payout', {
+      saleId: sale.id,
+      required: payoutBalanceCheck.required,
+      available: payoutBalanceCheck.available,
+      source: payoutBalanceCheck.source,
+    });
+
     let adminPayoutId: string | null = null;
     let userPayoutId: string | null = null;
 

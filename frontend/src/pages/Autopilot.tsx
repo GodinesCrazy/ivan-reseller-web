@@ -321,7 +321,7 @@ export default function Autopilot() {
         toast.error('No se pudo obtener la URL de autorización de eBay');
         return;
       }
-      const win = window.open(authUrl, '_blank', 'noopener,noreferrer,width=800,height=600');
+      const win = window.open(authUrl, 'oauth_ebay', 'noopener,noreferrer,width=800,height=600');
       if (!win || win.closed) {
         toast('Si la ventana fue bloqueada, habilita popups o abre Configuración → APIs → eBay para conectar.', { duration: 5000 });
       } else {

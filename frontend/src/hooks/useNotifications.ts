@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../stores/authStore';
 import { log } from '@/utils/logger';
-import { API_BASE_URL } from '../config/runtime';
+import { getSocketOptions } from '../config/runtime';
 import api from '@/services/api';
 
 export interface NotificationPayload {
@@ -50,10 +50,10 @@ export const useNotifications = (): UseNotificationsReturn => {
 
     log.info('🔌 Initializing Socket.IO connection...');
 
-    const newSocket = io(API_BASE_URL, {
-      auth: {
-        token: token
-      },
+    const { url, path } = getSocketOptions();
+    const newSocket = io(url, {
+      path,
+      auth: { token },
       transports: ['websocket', 'polling'],
       timeout: 20000,
       forceNew: true
@@ -73,7 +73,7 @@ export const useNotifications = (): UseNotificationsReturn => {
     });
 
     newSocket.on('connect_error', (error: Error) => {
-      log.error('🔌 Socket.IO connection error:', error);
+      log.warn('🔌 Socket.IO connection error (will retry):', error.message);
       setIsConnected(false);
     });
 

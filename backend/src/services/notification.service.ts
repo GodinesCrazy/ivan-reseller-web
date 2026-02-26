@@ -67,7 +67,10 @@ class NotificationService {
       .map((origin) => origin.trim())
       .filter((origin) => origin.length > 0);
 
+    // path: '/api/socket.io' para que Vercel rewrite /api/:path* lo enrute; fallback a /socket.io si no hay proxy
+    const socketPath = env.NODE_ENV === 'production' ? '/api/socket.io' : '/socket.io';
     this.io = new Server(httpServer, {
+      path: socketPath,
       cors: {
         origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins, // Socket.IO acepta string o array
         methods: ['GET', 'POST'],

@@ -1,12 +1,18 @@
 #!/usr/bin/env tsx
 /**
- * Generate AliExpress OAuth Authorization URL directly
- * Uses AppKey from image: 524880
+ * Generate AliExpress OAuth Authorization URL from env.
+ * Requires: ALIEXPRESS_APP_KEY, ALIEXPRESS_REDIRECT_URI (or ALIEXPRESS_CALLBACK_URL) in .env.local
  */
+require('dotenv').config({ path: require('path').join(__dirname, '../.env.local'), override: true });
 
-const APP_KEY = '524880';
-const REDIRECT_URI = 'https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback';
+const APP_KEY = (process.env.ALIEXPRESS_APP_KEY || '').trim();
+const REDIRECT_URI = (process.env.ALIEXPRESS_REDIRECT_URI || process.env.ALIEXPRESS_CALLBACK_URL || 'https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback').trim();
 const OAUTH_BASE = 'https://api-sg.aliexpress.com/oauth';
+
+if (!APP_KEY) {
+  console.error('Set ALIEXPRESS_APP_KEY in .env.local (never in code).');
+  process.exit(1);
+}
 
 const authUrl = `${OAUTH_BASE}/authorize?response_type=code&client_id=${APP_KEY}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
 
@@ -15,8 +21,8 @@ console.log('ALIEXPRESS OAUTH AUTHORIZATION URL');
 console.log('========================================================\n');
 console.log('?? INFORMACIÓN DE LA APP:');
 console.log('----------------------------------------');
-console.log('App Name: IvanReseller Affiliate API');
-console.log('AppKey: 524880');
+console.log('App Name: (from ALIEXPRESS_APP_KEY in env)');
+console.log('AppKey:', APP_KEY ? `${APP_KEY.substring(0, 4)}...` : '(not set)');
 console.log('Callback URL:', REDIRECT_URI);
 console.log('Tracking ID: ivanreseller');
 console.log('');

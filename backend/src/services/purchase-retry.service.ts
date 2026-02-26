@@ -40,7 +40,8 @@ export class PurchaseRetryService {
     maxPrice: number,
     shippingAddress: Record<string, string>,
     alternatives?: string[],
-    orderId?: string
+    orderId?: string,
+    userId?: number
   ): Promise<PurchaseRetryResult> {
     const attempts: PurchaseAttempt[] = [];
     const urlsToTry = [productUrl, ...(alternatives || []).filter(Boolean)];
@@ -64,21 +65,24 @@ export class PurchaseRetryService {
       });
 
       try {
-        const result = await aliexpressCheckoutService.placeOrder({
-          productUrl: url,
-          quantity,
-          maxPrice,
-          shippingAddress: {
-            fullName: shippingAddress.fullName || '',
-            addressLine1: shippingAddress.addressLine1 || '',
-            addressLine2: shippingAddress.addressLine2 || '',
-            city: shippingAddress.city || '',
-            state: shippingAddress.state || '',
-            zipCode: shippingAddress.zipCode || '',
-            country: shippingAddress.country || 'US',
-            phoneNumber: shippingAddress.phoneNumber || '',
+        const result = await aliexpressCheckoutService.placeOrder(
+          {
+            productUrl: url,
+            quantity,
+            maxPrice,
+            shippingAddress: {
+              fullName: shippingAddress.fullName || '',
+              addressLine1: shippingAddress.addressLine1 || '',
+              addressLine2: shippingAddress.addressLine2 || '',
+              city: shippingAddress.city || '',
+              state: shippingAddress.state || '',
+              zipCode: shippingAddress.zipCode || '',
+              country: shippingAddress.country || 'US',
+              phoneNumber: shippingAddress.phoneNumber || '',
+            },
           },
-        });
+          userId
+        );
 
         const attemptSuccess = result.success && !!result.orderId && result.orderId !== 'SIMULATED_ORDER_ID';
         attempts.push({

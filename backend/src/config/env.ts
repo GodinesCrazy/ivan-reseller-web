@@ -481,7 +481,11 @@ try {
       criticalErrors.forEach(msg => console.error(msg));
       const fallbackEnv = { ...process.env };
       if (!fallbackEnv.JWT_SECRET || String(fallbackEnv.JWT_SECRET).length < 32) {
-        fallbackEnv.JWT_SECRET = 'placeholder-min-32-chars-for-degraded-mode-xxxx';
+        try {
+          fallbackEnv.JWT_SECRET = require('crypto').randomBytes(32).toString('hex');
+        } catch {
+          fallbackEnv.JWT_SECRET = process.env.JWT_SECRET || '';
+        }
       }
       if (!fallbackEnv.DATABASE_URL) fallbackEnv.DATABASE_URL = '';
       env = envSchema.parse(fallbackEnv);

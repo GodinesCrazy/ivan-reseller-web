@@ -40,14 +40,15 @@ function parseEnvFile(filePath) {
   return map;
 }
 
+// Never hardcode real secrets. Use REPLACE_ME; set real values via env or .env.local (gitignored).
 const defaults = {
-  INTERNAL_RUN_SECRET: 'local-secret-123',
-  SERP_API_KEY: '09092b14341c43ee95ef9a800d45038f19650a62d9e50ef6d139235f207eaac0',
+  INTERNAL_RUN_SECRET: 'REPLACE_ME',
+  SERP_API_KEY: 'REPLACE_ME',
   ALIEXPRESS_APP_KEY: 'REPLACE_ME',
   ALIEXPRESS_APP_SECRET: 'REPLACE_ME',
   DATABASE_URL: 'REPLACE_ME',
-  JWT_SECRET: 'local-jwt-secret-12345678901234567890123456789012',
-  ENCRYPTION_KEY: 'local-encryption-key-12345678901234567890123456',
+  JWT_SECRET: 'REPLACE_ME',
+  ENCRYPTION_KEY: 'REPLACE_ME',
   PORT: '4000',
 };
 
@@ -65,12 +66,16 @@ const keyOrder = [
 
 const map = parseEnvFile(envLocalPath);
 
-// Overwrite with concrete defaults
-map.set('INTERNAL_RUN_SECRET', defaults.INTERNAL_RUN_SECRET);
-map.set('SERP_API_KEY', defaults.SERP_API_KEY);
-map.set('JWT_SECRET', defaults.JWT_SECRET);
-map.set('ENCRYPTION_KEY', defaults.ENCRYPTION_KEY);
-map.set('PORT', defaults.PORT);
+// Set only REPLACE_ME or keep existing; for new .env.local generate random secrets for local dev (never commit)
+const existingSecret = map.get('INTERNAL_RUN_SECRET');
+map.set('INTERNAL_RUN_SECRET', existingSecret && existingSecret !== 'REPLACE_ME' ? existingSecret : defaults.INTERNAL_RUN_SECRET);
+const existingSERP = map.get('SERP_API_KEY');
+map.set('SERP_API_KEY', existingSERP && existingSERP !== 'REPLACE_ME' ? existingSERP : defaults.SERP_API_KEY);
+const existingJWT = map.get('JWT_SECRET');
+map.set('JWT_SECRET', existingJWT && existingJWT !== 'REPLACE_ME' && existingJWT.length >= 32 ? existingJWT : defaults.JWT_SECRET);
+const existingEnc = map.get('ENCRYPTION_KEY');
+map.set('ENCRYPTION_KEY', existingEnc && existingEnc !== 'REPLACE_ME' && existingEnc.length >= 32 ? existingEnc : defaults.ENCRYPTION_KEY);
+map.set('PORT', map.get('PORT') || defaults.PORT);
 
 // Use process.env when set and not placeholder; otherwise keep existing or REPLACE_ME
 for (const key of ['ALIEXPRESS_APP_KEY', 'ALIEXPRESS_APP_SECRET', 'DATABASE_URL', 'SCRAPER_API_KEY']) {
