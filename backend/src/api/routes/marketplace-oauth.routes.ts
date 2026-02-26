@@ -644,8 +644,8 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       `);
     }
     
-    const webBase = process.env.WEB_BASE_URL || 'https://www.ivanreseller.com';
-    const returnUrl = `${webBase}/api-settings`;
+    const webBaseCallback = process.env.WEB_BASE_URL || 'https://www.ivanreseller.com';
+    const returnUrlCallback = `${webBaseCallback}/api-settings`;
 
     // Validar que el código no esté vacío
     if (!code || code.trim().length === 0) {
@@ -661,7 +661,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         <body style="font-family: sans-serif; max-width: 560px; margin: 2rem auto; padding: 1.5rem;">
           <h2>Error de autorización</h2>
           <p>No se recibió código de autorización. Vuelve a intentar desde API Settings.</p>
-          <p><a href="${returnUrl}" style="display: inline-block; margin-top: 1rem; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Volver a API Settings</a></p>
+          <p><a href="${returnUrlCallback}" style="display: inline-block; margin-top: 1rem; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Volver a API Settings</a></p>
         </body>
         </html>
       `);
@@ -1081,8 +1081,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       return res.status(400).send('<html><body>Marketplace not supported</body></html>');
     }
 
-    const webBase = process.env.WEB_BASE_URL || 'https://www.ivanreseller.com';
-    const returnUrl = webBase + '/api-settings?oauth=success&provider=' + req.params.marketplace;
+    const successReturnUrl = (process.env.WEB_BASE_URL || 'https://www.ivanreseller.com') + '/api-settings?oauth=success&provider=' + req.params.marketplace;
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -1100,7 +1099,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         <body>
           <div class="success">✅ Autorización completada exitosamente</div>
           <div class="info">Redirigiendo a la aplicación en unos segundos...</div>
-          <p><a href="${returnUrl}" class="btn">Volver a API Settings</a></p>
+          <p><a href="${successReturnUrl}" class="btn">Volver a API Settings</a></p>
           <script>
             (function() {
               var sendMessage = function() {
@@ -1114,7 +1113,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
               setTimeout(sendMessage, 300);
               setTimeout(sendMessage, 800);
               setTimeout(function() {
-                window.location.href = '${returnUrl}';
+                window.location.href = '${successReturnUrl.replace(/'/g, "\\'")}';
               }, 2000);
             })();
           </script>
