@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '@/services/api';
 import { useAuthStore } from '@stores/authStore';
 
@@ -15,10 +15,13 @@ interface SetupStatus {
 
 /**
  * Hook para verificar si el setup está completo
- * Redirige a /setup-required si es necesario
+ * Redirige a /setup-required si es necesario (nunca desde /api-settings ni /setup-required)
  */
 export function useSetupCheck() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const pathnameRef = useRef(location.pathname);
+  pathnameRef.current = location.pathname;
   const { isAuthenticated, user } = useAuthStore();
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
   const [checking, setChecking] = useState(false);
@@ -33,7 +36,6 @@ export function useSetupCheck() {
       return;
     }
 
-    // ✅ FIX: Verificar setup inmediatamente al montar (antes de que otros componentes hagan llamadas)
     checkSetup();
   }, [isAuthenticated, user]);
 
@@ -54,14 +56,13 @@ export function useSetupCheck() {
       });
 
       if (data.setupRequired) {
-        // Si estamos en una ruta protegida (no /setup-required ni /api-settings), redirigir
-        const currentPath = window.location.pathname;
+        // Usar pathname actual del router (evita redirigir si el usuario ya navegó a /api-settings)
+        const currentPath = pathnameRef.current;
         if (currentPath !== '/setup-required' && !currentPath.startsWith('/api-settings')) {
           navigate('/setup-required', { replace: true });
         }
       }
     } catch (error: any) {
-      // Si falla, no hacer nada (mejor mostrar dashboard con errores que bloquear)
       console.error('Error checking setup status:', error);
     } finally {
       setChecking(false);

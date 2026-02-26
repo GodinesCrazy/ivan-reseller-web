@@ -751,9 +751,10 @@ export default function Settings() {
               <p className="text-gray-600 mb-6">Manage your marketplace API credentials and connections</p>
             </div>
 
-            {/* Quick Links */}
+            {/* Quick Links - type="button" evita submit accidental; rutas absolutas */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <button
+                type="button"
                 onClick={() => navigate('/api-settings')}
                 className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
               >
@@ -763,6 +764,7 @@ export default function Settings() {
               </button>
 
               <button
+                type="button"
                 onClick={() => navigate('/other-credentials')}
                 className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 hover:bg-primary-50 transition-colors text-left"
               >
