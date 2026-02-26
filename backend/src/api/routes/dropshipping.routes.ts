@@ -3,9 +3,62 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/error.middleware';
 import { z } from 'zod';
+import logger from '../../config/logger';
+import { getAliExpressDropshippingRedirectUri } from '../../utils/aliexpress-dropshipping-oauth';
 
 const router = Router();
 router.use(authenticate);
+
+/**
+ * GET /api/dropshipping/start-oauth
+ * Genera URL OAuth de AliExpress Dropshipping (sin redirigir)
+ */
+router.get('/start-oauth', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user!.userId;
+    const redirectUriUsed = getAliExpressDropshippingRedirectUri();
+    const environment = process.env.NODE_ENV || 'development';
+
+    const lowerRedirect = redirectUriUsed.toLowerCase();
+    const isLocalhost = lowerRedirect.includes('localhost') || lowerRedirect.includes('127.0.0.1');
+    const hasRailwayDomain = /(?:^|\/\/)[^/]*railway\.app/i.test(redirectUriUsed);
+
+    if (environment === 'production') {
+      if (isLocalhost) {
+        throw new Error('Invalid redirect URI in production: localhost is not allowed');
+      }
+      if (!hasRailwayDomain) {
+        throw new Error('Invalid redirect URI in production: Railway domain is required');
+      }
+    }
+
+    const { CredentialsManager } = await import('../../services/credentials-manager.service');
+    const creds = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', 'production');
+    const appKey = String((creds as any)?.appKey || '').trim();
+    if (!appKey) {
+      return res.status(422).json({
+        success: false,
+        message: 'Missing appKey for aliexpress-dropshipping in production credentials',
+      });
+    }
+
+    const { signStateAliExpress } = await import('../../utils/oauth-state');
+    const { aliexpressDropshippingAPIService } = await import('../../services/aliexpress-dropshipping-api.service');
+    const state = signStateAliExpress(userId);
+    const authUrl = aliexpressDropshippingAPIService.getAuthUrl(redirectUriUsed, state, appKey);
+
+    logger.info('[Dropshipping OAuth] URL generated', {
+      event: 'dropshipping_oauth_url_generated',
+      userId,
+      redirectUriUsed,
+      environment,
+    });
+
+    return res.json({ authUrl });
+  } catch (error) {
+    return next(error);
+  }
+});
 
 // Schemas de validación
 const dropshippingRuleSchema = z.object({
