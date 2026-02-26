@@ -331,6 +331,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       `);
     }
 
+    const requestHost = req.get('host') || req.headers['x-forwarded-host'] || null;
     logger.info('[OAuth Callback] Exchanging code for AliExpress Dropshipping tokens', {
       service: 'marketplace-oauth',
       correlationId,
@@ -340,6 +341,10 @@ router.get('/callback', async (req: Request, res: Response) => {
       redirectUriLength: redirectUri?.length || 0,
       appKeyPreview: `${String(appKey).slice(0, 6)}...`,
       appSecretLength: String(appSecret).length,
+      redirectUriUsed: getAliExpressDropshippingRedirectUri(),
+      requestHost,
+      requestProtocol: req.headers['x-forwarded-proto'] || req.protocol,
+      tokenExchangeStatus: 'started',
     });
 
     const canonicalCallbackUrl = getAliExpressDropshippingRedirectUri();
@@ -358,6 +363,9 @@ router.get('/callback', async (req: Request, res: Response) => {
         correlationId,
         userId,
         environment,
+        redirectUriUsed: canonicalCallbackUrl,
+        requestHost,
+        tokenExchangeStatus: 'success',
         hasAccessToken: !!tokens.accessToken,
         accessTokenLength: tokens.accessToken?.length || 0,
         hasRefreshToken: !!tokens.refreshToken,
@@ -415,6 +423,10 @@ router.get('/callback', async (req: Request, res: Response) => {
 
       await CredentialsManager.saveCredentials(userId, 'aliexpress-dropshipping', updatedCreds, environment);
 
+      const persistedCreds = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', environment);
+      const persistedAccessToken = String((persistedCreds as any)?.accessToken || '').trim();
+      const persistedRefreshToken = String((persistedCreds as any)?.refreshToken || '').trim();
+
       // Limpiar cache de credenciales
       const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
       clearCredentialsCache(userId, 'aliexpress-dropshipping', environment);
@@ -440,6 +452,9 @@ router.get('/callback', async (req: Request, res: Response) => {
         userId,
         environment,
         duration: Date.now() - startTime,
+        dbSaveConfirmed: !!persistedAccessToken,
+        hasPersistedAccessToken: !!persistedAccessToken,
+        hasPersistedRefreshToken: !!persistedRefreshToken,
         cacheCleared: true,
         apiStatusRefreshed: true
       });
@@ -524,6 +539,9 @@ router.get('/callback', async (req: Request, res: Response) => {
         userId,
         environment,
         elapsed,
+        redirectUriUsed: canonicalCallbackUrl,
+        requestHost,
+        tokenExchangeStatus: 'failed',
         error: tokenError?.message || String(tokenError),
         responseData: tokenError?.response?.data,
         status: tokenError?.response?.status,
@@ -1022,6 +1040,10 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         redirectUriLength: redirectUri?.length || 0,
         appKeyPreview: `${String(appKey).slice(0, 6)}...`,
         appSecretLength: String(appSecret).length,
+        redirectUriUsed: redirectUri || getAliExpressDropshippingRedirectUri(),
+        requestHost: req.get('host') || req.headers['x-forwarded-host'] || null,
+        requestProtocol: req.headers['x-forwarded-proto'] || req.protocol,
+        tokenExchangeStatus: 'started',
       });
 
       try {
@@ -1040,6 +1062,9 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
           service: 'marketplace-oauth',
           userId,
           environment,
+          redirectUriUsed: redirectUri || canonicalCallbackUrl,
+          requestHost: req.get('host') || req.headers['x-forwarded-host'] || null,
+          tokenExchangeStatus: 'success',
           hasAccessToken: !!tokens.accessToken,
           accessTokenLength: tokens.accessToken?.length || 0,
           hasRefreshToken: !!tokens.refreshToken,
@@ -1073,6 +1098,10 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
 
         await CredentialsManager.saveCredentials(userId, 'aliexpress-dropshipping', updatedCreds, environment);
 
+        const persistedCreds = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', environment);
+        const persistedAccessToken = String((persistedCreds as any)?.accessToken || '').trim();
+        const persistedRefreshToken = String((persistedCreds as any)?.refreshToken || '').trim();
+
         // ✅ CORRECCIÓN ALIEXPRESS DROPSHIPPING OAUTH: Limpiar cache de credenciales
         const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
         clearCredentialsCache(userId, 'aliexpress-dropshipping', environment);
@@ -1094,6 +1123,9 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
           userId,
           environment,
           duration: Date.now() - startTime,
+          dbSaveConfirmed: !!persistedAccessToken,
+          hasPersistedAccessToken: !!persistedAccessToken,
+          hasPersistedRefreshToken: !!persistedRefreshToken,
           cacheCleared: true,
           apiStatusRefreshed: true
         });
@@ -1122,6 +1154,9 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
           service: 'marketplace-oauth',
           userId,
           environment,
+          redirectUriUsed: redirectUri || getAliExpressDropshippingRedirectUri(),
+          requestHost: req.get('host') || req.headers['x-forwarded-host'] || null,
+          tokenExchangeStatus: 'failed',
           error: tokenError?.message || String(tokenError),
           responseData: tokenError?.response?.data,
           status: tokenError?.response?.status,

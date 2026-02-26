@@ -360,6 +360,67 @@ router.get('/aliexpress-dropshipping-credentials', authenticate, async (req: Req
 });
 
 /**
+ * GET /api/debug/dropshipping-oauth-status
+ * Temporary OAuth status endpoint for AliExpress Dropshipping.
+ */
+router.get('/dropshipping-oauth-status', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({
+        hasCredentials: false,
+        expiresAt: null,
+        environment: 'unknown',
+      });
+    }
+
+    const requestedEnvironment = String(req.query.environment || '').toLowerCase();
+    const environmentsToCheck: Array<'production' | 'sandbox'> =
+      requestedEnvironment === 'sandbox'
+        ? ['sandbox']
+        : requestedEnvironment === 'production'
+          ? ['production']
+          : ['production', 'sandbox'];
+
+    let selectedEnvironment: 'production' | 'sandbox' = environmentsToCheck[0];
+    let selectedCreds: any = null;
+
+    for (const env of environmentsToCheck) {
+      const creds = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', env);
+      const accessToken = String((creds as any)?.accessToken || '').trim();
+      if (accessToken) {
+        selectedEnvironment = env;
+        selectedCreds = creds;
+        break;
+      }
+      if (!selectedCreds) {
+        selectedEnvironment = env;
+        selectedCreds = creds;
+      }
+    }
+
+    const accessToken = String((selectedCreds as any)?.accessToken || '').trim();
+    const refreshToken = String((selectedCreds as any)?.refreshToken || '').trim();
+    const expiresAt = (selectedCreds as any)?.accessTokenExpiresAt || null;
+
+    return res.json({
+      hasCredentials: !!(accessToken && refreshToken),
+      expiresAt,
+      environment: selectedEnvironment,
+    });
+  } catch (error: any) {
+    logger.error('[Debug Dropshipping OAuth Status] Error', {
+      error: error?.message || String(error),
+    });
+    return res.status(500).json({
+      hasCredentials: false,
+      expiresAt: null,
+      environment: 'unknown',
+    });
+  }
+});
+
+/**
  * GET /api/debug/aliexpress/probe
  *
  * Endpoint de diagnóstico para AliExpress Affiliate API.
