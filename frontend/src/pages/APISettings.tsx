@@ -2544,6 +2544,14 @@ export default function APISettings() {
       // Esto previene que modales de sesiones anteriores se muestren
       setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined });
       
+      // ✅ AliExpress Dropshipping: SOLO redirección en la misma pestaña (nunca popup) para evitar dos ventanas
+      if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') {
+        try { toast('Redirigiendo a AliExpress para autorizar...', { icon: 'ℹ️' }); } catch (_) {}
+        window.location.href = authUrl;
+        setOauthing(null);
+        return;
+      }
+      
       // ✅ Evitar dos ventanas: si ya hay una ventana OAuth abierta para esta API, enfocarla y no abrir otra
       const existing = openOAuthWindowRef.current;
       if (existing?.apiName === apiName && existing?.win && !existing.win.closed) {
