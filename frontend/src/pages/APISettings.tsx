@@ -3742,6 +3742,8 @@ export default function APISettings() {
               ? STATUS_BADGE_STYLES[statusInfo.status]
               : STATUS_BADGE_STYLES.unknown;
 
+          const unifiedStatusCard = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag);
+
           return (
             <div
               key={apiDef.name}
@@ -4076,7 +4078,7 @@ export default function APISettings() {
                       {/* OAuth Authorization: ocultar botón azul para AliExpress Dropshipping en partially_configured para evitar doble ventana (solo recuadro ámbar) */}
                       {apiDef.supportsOAuth && !(
                         (apiDef.name === 'aliexpress-dropshipping' || apiDef.name === 'aliexpress_dropshipping') &&
-                        unifiedStatus?.status === 'partially_configured'
+                        unifiedStatusCard?.status === 'partially_configured'
                       ) && (
                         (() => {
                           const requiresBaseCreds =
