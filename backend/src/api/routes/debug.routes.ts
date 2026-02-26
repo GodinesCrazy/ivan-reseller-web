@@ -401,12 +401,15 @@ router.get('/dropshipping-oauth-status', authenticate, async (req: Request, res:
 
     const accessToken = String((selectedCreds as any)?.accessToken || '').trim();
     const refreshToken = String((selectedCreds as any)?.refreshToken || '').trim();
-    const expiresAt = (selectedCreds as any)?.accessTokenExpiresAt || null;
+    const expiresAtRaw = (selectedCreds as any)?.accessTokenExpiresAt || null;
+    const expiresAtMs = expiresAtRaw ? new Date(expiresAtRaw).getTime() : null;
+    const hasValidExpiry = typeof expiresAtMs === 'number' && Number.isFinite(expiresAtMs) && expiresAtMs > Date.now();
+    const hasCredentials = !!(accessToken && refreshToken && hasValidExpiry);
 
     return res.json({
-      hasCredentials: !!(accessToken && refreshToken),
-      expiresAt,
-      environment: selectedEnvironment,
+      hasCredentials,
+      expiresAt: expiresAtMs,
+      environment: process.env.NODE_ENV || 'development',
     });
   } catch (error: any) {
     logger.error('[Debug Dropshipping OAuth Status] Error', {

@@ -426,6 +426,20 @@ router.get('/callback', async (req: Request, res: Response) => {
       const persistedCreds = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', environment);
       const persistedAccessToken = String((persistedCreds as any)?.accessToken || '').trim();
       const persistedRefreshToken = String((persistedCreds as any)?.refreshToken || '').trim();
+      const dbSaveConfirmed = !!persistedAccessToken && !!persistedRefreshToken;
+
+      if (!dbSaveConfirmed) {
+        logger.error('[OAuth Callback] Dropshipping OAuth DB persistence validation failed', {
+          service: 'marketplace-oauth',
+          correlationId,
+          userId,
+          environment,
+          dbSaveConfirmed,
+          hasPersistedAccessToken: !!persistedAccessToken,
+          hasPersistedRefreshToken: !!persistedRefreshToken,
+        });
+        throw new Error('AliExpress OAuth persistence validation failed: access/refresh token not persisted');
+      }
 
       // Limpiar cache de credenciales
       const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
@@ -452,7 +466,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         userId,
         environment,
         duration: Date.now() - startTime,
-        dbSaveConfirmed: !!persistedAccessToken,
+        dbSaveConfirmed,
         hasPersistedAccessToken: !!persistedAccessToken,
         hasPersistedRefreshToken: !!persistedRefreshToken,
         cacheCleared: true,
@@ -1101,6 +1115,19 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         const persistedCreds = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', environment);
         const persistedAccessToken = String((persistedCreds as any)?.accessToken || '').trim();
         const persistedRefreshToken = String((persistedCreds as any)?.refreshToken || '').trim();
+        const dbSaveConfirmed = !!persistedAccessToken && !!persistedRefreshToken;
+
+        if (!dbSaveConfirmed) {
+          logger.error('[OAuth Callback] Dropshipping OAuth DB persistence validation failed', {
+            service: 'marketplace-oauth',
+            userId,
+            environment,
+            dbSaveConfirmed,
+            hasPersistedAccessToken: !!persistedAccessToken,
+            hasPersistedRefreshToken: !!persistedRefreshToken,
+          });
+          throw new Error('AliExpress OAuth persistence validation failed: access/refresh token not persisted');
+        }
 
         // ✅ CORRECCIÓN ALIEXPRESS DROPSHIPPING OAUTH: Limpiar cache de credenciales
         const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
@@ -1123,7 +1150,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
           userId,
           environment,
           duration: Date.now() - startTime,
-          dbSaveConfirmed: !!persistedAccessToken,
+          dbSaveConfirmed,
           hasPersistedAccessToken: !!persistedAccessToken,
           hasPersistedRefreshToken: !!persistedRefreshToken,
           cacheCleared: true,
