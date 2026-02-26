@@ -29,10 +29,16 @@ function getBackendBaseUrl(): string {
 }
 
 export function getAliExpressDropshippingRedirectUri(): string {
-  const envRedirect = normalizeUrl(process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI || '');
-  if (envRedirect) return envRedirect;
+  let resolvedRedirectUri = normalizeUrl(process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI || '');
+  if (resolvedRedirectUri) return resolvedRedirectUri;
 
   const backendBaseUrl = getBackendBaseUrl();
-  return `${backendBaseUrl}/api/marketplace-oauth/callback`;
+  resolvedRedirectUri = `${backendBaseUrl}/api/marketplace-oauth/callback`;
+
+  if (process.env.NODE_ENV === 'production' && !resolvedRedirectUri) {
+    throw new Error('Missing canonical redirect URI in production');
+  }
+
+  return resolvedRedirectUri;
 }
 

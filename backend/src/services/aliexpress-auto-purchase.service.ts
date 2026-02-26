@@ -200,7 +200,7 @@ export class AliExpressAutoPurchaseService {
     if (userId) {
       try {
         const { CredentialsManager } = await import('./credentials-manager.service');
-        const { aliexpressDropshippingAPIService } = await import('./aliexpress-dropshipping-api.service');
+        const { aliexpressDropshippingAPIService, refreshAliExpressDropshippingToken } = await import('./aliexpress-dropshipping-api.service');
         const { prisma } = await import('../config/database');
         const { resolveEnvironment } = await import('../utils/environment-resolver');
         const { logger: envLogger } = await import('../config/logger');
@@ -243,11 +243,17 @@ export class AliExpressAutoPurchaseService {
         }
         
         if (dropshippingCreds && dropshippingCreds.accessToken) {
+          const activeEnvironment = (resolvedEnv || preferredEnvironment) as 'sandbox' | 'production';
+          const refreshedResult = await refreshAliExpressDropshippingToken(userId, activeEnvironment, { minTtlMs: 60_000 });
+          if (refreshedResult.credentials) {
+            dropshippingCreds = refreshedResult.credentials;
+          }
           logger.info('[ALIEXPRESS-AUTO-PURCHASE] Credenciales de Dropshipping API encontradas, intentando usar API oficial', {
             userId,
             productUrl: request.productUrl,
-            environment: resolvedEnv || preferredEnvironment,
-            resolvedFrom: resolvedEnv
+            environment: activeEnvironment,
+            resolvedFrom: resolvedEnv,
+            tokenRefreshed: refreshedResult.refreshed,
           });
           
           try {

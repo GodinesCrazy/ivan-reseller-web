@@ -506,6 +506,7 @@ export class AliExpressDropshippingAPIService {
     }
 
     logger.info('[ALIEXPRESS-DROPSHIPPING-API] Exchanging authorization code for tokens', {
+      tokenExchangeStatus: 'started',
       codeLength: code.length,
       redirectUri,
       hasAppKey: !!appKey,
@@ -617,6 +618,7 @@ export class AliExpressDropshippingAPIService {
 
       const elapsed = Date.now() - startTime;
       logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange successful', {
+        tokenExchangeStatus: 'success',
         endpoint: tokenUrl,
         method: 'POST',
         contentType: requestHeaders['Content-Type'],
@@ -643,6 +645,7 @@ export class AliExpressDropshippingAPIService {
         'Unknown error';
 
       logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token exchange failed', {
+        tokenExchangeStatus: 'failed',
         endpoint: tokenUrl,
         method: 'POST',
         contentType: 'application/x-www-form-urlencoded',
@@ -792,6 +795,80 @@ export class AliExpressDropshippingAPIService {
       throw error;
     }
   }
+}
+
+export async function refreshAliExpressDropshippingToken(
+  userId: number,
+  environment: 'sandbox' | 'production',
+  options?: { minTtlMs?: number }
+): Promise<{ refreshed: boolean; credentials: Record<string, any> | null }> {
+  const minTtlMs = options?.minTtlMs ?? 60_000;
+  const { CredentialsManager, clearCredentialsCache } = await import('./credentials-manager.service');
+
+  const currentCreds = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', environment);
+  if (!currentCreds) return { refreshed: false, credentials: null };
+
+  const accessToken = String((currentCreds as any).accessToken || '').trim();
+  const refreshToken = String((currentCreds as any).refreshToken || '').trim();
+  const appKey = String((currentCreds as any).appKey || '').trim();
+  const appSecret = String((currentCreds as any).appSecret || '').trim();
+  const expiresAtRaw = (currentCreds as any).accessTokenExpiresAt;
+  const expiresAtMs = expiresAtRaw ? new Date(expiresAtRaw).getTime() : 0;
+  const isExpiredOrNearExpiry = !expiresAtMs || expiresAtMs <= Date.now() + minTtlMs;
+
+  if (!isExpiredOrNearExpiry) {
+    return { refreshed: false, credentials: currentCreds };
+  }
+
+  if (!refreshToken || !appKey || !appSecret) {
+    logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Token refresh skipped: missing required fields', {
+      userId,
+      environment,
+      hasAccessToken: !!accessToken,
+      hasRefreshToken: !!refreshToken,
+      hasAppKey: !!appKey,
+      hasAppSecret: !!appSecret,
+      expiresAtRaw: expiresAtRaw || null,
+    });
+    return { refreshed: false, credentials: currentCreds };
+  }
+
+  logger.info('[ALIEXPRESS-DROPSHIPPING-API] Refreshing expired dropshipping token', {
+    userId,
+    environment,
+    expiresAtRaw,
+  });
+
+  const refreshed = await aliexpressDropshippingAPIService.refreshAccessToken(refreshToken, appKey, appSecret);
+  const updatedCreds = {
+    ...currentCreds,
+    accessToken: refreshed.accessToken,
+    refreshToken: refreshed.refreshToken || refreshToken,
+    accessTokenExpiresAt: new Date(Date.now() + refreshed.expiresIn * 1000).toISOString(),
+    refreshTokenExpiresAt: refreshed.refreshExpiresIn
+      ? new Date(Date.now() + refreshed.refreshExpiresIn * 1000).toISOString()
+      : (currentCreds as any).refreshTokenExpiresAt || null,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await CredentialsManager.saveCredentials(userId, 'aliexpress-dropshipping', updatedCreds, environment);
+  clearCredentialsCache(userId, 'aliexpress-dropshipping', environment);
+
+  const persisted = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', environment);
+  const persistedAccessToken = String((persisted as any)?.accessToken || '').trim();
+  const persistedRefreshToken = String((persisted as any)?.refreshToken || '').trim();
+  if (!persistedAccessToken || !persistedRefreshToken) {
+    throw new Error('AliExpress Dropshipping token refresh persistence validation failed');
+  }
+
+  logger.info('[ALIEXPRESS-DROPSHIPPING-API] Dropshipping token refresh persisted', {
+    userId,
+    environment,
+    hasPersistedAccessToken: !!persistedAccessToken,
+    hasPersistedRefreshToken: !!persistedRefreshToken,
+  });
+
+  return { refreshed: true, credentials: persisted };
 }
 
 // Exportar instancia singleton
