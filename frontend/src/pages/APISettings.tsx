@@ -329,8 +329,6 @@ export default function APISettings() {
   const openOAuthWindowRef = useRef<{ apiName: string; win: Window } | null>(null);
   /** Evita doble ejecución de handleOAuth (doble clic o Strict Mode) */
   const oauthInProgressRef = useRef<Record<string, boolean>>({});
-  /** AliExpress Dropshipping: evita segunda redirección (solo una pestaña) */
-  const aliexpressRedirectingRef = useRef(false);
   const [manualCookieModalOpen, setManualCookieModalOpen] = useState(false);
   const [manualCookieInput, setManualCookieInput] = useState('');
   const [manualCookieError, setManualCookieError] = useState<string | null>(null);
@@ -2346,9 +2344,6 @@ export default function APISettings() {
     if (oauthInProgressRef.current[apiName]) {
       return;
     }
-    if ((apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') && aliexpressRedirectingRef.current) {
-      return;
-    }
     if (openOAuthWindowRef.current?.apiName === apiName) {
       const w = openOAuthWindowRef.current.win;
       if (w && !w.closed) {
@@ -2549,19 +2544,8 @@ export default function APISettings() {
       // Esto previene que modales de sesiones anteriores se muestren
       setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined });
       
-      // ✅ AliExpress Dropshipping: SOLO redirección en la misma pestaña (nunca popup) para evitar dos ventanas
-      if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') {
-        if (aliexpressRedirectingRef.current) {
-          setOauthing(null);
-          return;
-        }
-        aliexpressRedirectingRef.current = true;
-        try { toast('Redirigiendo a AliExpress para autorizar...', { icon: 'ℹ️' }); } catch (_) {}
-        window.location.href = authUrl;
-        setOauthing(null);
-        return;
-      }
-      
+      // ✅ Para TODAS las APIs (incl. AliExpress Dropshipping): UNA SOLA ventana popup. NUNCA location.href aquí.
+      // (Antes AliExpress redirigía la pestaña y además algo abría popup = dos ventanas. Ahora solo popup.)
       // ✅ Evitar dos ventanas: si ya hay una ventana OAuth abierta para esta API, enfocarla y no abrir otra
       const existing = openOAuthWindowRef.current;
       if (existing?.apiName === apiName && existing?.win && !existing.win.closed) {
