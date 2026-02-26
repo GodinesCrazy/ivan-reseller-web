@@ -2285,6 +2285,7 @@ export default function APISettings() {
     const errorParam = searchParams.get('error');
 
     if (oauthStatus === 'success' && provider) {
+      try { sessionStorage.removeItem('aliexpress_oauth_redirecting'); } catch (_) {}
       log.info('[APISettings] OAuth success detected from URL', {
         provider,
         correlationId,
@@ -2320,6 +2321,7 @@ export default function APISettings() {
       newSearchParams.delete('error');
       navigate(`/api-settings?${newSearchParams.toString()}`, { replace: true });
     } else if (oauthStatus === 'error' && provider) {
+      try { sessionStorage.removeItem('aliexpress_oauth_redirecting'); } catch (_) {}
       const errorMsg = errorParam || 'Error desconocido en OAuth';
       log.error('[APISettings] OAuth error detected from URL', {
         provider,
@@ -2341,17 +2343,20 @@ export default function APISettings() {
   }, [searchParams, navigate, fetchAuthStatuses]);
 
   const handleOAuth = async (apiName: string, environment: string) => {
+    const isAliExpressDropshipping = apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping';
+    if (isAliExpressDropshipping && typeof sessionStorage !== 'undefined' && sessionStorage.getItem('aliexpress_oauth_redirecting') === '1') {
+      return;
+    }
     if (oauthInProgressRef.current[apiName]) {
       return;
     }
-    if (openOAuthWindowRef.current?.apiName === apiName) {
+    if (!isAliExpressDropshipping && openOAuthWindowRef.current?.apiName === apiName) {
       const w = openOAuthWindowRef.current.win;
       if (w && !w.closed) {
         try { w.focus(); } catch (_) {}
         return;
       }
-      if (!w) return;
-      openOAuthWindowRef.current = null;
+      if (!w) openOAuthWindowRef.current = null;
     }
     oauthInProgressRef.current[apiName] = true;
     setOauthing(apiName);
@@ -2544,8 +2549,17 @@ export default function APISettings() {
       // Esto previene que modales de sesiones anteriores se muestren
       setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined });
       
-      // ✅ Para TODAS las APIs (incl. AliExpress Dropshipping): UNA SOLA ventana popup. NUNCA location.href aquí.
-      // (Antes AliExpress redirigía la pestaña y además algo abría popup = dos ventanas. Ahora solo popup.)
+      // ✅ AliExpress Dropshipping: UNA SOLA acción = redirección en esta pestaña. Sin popup para evitar doble ventana.
+      if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') {
+        try {
+          sessionStorage.setItem('aliexpress_oauth_redirecting', '1');
+          toast('Redirigiendo a AliExpress…', { icon: 'ℹ️' });
+        } catch (_) {}
+        window.location.replace(authUrl);
+        setOauthing(null);
+        return;
+      }
+      
       // ✅ Evitar dos ventanas: si ya hay una ventana OAuth abierta para esta API, enfocarla y no abrir otra
       const existing = openOAuthWindowRef.current;
       if (existing?.apiName === apiName && existing?.win && !existing.win.closed) {
@@ -4059,8 +4073,11 @@ export default function APISettings() {
                         {credential.isActive ? 'ON' : 'OFF'}
                       </button>
 
-                      {/* OAuth Authorization */}
-                      {apiDef.supportsOAuth && (
+                      {/* OAuth Authorization: ocultar botón azul para AliExpress Dropshipping en partially_configured para evitar doble ventana (solo recuadro ámbar) */}
+                      {apiDef.supportsOAuth && !(
+                        (apiDef.name === 'aliexpress-dropshipping' || apiDef.name === 'aliexpress_dropshipping') &&
+                        unifiedStatus?.status === 'partially_configured'
+                      ) && (
                         (() => {
                           const requiresBaseCreds =
                             diag?.issues?.some((issue) =>
