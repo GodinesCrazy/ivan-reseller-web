@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { marketplaceRateLimit, ebayRateLimit, mercadolibreRateLimit, amazonRateLimit } from '../../middleware/rate-limit.middleware';
 import { logger } from '../../config/logger';
 import { AppError, ErrorCode } from '../../middleware/error.middleware';
+import { getAliExpressDropshippingRedirectUri } from '../../utils/aliexpress-dropshipping-oauth';
 
 const router = Router();
 const marketplaceService = new MarketplaceService();
@@ -992,18 +993,14 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         default: 'production'
       });
 
-      // ✅ CANONICAL: Callback EXACTAMENTE /api/marketplace-oauth/callback (consistencia frontend/backend/DB)
-      // Ignorar redirect_uri del frontend para evitar ivanreseller.com/aliexpress/callback y mismatch en token exchange
-      const webBaseUrl = process.env.WEB_BASE_URL || 
-                        (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173');
-      const defaultCallbackUrl = `${webBaseUrl.replace(/\/$/, '')}/api/marketplace-oauth/callback`;
-      const callbackUrl = process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI || defaultCallbackUrl;
+      // ✅ CANONICAL: Siempre usar una sola redirect_uri para auth y token exchange.
+      const callbackUrl = getAliExpressDropshippingRedirectUri();
 
       logger.debug('[AliExpress Dropshipping OAuth] Callback URL resolved', {
         correlationId,
         userId,
         callbackUrl: callbackUrl.substring(0, 50) + '...',
-        source: process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI ? 'env_var' : 'default_canonical',
+        source: process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI ? 'env_var_canonical' : 'web_base_url_canonical',
       });
 
       // Obtener credenciales base (appKey y appSecret)

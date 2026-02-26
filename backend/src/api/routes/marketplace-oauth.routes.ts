@@ -4,6 +4,7 @@ import { EbayService } from '../../services/ebay.service';
 import { MercadoLibreService } from '../../services/mercadolibre.service';
 import { authenticate } from '../../middleware/auth.middleware';
 import { verifyStateAliExpressSafe } from '../../utils/oauth-state';
+import { getAliExpressDropshippingRedirectUri } from '../../utils/aliexpress-dropshipping-oauth';
 import crypto from 'crypto';
 import logger from '../../config/logger';
 
@@ -258,7 +259,7 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     const userId: number = parsed.userId;
     const environment: 'sandbox' | 'production' = 'production';
-    const redirectUri: string | null = null; // JWT stateless: usar defaultCallbackUrl más abajo
+    const redirectUri: string | null = null; // JWT stateless: usar canonicalCallbackUrl más abajo
 
     logger.info('[OAuth Callback] State verified successfully', {
       service: 'marketplace-oauth',
@@ -330,10 +331,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       redirectUriLength: redirectUri?.length || 0,
     });
 
-    const webBaseUrl = (process.env.WEB_BASE_URL || 
-      (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173')).replace(/\/$/, '');
-    const canonicalCallbackUrl = process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI ||
-      `${webBaseUrl}/api/marketplace-oauth/callback`;
+    const canonicalCallbackUrl = getAliExpressDropshippingRedirectUri();
 
     try {
       // redirect_uri EXACTAMENTE el mismo que en getAuthUrl (canonical)
@@ -973,14 +971,11 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       try {
         // 🔥 PASO 4: Intercambiar code por tokens
         // ✅ CANONICAL: Mismo redirect_uri que getAuthUrl en marketplace.routes (/api/marketplace-oauth/callback)
-        const webBaseUrl = (process.env.WEB_BASE_URL || 
-          (process.env.NODE_ENV === 'production' ? 'https://www.ivanreseller.com' : 'http://localhost:5173')).replace(/\/$/, '');
-        const defaultCallbackUrl = process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI ||
-          `${webBaseUrl}/api/marketplace-oauth/callback`;
+        const canonicalCallbackUrl = getAliExpressDropshippingRedirectUri();
 
         const tokens = await aliexpressDropshippingAPIService.exchangeCodeForToken(
           code,
-          redirectUri || defaultCallbackUrl,
+          redirectUri || canonicalCallbackUrl,
           appKey,
           appSecret
         );

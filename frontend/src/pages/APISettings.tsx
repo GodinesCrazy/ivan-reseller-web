@@ -2235,6 +2235,8 @@ export default function APISettings() {
       // En producción, podríamos validar el origen específico del backend
       if (event.data?.type === 'oauth_success') {
         const marketplace = event.data.marketplace || 'unknown';
+        try { sessionStorage.removeItem('aliexpress_oauth_redirecting'); } catch (_) {}
+        setOauthing(null);
         log.info('[APISettings] Received OAuth success message', {
           marketplace,
           origin: event.origin,
@@ -2263,6 +2265,8 @@ export default function APISettings() {
       } else if (event.data?.type === 'oauth_error') {
         const errorMsg = event.data.error || 'Error desconocido en OAuth';
         const marketplace = event.data.marketplace || 'unknown';
+        try { sessionStorage.removeItem('aliexpress_oauth_redirecting'); } catch (_) {}
+        setOauthing(null);
         log.error('[APISettings] Received OAuth error message', {
           marketplace,
           error: errorMsg,

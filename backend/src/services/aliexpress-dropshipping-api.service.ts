@@ -513,25 +513,32 @@ export class AliExpressDropshippingAPIService {
     });
 
     const startTime = Date.now();
+    const tokenUrl = 'https://auth.aliexpress.com/oauth/token';
     try {
       // ✅ FIX OAUTH: Token exchange robusto con retries y timeout
-      const tokenUrl = 'https://auth.aliexpress.com/oauth/token';
 
-      // ✅ PASO 4: Payload según documentación de AliExpress
-      const payload = {
+      // ✅ PASO 4: Payload OAuth en x-www-form-urlencoded (NO JSON)
+      const payload = new URLSearchParams({
         grant_type: 'authorization_code',
         need_refresh_token: 'true',
         client_id: appKey,
         client_secret: appSecret,
         code: code,
         redirect_uri: redirectUri,
-      };
+      });
+      const requestHeaders = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      } as const;
 
       logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
         tokenUrl,
-        grantType: payload.grant_type,
-        hasCode: !!payload.code,
-        redirectUri: payload.redirect_uri,
+        method: 'POST',
+        contentType: requestHeaders['Content-Type'],
+        grantType: payload.get('grant_type'),
+        hasCode: !!payload.get('code'),
+        redirectUri: payload.get('redirect_uri'),
+        usesJsonPayload: false,
+        usesFormUrlEncoded: true,
       });
 
       // ✅ FIX OAUTH: Retry con timeout (2 intentos con backoff)
@@ -544,10 +551,8 @@ export class AliExpressDropshippingAPIService {
             setTimeout(() => reject(new Error('Token exchange timeout after 10s')), 10000);
           });
 
-          const requestPromise = httpClient.post(tokenUrl, payload, {
-            headers: {
-              'Content-Type': 'application/json',
-            },
+          const requestPromise = httpClient.post(tokenUrl, payload.toString(), {
+            headers: requestHeaders,
           });
 
           const response = await Promise.race([requestPromise, timeoutPromise]);
@@ -574,6 +579,9 @@ export class AliExpressDropshippingAPIService {
           elapsed,
           attempts: result.attempts,
           error: result.error?.message || String(result.error),
+          endpoint: tokenUrl,
+          method: 'POST',
+          contentType: requestHeaders['Content-Type'],
         });
         throw result.error || new Error('Token exchange failed');
       }
@@ -606,6 +614,10 @@ export class AliExpressDropshippingAPIService {
 
       const elapsed = Date.now() - startTime;
       logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange successful', {
+        endpoint: tokenUrl,
+        method: 'POST',
+        contentType: requestHeaders['Content-Type'],
+        statusCode: response.status,
         hasAccessToken: !!accessToken,
         accessTokenLength: accessToken.length,
         hasRefreshToken: !!refreshToken,
@@ -628,9 +640,20 @@ export class AliExpressDropshippingAPIService {
         'Unknown error';
 
       logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token exchange failed', {
+        endpoint: tokenUrl,
+        method: 'POST',
+        contentType: 'application/x-www-form-urlencoded',
         error: errorMessage,
         status: error.response?.status,
         responseData: error.response?.data,
+        requestBody: {
+          grant_type: 'authorization_code',
+          need_refresh_token: 'true',
+          has_client_id: !!appKey,
+          has_client_secret: !!appSecret,
+          has_code: !!code,
+          redirect_uri: redirectUri,
+        },
       });
 
       throw new Error(`AliExpress OAuth token exchange failed: ${errorMessage}`);
@@ -672,21 +695,22 @@ export class AliExpressDropshippingAPIService {
       refreshTokenLength: refreshToken.length,
     });
 
+    const tokenUrl = 'https://auth.aliexpress.com/oauth/token';
     try {
-      const tokenUrl = 'https://auth.aliexpress.com/oauth/token';
       
-      const payload = {
+      const payload = new URLSearchParams({
         grant_type: 'refresh_token',
         refresh_token: refreshToken,
         client_id: appKey,
         client_secret: appSecret,
-      };
+      });
+      const requestHeaders = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      } as const;
 
       // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
-      const response = await httpClient.post(tokenUrl, payload, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const response = await httpClient.post(tokenUrl, payload.toString(), {
+        headers: requestHeaders,
       });
 
       if (!response.data || !response.data.access_token) {
@@ -697,6 +721,10 @@ export class AliExpressDropshippingAPIService {
       }
 
       logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token refresh successful', {
+        endpoint: tokenUrl,
+        method: 'POST',
+        contentType: requestHeaders['Content-Type'],
+        statusCode: response.status,
         hasAccessToken: !!response.data.access_token,
         hasRefreshToken: !!response.data.refresh_token,
         expiresIn: response.data.expires_in,
@@ -715,6 +743,9 @@ export class AliExpressDropshippingAPIService {
                           'Unknown error';
       
       logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token refresh failed', {
+        endpoint: tokenUrl,
+        method: 'POST',
+        contentType: 'application/x-www-form-urlencoded',
         error: errorMessage,
         status: error.response?.status,
         responseData: error.response?.data,
