@@ -510,6 +510,8 @@ export class AliExpressDropshippingAPIService {
       redirectUri,
       hasAppKey: !!appKey,
       hasAppSecret: !!appSecret,
+      appKeyPreview: `${String(appKey).slice(0, 6)}...`,
+      appSecretLength: String(appSecret).length,
     });
 
     const startTime = Date.now();
@@ -537,6 +539,7 @@ export class AliExpressDropshippingAPIService {
         grantType: payload.get('grant_type'),
         hasCode: !!payload.get('code'),
         redirectUri: payload.get('redirect_uri'),
+        clientIdPreview: `${String(appKey).slice(0, 6)}...`,
         usesJsonPayload: false,
         usesFormUrlEncoded: true,
       });

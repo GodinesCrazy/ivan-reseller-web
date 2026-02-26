@@ -46,7 +46,14 @@ async function main(): Promise<void> {
     process.env.ALIEXPRESS_DROPSHIPPING_APP_SECRET || ''
   );
   const redirectUri = getAliExpressDropshippingRedirectUri();
-  const tokenUrl = 'https://auth.aliexpress.com/oauth/token';
+  const configuredEndpoint = (process.env.ALIEXPRESS_DROPSHIPPING_TOKEN_ENDPOINT || '').trim();
+  const tokenEndpoints = configuredEndpoint
+    ? [configuredEndpoint]
+    : [
+        'https://auth.aliexpress.com/oauth/token',
+        'https://api-sg.aliexpress.com/oauth/token',
+        'https://api.aliexpress.com/oauth/token',
+      ];
 
   const payload = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -57,35 +64,47 @@ async function main(): Promise<void> {
   });
 
   console.log('=== AliExpress Dropshipping OAuth Exchange Test ===');
-  console.log('tokenUrl:', tokenUrl);
+  console.log('tokenEndpoints:', tokenEndpoints.join(', '));
   console.log('contentType: application/x-www-form-urlencoded');
   console.log('appKey:', mask(appKey));
   console.log('redirectUri:', redirectUri);
   console.log('code:', mask(code));
 
-  try {
-    const response = await axios.post(tokenUrl, payload.toString(), {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
-      },
-      timeout: 30000,
-      validateStatus: () => true,
-    });
+  let hasSuccessfulExchange = false;
+  let lastFailureCode = 1;
+  for (const tokenUrl of tokenEndpoints) {
+    console.log('\n---');
+    console.log('endpoint:', tokenUrl);
+    try {
+      const response = await axios.post(tokenUrl, payload.toString(), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        timeout: 30000,
+        validateStatus: () => true,
+      });
 
-    console.log('status:', response.status);
-    console.log('statusText:', response.statusText || '(none)');
-    console.log('response:', JSON.stringify(response.data, null, 2));
+      console.log('status:', response.status);
+      console.log('statusText:', response.statusText || '(none)');
+      console.log('response:', JSON.stringify(response.data, null, 2));
 
-    if (response.status >= 400) {
-      process.exit(1);
+      if (response.status < 400 && response.data?.access_token) {
+        hasSuccessfulExchange = true;
+        break;
+      }
+      lastFailureCode = 1;
+    } catch (error: any) {
+      console.error('[test-dropshipping-token-exchange] request failed');
+      console.error('message:', error?.message || 'unknown');
+      console.error('status:', error?.response?.status || '(none)');
+      console.error('response:', JSON.stringify(error?.response?.data || {}, null, 2));
+      lastFailureCode = 1;
     }
-  } catch (error: any) {
-    console.error('[test-dropshipping-token-exchange] request failed');
-    console.error('message:', error?.message || 'unknown');
-    console.error('status:', error?.response?.status || '(none)');
-    console.error('response:', JSON.stringify(error?.response?.data || {}, null, 2));
-    process.exit(1);
+  }
+
+  if (!hasSuccessfulExchange) {
+    process.exit(lastFailureCode);
   }
 }
 

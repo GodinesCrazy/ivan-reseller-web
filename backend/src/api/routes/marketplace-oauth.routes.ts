@@ -311,6 +311,8 @@ router.get('/callback', async (req: Request, res: Response) => {
         environment,
         hasAppKey: !!appKey,
         hasAppSecret: !!appSecret,
+        appKeyPreview: appKey ? `${String(appKey).slice(0, 6)}...` : null,
+        appSecretLength: appSecret ? String(appSecret).length : 0,
       });
       return res.status(400).send(`
         <html>
@@ -329,6 +331,8 @@ router.get('/callback', async (req: Request, res: Response) => {
       environment,
       codeLength: codeStr.length,
       redirectUriLength: redirectUri?.length || 0,
+      appKeyPreview: `${String(appKey).slice(0, 6)}...`,
+      appSecretLength: String(appSecret).length,
     });
 
     const canonicalCallbackUrl = getAliExpressDropshippingRedirectUri();
@@ -454,8 +458,8 @@ router.get('/callback', async (req: Request, res: Response) => {
       }
 
       // ✅ Redirect a frontend (una sola ventana; postMessage + redirect para volver a la app)
-      const successUrl = `${webBaseUrl}/api-settings?oauth=success&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
-      const errorUrl = `${webBaseUrl}/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
+      const successUrl = `${webBaseUrlForRedirect}/api-settings?oauth=success&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
+      const errorUrl = `${webBaseUrlForRedirect}/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
       
       res.send(`
         <!DOCTYPE html>
@@ -520,7 +524,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       });
 
       // ✅ FIX OAUTH: Redirect a frontend con error (una sola respuesta)
-      const errorUrl = `${webBaseUrl}/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}&error=${encodeURIComponent(tokenError?.message || 'Token exchange failed')}`;
+      const errorUrl = `${webBaseUrlForRedirect}/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}&error=${encodeURIComponent(tokenError?.message || 'Token exchange failed')}`;
       const errorMessage = tokenError?.message || 'Token exchange failed';
       res.status(500).send(`
         <html>
@@ -665,8 +669,44 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       `);
     }
     
-    const parsed = parseState(state);
-    if (!parsed.ok) {
+    const isAliExpressDropshippingMarketplace =
+      marketplace === 'aliexpress-dropshipping' || marketplace === 'aliexpress_dropshipping';
+
+    let userId: number;
+    let redirectUri: string;
+    let environment: 'sandbox' | 'production';
+
+    if (isAliExpressDropshippingMarketplace) {
+      const parsedAliExpress = verifyStateAliExpressSafe(state);
+      if (!parsedAliExpress.ok) {
+        const reason = (parsedAliExpress as { ok: false; reason: string }).reason;
+        logger.error('[OAuth Callback] Invalid AliExpress JWT state', {
+          service: 'marketplace-oauth',
+          marketplace,
+          reason,
+          stateLength: state.length,
+        });
+        const returnUrlState = (process.env.WEB_BASE_URL || 'https://www.ivanreseller.com') + '/api-settings';
+        return res.status(200).send(`
+          <!DOCTYPE html>
+          <html>
+          <head><meta charset="utf-8"><title>Error de autorización</title></head>
+          <body style="font-family: sans-serif; max-width: 560px; margin: 2rem auto; padding: 1.5rem;">
+            <h2>Error de autorización</h2>
+            <p>Error de verificación del estado OAuth de AliExpress (${reason}).</p>
+            <p><strong>Qué hacer:</strong> Vuelve a API Settings y ejecuta OAuth nuevamente.</p>
+            <p><a href="${returnUrlState}" style="display: inline-block; margin-top: 1rem; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Volver a API Settings</a></p>
+          </body>
+          </html>
+        `);
+      }
+
+      userId = parsedAliExpress.userId;
+      redirectUri = getAliExpressDropshippingRedirectUri();
+      environment = 'production';
+    } else {
+      const parsed = parseState(state);
+      if (!parsed.ok) {
       let errorMessage = 'Invalid or expired authorization state.';
       let hint = 'Vuelve a Configuración → API Settings, guarda las credenciales de eBay y pulsa de nuevo "Autorizar OAuth".';
       if (parsed.reason === 'expired') {
@@ -688,20 +728,25 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       });
       
       const returnUrlState = (process.env.WEB_BASE_URL || 'https://www.ivanreseller.com') + '/api-settings';
-      return res.status(200).send(`
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"><title>Error de autorización</title></head>
-        <body style="font-family: sans-serif; max-width: 560px; margin: 2rem auto; padding: 1.5rem;">
-          <h2>Error de autorización</h2>
-          <p>${errorMessage}</p>
-          <p><strong>Qué hacer:</strong> ${hint}</p>
-          <p><a href="${returnUrlState}" style="display: inline-block; margin-top: 1rem; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Volver a API Settings</a></p>
-        </body>
-        </html>
-      `);
+        return res.status(200).send(`
+          <!DOCTYPE html>
+          <html>
+          <head><meta charset="utf-8"><title>Error de autorización</title></head>
+          <body style="font-family: sans-serif; max-width: 560px; margin: 2rem auto; padding: 1.5rem;">
+            <h2>Error de autorización</h2>
+            <p>${errorMessage}</p>
+            <p><strong>Qué hacer:</strong> ${hint}</p>
+            <p><a href="${returnUrlState}" style="display: inline-block; margin-top: 1rem; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Volver a API Settings</a></p>
+          </body>
+          </html>
+        `);
+      }
+
+      const parsedState = parsed as any;
+      userId = parsedState.userId;
+      redirectUri = parsedState.redirectUri;
+      environment = parsedState.environment;
     }
-    const { userId, redirectUri, environment } = parsed as any;
     
     logger.info('[OAuth Callback] State parsed successfully', {
       service: 'marketplace-oauth',
@@ -954,6 +999,8 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
           environment,
           hasAppKey: !!appKey,
           hasAppSecret: !!appSecret,
+          appKeyPreview: appKey ? `${String(appKey).slice(0, 6)}...` : null,
+          appSecretLength: appSecret ? String(appSecret).length : 0,
         });
         return res
           .status(400)
@@ -966,6 +1013,8 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         environment,
         codeLength: code.length,
         redirectUriLength: redirectUri?.length || 0,
+        appKeyPreview: `${String(appKey).slice(0, 6)}...`,
+        appSecretLength: String(appSecret).length,
       });
 
       try {

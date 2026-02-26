@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Settings,
   Globe,
@@ -301,6 +301,10 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
 };
 
 export default function APISettings() {
+  const ALIEXPRESS_OAUTH_REDIRECTING_KEY = 'aliexpress_oauth_redirecting';
+  const ALIEXPRESS_OAUTH_REDIRECTING_AT_KEY = 'aliexpress_oauth_redirecting_at';
+  const ALIEXPRESS_OAUTH_REDIRECTING_TTL_MS = 10 * 60 * 1000;
+
   const { token, user } = useAuthStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -427,10 +431,33 @@ export default function APISettings() {
   }
   const [fieldValidation, setFieldValidation] = useState<Record<string, FieldValidationState>>({});
 
+  const clearAliExpressOAuthRedirectingFlag = useCallback(() => {
+    try {
+      sessionStorage.removeItem(ALIEXPRESS_OAUTH_REDIRECTING_KEY);
+      sessionStorage.removeItem(ALIEXPRESS_OAUTH_REDIRECTING_AT_KEY);
+    } catch (_) {}
+  }, []);
+
   useEffect(() => {
     loadCredentials();
     loadMinimumDropshippingAPIs();
   }, []);
+
+  useEffect(() => {
+    // Prevent permanent OAuth lock if a previous redirect flow was interrupted.
+    try {
+      const flag = sessionStorage.getItem(ALIEXPRESS_OAUTH_REDIRECTING_KEY);
+      if (flag !== '1') return;
+
+      const startedAtRaw = sessionStorage.getItem(ALIEXPRESS_OAUTH_REDIRECTING_AT_KEY);
+      const startedAt = Number(startedAtRaw || '0');
+      const age = Date.now() - startedAt;
+
+      if (!Number.isFinite(startedAt) || startedAt <= 0 || age > ALIEXPRESS_OAUTH_REDIRECTING_TTL_MS) {
+        clearAliExpressOAuthRedirectingFlag();
+      }
+    } catch (_) {}
+  }, [clearAliExpressOAuthRedirectingFlag]);
 
   useEffect(() => {
     if (!authStatuses || Object.keys(authStatuses).length === 0) {
@@ -2235,7 +2262,7 @@ export default function APISettings() {
       // En producción, podríamos validar el origen específico del backend
       if (event.data?.type === 'oauth_success') {
         const marketplace = event.data.marketplace || 'unknown';
-        try { sessionStorage.removeItem('aliexpress_oauth_redirecting'); } catch (_) {}
+        clearAliExpressOAuthRedirectingFlag();
         setOauthing(null);
         log.info('[APISettings] Received OAuth success message', {
           marketplace,
@@ -2265,7 +2292,7 @@ export default function APISettings() {
       } else if (event.data?.type === 'oauth_error') {
         const errorMsg = event.data.error || 'Error desconocido en OAuth';
         const marketplace = event.data.marketplace || 'unknown';
-        try { sessionStorage.removeItem('aliexpress_oauth_redirecting'); } catch (_) {}
+        clearAliExpressOAuthRedirectingFlag();
         setOauthing(null);
         log.error('[APISettings] Received OAuth error message', {
           marketplace,
@@ -2279,7 +2306,7 @@ export default function APISettings() {
 
     window.addEventListener('message', handleOAuthMessage);
     return () => window.removeEventListener('message', handleOAuthMessage);
-  }, []);
+  }, [clearAliExpressOAuthRedirectingFlag]);
 
   // ✅ FIX OAUTH: Detectar query params de OAuth en la URL (cuando el callback redirige)
   useEffect(() => {
@@ -2289,7 +2316,7 @@ export default function APISettings() {
     const errorParam = searchParams.get('error');
 
     if (oauthStatus === 'success' && provider) {
-      try { sessionStorage.removeItem('aliexpress_oauth_redirecting'); } catch (_) {}
+      clearAliExpressOAuthRedirectingFlag();
       log.info('[APISettings] OAuth success detected from URL', {
         provider,
         correlationId,
@@ -2325,7 +2352,7 @@ export default function APISettings() {
       newSearchParams.delete('error');
       navigate(`/api-settings?${newSearchParams.toString()}`, { replace: true });
     } else if (oauthStatus === 'error' && provider) {
-      try { sessionStorage.removeItem('aliexpress_oauth_redirecting'); } catch (_) {}
+      clearAliExpressOAuthRedirectingFlag();
       const errorMsg = errorParam || 'Error desconocido en OAuth';
       log.error('[APISettings] OAuth error detected from URL', {
         provider,
@@ -2344,12 +2371,23 @@ export default function APISettings() {
       newSearchParams.delete('error');
       navigate(`/api-settings?${newSearchParams.toString()}`, { replace: true });
     }
-  }, [searchParams, navigate, fetchAuthStatuses]);
+  }, [searchParams, navigate, fetchAuthStatuses, clearAliExpressOAuthRedirectingFlag]);
 
   const handleOAuth = async (apiName: string, environment: string) => {
     const isAliExpressDropshipping = apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping';
-    if (isAliExpressDropshipping && typeof sessionStorage !== 'undefined' && sessionStorage.getItem('aliexpress_oauth_redirecting') === '1') {
-      return;
+    if (isAliExpressDropshipping && typeof sessionStorage !== 'undefined') {
+      try {
+        const flag = sessionStorage.getItem(ALIEXPRESS_OAUTH_REDIRECTING_KEY);
+        if (flag === '1') {
+          const startedAtRaw = sessionStorage.getItem(ALIEXPRESS_OAUTH_REDIRECTING_AT_KEY);
+          const startedAt = Number(startedAtRaw || '0');
+          const age = Date.now() - startedAt;
+          if (Number.isFinite(startedAt) && startedAt > 0 && age <= ALIEXPRESS_OAUTH_REDIRECTING_TTL_MS) {
+            return;
+          }
+          clearAliExpressOAuthRedirectingFlag();
+        }
+      } catch (_) {}
     }
     if (oauthInProgressRef.current[apiName]) {
       return;
@@ -2556,7 +2594,8 @@ export default function APISettings() {
       // ✅ AliExpress Dropshipping: UNA SOLA acción = redirección en esta pestaña. Sin popup para evitar doble ventana.
       if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') {
         try {
-          sessionStorage.setItem('aliexpress_oauth_redirecting', '1');
+          sessionStorage.setItem(ALIEXPRESS_OAUTH_REDIRECTING_KEY, '1');
+          sessionStorage.setItem(ALIEXPRESS_OAUTH_REDIRECTING_AT_KEY, String(Date.now()));
           toast('Redirigiendo a AliExpress…', { icon: 'ℹ️' });
         } catch (_) {}
         window.location.replace(authUrl);
