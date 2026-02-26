@@ -76,7 +76,10 @@ export async function runTestFullDropshippingCycle(req: Request, res: Response):
   logger.info('[INTERNAL] POST /api/internal/test-full-dropshipping-cycle', {
     keyword,
     hasTrendsApiKey: !!(process.env.SERP_API_KEY || process.env.GOOGLE_TRENDS_API_KEY),
-    hasAliexpressKeys: !!(process.env.ALIEXPRESS_APP_KEY && process.env.ALIEXPRESS_APP_SECRET),
+    hasAliexpressKeys: !!(
+      (process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY) &&
+      (process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET)
+    ),
   });
 
   try {

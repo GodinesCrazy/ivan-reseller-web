@@ -1,7 +1,10 @@
 /**
  * Credentials Manager Service
  * Centralizes credential loading from DB (api_credentials) and process.env fallback.
- * Supports: ALIEXPRESS_APP_KEY, ALIEXPRESS_APP_SECRET, EBAY_CLIENT_ID, PAYPAL_CLIENT_ID, etc.
+ * AliExpress isolation:
+ * - Affiliate namespace: aliexpress-affiliate
+ * - Dropshipping namespace: aliexpress-dropshipping
+ * - Legacy namespace: aliexpress (manual browser/cookies only)
  */
 
 import { trace } from '../utils/boot-trace';
@@ -25,6 +28,13 @@ const credentialsCache = new Map<string, CredentialEntry | null>();
 
 function cacheKey(userId: number, apiName: string, environment: string): string {
   return `${userId}:${apiName}:${environment}`;
+}
+
+function normalizeApiName(apiName: string): string {
+  const n = String(apiName || '').toLowerCase().trim();
+  if (n === 'aliexpress_affiliate') return 'aliexpress-affiliate';
+  if (n === 'aliexpress_dropshipping') return 'aliexpress-dropshipping';
+  return n;
 }
 
 /**
@@ -57,21 +67,41 @@ function loadFromEnv(
   apiName: string,
   environment: 'sandbox' | 'production'
 ): Record<string, any> | null {
-  const n = apiName.toLowerCase();
+  const n = normalizeApiName(apiName);
 
-  // AliExpress Affiliate (also ALIEXPRESS_APP_KEY for legacy)
-  if (n === 'aliexpress-affiliate' || n === 'aliexpress_affiliate') {
-    const appKey =
-      (process.env.ALIEXPRESS_APP_KEY || process.env.ALIEXPRESS_AFFILIATE_APP_KEY || '').trim();
-    const appSecret =
-      (process.env.ALIEXPRESS_APP_SECRET ||
-        process.env.ALIEXPRESS_AFFILIATE_APP_SECRET ||
-        '').trim();
+  // AliExpress Affiliate (strict namespace: ALIEXPRESS_AFFILIATE_*)
+  if (n === 'aliexpress-affiliate') {
+    const appKey = (process.env.ALIEXPRESS_AFFILIATE_APP_KEY || '').trim();
+    const appSecret = (process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || '').trim();
+    // Legacy fallback only when dropshipping vars are absent (avoid cross contamination).
+    const legacyKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
+    const legacySecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+    const dsKey = (process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY || '').trim();
+    const dsSecret = (process.env.ALIEXPRESS_DROPSHIPPING_APP_SECRET || '').trim();
+    const finalKey = appKey || (!dsKey ? legacyKey : '');
+    const finalSecret = appSecret || (!dsSecret ? legacySecret : '');
+    if (!finalKey || !finalSecret) return null;
+    if (!appKey || !appSecret) {
+      logger.warn('[CredentialsManager] Using legacy ALIEXPRESS_APP_* for affiliate. Configure ALIEXPRESS_AFFILIATE_APP_* to enforce full isolation.');
+    }
+    return {
+      appKey: finalKey,
+      appSecret: finalSecret,
+      trackingId: (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim(),
+      sandbox: environment === 'sandbox',
+    };
+  }
+
+  // AliExpress Dropshipping (strict namespace: ALIEXPRESS_DROPSHIPPING_*)
+  if (n === 'aliexpress-dropshipping') {
+    const appKey = (process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY || '').trim();
+    const appSecret = (process.env.ALIEXPRESS_DROPSHIPPING_APP_SECRET || '').trim();
     if (!appKey || !appSecret) return null;
     return {
       appKey,
       appSecret,
-      trackingId: (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim(),
+      accessToken: (process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN || '').trim() || undefined,
+      refreshToken: (process.env.ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN || '').trim() || undefined,
       sandbox: environment === 'sandbox',
     };
   }
@@ -217,7 +247,7 @@ export const CredentialsManager = {
     environment: 'sandbox' | 'production',
     options?: { includeGlobal?: boolean }
   ): Promise<CredentialEntry | null> {
-    const name = String(apiName).toLowerCase();
+    const name = normalizeApiName(String(apiName));
     const key = cacheKey(userId, name, environment);
     const cached = credentialsCache.get(key);
     if (cached !== undefined) return cached;
@@ -303,7 +333,7 @@ export const CredentialsManager = {
     environment: 'sandbox' | 'production',
     options?: { scope?: 'user' | 'global'; sharedByUserId?: number | null }
   ): Promise<void> {
-    const name = String(apiName).toLowerCase();
+    const name = normalizeApiName(String(apiName));
     const scope = options?.scope ?? 'user';
     const ownerUserId = scope === 'global' ? userId : userId;
 
@@ -342,7 +372,7 @@ export const CredentialsManager = {
     scope: 'user' | 'global',
     isActive: boolean
   ): Promise<void> {
-    const name = String(apiName).toLowerCase();
+    const name = normalizeApiName(String(apiName));
     const ownerUserId = scope === 'global' ? userId : userId;
 
     await prisma.apiCredential.updateMany({
@@ -364,7 +394,7 @@ export const CredentialsManager = {
     environment: 'sandbox' | 'production',
     scope: 'user' | 'global'
   ): Promise<void> {
-    const name = String(apiName).toLowerCase();
+    const name = normalizeApiName(String(apiName));
 
     await prisma.apiCredential.deleteMany({
       where: {
@@ -411,7 +441,7 @@ export const CredentialsManager = {
     credentials: Record<string, any>,
     environment: 'sandbox' | 'production'
   ): Record<string, any> {
-    const n = apiName.toLowerCase();
+    const n = normalizeApiName(apiName);
     const out = { ...credentials };
 
     if (n === 'ebay') {
@@ -443,7 +473,7 @@ export const CredentialsManager = {
     apiName: ApiName | string,
     credentials: Record<string, any>
   ): { valid: boolean; errors?: string[] } {
-    const n = String(apiName).toLowerCase();
+    const n = normalizeApiName(String(apiName));
     const err: string[] = [];
 
     if (n === 'ebay') {
@@ -489,11 +519,19 @@ export const CredentialsManager = {
         err.push('clientId is required');
       if (!credentials?.clientSecret || String(credentials.clientSecret).trim() === '')
         err.push('clientSecret is required');
-    } else if (n === 'aliexpress' || n === 'aliexpress_affiliate') {
+    } else if (n === 'aliexpress-affiliate') {
       if (!credentials?.appKey || String(credentials.appKey).trim() === '')
         err.push('appKey is required');
       if (!credentials?.appSecret || String(credentials.appSecret).trim() === '')
         err.push('appSecret is required');
+    } else if (n === 'aliexpress-dropshipping') {
+      if (!credentials?.appKey || String(credentials.appKey).trim() === '')
+        err.push('appKey is required');
+      if (!credentials?.appSecret || String(credentials.appSecret).trim() === '')
+        err.push('appSecret is required');
+      if (credentials?.accessToken && credentials?.refreshToken && String(credentials.accessToken) === String(credentials.refreshToken)) {
+        err.push('accessToken and refreshToken must be different');
+      }
     }
 
     return {

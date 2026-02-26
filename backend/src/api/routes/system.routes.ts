@@ -50,8 +50,8 @@ router.get('/diagnostics', async (_req: Request, res: Response) => {
 
     // AliExpress - Affiliate API + OAuth (Dropshipping)
     const hasAliexpress =
-      Boolean((process.env.ALIEXPRESS_APP_KEY || '').trim()) &&
-      Boolean((process.env.ALIEXPRESS_APP_SECRET || '').trim());
+      Boolean((process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY || '').trim()) &&
+      Boolean((process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET || '').trim());
     diagnostics.aliexpressOAuth = hasAliexpress ? 'OK' : 'FAIL';
 
     // PayPal
@@ -144,8 +144,8 @@ router.get('/full-diagnostics', async (_req: Request, res: Response) => {
 
     // AliExpress
     const hasAliexpress =
-      Boolean((process.env.ALIEXPRESS_APP_KEY || '').trim()) &&
-      Boolean((process.env.ALIEXPRESS_APP_SECRET || '').trim());
+      Boolean((process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY || '').trim()) &&
+      Boolean((process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET || '').trim());
     diagnostics.aliexpress = hasAliexpress ? 'OK' : 'FAIL';
 
     // eBay OAuth

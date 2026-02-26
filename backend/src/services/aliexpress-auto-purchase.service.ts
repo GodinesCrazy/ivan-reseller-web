@@ -258,10 +258,13 @@ export class AliExpressAutoPurchaseService {
             const productId = productIdMatch ? productIdMatch[1] : null;
             
             if (!productId) {
-              logger.warn('[ALIEXPRESS-AUTO-PURCHASE] No se pudo extraer productId de la URL, usando Puppeteer', {
+              logger.warn('[ALIEXPRESS-AUTO-PURCHASE] No se pudo extraer productId de la URL (strict isolation: no browser fallback)', {
                 url: request.productUrl
               });
-              // Continuar con Puppeteer
+              return {
+                success: false,
+                error: 'Could not extract productId from AliExpress URL. Dropshipping API requires productId.',
+              };
             } else {
               // Obtener información del producto desde la API
               const productInfo = await aliexpressDropshippingAPIService.getProductInfo(productId, {
@@ -348,11 +351,11 @@ export class AliExpressAutoPurchaseService {
               };
             }
           } catch (apiError: any) {
-            logger.warn('[ALIEXPRESS-AUTO-PURCHASE] Error usando Dropshipping API, usando Puppeteer como fallback', {
+            logger.warn('[ALIEXPRESS-AUTO-PURCHASE] Error usando Dropshipping API (strict isolation: no browser fallback)', {
               error: apiError?.message || String(apiError),
               userId,
               productUrl: request.productUrl,
-              willFallback: true
+              willFallback: false
             });
             
             // Si el error es de token expirado, no continuar con Puppeteer
@@ -363,20 +366,29 @@ export class AliExpressAutoPurchaseService {
               };
             }
             
-            // Continuar con Puppeteer si hay otros errores
+            return {
+              success: false,
+              error: `AliExpress Dropshipping API failed: ${apiError?.message || String(apiError)}`,
+            };
           }
         } else {
-          logger.debug('[ALIEXPRESS-AUTO-PURCHASE] No hay credenciales de Dropshipping API configuradas, usando Puppeteer', {
+          logger.debug('[ALIEXPRESS-AUTO-PURCHASE] No hay credenciales de Dropshipping API configuradas (strict isolation: no browser fallback)', {
             userId
           });
-          // Continuar con Puppeteer si no hay credenciales
+          return {
+            success: false,
+            error: 'AliExpress Dropshipping credentials not configured for this user/environment.',
+          };
         }
       } catch (apiCheckError: any) {
-        logger.warn('[ALIEXPRESS-AUTO-PURCHASE] Error verificando Dropshipping API, usando Puppeteer', {
+        logger.warn('[ALIEXPRESS-AUTO-PURCHASE] Error verificando Dropshipping API (strict isolation: no browser fallback)', {
           error: apiCheckError?.message || String(apiCheckError),
           userId
         });
-        // Continuar con Puppeteer si hay error
+        return {
+          success: false,
+          error: `AliExpress Dropshipping verification failed: ${apiCheckError?.message || String(apiCheckError)}`,
+        };
       }
     }
     

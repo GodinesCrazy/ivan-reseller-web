@@ -62,8 +62,10 @@ if (process.env.NODE_ENV === 'production') {
 // Railway startup env check (must run before any logic that depends on env)
 console.log('[RAILWAY ENV CHECK]', {
   PORT: process.env.PORT,
-  ALIEXPRESS_APP_KEY: !!process.env.ALIEXPRESS_APP_KEY,
-  ALIEXPRESS_APP_SECRET: !!process.env.ALIEXPRESS_APP_SECRET,
+  ALIEXPRESS_AFFILIATE_APP_KEY: !!process.env.ALIEXPRESS_AFFILIATE_APP_KEY,
+  ALIEXPRESS_AFFILIATE_APP_SECRET: !!process.env.ALIEXPRESS_AFFILIATE_APP_SECRET,
+  ALIEXPRESS_DROPSHIPPING_APP_KEY: !!process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY,
+  ALIEXPRESS_DROPSHIPPING_APP_SECRET: !!process.env.ALIEXPRESS_DROPSHIPPING_APP_SECRET,
   ALIEXPRESS_REDIRECT_URI: process.env.ALIEXPRESS_REDIRECT_URI,
   NODE_ENV: process.env.NODE_ENV,
 });
@@ -179,17 +181,18 @@ function logConfiguration(env: any, port: number, portSourceStr: string): void {
   console.log(`   NATIVE_SCRAPER_URL: ${process.env.NATIVE_SCRAPER_URL || '❌ FALTA'}`);
   console.log('');
   console.log('[ALIEXPRESS-CONFIG]', {
-    APP_KEY: process.env.ALIEXPRESS_APP_KEY ? 'SET' : 'MISSING',
-    APP_SECRET: process.env.ALIEXPRESS_APP_SECRET ? 'SET' : 'MISSING',
-    REDIRECT_URI: process.env.ALIEXPRESS_REDIRECT_URI || 'MISSING',
-    OAUTH_BASE: process.env.ALIEXPRESS_OAUTH_BASE,
-    API_BASE: process.env.ALIEXPRESS_API_BASE,
+    AFFILIATE_APP_KEY: process.env.ALIEXPRESS_AFFILIATE_APP_KEY ? 'SET' : 'MISSING',
+    AFFILIATE_APP_SECRET: process.env.ALIEXPRESS_AFFILIATE_APP_SECRET ? 'SET' : 'MISSING',
+    DROPSHIPPING_APP_KEY: process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY ? 'SET' : 'MISSING',
+    DROPSHIPPING_APP_SECRET: process.env.ALIEXPRESS_DROPSHIPPING_APP_SECRET ? 'SET' : 'MISSING',
+    DROPSHIPPING_REDIRECT_URI: process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI || 'MISSING',
+    LEGACY_REDIRECT_URI: process.env.ALIEXPRESS_REDIRECT_URI || 'MISSING',
   });
-  const hasAppKey = !!(process.env.ALIEXPRESS_APP_KEY || '').trim();
-  const hasAppSecret = !!(process.env.ALIEXPRESS_APP_SECRET || '').trim();
-  const hasRedirectUri = !!(process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
+  const hasAppKey = !!(process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY || '').trim();
+  const hasAppSecret = !!(process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET || '').trim();
+  const hasRedirectUri = !!(process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI || process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
   if (!hasAppKey || !hasAppSecret || !hasRedirectUri) {
-    console.warn('[ALIEXPRESS] Disabled - missing credentials (APP_KEY, APP_SECRET, or REDIRECT_URI). Backend will start without AliExpress OAuth.');
+    console.warn('[ALIEXPRESS] Disabled - missing affiliate or dropshipping settings (APP_KEY/APP_SECRET/REDIRECT_URI).');
   }
 }
 

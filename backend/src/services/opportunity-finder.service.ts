@@ -669,8 +669,8 @@ class OpportunityFinderService {
       try {
         const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
         const { CredentialsManager } = await import('./credentials-manager.service');
-        const appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
-        const appSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+        const appKey = (process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY || '').trim();
+        const appSecret = (process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET || '').trim();
         let affiliateCreds = appKey && appSecret
           ? { appKey, appSecret, trackingId: (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim(), sandbox: false } as any
           : await CredentialsManager.getCredentials(userId, 'aliexpress-affiliate', environment);
@@ -784,10 +784,10 @@ class OpportunityFinderService {
         const { CredentialsManager } = await import('./credentials-manager.service');
         const { aliexpressAffiliateAPIService } = await import('./aliexpress-affiliate-api.service');
         let affiliateCreds = await CredentialsManager.getCredentials(userId, 'aliexpress-affiliate', environment);
-        if (!affiliateCreds && process.env.ALIEXPRESS_APP_KEY && process.env.ALIEXPRESS_APP_SECRET) {
+        if (!affiliateCreds && (process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY) && (process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET)) {
           affiliateCreds = {
-            appKey: process.env.ALIEXPRESS_APP_KEY.trim(),
-            appSecret: process.env.ALIEXPRESS_APP_SECRET.trim(),
+            appKey: String(process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY).trim(),
+            appSecret: String(process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET).trim(),
             trackingId: (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim(),
             sandbox: false,
           } as any;

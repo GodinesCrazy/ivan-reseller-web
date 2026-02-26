@@ -318,9 +318,21 @@ const envSchema = z.object({
   ALIEXPRESS_AUTH_MONITOR_ENABLED: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
   ALLOW_BROWSER_AUTOMATION: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
   
-  // ✅ AliExpress Affiliate API - REQUERIDO para generación de links afiliados y OAuth
+  // ✅ AliExpress Affiliate API (strict vars)
+  ALIEXPRESS_AFFILIATE_APP_KEY: z.string().optional(),
+  ALIEXPRESS_AFFILIATE_APP_SECRET: z.string().optional(),
+  // Legacy fallback (avoid in production; prefer ALIEXPRESS_AFFILIATE_APP_*)
   ALIEXPRESS_APP_KEY: z.string().optional(),
   ALIEXPRESS_APP_SECRET: z.string().optional(),
+
+  // ✅ AliExpress Dropshipping API (strict vars)
+  ALIEXPRESS_DROPSHIPPING_APP_KEY: z.string().optional(),
+  ALIEXPRESS_DROPSHIPPING_APP_SECRET: z.string().optional(),
+  ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN: z.string().optional(),
+  ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN: z.string().optional(),
+  ALIEXPRESS_DROPSHIPPING_REDIRECT_URI: z.string().url().optional(),
+
+  // Legacy OAuth settings used by /api/aliexpress module
   ALIEXPRESS_REDIRECT_URI: z.string().url().default('https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback'),
   ALIEXPRESS_TRACKING_ID: z.string().default('ivanreseller'),
   ALIEXPRESS_OAUTH_BASE: z.string().url().default('https://api-sg.aliexpress.com/oauth'),

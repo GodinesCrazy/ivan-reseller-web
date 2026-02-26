@@ -35,7 +35,8 @@ export class AliExpressCheckoutService {
   /**
    * Place order on AliExpress. Stub mode if browser automation disabled.
    * When AUTOPILOT_MODE=production, simulated checkout is forbidden.
-   * When userId is provided and has aliexpress-dropshipping OAuth, Dropshipping API is used first; else Puppeteer fallback.
+   * Isolation rule: when userId is provided, purchase must use Dropshipping API credentials only.
+   * No Puppeteer fallback is allowed in that path.
    */
   async placeOrder(request: AliExpressCheckoutRequest, userId?: number): Promise<AliExpressCheckoutResult> {
     const allowBrowser = env.ALLOW_BROWSER_AUTOMATION ?? false;
@@ -59,7 +60,7 @@ export class AliExpressCheckoutService {
     try {
       const { AliExpressAutoPurchaseService } = await import('./aliexpress-auto-purchase.service');
       const service = new AliExpressAutoPurchaseService();
-      // When userId is provided, executePurchase will try Dropshipping API first (no login needed)
+      // When userId is provided, executePurchase must use Dropshipping API only (strict isolation)
       if (userId) {
         const result = await (service as any).executePurchase(
           {
@@ -88,9 +89,12 @@ export class AliExpressCheckoutService {
             orderNumber: result.orderNumber || result.orderId,
           };
         }
-        if (result.error && result.error !== 'AliExpress Dropshipping API access token expired. Please refresh credentials.') {
-          logger.warn('[ALIEXPRESS-CHECKOUT] Dropshipping API failed, will try Puppeteer fallback', { error: result.error });
-        }
+        const strictError = result.error || 'AliExpress Dropshipping API purchase failed';
+        logger.warn('[ALIEXPRESS-CHECKOUT] Dropshipping API failed (strict isolation: no browser fallback)', {
+          userId,
+          error: strictError,
+        });
+        return { success: false, error: strictError };
       }
       // Puppeteer fallback: need login credentials
       const aliUser = (process.env.ALIEXPRESS_USER || '').trim();

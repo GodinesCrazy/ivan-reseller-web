@@ -130,13 +130,22 @@ export class AliExpressAffiliateAPIService {
   private endpoint: string = AliExpressAffiliateAPIService.ENDPOINT;
 
   constructor() {
-    const rawKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
-    const rawSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+    const affiliateKey = (process.env.ALIEXPRESS_AFFILIATE_APP_KEY || '').trim();
+    const affiliateSecret = (process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || '').trim();
+    const legacyKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
+    const legacySecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+    const dsKey = (process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY || '').trim();
+    const dsSecret = (process.env.ALIEXPRESS_DROPSHIPPING_APP_SECRET || '').trim();
+    const rawKey = affiliateKey || (!dsKey ? legacyKey : '');
+    const rawSecret = affiliateSecret || (!dsSecret ? legacySecret : '');
+    if ((!affiliateKey || !affiliateSecret) && (legacyKey || legacySecret)) {
+      logger.warn('[ALIEXPRESS-AFFILIATE] Using legacy ALIEXPRESS_APP_* vars. Configure ALIEXPRESS_AFFILIATE_APP_* for strict isolation.');
+    }
     this.appKey = rawKey && rawKey !== 'PUT_YOUR_APP_KEY_HERE' ? rawKey : '';
     this.appSecret = rawSecret && rawSecret !== 'PUT_YOUR_APP_SECRET_HERE' ? rawSecret : '';
     this.trackingId = (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim();
     if (!this.appKey || !this.appSecret) {
-      console.log('[ALIEXPRESS-AFFILIATE] Not configured (ALIEXPRESS_APP_KEY/APP_SECRET missing). Server will start; AliExpress features will use fallbacks.');
+      console.log('[ALIEXPRESS-AFFILIATE] Not configured (ALIEXPRESS_AFFILIATE_APP_KEY/APP_SECRET missing). Server will start; AliExpress features will use fallbacks.');
     } else {
       console.log('[AUTOPILOT] Affiliate API credentials loaded');
       console.log('[AUTOPILOT] Using APP_KEY mode');

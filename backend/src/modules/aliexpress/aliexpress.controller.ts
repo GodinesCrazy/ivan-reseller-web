@@ -86,11 +86,11 @@ export const testAffiliateLink = async (req: Request, res: Response) => {
     const { productId } = req.query;
 
     // Check process.env directly
-    const rawAppKey = process.env.ALIEXPRESS_APP_KEY;
-    const rawAppSecret = process.env.ALIEXPRESS_APP_SECRET;
+    const rawAppKey = process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY;
+    const rawAppSecret = process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET;
     
-    console.log('[ALIEXPRESS-AFFILIATE] Test link - ALIEXPRESS_APP_KEY present:', !!rawAppKey);
-    console.log('[ALIEXPRESS-AFFILIATE] Test link - ALIEXPRESS_APP_SECRET present:', !!rawAppSecret);
+    console.log('[ALIEXPRESS-AFFILIATE] Test link - ALIEXPRESS_AFFILIATE_APP_KEY present:', !!rawAppKey);
+    console.log('[ALIEXPRESS-AFFILIATE] Test link - ALIEXPRESS_AFFILIATE_APP_SECRET present:', !!rawAppSecret);
     
     const appKey = rawAppKey || '';
     const appSecret = rawAppSecret || '';
@@ -130,7 +130,7 @@ export const testAffiliateLink = async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         error: 'AliExpress env missing',
-        message: 'ALIEXPRESS_APP_KEY y ALIEXPRESS_APP_SECRET deben estar configurados',
+        message: 'ALIEXPRESS_AFFILIATE_APP_KEY y ALIEXPRESS_AFFILIATE_APP_SECRET deben estar configurados',
         correlationId,
       });
     }
@@ -232,8 +232,8 @@ export const searchProducts = async (req: Request, res: Response) => {
  */
 export const getHealthStatus = async (req: Request, res: Response) => {
   try {
-    const rawAppKey = process.env.ALIEXPRESS_APP_KEY;
-    const rawAppSecret = process.env.ALIEXPRESS_APP_SECRET;
+    const rawAppKey = process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY;
+    const rawAppSecret = process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET;
     const rawTrackingId = process.env.ALIEXPRESS_TRACKING_ID;
     const rawApiBaseUrl = process.env.ALIEXPRESS_API_BASE_URL;
     
@@ -290,10 +290,10 @@ export const getHealthStatus = async (req: Request, res: Response) => {
     };
     
     if (!hasAppKey) {
-      healthStatus.errors.push('ALIEXPRESS_APP_KEY no configurado');
+      healthStatus.errors.push('ALIEXPRESS_AFFILIATE_APP_KEY no configurado');
     }
     if (!hasAppSecret) {
-      healthStatus.errors.push('ALIEXPRESS_APP_SECRET no configurado');
+      healthStatus.errors.push('ALIEXPRESS_AFFILIATE_APP_SECRET no configurado');
     }
     if (!signatureTest) {
       healthStatus.errors.push(`Error al generar firma: ${signatureError || 'unknown'}`);
@@ -488,8 +488,8 @@ async function persistCandidates(userId: number, candidates: any[]): Promise<voi
  * GET /api/aliexpress/affiliate/debug-auth - Diagnostic: app credentials + token status
  */
 export const getDebugAuth = async (_req: Request, res: Response) => {
-  const rawKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
-  const rawSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+  const rawKey = (process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY || '').trim();
+  const rawSecret = (process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET || '').trim();
   const hasAppKey = !!rawKey && rawKey !== 'PUT_YOUR_APP_KEY_HERE';
   const hasAppSecret = !!rawSecret && rawSecret !== 'PUT_YOUR_APP_SECRET_HERE';
   const tokenData = getToken();
@@ -520,8 +520,8 @@ export const getStatusHandler = async (_req: Request, res: Response) => {
   try {
     const oauthStatus = getOAuthStatus();
     const hasCredentials =
-      !!(process.env.ALIEXPRESS_APP_KEY || '').trim() &&
-      !!(process.env.ALIEXPRESS_APP_SECRET || '').trim();
+      !!(process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY || '').trim() &&
+      !!(process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET || '').trim();
     return res.status(200).json({
       oauth: oauthStatus,
       affiliate: { hasCredentials, hasTrackingId: !!(process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim() },

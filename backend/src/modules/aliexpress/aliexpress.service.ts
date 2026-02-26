@@ -33,8 +33,8 @@ class AliExpressService {
 
   constructor() {
     // ✅ FASE 3: Leer EXCLUSIVAMENTE de process.env (Railway)
-    this.appKey = (process.env.ALIEXPRESS_APP_KEY || '').trim();
-    this.appSecret = (process.env.ALIEXPRESS_APP_SECRET || '').trim();
+    this.appKey = (process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY || '').trim();
+    this.appSecret = (process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET || '').trim();
     this.trackingId = (process.env.ALIEXPRESS_TRACKING_ID || 'ivanreseller').trim();
     this.apiBaseUrl = (process.env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync').trim();
     this.environment = (process.env.ALIEXPRESS_ENV || 'production') as 'production' | 'test';
@@ -102,7 +102,7 @@ class AliExpressService {
    */
   async createAffiliateLink(params: AliExpressAffiliateLinkParams): Promise<AliExpressAffiliateLinkResponse> {
     if (!this.appKey || !this.appSecret) {
-      throw new Error('ALIEXPRESS_APP_KEY y ALIEXPRESS_APP_SECRET deben estar configurados');
+      throw new Error('ALIEXPRESS_AFFILIATE_APP_KEY y ALIEXPRESS_AFFILIATE_APP_SECRET deben estar configurados');
     }
 
     try {
@@ -209,7 +209,7 @@ class AliExpressService {
    */
   async searchProducts(params: AliExpressProductSearchParams): Promise<AliExpressProductSearchResponse> {
     if (!this.appKey || !this.appSecret) {
-      throw new Error('ALIEXPRESS_APP_KEY y ALIEXPRESS_APP_SECRET deben estar configurados');
+      throw new Error('ALIEXPRESS_AFFILIATE_APP_KEY y ALIEXPRESS_AFFILIATE_APP_SECRET deben estar configurados');
     }
 
     try {

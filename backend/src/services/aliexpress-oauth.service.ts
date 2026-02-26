@@ -38,8 +38,8 @@ function fromEnv(key: string): string {
   const v = (process.env[key] || '').trim();
   return v && !PLACEHOLDERS.includes(v) ? v : '';
 }
-const APP_KEY = fromEnv('ALIEXPRESS_APP_KEY');
-const APP_SECRET = fromEnv('ALIEXPRESS_APP_SECRET');
+const APP_KEY = fromEnv('ALIEXPRESS_AFFILIATE_APP_KEY') || fromEnv('ALIEXPRESS_APP_KEY');
+const APP_SECRET = fromEnv('ALIEXPRESS_AFFILIATE_APP_SECRET') || fromEnv('ALIEXPRESS_APP_SECRET');
 const REDIRECT_URI = (process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
 const OAUTH_BASE = (process.env.ALIEXPRESS_OAUTH_BASE || 'https://api-sg.aliexpress.com/oauth').replace(/\/$/, '');
 const API_BASE = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync').replace(/\/$/, '');
@@ -52,8 +52,8 @@ const TOKEN_SIGN_PATH = '/rest/auth/token/create';
  */
 export function getAuthorizationUrl(): string {
   if (!APP_KEY) {
-    logger.error('[ALIEXPRESS-OAUTH] Missing ALIEXPRESS_APP_KEY');
-    throw new Error('ALIEXPRESS_APP_KEY not configured');
+    logger.error('[ALIEXPRESS-OAUTH] Missing ALIEXPRESS_AFFILIATE_APP_KEY');
+    throw new Error('ALIEXPRESS_AFFILIATE_APP_KEY not configured');
   }
   if (!REDIRECT_URI) {
     logger.error('[ALIEXPRESS-OAUTH] Missing ALIEXPRESS_REDIRECT_URI / ALIEXPRESS_CALLBACK_URL');
@@ -79,7 +79,7 @@ export function getOAuthStatus(): { hasToken: boolean; expiresAt: string | null;
  */
 export async function exchangeCodeForToken(code: string): Promise<TokenData> {
   if (!APP_KEY || !APP_SECRET) {
-    throw new Error('ALIEXPRESS_APP_KEY / ALIEXPRESS_APP_SECRET not configured');
+    throw new Error('ALIEXPRESS_AFFILIATE_APP_KEY / ALIEXPRESS_AFFILIATE_APP_SECRET not configured');
   }
   if (!REDIRECT_URI) {
     throw new Error('ALIEXPRESS_REDIRECT_URI not configured');
@@ -218,7 +218,7 @@ export const exchangeAuthorizationCode = exchangeCodeForToken;
  */
 export async function refreshAccessToken(refreshToken: string): Promise<TokenData> {
   if (!APP_KEY || !APP_SECRET) {
-    throw new Error('ALIEXPRESS_APP_KEY / ALIEXPRESS_APP_SECRET not configured');
+    throw new Error('ALIEXPRESS_AFFILIATE_APP_KEY / ALIEXPRESS_AFFILIATE_APP_SECRET not configured');
   }
   const params = new URLSearchParams({
     grant_type: 'refresh_token',
