@@ -329,6 +329,8 @@ export default function APISettings() {
   const openOAuthWindowRef = useRef<{ apiName: string; win: Window } | null>(null);
   /** Evita doble ejecución de handleOAuth (doble clic o Strict Mode) */
   const oauthInProgressRef = useRef<Record<string, boolean>>({});
+  /** AliExpress Dropshipping: evita segunda redirección (solo una pestaña) */
+  const aliexpressRedirectingRef = useRef(false);
   const [manualCookieModalOpen, setManualCookieModalOpen] = useState(false);
   const [manualCookieInput, setManualCookieInput] = useState('');
   const [manualCookieError, setManualCookieError] = useState<string | null>(null);
@@ -2344,6 +2346,9 @@ export default function APISettings() {
     if (oauthInProgressRef.current[apiName]) {
       return;
     }
+    if ((apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') && aliexpressRedirectingRef.current) {
+      return;
+    }
     if (openOAuthWindowRef.current?.apiName === apiName) {
       const w = openOAuthWindowRef.current.win;
       if (w && !w.closed) {
@@ -2546,6 +2551,11 @@ export default function APISettings() {
       
       // ✅ AliExpress Dropshipping: SOLO redirección en la misma pestaña (nunca popup) para evitar dos ventanas
       if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') {
+        if (aliexpressRedirectingRef.current) {
+          setOauthing(null);
+          return;
+        }
+        aliexpressRedirectingRef.current = true;
         try { toast('Redirigiendo a AliExpress para autorizar...', { icon: 'ℹ️' }); } catch (_) {}
         window.location.href = authUrl;
         setOauthing(null);
@@ -3856,16 +3866,6 @@ export default function APISettings() {
                           }
                         };
                         
-                        const handleOpenOAuthInSameTab = async () => {
-                          log.info('[APISettings] Open OAuth in same tab button clicked');
-                          const url = await getOAuthUrlForAliExpress();
-                          if (url) {
-                            log.info('[APISettings] Opening OAuth in same tab (redirect)');
-                            toast('Redirigiendo a OAuth...', { icon: 'ℹ️' });
-                            window.location.href = url;
-                          }
-                        };
-                        
                         return (
                           <div className="mt-2 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded">
                             <div className="flex items-center justify-between">
@@ -3878,7 +3878,8 @@ export default function APISettings() {
                               <div className="flex gap-2 ml-2">
                                 {unifiedStatus.actionButton && (
                                   <button
-                                    onClick={unifiedStatus.actionButton.onClick}
+                                    type="button"
+                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); unifiedStatus.actionButton?.onClick(); }}
                                     disabled={oauthing === apiDef.name}
                                     className="px-3 py-1 text-xs font-semibold bg-amber-600 text-white rounded hover:bg-amber-700 transition disabled:opacity-50"
                                   >
@@ -4087,7 +4088,8 @@ export default function APISettings() {
                             : 'Autorizar OAuth';
                           return (
                         <button
-                          onClick={() => handleOAuth(apiDef.name, currentEnvironment)}
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleOAuth(apiDef.name, currentEnvironment); }}
                           disabled={oauthDisabled}
                           className="px-3 py-1 rounded text-sm font-medium border border-blue-200 text-blue-600 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                           title={oauthTitle}
