@@ -937,6 +937,109 @@ router.get('/ebay-runtime-credentials', validateInternalSecret, async (req: Requ
   }
 });
 
+// GET /api/internal/ebay-listing-diagnostic - resuelve offer+sku+inventoryItem e imágenes para un listingId
+router.get('/ebay-listing-diagnostic', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const { CredentialsManager, clearCredentialsCache } = await import('../../services/credentials-manager.service');
+    const userId = Number(req.query?.userId) || 1;
+    const listingId = String(req.query?.listingId || '').trim();
+    if (!listingId) {
+      return res.status(400).json({ success: false, error: 'listingId is required' });
+    }
+
+    const entry = await CredentialsManager.getCredentialEntry(userId, 'ebay', 'production');
+    const creds: Record<string, any> = (entry?.credentials as any) || {};
+    const appId = String(creds.appId || process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
+    const certId = String(creds.certId || process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
+    const refreshToken = String(creds.refreshToken || process.env.EBAY_REFRESH_TOKEN || '').trim();
+    let accessToken = String(creds.token || process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN || '').trim();
+    if (!appId || !certId) {
+      return res.status(400).json({ success: false, error: 'Missing EBAY_APP_ID/EBAY_CERT_ID' });
+    }
+
+    if (!accessToken && refreshToken) {
+      const basic = Buffer.from(`${appId}:${certId}`).toString('base64');
+      const tokenResp = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${basic}`,
+        },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+        }).toString(),
+      });
+      const tokenData = await tokenResp.json().catch(() => ({} as any));
+      if (!tokenResp.ok || !tokenData?.access_token) {
+        return res.status(400).json({
+          success: false,
+          stage: 'refresh_token',
+          status: tokenResp.status,
+          response: tokenData,
+        });
+      }
+      accessToken = String(tokenData.access_token).trim();
+      const newCreds = {
+        ...creds,
+        appId,
+        certId,
+        refreshToken: refreshToken || creds.refreshToken,
+        token: accessToken,
+        expiresAt: tokenData?.expires_in ? new Date(Date.now() + Number(tokenData.expires_in) * 1000).toISOString() : undefined,
+        sandbox: false,
+      };
+      await CredentialsManager.saveCredentials(userId, 'ebay', newCreds, 'production', { scope: entry?.scope || 'user' });
+      clearCredentialsCache(userId, 'ebay', 'production');
+    }
+    if (!accessToken) {
+      return res.status(400).json({ success: false, error: 'No eBay access token available' });
+    }
+
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Language': 'en-US',
+    } as Record<string, string>;
+
+    const offersResp = await fetch('https://api.ebay.com/sell/inventory/v1/offer?limit=200', { headers });
+    const offersText = await offersResp.text();
+    const offersJson = (() => {
+      try { return JSON.parse(offersText); } catch { return {}; }
+    })() as any;
+    const offers = offersJson?.offers || [];
+    const matched = offers.find((o: any) => String(o?.listing?.listingId || '') === listingId);
+    if (!matched?.sku) {
+      return res.status(404).json({
+        success: false,
+        listingId,
+        offersStatus: offersResp.status,
+        offersCount: Array.isArray(offers) ? offers.length : 0,
+        message: 'Listing not found in first 200 offers',
+      });
+    }
+
+    const sku = String(matched.sku);
+    const invResp = await fetch(`https://api.ebay.com/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, { headers });
+    const invText = await invResp.text();
+    const invJson = (() => {
+      try { return JSON.parse(invText); } catch { return {}; }
+    })() as any;
+    const imageUrls = Array.isArray(invJson?.product?.imageUrls) ? invJson.product.imageUrls : [];
+
+    return res.status(200).json({
+      success: true,
+      listingId,
+      sku,
+      offerId: matched?.offerId || null,
+      inventoryStatus: invResp.status,
+      imageCount: imageUrls.length,
+      imageUrls,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
 router.post('/reprice-product', validateInternalSecret, async (req: Request, res: Response) => {
   try {
     const { dynamicPricingService } = await import('../../services/dynamic-pricing.service');
