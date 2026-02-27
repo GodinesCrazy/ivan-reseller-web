@@ -137,11 +137,13 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
 
     let publishResult: { success: boolean; error?: string; listingId?: string; listingUrl?: string };
     try {
+      const baseTitle = String(updated?.title || opp.title || `Product-${product.id}`).replace(/\s+/g, ' ').trim();
+      const uniqueTitle = `${baseTitle} P${product.id}`.slice(0, 80).trim();
       publishResult = await marketplaceService.publishProduct(userId, {
         productId: product.id,
         marketplace: 'ebay',
         customData: {
-          title: String(updated?.title || opp.title || `Product-${product.id}`).replace(/\s+/g, ' ').trim().slice(0, 80),
+          title: uniqueTitle,
           price: Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5,
           quantity: 1,
           categoryId: '20349',
