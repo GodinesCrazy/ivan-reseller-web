@@ -568,11 +568,18 @@ router.post('/:id/unpublish', wrapAsync(async (req: Request, res: Response) => {
     }
   }
 
-  await productService.updateProductStatusSafely(productId, 'APPROVED', false, userId);
+  const failed = results.filter((r) => !r.success);
+  const allSucceeded = failed.length === 0;
 
-  return res.json({
-    success: true,
-    message: 'Producto despublicado. Estado actualizado a APPROVED.',
+  if (allSucceeded) {
+    await productService.updateProductStatusSafely(productId, 'APPROVED', false, userId);
+  }
+
+  return res.status(allSucceeded ? 200 : 409).json({
+    success: allSucceeded,
+    message: allSucceeded
+      ? 'Producto despublicado. Estado actualizado a APPROVED.'
+      : 'Despublicación parcial/fallida en uno o más marketplaces. Estado del producto no modificado.',
     marketplaceResults: results
   });
 }));
