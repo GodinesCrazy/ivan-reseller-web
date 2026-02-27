@@ -704,6 +704,43 @@ router.get('/ebay-policies-diagnostic', validateInternalSecret, async (req: Requ
   }
 });
 
+// GET /api/internal/ebay-credential-state - diagnóstico seguro de credenciales eBay guardadas
+router.get('/ebay-credential-state', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const { CredentialsManager } = await import('../../services/credentials-manager.service');
+    const userId = Number(req.query?.userId) || 1;
+    const environment = String(req.query?.environment || 'production') as 'production' | 'sandbox';
+    const entry = await CredentialsManager.getCredentialEntry(userId, 'ebay', environment);
+    const creds: Record<string, any> = (entry?.credentials as any) || {};
+    const token = String(creds.token || '').trim();
+    const refreshToken = String(creds.refreshToken || '').trim();
+    const appId = String(creds.appId || process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
+    const certId = String(creds.certId || process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
+    return res.status(200).json({
+      success: true,
+      userId,
+      environment,
+      entryFound: !!entry,
+      isActive: !!entry?.isActive,
+      hasAppId: !!appId,
+      appIdSuffix: appId ? appId.slice(-6) : null,
+      hasCertId: !!certId,
+      certIdSuffix: certId ? certId.slice(-6) : null,
+      hasToken: !!token,
+      tokenLength: token.length,
+      hasRefreshToken: !!refreshToken,
+      refreshTokenLength: refreshToken.length,
+      hasExpiresAt: !!creds.expiresAt,
+      expiresAt: creds.expiresAt || null,
+      sandboxFlag: typeof creds.sandbox === 'boolean' ? creds.sandbox : null,
+      scope: entry?.scope || null,
+      updatedAt: (entry as any)?.updatedAt || null,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
 router.post('/reprice-product', validateInternalSecret, async (req: Request, res: Response) => {
   try {
     const { dynamicPricingService } = await import('../../services/dynamic-pricing.service');
