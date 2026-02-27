@@ -1126,6 +1126,82 @@ router.get('/ebay-inventory-item-diagnostic', validateInternalSecret, async (req
   }
 });
 
+// POST /api/internal/unpublish-product - prueba interna de despublicación real por marketplaces
+router.post('/unpublish-product', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const productId = Number(req.body?.productId);
+    if (!Number.isFinite(productId) || productId <= 0) {
+      return res.status(400).json({ success: false, error: 'productId is required' });
+    }
+
+    const { prisma } = await import('../../config/database');
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: { marketplaceListings: true },
+    });
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Producto no encontrado' });
+    }
+
+    const { resolveEnvironment } = await import('../../utils/environment-resolver');
+    const MarketplaceService = (await import('../../services/marketplace.service')).default;
+    const { EbayService } = await import('../../services/ebay.service');
+    const { MercadoLibreService } = await import('../../services/mercadolibre.service');
+    const { AmazonService } = await import('../../services/amazon.service');
+    const { productService } = await import('../../services/product.service');
+
+    const env = await resolveEnvironment({ userId: product.userId, default: 'production' });
+    const marketplaceService = new MarketplaceService();
+    const results: { marketplace: string; success: boolean; error?: string; listingId?: string }[] = [];
+
+    for (const listing of product.marketplaceListings || []) {
+      const mp = String(listing.marketplace || '').toLowerCase();
+      try {
+        const creds = await marketplaceService.getCredentials(product.userId, mp as any, env);
+        const c = creds?.credentials as any;
+        if (!creds || !c || creds.issues?.length) {
+          results.push({ marketplace: mp, success: false, error: 'Sin credenciales', listingId: listing.listingId || undefined });
+          continue;
+        }
+
+        if (mp === 'ebay') {
+          const ebay = new EbayService({ ...c, sandbox: env === 'sandbox' });
+          await ebay.endListing(String(listing.listingId), 'NotAvailable');
+        } else if (mp === 'mercadolibre') {
+          const ml = new MercadoLibreService(c);
+          await ml.closeListing(String(listing.listingId));
+        } else if (mp === 'amazon') {
+          const amazon = new AmazonService();
+          await amazon.setCredentials(c);
+          const sku = String(listing.sku || listing.listingId || '');
+          if (sku) await amazon.deleteListing(sku);
+        }
+
+        results.push({ marketplace: mp, success: true, listingId: listing.listingId || undefined });
+      } catch (e: any) {
+        results.push({
+          marketplace: mp,
+          success: false,
+          error: e?.message || String(e),
+          listingId: listing.listingId || undefined,
+        });
+      }
+    }
+
+    await productService.updateProductStatusSafely(productId, 'APPROVED', false, Number(req.body?.userId) || product.userId);
+
+    return res.status(200).json({
+      success: true,
+      productId,
+      previousStatus: product.status,
+      newStatus: 'APPROVED',
+      marketplaceResults: results,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
 router.post('/reprice-product', validateInternalSecret, async (req: Request, res: Response) => {
   try {
     const { dynamicPricingService } = await import('../../services/dynamic-pricing.service');
