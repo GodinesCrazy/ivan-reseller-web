@@ -146,21 +146,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
         },
       }, env);
 
-      // Fallback: si falla por token/refresh en production, intentar sandbox
-      const isTokenError = publishResult.error && /token|refresh|invalid_grant|400/.test(String(publishResult.error).toLowerCase());
-      if (!publishResult.success && isTokenError && env === 'production') {
-        logger.warn('[INTERNAL] eBay production token failed, trying sandbox');
-        publishResult = await marketplaceService.publishProduct(userId, {
-          productId: product.id,
-          marketplace: 'ebay',
-          customData: {
-            title: String(updated?.title || opp.title || `Product-${product.id}`).replace(/\s+/g, ' ').trim().slice(0, 80),
-            price: Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5,
-            quantity: 1,
-            categoryId: '267',
-          },
-        }, 'sandbox');
-      }
+      // No automatic sandbox fallback here: we need strict production diagnostics.
     } catch (publishErr: any) {
       const errMsg = publishErr?.message || String(publishErr);
       publishResult = { success: false, error: errMsg };
