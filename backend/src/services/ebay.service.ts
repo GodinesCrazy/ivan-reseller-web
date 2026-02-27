@@ -796,6 +796,15 @@ export class EbayService {
           await this.apiClient.post(`/sell/inventory/v1/offer/${offerId}/withdraw`, {});
         };
 
+      const resolveOfferIdBySku = async (sku: string): Promise<string | null> => {
+        const resp = await this.apiClient.get('/sell/inventory/v1/offer', {
+          params: { sku, limit: 20 },
+        });
+        const offers = resp.data?.offers || [];
+        const offer = offers.find((o: any) => String(o?.offerId || '').length > 0);
+        return offer?.offerId || null;
+      };
+
         // First, try as direct offerId.
         try {
           await tryWithdraw(itemIdOrOfferId);
@@ -816,16 +825,20 @@ export class EbayService {
           }
         }
 
-        // Resolve offerId from listingId scanning recent offers.
-        const offersResp = await this.apiClient.get('/sell/inventory/v1/offer?limit=200');
-        const offers = offersResp.data?.offers || [];
-        const matched = offers.find((o: any) => String(o?.listing?.listingId || '') === String(itemIdOrOfferId));
-        const offerId = matched?.offerId;
-        if (!offerId) {
-          throw new AppError(`Could not resolve offerId for listingId ${itemIdOrOfferId}`, 404);
+      // If the input is a SKU, resolve offer directly by SKU.
+      if (/^[A-Za-z0-9-]{1,50}$/.test(String(itemIdOrOfferId)) && /[A-Za-z]/.test(String(itemIdOrOfferId))) {
+        const skuOfferId = await resolveOfferIdBySku(String(itemIdOrOfferId));
+        if (skuOfferId) {
+          await tryWithdraw(skuOfferId);
+          return;
         }
+      }
 
-        await tryWithdraw(offerId);
+        // Resolve offerId from listingId scanning recent offers.
+      throw new AppError(
+        `Could not resolve offerId from identifier ${itemIdOrOfferId}. Provide offerId or SKU.`,
+        404
+      );
       });
     } catch (error: any) {
       const status = error?.response?.status;

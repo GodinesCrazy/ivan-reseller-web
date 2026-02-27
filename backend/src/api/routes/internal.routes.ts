@@ -1166,7 +1166,8 @@ router.post('/unpublish-product', validateInternalSecret, async (req: Request, r
 
         if (mp === 'ebay') {
           const ebay = new EbayService({ ...c, sandbox: env === 'sandbox' });
-          await ebay.endListing(String(listing.listingId), 'NotAvailable');
+          const ebayIdentifier = String(listing.sku || `IVAN-${productId}`);
+          await ebay.endListing(ebayIdentifier, 'NotAvailable');
         } else if (mp === 'mercadolibre') {
           const ml = new MercadoLibreService(c);
           await ml.closeListing(String(listing.listingId));
