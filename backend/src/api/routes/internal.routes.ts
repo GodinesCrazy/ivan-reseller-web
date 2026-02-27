@@ -614,6 +614,96 @@ router.post('/ebay-bootstrap-location', validateInternalSecret, async (req: Requ
   }
 });
 
+// GET /api/internal/ebay-policies-diagnostic - valida scopes y políticas reales en eBay
+router.get('/ebay-policies-diagnostic', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const { CredentialsManager, clearCredentialsCache } = await import('../../services/credentials-manager.service');
+    const userId = Number(req.query?.userId) || 1;
+    const marketplaceId = String(req.query?.marketplaceId || 'EBAY_US').trim();
+    const entry = await CredentialsManager.getCredentialEntry(userId, 'ebay', 'production');
+    const creds: Record<string, any> = (entry?.credentials as any) || {};
+    const appId = String(creds.appId || process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
+    const certId = String(creds.certId || process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
+    const refreshToken = String(creds.refreshToken || process.env.EBAY_REFRESH_TOKEN || '').trim();
+    let accessToken = String(creds.token || process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN || '').trim();
+
+    if (!appId || !certId) {
+      return res.status(400).json({ success: false, error: 'Missing EBAY_APP_ID/EBAY_CERT_ID' });
+    }
+
+    if (!accessToken && refreshToken) {
+      const basic = Buffer.from(`${appId}:${certId}`).toString('base64');
+      const tokenResp = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${basic}`,
+        },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+        }).toString(),
+      });
+      const tokenData = await tokenResp.json().catch(() => ({} as any));
+      if (!tokenResp.ok || !tokenData?.access_token) {
+        return res.status(400).json({
+          success: false,
+          stage: 'refresh_token',
+          status: tokenResp.status,
+          response: tokenData,
+        });
+      }
+      accessToken = String(tokenData.access_token).trim();
+      const newCreds = {
+        ...creds,
+        appId,
+        certId,
+        refreshToken: refreshToken || creds.refreshToken,
+        token: accessToken,
+        expiresAt: tokenData?.expires_in ? new Date(Date.now() + Number(tokenData.expires_in) * 1000).toISOString() : undefined,
+        sandbox: false,
+      };
+      await CredentialsManager.saveCredentials(userId, 'ebay', newCreds, 'production', { scope: 'user' });
+      clearCredentialsCache(userId, 'ebay', 'production');
+    }
+
+    if (!accessToken) {
+      return res.status(400).json({ success: false, error: 'No eBay access token available' });
+    }
+
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Language': 'en-US',
+    } as Record<string, string>;
+
+    const urls = {
+      locations: 'https://api.ebay.com/sell/inventory/v1/location?limit=5',
+      fulfillment: `https://api.ebay.com/sell/account/v1/fulfillment_policy?marketplace_id=${encodeURIComponent(marketplaceId)}`,
+      payment: `https://api.ebay.com/sell/account/v1/payment_policy?marketplace_id=${encodeURIComponent(marketplaceId)}`,
+      returns: `https://api.ebay.com/sell/account/v1/return_policy?marketplace_id=${encodeURIComponent(marketplaceId)}`,
+    };
+
+    const [locations, fulfillment, payment, returns] = await Promise.all(
+      Object.values(urls).map(async (url) => {
+        const resp = await fetch(url, { headers });
+        const text = await resp.text();
+        return { status: resp.status, ok: resp.ok, body: text };
+      })
+    );
+
+    return res.status(200).json({
+      success: true,
+      marketplaceId,
+      locations,
+      fulfillment,
+      payment,
+      returns,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
 router.post('/reprice-product', validateInternalSecret, async (req: Request, res: Response) => {
   try {
     const { dynamicPricingService } = await import('../../services/dynamic-pricing.service');
