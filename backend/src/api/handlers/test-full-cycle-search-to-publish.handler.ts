@@ -34,14 +34,24 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
   const startTime = Date.now();
   const keywordOverride = (req.body?.keyword as string) || process.env.keyword;
   const dryRun = req.body?.dryRun === true || process.env.DRY_RUN === '1';
+  const requestedUserId = Number(req.body?.userId);
 
   try {
-    const user = await prisma.user.findFirst({
-      where: { isActive: true },
-      select: { id: true, username: true },
-    });
+    const user = Number.isFinite(requestedUserId) && requestedUserId > 0
+      ? await prisma.user.findUnique({
+          where: { id: requestedUserId },
+          select: { id: true, username: true, isActive: true },
+        })
+      : await prisma.user.findFirst({
+          where: { isActive: true },
+          select: { id: true, username: true, isActive: true },
+        });
     if (!user) {
       res.status(400).json({ success: false, error: 'No hay usuario activo. Ejecuta seed.' });
+      return;
+    }
+    if (!user.isActive) {
+      res.status(400).json({ success: false, error: `El userId=${user.id} no está activo.` });
       return;
     }
     const userId = user.id;
@@ -181,7 +191,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
     }
 
     // Degradación: si falla por token eBay, retornar éxito con producto creado/aprobado (pendiente OAuth)
-    const tokenErr = publishResult.error && /token|refresh|invalid_grant|400|401/.test(String(publishResult.error).toLowerCase());
+    const tokenErr = publishResult.error && /token|refresh|invalid_grant|401|expired|oauth/.test(String(publishResult.error).toLowerCase());
     if (tokenErr) {
       logger.warn('[INTERNAL] eBay publish failed (token). Returning success with product ready.', { productId: product.id });
       res.status(200).json({
@@ -190,6 +200,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
         keyword,
         stages: { trends: true, search: true, product: true, approved: true, publish: 'pending_oauth' },
         ebayPendingOAuth: true,
+        publishError: publishResult.error,
         message: 'Producto creado y aprobado. Completa OAuth de eBay para publicar: npm run ebay:oauth-url',
         durationMs: Date.now() - startTime,
       });
