@@ -499,6 +499,116 @@ router.post('/set-ebay-token', validateInternalSecret, async (req: Request, res:
   }
 });
 
+// POST /api/internal/ebay-bootstrap-location - Crea/actualiza ubicación default_location en eBay (producción)
+router.post('/ebay-bootstrap-location', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const { CredentialsManager, clearCredentialsCache } = await import('../../services/credentials-manager.service');
+    const userId = Number(req.body?.userId) || 1;
+    const locationKey = String(req.body?.locationKey || 'default_location').trim();
+
+    const entry = await CredentialsManager.getCredentialEntry(userId, 'ebay', 'production');
+    const creds: Record<string, any> = (entry?.credentials as any) || {};
+    const appId = String(creds.appId || process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
+    const certId = String(creds.certId || process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
+    const refreshToken = String(creds.refreshToken || process.env.EBAY_REFRESH_TOKEN || '').trim();
+    let accessToken = String(creds.token || process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN || '').trim();
+
+    if (!appId || !certId) {
+      return res.status(400).json({ success: false, error: 'Missing EBAY_APP_ID/EBAY_CERT_ID' });
+    }
+
+    // Refresh access token when needed
+    if (!accessToken && refreshToken) {
+      const basic = Buffer.from(`${appId}:${certId}`).toString('base64');
+      const tokenResp = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${basic}`,
+        },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+        }).toString(),
+      });
+
+      const tokenData = await tokenResp.json().catch(() => ({} as any));
+      if (!tokenResp.ok || !tokenData?.access_token) {
+        return res.status(400).json({
+          success: false,
+          stage: 'refresh_token',
+          status: tokenResp.status,
+          error: tokenData?.error || 'refresh_failed',
+          error_description: tokenData?.error_description || 'Failed refreshing eBay token',
+          response: tokenData,
+        });
+      }
+
+      accessToken = String(tokenData.access_token).trim();
+      const newCreds = {
+        ...creds,
+        appId,
+        certId,
+        refreshToken: refreshToken || creds.refreshToken,
+        token: accessToken,
+        expiresAt: tokenData?.expires_in ? new Date(Date.now() + Number(tokenData.expires_in) * 1000).toISOString() : undefined,
+        sandbox: false,
+      };
+      await CredentialsManager.saveCredentials(userId, 'ebay', newCreds, 'production', { scope: 'user' });
+      clearCredentialsCache(userId, 'ebay', 'production');
+    }
+
+    if (!accessToken) {
+      return res.status(400).json({ success: false, error: 'No eBay access token available' });
+    }
+
+    const locationBody = {
+      name: 'Ivan Default Warehouse',
+      merchantLocationStatus: 'ENABLED',
+      locationTypes: ['WAREHOUSE'],
+      location: {
+        address: {
+          addressLine1: String(req.body?.addressLine1 || '2 Norte 468'),
+          city: String(req.body?.city || 'Concepcion'),
+          stateOrProvince: String(req.body?.stateOrProvince || 'BIO BIO'),
+          postalCode: String(req.body?.postalCode || '400084'),
+          country: String(req.body?.country || 'CL'),
+        },
+      },
+    };
+
+    const putResp = await fetch(`https://api.ebay.com/sell/inventory/v1/location/${encodeURIComponent(locationKey)}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Content-Language': 'en-US',
+      },
+      body: JSON.stringify(locationBody),
+    });
+    const putData = await putResp.text();
+
+    const getResp = await fetch(`https://api.ebay.com/sell/inventory/v1/location/${encodeURIComponent(locationKey)}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Language': 'en-US',
+      },
+    });
+    const getData = await getResp.text();
+
+    return res.status(getResp.ok ? 200 : 400).json({
+      success: getResp.ok,
+      locationKey,
+      putStatus: putResp.status,
+      putResponse: putData,
+      getStatus: getResp.status,
+      getResponse: getData,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
 router.post('/reprice-product', validateInternalSecret, async (req: Request, res: Response) => {
   try {
     const { dynamicPricingService } = await import('../../services/dynamic-pricing.service');
