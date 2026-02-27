@@ -800,10 +800,17 @@ export class EbayService {
         await tryWithdraw(itemIdOrOfferId);
         return;
       } catch (directError: any) {
-        const directStatus = directError?.response?.status;
-        const directMsg = directError?.response?.data?.errors?.[0]?.message || directError?.message || '';
-        // If the provided ID is not an offerId, try resolving by listingId.
-        if (!(directStatus === 404 || /not found|invalid/i.test(String(directMsg).toLowerCase()))) {
+        const directStatus = Number(directError?.response?.status || 0);
+        const directMsg = String(
+          directError?.response?.data?.errors?.[0]?.message ||
+          directError?.message ||
+          ''
+        ).toLowerCase();
+        // If id is a listingId, eBay may return 400/404. In those cases, try resolving offerId.
+        const shouldTryResolveOfferId =
+          (directStatus >= 400 && directStatus < 500) ||
+          /not found|invalid|offer/i.test(directMsg);
+        if (!shouldTryResolveOfferId) {
           throw directError;
         }
       }
