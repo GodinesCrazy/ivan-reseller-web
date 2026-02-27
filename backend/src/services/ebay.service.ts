@@ -536,6 +536,9 @@ export class EbayService {
 
         const defaults = await this.getListingDefaults();
         const listingData = {
+          sku,
+          marketplaceId: 'EBAY_US',
+          format: 'FIXED_PRICE',
           categoryId: product.categoryId,
           merchantLocationKey: defaults.merchantLocationKey,
           pricingSummary: {
@@ -564,7 +567,7 @@ export class EbayService {
         const result = await retryMarketplaceOperation(
           async () => {
             const response = await this.apiClient.post(
-              `/sell/inventory/v1/inventory_item/${sku}/offer`,
+              `/sell/inventory/v1/offer`,
               listingData,
               { headers: invHeaders }
             );
