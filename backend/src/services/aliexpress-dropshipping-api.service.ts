@@ -17,6 +17,7 @@ import axios, { type AxiosInstance } from 'axios';
 // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
 import { httpClient } from '../config/http-client';
 import type { AliExpressDropshippingCredentials } from '../types/api-credentials.types';
+import { generateAliExpressSignatureNoSecret } from './aliexpress-signature.service';
 
 // Tipos de datos de la API
 export interface DropshippingProductInfo {
@@ -100,6 +101,10 @@ export interface TrackingEvent {
 export class AliExpressDropshippingAPIService {
   private client: AxiosInstance;
   private credentials: AliExpressDropshippingCredentials | null = null;
+  private readonly TOKEN_CREATE_ENDPOINT =
+    (process.env.ALIEXPRESS_DROPSHIPPING_TOKEN_ENDPOINT || '').trim() ||
+    'https://api-sg.aliexpress.com/rest/auth/token/create';
+  private readonly TOKEN_CREATE_SIGN_PATH = '/rest/auth/token/create';
 
   // Endpoints base de la API
   private readonly ENDPOINT_LEGACY = 'https://gw.api.taobao.com/router/rest';
@@ -516,33 +521,37 @@ export class AliExpressDropshippingAPIService {
     });
 
     const startTime = Date.now();
-    const tokenUrl = 'https://auth.aliexpress.com/oauth/token';
+    const tokenUrl = this.TOKEN_CREATE_ENDPOINT;
     try {
-      // ✅ FIX OAUTH: Token exchange robusto con retries y timeout
-
-      // ✅ PASO 4: Payload OAuth en x-www-form-urlencoded (NO JSON)
-      const payload = new URLSearchParams({
+      const timestamp = Date.now().toString();
+      const signMethod = 'sha256';
+      const signedParams = {
+        app_key: appKey,
+        code,
         grant_type: 'authorization_code',
-        need_refresh_token: 'true',
-        client_id: appKey,
-        client_secret: appSecret,
-        code: code,
-        redirect_uri: redirectUri,
+        sign_method: signMethod,
+        timestamp,
+      };
+      const sign = generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, signedParams);
+      const queryParams = {
+        ...signedParams,
+        sign,
+      };
+      logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange attempt', {
+        event: 'dropshipping_token_exchange_attempt',
+        endpoint: tokenUrl,
+        environment: process.env.NODE_ENV || 'development',
       });
-      const requestHeaders = {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      } as const;
 
       logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
         tokenUrl,
-        method: 'POST',
-        contentType: requestHeaders['Content-Type'],
-        grantType: payload.get('grant_type'),
-        hasCode: !!payload.get('code'),
-        redirectUri: payload.get('redirect_uri'),
+        method: 'GET',
+        signMethod,
+        hasCode: !!queryParams.code,
+        hasSign: !!queryParams.sign,
         clientIdPreview: `${String(appKey).slice(0, 6)}...`,
-        usesJsonPayload: false,
-        usesFormUrlEncoded: true,
+        usesSignedQuery: true,
+        redirectUri,
       });
 
       // ✅ FIX OAUTH: Retry con timeout (2 intentos con backoff)
@@ -555,8 +564,8 @@ export class AliExpressDropshippingAPIService {
             setTimeout(() => reject(new Error('Token exchange timeout after 10s')), 10000);
           });
 
-          const requestPromise = httpClient.post(tokenUrl, payload.toString(), {
-            headers: requestHeaders,
+          const requestPromise = httpClient.get(tokenUrl, {
+            params: queryParams,
           });
 
           const response = await Promise.race([requestPromise, timeoutPromise]);
@@ -584,16 +593,21 @@ export class AliExpressDropshippingAPIService {
           attempts: result.attempts,
           error: result.error?.message || String(result.error),
           endpoint: tokenUrl,
-          method: 'POST',
-          contentType: requestHeaders['Content-Type'],
+          method: 'GET',
+          signMethod,
         });
         throw result.error || new Error('Token exchange failed');
       }
 
       const response = result.data;
+      const responsePayload = response.data?.data ?? response.data ?? {};
+      const accessToken = String(responsePayload.access_token || responsePayload.accessToken || '').trim();
+      const refreshToken = String(responsePayload.refresh_token || responsePayload.refreshToken || '').trim();
+      const expiresIn = Number(responsePayload.expires_in || responsePayload.expiresIn || 0) || 86400;
+      const refreshExpiresIn = Number(responsePayload.refresh_expires_in || responsePayload.refreshExpiresIn || 0) || 2592000;
 
       // ✅ FIX OAUTH: Validar respuesta robustamente
-      if (!response.data || !response.data.access_token) {
+      if (!accessToken) {
         const elapsed = Date.now() - startTime;
         logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token exchange response missing access_token', {
           responseData: response.data,
@@ -602,41 +616,27 @@ export class AliExpressDropshippingAPIService {
         throw new Error('Invalid response from AliExpress OAuth token endpoint: missing access_token');
       }
 
-      // ✅ FIX OAUTH: Validar que tokens no sean null/undefined/empty
-      const accessToken = response.data.access_token;
-      const refreshToken = response.data.refresh_token || null;
-
-      if (!accessToken || typeof accessToken !== 'string' || accessToken.trim().length === 0) {
-        const elapsed = Date.now() - startTime;
-        logger.error('[ALIEXPRESS-DROPSHIPPING-API] Invalid access token', {
-          tokenType: typeof accessToken,
-          tokenLength: accessToken?.length || 0,
-          elapsed,
-        });
-        throw new Error('Invalid access token received from AliExpress OAuth token endpoint');
-      }
-
       const elapsed = Date.now() - startTime;
       logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange successful', {
         tokenExchangeStatus: 'success',
         endpoint: tokenUrl,
-        method: 'POST',
-        contentType: requestHeaders['Content-Type'],
+        method: 'GET',
+        signMethod,
         statusCode: response.status,
         hasAccessToken: !!accessToken,
         accessTokenLength: accessToken.length,
         hasRefreshToken: !!refreshToken,
-        refreshTokenLength: refreshToken?.length || 0,
-        expiresIn: response.data.expires_in,
-        refreshExpiresIn: response.data.refresh_expires_in,
+        refreshTokenLength: refreshToken.length,
+        expiresIn,
+        refreshExpiresIn,
         elapsed,
       });
 
       return {
-        accessToken: accessToken,
-        refreshToken: refreshToken || '',
-        expiresIn: response.data.expires_in || 86400, // Default: 24 horas
-        refreshExpiresIn: response.data.refresh_expires_in || 2592000, // Default: 30 días
+        accessToken,
+        refreshToken,
+        expiresIn,
+        refreshExpiresIn,
       };
     } catch (error: any) {
       const errorMessage = error.response?.data?.error_description ||
@@ -647,17 +647,16 @@ export class AliExpressDropshippingAPIService {
       logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token exchange failed', {
         tokenExchangeStatus: 'failed',
         endpoint: tokenUrl,
-        method: 'POST',
-        contentType: 'application/x-www-form-urlencoded',
+        method: 'GET',
+        signMethod: 'sha256',
         error: errorMessage,
         status: error.response?.status,
         responseData: error.response?.data,
         requestBody: {
-          grant_type: 'authorization_code',
-          need_refresh_token: 'true',
-          has_client_id: !!appKey,
-          has_client_secret: !!appSecret,
+          app_key_preview: `${String(appKey).slice(0, 6)}...`,
+          sign_method: 'sha256',
           has_code: !!code,
+          has_sign: true,
           redirect_uri: redirectUri,
         },
       });
@@ -701,7 +700,7 @@ export class AliExpressDropshippingAPIService {
       refreshTokenLength: refreshToken.length,
     });
 
-    const tokenUrl = 'https://auth.aliexpress.com/oauth/token';
+    const tokenUrl = this.TOKEN_CREATE_ENDPOINT;
     try {
       
       const payload = new URLSearchParams({
