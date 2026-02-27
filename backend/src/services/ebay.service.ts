@@ -789,43 +789,51 @@ export class EbayService {
    * End/Delete eBay listing
    */
   async endListing(itemIdOrOfferId: string, reason: string = 'NotAvailable'): Promise<void> {
-    await this.withAuthRetry(async () => {
-      const tryWithdraw = async (offerId: string) => {
-        // Inventory API withdrawOffer does not require a reason payload.
-        await this.apiClient.post(`/sell/inventory/v1/offer/${offerId}/withdraw`, {});
-      };
+    try {
+      await this.withAuthRetry(async () => {
+        const tryWithdraw = async (offerId: string) => {
+          // Inventory API withdrawOffer does not require a reason payload.
+          await this.apiClient.post(`/sell/inventory/v1/offer/${offerId}/withdraw`, {});
+        };
 
-      // First, try as direct offerId.
-      try {
-        await tryWithdraw(itemIdOrOfferId);
-        return;
-      } catch (directError: any) {
-        const directStatus = Number(directError?.response?.status || 0);
-        const directMsg = String(
-          directError?.response?.data?.errors?.[0]?.message ||
-          directError?.message ||
-          ''
-        ).toLowerCase();
-        // If id is a listingId, eBay may return 400/404. In those cases, try resolving offerId.
-        const shouldTryResolveOfferId =
-          (directStatus >= 400 && directStatus < 500) ||
-          /not found|invalid|offer/i.test(directMsg);
-        if (!shouldTryResolveOfferId) {
-          throw directError;
+        // First, try as direct offerId.
+        try {
+          await tryWithdraw(itemIdOrOfferId);
+          return;
+        } catch (directError: any) {
+          const directStatus = Number(directError?.response?.status || 0);
+          const directMsg = String(
+            directError?.response?.data?.errors?.[0]?.message ||
+            directError?.message ||
+            ''
+          ).toLowerCase();
+          // If id is a listingId, eBay may return 400/404. In those cases, try resolving offerId.
+          const shouldTryResolveOfferId =
+            (directStatus >= 400 && directStatus < 500) ||
+            /not found|invalid|offer/i.test(directMsg);
+          if (!shouldTryResolveOfferId) {
+            throw directError;
+          }
         }
-      }
 
-      // Resolve offerId from listingId scanning recent offers.
-      const offersResp = await this.apiClient.get('/sell/inventory/v1/offer?limit=200');
-      const offers = offersResp.data?.offers || [];
-      const matched = offers.find((o: any) => String(o?.listing?.listingId || '') === String(itemIdOrOfferId));
-      const offerId = matched?.offerId;
-      if (!offerId) {
-        throw new AppError(`Could not resolve offerId for listingId ${itemIdOrOfferId}`, 404);
-      }
+        // Resolve offerId from listingId scanning recent offers.
+        const offersResp = await this.apiClient.get('/sell/inventory/v1/offer?limit=200');
+        const offers = offersResp.data?.offers || [];
+        const matched = offers.find((o: any) => String(o?.listing?.listingId || '') === String(itemIdOrOfferId));
+        const offerId = matched?.offerId;
+        if (!offerId) {
+          throw new AppError(`Could not resolve offerId for listingId ${itemIdOrOfferId}`, 404);
+        }
 
-      await tryWithdraw(offerId);
-    });
+        await tryWithdraw(offerId);
+      });
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const body = error?.response?.data;
+      const msg = body?.errors?.[0]?.message || error?.message || 'Unknown eBay unpublish error';
+      const details = body ? ` response=${JSON.stringify(body).slice(0, 900)}` : '';
+      throw new AppError(`eBay listing end error: ${msg}${details}`, status || 400);
+    }
   }
 
   /**
