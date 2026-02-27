@@ -35,6 +35,8 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
   const keywordOverride = (req.body?.keyword as string) || process.env.keyword;
   const dryRun = req.body?.dryRun === true || process.env.DRY_RUN === '1';
   const requestedUserId = Number(req.body?.userId);
+  const maxPriceUsdRaw = Number(req.body?.maxPriceUsd);
+  const maxPriceUsd = Number.isFinite(maxPriceUsdRaw) && maxPriceUsdRaw > 0 ? maxPriceUsdRaw : null;
 
   try {
     const user = Number.isFinite(requestedUserId) && requestedUserId > 0
@@ -139,12 +141,14 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
     try {
       const baseTitle = String(updated?.title || opp.title || `Product-${product.id}`).replace(/\s+/g, ' ').trim();
       const uniqueTitle = `${baseTitle.slice(0, 70)} P${product.id}`.trim();
+      const basePrice = Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5;
+      const finalPrice = maxPriceUsd ? Math.min(basePrice, maxPriceUsd) : basePrice;
       publishResult = await marketplaceService.publishProduct(userId, {
         productId: product.id,
         marketplace: 'ebay',
         customData: {
           title: uniqueTitle,
-          price: Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5,
+          price: finalPrice,
           quantity: 1,
           categoryId: '20349',
         },
@@ -175,6 +179,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
         listingId: publishResult.listingId,
         listingUrl: publishResult.listingUrl,
         keyword,
+        maxPriceUsdApplied: maxPriceUsd,
         stages: { trends: true, search: true, product: true, approved: true, publish: true },
         verified: verified ? { status: verified.status, isPublished: verified.isPublished } : undefined,
         durationMs: Date.now() - startTime,
