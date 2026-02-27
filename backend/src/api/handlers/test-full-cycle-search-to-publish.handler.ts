@@ -91,13 +91,15 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
     }
 
     const opp = opportunities[0];
-    const rawImages = opp.images ?? (opp as any).image ? [(opp as any).image] : [];
+    const rawImages = Array.isArray((opp as any).images)
+      ? (opp as any).images
+      : ((opp as any).image ? [(opp as any).image] : []);
     const filtered = Array.isArray(rawImages) && rawImages.length > 0
       ? rawImages.filter((u: unknown): u is string => typeof u === 'string' && u.startsWith('http'))
       : [];
     const enlarged = filtered.map(enlargeImageUrl);
-    // Solo placeholder 500x500: evita validación fallida por imágenes AliExpress pequeñas
-    const images = [FALLBACK_IMAGE];
+    const uniqueImages = Array.from(new Set(enlarged)).slice(0, 12);
+    const images = uniqueImages.length > 0 ? uniqueImages : [FALLBACK_IMAGE];
 
     const productService = new ProductService();
     const product = await productService.createProduct(userId, {
