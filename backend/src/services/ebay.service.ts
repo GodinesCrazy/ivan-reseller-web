@@ -13,6 +13,7 @@ export interface EbayCredentials {
   certId: string;
   token?: string;
   refreshToken?: string;
+  expiresAt?: string;
   sandbox: boolean;
 }
 
@@ -158,8 +159,9 @@ export class EbayService {
       throw new AppError('eBay credentials not configured', 400);
     }
 
-    const now = new Date();
-    if (!force && this.credentials.token && this.tokenExpiry && this.tokenExpiry > now) {
+    // Prefer current access token; refresh only when explicitly forced (e.g. after 401)
+    // or when no token is available.
+    if (!force && this.credentials.token) {
       return;
     }
 
