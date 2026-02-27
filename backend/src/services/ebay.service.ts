@@ -791,7 +791,8 @@ export class EbayService {
   async endListing(itemIdOrOfferId: string, reason: string = 'NotAvailable'): Promise<void> {
     await this.withAuthRetry(async () => {
       const tryWithdraw = async (offerId: string) => {
-        await this.apiClient.post(`/sell/inventory/v1/offer/${offerId}/withdraw`, { reason });
+        // Inventory API withdrawOffer does not require a reason payload.
+        await this.apiClient.post(`/sell/inventory/v1/offer/${offerId}/withdraw`, {});
       };
 
       // First, try as direct offerId.
