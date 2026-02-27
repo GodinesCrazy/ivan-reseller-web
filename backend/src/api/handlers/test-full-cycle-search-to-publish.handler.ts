@@ -142,7 +142,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
           title: String(updated?.title || opp.title || `Product-${product.id}`).replace(/\s+/g, ' ').trim().slice(0, 80),
           price: Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5,
           quantity: 1,
-          categoryId: '267',
+          categoryId: '20349',
         },
       }, env);
 
