@@ -598,8 +598,9 @@ export class EbayService {
             ? ' Crea ubicación y políticas en eBay: Seller Hub → Account → Business Policies; y en Inventory → Locations.'
             : '';
           logger.error('eBay createListing failed', { status, body, defaults });
+          const bodyPreview = body ? ` response=${JSON.stringify(body).slice(0, 800)}` : '';
           throw new AppError(
-            `Failed to create eBay listing: ${err?.message || 'Unknown'}${hint}`,
+            `Failed to create eBay listing: ${err?.message || 'Unknown'}${hint}${bodyPreview}`,
             400
           );
         }
