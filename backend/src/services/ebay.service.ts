@@ -516,7 +516,12 @@ export class EbayService {
         this.apiClient.get(`/sell/account/v1/payment_policy?marketplace_id=${marketplaceId}`, { headers: invHeaders }),
         this.apiClient.get(`/sell/account/v1/return_policy?marketplace_id=${marketplaceId}`, { headers: invHeaders }),
       ]);
-      const fp = fulfillRes.data?.fulfillmentPolicies?.[0];
+      const fulfillmentPolicies = fulfillRes.data?.fulfillmentPolicies || [];
+      const fp =
+        fulfillmentPolicies.find((policy: any) => {
+          const services = policy?.shippingOptions?.flatMap((opt: any) => opt?.shippingServices || []) || [];
+          return !services.some((svc: any) => /economy/i.test(String(svc?.shippingServiceCode || '')));
+        }) || fulfillmentPolicies[0];
       const pp = payRes.data?.paymentPolicies?.[0];
       const rp = returnRes.data?.returnPolicies?.[0];
       if (fp?.fulfillmentPolicyId) fulfillmentPolicyId = fp.fulfillmentPolicyId;
