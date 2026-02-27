@@ -741,6 +741,39 @@ router.get('/ebay-credential-state', validateInternalSecret, async (req: Request
   }
 });
 
+// POST /api/internal/ebay-disable-refresh-token - bypass temporal para usar solo access token vigente
+router.post('/ebay-disable-refresh-token', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const { CredentialsManager, clearCredentialsCache } = await import('../../services/credentials-manager.service');
+    const userId = Number(req.body?.userId) || 1;
+    const environment = String(req.body?.environment || 'production') as 'production' | 'sandbox';
+    const entry = await CredentialsManager.getCredentialEntry(userId, 'ebay', environment);
+    const creds: Record<string, any> = (entry?.credentials as any) || {};
+    const token = String(creds.token || '').trim();
+    if (!token) {
+      return res.status(400).json({ success: false, error: 'No access token available in stored credentials' });
+    }
+
+    const newCreds = {
+      ...creds,
+      refreshToken: undefined,
+      EBAY_REFRESH_TOKEN: undefined,
+      sandbox: environment === 'sandbox',
+    };
+    await CredentialsManager.saveCredentials(userId, 'ebay', newCreds, environment, { scope: entry?.scope || 'user' });
+    clearCredentialsCache(userId, 'ebay', environment);
+
+    return res.status(200).json({
+      success: true,
+      userId,
+      environment,
+      message: 'refreshToken removed. Using access token only.',
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
 router.post('/reprice-product', validateInternalSecret, async (req: Request, res: Response) => {
   try {
     const { dynamicPricingService } = await import('../../services/dynamic-pricing.service');
