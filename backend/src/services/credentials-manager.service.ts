@@ -457,7 +457,13 @@ export const CredentialsManager = {
       const envToken = (process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN || '').trim() || undefined;
       const envRefresh = (process.env.EBAY_REFRESH_TOKEN || '').trim() || undefined;
       out.token = out.token || out.authToken || out.accessToken || out.EBAY_OAUTH_TOKEN || envToken;
-      out.refreshToken = out.refreshToken || out.EBAY_REFRESH_TOKEN || envRefresh;
+      // If a concrete access token exists in stored credentials, do not inject refresh token from env.
+      // This allows controlled bypass when refresh token is stale/revoked.
+      if (!out.refreshToken && !out.EBAY_REFRESH_TOKEN && !out.token) {
+        out.refreshToken = envRefresh;
+      } else {
+        out.refreshToken = out.refreshToken || out.EBAY_REFRESH_TOKEN;
+      }
       out.sandbox = environment === 'sandbox';
     }
 
