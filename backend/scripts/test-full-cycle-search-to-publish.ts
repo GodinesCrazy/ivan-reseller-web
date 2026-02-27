@@ -183,6 +183,7 @@ async function main(): Promise<number> {
       productId: product.id,
       marketplace: 'ebay',
       customData: {
+        title: String(updated?.title || opp.title || `Product-${product.id}`).replace(/\s+/g, ' ').trim().slice(0, 80),
         price: Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5,
         quantity: 1,
       },

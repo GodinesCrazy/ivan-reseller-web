@@ -201,4 +201,13 @@ El flujo OAuth est� implementado de extremo a extremo (auth URL, callback, exc
 - **Sin pérdida de sesión:** En el callback de éxito, si existe `window.opener` (popup), solo se envía `postMessage` y se cierra el popup (`window.close()`); no se redirige el popup a api-settings, así la sesión permanece en la ventana principal.
 - **Callback canonical:** Backend usa siempre `/api/marketplace-oauth/callback`; frontend no envía `redirect_uri` para aliexpress-dropshipping.
 
-*End of report. Last updated: 2026-02-24.*
+---
+
+## ACTUALIZACIÓN 2026-02-27 — Refresh automático y token exchange robusto
+
+- **Refresh automático antes de compra:** Se agregó la función `refreshAliExpressDropshippingToken(userId, environment)` para renovar credenciales cuando `accessTokenExpiresAt` está vencido o próximo a vencer. Si falta `refreshToken`/`appKey`/`appSecret`, no rompe el flujo: registra warning y mantiene fallback.
+- **Persistencia validada tras refresh:** Luego de renovar, se guarda con `CredentialsManager.saveCredentials`, se limpia caché, se vuelve a leer y se valida que `accessToken` y `refreshToken` realmente quedaron persistidos.
+- **Token exchange más tolerante a firmas:** `exchangeCodeForToken` ahora prueba múltiples variantes de firma (`sha256`/`md5` y formatos alternos), con `retryWithBackoff` y timeout, reduciendo fallas por `IncompleteSignature`.
+- **Observabilidad reforzada:** Logs estructurados para intento, retry, variante de firma usada, elapsed time y error final, facilitando diagnóstico en producción.
+
+*End of report. Last updated: 2026-02-27.*

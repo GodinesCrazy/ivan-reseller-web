@@ -393,7 +393,31 @@ export class EbayService {
         expiresIn: response.data.expires_in,
       };
     } catch (error: any) {
-      throw new AppError(`eBay token refresh error: ${error.response?.data?.error_description || error.message}`, 400);
+      const status = error?.response?.status;
+      const headers = error?.response?.headers;
+      const data = error?.response?.data;
+      const ebayError = data?.error || 'unknown_error';
+      const ebayErrorDescription = data?.error_description || error?.message || 'Unknown eBay refresh error';
+
+      let probableCause = 'unknown';
+      const msg = `${ebayError} ${ebayErrorDescription}`.toLowerCase();
+      if (/invalid_grant|expired|revoked/.test(msg)) probableCause = 'A) expired_or_revoked_refresh_token';
+      else if (/sandbox|auth\\.sandbox\\.ebay\\.com/.test(msg)) probableCause = 'B) sandbox_token_used_in_production';
+      else if (/redirect_uri|ru(name)?/.test(msg)) probableCause = 'C) redirect_uri_mismatch';
+      else if (/scope|insufficient/.test(msg)) probableCause = 'D) invalid_scope';
+
+      logger.error('[EbayService] Refresh token failed', {
+        service: 'ebay',
+        status,
+        error: ebayError,
+        errorDescription: ebayErrorDescription,
+        headers,
+        response: data,
+        probableCause,
+        sandbox: this.credentials?.sandbox,
+      });
+
+      throw new AppError(`eBay token refresh error: ${ebayErrorDescription}`, 400);
     }
   }
 

@@ -651,6 +651,19 @@ export class MarketplaceService {
         }
       }
 
+      // eBay Inventory API requires title length 1..80 characters.
+      // Normalize here even when title is AI-generated.
+      finalTitle = String(finalTitle || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 80);
+      if (!finalTitle) {
+        finalTitle = String(product.title || 'Product')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 80) || `Product-${product.id}`;
+      }
+
       const ebayProduct: EbayProduct = {
         title: finalTitle,
         description: finalDescription,

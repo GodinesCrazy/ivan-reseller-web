@@ -129,6 +129,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
         productId: product.id,
         marketplace: 'ebay',
         customData: {
+          title: String(updated?.title || opp.title || `Product-${product.id}`).replace(/\s+/g, ' ').trim().slice(0, 80),
           price: Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5,
           quantity: 1,
         },
@@ -142,6 +143,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
           productId: product.id,
           marketplace: 'ebay',
           customData: {
+            title: String(updated?.title || opp.title || `Product-${product.id}`).replace(/\s+/g, ' ').trim().slice(0, 80),
             price: Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5,
             quantity: 1,
           },

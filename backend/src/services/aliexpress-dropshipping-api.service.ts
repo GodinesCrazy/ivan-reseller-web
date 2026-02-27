@@ -17,7 +17,13 @@ import axios, { type AxiosInstance } from 'axios';
 // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
 import { httpClient } from '../config/http-client';
 import type { AliExpressDropshippingCredentials } from '../types/api-credentials.types';
-import { generateAliExpressSignatureNoSecret } from './aliexpress-signature.service';
+import {
+  generateAliExpressSignatureHmac,
+  generateAliExpressSignatureNoSecret,
+  generateAliExpressSignatureWithSecret,
+  generateTokenCreateSignature,
+  generateTokenCreateSignatureMD5,
+} from './aliexpress-signature.service';
 
 // Tipos de datos de la API
 export interface DropshippingProductInfo {
@@ -524,51 +530,117 @@ export class AliExpressDropshippingAPIService {
     const tokenUrl = this.TOKEN_CREATE_ENDPOINT;
     try {
       const timestamp = Date.now().toString();
-      const signMethod = 'sha256';
-      const signedParams = {
+      const signedParamsBase = {
         app_key: appKey,
         code,
-        sign_method: signMethod,
         timestamp,
-      };
-      const sign = generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, signedParams);
-      const queryParams = {
-        ...signedParams,
-        sign,
       };
       logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange attempt', {
         event: 'dropshipping_token_exchange_attempt',
         endpoint: tokenUrl,
         environment: process.env.NODE_ENV || 'development',
       });
-
-      logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
-        tokenUrl,
-        method: 'GET',
-        signMethod,
-        hasCode: !!queryParams.code,
-        hasSign: !!queryParams.sign,
-        clientIdPreview: `${String(appKey).slice(0, 6)}...`,
-        usesSignedQuery: true,
-        redirectUri,
-      });
+      const signatureVariants: Array<{
+        name: string;
+        signMethod: 'sha256' | 'md5';
+        buildSign: (params: Record<string, string>) => string;
+      }> = [
+        {
+          name: 'case2-no-secret',
+          signMethod: 'sha256',
+          buildSign: (params) => generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, params),
+        },
+        {
+          name: 'sha256-with-secret-upper',
+          signMethod: 'sha256',
+          buildSign: (params) => generateAliExpressSignatureWithSecret(this.TOKEN_CREATE_SIGN_PATH, params, appSecret),
+        },
+        {
+          name: 'sha256-with-secret-lower',
+          signMethod: 'sha256',
+          buildSign: (params) => generateTokenCreateSignature(params, appSecret),
+        },
+        {
+          name: 'sha256-hmac-lower',
+          signMethod: 'sha256',
+          buildSign: (params) => generateAliExpressSignatureHmac(this.TOKEN_CREATE_SIGN_PATH, params, appSecret),
+        },
+        {
+          name: 'md5-with-secret-lower',
+          signMethod: 'md5',
+          buildSign: (params) => generateTokenCreateSignatureMD5(params, appSecret),
+        },
+      ];
 
       // ✅ FIX OAUTH: Retry con timeout (2 intentos con backoff)
       const { retryWithBackoff } = await import('../utils/retry.util');
 
       const result = await retryWithBackoff(
         async () => {
+          let lastResponse: any = null;
+          let lastError: Error | null = null;
+          for (const variant of signatureVariants) {
+            const paramsForSign = {
+              ...signedParamsBase,
+              sign_method: variant.signMethod,
+            };
+            const sign = variant.buildSign(paramsForSign);
+            const queryParams = {
+              ...paramsForSign,
+              sign,
+            };
+            logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
+              tokenUrl,
+              method: 'GET',
+              signMethod: variant.signMethod,
+              signatureVariant: variant.name,
+              hasCode: !!queryParams.code,
+              hasSign: !!queryParams.sign,
+              clientIdPreview: `${String(appKey).slice(0, 6)}...`,
+              usesSignedQuery: true,
+              redirectUri,
+            });
+
           // ✅ FIX OAUTH: Timeout de 10s para token exchange
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error('Token exchange timeout after 10s')), 10000);
-          });
+            const timeoutPromise = new Promise<never>((_, reject) => {
+              setTimeout(() => reject(new Error('Token exchange timeout after 10s')), 10000);
+            });
 
-          const requestPromise = httpClient.get(tokenUrl, {
-            params: queryParams,
-          });
+            try {
+              const requestPromise = httpClient.get(tokenUrl, {
+                params: queryParams,
+              });
+              const response = await Promise.race([requestPromise, timeoutPromise]);
+              const payload = response.data?.data ?? response.data ?? {};
+              const hasAccessToken = !!String(payload.access_token || payload.accessToken || '').trim();
+              if (hasAccessToken) {
+                return response;
+              }
+              lastResponse = response;
+              const aliCode = String(payload.code || '').trim();
+              if (aliCode === 'IncompleteSignature') {
+                logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Signature variant rejected', {
+                  signatureVariant: variant.name,
+                  signMethod: variant.signMethod,
+                  aliCode,
+                });
+                continue;
+              }
+              return response;
+            } catch (error: any) {
+              lastError = error;
+              logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Signature variant request failed', {
+                signatureVariant: variant.name,
+                signMethod: variant.signMethod,
+                error: error?.message || String(error),
+              });
+            }
+          }
 
-          const response = await Promise.race([requestPromise, timeoutPromise]);
-          return response;
+          if (lastResponse) {
+            return lastResponse;
+          }
+          throw lastError || new Error('All signature variants failed for token exchange');
         },
         {
           maxRetries: 2,
@@ -593,7 +665,7 @@ export class AliExpressDropshippingAPIService {
           error: result.error?.message || String(result.error),
           endpoint: tokenUrl,
           method: 'GET',
-          signMethod,
+          signMethod: 'multi-variant',
         });
         throw result.error || new Error('Token exchange failed');
       }
@@ -620,7 +692,7 @@ export class AliExpressDropshippingAPIService {
         tokenExchangeStatus: 'success',
         endpoint: tokenUrl,
         method: 'GET',
-        signMethod,
+        signMethod: 'multi-variant',
         statusCode: response.status,
         hasAccessToken: !!accessToken,
         accessTokenLength: accessToken.length,
@@ -647,13 +719,13 @@ export class AliExpressDropshippingAPIService {
         tokenExchangeStatus: 'failed',
         endpoint: tokenUrl,
         method: 'GET',
-        signMethod: 'sha256',
+        signMethod: 'multi-variant',
         error: errorMessage,
         status: error.response?.status,
         responseData: error.response?.data,
         requestBody: {
           app_key_preview: `${String(appKey).slice(0, 6)}...`,
-          sign_method: 'sha256',
+          sign_method: 'multi-variant',
           has_code: !!code,
           has_sign: true,
           redirect_uri: redirectUri,
