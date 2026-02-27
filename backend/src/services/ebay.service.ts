@@ -518,6 +518,7 @@ export class EbayService {
       ]);
       const fulfillmentPolicies = fulfillRes.data?.fulfillmentPolicies || [];
       const fp =
+        fulfillmentPolicies.find((policy: any) => String(policy?.name || '').toUpperCase() === 'IVAN_SHIP_STD_INTL_01') ||
         fulfillmentPolicies.find((policy: any) => {
           const services = policy?.shippingOptions?.flatMap((opt: any) => opt?.shippingServices || []) || [];
           return !services.some((svc: any) => /economy/i.test(String(svc?.shippingServiceCode || '')));

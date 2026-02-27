@@ -704,6 +704,137 @@ router.get('/ebay-policies-diagnostic', validateInternalSecret, async (req: Requ
   }
 });
 
+// POST /api/internal/ebay-bootstrap-fulfillment-policy - crea policy de envío no-Economy para EBAY_US
+router.post('/ebay-bootstrap-fulfillment-policy', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const { CredentialsManager, clearCredentialsCache } = await import('../../services/credentials-manager.service');
+    const userId = Number(req.body?.userId) || 1;
+    const marketplaceId = String(req.body?.marketplaceId || 'EBAY_US').trim();
+    const policyName = String(req.body?.name || 'IVAN_SHIP_STD_INTL_01').trim();
+    const entry = await CredentialsManager.getCredentialEntry(userId, 'ebay', 'production');
+    const creds: Record<string, any> = (entry?.credentials as any) || {};
+    const appId = String(creds.appId || process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
+    const certId = String(creds.certId || process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
+    const refreshToken = String(creds.refreshToken || process.env.EBAY_REFRESH_TOKEN || '').trim();
+    let accessToken = String(creds.token || process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN || '').trim();
+
+    if (!appId || !certId) {
+      return res.status(400).json({ success: false, error: 'Missing EBAY_APP_ID/EBAY_CERT_ID' });
+    }
+
+    if (!accessToken && refreshToken) {
+      const basic = Buffer.from(`${appId}:${certId}`).toString('base64');
+      const tokenResp = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${basic}`,
+        },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+        }).toString(),
+      });
+      const tokenData = await tokenResp.json().catch(() => ({} as any));
+      if (!tokenResp.ok || !tokenData?.access_token) {
+        return res.status(400).json({
+          success: false,
+          stage: 'refresh_token',
+          status: tokenResp.status,
+          response: tokenData,
+        });
+      }
+      accessToken = String(tokenData.access_token).trim();
+      const newCreds = {
+        ...creds,
+        appId,
+        certId,
+        refreshToken: refreshToken || creds.refreshToken,
+        token: accessToken,
+        expiresAt: tokenData?.expires_in ? new Date(Date.now() + Number(tokenData.expires_in) * 1000).toISOString() : undefined,
+        sandbox: false,
+      };
+      await CredentialsManager.saveCredentials(userId, 'ebay', newCreds, 'production', { scope: entry?.scope || 'user' });
+      clearCredentialsCache(userId, 'ebay', 'production');
+    }
+
+    if (!accessToken) {
+      return res.status(400).json({ success: false, error: 'No eBay access token available' });
+    }
+
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      'Content-Language': 'en-US',
+    } as Record<string, string>;
+
+    const listResp = await fetch(
+      `https://api.ebay.com/sell/account/v1/fulfillment_policy?marketplace_id=${encodeURIComponent(marketplaceId)}`,
+      { headers }
+    );
+    const listData = await listResp.json().catch(() => ({} as any));
+    const existing = (listData?.fulfillmentPolicies || []).find((p: any) => p?.name === policyName);
+    if (existing?.fulfillmentPolicyId) {
+      return res.status(200).json({
+        success: true,
+        created: false,
+        marketplaceId,
+        policyName,
+        fulfillmentPolicyId: existing.fulfillmentPolicyId,
+      });
+    }
+
+    const payload = {
+      name: policyName,
+      description: 'Standard international shipping policy for API listings',
+      marketplaceId,
+      categoryTypes: [{ name: 'ALL_EXCLUDING_MOTORS_VEHICLES', default: false }],
+      handlingTime: { value: 2, unit: 'DAY' },
+      shippingOptions: [
+        {
+          optionType: 'DOMESTIC',
+          costType: 'FLAT_RATE',
+          shippingServices: [
+            {
+              sortOrder: 1,
+              shippingCarrierCode: 'GENERIC',
+              shippingServiceCode: 'StandardShippingFromOutsideUS',
+              shippingCost: { value: '4.99', currency: 'USD' },
+              additionalShippingCost: { value: '0.0', currency: 'USD' },
+            },
+          ],
+        },
+      ],
+    };
+
+    const createResp = await fetch('https://api.ebay.com/sell/account/v1/fulfillment_policy', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const createText = await createResp.text();
+
+    const verifyResp = await fetch(
+      `https://api.ebay.com/sell/account/v1/fulfillment_policy?marketplace_id=${encodeURIComponent(marketplaceId)}`,
+      { headers }
+    );
+    const verifyData = await verifyResp.json().catch(() => ({} as any));
+    const found = (verifyData?.fulfillmentPolicies || []).find((p: any) => p?.name === policyName);
+
+    return res.status(found?.fulfillmentPolicyId ? 200 : 400).json({
+      success: !!found?.fulfillmentPolicyId,
+      created: createResp.ok,
+      marketplaceId,
+      policyName,
+      createStatus: createResp.status,
+      createResponse: createText,
+      fulfillmentPolicyId: found?.fulfillmentPolicyId || null,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
 // GET /api/internal/ebay-credential-state - diagnóstico seguro de credenciales eBay guardadas
 router.get('/ebay-credential-state', validateInternalSecret, async (req: Request, res: Response) => {
   try {
