@@ -774,6 +774,38 @@ router.post('/ebay-disable-refresh-token', validateInternalSecret, async (req: R
   }
 });
 
+// GET /api/internal/ebay-runtime-credentials - muestra cómo MarketplaceService resuelve eBay creds en runtime
+router.get('/ebay-runtime-credentials', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const { MarketplaceService } = await import('../../services/marketplace.service');
+    const userId = Number(req.query?.userId) || 1;
+    const environment = String(req.query?.environment || 'production') as 'production' | 'sandbox';
+    const ms = new MarketplaceService();
+    const creds = await ms.getCredentials(userId, 'ebay', environment);
+    const c: Record<string, any> = (creds?.credentials as any) || {};
+    const token = String(c.token || '').trim();
+    const refreshToken = String(c.refreshToken || '').trim();
+    return res.status(200).json({
+      success: true,
+      userId,
+      environment,
+      credentialEnv: creds?.environment || null,
+      isActive: !!creds?.isActive,
+      issues: creds?.issues || [],
+      warnings: creds?.warnings || [],
+      hasToken: !!token,
+      tokenLength: token.length,
+      hasRefreshToken: !!refreshToken,
+      refreshTokenLength: refreshToken.length,
+      sandbox: !!c.sandbox,
+      hasAppId: !!c.appId,
+      hasCertId: !!c.certId,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
 router.post('/reprice-product', validateInternalSecret, async (req: Request, res: Response) => {
   try {
     const { dynamicPricingService } = await import('../../services/dynamic-pricing.service');
