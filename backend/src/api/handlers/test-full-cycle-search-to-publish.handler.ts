@@ -92,7 +92,10 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
       } as any];
     }
 
-    const opp = opportunities[0];
+    const maxCostForCap = maxPriceUsd ? (maxPriceUsd / 1.5) : null;
+    const opp = maxCostForCap
+      ? (opportunities.find((o: any) => Number(o?.costUsd || 0) > 0 && Number(o.costUsd) <= maxCostForCap) || opportunities[0])
+      : opportunities[0];
     const rawImages = Array.isArray((opp as any).images)
       ? (opp as any).images
       : ((opp as any).image ? [(opp as any).image] : []);
