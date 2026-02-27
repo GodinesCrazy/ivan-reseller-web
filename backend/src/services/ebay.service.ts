@@ -479,7 +479,10 @@ export class EbayService {
       const locRes = await this.apiClient.get('/sell/inventory/v1/location?limit=5', { headers: invHeaders });
       const locations = locRes.data?.locations;
       if (locations?.length > 0) {
-        merchantLocationKey = locations[0].merchantLocationKey || merchantLocationKey;
+        const preferred =
+          locations.find((loc: any) => String(loc?.location?.address?.country || '').toUpperCase() === 'CL') ||
+          locations[0];
+        merchantLocationKey = preferred?.merchantLocationKey || merchantLocationKey;
       } else {
         try {
           await this.apiClient.post(
