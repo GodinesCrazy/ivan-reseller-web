@@ -1104,6 +1104,7 @@ router.get('/ebay-inventory-item-diagnostic', validateInternalSecret, async (req
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Language': 'en-US',
+        'Accept-Language': 'en-US',
       },
     });
     const text = await resp.text();
