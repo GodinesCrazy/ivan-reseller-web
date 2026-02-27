@@ -562,20 +562,25 @@ router.post('/ebay-bootstrap-location', validateInternalSecret, async (req: Requ
       return res.status(400).json({ success: false, error: 'No eBay access token available' });
     }
 
-    const locationBody = {
-      name: 'Ivan Default Warehouse',
+    const country = String(req.body?.country || 'US').trim();
+    const postalCode = String(req.body?.postalCode || '33101').trim();
+    const addressLine1 = String(req.body?.addressLine1 || '').trim();
+    const city = String(req.body?.city || '').trim();
+    const stateOrProvince = String(req.body?.stateOrProvince || '').trim();
+    const locationBody: any = {
+      name: String(req.body?.name || 'Ivan Default Warehouse').trim(),
       merchantLocationStatus: 'ENABLED',
       locationTypes: ['WAREHOUSE'],
       location: {
         address: {
-          addressLine1: String(req.body?.addressLine1 || '2 Norte 468'),
-          city: String(req.body?.city || 'Concepcion'),
-          stateOrProvince: String(req.body?.stateOrProvince || 'BIO BIO'),
-          postalCode: String(req.body?.postalCode || '400084'),
-          country: String(req.body?.country || 'CL'),
+          postalCode,
+          country,
         },
       },
     };
+    if (addressLine1) locationBody.location.address.addressLine1 = addressLine1;
+    if (city) locationBody.location.address.city = city;
+    if (stateOrProvince) locationBody.location.address.stateOrProvince = stateOrProvince;
 
     const putResp = await fetch(`https://api.ebay.com/sell/inventory/v1/location/${encodeURIComponent(locationKey)}`, {
       method: 'POST',

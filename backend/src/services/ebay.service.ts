@@ -483,17 +483,15 @@ export class EbayService {
           await this.apiClient.post(
             '/sell/inventory/v1/location/default_location',
             {
+              merchantLocationStatus: 'ENABLED',
+              locationTypes: ['WAREHOUSE'],
+              name: 'Default Warehouse',
               location: {
                 address: {
-                  addressLine1: '123 Main St',
-                  city: 'Miami',
-                  stateOrProvince: 'FL',
                   postalCode: '33101',
                   country: 'US',
                 },
               },
-              locationTypes: ['WAREHOUSE'],
-              name: 'Default Warehouse',
             },
             { headers: invHeaders }
           );
