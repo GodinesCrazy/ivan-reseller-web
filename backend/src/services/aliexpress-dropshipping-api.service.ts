@@ -528,7 +528,6 @@ export class AliExpressDropshippingAPIService {
       const signedParams = {
         app_key: appKey,
         code,
-        grant_type: 'authorization_code',
         sign_method: signMethod,
         timestamp,
       };
