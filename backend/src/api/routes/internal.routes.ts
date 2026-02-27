@@ -1268,6 +1268,7 @@ router.get('/ebay-offer-by-sku', validateInternalSecret, async (req: Request, re
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Language': 'en-US',
+        'Accept-Language': 'en-US',
       },
     });
     const text = await resp.text();
