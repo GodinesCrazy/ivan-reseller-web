@@ -578,7 +578,7 @@ router.post('/ebay-bootstrap-location', validateInternalSecret, async (req: Requ
     };
 
     const putResp = await fetch(`https://api.ebay.com/sell/inventory/v1/location/${encodeURIComponent(locationKey)}`, {
-      method: 'PUT',
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',

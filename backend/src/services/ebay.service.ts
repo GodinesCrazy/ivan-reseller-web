@@ -480,7 +480,7 @@ export class EbayService {
         merchantLocationKey = locations[0].merchantLocationKey || merchantLocationKey;
       } else {
         try {
-          await this.apiClient.put(
+          await this.apiClient.post(
             '/sell/inventory/v1/location/default_location',
             {
               location: {
