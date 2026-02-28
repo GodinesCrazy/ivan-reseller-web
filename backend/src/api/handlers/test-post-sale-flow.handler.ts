@@ -75,12 +75,13 @@ export async function runTestPostSaleFlow(req: Request, res: Response): Promise<
       select: { id: true, aliexpressUrl: true, aliexpressPrice: true, suggestedPrice: true },
     });
     if (!product) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'No product found for user. Add an approved product first.',
         report,
         durationMs: Date.now() - startTime,
       });
+      return;
     }
 
     const salePrice = Number(body.price) || Number(product.suggestedPrice) || 25;
