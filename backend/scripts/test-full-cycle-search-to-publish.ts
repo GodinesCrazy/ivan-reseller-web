@@ -26,10 +26,12 @@ async function runRemote(): Promise<number> {
   const url = `${base}/api/internal/test-full-cycle-search-to-publish`;
   const keyword = process.env.keyword;
   const dryRun = process.env.DRY_RUN === '1' || process.env.DRY_RUN === 'true';
+  const maxPriceUsd = 12; // Artículos económicos ≤$12 para ciclo de prueba
 
   console.log('=== Test remoto (Railway): Tendencias -> Publicacion eBay ===\n');
   console.log('URL:', url);
   console.log('Keyword:', keyword || '(auto)');
+  console.log('MaxPriceUsd:', maxPriceUsd);
   console.log('DRY_RUN:', dryRun, '\n');
 
   const res = await fetch(url, {
@@ -38,7 +40,7 @@ async function runRemote(): Promise<number> {
       'Content-Type': 'application/json',
       'x-internal-secret': INTERNAL_SECRET,
     },
-    body: JSON.stringify({ keyword: keyword || undefined, dryRun }),
+    body: JSON.stringify({ keyword: keyword || undefined, dryRun, maxPriceUsd }),
   });
   let data: any;
   try {
@@ -81,6 +83,7 @@ import { workflowConfigService } from '../src/services/workflow-config.service';
 
 const KEYWORD_OVERRIDE = process.env.keyword;
 const DRY_RUN = process.env.DRY_RUN === '1' || process.env.DRY_RUN === 'true';
+const MAX_PRICE_USD = 12; // Artículos económicos ≤$12 para ciclo de prueba
 
 async function main(): Promise<number> {
   console.log('=== Test: Tendencias -> Busqueda -> Producto -> Publicacion eBay ===\n');
@@ -136,7 +139,10 @@ async function main(): Promise<number> {
   console.log(`    Encontradas: ${opportunities.length}`);
   console.log();
 
-  const opp = opportunities[0];
+  // Preferir productos económicos ≤$12
+  const maxCostForCap = MAX_PRICE_USD / 1.5;
+  const opp = opportunities.find((o: any) => Number(o?.costUsd || 0) > 0 && Number(o.costUsd) <= maxCostForCap)
+    || opportunities[0];
   const rawImages = opp.images ?? (opp as any).image ? [(opp as any).image] : [];
   const images = Array.isArray(rawImages) && rawImages.length > 0
     ? rawImages.filter((u): u is string => typeof u === 'string' && u.startsWith('http'))
@@ -179,13 +185,16 @@ async function main(): Promise<number> {
   const env = await workflowConfigService.getUserEnvironment(userId);
 
   try {
+    const basePrice = Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5;
+    const finalPrice = Math.min(basePrice, MAX_PRICE_USD);
     const publishResult = await marketplaceService.publishProduct(userId, {
       productId: product.id,
       marketplace: 'ebay',
       customData: {
         title: String(updated?.title || opp.title || `Product-${product.id}`).replace(/\s+/g, ' ').trim().slice(0, 80),
-        price: Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5,
+        price: finalPrice,
         quantity: 1,
+        categoryId: '20349', // eBay category for phones/accessories
       },
     }, env);
 

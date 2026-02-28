@@ -166,7 +166,7 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
       { key: 'EBAY_APP_ID', label: 'App ID (Client ID)', required: true, type: 'text', placeholder: 'IvanMart-IVANRese-PRD-...', helpText: 'Formato: Nombre-Nombre-[SBX|PRD]-hash. Ejemplo: IvanMart-IVANRese-PRD-febbdcd65-626be473' },
       { key: 'EBAY_DEV_ID', label: 'Dev ID', required: true, type: 'text', placeholder: 'Your-DevI-PRD-...' },
       { key: 'EBAY_CERT_ID', label: 'Cert ID (Client Secret)', required: true, type: 'password', placeholder: 'PRD-...' },
-      { key: 'EBAY_REDIRECT_URI', label: 'Redirect URI (RuName)', required: true, type: 'text', placeholder: 'Ivan_Marty-IvanMart-IVANRe-cgcqu', helpText: 'Solo el RuName (ej. Ivan_Marty-IvanMart-IVANRe-xxx). NO pegues la URL completa: en eBay Developer el RuName es el nombre que asignas a la URL de callback.' },
+      { key: 'EBAY_REDIRECT_URI', label: 'Redirect URI (RuName o URL)', required: true, type: 'text', placeholder: 'Ivan_Marty-IvanMart-IVANRe-cgcqu o https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/ebay', helpText: 'RuName (ej. Ivan_Marty-IvanMart-IVANRe-cgcqu) O la URL completa (Auth accepted URL de eBay Developer). Debe coincidir exactamente con lo registrado.' },
       { key: 'EBAY_TOKEN', label: 'User Token (opcional)', required: false, type: 'password', placeholder: 'v^1.1#i^1#...' },
     ],
   },
@@ -1744,11 +1744,7 @@ export default function APISettings() {
       // Agregar campos específicos según el tipo de API
       if (apiName === 'ebay') {
         credentials.sandbox = currentEnvironment === 'sandbox';
-        if (credentials.redirectUri && /^https?:\/\//i.test(String(credentials.redirectUri).trim())) {
-          toast.error('El campo "Redirect URI (RuName)" debe ser solo el RuName (ej. Ivan_Marty-IvanMart-IVANRe-cgcqu), no la URL completa. En eBay Developer copia el nombre del Redirect URL, no la URL.');
-          setSaving(null);
-          return;
-        }
+        // Aceptar tanto RuName como URL completa - eBay soporta ambos
       } else if (apiName === 'amazon') {
         credentials.sandbox = currentEnvironment === 'sandbox';
         // Si no se proporciona region, usar default
@@ -2463,14 +2459,7 @@ export default function APISettings() {
         // Limpiar el Redirect URI (remover espacios al inicio y final)
         ruName = String(ruName).trim();
         
-        // eBay: no permitir URL completa; solo RuName (evita error "caracteres inválidos")
-        if (apiName === 'ebay' && /^https?:\/\//i.test(ruName)) {
-          const msg = 'El campo "Redirect URI (RuName)" debe ser solo el RuName (ej. Ivan_Marty-IvanMart-IVANRe-cgcqu), no la URL. Edita el campo, borra la URL, escribe solo el RuName desde eBay Developer y guarda.';
-          toast.error(msg);
-          setError(`[ebay] ${msg}`);
-          setOauthing(null);
-          return;
-        }
+        // Aceptar tanto RuName como URL completa - eBay soporta ambos; no rechazar URL
         
         // Advertencia si contiene espacios (eBay requiere coincidencia exacta)
         if (ruName.includes(' ')) {

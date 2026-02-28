@@ -36,7 +36,8 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
   const dryRun = req.body?.dryRun === true || process.env.DRY_RUN === '1';
   const requestedUserId = Number(req.body?.userId);
   const maxPriceUsdRaw = Number(req.body?.maxPriceUsd);
-  const maxPriceUsd = Number.isFinite(maxPriceUsdRaw) && maxPriceUsdRaw > 0 ? maxPriceUsdRaw : null;
+  // Default max $12 for economical test cycles (user preference: artículos económicos ≤$12)
+  const maxPriceUsd = Number.isFinite(maxPriceUsdRaw) && maxPriceUsdRaw > 0 ? maxPriceUsdRaw : 12;
 
   try {
     const user = Number.isFinite(requestedUserId) && requestedUserId > 0
@@ -67,6 +68,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
         maxKeywords: 10,
         userId,
       });
+      // Default keyword for cheap items (≤$12 test cycles)
       keyword = trendKeywords.length > 0 ? trendKeywords[0].keyword : 'phone case';
     }
 
@@ -80,13 +82,15 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
     // Fallback: si no hay oportunidades (ej. AliExpress en Railway), usar producto m�nimo para probar publish
     if (opportunities.length === 0) {
       logger.warn('[INTERNAL] No opportunities found, using fallback product for publish test');
+      const fallbackPrice = Math.min(11.99, maxPriceUsd);
+      const fallbackCost = Math.min(7.99, fallbackPrice / 1.5);
       opportunities = [{
         title: `Test Product ${keyword} - ${Date.now()}`,
         description: 'Test product for full cycle',
         aliexpressUrl: 'https://www.aliexpress.com/item/1005001234567890.html',
         productUrl: 'https://www.aliexpress.com/item/1005001234567890.html',
-        costUsd: 15.99,
-        suggestedPriceUsd: 24.99,
+        costUsd: fallbackCost,
+        suggestedPriceUsd: fallbackPrice,
         category: 'Electronics',
         images: ['https://placehold.co/400x400?text=Test+Product'],
       } as any];

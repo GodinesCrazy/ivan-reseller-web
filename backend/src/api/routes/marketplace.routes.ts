@@ -548,11 +548,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const { CredentialsManager } = await import('../../services/credentials-manager.service');
       const normalizedCreds = CredentialsManager.normalizeCredential('ebay', { redirectUri }, resolvedEnv);
       redirectUri = normalizedCreds.redirectUri || redirectUri;
-      // Si aún es una URL (p. ej. guardada antes del fix), usar solo RuName desde env
-      if (redirectUri && /^https?:\/\//i.test(redirectUri.trim())) {
-        const ruFromEnv = (process.env.EBAY_RUNAME || process.env.EBAY_REDIRECT_URI || '').trim();
-        if (ruFromEnv && !/^https?:\/\//i.test(ruFromEnv)) redirectUri = ruFromEnv;
-      }
+      // ✅ Aceptar tanto RuName como URL completa - eBay soporta ambos; no forzar conversión
       // Limpiar el Redirect URI - eBay es muy estricto con esto
       // Remover espacios al inicio y final, pero NO modificar el contenido interno
       // porque eBay requiere que coincida EXACTAMENTE con el registrado
@@ -739,26 +735,20 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
           );
         }
         
-        // ✅ VALIDACIÓN: Verificar que el redirectUri solo contenga caracteres permitidos
-        // eBay RuName solo permite: letras, números, guiones (-), guiones bajos (_)
-        const allowedPattern = /^[a-zA-Z0-9\-_]+$/;
-        if (!allowedPattern.test(redirectUri)) {
-          const isUrl = /^https?:\/\//i.test(redirectUri.trim());
-          const invalidChars = redirectUri.match(/[^a-zA-Z0-9\-_]/g);
-          logger.error('[eBay OAuth] CRITICAL: Redirect URI contains invalid characters', {
-            redirectUri: redirectUri.substring(0, 50) + '...',
-            isUrl,
-            invalidChars: invalidChars?.join(', ') || 'unknown',
-            warning: 'eBay RuName only allows: letters, numbers, hyphens (-), underscores (_)'
-          });
-          const message = isUrl
-            ? 'No uses la URL completa. El campo "Redirect URI (RuName)" debe ser solo el RuName (ej. Ivan_Marty-IvanMart-IVANRe-cgcqu). En API Settings borra la URL, escribe solo el RuName que ves en eBay Developer → User Tokens → Redirect URL name, guarda y vuelve a pulsar Autorizar OAuth.'
-            : `El Redirect URI (RuName) contiene caracteres inválidos: ${invalidChars?.join(', ') || 'desconocidos'}. eBay solo permite letras, números, guiones (-) y guiones bajos (_).`;
+        // ✅ VALIDACIÓN: Aceptar tanto RuName como URL completa - eBay soporta ambos
+        // RuName: letras, números, guiones (-), guiones bajos (_)
+        // URL: https?://...
+        const ruNamePattern = /^[a-zA-Z0-9\-_]+$/;
+        const urlPattern = /^https?:\/\/[^\s<>"{}|\\^`\[\]]+$/i;
+        const isValidRuName = ruNamePattern.test(redirectUri);
+        const isValidUrl = urlPattern.test(redirectUri.trim());
+        if (!isValidRuName && !isValidUrl) {
+          const invalidChars = redirectUri.match(/[<>"{}|\\^`\[\]]/g);
           throw new AppError(
-            message,
+            `El Redirect URI contiene caracteres inválidos${invalidChars?.length ? `: ${invalidChars.join(', ')}` : ''}. Usa solo el RuName (ej. Ivan_Marty-IvanMart-IVANRe-cgcqu) O la URL completa (ej. https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/ebay).`,
             400,
             ErrorCode.VALIDATION_ERROR,
-            { field: 'redirectUri', apiName: 'ebay', invalidChars: invalidChars, hint: isUrl ? 'Ejemplo de RuName: Ivan_Marty-IvanMart-IVANRe-cgcqu' : undefined }
+            { field: 'redirectUri', apiName: 'ebay' }
           );
         }
         

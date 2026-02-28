@@ -448,11 +448,9 @@ export const CredentialsManager = {
       out.appId = out.appId || out.clientId || out.EBAY_APP_ID;
       out.certId = out.certId || out.clientSecret || out.EBAY_CERT_ID;
       out.devId = out.devId || out.EBAY_DEV_ID;
-      let ru = out.redirectUri || out.EBAY_RUNAME || out.ruName || out.RuName;
-      if (ru && /^https?:\/\//i.test(String(ru))) {
-        ru = (process.env.EBAY_RUNAME || '').trim() || undefined;
-      }
-      out.redirectUri = ru || undefined;
+      // ✅ Aceptar tanto RuName como URL completa - eBay soporta ambos
+      const ru = out.redirectUri || out.EBAY_RUNAME || out.ruName || out.RuName || process.env.EBAY_RUNAME || process.env.EBAY_REDIRECT_URI;
+      out.redirectUri = ru ? String(ru).trim() || undefined : undefined;
       // Token/refreshToken: DB first (token|authToken|accessToken), then env fallback (Railway)
       const envToken = (process.env.EBAY_OAUTH_TOKEN || process.env.EBAY_TOKEN || '').trim() || undefined;
       const envRefresh = (process.env.EBAY_REFRESH_TOKEN || '').trim() || undefined;

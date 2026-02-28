@@ -92,22 +92,18 @@ function validateEbayCredentials(credentials: any, environment: string): Intelli
   if (credentials.redirectUri) {
     const redirectUri = String(credentials.redirectUri).trim();
     
-    // Detectar si se ingresó una URL completa en lugar del RuName
-    if (redirectUri.startsWith('http://') || redirectUri.startsWith('https://')) {
-      return {
-        valid: false,
-        message: 'Redirect URI parece ser una URL completa en lugar del RuName',
-        recommendations: [
-          'eBay requiere el RuName (por ejemplo: Ivan_Marty-IvanMart-IVANRe-vxcxlakn)',
-          'NO uses la URL completa de OAuth',
-          'Obtén el RuName desde: eBay Developer Portal → Tu App → OAuth Redirect URIs'
-        ]
-      };
-    }
-
-    // Validar longitud
-    if (redirectUri.length < 10) {
-      warnings.push('El Redirect URI (RuName) parece ser muy corto. Verifica que sea correcto.');
+    // ✅ Aceptar TANTO RuName como URL completa - eBay soporta ambos
+    // Si "Your auth accepted URL" en eBay Developer es la URL, usar la URL es válido
+    const isUrl = redirectUri.startsWith('http://') || redirectUri.startsWith('https://');
+    if (isUrl) {
+      if (redirectUri.length < 20) {
+        warnings.push('La URL de Redirect parece incompleta. Verifica que sea exactamente la de eBay Developer → Auth accepted URL.');
+      }
+    } else {
+      // RuName: validar longitud mínima
+      if (redirectUri.length < 10) {
+        warnings.push('El RuName parece muy corto. Verifica que sea correcto (ej: Ivan_Marty-IvanMart-IVANRe-cgcqu).');
+      }
     }
   }
 
