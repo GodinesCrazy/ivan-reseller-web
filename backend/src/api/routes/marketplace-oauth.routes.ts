@@ -845,7 +845,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         `);
       }
 
-      const parsedState = parsed as { userId: number; redirectUri: string; environment: string; returnOrigin?: string };
+      const parsedState = parsed as { userId: number; redirectUri: string; environment: 'sandbox' | 'production'; returnOrigin?: string };
       userId = parsedState.userId;
       redirectUri = parsedState.redirectUri;
       environment = parsedState.environment;
