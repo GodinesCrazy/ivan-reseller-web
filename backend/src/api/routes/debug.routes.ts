@@ -1010,6 +1010,39 @@ router.post('/reset-admin-password', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/debug/post-sale-integrity-check
+ * Verificación de integridad financiera del pipeline post-venta (público para monitoreo)
+ */
+router.get('/post-sale-integrity-check', async (_req: Request, res: Response) => {
+  try {
+    const centralized = !await hasPrismaSaleCreateOutsideService();
+    const webhookBypass = !centralized;
+    const duplicatePayoutRisk = !await hasPayoutIdempotencyCheck();
+    const feeCalculationStrict = await hasStrictFeeValidation();
+    const netProfitValidated = await hasNetProfitValidation();
+
+    let score = 0;
+    if (centralized) score += 25;
+    if (!webhookBypass) score += 25;
+    if (!duplicatePayoutRisk) score += 20;
+    if (feeCalculationStrict) score += 15;
+    if (netProfitValidated) score += 15;
+    const overallFinancialIntegrityScore = Math.min(100, score);
+
+    return res.json({
+      centralizedSaleCreation: centralized,
+      webhookBypassDetected: webhookBypass,
+      duplicatePayoutRisk,
+      feeCalculationStrict,
+      netProfitValidated,
+      overallFinancialIntegrityScore,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
 // Require authentication for other endpoints
 router.use(authenticate);
 
@@ -1525,39 +1558,6 @@ router.get('/aliexpress/diagnostic', authenticate, async (req: Request, res: Res
       correlationId,
       totalDuration: `${totalDuration}ms`
     });
-  }
-});
-
-/**
- * GET /api/debug/post-sale-integrity-check
- * Verificación de integridad financiera del pipeline post-venta
- */
-router.get('/post-sale-integrity-check', async (_req: Request, res: Response) => {
-  try {
-    const centralized = !await hasPrismaSaleCreateOutsideService();
-    const webhookBypass = !centralized;
-    const duplicatePayoutRisk = !await hasPayoutIdempotencyCheck();
-    const feeCalculationStrict = await hasStrictFeeValidation();
-    const netProfitValidated = await hasNetProfitValidation();
-
-    let score = 0;
-    if (centralized) score += 25;
-    if (!webhookBypass) score += 25;
-    if (!duplicatePayoutRisk) score += 20;
-    if (feeCalculationStrict) score += 15;
-    if (netProfitValidated) score += 15;
-    const overallFinancialIntegrityScore = Math.min(100, score);
-
-    return res.json({
-      centralizedSaleCreation: centralized,
-      webhookBypassDetected: webhookBypass,
-      duplicatePayoutRisk,
-      feeCalculationStrict,
-      netProfitValidated,
-      overallFinancialIntegrityScore,
-    });
-  } catch (e: any) {
-    return res.status(500).json({ error: e?.message || String(e) });
   }
 });
 
