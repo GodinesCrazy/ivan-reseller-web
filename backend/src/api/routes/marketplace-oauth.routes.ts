@@ -774,6 +774,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
     let userId: number;
     let redirectUri: string;
     let environment: 'sandbox' | 'production';
+    let returnOriginForRedirect = '';
 
     if (isAliExpressDropshippingMarketplace) {
       const parsedAliExpress = verifyStateAliExpressSafe(state);
@@ -844,10 +845,11 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         `);
       }
 
-      const parsedState = parsed as any;
+      const parsedState = parsed as { userId: number; redirectUri: string; environment: string; returnOrigin?: string };
       userId = parsedState.userId;
       redirectUri = parsedState.redirectUri;
       environment = parsedState.environment;
+      returnOriginForRedirect = parsedState.returnOrigin || '';
     }
     
     logger.info('[OAuth Callback] State parsed successfully', {
@@ -1259,7 +1261,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
 
     // ✅ FIX OAUTH LOGOUT: Usar returnOrigin del state para redirigir al mismo host (evita www vs no-www)
     const provider = req.params.marketplace;
-    const returnOrigin = (parsedState as { returnOrigin?: string })?.returnOrigin || '';
+    const returnOrigin = returnOriginForRedirect;
     const baseForRedirect = returnOrigin || getFrontendReturnBaseUrl();
     const fallbackReturnUrl = baseForRedirect + '/api-settings?oauth=success&provider=' + provider;
     res.send(`
