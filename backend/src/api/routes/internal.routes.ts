@@ -1376,6 +1376,38 @@ router.post('/aliexpress-ds-bootstrap', validateInternalSecret, async (req: Requ
   }
 });
 
+// GET /api/internal/aliexpress-ds-oauth-url - genera URL OAuth para Dropshipping API (userId=1 por defecto)
+router.get('/aliexpress-ds-oauth-url', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const userId = Number(req.query?.userId) || 1;
+    const environment = String(req.query?.environment || 'production') as 'production' | 'sandbox';
+    const { CredentialsManager } = await import('../../services/credentials-manager.service');
+    const { aliexpressDropshippingAPIService } = await import('../../services/aliexpress-dropshipping-api.service');
+    const { signStateAliExpress } = await import('../../utils/oauth-state');
+    const { getAliExpressDropshippingRedirectUri } = await import('../../utils/aliexpress-dropshipping-oauth');
+
+    const creds = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', environment);
+    const appKey = String((creds as any)?.appKey || process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY || '').trim();
+    if (!appKey) {
+      return res.status(400).json({ success: false, error: 'Missing appKey for aliexpress-dropshipping' });
+    }
+
+    const redirectUri = getAliExpressDropshippingRedirectUri();
+    const state = signStateAliExpress(userId);
+    const authUrl = aliexpressDropshippingAPIService.getAuthUrl(redirectUri, state, appKey);
+
+    return res.status(200).json({
+      success: true,
+      userId,
+      environment,
+      redirectUri,
+      authUrl,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
 router.post('/reprice-product', validateInternalSecret, async (req: Request, res: Response) => {
   try {
     const { dynamicPricingService } = await import('../../services/dynamic-pricing.service');
