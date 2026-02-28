@@ -408,20 +408,21 @@ export const CredentialsManager = {
     clearCredentialsCache(userId, name, environment);
   },
 
-  async listConfiguredApis(userId: number): Promise<Array<{ apiName: string; environment: string; isActive: boolean; updatedAt: Date; scope: string; ownerUserId: number; sharedByUserId: number | null }>> {
+  async listConfiguredApis(userId: number): Promise<Array<{ id: number; apiName: string; environment: string; isActive: boolean; updatedAt: Date; scope: string; ownerUserId: number; sharedByUserId: number | null }>> {
     const rows = await prisma.apiCredential.findMany({
       where: {
         OR: [{ userId, scope: 'user' }, { scope: 'global' }],
       },
-      select: { apiName: true, environment: true, isActive: true, updatedAt: true, scope: true, userId: true, sharedById: true },
+      select: { id: true, apiName: true, environment: true, isActive: true, updatedAt: true, scope: true, userId: true, sharedById: true },
     });
 
-    const byKey = new Map<string, { apiName: string; environment: string; isActive: boolean; updatedAt: Date; scope: string; ownerUserId: number; sharedByUserId: number | null }>();
+    const byKey = new Map<string, { id: number; apiName: string; environment: string; isActive: boolean; updatedAt: Date; scope: string; ownerUserId: number; sharedByUserId: number | null }>();
     for (const r of rows) {
       const k = `${r.apiName}:${r.environment}`;
       const existing = byKey.get(k);
       if (!existing || (r.scope === 'user' && existing.apiName === r.apiName)) {
         byKey.set(k, {
+          id: r.id,
           apiName: r.apiName,
           environment: r.environment,
           isActive: r.isActive,
