@@ -47,13 +47,12 @@ export class SaleService {
       throw new AppError('Product must be published or approved before creating a sale', 400);
     }
 
-    // ✅ Validar precios
-    if (data.salePrice <= 0) {
+    // ✅ Validación matemática estricta (no valores por defecto 0 silenciosos)
+    if (!data.salePrice || data.salePrice <= 0) {
       throw new AppError('Sale price must be greater than 0', 400);
     }
-
-    if (data.costPrice <= 0) {
-      throw new AppError('Cost price must be greater than 0', 400);
+    if (!data.costPrice || data.costPrice <= 0) {
+      throw new AppError('Supplier cost (costPrice) must be greater than 0', 400);
     }
 
     // ✅ CORREGIDO: Sincronizar monedas antes de calcular utilidades
@@ -125,6 +124,23 @@ export class SaleService {
     const platformCommission = roundMoney((grossProfitNum * commissionPct) / 100, saleCurrency);
     const userProfit = roundMoney(grossProfitNum - platformCommission, saleCurrency);
     const netProfit = roundMoney(userProfit - platformFees, saleCurrency);
+
+    // ✅ Validación matemática: netProfit = salePrice - supplierCost - marketplaceFee - paymentFee - platformCommission
+    const marketplaceFee = platformFees; // platformFees = marketplaceFee + paymentFee when passed
+    const expectedNetProfit = data.salePrice - costPriceInSaleCurrency - marketplaceFee - platformCommission;
+    const diff = Math.abs(toNumber(netProfit) - expectedNetProfit);
+    if (diff > 0.05) {
+      logger.error('[SALE] CRITICAL: netProfit validation failed', {
+        netProfit: toNumber(netProfit),
+        expectedNetProfit,
+        salePrice: data.salePrice,
+        costPrice: costPriceInSaleCurrency,
+        marketplaceFee,
+        platformCommission,
+        diff,
+      });
+      throw new AppError(`netProfit validation failed: expected ${expectedNetProfit}, got ${netProfit}`, 500);
+    }
 
     // ✅ User and creator admin for legacy AdminCommission (if user was created by admin)
     const user = await prisma.user.findUnique({
@@ -341,6 +357,17 @@ export class SaleService {
       return sale;
     }
 
+    // ✅ Idempotencia: evitar doble payout
+    const saleFresh = await prisma.sale.findUnique({
+      where: { id: sale.id },
+      select: { payoutExecuted: true, adminPayoutId: true, userPayoutId: true },
+    });
+    const alreadyPaid = (saleFresh as any)?.payoutExecuted === true || (!!saleFresh?.adminPayoutId && !!saleFresh?.userPayoutId);
+    if (alreadyPaid) {
+      logger.info('[SALE] Payout already executed, skipping (idempotent)', { saleId: sale.id });
+      return sale;
+    }
+
     const commissionAmountNum = toNumber(sale.commissionAmount);
     const netProfitNum = toNumber(sale.netProfit);
     if (commissionAmountNum <= 0 && netProfitNum <= 0) {
@@ -435,7 +462,7 @@ export class SaleService {
 
     await prisma.sale.update({
       where: { id: sale.id },
-      data: { adminPayoutId, userPayoutId } as any,
+      data: { adminPayoutId, userPayoutId, payoutExecuted: true } as any,
     });
 
     logger.info('[PAYOUT_EXECUTED]', {

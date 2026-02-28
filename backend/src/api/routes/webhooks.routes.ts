@@ -1,13 +1,44 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../../config/database';
-import { logger } from '../../config/logger'; // ✅ FIX: Import logger at top level
-import costCalculator from '../../services/cost-calculator.service';
+import { logger } from '../../config/logger';
 import { notificationService } from '../../services/notification.service';
-// ✅ FASE 3: Webhook signature validation middleware
 import { createWebhookSignatureValidator } from '../../middleware/webhook-signature.middleware';
+import { orderFulfillmentService } from '../../services/order-fulfillment.service';
 
 const router = Router();
 
+/**
+ * Normalize webhook shipping address to Order format (addressLine1, fullName, etc.)
+ */
+function normalizeShippingAddress(addr: any, buyerName?: string | null): Record<string, string> {
+  if (!addr || typeof addr !== 'object') {
+    return {
+      fullName: buyerName || 'Buyer',
+      addressLine1: 'Address not provided',
+      addressLine2: '',
+      city: 'City not provided',
+      state: 'State not provided',
+      zipCode: '00000',
+      country: 'US',
+      phoneNumber: '0000000000',
+    };
+  }
+  return {
+    fullName: addr.fullName || addr.name || buyerName || 'Buyer',
+    addressLine1: addr.addressLine1 || addr.street || addr.address_line || addr.line1 || '',
+    addressLine2: addr.addressLine2 || addr.line2 || '',
+    city: addr.city || '',
+    state: addr.state || addr.stateOrProvince || '',
+    zipCode: addr.zipCode || addr.zip || addr.postal_code || addr.postalCode || '',
+    country: addr.country || addr.countryCode || 'US',
+    phoneNumber: addr.phoneNumber || addr.phone || '',
+  };
+}
+
+/**
+ * Webhook → Order → Fulfill → SaleService → Payout
+ * Single source of truth: Sale created ONLY via saleService.createSaleFromOrder
+ */
 async function recordSaleFromWebhook(params: {
   marketplace: 'ebay' | 'mercadolibre' | 'amazon';
   listingId: string;
@@ -16,22 +47,27 @@ async function recordSaleFromWebhook(params: {
   buyer?: string;
   buyerEmail?: string;
   shipping?: string;
-  shippingAddress?: any; // Objeto con dirección completa
+  shippingAddress?: any;
 }, correlationId?: string) {
   const orderIdRaw = params.orderId?.trim() || '';
-  const orderId = orderIdRaw || `${params.marketplace.toUpperCase()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const marketplaceOrderId = orderIdRaw || `${params.marketplace.toUpperCase()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-  // Idempotency: avoid duplicate Sales for same marketplace orderId
+  // Idempotency: Order already processed for this marketplace orderId
   if (orderIdRaw) {
-    const existing = await prisma.sale.findUnique({ where: { orderId: orderIdRaw } });
-    if (existing) {
-      logger.info('[WEBHOOK] Idempotent: Sale already exists for orderId', {
+    const existingOrder = await prisma.order.findFirst({
+      where: { paypalOrderId: `${params.marketplace}:${orderIdRaw}` },
+      select: { id: true },
+    });
+    if (existingOrder) {
+      const existingSale = await prisma.sale.findUnique({ where: { orderId: existingOrder.id } });
+      logger.info('[WEBHOOK] Idempotent: Order already exists', {
         orderId: orderIdRaw,
-        saleId: existing.id,
+        internalOrderId: existingOrder.id,
+        saleId: existingSale?.id,
         correlationId: correlationId ?? null,
         marketplace: params.marketplace,
       });
-      return existing;
+      return existingSale || existingOrder;
     }
   }
 
@@ -41,486 +77,76 @@ async function recordSaleFromWebhook(params: {
 
   const product = await prisma.product.findUnique({ where: { id: listing.productId } });
   if (!product) throw new Error('Product not found');
-  const user = await prisma.user.findUnique({ where: { id: listing.userId } });
-  if (!user) throw new Error('User not found');
 
   const salePrice = Number(params.amount || product.suggestedPrice || 0);
   if (!isFinite(salePrice) || salePrice <= 0) throw new Error('Invalid amount');
 
-  const aliexpressCost = Number(product.aliexpressPrice || 0);
-  const { breakdown } = costCalculator.calculate(marketplace, salePrice, aliexpressCost);
-  const marketplaceFee = breakdown.marketplaceFee;
-  const grossProfit = salePrice - aliexpressCost - marketplaceFee;
-  const commissionAmount = grossProfit * (Number(user.commissionRate || 0.1));
-  const netProfit = grossProfit - commissionAmount;
-
-  // orderId already set above (idempotency block)
-
-  // ✅ MEJORADO: Extraer y guardar información del comprador
   const buyerEmail = params.buyerEmail || (typeof params.buyer === 'string' && params.buyer.includes('@') ? params.buyer : null);
   const buyerName = params.buyer && !params.buyer.includes('@') ? params.buyer : null;
-  
-  // Procesar dirección de envío
-  let shippingAddressStr: string | null = null;
-  if (params.shippingAddress && typeof params.shippingAddress === 'object') {
-    shippingAddressStr = JSON.stringify(params.shippingAddress);
-  } else if (params.shipping) {
-    shippingAddressStr = typeof params.shipping === 'string' ? params.shipping : JSON.stringify(params.shipping);
-  }
+  const normalizedAddr = normalizeShippingAddress(params.shippingAddress, buyerName);
+  const shippingAddressStr = JSON.stringify(normalizedAddr);
 
-  const sale = await prisma.sale.create({
+  // Create Order (single ingestion point)
+  const order = await prisma.order.create({
     data: {
       userId: listing.userId,
       productId: listing.productId,
-      orderId,
-      marketplace,
-      salePrice,
-      aliexpressCost,
-      marketplaceFee,
-      grossProfit,
-      commissionAmount,
-      netProfit,
-      status: 'PENDING',
-      buyerEmail: buyerEmail || null, // ✅ Guardar email del comprador
-      buyerName: buyerName || null, // ✅ Guardar nombre del comprador
-      shippingAddress: shippingAddressStr, // ✅ Guardar dirección de envío
+      title: product.title,
+      price: salePrice,
+      currency: 'USD',
+      customerName: normalizedAddr.fullName,
+      customerEmail: buyerEmail || 'buyer@unknown.com',
+      shippingAddress: shippingAddressStr,
+      status: 'PAID',
+      paypalOrderId: `${marketplace}:${marketplaceOrderId}`,
+      productUrl: product.aliexpressUrl || '',
     },
   });
 
-  // Create commission record
-  await prisma.commission.create({ data: { userId: listing.userId, saleId: sale.id, amount: commissionAmount } });
-
-  // ✅ MEJORADO: Notificar usuario con información completa
-  await notificationService.sendToUser(listing.userId, {
-    type: 'SALE_CREATED',
-    title: 'Nueva venta recibida',
-    message: `Orden ${orderId} en ${marketplace} por $${salePrice.toFixed(2)}`,
-    category: 'SALE',
-    priority: 'HIGH',
-    data: { 
-      orderId, 
-      listingId, 
-      marketplace, 
-      amount: salePrice, 
-      buyer: params.buyer || buyerName, 
-      buyerEmail: buyerEmail,
-      shipping: params.shipping || shippingAddressStr,
-      productTitle: product.title,
-      productId: product.id
-    },
+  logger.info('[WEBHOOK] Order created, invoking fulfillOrder', {
+    orderId: order.id,
+    marketplaceOrderId,
+    correlationId: correlationId ?? null,
+    marketplace,
   });
 
-  // ✅ MEJORADO: FLUJO POST-VENTA AUTOMÁTICO
-  try {
-    const { workflowConfigService } = await import('../../services/workflow-config.service');
-    const { PayPalPayoutService } = await import('../../services/paypal-payout.service');
-    const { prisma } = await import('../../config/database');
-    const { logger } = await import('../../config/logger');
-    const { toNumber } = await import('../../utils/decimal.utils');
-    const aliexpressAutoPurchaseService = (await import('../../services/aliexpress-auto-purchase.service')).default;
+  // Fulfill → SaleService.createSaleFromOrder (on PURCHASED)
+  const fulfill = await orderFulfillmentService.fulfillOrder(order.id);
 
-    // ✅ FASE 4: Verificar feature flag global de compra automática
-    const AutoPurchaseGuardrails = (await import('../../services/auto-purchase-guardrails.service')).AutoPurchaseGuardrailsService;
-    const autoPurchaseEnabled = AutoPurchaseGuardrails.isEnabled();
-    
-    if (!autoPurchaseEnabled) {
-      logger.info('Auto-purchase disabled globally, skipping automatic purchase flow', {
-        saleId: sale.id,
-        userId: listing.userId,
-        orderId,
-      });
-    }
-    
-    // Verificar si el flujo está en modo automático Y está habilitado globalmente
-    const purchaseMode = await workflowConfigService.getStageMode(listing.userId, 'purchase');
-    
-    if (purchaseMode === 'automatic' && autoPurchaseEnabled) {
-      logger.info('Flujo post-venta en modo automático - iniciando compra automática', {
-        saleId: sale.id,
-        userId: listing.userId,
-        orderId
-      });
-
-      // 1. Validar capital de trabajo
-      const totalCapital = await workflowConfigService.getWorkingCapital(listing.userId);
-      
-      const pendingOrders = await prisma.sale.findMany({
-        where: {
-          userId: listing.userId,
-          status: { in: ['PENDING', 'PROCESSING'] }
-        }
-      });
-      const pendingCost = pendingOrders.reduce((sum, order) => 
-        sum + toNumber(order.aliexpressCost || 0), 0
-      );
-
-      const approvedProducts = await prisma.product.findMany({
-        where: {
-          userId: listing.userId,
-          status: 'APPROVED',
-          isPublished: false
-        }
-      });
-      const approvedCost = approvedProducts.reduce((sum, p) => 
-        sum + toNumber(p.aliexpressPrice || 0), 0
-      );
-
-      const availableCapital = totalCapital - pendingCost - approvedCost;
-      const purchaseCost = toNumber(product.aliexpressPrice || 0);
-
-      // ✅ FASE 4: Validar guardrails antes de continuar
-      const validation = await AutoPurchaseGuardrails.validatePurchase(
-        listing.userId,
-        purchaseCost,
-        orderId,
-        product.id
-      );
-
-      if (!validation.allowed) {
-        logger.warn('[AutoPurchase] Purchase blocked by guardrails', {
-          userId: listing.userId,
-          orderId,
-          reason: validation.reason,
-          amount: purchaseCost,
-        });
-
-        await notificationService.sendToUser(listing.userId, {
-          type: 'USER_ACTION',
-          title: 'Compra automática bloqueada',
-          message: validation.reason || 'Compra no permitida por límites de seguridad',
-          category: 'SALE',
-          priority: 'HIGH',
-          data: {
-            saleId: sale.id,
-            orderId,
-            productUrl: product.aliexpressUrl || '',
-            manualPurchaseRequired: true,
-            reason: validation.reason,
-          },
-        });
-
-        // Registrar en PurchaseLog como bloqueado
-        try {
-          await prisma.purchaseLog.create({
-            data: {
-              userId: listing.userId,
-              saleId: sale.id,
-              orderId,
-              productId: product.id,
-              supplierUrl: product.aliexpressUrl || '',
-              purchaseAmount: purchaseCost,
-              quantity: 1,
-              status: 'PENDING',
-              success: false,
-              capitalValidated: false,
-              errorMessage: validation.reason || 'Blocked by guardrails',
-              retryAttempt: 0,
-              maxRetries: 0,
-            },
-          });
-        } catch (logError) {
-          logger.error('Error creando PurchaseLog (blocked)', { error: logError });
-        }
-
-        // No continuar con compra automática
-        return sale;
-      }
-
-      // Si está en dry-run, solo registrar y notificar, no ejecutar
-      if (validation.dryRun) {
-        logger.info('[AutoPurchase] DRY-RUN: Purchase would be executed', {
-          userId: listing.userId,
-          orderId,
-          amount: purchaseCost,
-        });
-
-        await notificationService.sendToUser(listing.userId, {
-          type: 'SYSTEM_ALERT', // ✅ FIX: NotificationType no tiene 'info', usar 'SYSTEM_ALERT'
-          title: 'Compra automática (DRY-RUN)',
-          message: `Modo dry-run: La compra se simularía por $${purchaseCost.toFixed(2)}`,
-          category: 'SALE',
-          priority: 'NORMAL',
-          data: {
-            saleId: sale.id,
-            orderId,
-            dryRun: true,
-            simulatedAmount: purchaseCost,
-          },
-        });
-
-        return sale;
-      }
-
-      // 2. Validar saldo PayPal (si está disponible)
-      // ✅ MEJORADO: Intentar usar credenciales del usuario primero, luego variables de entorno
-      let paypalBalance: { available: number; currency: string } | null = null;
-      try {
-        let paypalService = await PayPalPayoutService.fromUserCredentials(listing.userId);
-        if (!paypalService) {
-          // Fallback a variables de entorno si no hay credenciales de usuario
-          paypalService = PayPalPayoutService.fromEnv();
-        }
-        
-        if (paypalService) {
-          paypalBalance = await paypalService.checkPayPalBalance();
-        }
-      } catch (paypalError: any) {
-        logger.warn('No se pudo validar saldo PayPal, continuando con validación de capital de trabajo', {
-          error: paypalError.message,
-          userId: listing.userId
-        });
-      }
-
-      // 3. Verificar si hay suficiente capital/disponibilidad
-      const capitalBuffer = Number(process.env.WORKING_CAPITAL_BUFFER || '0.20'); // 20% buffer por defecto
-      const requiredCapital = purchaseCost * (1 + capitalBuffer);
-
-      if (availableCapital < requiredCapital) {
-        logger.warn('Capital insuficiente para compra automática', {
-          userId: listing.userId,
-          availableCapital,
-          requiredCapital,
-          purchaseCost,
-          buffer: capitalBuffer
-        });
-
-        // Enviar notificación con link para compra manual
-        await notificationService.sendToUser(listing.userId, {
-          type: 'USER_ACTION', // ✅ FIX: Changed from 'ACTION_REQUIRED' to valid type
-          title: 'Compra manual requerida',
-          message: `Capital insuficiente. Disponible: $${availableCapital.toFixed(2)}, Requerido: $${requiredCapital.toFixed(2)}`,
-          category: 'SALE',
-          priority: 'HIGH',
-          data: {
-            saleId: sale.id,
-            orderId,
-            productUrl: product.aliexpressUrl || '', // ✅ FIX: Removed sourceUrl (doesn't exist)
-            manualPurchaseRequired: true,
-            availableCapital,
-            requiredCapital
-          }
-        });
-
-        // Registrar en PurchaseLog como pendiente
-        try {
-          await prisma.purchaseLog.create({
-            data: {
-              userId: listing.userId,
-              saleId: sale.id,
-              orderId,
-              productId: product.id,
-              supplierUrl: product.aliexpressUrl || '',
-              purchaseAmount: purchaseCost,
-              quantity: 1,
-              status: 'PENDING',
-              success: false,
-              capitalValidated: false,
-              capitalAvailable: availableCapital,
-              paypalValidated: !!paypalBalance,
-              errorMessage: `Capital insuficiente: disponible $${availableCapital.toFixed(2)}, requerido $${requiredCapital.toFixed(2)}`,
-              retryAttempt: 0,
-              maxRetries: 0
-            }
-          });
-        } catch (logError) {
-          logger.error('Error creando PurchaseLog', { error: logError });
-        }
-      } else if (paypalBalance && paypalBalance.available < requiredCapital) {
-        logger.warn('Saldo PayPal insuficiente para compra automática', {
-          userId: listing.userId,
-          paypalBalance: paypalBalance.available,
-          requiredCapital
-        });
-
-        // Similar a capital insuficiente
-        await notificationService.sendToUser(listing.userId, {
-          type: 'USER_ACTION', // ✅ FIX: Changed from 'ACTION_REQUIRED' to valid type
-          title: 'Saldo PayPal insuficiente',
-          message: `Saldo PayPal: $${paypalBalance.available.toFixed(2)}, Requerido: $${requiredCapital.toFixed(2)}`,
-          category: 'SALE',
-          priority: 'HIGH',
-          data: {
-            saleId: sale.id,
-            orderId,
-            productUrl: product.aliexpressUrl || '', // ✅ FIX: Removed sourceUrl (doesn't exist)
-            manualPurchaseRequired: true
-          }
-        });
-      } else {
-        // 4. Ejecutar compra automática
-        logger.info('Ejecutando compra automática', {
-          saleId: sale.id,
-          userId: listing.userId,
-          productUrl: product.aliexpressUrl || '',
-          purchaseCost
-        });
-
-        // Parsear dirección de envío
-        let shippingAddressObj: any = null;
-        try {
-          if (shippingAddressStr) {
-            shippingAddressObj = typeof shippingAddressStr === 'string' 
-              ? JSON.parse(shippingAddressStr) 
-              : shippingAddressStr;
-          }
-        } catch (parseError) {
-          logger.warn('Error parseando dirección de envío', { error: parseError });
-        }
-
-        // Preparar datos de compra
-        const purchaseRequest = {
-          productUrl: product.aliexpressUrl || '',
-          quantity: 1,
-          maxPrice: purchaseCost * 1.1, // 10% de margen para variaciones de precio
-          shippingAddress: shippingAddressObj || {
-            fullName: buyerName || 'Buyer',
-            addressLine1: 'Address not provided',
-            city: 'City not provided',
-            state: 'State not provided',
-            zipCode: '00000',
-            country: 'US',
-            phoneNumber: '0000000000'
-          },
-          notes: `Order ${orderId} - Buyer: ${buyerEmail || buyerName || 'N/A'}`
-        };
-
-        // Registrar intento en PurchaseLog
-        let purchaseLogId: number | null = null;
-        try {
-          const purchaseLog = await prisma.purchaseLog.create({
-            data: {
-              userId: listing.userId,
-              saleId: sale.id,
-              orderId,
-              productId: product.id,
-              supplierUrl: purchaseRequest.productUrl,
-              purchaseAmount: purchaseCost,
-              quantity: 1,
-              status: 'PROCESSING',
-              success: false,
-              capitalValidated: true,
-              capitalAvailable: availableCapital,
-              paypalValidated: !!paypalBalance,
-              retryAttempt: 0,
-              maxRetries: 3
-            }
-          });
-          purchaseLogId = purchaseLog.id;
-        } catch (logError) {
-          logger.error('Error creando PurchaseLog', { error: logError });
-        }
-
-        // Ejecutar compra
-        try {
-          const purchaseResult = await aliexpressAutoPurchaseService.executePurchase(purchaseRequest, listing.userId);
-
-          if (purchaseResult.success && purchaseLogId) {
-            await prisma.purchaseLog.update({
-              where: { id: purchaseLogId },
-              data: {
-                status: 'SUCCESS',
-                success: true,
-                supplierOrderId: purchaseResult.orderNumber || purchaseResult.orderId,
-                trackingNumber: purchaseResult.trackingNumber,
-                completedAt: new Date()
-              }
-            });
-
-            // Actualizar estado de la venta
-            await prisma.sale.update({
-              where: { id: sale.id },
-              data: { status: 'PROCESSING' }
-            });
-
-            // Notificar éxito
-            await notificationService.sendToUser(listing.userId, {
-              type: 'JOB_COMPLETED', // ✅ FIX: Changed from 'PURCHASE_COMPLETED' to valid type
-              title: 'Compra automática completada',
-              message: `Orden ${orderId} procesada. Tracking: ${purchaseResult.trackingNumber || 'Pendiente'}`,
-              category: 'SALE',
-              priority: 'NORMAL', // ✅ FIX: Changed from 'MEDIUM' to valid priority
-              data: {
-                saleId: sale.id,
-                orderId,
-                supplierOrderId: purchaseResult.orderNumber || purchaseResult.orderId,
-                trackingNumber: purchaseResult.trackingNumber
-              }
-            });
-          } else {
-            throw new Error(purchaseResult.error || 'Compra falló sin razón específica');
-          }
-        } catch (purchaseError: any) {
-          logger.error('Error ejecutando compra automática', {
-            error: purchaseError.message,
-            saleId: sale.id,
-            userId: listing.userId
-          });
-
-          if (purchaseLogId) {
-            await prisma.purchaseLog.update({
-              where: { id: purchaseLogId },
-              data: {
-                status: 'FAILED',
-                success: false,
-                errorMessage: purchaseError.message,
-                completedAt: new Date()
-              }
-            });
-          }
-
-          // Notificar error y enviar link para compra manual
-          await notificationService.sendToUser(listing.userId, {
-            type: 'JOB_FAILED', // ✅ FIX: Changed from 'PURCHASE_FAILED' to valid type
-            title: 'Compra automática falló',
-            message: `Error: ${purchaseError.message}. Requiere acción manual.`,
-            category: 'SALE',
-            priority: 'HIGH',
-            data: {
-              saleId: sale.id,
-              orderId,
-              productUrl: purchaseRequest.productUrl,
-              manualPurchaseRequired: true,
-              error: purchaseError.message
-            }
-          });
-        }
-      }
-    } else {
-      // Modo manual: solo notificar con link para compra manual
-      logger.info('Flujo post-venta en modo manual', {
-        saleId: sale.id,
-        userId: listing.userId
-      });
-
+  if (fulfill.status === 'PURCHASED') {
+    const sale = await prisma.sale.findUnique({ where: { orderId: order.id } });
+    if (sale) {
       await notificationService.sendToUser(listing.userId, {
-        type: 'USER_ACTION', // ✅ FIX: Changed from 'ACTION_REQUIRED' to valid type
-        title: 'Compra manual requerida',
-        message: `Nueva venta recibida. Orden ${orderId} requiere procesamiento manual.`,
+        type: 'SALE_CREATED',
+        title: 'Nueva venta recibida',
+        message: `Orden ${marketplaceOrderId} en ${marketplace} por $${salePrice.toFixed(2)}`,
         category: 'SALE',
         priority: 'HIGH',
-        data: {
-          saleId: sale.id,
-          orderId,
-          productUrl: product.aliexpressUrl || '', // ✅ FIX: Removed sourceUrl (doesn't exist)
-          manualPurchaseRequired: true,
-          buyerEmail,
-          shippingAddress: shippingAddressStr
-        }
+        data: { orderId: order.id, saleId: sale.id, marketplaceOrderId, marketplace, amount: salePrice },
       });
+      return sale;
     }
-  } catch (postSaleError: any) {
-    // No fallar la creación de la venta si hay error en el flujo post-venta
-    logger.error('Error en flujo post-venta', {
-      error: postSaleError.message,
-      saleId: sale.id,
-      userId: listing.userId
-    });
+    return order;
   }
 
-  return sale;
+  // FAILED: notify for manual action
+  await notificationService.sendToUser(listing.userId, {
+    type: 'USER_ACTION',
+    title: 'Compra manual requerida',
+    message: `Fulfillment falló: ${fulfill.error || 'Unknown'}. Orden ${marketplaceOrderId} requiere acción manual.`,
+    category: 'SALE',
+    priority: 'HIGH',
+    data: {
+      orderId: order.id,
+      marketplaceOrderId,
+      productUrl: product.aliexpressUrl || '',
+      manualPurchaseRequired: true,
+      error: fulfill.error,
+    },
+  });
+  return order;
 }
 
-// ✅ FASE 3: Validar firma de MercadoLibre antes de procesar
 router.post('/mercadolibre', createWebhookSignatureValidator('mercadolibre'), async (req: Request, res: Response) => {
   const correlationId = (req as any).correlationId ?? `webhook-ml-${Date.now()}`;
   try {
@@ -528,49 +154,30 @@ router.post('/mercadolibre', createWebhookSignatureValidator('mercadolibre'), as
     const listingId = body.listingId || body.resourceId || body?.order?.order_items?.[0]?.item?.id || body?.order_items?.[0]?.item?.id;
     const amount = Number(body.amount || body.total_amount || body?.order?.total_amount || body?.order_items?.[0]?.unit_price);
     const orderId = String(body.id || body.order_id || body.resource || '');
-    
-    // ✅ MEJORADO: Extraer información completa del comprador
-    const buyer = body?.buyer?.nickname || body?.buyer?.first_name || body?.buyer?.last_name || body?.buyer?.email;
-    const buyerEmail = body?.buyer?.email || (body?.buyer?.nickname && body.buyer.nickname.includes('@') ? body.buyer.nickname : null);
-    const buyerName = body?.buyer?.first_name && body?.buyer?.last_name 
-      ? `${body.buyer.first_name} ${body.buyer.last_name}` 
-      : (body?.buyer?.nickname && !body.buyer.nickname.includes('@') ? body.buyer.nickname : null);
-    
-    // ✅ MEJORADO: Extraer dirección completa de envío
+
     const receiverAddress = body?.shipping?.receiver_address || body?.order?.shipping?.receiver_address;
     const shippingAddress = receiverAddress ? {
-      street: receiverAddress.address_line || receiverAddress.street_name || '',
-      number: receiverAddress.street_number || '',
+      addressLine1: receiverAddress.address_line || receiverAddress.street_name || '',
       city: receiverAddress.city?.name || receiverAddress.city || '',
       state: receiverAddress.state?.name || receiverAddress.state || '',
       zipCode: receiverAddress.zip_code || receiverAddress.postal_code || '',
       country: receiverAddress.country?.name || receiverAddress.country || '',
-      neighborhood: receiverAddress.neighborhood?.name || receiverAddress.neighborhood || '',
     } : null;
-    const shipping = receiverAddress?.address_line || body?.shipping?.receiver_address?.address_line;
-    
+    const buyer = body?.buyer?.nickname || body?.buyer?.first_name || body?.buyer?.last_name || body?.buyer?.email;
+    const buyerEmail = body?.buyer?.email || (body?.buyer?.nickname && body.buyer.nickname.includes('@') ? body.buyer.nickname : null);
+
     if (!listingId) return res.status(400).json({ success: false, error: 'listingId missing' });
-    await recordSaleFromWebhook(
-      {
-        marketplace: 'mercadolibre',
-        listingId,
-        amount,
-        orderId: orderId || undefined,
-        buyer,
-        buyerEmail,
-        shipping,
-        shippingAddress,
-      },
+    const result = await recordSaleFromWebhook(
+      { marketplace: 'mercadolibre', listingId, amount, orderId: orderId || undefined, buyer, buyerEmail, shippingAddress },
       correlationId
     );
     res.status(200).json({ success: true });
   } catch (e: any) {
     logger.error('[WEBHOOK_MERCADOLIBRE] Error', { correlationId, error: (e as Error)?.message });
-    res.status(200).json({ success: true }); // 200 to avoid retries storm
+    res.status(200).json({ success: true });
   }
 });
 
-// ✅ FASE 3: Validar firma de eBay antes de procesar
 router.post('/ebay', createWebhookSignatureValidator('ebay'), async (req: Request, res: Response) => {
   const correlationId = (req as any).correlationId ?? `webhook-ebay-${Date.now()}`;
   logger.info('[WEBHOOK_EBAY] Received', {
@@ -584,44 +191,34 @@ router.post('/ebay', createWebhookSignatureValidator('ebay'), async (req: Reques
     const listingId = body.listingId || body.itemId || body?.transaction?.itemId;
     const amount = Number(body.amount || body.total || body?.transaction?.amountPaid || body?.transaction?.transactionPrice?.value);
     const orderId = String(body.orderId || body.id || body?.transaction?.orderId || '');
-    
-    // ✅ MEJORADO: Extraer información completa del comprador
+
+    const shipTo = body?.fulfillmentStartInstructions?.shippingStep?.shipTo;
+    const contactAddr = shipTo?.contactAddress;
+    const shippingAddress = (body?.shippingAddress || body?.transaction?.shippingAddress || shipTo) ? {
+      fullName: shipTo?.fullName || '',
+      addressLine1: contactAddr?.addressLine1 || '',
+      addressLine2: contactAddr?.addressLine2 || '',
+      city: contactAddr?.city || '',
+      state: contactAddr?.stateOrProvince || '',
+      zipCode: contactAddr?.postalCode || '',
+      country: contactAddr?.countryCode || '',
+      phoneNumber: shipTo?.primaryPhone?.phoneNumber || '',
+    } : null;
+
     const buyer = body?.buyer?.username || body?.buyer?.name || body?.transaction?.buyer?.username;
     const buyerEmail = body?.buyer?.email || body?.transaction?.buyer?.email || null;
-    const buyerName = body?.buyer?.name || body?.transaction?.buyer?.name || buyer;
-    
-    // ✅ MEJORADO: Extraer dirección completa de envío
-    const shippingAddress = body?.shippingAddress || body?.transaction?.shippingAddress || body?.fulfillmentStartInstructions?.shippingStep?.shipTo ? {
-      fullName: body.fulfillmentStartInstructions.shippingStep.shipTo.fullName || '',
-      street: body.fulfillmentStartInstructions.shippingStep.shipTo.contactAddress?.addressLine1 || '',
-      addressLine2: body.fulfillmentStartInstructions.shippingStep.shipTo.contactAddress?.addressLine2 || '',
-      city: body.fulfillmentStartInstructions.shippingStep.shipTo.contactAddress?.city || '',
-      state: body.fulfillmentStartInstructions.shippingStep.shipTo.contactAddress?.stateOrProvince || '',
-      zipCode: body.fulfillmentStartInstructions.shippingStep.shipTo.contactAddress?.postalCode || '',
-      country: body.fulfillmentStartInstructions.shippingStep.shipTo.contactAddress?.countryCode || '',
-      phone: body.fulfillmentStartInstructions.shippingStep.shipTo.primaryPhone?.phoneNumber || '',
-    } : null;
-    
+
     if (!listingId) return res.status(400).json({ success: false, error: 'listingId missing' });
-    const sale = await recordSaleFromWebhook(
-      {
-        marketplace: 'ebay',
-        listingId,
-        amount,
-        orderId: orderId || undefined,
-        buyer,
-        buyerEmail,
-        shippingAddress,
-      },
+    const result = await recordSaleFromWebhook(
+      { marketplace: 'ebay', listingId, amount, orderId: orderId || undefined, buyer, buyerEmail, shippingAddress },
       correlationId
     );
-    logger.info('[WEBHOOK_EBAY] Success', { correlationId, saleId: sale.id, orderId });
+    logger.info('[WEBHOOK_EBAY] Success', { correlationId, resultId: result.id, ebayOrderId: orderId });
     res.status(200).json({ success: true });
   } catch (e: any) {
-    logger.error('[WEBHOOK_EBAY] Error', { correlationId, error: e?.message });
-    res.status(200).json({ success: true }); // 200 to avoid retry storm
+    logger.error('[WEBHOOK_EBAY] Error', { correlationId, error: (e as Error)?.message });
+    res.status(200).json({ success: true });
   }
 });
 
 export default router;
-

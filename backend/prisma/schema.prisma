@@ -172,6 +172,7 @@ model Sale {
   completedAt        DateTime? // Fecha de completado del ciclo
   adminPayoutId      String? // PayPal batch/item ID del payout al admin
   userPayoutId       String? // PayPal batch/item ID del payout al usuario
+  payoutExecuted     Boolean  @default(false) // Idempotency: prevent double payout
 
   // ✅ MEJORADO: Información del comprador
   buyerEmail      String? // Email del comprador (si está disponible)

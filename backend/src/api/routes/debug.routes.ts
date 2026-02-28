@@ -1528,5 +1528,92 @@ router.get('/aliexpress/diagnostic', authenticate, async (req: Request, res: Res
   }
 });
 
+/**
+ * GET /api/debug/post-sale-integrity-check
+ * Verificación de integridad financiera del pipeline post-venta
+ */
+router.get('/post-sale-integrity-check', async (_req: Request, res: Response) => {
+  try {
+    const centralized = !await hasPrismaSaleCreateOutsideService();
+    const webhookBypass = !centralized;
+    const duplicatePayoutRisk = !await hasPayoutIdempotencyCheck();
+    const feeCalculationStrict = await hasStrictFeeValidation();
+    const netProfitValidated = await hasNetProfitValidation();
+
+    let score = 0;
+    if (centralized) score += 25;
+    if (!webhookBypass) score += 25;
+    if (!duplicatePayoutRisk) score += 20;
+    if (feeCalculationStrict) score += 15;
+    if (netProfitValidated) score += 15;
+    const overallFinancialIntegrityScore = Math.min(100, score);
+
+    return res.json({
+      centralizedSaleCreation: centralized,
+      webhookBypassDetected: webhookBypass,
+      duplicatePayoutRisk,
+      feeCalculationStrict,
+      netProfitValidated,
+      overallFinancialIntegrityScore,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
+async function hasPrismaSaleCreateOutsideService(): Promise<boolean> {
+  const fs = await import('fs');
+  const path = await import('path');
+  const backendPath = path.resolve(process.cwd(), 'src');
+  const checkFile = (filePath: string): boolean => {
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const inService = filePath.includes('sale.service');
+      const hasCreate = /prisma\.sale\.create|tx\.sale\.create/.test(content);
+      if (hasCreate && !inService) return true;
+    } catch { /* ignore */ }
+    return false;
+  };
+  const files = ['api/routes/webhooks.routes.ts'];
+  for (const f of files) {
+    const fullPath = path.join(backendPath, f);
+    if (fs.existsSync(fullPath) && checkFile(fullPath)) return true;
+  }
+  return false;
+}
+
+async function hasPayoutIdempotencyCheck(): Promise<boolean> {
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(path.resolve(process.cwd(), 'src/services/sale.service.ts'), 'utf8');
+    return /payoutExecuted|alreadyPaid|already executed/.test(content);
+  } catch {
+    return false;
+  }
+}
+
+async function hasStrictFeeValidation(): Promise<boolean> {
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(path.resolve(process.cwd(), 'src/services/sale.service.ts'), 'utf8');
+    return /costPrice.*<=.*0|salePrice.*<=.*0|supplier cost/.test(content);
+  } catch {
+    return false;
+  }
+}
+
+async function hasNetProfitValidation(): Promise<boolean> {
+  try {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(path.resolve(process.cwd(), 'src/services/sale.service.ts'), 'utf8');
+    return /netProfit validation|expectedNetProfit/.test(content);
+  } catch {
+    return false;
+  }
+}
+
 export default router;
 
