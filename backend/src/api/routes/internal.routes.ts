@@ -1,6 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { logger } from '../../config/logger';
-import { runEbayRealCycle } from '../../scripts/run-ebay-real-cycle';
 import opportunityFinder from '../../services/opportunity-finder.service';
 import { runTestFullDropshippingCycle } from '../handlers/test-full-dropshipping-cycle.handler';
 import { runTestFullCycleSearchToPublish } from '../handlers/test-full-cycle-search-to-publish.handler';
@@ -72,7 +71,12 @@ router.post('/run-ebay-cycle', validateInternalSecret, async (req: Request, res:
   });
 
   try {
-    const result = await runEbayRealCycle();
+    const result = {
+      success: false,
+      message: 'run-ebay-cycle is deprecated. Use /api/internal/test-full-cycle-search-to-publish.',
+      data: null as any,
+      error: 'deprecated_endpoint',
+    };
 
     const duration = Date.now() - startTime;
 
