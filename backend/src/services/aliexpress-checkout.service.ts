@@ -60,7 +60,9 @@ export class AliExpressCheckoutService {
     try {
       const { AliExpressAutoPurchaseService } = await import('./aliexpress-auto-purchase.service');
       const service = new AliExpressAutoPurchaseService();
-      // When userId is provided, executePurchase must use Dropshipping API only (strict isolation)
+      // Primary path for user-bound purchases: Dropshipping API.
+      // If OAuth/token exchange is blocked upstream, allow browser fallback in production
+      // when ALIEXPRESS_USER/ALIEXPRESS_PASS are configured.
       if (userId) {
         const result = await (service as any).executePurchase(
           {
@@ -90,11 +92,58 @@ export class AliExpressCheckoutService {
           };
         }
         const strictError = result.error || 'AliExpress Dropshipping API purchase failed';
-        logger.warn('[ALIEXPRESS-CHECKOUT] Dropshipping API failed (strict isolation: no browser fallback)', {
+        logger.warn('[ALIEXPRESS-CHECKOUT] Dropshipping API failed, attempting browser fallback', {
           userId,
           error: strictError,
         });
-        return { success: false, error: strictError };
+        // Fallback to browser automation for user-bound purchases
+        const aliUser = (process.env.ALIEXPRESS_USER || '').trim();
+        const aliPass = (process.env.ALIEXPRESS_PASS || '').trim();
+        if (!aliUser || !aliPass) {
+          return {
+            success: false,
+            error: `${strictError}. Missing ALIEXPRESS_USER/ALIEXPRESS_PASS for browser fallback.`,
+          };
+        }
+        service.setCredentials({ email: aliUser, password: aliPass });
+        const loginOk = await service.login();
+        if (!loginOk) {
+          return { success: false, error: `${strictError}. AliExpress browser login failed.` };
+        }
+        const browserResult = await (service as any).executePurchase(
+          {
+            productUrl: request.productUrl,
+            quantity: request.quantity ?? 1,
+            maxPrice: request.maxPrice,
+            shippingAddress: {
+              fullName: request.shippingAddress.fullName,
+              addressLine1: request.shippingAddress.addressLine1,
+              addressLine2: request.shippingAddress.addressLine2,
+              city: request.shippingAddress.city,
+              state: request.shippingAddress.state,
+              zipCode: request.shippingAddress.zipCode,
+              country: request.shippingAddress.country,
+              phoneNumber: request.shippingAddress.phoneNumber,
+            },
+          },
+          undefined
+        );
+        await service.closeBrowser?.();
+        if (browserResult.success && browserResult.orderId) {
+          logger.info('[ALIEXPRESS-CHECKOUT] Browser fallback purchase succeeded', {
+            orderId: browserResult.orderId,
+            userId,
+          });
+          return {
+            success: true,
+            orderId: browserResult.orderId,
+            orderNumber: browserResult.orderNumber || browserResult.orderId,
+          };
+        }
+        return {
+          success: false,
+          error: `${strictError}. Browser fallback failed: ${browserResult.error || 'unknown error'}`,
+        };
       }
       // Puppeteer fallback: need login credentials
       const aliUser = (process.env.ALIEXPRESS_USER || '').trim();

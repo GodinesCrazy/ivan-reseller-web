@@ -440,13 +440,10 @@ export class SaleService {
 
     logger.info('[PAYOUT_EXECUTED]', {
       saleId: sale.id,
+      orderId: sale.orderId,
       adminPayoutId: adminPayoutId ?? null,
       userPayoutId: userPayoutId ?? null,
-    });
-    logger.info('[REAL_PAYOUT_EXECUTED]', {
-      saleId: sale.id,
-      adminPayoutId: adminPayoutId ?? null,
-      userPayoutId: userPayoutId ?? null,
+      timestamp: new Date().toISOString(),
     });
 
     await prisma.user.update({
@@ -964,12 +961,23 @@ export class SaleService {
    * Requiere Order.userId y un Product (por order.productId o por productUrl del usuario).
    */
   async createSaleFromOrder(orderId: string): Promise<{ id: number } | null> {
+    const ts = new Date().toISOString();
+    // Idempotency: avoid duplicate Sale and double payout for same Order
+    const existingSale = await prisma.sale.findUnique({ where: { orderId }, select: { id: true } });
+    if (existingSale) {
+      logger.info('[SALE] createSaleFromOrder idempotent: Sale already exists', {
+        orderId,
+        saleId: existingSale.id,
+        timestamp: ts,
+      });
+      return { id: existingSale.id };
+    }
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       select: { id: true, userId: true, productId: true, productUrl: true, price: true, currency: true, customerEmail: true, shippingAddress: true },
     });
     if (!order || !order.userId) {
-      logger.debug('[SALE] createSaleFromOrder skipped: no order or no userId', { orderId });
+      logger.debug('[SALE] createSaleFromOrder skipped: no order or no userId', { orderId, timestamp: ts });
       return null;
     }
     const userId = order.userId;
@@ -1008,10 +1016,11 @@ export class SaleService {
         buyerEmail: order.customerEmail || undefined,
         shippingAddress: order.shippingAddress || undefined,
       });
-      logger.info('[AUTO_SALE_CREATED]', {
+      logger.info('[SALE] createSaleFromOrder created', {
         orderId,
         saleId: sale.id,
         userId: sale.userId,
+        timestamp: new Date().toISOString(),
       });
       return { id: sale.id };
     } catch (err: any) {

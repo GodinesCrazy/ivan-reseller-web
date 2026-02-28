@@ -17,7 +17,24 @@ async function recordSaleFromWebhook(params: {
   buyerEmail?: string;
   shipping?: string;
   shippingAddress?: any; // Objeto con dirección completa
-}) {
+}, correlationId?: string) {
+  const orderIdRaw = params.orderId?.trim() || '';
+  const orderId = orderIdRaw || `${params.marketplace.toUpperCase()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+  // Idempotency: avoid duplicate Sales for same marketplace orderId
+  if (orderIdRaw) {
+    const existing = await prisma.sale.findUnique({ where: { orderId: orderIdRaw } });
+    if (existing) {
+      logger.info('[WEBHOOK] Idempotent: Sale already exists for orderId', {
+        orderId: orderIdRaw,
+        saleId: existing.id,
+        correlationId: correlationId ?? null,
+        marketplace: params.marketplace,
+      });
+      return existing;
+    }
+  }
+
   const { marketplace, listingId } = params;
   const listing = await prisma.marketplaceListing.findFirst({ where: { marketplace, listingId } });
   if (!listing) throw new Error('Listing not found');
@@ -37,7 +54,7 @@ async function recordSaleFromWebhook(params: {
   const commissionAmount = grossProfit * (Number(user.commissionRate || 0.1));
   const netProfit = grossProfit - commissionAmount;
 
-  const orderId = params.orderId || `${marketplace.toUpperCase()}-${Date.now()}-${Math.floor(Math.random()*1000)}`;
+  // orderId already set above (idempotency block)
 
   // ✅ MEJORADO: Extraer y guardar información del comprador
   const buyerEmail = params.buyerEmail || (typeof params.buyer === 'string' && params.buyer.includes('@') ? params.buyer : null);
@@ -505,6 +522,7 @@ async function recordSaleFromWebhook(params: {
 
 // ✅ FASE 3: Validar firma de MercadoLibre antes de procesar
 router.post('/mercadolibre', createWebhookSignatureValidator('mercadolibre'), async (req: Request, res: Response) => {
+  const correlationId = (req as any).correlationId ?? `webhook-ml-${Date.now()}`;
   try {
     const body: any = req.body || {};
     const listingId = body.listingId || body.resourceId || body?.order?.order_items?.[0]?.item?.id || body?.order_items?.[0]?.item?.id;
@@ -532,24 +550,35 @@ router.post('/mercadolibre', createWebhookSignatureValidator('mercadolibre'), as
     const shipping = receiverAddress?.address_line || body?.shipping?.receiver_address?.address_line;
     
     if (!listingId) return res.status(400).json({ success: false, error: 'listingId missing' });
-    await recordSaleFromWebhook({ 
-      marketplace: 'mercadolibre', 
-      listingId, 
-      amount, 
-      orderId, 
-      buyer, 
-      buyerEmail,
-      shipping, 
-      shippingAddress 
-    });
-    res.json({ success: true });
+    await recordSaleFromWebhook(
+      {
+        marketplace: 'mercadolibre',
+        listingId,
+        amount,
+        orderId: orderId || undefined,
+        buyer,
+        buyerEmail,
+        shipping,
+        shippingAddress,
+      },
+      correlationId
+    );
+    res.status(200).json({ success: true });
   } catch (e: any) {
-    res.status(200).json({ success: true }); // 200 to avoid retries storm; log internally
+    logger.error('[WEBHOOK_MERCADOLIBRE] Error', { correlationId, error: (e as Error)?.message });
+    res.status(200).json({ success: true }); // 200 to avoid retries storm
   }
 });
 
 // ✅ FASE 3: Validar firma de eBay antes de procesar
 router.post('/ebay', createWebhookSignatureValidator('ebay'), async (req: Request, res: Response) => {
+  const correlationId = (req as any).correlationId ?? `webhook-ebay-${Date.now()}`;
+  logger.info('[WEBHOOK_EBAY] Received', {
+    correlationId,
+    hasBody: !!req.body,
+    listingId: (req.body as any)?.listingId ?? (req.body as any)?.itemId ?? null,
+    orderId: (req.body as any)?.orderId ?? (req.body as any)?.id ?? null,
+  });
   try {
     const body: any = req.body || {};
     const listingId = body.listingId || body.itemId || body?.transaction?.itemId;
@@ -574,18 +603,23 @@ router.post('/ebay', createWebhookSignatureValidator('ebay'), async (req: Reques
     } : null;
     
     if (!listingId) return res.status(400).json({ success: false, error: 'listingId missing' });
-    await recordSaleFromWebhook({ 
-      marketplace: 'ebay', 
-      listingId, 
-      amount, 
-      orderId, 
-      buyer,
-      buyerEmail,
-      shippingAddress 
-    });
-    res.json({ success: true });
-  } catch (e: any) {
+    const sale = await recordSaleFromWebhook(
+      {
+        marketplace: 'ebay',
+        listingId,
+        amount,
+        orderId: orderId || undefined,
+        buyer,
+        buyerEmail,
+        shippingAddress,
+      },
+      correlationId
+    );
+    logger.info('[WEBHOOK_EBAY] Success', { correlationId, saleId: sale.id, orderId });
     res.status(200).json({ success: true });
+  } catch (e: any) {
+    logger.error('[WEBHOOK_EBAY] Error', { correlationId, error: e?.message });
+    res.status(200).json({ success: true }); // 200 to avoid retry storm
   }
 });
 

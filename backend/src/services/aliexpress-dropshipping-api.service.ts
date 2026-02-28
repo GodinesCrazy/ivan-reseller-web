@@ -110,6 +110,9 @@ export class AliExpressDropshippingAPIService {
   private readonly TOKEN_CREATE_ENDPOINT =
     (process.env.ALIEXPRESS_DROPSHIPPING_TOKEN_ENDPOINT || '').trim() ||
     'https://api-sg.aliexpress.com/rest/auth/token/create';
+  private readonly OAUTH_TOKEN_ENDPOINT =
+    (process.env.ALIEXPRESS_DROPSHIPPING_OAUTH_TOKEN_ENDPOINT || '').trim() ||
+    'https://oauth.aliexpress.com/token';
   private readonly TOKEN_CREATE_SIGN_PATH = '/rest/auth/token/create';
 
   // Endpoints base de la API
@@ -710,6 +713,17 @@ export class AliExpressDropshippingAPIService {
         refreshExpiresIn,
       };
     } catch (error: any) {
+      // Fallback: OAuth standard endpoint (no signed query)
+      const oauthFallback = await this.exchangeCodeForTokenViaOAuthEndpoint(
+        code,
+        redirectUri,
+        appKey,
+        appSecret
+      );
+      if (oauthFallback) {
+        return oauthFallback;
+      }
+
       const errorMessage = error.response?.data?.error_description ||
         error.response?.data?.error ||
         error.message ||
@@ -734,6 +748,103 @@ export class AliExpressDropshippingAPIService {
 
       throw new Error(`AliExpress OAuth token exchange failed: ${errorMessage}`);
     }
+  }
+
+  private parseOAuthTokenPayload(raw: any): {
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    refreshExpiresIn: number;
+  } | null {
+    const payload = raw?.data ?? raw ?? {};
+    const accessToken = String(payload.access_token || payload.accessToken || '').trim();
+    if (!accessToken) return null;
+    return {
+      accessToken,
+      refreshToken: String(payload.refresh_token || payload.refreshToken || '').trim(),
+      expiresIn: Number(payload.expires_in || payload.expiresIn || 0) || 86400,
+      refreshExpiresIn: Number(payload.refresh_expires_in || payload.refreshExpiresIn || 0) || 2592000,
+    };
+  }
+
+  private async exchangeCodeForTokenViaOAuthEndpoint(
+    code: string,
+    redirectUri: string,
+    appKey: string,
+    appSecret: string
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    refreshExpiresIn: number;
+  } | null> {
+    const endpoint = this.OAUTH_TOKEN_ENDPOINT;
+    const payloadVariants: Array<{ name: string; body: URLSearchParams }> = [
+      {
+        name: 'client_id+client_secret',
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: appKey,
+          client_secret: appSecret,
+          code,
+          redirect_uri: redirectUri,
+        }),
+      },
+      {
+        name: 'client_id+app_secret',
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: appKey,
+          app_secret: appSecret,
+          code,
+          redirect_uri: redirectUri,
+        }),
+      },
+      {
+        name: 'app_key+app_secret',
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          app_key: appKey,
+          app_secret: appSecret,
+          code,
+          redirect_uri: redirectUri,
+        }),
+      },
+    ];
+
+    for (const variant of payloadVariants) {
+      try {
+        const response = await httpClient.post(endpoint, variant.body.toString(), {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        });
+        const parsed = this.parseOAuthTokenPayload(response.data);
+        if (parsed?.accessToken) {
+          logger.info('[ALIEXPRESS-DROPSHIPPING-API] OAuth fallback token exchange successful', {
+            endpoint,
+            variant: variant.name,
+            hasAccessToken: true,
+            hasRefreshToken: !!parsed.refreshToken,
+            expiresIn: parsed.expiresIn,
+          });
+          return parsed;
+        }
+        logger.warn('[ALIEXPRESS-DROPSHIPPING-API] OAuth fallback variant returned no access token', {
+          endpoint,
+          variant: variant.name,
+          responseData: response.data,
+        });
+      } catch (e: any) {
+        logger.warn('[ALIEXPRESS-DROPSHIPPING-API] OAuth fallback variant failed', {
+          endpoint,
+          variant: variant.name,
+          error: e?.message || String(e),
+          status: e?.response?.status,
+          responseData: e?.response?.data,
+        });
+      }
+    }
+
+    return null;
   }
 
   /**

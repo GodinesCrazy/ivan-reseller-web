@@ -54,8 +54,8 @@ export class OrderFulfillmentService {
       where: { id: orderId },
       data: { status: 'PURCHASING' },
     });
-    console.log('[FULFILLMENT] START', { orderId });
-    logger.info('[FULFILLMENT] Status → PURCHASING', { orderId });
+    const ts = new Date().toISOString();
+    logger.info('[FULFILLMENT] START', { orderId, timestamp: ts });
 
     const shippingObj = this.parseShippingAddress(order.shippingAddress);
     if (!shippingObj) {
@@ -131,8 +131,11 @@ export class OrderFulfillmentService {
             errorMessage: null,
           },
         });
-        console.log('[FULFILLMENT] ALIEXPRESS OK', { orderId, aliexpressOrderId: result.orderId });
-        logger.info('[FULFILLMENT] PURCHASED', { orderId, aliexpressOrderId: result.orderId });
+        logger.info('[FULFILLMENT] PURCHASED', {
+          orderId,
+          aliexpressOrderId: result.orderId,
+          timestamp: new Date().toISOString(),
+        });
         // Crear Sale automática (comisión + payout) si el Order tiene userId
         logger.info('[AUTO_SALE_TRIGGER]', { orderId });
         try {
@@ -169,8 +172,11 @@ export class OrderFulfillmentService {
       where: { id: orderId },
       data: { status: 'FAILED', errorMessage },
     });
-    console.log('[FULFILLMENT] FAILED', { orderId, errorMessage });
-    logger.error('[FULFILLMENT] FAILED', { orderId, errorMessage });
+    logger.error('[FULFILLMENT] FAILED', {
+      orderId,
+      errorMessage,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   private parseShippingAddress(str: string): Record<string, string> | null {

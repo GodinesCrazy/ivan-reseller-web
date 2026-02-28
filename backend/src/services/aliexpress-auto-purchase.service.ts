@@ -76,10 +76,23 @@ export class AliExpressAutoPurchaseService {
 
     try {
       const puppeteerCore = await import('puppeteer-core');
-      const StealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
-      
       const puppeteer = puppeteerCore.default;
-      puppeteer.use(StealthPlugin());
+
+      // Stealth plugin only when puppeteer instance supports .use (puppeteer-extra API).
+      // Some environments load plain puppeteer-core where .use is unavailable.
+      try {
+        const StealthPlugin = (await import('puppeteer-extra-plugin-stealth')).default;
+        if (typeof puppeteer?.use === 'function') {
+          puppeteer.use(StealthPlugin());
+          logger.info('[AutoPurchase] Stealth plugin enabled');
+        } else {
+          logger.warn('[AutoPurchase] Stealth plugin skipped: puppeteer.use unavailable');
+        }
+      } catch (pluginError: any) {
+        logger.warn('[AutoPurchase] Stealth plugin not loaded', {
+          error: pluginError?.message || String(pluginError),
+        });
+      }
       
       this.puppeteerModule = puppeteer;
       logger.info('[AutoPurchase] Puppeteer loaded successfully (dynamic import)');
