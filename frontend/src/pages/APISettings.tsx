@@ -443,6 +443,25 @@ export default function APISettings() {
     loadMinimumDropshippingAPIs();
   }, []);
 
+  // ✅ FIX EBAY: Recarga forzada al volver de OAuth para que el estado se refleje (evita cache/timing)
+  useEffect(() => {
+    if (searchParams.get('oauth') === 'success') {
+      loadCredentials(true); // Primera carga con refresh=1 para limpiar cache del backend
+      const t1 = setTimeout(() => loadCredentials(true), 800);
+      const t2 = setTimeout(() => loadCredentials(true), 2200);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('oauth');
+        const s = next.toString();
+        return s ? next : new URLSearchParams();
+      }, { replace: true });
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
+    }
+  }, [searchParams.get('oauth')]);
+
   useEffect(() => {
     // Prevent permanent OAuth lock if a previous redirect flow was interrupted.
     try {
@@ -600,7 +619,7 @@ export default function APISettings() {
   // Estado para almacenar las definiciones de APIs del backend
   const [backendApiDefinitions, setBackendApiDefinitions] = useState<Record<string, BackendAPIDefinition>>({});
 
-  const loadCredentials = async () => {
+  const loadCredentials = async (forceRefresh = false) => {
     setLoading(true);
     setError(null);
     try {
@@ -840,17 +859,22 @@ export default function APISettings() {
         }
       });
       try {
-        const statusResponse = await api.get('/api/credentials/status');
+        const statusResponse = await api.get('/api/credentials/status', {
+          params: forceRefresh ? { refresh: 1 } : undefined,
+        });
         const statusData = statusResponse.data?.data?.apis || statusResponse.data?.data || [];
         const normalize = (value: string) => value?.toString().toLowerCase().replace(/[^a-z0-9]/g, '') || '';
         const statusLookup = new Map<string, any>();
         if (Array.isArray(statusData)) {
           statusData.forEach((item: APIStatus) => {
             const normalizedName = normalize(item.apiName || item.name || '');
+            const env = typeof item.environment === 'string' ? item.environment : 'production';
+            const envKey = makeEnvKey(normalizedName, env);
             if (normalizedName) {
-              statusLookup.set(normalizedName, item);
+              // ✅ FIX EBAY: Usar envKey para APIs con environments (ebay, mercadolibre) - evita sobrescribir production con sandbox
+              statusLookup.set(envKey, item);
+              statusLookup.set(normalizedName, item); // Fallback para APIs sin environment
               // ✅ FIX: Para googletrends/serpapi, agregar entrada también con el nombre alternativo
-              // El backend puede devolver 'googletrends' pero el frontend busca con 'serpapi' normalizado
               if (normalizedName === 'googletrends' || normalizedName === 'serpapi') {
                 const alternateName = normalizedName === 'googletrends' ? 'serpapi' : 'googletrends';
                 statusLookup.set(alternateName, item);
@@ -886,13 +910,14 @@ export default function APISettings() {
         }
 
         creds.forEach((cred) => {
-          // ✅ FIX: Normalizar 'googletrends' a 'serpapi' para búsqueda de estado
-          // El backend usa 'serpapi' pero el frontend puede usar 'googletrends'
-          // El backend mapea 'serpapi' a 'googletrends' en la respuesta, así que debemos buscar ambos
+          const key = makeEnvKey(cred.apiName, cred.environment);
+          // ✅ FIX EBAY: Buscar primero por envKey para APIs con environments (evita mezclar production/sandbox)
+          const envKeyForLookup = makeEnvKey(cred.apiName, cred.environment);
+          const altEnvKey = cred.apiName === 'googletrends' ? makeEnvKey('serpapi', cred.environment) : null;
           const normalizedApiName = cred.apiName === 'googletrends' ? 'serpapi' : cred.apiName;
-          // Buscar primero con el nombre normalizado (serpapi), luego con el nombre original (googletrends)
-          // porque el backend puede devolver cualquiera de los dos
-          const match = statusLookup.get(normalize(normalizedApiName)) 
+          const match = statusLookup.get(envKeyForLookup)
+            || (altEnvKey ? statusLookup.get(altEnvKey) : null)
+            || statusLookup.get(normalize(normalizedApiName))
             || statusLookup.get(normalize(cred.apiName))
             || (cred.apiName === 'googletrends' ? statusLookup.get('serpapi') : null)
             || (cred.apiName === 'googletrends' ? statusLookup.get('googletrends') : null);
@@ -3764,12 +3789,13 @@ export default function APISettings() {
             // Para eBay, MercadoLibre y otras APIs, usar statusMap desde /api/credentials/status
             const apiStatus = statuses[statusKey];
             if (apiStatus) {
-              // Convertir APIStatus al formato esperado (incluir isConfigured para Google Trends/SerpAPI)
+              // ✅ FIX EBAY: Usar isAvailable y available - backend devuelve isAvailable
+              const available = Boolean(apiStatus.isAvailable ?? apiStatus.available);
               statusInfo = {
-                status: apiStatus.available ? 'healthy' : (apiStatus.status || (diag?.issues?.length ? 'unhealthy' : 'degraded')),
+                status: available ? 'healthy' : (apiStatus.status || (diag?.issues?.length ? 'unhealthy' : 'degraded')),
                 message: apiStatus.message,
-                isAvailable: apiStatus.available,
-                isConfigured: apiStatus.isConfigured ?? apiStatus.available,
+                isAvailable: available,
+                isConfigured: apiStatus.isConfigured ?? available,
                 error: diag?.issues?.[0],
               } as APIStatus;
             }

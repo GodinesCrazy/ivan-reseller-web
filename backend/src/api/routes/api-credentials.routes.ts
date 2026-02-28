@@ -167,9 +167,15 @@ router.get('/', async (req: Request, res: Response, next) => {
 
 // GET /api/credentials/status - Estado de todas las APIs con capabilities
 // ✅ OBJETIVO B: Mejorar manejo de errores para no bloquear la página
+// ✅ FIX EBAY: ?refresh=1 limpia cache de marketplaces antes de consultar (útil al volver de OAuth)
 router.get('/status', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
+    const forceRefresh = req.query.refresh === '1' || req.query.oauth_refresh === '1';
+    if (forceRefresh) {
+      await apiAvailability.clearAPICache(userId, 'ebay').catch(() => {});
+      await apiAvailability.clearAPICache(userId, 'mercadolibre').catch(() => {});
+    }
     
     // ✅ Intentar obtener estados con manejo de errores individual
     let statuses: any[] = [];
