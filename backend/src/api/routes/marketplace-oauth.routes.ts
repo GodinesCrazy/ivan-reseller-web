@@ -1217,7 +1217,9 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       return res.status(400).send('<html><body>Marketplace not supported</body></html>');
     }
 
-    const successReturnUrl = getFrontendReturnBaseUrl() + '/api-settings?oauth=success&provider=' + req.params.marketplace;
+    // Usar window.location.origin en cliente para evitar logout (www vs no-www, mismas cookies)
+    const provider = req.params.marketplace;
+    const fallbackReturnUrl = getFrontendReturnBaseUrl() + '/api-settings?oauth=success&provider=' + provider;
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -1235,22 +1237,16 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         <body>
           <div class="success">✅ Autorización completada exitosamente</div>
           <div class="info">Redirigiendo a la aplicación en unos segundos...</div>
-          <p><a href="${successReturnUrl}" class="btn">Volver a API Settings</a></p>
+          <p><a href="${fallbackReturnUrl}" id="return-btn" class="btn">Volver a API Settings</a></p>
           <script>
             (function() {
-              var sendMessage = function() {
-                if (window.opener && !window.opener.closed) {
-                  try {
-                    window.opener.postMessage({ type: 'oauth_success', marketplace: '${req.params.marketplace}', timestamp: Date.now() }, '*');
-                  } catch (e) {}
-                }
-              };
-              sendMessage();
-              setTimeout(sendMessage, 300);
-              setTimeout(sendMessage, 800);
-              setTimeout(function() {
-                window.location.href = '${successReturnUrl.replace(/'/g, "\\'")}';
-              }, 2000);
+              var returnUrl = window.location.origin + '/api-settings?oauth=success&provider=${provider}';
+              var btn = document.getElementById('return-btn');
+              if (btn) btn.href = returnUrl;
+              if (window.opener && !window.opener.closed) {
+                try { window.opener.postMessage({ type: 'oauth_success', marketplace: '${provider}', timestamp: Date.now() }, '*'); } catch (e) {}
+              }
+              setTimeout(function() { window.location.href = returnUrl; }, 2000);
             })();
           </script>
         </body>

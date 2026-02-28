@@ -321,12 +321,8 @@ export default function Autopilot() {
         toast.error('No se pudo obtener la URL de autorización de eBay');
         return;
       }
-      const win = window.open(authUrl, 'oauth_ebay', 'noopener,noreferrer,width=800,height=600');
-      if (!win || win.closed) {
-        toast('Si la ventana fue bloqueada, habilita popups o abre Configuración → APIs → eBay para conectar.', { duration: 5000 });
-      } else {
-        toast('Completa el inicio de sesión en la ventana de eBay y vuelve aquí.');
-      }
+      toast('Redirigiendo a eBay para autorizar…', { icon: 'ℹ️' });
+      window.location.replace(authUrl);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message || (err as Error)?.message || 'Error';
       toast.error('Error al iniciar OAuth: ' + msg);

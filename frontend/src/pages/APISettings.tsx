@@ -2580,12 +2580,17 @@ export default function APISettings() {
       // Esto previene que modales de sesiones anteriores se muestren
       setOauthBlockedModal({ open: false, authUrl: '', apiName: '', warning: undefined });
       
-      // ✅ AliExpress Dropshipping: UNA SOLA acción = redirección en esta pestaña. Sin popup para evitar doble ventana.
-      if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') {
+      // ✅ UNA SOLA ventana: eBay y AliExpress usan redirección en esta pestaña (no popup).
+      // Evita: doble ventana (popup + main) y pérdida de sesión al volver.
+      const sameWindowOAuth = ['ebay', 'mercadolibre', 'aliexpress-dropshipping', 'aliexpress_dropshipping'].includes(apiName);
+      if (sameWindowOAuth) {
         try {
-          sessionStorage.setItem(ALIEXPRESS_OAUTH_REDIRECTING_KEY, '1');
-          sessionStorage.setItem(ALIEXPRESS_OAUTH_REDIRECTING_AT_KEY, String(Date.now()));
-          toast('Redirigiendo a AliExpress…', { icon: 'ℹ️' });
+          if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') {
+            sessionStorage.setItem(ALIEXPRESS_OAUTH_REDIRECTING_KEY, '1');
+            sessionStorage.setItem(ALIEXPRESS_OAUTH_REDIRECTING_AT_KEY, String(Date.now()));
+          }
+          sessionStorage.setItem('oauth_redirecting_api', apiName);
+          toast(apiName === 'ebay' ? 'Redirigiendo a eBay…' : apiName === 'mercadolibre' ? 'Redirigiendo a MercadoLibre…' : 'Redirigiendo a AliExpress…', { icon: 'ℹ️' });
         } catch (_) {}
         window.location.replace(authUrl);
         setOauthing(null);
