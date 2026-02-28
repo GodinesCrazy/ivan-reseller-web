@@ -1295,6 +1295,83 @@ router.get('/ebay-offer-by-sku', validateInternalSecret, async (req: Request, re
   }
 });
 
+// GET /api/internal/aliexpress-ds-credential-state - diagnóstico seguro de credenciales Dropshipping
+router.get('/aliexpress-ds-credential-state', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const { CredentialsManager } = await import('../../services/credentials-manager.service');
+    const userId = Number(req.query?.userId) || 1;
+    const environment = String(req.query?.environment || 'production') as 'production' | 'sandbox';
+    const entry = await CredentialsManager.getCredentialEntry(userId, 'aliexpress-dropshipping', environment);
+    const creds: Record<string, any> = (entry?.credentials as any) || {};
+    const appKey = String(creds.appKey || process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY || '').trim();
+    const appSecret = String(creds.appSecret || process.env.ALIEXPRESS_DROPSHIPPING_APP_SECRET || '').trim();
+    const accessToken = String(creds.accessToken || process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN || '').trim();
+    const refreshToken = String(creds.refreshToken || process.env.ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN || '').trim();
+    return res.status(200).json({
+      success: true,
+      userId,
+      environment,
+      entryFound: !!entry,
+      isActive: !!entry?.isActive,
+      hasAppKey: !!appKey,
+      appKeySuffix: appKey ? appKey.slice(-6) : null,
+      hasAppSecret: !!appSecret,
+      appSecretLength: appSecret.length,
+      hasAccessToken: !!accessToken,
+      accessTokenLength: accessToken.length,
+      hasRefreshToken: !!refreshToken,
+      refreshTokenLength: refreshToken.length,
+      scope: entry?.scope || null,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
+// POST /api/internal/aliexpress-ds-bootstrap - guarda credenciales DS desde env y refresca token si es posible
+router.post('/aliexpress-ds-bootstrap', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const { CredentialsManager, clearCredentialsCache } = await import('../../services/credentials-manager.service');
+    const { refreshAliExpressDropshippingToken } = await import('../../services/aliexpress-dropshipping-api.service');
+    const userId = Number(req.body?.userId) || 1;
+    const environment = String(req.body?.environment || 'production') as 'production' | 'sandbox';
+    const appKey = String(req.body?.appKey || process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY || '').trim();
+    const appSecret = String(req.body?.appSecret || process.env.ALIEXPRESS_DROPSHIPPING_APP_SECRET || '').trim();
+    const accessToken = String(req.body?.accessToken || process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN || '').trim();
+    const refreshToken = String(req.body?.refreshToken || process.env.ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN || '').trim();
+    if (!appKey || !appSecret) {
+      return res.status(400).json({ success: false, error: 'ALIEXPRESS_DROPSHIPPING_APP_KEY/APP_SECRET missing' });
+    }
+
+    const payload: Record<string, any> = {
+      appKey,
+      appSecret,
+      sandbox: environment === 'sandbox',
+      ...(accessToken ? { accessToken } : {}),
+      ...(refreshToken ? { refreshToken } : {}),
+    };
+    await CredentialsManager.saveCredentials(userId, 'aliexpress-dropshipping', payload, environment, { scope: 'user' });
+    clearCredentialsCache(userId, 'aliexpress-dropshipping', environment);
+
+    let refreshResult: any = null;
+    if (refreshToken) {
+      refreshResult = await refreshAliExpressDropshippingToken(userId, environment, { minTtlMs: 60_000 });
+    }
+
+    return res.status(200).json({
+      success: true,
+      userId,
+      environment,
+      saved: true,
+      tokenRefreshed: !!refreshResult?.refreshed,
+      hasAccessToken: !!refreshResult?.credentials?.accessToken || !!accessToken,
+      hasRefreshToken: !!refreshResult?.credentials?.refreshToken || !!refreshToken,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
 router.post('/reprice-product', validateInternalSecret, async (req: Request, res: Response) => {
   try {
     const { dynamicPricingService } = await import('../../services/dynamic-pricing.service');
