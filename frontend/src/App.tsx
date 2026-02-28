@@ -63,7 +63,7 @@ function HelpOnlyPage() {
 
 function AppContent() {
   const location = useLocation();
-  const { isAuthenticated, isCheckingAuth, checkAuth, setCheckingAuth, token } = useAuthStore();
+  const { isAuthenticated, isCheckingAuth, checkAuth, setCheckingAuth, token, user } = useAuthStore();
   const [isInitialized, setIsInitialized] = useState(false);
   
   // ✅ CORRECCIÓN TEMA: Inicializar tema al cargar la app
@@ -79,9 +79,15 @@ function AppContent() {
       const tokenInStore = token;
       const tokenInStorage = localStorage.getItem('auth_token');
       const hasToken = tokenInStore || tokenInStorage;
+      // ✅ FIX OAUTH LOGOUT: También verificar cuando hay user persistido (cookie-only) O cuando
+      // volvemos de OAuth (/api-settings?oauth=success). Persist solo guarda user; token no persiste.
+      // Si hay user o estamos en return OAuth, intentar checkAuth para validar la cookie.
+      const hasUserPersisted = user != null;
+      const isOAuthReturn = typeof window !== 'undefined' &&
+        window.location.pathname === '/api-settings' &&
+        window.location.search.includes('oauth=success');
       
-      // Si no hay token, mostrar login inmediatamente
-      if (!hasToken) {
+      if (!hasToken && !hasUserPersisted && !isOAuthReturn) {
         if (isMounted) {
           setIsInitialized(true);
         }
@@ -145,18 +151,22 @@ function AppContent() {
   const tokenInStore = token;
   const tokenInStorage = localStorage.getItem('auth_token');
   const hasToken = tokenInStore || tokenInStorage;
+  const hasUserPersisted = user != null;
+  const isOAuthReturnPath = location.pathname === '/api-settings' && location.search.includes('oauth=success');
+  const mightHaveSession = hasToken || hasUserPersisted || isOAuthReturnPath;
   
-  // Si estamos en login, help o no hay token, inicializar inmediatamente (no bloquear)
+  // Si estamos en login, help o no hay indicio de sesión, inicializar inmediatamente (no bloquear)
   useEffect(() => {
-    if (isLoginPage || isHelpPage || !hasToken) {
+    if (isLoginPage || isHelpPage || !mightHaveSession) {
       if (!isInitialized) {
         setIsInitialized(true);
       }
     }
-  }, [isLoginPage, isHelpPage, hasToken, isInitialized]);
+  }, [isLoginPage, isHelpPage, mightHaveSession, isInitialized]);
   
   // No bloquear /help: siempre renderizar para que el centro de ayuda sea accesible
-  if (!isLoginPage && !isHelpPage && hasToken && !isInitialized && isCheckingAuth) {
+  // ✅ FIX OAUTH: Mostrar spinner también cuando mightHaveSession (user persistido o return OAuth)
+  if (!isLoginPage && !isHelpPage && mightHaveSession && !isInitialized && isCheckingAuth) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
         <div className="text-center">

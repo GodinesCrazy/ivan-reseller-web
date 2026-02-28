@@ -99,8 +99,12 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      // Solo persistir el usuario, no el token (está en cookie httpOnly)
-      partialize: (state) => ({ user: state.user }),
+      // Persistir user Y isAuthenticated para que al volver de OAuth no se muestre login
+      // antes de que checkAuth valide la cookie. Si user existe, asumimos sesión potencial.
+      partialize: (state) => ({
+        user: state.user,
+        isAuthenticated: state.user ? state.isAuthenticated : false,
+      }),
     }
   )
 );

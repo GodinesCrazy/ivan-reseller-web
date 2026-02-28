@@ -223,4 +223,20 @@ El flujo OAuth est� implementado de extremo a extremo (auth URL, callback, exc
   - Backend (`marketplace-oauth.routes.ts`): `parseState` soporta el nuevo formato con `returnOrigin`; la página de éxito del callback usa `returnOrigin` del state para construir la URL de redirección.
 - **Resultado:** La redirección tras OAuth va siempre al mismo origen (p. ej. `ivanreseller.com` o `www.ivanreseller.com`), evitando pérdida de sesión.
 
+---
+
+## ACTUALIZACIÓN 2026-02-28 — Fix definitivo: sesión mantenida al volver del callback
+
+**Problema persistente:** Tras autorizar OAuth, al pulsar "Volver a API Settings" el usuario era redirigido al login en lugar de permanecer en API Settings con sesión activa.
+
+**Análisis (revisión del 100% del código):**
+1. **authStore (persist):** Solo persistía `user`, no `token` ni `isAuthenticated`. Al volver del OAuth (carga completa de página), el store se rehidrata con `user` pero `token=null`, `isAuthenticated=false`.
+2. **App.tsx validateToken:** Comprobaba solo `hasToken`. Si no había token en store/localStorage, no llamaba a `checkAuth()` y nunca verificaba la cookie httpOnly.
+3. **Resultado:** Con sesión cookie-only (producción usa httpOnly), `hasToken` era false → no se ejecutaba `checkAuth()` → `isAuthenticated` quedaba false → `Navigate to="/login"`.
+
+**Solución aplicada:**
+- **App.tsx:** Llamar a `checkAuth()` cuando hay `user` persistido O cuando la URL es `/api-settings?oauth=success`, no solo cuando hay token.
+- **App.tsx:** Mostrar el spinner "Verificando sesión..." cuando `mightHaveSession` (user persistido o return OAuth) para no renderizar login antes de validar la cookie.
+- **authStore (persist):** Persistir también `isAuthenticated` cuando hay `user`, para que al volver del OAuth la sesión se considere potencialmente válida hasta que `checkAuth()` valide la cookie.
+
 *End of report. Last updated: 2026-02-28.*
