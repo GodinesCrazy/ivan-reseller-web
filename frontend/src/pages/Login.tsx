@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -16,6 +16,8 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnUrl = searchParams.get('returnUrl') || '';
   const { login } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -46,7 +48,10 @@ export default function Login() {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       toast.success('Login successful!');
-      navigate('/dashboard', { replace: true });
+      const target = returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//')
+        ? returnUrl
+        : '/dashboard';
+      navigate(target, { replace: true });
     } catch (error: any) {
       // Manejo robusto de errores - prevenir crash de React
       let errorMessage = 'Login failed';

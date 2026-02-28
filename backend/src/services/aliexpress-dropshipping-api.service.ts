@@ -533,7 +533,7 @@ export class AliExpressDropshippingAPIService {
     const tokenUrl = this.TOKEN_CREATE_ENDPOINT;
     try {
       const timestamp = Date.now().toString();
-      const signedParamsBase = {
+      const signedParamsBase: Record<string, string> = {
         app_key: appKey,
         code,
         timestamp,
@@ -588,10 +588,14 @@ export class AliExpressDropshippingAPIService {
               sign_method: variant.signMethod,
             };
             const sign = variant.buildSign(paramsForSign);
-            const queryParams = {
+            // redirect_uri must be sent in URL (per AliExpress docs) but NOT in signature
+            const queryParams: Record<string, string> = {
               ...paramsForSign,
               sign,
             };
+            if (redirectUri) {
+              queryParams.redirect_uri = redirectUri;
+            }
             logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
               tokenUrl,
               method: 'GET',
@@ -674,20 +678,49 @@ export class AliExpressDropshippingAPIService {
       }
 
       const response = result.data;
-      const responsePayload = response.data?.data ?? response.data ?? {};
+      const rawData = response.data ?? response;
+      // 1) Parse error_response first
+      const errorResp = rawData?.error_response ?? rawData?.error_response_data ?? rawData?.error;
+      if (errorResp) {
+        const code = String(errorResp.code ?? errorResp.error_code ?? '').trim();
+        const msg = String(errorResp.msg ?? errorResp.sub_msg ?? errorResp.error_msg ?? errorResp.message ?? '').trim();
+        const hint = code ? ` (Code: ${code})` : '';
+        logger.error('[ALIEXPRESS-DROPSHIPPING-API] AliExpress returned error_response', {
+          code,
+          msg,
+          subMsg: errorResp.sub_msg,
+          fullError: errorResp,
+        });
+        throw new Error(`AliExpress OAuth error: ${msg || 'Unknown error'}${hint}`);
+      }
+      // 2) Try multiple response paths for token payload (AliExpress uses various structures)
+      const getPayload = (obj: any): Record<string, any> | null => {
+        if (!obj || typeof obj !== 'object') return null;
+        if (String(obj.access_token || obj.accessToken || '').trim()) return obj;
+        const inner = obj.token_result ?? obj.data ?? obj.token_create_response;
+        return inner ? getPayload(inner) : null;
+      };
+      const responsePayload = getPayload(rawData) ?? rawData ?? {};
       const accessToken = String(responsePayload.access_token || responsePayload.accessToken || '').trim();
       const refreshToken = String(responsePayload.refresh_token || responsePayload.refreshToken || '').trim();
       const expiresIn = Number(responsePayload.expires_in || responsePayload.expiresIn || 0) || 86400;
       const refreshExpiresIn = Number(responsePayload.refresh_expires_in || responsePayload.refreshExpiresIn || 0) || 2592000;
 
-      // ✅ FIX OAUTH: Validar respuesta robustamente
+      // 3) Validate access_token and surface helpful error
       if (!accessToken) {
         const elapsed = Date.now() - startTime;
+        const aliCode = String(responsePayload.code ?? rawData?.code ?? '').trim();
+        const aliMsg = String(responsePayload.msg ?? rawData?.msg ?? responsePayload.error_msg ?? rawData?.error_msg ?? '').trim();
+        const hint = aliCode || aliMsg ? ` AliExpress: ${aliMsg || aliCode}` : '';
         logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token exchange response missing access_token', {
-          responseData: response.data,
+          responseData: rawData,
           elapsed,
+          aliCode,
+          aliMsg,
         });
-        throw new Error('Invalid response from AliExpress OAuth token endpoint: missing access_token');
+        throw new Error(
+          `Invalid response from AliExpress OAuth token endpoint: missing access_token.${hint} Ensure redirect_uri matches exactly the one configured in AliExpress app and used in authorize URL.`
+        );
       }
 
       const elapsed = Date.now() - startTime;

@@ -123,8 +123,16 @@ api.interceptors.response.use(
       if (isAlreadyOnLogin) {
         return Promise.reject(error);
       }
-      toast.error('Session expired');
-      window.location.href = '/login';
+      const isOAuthRequest = requestUrl.includes('auth-url') || requestUrl.includes('oauth');
+      toast.error(
+        isOAuthRequest
+          ? 'Tu sesión ha expirado. Inicia sesión para conectar.'
+          : 'Session expired'
+      );
+      const returnUrl = typeof window !== 'undefined'
+        ? encodeURIComponent(window.location.pathname + window.location.search)
+        : '';
+      window.location.href = returnUrl ? `/login?returnUrl=${returnUrl}` : '/login';
       return Promise.reject(error);
     }
     
