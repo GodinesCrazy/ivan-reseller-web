@@ -474,9 +474,36 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
   
   try {
     const { marketplace } = req.params;
-    const { redirect_uri, environment: envParam } = req.query;
+    const { redirect_uri, environment: envParam, return_origin: returnOriginParam } = req.query;
     const requestedEnv = typeof envParam === 'string' ? envParam.toLowerCase() : undefined;
     const environment = requestedEnv && ['sandbox', 'production'].includes(requestedEnv) ? requestedEnv : undefined;
+
+    // ✅ FIX OAUTH LOGOUT: Obtener origin del frontend para redirigir al mismo host (evita www vs no-www cookie mismatch)
+    const allowedOrigins = [
+      'https://ivanreseller.com',
+      'https://www.ivanreseller.com',
+      'http://ivanreseller.com',
+      'http://www.ivanreseller.com',
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:3000',
+    ];
+    const frontendOrigin =
+      (typeof returnOriginParam === 'string' ? returnOriginParam.trim() : null) ||
+      (req.get('Origin') || '').replace(/\/$/, '') ||
+      (() => {
+        const ref = req.get('Referer') || '';
+        try {
+          return ref ? new URL(ref).origin : '';
+        } catch {
+          return '';
+        }
+      })();
+    const returnOrigin =
+      frontendOrigin && allowedOrigins.includes(frontendOrigin)
+        ? frontendOrigin.replace(/\/$/, '')
+        : '';
 
     // ✅ FIX: Incluir aliexpress-dropshipping en marketplaces soportados
     const supportedMarketplaces = ['ebay', 'mercadolibre', 'aliexpress-dropshipping', 'aliexpress_dropshipping'];
@@ -685,8 +712,9 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const redirB64 = Buffer.from(String(redirectUri)).toString('base64url');
       
       // 🔒 SEGURIDAD: Agregar expiración al state parameter (10 minutos)
+      // ✅ FIX OAUTH LOGOUT: Incluir returnOrigin para redirigir al mismo host (evita www vs no-www)
       const expirationTime = Date.now() + (10 * 60 * 1000); // 10 minutos desde ahora
-      const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv, expirationTime.toString()].join('|');
+      const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv, expirationTime.toString(), returnOrigin || ''].join('|');
       const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
       const state = Buffer.from([payload, sig].join('|')).toString('base64url');
       
@@ -957,7 +985,8 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         return res.status(400).json({ success: false, message: 'Missing MercadoLibre Redirect URI' });
       }
       const redirB64 = Buffer.from(String(callbackUrl)).toString('base64url');
-      const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv].join('|');
+      // ✅ FIX OAUTH LOGOUT: Incluir returnOrigin para redirigir al mismo host
+      const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv, returnOrigin || ''].join('|');
       const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
       const state = Buffer.from([payload, sig].join('|')).toString('base64url');
       const ml = new MercadoLibreService({ clientId, clientSecret, siteId });

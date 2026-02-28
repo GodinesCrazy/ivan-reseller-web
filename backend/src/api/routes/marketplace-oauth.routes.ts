@@ -126,28 +126,58 @@ function parseState(state: string) {
     const decoded = Buffer.from(state, 'base64url').toString('utf8');
     const parts = decoded.split('|');
     
-    // Formato con expiración (8): userId|marketplace|ts|nonce|redirB64|env|expirationTime|signature
+    // Formato v3 eBay (9): userId|marketplace|ts|nonce|redirB64|env|expirationTime|returnOrigin|signature
+    // Formato v2 eBay (8): userId|marketplace|ts|nonce|redirB64|env|expirationTime|signature
+    // Formato v2 ML (8): userId|marketplace|ts|nonce|redirB64|env|returnOrigin|signature
     // Formato legacy (7): userId|marketplace|ts|nonce|redirB64|env|signature
     if (parts.length < 7) return { ok: false, reason: 'invalid_format' };
     
-    const hasExpiration = parts.length === 8;
+    let hasExpiration = false;
+    let returnOrigin = '';
+    let sig: string;
+    let payloadForSig: string;
     const userIdStr = parts[0];
     const mk = parts[1];
     const ts = parts[2];
     const nonce = parts[3];
     const redirB64 = parts[4];
     const env = parts[5] || 'production';
-    const expirationTimeOrSig = parts[6];
-    const sig = hasExpiration ? parts[7] : parts[6];
-    const payloadForSig = hasExpiration
-      ? [userIdStr, mk, ts, nonce, redirB64, env, expirationTimeOrSig].join('|')
-      : [userIdStr, mk, ts, nonce, redirB64, env].join('|');
-    
-    if (hasExpiration && expirationTimeOrSig) {
-      const expirationTime = parseInt(expirationTimeOrSig, 10);
+    const p6 = parts[6];
+    const p7 = parts[7];
+    const p8 = parts[8];
+
+    if (parts.length === 9) {
+      // v3 eBay: expiration at 6, returnOrigin at 7, sig at 8
+      hasExpiration = true;
+      returnOrigin = (p7 || '').trim();
+      sig = p8 || '';
+      payloadForSig = [userIdStr, mk, ts, nonce, redirB64, env, p6, returnOrigin].join('|');
+      const expirationTime = parseInt(p6, 10);
       if (isNaN(expirationTime) || expirationTime < Date.now()) {
         return { ok: false, reason: 'expired', expiredAt: expirationTime, now: Date.now() };
       }
+    } else if (parts.length === 8) {
+      if (/^\d+$/.test(p6)) {
+        // v2 eBay: expiration at 6, sig at 7
+        hasExpiration = true;
+        sig = p7 || '';
+        payloadForSig = [userIdStr, mk, ts, nonce, redirB64, env, p6].join('|');
+        const expirationTime = parseInt(p6, 10);
+        if (isNaN(expirationTime) || expirationTime < Date.now()) {
+          return { ok: false, reason: 'expired', expiredAt: expirationTime, now: Date.now() };
+        }
+      } else if (/^https?:\/\//.test(p6)) {
+        // v2 ML: returnOrigin at 6, sig at 7
+        returnOrigin = (p6 || '').trim();
+        sig = p7 || '';
+        payloadForSig = [userIdStr, mk, ts, nonce, redirB64, env, returnOrigin].join('|');
+      } else {
+        return { ok: false, reason: 'invalid_format' };
+      }
+    } else {
+      // 7 parts legacy
+      sig = p6 || '';
+      payloadForSig = [userIdStr, mk, ts, nonce, redirB64, env].join('|');
     }
     
     const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-key';
@@ -161,6 +191,15 @@ function parseState(state: string) {
     const redirectUri = Buffer.from(redirB64, 'base64url').toString('utf8');
     const userId = parseInt(userIdStr, 10);
     if (!userId || !mk) return { ok: false, reason: 'invalid_user_or_marketplace' };
+
+    // Validar returnOrigin antes de usar (evitar open redirect)
+    const allowedOrigins = [
+      'https://ivanreseller.com', 'https://www.ivanreseller.com',
+      'http://ivanreseller.com', 'http://www.ivanreseller.com',
+      'http://localhost:5173', 'http://localhost:3000',
+      'http://127.0.0.1:5173', 'http://127.0.0.1:3000',
+    ];
+    const safeReturnOrigin = returnOrigin && allowedOrigins.includes(returnOrigin) ? returnOrigin : '';
     
     return {
       ok: true,
@@ -169,7 +208,8 @@ function parseState(state: string) {
       redirectUri,
       environment: env as 'sandbox' | 'production',
       hasExpiration,
-      expirationTime: hasExpiration ? parseInt(expirationTimeOrSig, 10) : null
+      expirationTime: hasExpiration ? parseInt(p6, 10) : null,
+      returnOrigin: safeReturnOrigin
     };
   } catch (error: any) {
     return { ok: false, reason: 'parse_error', error: error.message };
@@ -1217,9 +1257,11 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       return res.status(400).send('<html><body>Marketplace not supported</body></html>');
     }
 
-    // Usar window.location.origin en cliente para evitar logout (www vs no-www, mismas cookies)
+    // ✅ FIX OAUTH LOGOUT: Usar returnOrigin del state para redirigir al mismo host (evita www vs no-www)
     const provider = req.params.marketplace;
-    const fallbackReturnUrl = getFrontendReturnBaseUrl() + '/api-settings?oauth=success&provider=' + provider;
+    const returnOrigin = (parsedState as { returnOrigin?: string })?.returnOrigin || '';
+    const baseForRedirect = returnOrigin || getFrontendReturnBaseUrl();
+    const fallbackReturnUrl = baseForRedirect + '/api-settings?oauth=success&provider=' + provider;
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -1240,7 +1282,8 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
           <p><a href="${fallbackReturnUrl}" id="return-btn" class="btn">Volver a API Settings</a></p>
           <script>
             (function() {
-              var returnUrl = window.location.origin + '/api-settings?oauth=success&provider=${provider}';
+              var returnOrigin = ${JSON.stringify(returnOrigin)};
+              var returnUrl = (returnOrigin || window.location.origin) + '/api-settings?oauth=success&provider=${provider}';
               var btn = document.getElementById('return-btn');
               if (btn) btn.href = returnUrl;
               if (window.opener && !window.opener.closed) {

@@ -210,4 +210,17 @@ El flujo OAuth est� implementado de extremo a extremo (auth URL, callback, exc
 - **Token exchange más tolerante a firmas:** `exchangeCodeForToken` ahora prueba múltiples variantes de firma (`sha256`/`md5` y formatos alternos), con `retryWithBackoff` y timeout, reduciendo fallas por `IncompleteSignature`.
 - **Observabilidad reforzada:** Logs estructurados para intento, retry, variante de firma usada, elapsed time y error final, facilitando diagnóstico en producción.
 
-*End of report. Last updated: 2026-02-27.*
+---
+
+## ACTUALIZACIÓN 2026-02-28 — Fix OAuth eBay/MercadoLibre: evitar logout al volver del callback
+
+- **Problema:** Tras autorizar OAuth de eBay, al volver a la app el usuario era redirigido al login en lugar de API Settings con eBay conectado.
+- **Causa:** Desajuste www vs no-www: si la sesión estaba en `ivanreseller.com` y el callback redirigía a `www.ivanreseller.com` (o viceversa), las cookies no se enviaban y el 401 provocaba logout.
+- **Solución:** Se incluye `return_origin` en el state OAuth para redirigir siempre al mismo host donde el usuario inició el flujo.
+- **Cambios:**
+  - Frontend (`APISettings.tsx`): envía `return_origin: window.location.origin` al pedir la URL de autorización para eBay, MercadoLibre y AliExpress.
+  - Backend (`marketplace.routes.ts`): obtiene y valida `return_origin` desde query, `Origin` o `Referer`; lo incluye en el state OAuth de eBay y MercadoLibre.
+  - Backend (`marketplace-oauth.routes.ts`): `parseState` soporta el nuevo formato con `returnOrigin`; la página de éxito del callback usa `returnOrigin` del state para construir la URL de redirección.
+- **Resultado:** La redirección tras OAuth va siempre al mismo origen (p. ej. `ivanreseller.com` o `www.ivanreseller.com`), evitando pérdida de sesión.
+
+*End of report. Last updated: 2026-02-28.*

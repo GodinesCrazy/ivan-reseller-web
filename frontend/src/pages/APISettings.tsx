@@ -2493,8 +2493,8 @@ export default function APISettings() {
 
       const { data } = await api.get(`/api/marketplace/auth-url/${apiName}`, {
         params: (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping')
-          ? { environment }
-          : { redirect_uri: ruName, environment },
+          ? { environment, return_origin: typeof window !== 'undefined' ? window.location.origin : '' }
+          : { redirect_uri: ruName, environment, return_origin: typeof window !== 'undefined' ? window.location.origin : '' },
       });
       
       // Verificar si hay errores en la respuesta
