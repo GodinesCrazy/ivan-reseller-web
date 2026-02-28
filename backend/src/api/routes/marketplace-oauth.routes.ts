@@ -20,6 +20,21 @@ function getFrontendReturnBaseUrl(): string {
 }
 
 /**
+ * Canonical eBay OAuth redirect URI.
+ * Prefer BACKEND_URL (direct callback, no proxy) when set; else EBAY_REDIRECT_URI.
+ * Must match exactly what is configured in eBay Developer Portal.
+ */
+function getEbayRedirectUri(): string {
+  const backendUrl = (process.env.BACKEND_URL || process.env.RAILWAY_STATIC_URL || '').replace(/\/$/, '');
+  if (backendUrl) {
+    return `${backendUrl}/api/marketplace-oauth/oauth/callback/ebay`;
+  }
+  const explicit = (process.env.EBAY_REDIRECT_URI || process.env.EBAY_RUNAME || '').trim();
+  if (explicit) return explicit;
+  return `${getFrontendReturnBaseUrl()}/api/marketplace-oauth/oauth/callback/ebay`;
+}
+
+/**
  * GET /api/marketplace-oauth/authorize/ebay
  * Redirects to eBay OAuth page. NO auth required (direct link for production).
  * Uses userId=1 by default; callback saves tokens to api_credentials.
@@ -27,11 +42,10 @@ function getFrontendReturnBaseUrl(): string {
 router.get('/authorize/ebay', async (req: Request, res: Response) => {
   try {
     const clientId = (process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
-    let redirectUri = (process.env.EBAY_RUNAME || process.env.EBAY_REDIRECT_URI || '').trim();
-    // eBay requiere RuName como redirect_uri (no URL). Debe estar en EBAY_RUNAME o EBAY_REDIRECT_URI.
-    if (redirectUri && (redirectUri.startsWith('http') || redirectUri.includes('/'))) {
-      logger.warn('[OAuth Authorize] EBAY_RUNAME should be RuName, not URL. Using as-is.');
-    }
+    const runame = (process.env.EBAY_RUNAME || '').trim();
+    const explicitRedirect = (process.env.EBAY_REDIRECT_URI || '').trim();
+    // RuName (eBay identifier) or full URL. Prefer BACKEND_URL for direct callback (avoids proxy).
+    let redirectUri = runame || explicitRedirect || getEbayRedirectUri();
     const certId = (process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
 
     if (!clientId || !redirectUri) {
@@ -663,23 +677,29 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       const errorDesc = String(req.query.error_description || 'Please try again.');
       const webBase = getFrontendReturnBaseUrl();
       const returnUrl = `${webBase}/api-settings`;
+      const suggestedRedirect = marketplace === 'ebay' ? getEbayRedirectUri() : '';
       logger.error('[OAuth Callback] OAuth error from provider', {
         service: 'marketplace-oauth',
         marketplace,
         error: errorParam,
         errorDescription: errorDesc
       });
-      // Devolver 200 para que la página cargue y el usuario pueda volver (400 dejaba "Bad Request" y confusión)
+      const scopeHint = errorParam === 'invalid_scope'
+        ? '<p style="color: #666; font-size: 14px;"><strong>invalid_scope:</strong> Ve a <a href="https://developer.ebay.com/my/keys" target="_blank">eBay Developer</a> → Tu app → OAuth Scopes y añade: sell.inventory, sell.marketing, sell.account, sell.fulfillment.</p>'
+        : '';
+      const redirectHint = errorParam === 'redirect_uri_mismatch' && suggestedRedirect
+        ? `<p style="color: #666; font-size: 14px;"><strong>redirect_uri_mismatch:</strong> En eBay Developer Portal, Auth Accepted URL debe ser exactamente: <code style="word-break:break-all;">${suggestedRedirect}</code></p>`
+        : '';
       return res.status(200).send(`
         <!DOCTYPE html>
         <html>
         <head><meta charset="utf-8"><title>Error de autorización</title></head>
-        <body style="font-family: sans-serif; max-width: 560px; margin: 2rem auto; padding: 1.5rem;">
+        <body style="font-family: sans-serif; max-width: 600px; margin: 2rem auto; padding: 1.5rem;">
           <h2>Error de autorización</h2>
           <p><strong>${marketplace === 'ebay' ? 'eBay' : marketplace}</strong> devolvió: ${errorParam}</p>
           <p>${errorDesc}</p>
+          ${scopeHint}${redirectHint}
           <p><a href="${returnUrl}" style="display: inline-block; margin-top: 1rem; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Volver a API Settings</a></p>
-          <p style="color: #666; font-size: 14px;">Si el error es "invalid_scope", verifica en el portal de desarrollador que tu aplicación tenga los permisos (scopes) necesarios.</p>
         </body>
         </html>
       `);
@@ -746,27 +766,30 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
     } else {
       const parsed = parseState(state);
       if (!parsed.ok) {
-      let errorMessage = 'Invalid or expired authorization state.';
-      let hint = 'Vuelve a Configuración → API Settings, guarda las credenciales de eBay y pulsa de nuevo "Autorizar OAuth".';
-      if (parsed.reason === 'expired') {
-        errorMessage = 'El enlace de autorización ha caducado (válido 10 minutos).';
-        hint = 'Pulsa "Autorizar OAuth" de nuevo en API Settings.';
-      } else if (parsed.reason === 'invalid_signature') {
-        errorMessage = 'Error de verificación del estado de autorización.';
-        hint = 'Asegúrate de usar la misma sesión (misma ventana de ivanreseller.com) y de que en eBay Developer el Redirect URL del RuName sea exactamente: ' +
-          getFrontendReturnBaseUrl() + '/api/marketplace-oauth/oauth/callback/ebay';
-      } else if (parsed.reason === 'invalid_format') {
-        errorMessage = 'El enlace de autorización no es válido.';
-      }
-      
-      logger.error('[OAuth Callback] Invalid state', {
-        service: 'marketplace-oauth',
-        marketplace,
-        reason: parsed.reason,
-        stateLength: state.length
-      });
-      
-      const returnUrlState = getFrontendReturnBaseUrl() + '/api-settings';
+        let errorMessage = 'Invalid or expired authorization state.';
+        let hint = 'Vuelve a Configuración → API Settings, guarda las credenciales de eBay y pulsa de nuevo "Autorizar OAuth".';
+        const suggestedRedirect = getEbayRedirectUri();
+        if (parsed.reason === 'expired') {
+          errorMessage = 'El enlace de autorización ha caducado (válido 10 minutos).';
+          hint = 'Pulsa "Autorizar OAuth" de nuevo en API Settings.';
+        } else if (parsed.reason === 'invalid_signature') {
+          errorMessage = 'Error de verificación del estado de autorización.';
+          hint = `En eBay Developer Portal, el Redirect URL debe ser exactamente: ${suggestedRedirect}`;
+        } else if (parsed.reason === 'missing_secret') {
+          errorMessage = 'Configuración del servidor incompleta (ENCRYPTION_KEY).';
+          hint = 'Contacta al administrador. ENCRYPTION_KEY debe estar definido en Railway.';
+        } else if (parsed.reason === 'invalid_format') {
+          errorMessage = 'El enlace de autorización no es válido.';
+        }
+
+        logger.error('[OAuth Callback] Invalid state', {
+          service: 'marketplace-oauth',
+          marketplace,
+          reason: parsed.reason,
+          stateLength: state.length
+        });
+
+        const returnUrlState = getFrontendReturnBaseUrl() + '/api-settings';
         return res.status(200).send(`
           <!DOCTYPE html>
           <html>

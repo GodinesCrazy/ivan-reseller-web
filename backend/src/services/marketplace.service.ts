@@ -291,7 +291,13 @@ export class MarketplaceService {
     const cred = await this.getCredentials(userId, 'ebay', environment);
     const appId = (cred?.credentials?.appId || process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
     const certId = (cred?.credentials?.certId || process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
-    let redirectUri = (cred?.credentials?.redirectUri || process.env.EBAY_RUNAME || process.env.EBAY_REDIRECT_URI || '').trim();
+    const runame = (process.env.EBAY_RUNAME || '').trim();
+    const explicitRedirect = (cred?.credentials?.redirectUri || process.env.EBAY_REDIRECT_URI || '').trim();
+    const backendUrl = (process.env.BACKEND_URL || process.env.RAILWAY_STATIC_URL || '').replace(/\/$/, '');
+    const canonicalBackend = backendUrl ? `${backendUrl}/api/marketplace-oauth/oauth/callback/ebay` : '';
+    const frontendBase = (process.env.FRONTEND_URL || process.env.WEB_BASE_URL || 'https://www.ivanreseller.com').replace(/\/$/, '');
+    const defaultRedirect = canonicalBackend || explicitRedirect || `${frontendBase}/api/marketplace-oauth/oauth/callback/ebay`;
+    const redirectUri = runame || explicitRedirect || canonicalBackend || defaultRedirect;
     // eBay requiere RuName (no URL). Configurar EBAY_RUNAME o EBAY_REDIRECT_URI en env.
     if (!appId || !certId || !redirectUri) {
       throw new AppError(
