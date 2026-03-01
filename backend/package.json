@@ -50,6 +50,7 @@
     "test-railway-ready": "tsx scripts/test-railway-ready.ts",
     "check-verifier-env": "tsx scripts/check-verifier-env.ts",
     "verify-oauth-db": "tsx scripts/verify-oauth-db.ts",
+    "diagnose:ebay": "tsx scripts/diagnose-ebay-credentials.ts",
     "repair:affiliate": "tsx scripts/repair-affiliate-credentials.ts",
     "test-real-placeOrder": "tsx scripts/test-real-placeOrder.ts",
     "bootstrap-env": "node scripts/ensure-env-local.js",

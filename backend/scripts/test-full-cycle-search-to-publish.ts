@@ -16,8 +16,20 @@ import { config } from 'dotenv';
 config({ path: path.join(process.cwd(), '.env'), override: false });
 config({ path: path.join(process.cwd(), '.env.local'), override: true });
 
-const REMOTE_URL = process.env.VERIFIER_TARGET_URL || process.env.API_URL;
+// ✅ FIX: Múltiples fuentes para URL remota (Railway, Vercel, etc.)
+const REMOTE_URL = (
+  process.env.VERIFIER_TARGET_URL ||
+  process.env.API_URL ||
+  process.env.BACKEND_URL ||
+  ''
+).replace(/\/$/, '');
 const INTERNAL_SECRET = process.env.INTERNAL_RUN_SECRET;
+
+/** Detecta si DATABASE_URL apunta a Railway (DB remota) */
+function isRailwayDb(): boolean {
+  const u = process.env.DATABASE_URL || '';
+  return /railway|rlwy\.net|railway\.app/i.test(u);
+}
 
 async function runRemote(): Promise<number> {
   if (!REMOTE_URL || !INTERNAL_SECRET) return -1;
@@ -237,6 +249,16 @@ async function main(): Promise<number> {
   const remoteCode = await runRemote();
   if (remoteCode >= 0) {
     process.exit(remoteCode);
+    return;
+  }
+  // ✅ FIX: Si DB es Railway y no tenemos remote config, main() fallará por ENCRYPTION_KEY mismatch
+  if (isRailwayDb() && (!REMOTE_URL || !INTERNAL_SECRET)) {
+    console.error('\n⚠️  DATABASE_URL apunta a Railway pero falta config para ejecutar en el servidor.');
+    console.error('   Las credenciales OAuth están encriptadas con la clave de Railway.');
+    console.error('   Ejecuta contra el backend:\n');
+    console.error('   API_URL=https://tu-backend.railway.app INTERNAL_RUN_SECRET=<de Railway Variables> npm run test:search-to-publish\n');
+    console.error('   O copia ENCRYPTION_KEY de Railway a .env.local para ejecutar localmente.\n');
+    process.exit(1);
     return;
   }
   return main();
