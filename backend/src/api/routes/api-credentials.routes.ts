@@ -273,7 +273,13 @@ router.get('/minimum-dropshipping', async (req: Request, res: Response, next) =>
     }
     
     const userId = req.user.userId;
-    
+    const forceRefresh = req.query.refresh === '1' || req.query.oauth_refresh === '1';
+    if (forceRefresh) {
+      await apiAvailability.clearAPICache(userId, 'aliexpress-dropshipping').catch(() => {});
+      await apiAvailability.clearAPICache(userId, 'ebay').catch(() => {});
+      await apiAvailability.clearAPICache(userId, 'mercadolibre').catch(() => {});
+    }
+
     // Obtener estados de todas las APIs
     let allStatuses: any[] = [];
     try {

@@ -444,11 +444,14 @@ export default function APISettings() {
   }, []);
 
   // ✅ FIX EBAY: Recarga forzada al volver de OAuth para que el estado se refleje (evita cache/timing)
+  // ✅ FIX ALIEXPRESS DROPSHIPPING: Recargar también "APIs Mínimas" para que pase a verde al completar OAuth
   useEffect(() => {
     if (searchParams.get('oauth') === 'success') {
       loadCredentials(true); // Primera carga con refresh=1 para limpiar cache del backend
+      loadMinimumDropshippingAPIs(true); // Actualizar sección "APIs Mínimas" con refresh (aliexpress-dropshipping, ebay, etc.)
       const t1 = setTimeout(() => loadCredentials(true), 800);
       const t2 = setTimeout(() => loadCredentials(true), 2200);
+      const t3 = setTimeout(() => loadMinimumDropshippingAPIs(true), 1000); // Recarga adicional con refresh por si hay cache
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         next.delete('oauth');
@@ -458,6 +461,7 @@ export default function APISettings() {
       return () => {
         clearTimeout(t1);
         clearTimeout(t2);
+        clearTimeout(t3);
       };
     }
   }, [searchParams.get('oauth')]);
@@ -566,10 +570,12 @@ export default function APISettings() {
   }, [token, user]);
 
   // ✅ Función para cargar APIs mínimas de dropshipping
-  const loadMinimumDropshippingAPIs = async () => {
+  const loadMinimumDropshippingAPIs = async (forceRefresh = false) => {
     setLoadingMinimumAPIs(true);
     try {
-      const response = await api.get('/api/credentials/minimum-dropshipping');
+      const response = await api.get('/api/credentials/minimum-dropshipping', {
+        params: forceRefresh ? { refresh: 1 } : undefined,
+      });
       // ✅ FIX: Proteger contra respuestas inválidas
       if (response.data?.success && response.data?.data) {
         setMinimumDropshippingAPIs(response.data.data);
@@ -2292,15 +2298,18 @@ export default function APISettings() {
         
         toast.success('✅ Autorización OAuth completada exitosamente');
         // ✅ CORRECCIÓN: Recargar credenciales y estados con delay para asegurar que el backend procese el cambio
+        // ✅ FIX: Recargar también "APIs Mínimas" para que pase a verde (aliexpress-dropshipping, ebay, etc.)
         setTimeout(async () => {
           try {
             await fetchAuthStatuses();
-            await loadCredentials();
+            await loadCredentials(true);
+            await loadMinimumDropshippingAPIs(true);
             // ✅ CORRECCIÓN: Forzar recarga adicional después de un momento para asegurar que el token se detecte
             setTimeout(async () => {
               try {
-                await loadCredentials();
+                await loadCredentials(true);
                 await fetchAuthStatuses();
+                await loadMinimumDropshippingAPIs(true);
                 toast.success('✅ Credenciales actualizadas correctamente');
               } catch (err) {
                 log.warn('Error en recarga adicional después de OAuth success:', err);
@@ -2345,16 +2354,18 @@ export default function APISettings() {
 
       toast.success('✅ Autorización OAuth completada exitosamente');
       
-      // Recargar credenciales y estados
+      // Recargar credenciales y estados (incluye "APIs Mínimas" para que pase a verde)
       setTimeout(async () => {
         try {
           await fetchAuthStatuses();
-          await loadCredentials();
+          await loadCredentials(true);
+          await loadMinimumDropshippingAPIs(true);
           // Recarga adicional para asegurar que el token se detecte
           setTimeout(async () => {
             try {
-              await loadCredentials();
+              await loadCredentials(true);
               await fetchAuthStatuses();
+              await loadMinimumDropshippingAPIs(true);
               toast.success('✅ Credenciales actualizadas correctamente');
             } catch (err) {
               log.warn('Error en recarga adicional después de OAuth success:', err);
