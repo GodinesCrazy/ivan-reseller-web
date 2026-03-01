@@ -4,6 +4,18 @@ Pasos para completar la autorizaci�n OAuth de AliExpress Dropshipping y activa
 
 ---
 
+## Configuración actual (IvanResellerDS2)
+
+| Campo | Valor |
+|-------|--------|
+| App Key | `528624` |
+| App Secret | `nj9CX0uDjcSNrUE9yoX0Gh1uY4LLnGZ6` |
+| Callback URL | `https://ivanreseller.com/api/marketplace-oauth/callback` |
+| rail.txt | Incluye APP_KEY, APP_SECRET, REDIRECT_URI para IvanResellerDS2 |
+| inject-apis | Ya ejecutado; .env.local tiene estas variables |
+
+---
+
 ## Requisitos previos
 
 1. **App en AliExpress Open Platform** (Dropshipping)

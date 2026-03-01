@@ -39,8 +39,8 @@ const keys = {
   ALIEXPRESS_APP_SECRET: null,
   ALIEXPRESS_TRACKING_ID: (content.match(/ALIEXPRESS_AFFILIATE_TRACKING_ID=(\S+)/i) || [])[1] || 'ivanreseller',
   ALIEXPRESS_AFFILIATE_TRACKING_ID: (content.match(/ALIEXPRESS_AFFILIATE_TRACKING_ID=(\S+)/i) || [])[1],
-  // AliExpress Dropshipping
-  ALIEXPRESS_DROPSHIPPING_APP_KEY: null,
+  // AliExpress Dropshipping (rail.txt puede sobrescribir APIS2 para IvanResellerDS2)
+  ALIEXPRESS_DROPSHIPPING_APP_KEY: (content.match(/ALIEXPRESS_DROPSHIPPING_APP_KEY\s*=\s*(\S+)/) || [])[1],
   ALIEXPRESS_DROPSHIPPING_APP_SECRET: (content.match(/ALIEXPRESS_DROPSHIPPING_APP_SECRET\s*=\s*(\S+)/) || [])[1],
   ALIEXPRESS_DROPSHIPPING_REDIRECT_URI: (content.match(/ALIEXPRESS_DROPSHIPPING_REDIRECT_URI\s*=\s*(\S+)/) || [])[1],
   ALIEXPRESS_DROPSHIPPING_TRACKING_ID: (content.match(/ALIEXPRESS_DROPSHIPPING_TRACKING_ID=(\S+)/i) || [])[1],
@@ -105,8 +105,7 @@ if (dsIdx >= 0) {
   const dsBlock = content.substring(dsIdx, dsIdx + 600);
   const dsKey = dsBlock.match(/AppKey\s*\n\s*(\d+)/);
   const dsSecret = dsBlock.match(/App Secret\s*\n\s*([A-Za-z0-9]+)/);
-  if (dsKey) keys.ALIEXPRESS_DROPSHIPPING_APP_KEY = dsKey[1];
-  // Preferir ALIEXPRESS_DROPSHIPPING_APP_SECRET= explícito (rail.txt) sobre APIS2
+  if (dsKey && !keys.ALIEXPRESS_DROPSHIPPING_APP_KEY) keys.ALIEXPRESS_DROPSHIPPING_APP_KEY = dsKey[1];
   if (dsSecret && !keys.ALIEXPRESS_DROPSHIPPING_APP_SECRET) keys.ALIEXPRESS_DROPSHIPPING_APP_SECRET = dsSecret[1];
 }
 // AliExpress Affiliate (Affiliates API)
