@@ -1,6 +1,6 @@
-# Guía: AliExpress Dropshipping OAuth
+# Guï¿½a: AliExpress Dropshipping OAuth
 
-Pasos para completar la autorización OAuth de AliExpress Dropshipping y activar la compra automatizada.
+Pasos para completar la autorizaciï¿½n OAuth de AliExpress Dropshipping y activar la compra automatizada.
 
 ---
 
@@ -12,7 +12,7 @@ Pasos para completar la autorización OAuth de AliExpress Dropshipping y activar 
    - Registrar la **Redirect URI** exacta
 
 2. **Variables de entorno en Railway**
-   - `BACKEND_URL` = URL pública del backend (ej. `https://ivan-reseller-backend.up.railway.app`)
+   - `BACKEND_URL` = URL pï¿½blica del backend (ej. `https://ivan-reseller-backend.up.railway.app`)
    - O bien `ALIEXPRESS_DROPSHIPPING_REDIRECT_URI` = URL completa del callback
 
 ---
@@ -27,7 +27,7 @@ La Redirect URI que usa el backend es:
 
 Ejemplo: `https://tu-backend.railway.app/api/marketplace-oauth/callback`
 
-En [AliExpress Open Platform](https://open.aliexpress.com/) ? Tu app ? Configuración ? **Authorized Redirect URI**, a?ade esa URL exacta (sin barra final).
+En [AliExpress Open Platform](https://open.aliexpress.com/) ? Tu app ? Configuraciï¿½n ? **Authorized Redirect URI**, a?ade esa URL exacta (sin barra final).
 
 ---
 
@@ -39,36 +39,36 @@ En [AliExpress Open Platform](https://open.aliexpress.com/) ? Tu app ? Configura
    - **App Secret**
 3. Pulsar **Guardar**
 
-> Sin estos campos guardados, el botón "Autorizar OAuth" fallará con "Credenciales incompletas".
+> Sin estos campos guardados, el botï¿½n "Autorizar OAuth" fallarï¿½ con "Credenciales incompletas".
 
 ---
 
 ## Paso 3: Autorizar OAuth
 
 1. En la tarjeta de **AliExpress Dropshipping API**
-2. Pulsar el botón **Autorizar OAuth**
-3. Se abrirá la página de autorización de AliExpress
-4. Iniciar sesión (si hace falta) y aceptar los permisos
-5. Tras autorizar, volverás a API Settings
-6. El estado debería pasar a **Configurada y funcionando**
+2. Pulsar el botï¿½n **Autorizar OAuth**
+3. Se abrirï¿½ la pï¿½gina de autorizaciï¿½n de AliExpress
+4. Iniciar sesiï¿½n (si hace falta) y aceptar los permisos
+5. Tras autorizar, volverï¿½s a API Settings
+6. El estado deberï¿½a pasar a **Configurada y funcionando**
 
 ---
 
 ## Paso 4: Verificar
 
-- En API Settings, la tarjeta de AliExpress Dropshipping debería estar en verde
+- En API Settings, la tarjeta de AliExpress Dropshipping deberï¿½a estar en verde
 - Opcional: `GET /api/debug/aliexpress-dropshipping-credentials` (autenticado) para comprobar que hay accessToken en BD
 
 ---
 
 ## Problemas frecuentes
 
-| Problema | Solución |
+| Problema | Soluciï¿½n |
 |----------|----------|
 | "Credenciales no encontradas" | Guardar App Key y App Secret antes de OAuth |
 | "Invalid redirect_uri" | A?adir la misma URL en AliExpress Open Platform |
-| "IncompleteSignature" | Ver actualización 2026-02-27 en OAUTH_ACTIVATION_REPORT.md |
-| Sesión perdida al volver | Verificar `return_origin` y que BACKEND_URL coincida con el dominio |
+| "IncompleteSignature" / "missing access_token" | App Key y App Secret deben ser del MISMO app. Si auth muestra client_id=528624 (IvanResellerDS2), usa su App Secret. Si usas 522578 (IvanReseller), usa su App Secret. Callback: `https://ivanreseller.com/api/marketplace-oauth/callback`. No mezcles apps. Ver tambiï¿½n 2026-02-27 en OAUTH_ACTIVATION_REPORT.md |
+| Sesiï¿½n perdida al volver | Verificar `return_origin` y que BACKEND_URL coincida con el dominio |
 
 ---
 
@@ -79,4 +79,4 @@ El backend usa `getAliExpressDropshippingRedirectUri()`:
 - Si existe `ALIEXPRESS_DROPSHIPPING_REDIRECT_URI` ? se usa
 - Si no ? `{BACKEND_URL}/api/marketplace-oauth/callback`
 
-En producción, `BACKEND_URL` debe estar configurado (o la variable explícita).
+En producciï¿½n, `BACKEND_URL` debe estar configurado (o la variable explï¿½cita).
