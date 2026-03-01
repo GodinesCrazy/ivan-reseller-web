@@ -3,9 +3,113 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/error.middleware';
 import { toNumber } from '../../utils/decimal.utils';
+import { getSalesLedger } from '../../services/sales-ledger.service';
+import { getWorkingCapitalDetail } from '../../services/working-capital-detail.service';
+import { calculateMaxNewListingsAllowed } from '../../services/capital-allocation.engine';
+import { getProductPerformance } from '../../services/product-performance.engine';
+import { computeFinanceRisk } from '../../services/finance-risk.engine';
 
 const router = Router();
 router.use(authenticate);
+
+/**
+ * GET /api/finance/sales-ledger
+ * Phase 1: Forensic complete sales ledger per sale
+ */
+router.get('/sales-ledger', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user!.userId;
+    const range = (req.query.range as string) || 'month';
+    const entries = await getSalesLedger(userId, range as any);
+    res.json({ success: true, sales: entries });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/finance/working-capital-detail
+ * Phase 2: Working capital intelligence
+ */
+router.get('/working-capital-detail', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user!.userId;
+    const detail = await getWorkingCapitalDetail(userId);
+    res.json({ success: true, detail });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/finance/leverage-and-risk
+ * Phase 3+5: Leverage, capital allocation, and finance risk
+ */
+router.get('/leverage-and-risk', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user!.userId;
+    const wc = await getWorkingCapitalDetail(userId);
+    const allocation = await calculateMaxNewListingsAllowed(userId, wc.totalCapital);
+    const risk = await computeFinanceRisk(userId, wc.totalCapital);
+    res.json({
+      success: true,
+      leverage: {
+        iclr: allocation.iclr,
+        olr: allocation.olr,
+        riskLevel: allocation.riskLevel,
+      },
+      capitalAllocation: {
+        canPublish: allocation.canPublish,
+        remainingExposure: allocation.remainingExposure,
+        maxExposureAllowed: allocation.maxExposureAllowed,
+        currentExposure: allocation.currentExposure,
+      },
+      risk: {
+        worstCaseCost: risk.worstCaseCost,
+        capitalBuffer: risk.capitalBuffer,
+        bufferPercent: risk.bufferPercent,
+        capitalTurnover: risk.capitalTurnover,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/finance/top-products
+ * Phase 4: Product performance / winners
+ */
+router.get('/top-products', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user!.userId;
+    const days = parseInt((req.query.days as string) || '90', 10);
+    const entries = await getProductPerformance(userId, days);
+    res.json({ success: true, products: entries });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/finance/capital-allocation
+ * Phase 3: Capital allocation status for publishing
+ */
+router.get('/capital-allocation', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user!.userId;
+    const supplierCost = parseFloat((req.query.supplierCost as string) || '0');
+    const wc = await getWorkingCapitalDetail(userId);
+    const allocation = await calculateMaxNewListingsAllowed(
+      userId,
+      wc.totalCapital,
+      supplierCost > 0 ? supplierCost : undefined
+    );
+    res.json({ success: true, allocation });
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * GET /api/finance/summary

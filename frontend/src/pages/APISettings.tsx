@@ -649,20 +649,35 @@ export default function APISettings() {
       });
       setBackendApiDefinitions(backendDefs);
       
-      // ✅ FIX: Cargar credenciales configuradas desde /api/credentials con fallback
+      // ✅ FIX: Cargar credenciales configuradas desde /api/credentials con fallback y retry
       let configuredApisRaw: BackendCredentialRecord[] = [];
-      try {
+      const fetchCreds = async (): Promise<void> => {
         const credsResponse = await api.get('/api/credentials');
-        // ✅ FIX: Proteger contra respuestas inválidas
-        configuredApisRaw = Array.isArray(credsResponse.data?.data)
-          ? credsResponse.data.data
-          : [];
+        const data = credsResponse.data?.data;
+        configuredApisRaw = Array.isArray(data) ? data : [];
+        // Si backend retorna 200 pero con error en body, mostrarlo solo si no hay datos
+        const backendError = credsResponse.data?.error;
+        if (typeof backendError === 'string' && configuredApisRaw.length === 0) {
+          setError(backendError);
+        }
+      };
+      try {
+        await fetchCreds();
       } catch (credsError: any) {
-        log.error('Error loading credentials:', credsError);
-        // ✅ FIX: Fallback a array vacío en caso de error
-        configuredApisRaw = [];
-        // Mostrar error al usuario pero no crashear
-        setError('No se pudieron cargar las credenciales. Intenta nuevamente.');
+        log.error('Error loading credentials (first attempt):', credsError);
+        // ✅ Retry tras 2s por errores transitorios (429, timeout, etc.)
+        try {
+          await new Promise((r) => setTimeout(r, 2000));
+          await fetchCreds();
+        } catch (retryError: any) {
+          log.error('Error loading credentials (retry failed):', retryError);
+          configuredApisRaw = [];
+          const status = credsError?.response?.status;
+          const msg = status === 429
+            ? 'Demasiadas solicitudes. Espera unos segundos y haz clic en Reintentar.'
+            : credsError?.response?.data?.message || 'No se pudieron cargar las credenciales. Intenta nuevamente.';
+          setError(msg);
+        }
       }
       
       // ✅ FIX: Mapear 'serpapi' a 'googletrends' para el frontend
@@ -3706,7 +3721,7 @@ export default function APISettings() {
                   <button
                     onClick={() => {
                       setError(null);
-                      loadCredentials();
+                      loadCredentials(true);
                     }}
                     className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition flex items-center gap-2 text-sm"
                   >

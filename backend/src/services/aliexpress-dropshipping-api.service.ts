@@ -547,7 +547,14 @@ export class AliExpressDropshippingAPIService {
         name: string;
         signMethod: 'sha256' | 'md5';
         buildSign: (params: Record<string, string>) => string;
+        includeRedirectUri?: boolean;
       }> = [
+        {
+          name: 'sha256-with-redirect-uri',
+          signMethod: 'sha256',
+          includeRedirectUri: true,
+          buildSign: (params) => generateTokenCreateSignature(params, appSecret),
+        },
         {
           name: 'case2-no-secret',
           signMethod: 'sha256',
@@ -583,12 +590,14 @@ export class AliExpressDropshippingAPIService {
           let lastResponse: any = null;
           let lastError: Error | null = null;
           for (const variant of signatureVariants) {
-            const paramsForSign = {
+            const paramsForSign: Record<string, string> = {
               ...signedParamsBase,
               sign_method: variant.signMethod,
             };
+            if (variant.includeRedirectUri && redirectUri) {
+              paramsForSign.redirect_uri = redirectUri;
+            }
             const sign = variant.buildSign(paramsForSign);
-            // redirect_uri must be sent in URL (per AliExpress docs) but NOT in signature
             const queryParams: Record<string, string> = {
               ...paramsForSign,
               sign,
@@ -711,7 +720,14 @@ export class AliExpressDropshippingAPIService {
         const elapsed = Date.now() - startTime;
         const aliCode = String(responsePayload.code ?? rawData?.code ?? '').trim();
         const aliMsg = String(responsePayload.msg ?? rawData?.msg ?? responsePayload.error_msg ?? rawData?.error_msg ?? '').trim();
-        const hint = aliCode || aliMsg ? ` AliExpress: ${aliMsg || aliCode}` : '';
+        let hint = aliCode || aliMsg ? ` AliExpress: ${aliMsg || aliCode}` : '';
+        if (aliCode === 'ApiCallLimit') {
+          hint += ' Espera unos minutos y vuelve a intentar. Revisa en AliExpress Developer Console el límite de llamadas.';
+        } else if (aliCode === 'IncompleteSignature') {
+          hint += ' Verifica que redirect_uri coincida exactamente con el configurado en la app AliExpress.';
+        } else if (!aliCode && !aliMsg) {
+          hint = ' Ensure redirect_uri matches exactly the one configured in AliExpress app and used in authorize URL.';
+        }
         logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token exchange response missing access_token', {
           responseData: rawData,
           elapsed,
@@ -719,7 +735,7 @@ export class AliExpressDropshippingAPIService {
           aliMsg,
         });
         throw new Error(
-          `Invalid response from AliExpress OAuth token endpoint: missing access_token.${hint} Ensure redirect_uri matches exactly the one configured in AliExpress app and used in authorize URL.`
+          `Invalid response from AliExpress OAuth token endpoint: missing access_token.${hint}`
         );
       }
 

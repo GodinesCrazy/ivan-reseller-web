@@ -1323,6 +1323,24 @@ export class AutopilotSystem extends EventEmitter {
       const { pendingProductsLimitService } = await import('./pending-products-limit.service');
       await pendingProductsLimitService.ensurePendingLimitNotExceeded(currentUserId, false);
 
+      // ✅ Phase 3: Capital allocation - block publishing if exposure limit exceeded
+      const { canPublishProduct } = await import('./capital-allocation.engine');
+      const { getWorkingCapitalDetail } = await import('./working-capital-detail.service');
+      const wc = await getWorkingCapitalDetail(currentUserId);
+      const allocationCheck = await canPublishProduct(
+        currentUserId,
+        wc.totalCapital,
+        opportunity.estimatedCost || 0
+      );
+      if (!allocationCheck.allowed) {
+        logger.warn('Autopilot: Publishing blocked by capital allocation engine', {
+          userId: currentUserId,
+          reason: allocationCheck.reason,
+          estimatedCost: opportunity.estimatedCost,
+        });
+        return { success: false };
+      }
+
       // ✅ Usar transacción para crear producto y listing de forma atómica
       const product = await prisma.$transaction(async (tx) => {
         // Create product in database (con userId del usuario)

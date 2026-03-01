@@ -4,15 +4,24 @@ Pasos para completar la autorizaci�n OAuth de AliExpress Dropshipping y activa
 
 ---
 
-## Configuración actual (IvanResellerDS2)
+## Configuración actual (Ivan Reseller – cuenta ivanmarty5338@gmail.com)
 
 | Campo | Valor |
 |-------|--------|
-| App Key | `528624` |
-| App Secret | `nj9CX0uDjcSNrUE9yoX0Gh1uY4LLnGZ6` |
+| App Key | `522578` |
+| App Secret | `Xevol0LcINIL9fL3yLqdwG4WfNmkioGp` |
 | Callback URL | `https://ivanreseller.com/api/marketplace-oauth/callback` |
-| rail.txt | Incluye APP_KEY, APP_SECRET, REDIRECT_URI para IvanResellerDS2 |
-| inject-apis | Ya ejecutado; .env.local tiene estas variables |
+| rail.txt | ✅ Incluye APP_KEY, APP_SECRET, REDIRECT_URI |
+| .env.local | ✅ inject-apis ya ejecutado |
+
+**Si OAuth falla con IncompleteSignature** (credenciales mixtas 528624 vs 522578):  
+Ejecutar `cd backend && npm run clear:aliexpress-dropshipping` para borrar credenciales de BD y forzar uso de env (522578).
+
+**Importante:** En AliExpress Open Platform → Ivan Reseller (522578) → Basic Information → **Callback URL** debe ser exactamente:
+```
+https://ivanreseller.com/api/marketplace-oauth/callback
+```
+Si no coincide, editarlo en la consola de AliExpress.
 
 ---
 
