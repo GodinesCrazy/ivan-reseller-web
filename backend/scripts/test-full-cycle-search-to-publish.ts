@@ -17,12 +17,17 @@ config({ path: path.join(process.cwd(), '.env'), override: false });
 config({ path: path.join(process.cwd(), '.env.local'), override: true });
 
 // ✅ FIX: Múltiples fuentes para URL remota (Railway, Vercel, etc.)
-const REMOTE_URL = (
+// localhost:3000 suele ser frontend; backend está en :4000
+let _remoteUrl = (
   process.env.VERIFIER_TARGET_URL ||
   process.env.API_URL ||
   process.env.BACKEND_URL ||
   ''
 ).replace(/\/$/, '');
+if (_remoteUrl && /localhost:3000|127\.0\.0\.1:3000/.test(_remoteUrl)) {
+  _remoteUrl = _remoteUrl.replace(/:3000/, ':4000');
+}
+const REMOTE_URL = _remoteUrl;
 const INTERNAL_SECRET = process.env.INTERNAL_RUN_SECRET;
 
 /** Detecta si DATABASE_URL apunta a Railway (DB remota) */

@@ -21,7 +21,11 @@ if (!apisFile) {
   process.exit(1);
 }
 
-const content = fs.readFileSync(apisFile, 'utf8');
+let content = fs.readFileSync(apisFile, 'utf8');
+const railPath = path.join(projectRoot, 'rail.txt');
+if (fs.existsSync(railPath)) {
+  content += '\n' + fs.readFileSync(railPath, 'utf8');
+}
 
 const keys = {
   SERP_API_KEY: (content.match(/SerpAPI Key\s+(\S+)/i) || [])[1],
@@ -37,6 +41,7 @@ const keys = {
   EBAY_REDIRECT_URI: (content.match(/EBAY_RUNAME\s*=\s*(\S+)/) || [])[1] || (content.match(/RuName\s*[:\s]+(\S+)/i) || [])[1] || (content.match(/([A-Za-z]+_[A-Za-z]+-[A-Za-z]+-[A-Za-z0-9-]+)/) || [])[1],
   EBAY_RUNAME: (content.match(/EBAY_RUNAME\s*=\s*(\S+)/) || [])[1] || (content.match(/RuName\s*[:\s]+(\S+)/i) || [])[1] || (content.match(/([A-Za-z]+_[A-Za-z]+-[A-Za-z]+-[A-Za-z0-9-]+)/) || [])[1],
   INTERNAL_RUN_SECRET: (content.match(/INTERNAL_RUN_SECRET\s*=\s*(\S+)/) || [])[1],
+  ENCRYPTION_KEY: (content.match(/ENCRYPTION_KEY\s*=\s*(\S+)/) || [])[1],
   GROQ_API_KEY: (content.match(/groq\s*:\s*(gsk_[A-Za-z0-9]+)/i) || [])[1],
   GEMINI_API_KEY: (content.match(/GEMINI_API_KEY\s+(AIzaSy[A-Za-z0-9_-]+)/i) || [])[1] || (content.match(/(AIzaSy[A-Za-z0-9_-]+)/) || [])[1],
   PAYPAL_CLIENT_ID: null,
@@ -111,7 +116,13 @@ if (!map.get('JWT_SECRET') || map.get('JWT_SECRET') === 'REPLACE_ME' || (map.get
   map.set('JWT_SECRET', crypto.randomBytes(32).toString('hex'));
   updates.push('JWT_SECRET');
 }
-if (!map.get('ENCRYPTION_KEY') || map.get('ENCRYPTION_KEY') === 'REPLACE_ME' || (map.get('ENCRYPTION_KEY') || '').length < 32) {
+// ENCRYPTION_KEY: usar la de Railway (APIS2/rail.txt) para desencriptar credenciales OAuth
+if (keys.ENCRYPTION_KEY && keys.ENCRYPTION_KEY.length >= 32) {
+  if (map.get('ENCRYPTION_KEY') !== keys.ENCRYPTION_KEY) {
+    map.set('ENCRYPTION_KEY', keys.ENCRYPTION_KEY);
+    updates.push('ENCRYPTION_KEY');
+  }
+} else if (!map.get('ENCRYPTION_KEY') || map.get('ENCRYPTION_KEY') === 'REPLACE_ME' || (map.get('ENCRYPTION_KEY') || '').length < 32) {
   map.set('ENCRYPTION_KEY', crypto.randomBytes(32).toString('hex'));
   updates.push('ENCRYPTION_KEY');
 }
