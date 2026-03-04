@@ -4,8 +4,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Package, CheckCircle, XCircle } from 'lucide-react';
-import { getOrder, type Order } from '@/services/orders.api';
+import { ArrowLeft, Package, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { getOrder, retryOrderFulfill, type Order } from '@/services/orders.api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -16,7 +16,32 @@ export default function OrderDetail() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryLoading, setRetryLoading] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const canRetryFulfill =
+    order?.status === 'FAILED' &&
+    order?.errorMessage?.includes('FAILED_INSUFFICIENT_FUNDS') &&
+    (order?.fulfillRetryCount ?? 0) < 3;
+
+  const handleRetryFulfill = async () => {
+    if (!id || !order || !canRetryFulfill) return;
+    setRetryLoading(true);
+    setRetryError(null);
+    try {
+      const result = await retryOrderFulfill(id);
+      if (result.success) {
+        await fetchOrder();
+      } else {
+        setRetryError(result.error || 'Retry failed');
+      }
+    } catch (err: any) {
+      setRetryError(err?.response?.data?.error || err?.message || 'Error al reintentar');
+    } finally {
+      setRetryLoading(false);
+    }
+  };
 
   const fetchOrder = async () => {
     if (!id) return;
@@ -100,9 +125,27 @@ export default function OrderDetail() {
         )}
 
         {order.status === 'FAILED' && order.errorMessage && (
-          <div className="flex items-center gap-2 p-4 mb-4 text-red-800 bg-red-50 rounded-lg">
-            <XCircle className="w-5 h-5 flex-shrink-0" />
-            <span>{order.errorMessage}</span>
+          <div className="p-4 mb-4 text-red-800 bg-red-50 rounded-lg space-y-2">
+            <div className="flex items-center gap-2">
+              <XCircle className="w-5 h-5 flex-shrink-0" />
+              <span>{order.errorMessage}</span>
+            </div>
+            {canRetryFulfill && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleRetryFulfill}
+                  disabled={retryLoading}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${retryLoading ? 'animate-spin' : ''}`} />
+                  Reintentar compra
+                </button>
+                {retryError && (
+                  <p className="mt-2 text-sm text-red-700">{retryError}</p>
+                )}
+              </div>
+            )}
           </div>
         )}
 

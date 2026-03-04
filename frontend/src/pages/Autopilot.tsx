@@ -484,6 +484,40 @@ export default function Autopilot() {
     }
   };
 
+  const applyTestListingPreset = async () => {
+    const testValues = {
+      minProfitUsd: 1,
+      minSupplierPrice: 0.5,
+      minRoiPct: 15,
+      maxActiveProducts: 1,
+    };
+    setSettingsForm((prev) => ({ ...prev, ...testValues }));
+    setSavingSettings(true);
+    try {
+      await api.put('/api/autopilot/config', {
+        ...settingsForm,
+        ...testValues,
+        maxActiveProducts: testValues.maxActiveProducts,
+        minProfitUsd: testValues.minProfitUsd,
+        minRoiPct: testValues.minRoiPct,
+        minSupplierPrice: testValues.minSupplierPrice,
+        maxSupplierPrice: settingsForm.maxSupplierPrice || undefined,
+        maxDuplicatesPerProduct: settingsForm.maxDuplicatesPerProduct || undefined,
+        autoRepeatWinners: settingsForm.autoRepeatWinners,
+        deleteListingsAfterDays: settingsForm.deleteListingsAfterDays || undefined,
+        repricingIntervalHours: settingsForm.repricingIntervalHours,
+        targetCountry: settingsForm.targetCountry || undefined,
+      });
+      toast.success(
+        'Configuración de prueba guardada. Ve a Oportunidades (o Panel → Tendencias), elige un producto barato y publícalo en eBay para probar el ciclo.'
+      );
+    } catch (error: any) {
+      toast.error('Error al aplicar preset: ' + (error.response?.data?.error || error?.message));
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   const toggleAutopilot = async () => {
     try {
       if (autopilotRunning) {
@@ -1005,7 +1039,15 @@ export default function Autopilot() {
                 <label htmlFor="autoRepeatWinners" className="text-sm font-medium text-gray-700 dark:text-gray-300">Auto repeat winning products</label>
               </div>
             </div>
-            <div className="flex justify-end">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={applyTestListingPreset}
+                disabled={savingSettings}
+                className="px-4 py-2 border border-primary-600 text-primary-600 dark:border-primary-400 dark:text-primary-400 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-50"
+              >
+                Usar valores para 1 artículo de prueba (más económico)
+              </button>
               <button
                 type="button"
                 onClick={saveAutopilotSettings}

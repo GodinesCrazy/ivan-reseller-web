@@ -18,8 +18,22 @@ export interface Order {
   aliexpressOrderId?: string;
   productUrl?: string;
   errorMessage?: string;
+  fulfillRetryCount?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RetryFulfillResponse {
+  success: boolean;
+  orderId: string;
+  status: string;
+  error?: string;
+  aliexpressOrderId?: string;
+}
+
+export async function retryOrderFulfill(orderId: string): Promise<RetryFulfillResponse> {
+  const res = await api.post<RetryFulfillResponse>(`/api/orders/${orderId}/retry-fulfill`);
+  return res.data;
 }
 
 export async function getOrder(id: string): Promise<Order> {

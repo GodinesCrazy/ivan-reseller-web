@@ -161,23 +161,35 @@ export class AutopilotSystem extends EventEmitter {
     // ✅ ALTA PRIORIDAD: Inicializar MarketplaceService
     this.marketplaceService = new MarketplaceService();
     
-    // Default configuration
+    // Default configuration (orientada a ~$3000/mes: 150–250 listados, margen y ROI razonables)
     this.config = {
       enabled: false,
-      cycleIntervalMinutes: 60,
+      cycleIntervalMinutes: 90,
       publicationMode: 'manual',
       targetMarketplace: 'ebay',
       maxOpportunitiesPerCycle: 5,
+      maxActiveProducts: 250,
+      minSupplierPrice: 2,
+      maxSupplierPrice: 35,
+      repricingIntervalHours: 12,
+      targetCountry: 'US',
       searchQueries: [
-        'organizador cocina',
-        'luces solares',
-        'auriculares bluetooth',
-        'soporte móvil coche',
-        'bandas resistencia'
+        'phone case',
+        'wireless earbuds',
+        'usb charger',
+        'led strip',
+        'car phone holder',
+        'smart watch band',
+        'portable bluetooth speaker',
+        'kitchen organizer',
+        'yoga mat',
+        'resistance bands',
+        'desk organizer',
+        'cable organizer',
       ],
-      workingCapital: 500,
-      minProfitUsd: 10,
-      minRoiPct: 50,
+      workingCapital: 1200,
+      minProfitUsd: 8,
+      minRoiPct: 40,
       optimizationEnabled: false,
     };
 
@@ -1134,6 +1146,19 @@ export class AutopilotSystem extends EventEmitter {
     if (!userId || userId <= 0) {
       throw new Error('processOpportunities: userId is required and must be greater than 0');
     }
+
+    const maxCap = this.config.maxActiveProducts ?? 0;
+    if (maxCap > 0) {
+      const activeCount = await prisma.marketplaceListing.count({ where: { userId } });
+      if (activeCount >= maxCap) {
+        logger.info('Autopilot: Skipping publish - max active listings reached', {
+          userId,
+          activeCount,
+          maxCap,
+        });
+        return { published: 0, approved: 0, capitalActuallyUsed: 0 };
+      }
+    }
     
     let published = 0;
     let approved = 0;
@@ -1144,6 +1169,17 @@ export class AutopilotSystem extends EventEmitter {
 
     for (const opp of opportunities) {
       try {
+        if (maxCap > 0) {
+          const currentCount = await prisma.marketplaceListing.count({ where: { userId: currentUserId } });
+          if (currentCount >= maxCap) {
+            logger.info('Autopilot: Max active listings reached, stopping cycle', {
+              userId: currentUserId,
+              currentCount,
+              maxCap,
+            });
+            break;
+          }
+        }
         // ✅ FULL AUTOMATIC MODE: Treat as automatic when autopilot is running
         const effectiveMode = this.isRunning ? 'automatic' : currentPublishMode;
         if (effectiveMode === 'automatic') {

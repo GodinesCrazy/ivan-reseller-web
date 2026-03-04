@@ -823,6 +823,7 @@ model Order {
   aliexpressOrderId String?
   productUrl        String?
   errorMessage      String?  // Stored on FAILED
+  fulfillRetryCount Int      @default(0) // Number of retry attempts for re-fulfill (cap at 3)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

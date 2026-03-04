@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "fulfillRetryCount" INTEGER NOT NULL DEFAULT 0;

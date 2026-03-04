@@ -14,6 +14,7 @@ import { getToken } from './aliexpress-token.store';
 import { aliexpressAffiliateAPIService } from './aliexpress-affiliate-api.service';
 import fxService from './fx.service';
 import { toNumber } from '../utils/decimal.utils';
+import { retryFailedOrdersDueToFunds } from './retry-failed-orders.service';
 
 /**
  * Scheduled Tasks Service
@@ -28,6 +29,7 @@ export class ScheduledTasksService {
   private productUnpublishQueue: Queue | null = null;
   private dynamicPricingQueue: Queue | null = null;
   private aliExpressTokenRefreshQueue: Queue | null = null;
+  private retryFailedOrdersQueue: Queue | null = null;
   private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
@@ -36,6 +38,7 @@ export class ScheduledTasksService {
   private productUnpublishWorker: Worker | null = null;
   private dynamicPricingWorker: Worker | null = null;
   private aliExpressTokenRefreshWorker: Worker | null = null;
+  private retryFailedOrdersWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
 
@@ -92,6 +95,11 @@ export class ScheduledTasksService {
 
     // AliExpress OAuth token refresh: cada 1 hora
     this.aliExpressTokenRefreshQueue = new Queue('ali-express-token-refresh', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Retry orders that failed due to insufficient funds: cada 30 min
+    this.retryFailedOrdersQueue = new Queue('retry-failed-orders', {
       connection: this.bullMQRedis as any
     });
   }
@@ -271,6 +279,21 @@ export class ScheduledTasksService {
         }
       );
     }
+
+    // Retry failed orders (insufficient funds) worker
+    if (this.retryFailedOrdersQueue) {
+      this.retryFailedOrdersWorker = new Worker(
+        'retry-failed-orders',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running retry failed orders', { jobId: job.id });
+          return await retryFailedOrdersDueToFunds({ maxAgeHours: 72, maxRetriesPerOrder: 3 });
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+    }
   }
 
   private async runAliExpressTokenRefresh(): Promise<{ refreshed: boolean; reason?: string }> {
@@ -414,6 +437,21 @@ export class ScheduledTasksService {
         {
           repeat: {
             pattern: '0 * * * *' // Cada hora en el minuto 0
+          },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Retry failed orders (insufficient funds): cada 30 min
+    if (this.retryFailedOrdersQueue) {
+      this.retryFailedOrdersQueue.add(
+        'retry-failed-orders-job',
+        {},
+        {
+          repeat: {
+            pattern: '*/30 * * * *' // Every 30 minutes
           },
           removeOnComplete: 5,
           removeOnFail: 5,

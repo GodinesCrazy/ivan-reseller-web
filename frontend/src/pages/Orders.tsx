@@ -10,13 +10,32 @@ import OrderStatusBadge from '@/components/OrderStatusBadge';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { formatCurrencySimple } from '@/utils/currency';
-import type { Order } from '@/services/orders.api';
+import { retryOrderFulfill, type Order } from '@/services/orders.api';
 
 export default function Orders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const canRetryFulfill = (order: Order) =>
+    order.status === 'FAILED' &&
+    order.errorMessage?.includes('FAILED_INSUFFICIENT_FUNDS') &&
+    (order.fulfillRetryCount ?? 0) < 3;
+
+  const handleRetryFulfill = async (orderId: string) => {
+    setRetryingId(orderId);
+    setError(null);
+    try {
+      await retryOrderFulfill(orderId);
+      await fetchOrders();
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err?.message || 'Error al reintentar');
+    } finally {
+      setRetryingId(null);
+    }
+  };
 
   const fetchOrders = async () => {
     try {
@@ -98,12 +117,25 @@ export default function Orders() {
                     {new Date(order.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4">
-                    <button
-                      onClick={() => navigate(`/orders/${order.id}`)}
-                      className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
-                    >
-                      Ver <ArrowRight className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => navigate(`/orders/${order.id}`)}
+                        className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        Ver <ArrowRight className="w-4 h-4" />
+                      </button>
+                      {canRetryFulfill(order) && (
+                        <button
+                          type="button"
+                          onClick={() => handleRetryFulfill(order.id)}
+                          disabled={retryingId === order.id}
+                          className="flex items-center gap-1 text-sm text-amber-700 hover:text-amber-900 disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${retryingId === order.id ? 'animate-spin' : ''}`} />
+                          Reintentar
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
