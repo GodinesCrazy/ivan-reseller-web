@@ -329,4 +329,79 @@ router.get('/summary', async (req: Request, res: Response, next) => {
   }
 });
 
+// GET /api/dashboard/autopilot-metrics - Active listings, daily sales, profit today/month, winning products count
+router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
+  try {
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? undefined : req.user?.userId;
+    if (!userId && !isAdmin) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    if (env.SAFE_DASHBOARD_MODE) {
+      return res.json({
+        activeListings: 0,
+        dailySales: 0,
+        profitToday: 0,
+        profitMonth: 0,
+        winningProductsCount: 0,
+        _safeMode: true,
+      });
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+
+    const whereUser = userId ? { userId } : undefined;
+
+    const [activeListings, salesToday, salesMonth, productsWithSales] = await Promise.all([
+      prisma.marketplaceListing.count({ where: whereUser }),
+      prisma.sale.count({
+        where: {
+          ...whereUser,
+          createdAt: { gte: todayStart },
+          status: { not: 'CANCELLED' },
+        },
+      }),
+      prisma.sale.findMany({
+        where: {
+          ...whereUser,
+          createdAt: { gte: monthStart },
+          status: { not: 'CANCELLED' },
+        },
+        select: { netProfit: true },
+      }),
+      prisma.sale.groupBy({
+        by: ['productId'],
+        where: { ...whereUser, status: { not: 'CANCELLED' } },
+        _count: { productId: true },
+      }),
+    ]);
+
+    const profitMonth = salesMonth.reduce((sum, s) => sum + Number(s.netProfit || 0), 0);
+    const profitTodayResult = await prisma.sale.aggregate({
+      where: {
+        ...whereUser,
+        createdAt: { gte: todayStart },
+        status: { not: 'CANCELLED' },
+      },
+      _sum: { netProfit: true },
+    });
+    const profitToday = Number(profitTodayResult._sum?.netProfit ?? 0);
+
+    res.json({
+      activeListings,
+      dailySales: salesToday,
+      profitToday,
+      profitMonth,
+      winningProductsCount: productsWithSales.length,
+    });
+  } catch (error: any) {
+    logger.error('Error in /api/dashboard/autopilot-metrics', { error: error?.message, userId: req.user?.userId });
+    next(error);
+  }
+});
+
 export default router;

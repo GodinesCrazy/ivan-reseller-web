@@ -20,7 +20,11 @@ import {
   X,
   Copy,
   RefreshCw,
-  Link2
+  Link2,
+  DollarSign,
+  Package,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
@@ -73,6 +77,15 @@ interface AutopilotStatusResponse {
   config?: { targetMarketplaces?: string[]; targetMarketplace?: string };
 }
 
+/** Autopilot business metrics from GET /api/dashboard/autopilot-metrics */
+interface AutopilotMetrics {
+  activeListings: number;
+  dailySales: number;
+  profitToday: number;
+  profitMonth: number;
+  winningProductsCount: number;
+}
+
 export default function Autopilot() {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [logs, setLogs] = useState<WorkflowLog[]>([]);
@@ -80,6 +93,7 @@ export default function Autopilot() {
   const [loading, setLoading] = useState(true);
   const [autopilotRunning, setAutopilotRunning] = useState(false);
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatusResponse | null>(null);
+  const [autopilotMetrics, setAutopilotMetrics] = useState<AutopilotMetrics | null>(null);
 
   // Modals
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
@@ -93,6 +107,22 @@ export default function Autopilot() {
   // Autopilot config: marketplaces destino
   const [targetMarketplaces, setTargetMarketplaces] = useState<string[]>(['ebay']);
   const [savingConfig, setSavingConfig] = useState(false);
+
+  // Autopilot Settings (extended config)
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  const [settingsForm, setSettingsForm] = useState({
+    maxActiveProducts: 0,
+    minProfitUsd: 10,
+    minRoiPct: 50,
+    minSupplierPrice: 0,
+    maxSupplierPrice: 0,
+    maxDuplicatesPerProduct: 0,
+    autoRepeatWinners: false,
+    deleteListingsAfterDays: 0,
+    repricingIntervalHours: 6,
+    targetCountry: 'US',
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
 
   // Form state
   const [workflowForm, setWorkflowForm] = useState({
@@ -333,13 +363,40 @@ export default function Autopilot() {
 
   const loadData = async () => {
     try {
-      const [workflowsRes, statsRes] = await Promise.all([
+      const [workflowsRes, statsRes, configRes, metricsRes] = await Promise.all([
         api.get('/api/autopilot/workflows'),
-        api.get('/api/autopilot/stats')
+        api.get('/api/autopilot/stats'),
+        api.get('/api/autopilot/config').catch(() => ({ data: {} })),
+        api.get('/api/dashboard/autopilot-metrics').catch(() => ({ data: {} })),
       ]);
       
       setWorkflows(workflowsRes.data?.workflows || []);
       setStats(statsRes.data?.stats || null);
+      const cfg = configRes.data?.config;
+      if (cfg) {
+        setSettingsForm((prev) => ({
+          ...prev,
+          maxActiveProducts: cfg.maxActiveProducts ?? prev.maxActiveProducts,
+          minProfitUsd: typeof cfg.minProfitUsd === 'number' ? cfg.minProfitUsd : prev.minProfitUsd,
+          minRoiPct: typeof cfg.minRoiPct === 'number' ? cfg.minRoiPct : prev.minRoiPct,
+          minSupplierPrice: cfg.minSupplierPrice ?? prev.minSupplierPrice,
+          maxSupplierPrice: cfg.maxSupplierPrice ?? prev.maxSupplierPrice,
+          maxDuplicatesPerProduct: cfg.maxDuplicatesPerProduct ?? prev.maxDuplicatesPerProduct,
+          autoRepeatWinners: cfg.autoRepeatWinners ?? prev.autoRepeatWinners,
+          deleteListingsAfterDays: cfg.deleteListingsAfterDays ?? prev.deleteListingsAfterDays,
+          repricingIntervalHours: cfg.repricingIntervalHours ?? prev.repricingIntervalHours,
+          targetCountry: cfg.targetCountry || prev.targetCountry,
+        }));
+      }
+      if (metricsRes.data && !metricsRes.data._safeMode) {
+        setAutopilotMetrics({
+          activeListings: metricsRes.data.activeListings ?? 0,
+          dailySales: metricsRes.data.dailySales ?? 0,
+          profitToday: metricsRes.data.profitToday ?? 0,
+          profitMonth: metricsRes.data.profitMonth ?? 0,
+          winningProductsCount: metricsRes.data.winningProductsCount ?? 0,
+        });
+      }
     } catch (error: any) {
       toast.error('Error loading autopilot data: ' + (error.response?.data?.error || error.message));
     } finally {
@@ -402,6 +459,29 @@ export default function Autopilot() {
       : [...targetMarketplaces, mp];
     if (next.length === 0) return; // Al menos uno debe estar seleccionado
     saveAutopilotMarketplaces(next);
+  };
+
+  const saveAutopilotSettings = async () => {
+    setSavingSettings(true);
+    try {
+      await api.put('/api/autopilot/config', {
+        maxActiveProducts: settingsForm.maxActiveProducts || undefined,
+        minProfitUsd: settingsForm.minProfitUsd,
+        minRoiPct: settingsForm.minRoiPct,
+        minSupplierPrice: settingsForm.minSupplierPrice || undefined,
+        maxSupplierPrice: settingsForm.maxSupplierPrice || undefined,
+        maxDuplicatesPerProduct: settingsForm.maxDuplicatesPerProduct || undefined,
+        autoRepeatWinners: settingsForm.autoRepeatWinners,
+        deleteListingsAfterDays: settingsForm.deleteListingsAfterDays || undefined,
+        repricingIntervalHours: settingsForm.repricingIntervalHours,
+        targetCountry: settingsForm.targetCountry || undefined,
+      });
+      toast.success('Configuración de Autopilot guardada');
+    } catch (error: any) {
+      toast.error('Error al guardar configuración: ' + (error.response?.data?.error || error?.message));
+    } finally {
+      setSavingSettings(false);
+    }
   };
 
   const toggleAutopilot = async () => {
@@ -704,6 +784,71 @@ export default function Autopilot() {
         </div>
       </div>
 
+      {/* Autopilot Dashboard - Business metrics */}
+      {autopilotMetrics && (
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                <Package className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Active Listings</div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{autopilotMetrics.activeListings}</div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+                <BarChart3 className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Daily Sales</div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{autopilotMetrics.dailySales}</div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                <TrendingUp className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Winning Products</div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{autopilotMetrics.winningProductsCount}</div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <DollarSign className="w-6 h-6 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Profit Today</div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  ${autopilotMetrics.profitToday.toFixed(2)}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-teal-100 dark:bg-teal-900/30 rounded-lg">
+                <DollarSign className="w-6 h-6 text-teal-600 dark:text-teal-400" />
+              </div>
+              <div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">Profit Month</div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  ${autopilotMetrics.profitMonth.toFixed(2)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Marketplaces destino para publicación */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
         <div className="flex items-center gap-2 mb-2">
@@ -727,6 +872,152 @@ export default function Autopilot() {
             </label>
           ))}
         </div>
+      </div>
+
+      {/* Autopilot Settings (extended config) */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowSettingsPanel((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50"
+        >
+          <div className="flex items-center gap-2">
+            <SettingsIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            <span className="font-medium text-gray-900 dark:text-gray-100">Autopilot Settings</span>
+          </div>
+          {showSettingsPanel ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+        </button>
+        {showSettingsPanel && (
+          <div className="px-4 pb-4 pt-2 border-t border-gray-200 dark:border-gray-700 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Max active listings</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={10000}
+                  value={settingsForm.maxActiveProducts || ''}
+                  onChange={(e) => setSettingsForm((s) => ({ ...s, maxActiveProducts: parseInt(e.target.value, 10) || 0 }))}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2"
+                  placeholder="0 = no limit"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Min profit (USD)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={settingsForm.minProfitUsd}
+                  onChange={(e) => setSettingsForm((s) => ({ ...s, minProfitUsd: parseFloat(e.target.value) || 0 }))}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Min ROI (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={settingsForm.minRoiPct}
+                  onChange={(e) => setSettingsForm((s) => ({ ...s, minRoiPct: parseFloat(e.target.value) || 0 }))}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Min supplier price (USD)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={settingsForm.minSupplierPrice || ''}
+                  onChange={(e) => setSettingsForm((s) => ({ ...s, minSupplierPrice: parseFloat(e.target.value) || 0 }))}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2"
+                  placeholder="0 = no min"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Max supplier price (USD)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={settingsForm.maxSupplierPrice || ''}
+                  onChange={(e) => setSettingsForm((s) => ({ ...s, maxSupplierPrice: parseFloat(e.target.value) || 0 }))}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2"
+                  placeholder="0 = no max"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Max duplicates per product</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  value={settingsForm.maxDuplicatesPerProduct || ''}
+                  onChange={(e) => setSettingsForm((s) => ({ ...s, maxDuplicatesPerProduct: parseInt(e.target.value, 10) || 0 }))}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2"
+                  placeholder="0 = off"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Repricing interval (hours)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={168}
+                  value={settingsForm.repricingIntervalHours}
+                  onChange={(e) => setSettingsForm((s) => ({ ...s, repricingIntervalHours: parseInt(e.target.value, 10) || 6 }))}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Delete listings after (days)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={365}
+                  value={settingsForm.deleteListingsAfterDays || ''}
+                  onChange={(e) => setSettingsForm((s) => ({ ...s, deleteListingsAfterDays: parseInt(e.target.value, 10) || 0 }))}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2"
+                  placeholder="0 = off"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Target country</label>
+                <input
+                  type="text"
+                  maxLength={10}
+                  value={settingsForm.targetCountry}
+                  onChange={(e) => setSettingsForm((s) => ({ ...s, targetCountry: e.target.value.trim() || 'US' }))}
+                  className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2"
+                  placeholder="US"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="autoRepeatWinners"
+                  checked={settingsForm.autoRepeatWinners}
+                  onChange={(e) => setSettingsForm((s) => ({ ...s, autoRepeatWinners: e.target.checked }))}
+                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                />
+                <label htmlFor="autoRepeatWinners" className="text-sm font-medium text-gray-700 dark:text-gray-300">Auto repeat winning products</label>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={saveAutopilotSettings}
+                disabled={savingSettings}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                {savingSettings ? 'Guardando…' : 'Guardar configuración'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}

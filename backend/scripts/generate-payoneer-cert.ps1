@@ -2,7 +2,8 @@
 # Requires OpenSSL. Run as: .\generate-payoneer-cert.ps1
 # If OpenSSL not found, install: choco install openssl.light -y (run PowerShell as Admin)
 
-$secDir = Join-Path $PSScriptRoot "..\security"
+$secDir = Join-Path $PSScriptRoot "..\
+security"
 $keyPath = Join-Path $secDir "payoneer.key"
 $crtPath = Join-Path $secDir "payoneer.crt"
 

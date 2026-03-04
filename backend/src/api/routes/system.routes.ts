@@ -195,4 +195,104 @@ router.get('/full-diagnostics', async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/system/business-diagnostics
+ * Business-level diagnostics: autopilot, marketplace, supplier, payment, database, scheduler, listings, sales.
+ * Each section has status (OK/FAIL) and optional message or counts.
+ */
+router.get('/business-diagnostics', async (_req: Request, res: Response) => {
+  const result: Record<string, { status: string; message?: string; count?: number }> = {
+    autopilot: { status: 'FAIL' },
+    marketplace: { status: 'FAIL' },
+    supplier: { status: 'FAIL' },
+    payment: { status: 'FAIL' },
+    database: { status: 'FAIL' },
+    scheduler: { status: 'FAIL' },
+    listings: { status: 'FAIL' },
+    sales: { status: 'FAIL' },
+  };
+
+  try {
+    const { prisma } = await import('../../config/database');
+
+    // Database
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      result.database = { status: 'OK' };
+    } catch {
+      result.database = { status: 'FAIL', message: 'Connection failed' };
+    }
+
+    // Autopilot - prerequisites (scraping + eBay)
+    const hasScraping = Boolean(
+      (process.env.SCRAPER_API_KEY || process.env.SCRAPERAPI_KEY || process.env.ZENROWS_API_KEY || '').trim()
+    );
+    const hasEbay =
+      Boolean((process.env.EBAY_CLIENT_ID || process.env.EBAY_APP_ID || '').trim()) &&
+      Boolean((process.env.EBAY_CLIENT_SECRET || process.env.EBAY_CERT_ID || '').trim());
+    result.autopilot = hasScraping && hasEbay ? { status: 'OK' } : { status: 'FAIL', message: 'Scraping or eBay not configured' };
+
+    // Marketplace - eBay as primary
+    result.marketplace = hasEbay ? { status: 'OK' } : { status: 'FAIL', message: 'eBay not configured' };
+
+    // Supplier - AliExpress
+    const hasAliexpress =
+      Boolean((process.env.ALIEXPRESS_AFFILIATE_APP_KEY || process.env.ALIEXPRESS_APP_KEY || '').trim()) &&
+      Boolean((process.env.ALIEXPRESS_AFFILIATE_APP_SECRET || process.env.ALIEXPRESS_APP_SECRET || '').trim());
+    result.supplier = hasAliexpress ? { status: 'OK' } : { status: 'FAIL', message: 'AliExpress not configured' };
+
+    // Payment - PayPal + optional Payoneer
+    const hasPaypal =
+      Boolean((process.env.PAYPAL_CLIENT_ID || '').trim()) &&
+      Boolean((process.env.PAYPAL_CLIENT_SECRET || '').trim());
+    const PayoneerService = (await import('../../services/payoneer.service')).PayoneerService;
+    const hasPayoneer = PayoneerService.isConfigured();
+    result.payment = hasPaypal
+      ? { status: 'OK', message: hasPayoneer ? 'PayPal + Payoneer' : 'PayPal' }
+      : { status: 'FAIL', message: 'PayPal not configured' };
+
+    // Scheduler - from autopilot stats
+    if (result.database.status === 'OK') {
+      try {
+        const statsRec = await prisma.systemConfig.findUnique({ where: { key: 'autopilot_stats' } });
+        if (statsRec?.value) {
+          const stats = JSON.parse(statsRec.value as string);
+          result.scheduler =
+            stats.currentStatus === 'running'
+              ? { status: 'OK', message: 'Autopilot running' }
+              : { status: 'OK', message: 'idle' };
+        } else {
+          result.scheduler = { status: 'OK', message: 'idle' };
+        }
+      } catch {
+        result.scheduler = { status: 'FAIL', message: 'Could not read stats' };
+      }
+
+      // Listings count
+      try {
+        const listingsCount = await prisma.marketplaceListing.count();
+        result.listings = { status: 'OK', count: listingsCount };
+      } catch {
+        result.listings = { status: 'FAIL', message: 'Count failed' };
+      }
+
+      // Sales count
+      try {
+        const salesCount = await prisma.sale.count();
+        result.sales = { status: 'OK', count: salesCount };
+      } catch {
+        result.sales = { status: 'FAIL', message: 'Count failed' };
+      }
+    }
+
+    res.status(200).json(result);
+  } catch (err: any) {
+    logger.error('[SYSTEM/BUSINESS-DIAGNOSTICS] Error', { error: err?.message });
+    res.status(500).json({
+      ...result,
+      error: err?.message || 'Business diagnostics failed',
+    });
+  }
+});
+
 export default router;

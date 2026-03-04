@@ -36,6 +36,20 @@ export interface AutopilotConfig {
   maxActiveProducts?: number;
   /** Max daily orders cap (optional, for config/store only). */
   maxDailyOrders?: number;
+  /** Min supplier price (optional). */
+  minSupplierPrice?: number;
+  /** Max supplier price (optional). */
+  maxSupplierPrice?: number;
+  /** Max duplicate listings per product (optional). */
+  maxDuplicatesPerProduct?: number;
+  /** Auto repeat winning products (optional). */
+  autoRepeatWinners?: boolean;
+  /** Delete listings after X days with no sales (optional). */
+  deleteListingsAfterDays?: number;
+  /** Repricing interval in hours (optional). */
+  repricingIntervalHours?: number;
+  /** Target country for pricing/shipping (optional). */
+  targetCountry?: string;
 }
 
 /**

@@ -23,7 +23,8 @@ describe('currency utils', () => {
       const formatted = formatCurrencySimple(1234.56, 'CLP');
       expect(formatted).toContain('$');
       expect(formatted).not.toContain('.56');
-      expect(formatted).toContain('1,235'); // Rounded
+      // es-CL uses dot as thousands sep (1.235); en-US would use comma (1,235). Accept both.
+      expect(formatted).toMatch(/1[.,]235/);
     });
 
     it('should handle zero', () => {

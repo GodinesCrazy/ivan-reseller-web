@@ -127,6 +127,14 @@ const updateConfigSchema = z.object({
   workingCapital: z.number().min(0).optional(),
   minProfitUsd: z.number().min(0).optional(),
   minRoiPct: z.number().min(0).max(100).optional(),
+  maxActiveProducts: z.number().min(0).max(10000).optional(),
+  minSupplierPrice: z.number().min(0).optional(),
+  maxSupplierPrice: z.number().min(0).optional(),
+  maxDuplicatesPerProduct: z.number().min(0).max(20).optional(),
+  autoRepeatWinners: z.boolean().optional(),
+  deleteListingsAfterDays: z.number().min(0).max(365).optional(),
+  repricingIntervalHours: z.number().min(1).max(168).optional(),
+  targetCountry: z.string().max(10).optional(),
 });
 
 /**
