@@ -2,8 +2,8 @@
 
 **Guía completa para administradores del sistema**
 
-**Última actualización:** 2025-01-27  
-**Versión:** 1.0
+**Última actualización:** 2025-03-04  
+**Versión:** 1.1
 
 ---
 
@@ -123,7 +123,12 @@ curl https://tu-backend.up.railway.app/health
 
 # Health detallado
 curl https://tu-backend.up.railway.app/api/system/health/detailed
+
+# Business diagnostics (estado de Autopilot, Marketplace, Supplier, Payment, DB, Scheduler, Listings, Sales)
+curl https://tu-backend.up.railway.app/api/system/business-diagnostics
 ```
+
+El endpoint **business-diagnostics** devuelve OK/FAIL y conteos para cada componente. El Dashboard lo muestra en la sección "Estado del sistema".
 
 ---
 

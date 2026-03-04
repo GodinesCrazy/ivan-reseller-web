@@ -84,6 +84,7 @@ interface AutopilotMetrics {
   profitToday: number;
   profitMonth: number;
   winningProductsCount: number;
+  topWinningProducts?: Array<{ productId: number; productTitle: string; winningScore: number }>;
 }
 
 export default function Autopilot() {
@@ -880,6 +881,25 @@ export default function Autopilot() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Top winning products list */}
+      {autopilotMetrics?.topWinningProducts && autopilotMetrics.topWinningProducts.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Top productos ganadores (WinningScore &gt; 75)</h3>
+          <ul className="space-y-2">
+            {autopilotMetrics.topWinningProducts.map((p) => (
+              <li key={p.productId} className="flex items-center justify-between py-1 border-b border-gray-100 dark:border-gray-700 last:border-0">
+                <span className="text-sm text-gray-700 dark:text-gray-300 truncate max-w-[70%]" title={p.productTitle}>
+                  {p.productTitle || `Producto #${p.productId}`}
+                </span>
+                <span className="text-xs font-medium text-amber-600 dark:text-amber-400 shrink-0 ml-2">
+                  Score: {p.winningScore}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

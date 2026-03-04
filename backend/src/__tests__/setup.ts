@@ -1,9 +1,10 @@
 // Test setup file
-// ✅ CRITICAL: Set flags BEFORE any imports to prevent side-effects
+// CRITICAL: Set flags BEFORE any imports to prevent side-effects
 process.env.NODE_ENV = 'test';
 process.env.FX_AUTO_REFRESH_ENABLED = 'false';
 process.env.USAGE_TRACKING_ENABLED = 'false';
 process.env.AUTOMATION_ENGINE_ENABLED = 'false';
+process.env.SAFE_BOOT = 'true'; // Skip ScheduledTasksService/Redis/BullMQ init in unit tests
 
 // Set test environment variables
 process.env.JWT_SECRET = 'test-jwt-secret-key-32-chars-minimum-required';

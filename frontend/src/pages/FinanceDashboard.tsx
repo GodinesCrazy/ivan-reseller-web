@@ -114,6 +114,17 @@ interface LeverageRisk {
   risk: { worstCaseCost: number; capitalBuffer: number; bufferPercent: number; capitalTurnover: number };
 }
 
+interface ProfitProjection {
+  projectedMonthlyProfit: number;
+  projectedMonthlySales: number;
+  avgProfitPerSale: number;
+  methodology: 'historical' | 'default';
+  confidence: number;
+  activeListings: number;
+  historicalSales?: number;
+  historicalActiveListings?: number;
+}
+
 interface TopProduct {
   productId: number;
   productTitle: string;
@@ -166,6 +177,7 @@ export default function FinanceDashboard() {
     deductions: 0,
     netTax: 0
   });
+  const [profitProjection, setProfitProjection] = useState<ProfitProjection | null>(null);
 
   useEffect(() => {
     loadFinancialData();
@@ -227,17 +239,19 @@ export default function FinanceDashboard() {
   const loadFinancialData = async () => {
     setLoading(true);
     try {
-      const [summaryRes, breakdownRes, cashFlowRes, taxRes] = await Promise.all([
+      const [summaryRes, breakdownRes, cashFlowRes, taxRes, projectionRes] = await Promise.all([
         api.get('/api/finance/summary', { params: { range: dateRange } }),
         api.get('/api/finance/breakdown', { params: { range: dateRange } }),
         api.get('/api/finance/cashflow', { params: { range: dateRange } }),
-        api.get('/api/finance/tax-summary', { params: { range: dateRange } })
+        api.get('/api/finance/tax-summary', { params: { range: dateRange } }),
+        api.get('/api/finance/profit-projection')
       ]);
 
       setFinancialData(summaryRes.data?.summary || financialData);
       setCategoryBreakdown(breakdownRes.data?.breakdown || []);
       setCashFlow(cashFlowRes.data?.cashFlow || []);
       setTaxSummary(taxRes.data?.taxSummary || taxSummary);
+      setProfitProjection(projectionRes.data?.projection ?? null);
     } catch (error: any) {
       toast.error('Error loading financial data: ' + (error.response?.data?.error || error.message));
     } finally {
@@ -632,6 +646,47 @@ export default function FinanceDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Monthly Profit Projection */}
+      {profitProjection && (
+        <div className="bg-white border rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <Target className="w-5 h-5 text-emerald-600" />
+            Proyección mensual estimada
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <div className="text-sm text-gray-600">Utilidad proyectada</div>
+              <div className="text-xl font-bold text-emerald-600">{formatCurrency(profitProjection.projectedMonthlyProfit)}</div>
+            </div>
+            <div>
+              <div className="text-sm text-gray-600">Ventas proyectadas/mes</div>
+              <div className="text-xl font-bold text-gray-900">{profitProjection.projectedMonthlySales.toFixed(1)}</div>
+            </div>
+            <div>
+              <div className="text-sm text-gray-600">Utilidad por venta</div>
+              <div className="text-xl font-semibold text-gray-900">{formatCurrency(profitProjection.avgProfitPerSale)}</div>
+            </div>
+            <div>
+              <div className="text-sm text-gray-600">Metodología</div>
+              <div className="text-sm font-medium">
+                {profitProjection.methodology === 'historical'
+                  ? 'Histórica (90 días)'
+                  : 'Por defecto (nuevo usuario)'}
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">
+                Confianza: {Math.round(profitProjection.confidence * 100)}%
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-gray-500">
+            Basado en {profitProjection.activeListings} listados activos
+            {profitProjection.methodology === 'historical' && profitProjection.historicalSales != null && (
+              <> · {profitProjection.historicalSales} ventas en los últimos 90 días</>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Secondary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

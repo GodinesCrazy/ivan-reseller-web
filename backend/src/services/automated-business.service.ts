@@ -2,6 +2,7 @@
 import { trace } from '../utils/boot-trace';
 trace('loading automated-business.service');
 
+import { prisma } from '../config/database';
 import { EbayService } from './ebay.service';
 import { AIOpportunityEngine } from './ai-opportunity.service';
 import { notificationService } from './notification.service';
@@ -954,18 +955,8 @@ ${opportunity.aiAnalysis.strengths.map(s => `• ${s}`).join('\n')}
     return totalTime / completed.length / (1000 * 60); // En minutos
   }
 
-  // Métodos auxiliares que se implementarían según las necesidades
-  private async getActiveListings(): Promise<any[]> {
-    // Implementar según la base de datos
-    return [];
-  }
-
-  private async checkAndAdjustPrice(listing: any): Promise<void> {
-    // Implementar lógica de ajuste de precios
-  }
-
   /**
-   * ✅ Procesar órdenes pendientes (con userId)
+   * Procesar órdenes pendientes (con userId)
    */
   private async processOrders(userId?: number): Promise<void> {
     try {
@@ -1026,32 +1017,84 @@ ${opportunity.aiAnalysis.strengths.map(s => `• ${s}`).join('\n')}
     }
   }
 
-  // Métodos auxiliares (implementar según necesidad)
+  // Métodos auxiliares
   private async getActiveListings(userId: number): Promise<any[]> {
-    // TODO: Implementar obtención de listings activos del usuario
-    return [];
+    return prisma.marketplaceListing.findMany({
+      where: { userId },
+      include: { product: true },
+    });
   }
 
   private async getPendingOrders(userId: number): Promise<any[]> {
-    // TODO: Implementar obtención de órdenes pendientes del usuario
-    return [];
+    return prisma.order.findMany({
+      where: { userId, status: 'PAID' },
+      include: { user: true },
+    });
   }
 
   private async getOrdersInTransit(userId: number): Promise<any[]> {
-    // TODO: Implementar obtención de órdenes en tránsito del usuario
-    return [];
+    return prisma.order.findMany({
+      where: { userId, status: { in: ['PURCHASING', 'PURCHASED'] } },
+      include: { user: true },
+    });
   }
 
   private async checkAndAdjustPrice(listing: any, userId: number): Promise<void> {
-    // TODO: Implementar verificación y ajuste de precios
+    try {
+      const { dynamicPricingService } = await import('./dynamic-pricing.service');
+      const productId = listing?.productId ?? listing?.product?.id;
+      const supplierPrice = Number(listing?.product?.aliexpressPrice ?? listing?.product?.totalCost ?? listing?.product?.aliexpressPrice ?? 0);
+      const marketplace = (listing?.marketplace ?? 'ebay') as 'ebay' | 'amazon' | 'mercadolibre';
+      if (productId && supplierPrice > 0) {
+        await dynamicPricingService.repriceByProduct(productId, supplierPrice, marketplace, userId);
+      }
+    } catch (err) {
+      logger.warn('checkAndAdjustPrice failed', { listingId: listing?.id, userId, error: (err as Error)?.message });
+    }
   }
 
   private async executePurchase(order: any): Promise<void> {
-    // TODO: Implementar compra automática
+    try {
+      const { orderFulfillmentService } = await import('./order-fulfillment.service');
+      const orderId = order?.id ?? order?.orderId;
+      if (orderId) {
+        await orderFulfillmentService.fulfillOrder(String(orderId));
+      }
+    } catch (err) {
+      logger.error('executePurchase failed', { orderId: order?.id, error: (err as Error)?.message });
+    }
   }
 
   private async updateOrderTracking(order: any): Promise<void> {
-    // TODO: Implementar actualización de tracking
+    try {
+      const orderId = order?.id ?? order?.orderId;
+      if (!orderId) return;
+      const purchaseLog = await prisma.purchaseLog.findFirst({
+        where: { orderId: String(orderId), userId: order?.userId },
+        orderBy: { id: 'desc' },
+      });
+      const tracking = purchaseLog?.trackingNumber ?? order?.trackingNumber;
+      if (!tracking) return;
+      if (purchaseLog?.saleId) {
+        await prisma.sale.update({
+          where: { id: purchaseLog.saleId },
+          data: { trackingNumber: tracking },
+        });
+      } else if (order?.productId && order?.userId) {
+        const sale = await prisma.sale.findFirst({
+          where: { productId: order.productId, userId: order.userId, status: { in: ['PENDING', 'PROCESSING'] } },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (sale?.id) {
+          await prisma.sale.update({
+            where: { id: sale.id },
+            data: { trackingNumber: tracking },
+          });
+        }
+      }
+    } catch (err) {
+      logger.warn('updateOrderTracking failed', { orderId: order?.id, error: (err as Error)?.message });
+    }
   }
 
   private async autoCreateListing(opportunity: any, userId?: number, environment?: 'sandbox' | 'production'): Promise<void> {

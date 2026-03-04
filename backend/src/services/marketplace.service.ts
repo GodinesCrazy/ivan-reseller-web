@@ -31,6 +31,8 @@ export interface MarketplaceCredentials {
 export interface PublishProductRequest {
   productId: number;
   marketplace: MarketplaceName; // ✅ Estandarizado a tipo union estricto
+  /** When true, allow publishing an already-published product (creates duplicate listing). */
+  duplicateListing?: boolean;
   customData?: {
     categoryId?: string;
     price?: number;
@@ -469,8 +471,8 @@ export class MarketplaceService {
         throw new AppError(`Cannot publish a product with status: ${product.status}. Product must be APPROVED.`, 400);
       }
 
-      // ✅ Verificar si el producto ya está publicado
-      if (product.isPublished || product.status === 'PUBLISHED') {
+      // ✅ Verificar si el producto ya está publicado (permitir duplicateListing para ganadores)
+      if (!request.duplicateListing && (product.isPublished || product.status === 'PUBLISHED')) {
         throw new AppError('Product is already published. Use updateListing to modify it.', 400);
       }
 

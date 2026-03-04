@@ -30,6 +30,7 @@ export class ScheduledTasksService {
   private dynamicPricingQueue: Queue | null = null;
   private aliExpressTokenRefreshQueue: Queue | null = null;
   private retryFailedOrdersQueue: Queue | null = null;
+  private ebayTrafficSyncQueue: Queue | null = null;
   private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
@@ -39,6 +40,7 @@ export class ScheduledTasksService {
   private dynamicPricingWorker: Worker | null = null;
   private aliExpressTokenRefreshWorker: Worker | null = null;
   private retryFailedOrdersWorker: Worker | null = null;
+  private ebayTrafficSyncWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
 
@@ -100,6 +102,11 @@ export class ScheduledTasksService {
 
     // Retry orders that failed due to insufficient funds: cada 30 min
     this.retryFailedOrdersQueue = new Queue('retry-failed-orders', {
+      connection: this.bullMQRedis as any
+    });
+
+    // eBay Analytics: sync view counts for listing lifetime optimization
+    this.ebayTrafficSyncQueue = new Queue('ebay-traffic-sync', {
       connection: this.bullMQRedis as any
     });
   }
@@ -294,6 +301,22 @@ export class ScheduledTasksService {
         }
       );
     }
+
+    // eBay traffic sync worker (view counts for listing lifetime)
+    if (this.ebayTrafficSyncQueue) {
+      this.ebayTrafficSyncWorker = new Worker(
+        'ebay-traffic-sync',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running eBay traffic sync', { jobId: job.id });
+          const { syncAllUsersViewCounts } = await import('./ebay-traffic-sync.service');
+          return await syncAllUsersViewCounts();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+    }
   }
 
   private async runAliExpressTokenRefresh(): Promise<{ refreshed: boolean; reason?: string }> {
@@ -414,19 +437,22 @@ export class ScheduledTasksService {
       );
     }
 
-    // ✅ Evolution: Dynamic pricing every 6 hours
+    // Dynamic pricing: interval from DYNAMIC_PRICING_INTERVAL_HOURS (default 6)
+    const repricingHours = Math.max(1, Math.min(24, Number(process.env.DYNAMIC_PRICING_INTERVAL_HOURS || '6') || 6));
+    const dynamicPricingCron = `0 */${repricingHours} * * *`;
     if (this.dynamicPricingQueue) {
       this.dynamicPricingQueue.add(
         'reprice-products',
         {},
         {
           repeat: {
-            pattern: '0 */6 * * *' // Every 6 hours
+            pattern: dynamicPricingCron
           },
           removeOnComplete: 10,
           removeOnFail: 5,
         }
       );
+      logger.info('Scheduled Tasks: Dynamic pricing interval', { hours: repricingHours, cron: dynamicPricingCron });
     }
 
     // AliExpress OAuth token refresh: cada 1 hora
@@ -453,6 +479,20 @@ export class ScheduledTasksService {
           repeat: {
             pattern: '*/30 * * * *' // Every 30 minutes
           },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // eBay traffic sync: cada 12h (configurable via EBAY_TRAFFIC_SYNC_CRON, default 0 */12 * * *)
+    const ebaySyncCron = process.env.EBAY_TRAFFIC_SYNC_CRON || '0 */12 * * *';
+    if (this.ebayTrafficSyncQueue) {
+      this.ebayTrafficSyncQueue.add(
+        'sync-view-counts',
+        {},
+        {
+          repeat: { pattern: ebaySyncCron },
           removeOnComplete: 5,
           removeOnFail: 5,
         }
@@ -1190,6 +1230,12 @@ export class ScheduledTasksService {
     if (this.dynamicPricingWorker) {
       await this.dynamicPricingWorker.close();
     }
+    if (this.ebayTrafficSyncWorker) {
+      await this.ebayTrafficSyncWorker.close();
+    }
+    if (this.ebayTrafficSyncQueue) {
+      await this.ebayTrafficSyncQueue.close();
+    }
   }
 
   /**
@@ -1242,6 +1288,7 @@ export class ScheduledTasksService {
       let totalUnpublished = 0;
 
       for (const user of users) {
+        let userUnpublished = 0;
         try {
           const { workflowConfigService } = await import('./workflow-config.service');
           const totalCapital = await workflowConfigService.getWorkingCapital(user.id);
@@ -1285,15 +1332,14 @@ export class ScheduledTasksService {
             const totalViews = listings.reduce((sum: number, listing: any) => 
               sum + (listing.viewCount || 0), 0
             );
-            // ✅ FIX: Obtener sales por separado ya que include anidado no funciona
-            // Usar listingId en lugar de marketplaceListingId si el schema usa otro nombre
-            const listingIds = listings.map((l: any) => l.id);
-            const salesCount = listingIds.length > 0 ? await (prisma as any).sale.count({
+            // ✅ FIX: Sale has productId (not listingId). Count sales for this product in last 30 days.
+            const salesCount = await prisma.sale.count({
               where: {
-                listingId: { in: listingIds },
+                userId: user.id,
+                productId: product.id,
                 createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
               }
-            }) : 0;
+            });
             const totalSales = salesCount;
             const conversionRate = totalViews > 0 ? (totalSales / totalViews) * 100 : 0;
             const minConversionRate = Number(process.env.MIN_CONVERSION_RATE || '0.5');
@@ -1303,13 +1349,14 @@ export class ScheduledTasksService {
               reasons.push(`Baja conversión (${conversionRate.toFixed(2)}%)`);
             }
 
-            // ✅ FIX: Obtener última venta por separado
-            const lastSale = listingIds.length > 0 ? await (prisma as any).sale.findFirst({
+            // ✅ FIX: Sale has productId. Get last sale for this product.
+            const lastSale = await prisma.sale.findFirst({
               where: {
-                listingId: { in: listingIds }
+                userId: user.id,
+                productId: product.id
               },
               orderBy: { createdAt: 'desc' }
-            }) : null;
+            });
             const daysSinceLastSale = lastSale 
               ? Math.floor((Date.now() - lastSale.createdAt.getTime()) / (1000 * 60 * 60 * 24))
               : Infinity;
@@ -1357,6 +1404,7 @@ export class ScheduledTasksService {
                 });
 
                 totalUnpublished++;
+                userUnpublished++;
                 await notificationService.sendToUser(user.id, {
                   type: 'SYSTEM_ALERT', // ✅ FIX: Changed from 'PRODUCT_UNPUBLISHED' to valid type
                   title: 'Producto despublicado automáticamente',
@@ -1372,6 +1420,23 @@ export class ScheduledTasksService {
                   error: error.message
                 });
               }
+            }
+          }
+
+          // ✅ 2-1-trigger: Run autopilot cycle to replace unpublished product
+          if (userUnpublished > 0) {
+            try {
+              const { autopilotSystem } = await import('./autopilot.service');
+              await autopilotSystem.runSingleCycle(undefined, user.id);
+              logger.info('Autopilot replacement cycle triggered after unpublish', {
+                userId: user.id,
+                unpublishedCount: userUnpublished,
+              });
+            } catch (cycleErr: any) {
+              logger.warn('Autopilot replacement cycle failed after unpublish', {
+                userId: user.id,
+                error: cycleErr?.message || String(cycleErr),
+              });
             }
           }
         } catch (userError: any) {

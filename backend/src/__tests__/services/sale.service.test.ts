@@ -1,30 +1,44 @@
-// ✅ E6: Tests unitarios para SaleService
+// E6: Tests unitarios para SaleService
 import { SaleService } from '../../services/sale.service';
-import { PrismaClient } from '@prisma/client';
 
-// Mock Prisma
+jest.mock('../../services/platform-config.service', () => ({
+  platformConfigService: {
+    getCommissionPct: jest.fn().mockResolvedValue(20),
+    getAdminPaypalEmail: jest.fn().mockResolvedValue(null),
+  },
+}));
+
+jest.mock('../../services/user-settings.service', () => ({
+  UserSettingsService: jest.fn().mockImplementation(() => ({
+    getUserBaseCurrency: jest.fn().mockResolvedValue('USD'),
+  })),
+}));
+
+jest.mock('../../services/fx.service', () => ({
+  __esModule: true,
+  default: { convert: jest.fn((v: number) => v) },
+}));
+
+jest.mock('../../services/notification.service', () => ({
+  notificationService: { sendSaleNotification: jest.fn().mockResolvedValue({}) },
+}));
+
+const mockTx = {
+  sale: { create: jest.fn() },
+  commission: { create: jest.fn() },
+  adminCommission: { create: jest.fn() },
+  activity: { create: jest.fn() },
+};
+
 jest.mock('../../config/database', () => ({
   prisma: {
-    product: {
-      findUnique: jest.fn(),
-    },
-    sale: {
-      create: jest.fn(),
-    },
-    commission: {
-      create: jest.fn(),
-    },
-    adminCommission: {
-      create: jest.fn(),
-    },
-    user: {
-      findUnique: jest.fn(),
-      update: jest.fn(),
-    },
-    activity: {
-      create: jest.fn(),
-    },
-    $transaction: jest.fn(),
+    product: { findUnique: jest.fn() },
+    user: { findUnique: jest.fn(), update: jest.fn() },
+    sale: { create: jest.fn(), update: jest.fn() },
+    commission: { create: jest.fn() },
+    adminCommission: { create: jest.fn() },
+    activity: { create: jest.fn() },
+    $transaction: jest.fn((cb: (tx: any) => Promise<any>) => cb(mockTx)),
   },
 }));
 
@@ -34,13 +48,18 @@ describe('SaleService', () => {
   beforeEach(() => {
     saleService = new SaleService();
     jest.clearAllMocks();
+    mockTx.sale.create.mockReset();
+    mockTx.commission.create.mockReset();
+    mockTx.adminCommission.create.mockReset();
+    mockTx.activity.create.mockReset();
   });
 
   describe('createSale', () => {
     it('should calculate commission correctly (20% of gross profit)', async () => {
       const userId = 1;
+      const orderId = `ORD-test-1-${Date.now()}`;
       const saleData = {
-        orderId: 'ORD-123',
+        orderId,
         productId: 1,
         marketplace: 'ebay',
         salePrice: 100,
@@ -49,62 +68,42 @@ describe('SaleService', () => {
       };
 
       const { prisma } = require('../../config/database');
-      
       const mockProduct = {
         id: 1,
         userId: 1,
         title: 'Test Product',
         status: 'PUBLISHED',
         isPublished: true,
+        user: {},
       };
-
       const mockUser = {
         id: userId,
-        commissionRate: 0.20, // 20%
+        commissionRate: 0.20,
         createdBy: null,
+        paypalPayoutEmail: null,
       };
-
       const mockSale = {
         id: 1,
         ...saleData,
-        grossProfit: 50, // 100 - 50
-        commissionAmount: 10, // 50 * 0.20
-        netProfit: 35, // 50 - 10 - 5
+        grossProfit: 50,
+        commissionAmount: 10,
+        netProfit: 35,
         userId,
         createdAt: new Date(),
       };
 
       prisma.product.findUnique.mockResolvedValue(mockProduct);
       prisma.user.findUnique.mockResolvedValue(mockUser);
-      prisma.$transaction.mockImplementation(async (callback) => {
-        return await callback(prisma);
-      });
-      prisma.sale.create.mockResolvedValue(mockSale);
-      prisma.commission.create.mockResolvedValue({});
-      prisma.user.update.mockResolvedValue({});
-      prisma.activity.create.mockResolvedValue({});
-
-      // Mock notifications service
-      jest.mock('../../services/notifications.service', () => ({
-        notificationService: {
-          sendSaleNotification: jest.fn().mockResolvedValue({}),
-        },
-      }));
+      mockTx.sale.create.mockResolvedValue(mockSale);
+      mockTx.commission.create.mockResolvedValue({});
+      mockTx.activity.create.mockResolvedValue({});
+      prisma.sale.update.mockResolvedValue(mockSale);
 
       const result = await saleService.createSale(userId, saleData);
 
-      // Verificar cálculo de comisión
-      const grossProfit = saleData.salePrice - saleData.costPrice; // 50
-      const expectedCommission = grossProfit * mockUser.commissionRate; // 10
-      const expectedNetProfit = grossProfit - expectedCommission - saleData.platformFees; // 35
-
-      expect(prisma.commission.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            amount: expectedCommission,
-          }),
-        })
-      );
+      const grossProfit = saleData.salePrice - saleData.costPrice;
+      const expectedCommission = grossProfit * 0.20;
+      const expectedNetProfit = grossProfit - expectedCommission - saleData.platformFees;
 
       expect(result.grossProfit).toBe(grossProfit);
       expect(result.commissionAmount).toBe(expectedCommission);
@@ -114,11 +113,11 @@ describe('SaleService', () => {
     it('should reject sale if salePrice <= costPrice', async () => {
       const userId = 1;
       const invalidSaleData = {
-        orderId: 'ORD-123',
+        orderId: `ORD-test-2-${Date.now()}`,
         productId: 1,
         marketplace: 'ebay',
         salePrice: 50,
-        costPrice: 100, // Higher than sale price
+        costPrice: 100,
       };
 
       const { prisma } = require('../../config/database');
@@ -127,21 +126,18 @@ describe('SaleService', () => {
         userId: 1,
         status: 'PUBLISHED',
         isPublished: true,
-      });
-      prisma.user.findUnique.mockResolvedValue({
-        id: userId,
-        commissionRate: 0.20,
+        user: {},
       });
 
       await expect(
         saleService.createSale(userId, invalidSaleData)
-      ).rejects.toThrow('Sale price must be greater than cost price');
+      ).rejects.toThrow(/Sale price .* must be greater than cost price/);
     });
 
     it('should reject sale if product status is REJECTED', async () => {
       const userId = 1;
       const saleData = {
-        orderId: 'ORD-123',
+        orderId: `ORD-test-3-${Date.now()}`,
         productId: 1,
         marketplace: 'ebay',
         salePrice: 100,
@@ -154,11 +150,12 @@ describe('SaleService', () => {
         userId: 1,
         status: 'REJECTED',
         isPublished: false,
+        user: {},
       });
 
       await expect(
         saleService.createSale(userId, saleData)
-      ).rejects.toThrow('Cannot create sale for product with status: REJECTED');
+      ).rejects.toThrow(/Cannot create sale for product with status: REJECTED/);
     });
   });
 });

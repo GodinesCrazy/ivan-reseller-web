@@ -85,6 +85,8 @@ export default function Dashboard() {
     perUser: Array<{ userId: number; username: string; email: string; salesCount: number; grossProfit: number; platformCommission: number; userProfit: number }>;
   } | null>(null);
 
+  const [businessDiagnostics, setBusinessDiagnostics] = useState<Record<string, { status: string; message?: string; count?: number }> | null>(null);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       loadDashboardData();
@@ -107,6 +109,16 @@ export default function Dashboard() {
       })
       .catch(() => {});
   }, [user?.role]);
+
+  useEffect(() => {
+    api.get('/api/system/business-diagnostics')
+      .then((res) => {
+        if (res.data && typeof res.data === 'object' && !res.data.error) {
+          setBusinessDiagnostics(res.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Real backend health check
   useEffect(() => {
@@ -470,6 +482,44 @@ export default function Dashboard() {
       <div className="mt-6">
         <WorkflowSummaryWidget />
       </div>
+
+      {/* Business Diagnostics - Estado del sistema */}
+      {businessDiagnostics && (
+        <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Estado del sistema
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
+            {Object.entries(businessDiagnostics).filter(([k]) => k !== 'error').map(([key, val]) => (
+              <div
+                key={key}
+                className={`p-3 rounded-lg border ${
+                  val.status === 'OK'
+                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                    : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                }`}
+                title={val.message}
+              >
+                <div className="flex items-center gap-2">
+                  {val.status === 'OK' ? (
+                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+                  )}
+                  <span className="text-sm font-medium capitalize truncate">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                </div>
+                {val.count !== undefined && (
+                  <p className="text-xs mt-1 text-gray-600 dark:text-gray-400">{val.count}</p>
+                )}
+                {val.message && val.status === 'OK' && (
+                  <p className="text-xs mt-1 text-gray-500 truncate" title={val.message}>{val.message}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Actividad reciente */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

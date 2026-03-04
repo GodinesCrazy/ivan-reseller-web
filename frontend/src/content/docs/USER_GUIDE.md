@@ -2,8 +2,8 @@
 
 **Guía completa para usuarios finales**
 
-**Última actualización:** 2025-01-27  
-**Versión:** 1.0
+**Última actualización:** 2025-03-04  
+**Versión:** 1.1
 
 ---
 
@@ -39,6 +39,7 @@ El Dashboard muestra:
 - **Actividad reciente:** Últimas acciones del sistema
 - **Oportunidades:** Sugerencias de IA
 - **Estado del sistema:** Workflow, Autopilot, APIs
+- **Estado del sistema (Business Diagnostics):** Estado en tiempo real de Autopilot, Marketplace, Supplier, Payment, Database, Scheduler, Listings y Sales (OK/FAIL + conteos)
 
 **Ubicación:** Menú lateral → Dashboard
 
@@ -127,6 +128,20 @@ El Autopilot ejecuta el ciclo completo de dropshipping automáticamente 24/7.
 3. Activar Autopilot
 4. El sistema ejecutará ciclos automáticamente
 
+### Preset: 1 artículo de prueba
+
+Para una primera prueba con mínimo riesgo, usar el botón **"Usar valores para 1 artículo de prueba (más económico)"**. Aplica: minProfitUsd=1, minSupplierPrice=0.50, minRoiPct=15, maxActiveProducts=1.
+
+### Duplicar productos ganadores
+
+Con **Repetir ganadores** activado y **Máx. duplicados por producto** > 1, el sistema duplica automáticamente listings de productos con buen rendimiento (WinningScore > 75), respetando capital y límites.
+
+### Despublicación y reemplazo automático
+
+Los productos con baja conversión, muchos días sin ventas o que exceden el capital disponible se despublican automáticamente. Tras cada despublicación, el Autopilot ejecuta un ciclo para buscar y publicar un producto de reemplazo.
+
+**Documentación detallada:** [FEATURES_AUTOPILOT_AVANZADO.md](./FEATURES_AUTOPILOT_AVANZADO.md)
+
 ### Monitorear Autopilot
 
 - Ver estadísticas en tiempo real
@@ -204,8 +219,9 @@ Las comisiones se calculan automáticamente:
 - **Setup Local:** [docs/SETUP_LOCAL.md](./SETUP_LOCAL.md)
 - **Architecture:** [docs/ARCHITECTURE.md](./ARCHITECTURE.md)
 - **Guía Detallada de Workflow:** `docs/GUIDE_MOD_GUIDED_USUARIOS.md`
+- **Funcionalidades Avanzadas Autopilot:** [FEATURES_AUTOPILOT_AVANZADO.md](./FEATURES_AUTOPILOT_AVANZADO.md)
 
 ---
 
-**Última actualización:** 2025-01-27
+**Última actualización:** 2025-03-04
 

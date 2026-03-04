@@ -15,6 +15,7 @@ import MarketplaceService from './marketplace.service';
 import { AppError, ErrorCode } from '../middleware/error.middleware';
 import { toNumber } from '../utils/decimal.utils';
 import { env } from '../config/env';
+import { getProductPerformance, shouldRepeatWinner } from './product-performance.engine';
 
 /**
  * Configuration for autopilot system
@@ -768,6 +769,17 @@ export class AutopilotSystem extends EventEmitter {
       const { published, approved, capitalActuallyUsed } = await this.processOpportunities(affordable, currentUserId, userEnvironment, effectivePublishMode);
       console.log('[AUTOPILOT] PRODUCTS PUBLISHED:', published);
       console.log('[AUTOPILOT] products saved:', published);
+
+      // 5b. Duplicate winning products when autoRepeatWinners is enabled
+      let winnersDuplicated = 0;
+      if (this.config.autoRepeatWinners && (this.config.maxDuplicatesPerProduct ?? 1) > 1) {
+        const dupResult = await this.processWinnerDuplication(currentUserId, userEnvironment);
+        winnersDuplicated = dupResult.duplicated;
+        if (winnersDuplicated > 0) {
+          logger.info('Autopilot: Winner duplicates published', { count: winnersDuplicated, userId: currentUserId });
+        }
+      }
+
       if (published === 0 && affordable.length > 0) {
         logger.info('Autopilot: 0 published - all opportunities were duplicates (products already in catalog)', {
           affordableCount: affordable.length,
@@ -779,18 +791,19 @@ export class AutopilotSystem extends EventEmitter {
       const capitalUsed = capitalActuallyUsed ?? 0;
 
       // 6. Update category performance
+      const totalPublished = published + winnersDuplicated;
       this.updateCategoryPerformance(category, {
         productsFound: opportunities.length,
         productsProcessed: affordable.length,
-        productsPublished: published,
+        productsPublished: totalPublished,
         productsApproved: approved,
         capitalUsed,
-        successRate: (published + approved) / Math.max(opportunities.length, 1)
+        successRate: (totalPublished + approved) / Math.max(opportunities.length, 1)
       });
 
       // 7. Update autopilot stats
       this.updateAutopilotStats({
-        published,
+        published: totalPublished,
         approved,
         processed: affordable.length,
         capitalUsed
@@ -808,7 +821,7 @@ export class AutopilotSystem extends EventEmitter {
         query: selectedQuery,
         opportunitiesFound: opportunities.length,
         opportunitiesProcessed: affordable.length,
-        productsPublished: published,
+        productsPublished: totalPublished,
         productsApproved: approved,
         capitalUsed,
         timestamp: new Date()
@@ -1274,6 +1287,73 @@ export class AutopilotSystem extends EventEmitter {
     }
 
     return { published, approved, capitalActuallyUsed };
+  }
+
+  /**
+   * Duplicate winning products (winningScore > 75) when autoRepeatWinners is enabled.
+   * Creates additional listings for products that perform well, up to maxDuplicatesPerProduct.
+   */
+  private async processWinnerDuplication(
+    userId: number,
+    environment: 'sandbox' | 'production'
+  ): Promise<{ duplicated: number }> {
+    const maxDup = this.config.maxDuplicatesPerProduct ?? 1;
+    if (maxDup <= 1) return { duplicated: 0 };
+
+    const entries = await getProductPerformance(userId, 90);
+    const winners = entries.filter((e) => e.winningScore > 75);
+    if (winners.length === 0) return { duplicated: 0 };
+
+    const availableCapital = await this.getAvailableCapital(userId);
+    const maxCap = this.config.maxActiveProducts ?? 0;
+    const marketplaces: Array<'ebay' | 'mercadolibre' | 'amazon'> = (
+      this.config.targetMarketplaces && this.config.targetMarketplaces.length > 0
+        ? this.config.targetMarketplaces.filter((m): m is 'ebay' | 'mercadolibre' | 'amazon' =>
+            ['ebay', 'amazon', 'mercadolibre'].includes(String(m).toLowerCase()))
+        : [this.config.targetMarketplace as 'ebay' | 'mercadolibre' | 'amazon']
+    );
+    if (marketplaces.length === 0) return { duplicated: 0 };
+
+    let duplicated = 0;
+    for (const entry of winners) {
+      if (maxCap > 0) {
+        const activeCount = await prisma.marketplaceListing.count({ where: { userId } });
+        if (activeCount >= maxCap) break;
+      }
+      const product = await prisma.product.findFirst({
+        where: { id: entry.productId, userId },
+        include: { marketplaceListings: true },
+      });
+      if (!product || product.status !== 'PUBLISHED' || !product.isPublished) continue;
+
+      const listingCount = product.marketplaceListings?.length ?? 0;
+      if (listingCount >= maxDup) continue;
+
+      const capitalAllocationAllows = availableCapital >= toNumber(product.aliexpressPrice ?? 0);
+      const marketSaturated = listingCount >= maxDup;
+      if (!shouldRepeatWinner(entry.winningScore, capitalAllocationAllows, marketSaturated)) continue;
+
+      try {
+        for (const marketplace of marketplaces) {
+          const result = await this.marketplaceService.publishProduct(
+            userId,
+            { productId: product.id, marketplace, duplicateListing: true },
+            environment
+          );
+          if (result.success) {
+            duplicated++;
+            break; // one duplicate per product per cycle
+          }
+        }
+      } catch (err) {
+        logger.warn('Autopilot: Error duplicating winner listing', {
+          productId: entry.productId,
+          userId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    return { duplicated };
   }
 
   /**

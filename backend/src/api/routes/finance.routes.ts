@@ -8,6 +8,7 @@ import { getWorkingCapitalDetail } from '../../services/working-capital-detail.s
 import { calculateMaxNewListingsAllowed } from '../../services/capital-allocation.engine';
 import { getProductPerformance } from '../../services/product-performance.engine';
 import { computeFinanceRisk } from '../../services/finance-risk.engine';
+import { getMonthlyProfitProjection } from '../../services/profit-projection.service';
 
 const router = Router();
 router.use(authenticate);
@@ -106,6 +107,20 @@ router.get('/capital-allocation', async (req: Request, res: Response, next) => {
       supplierCost > 0 ? supplierCost : undefined
     );
     res.json({ success: true, allocation });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/finance/profit-projection
+ * Monthly profit projection (historical or default methodology)
+ */
+router.get('/profit-projection', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user!.userId;
+    const projection = await getMonthlyProfitProjection(userId);
+    res.json({ success: true, projection });
   } catch (error) {
     next(error);
   }

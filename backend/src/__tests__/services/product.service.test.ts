@@ -1,9 +1,6 @@
 // ✅ E6: Tests unitarios para ProductService
 import { ProductService } from '../../services/product.service';
-import { PrismaClient } from '@prisma/client';
-import { AppError } from '../../middleware/error.middleware';
 
-// Mock Prisma
 jest.mock('../../config/database', () => ({
   prisma: {
     product: {
@@ -20,6 +17,9 @@ jest.mock('../../config/database', () => ({
     },
     sale: {
       count: jest.fn(),
+    },
+    systemConfig: {
+      findUnique: jest.fn().mockResolvedValue(null),
     },
   },
 }));

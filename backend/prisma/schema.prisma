@@ -368,6 +368,7 @@ model MarketplaceListing {
   listingId   String // ID del listing en el marketplace
   listingUrl  String?
   sku         String?
+  viewCount   Int?      @default(0) // Synced from eBay Analytics (traffic report)
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

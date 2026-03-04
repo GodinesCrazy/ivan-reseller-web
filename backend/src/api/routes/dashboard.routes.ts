@@ -10,6 +10,7 @@ import { queryWithTimeout } from '../../utils/queryWithTimeout';
 import { handleSetupCheck } from '../../utils/setup-check';
 import { env } from '../../config/env';
 import { wrapAsync } from '../../utils/async-route-wrapper';
+import { getProductPerformance } from '../../services/product-performance.engine';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -346,6 +347,7 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
         profitToday: 0,
         profitMonth: 0,
         winningProductsCount: 0,
+        topWinningProducts: [],
         _safeMode: true,
       });
     }
@@ -391,12 +393,30 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
     });
     const profitToday = Number(profitTodayResult._sum?.netProfit ?? 0);
 
+    let winningProductsCount = productsWithSales.length;
+    let topWinningProducts: Array<{ productId: number; productTitle: string; winningScore: number }> = [];
+    if (userId) {
+      try {
+        const entries = await getProductPerformance(userId, 90);
+        const winners = entries.filter((e) => e.winningScore > 75);
+        winningProductsCount = winners.length;
+        topWinningProducts = winners.slice(0, 5).map((e) => ({
+          productId: e.productId,
+          productTitle: e.productTitle,
+          winningScore: Math.round(e.winningScore),
+        }));
+      } catch (err) {
+        logger.warn('autopilot-metrics: getProductPerformance failed', { userId, error: (err as Error)?.message });
+      }
+    }
+
     res.json({
       activeListings,
       dailySales: salesToday,
       profitToday,
       profitMonth,
-      winningProductsCount: productsWithSales.length,
+      winningProductsCount,
+      topWinningProducts,
     });
   } catch (error: any) {
     logger.error('Error in /api/dashboard/autopilot-metrics', { error: error?.message, userId: req.user?.userId });

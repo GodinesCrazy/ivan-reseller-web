@@ -1,7 +1,7 @@
 import { trace } from '../utils/boot-trace';
 trace('loading sale.service');
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../config/database';
 import { AppError } from '../middleware/error.middleware';
 import logger from '../config/logger';
 import fxService from './fx.service';
@@ -10,8 +10,6 @@ import { UserSettingsService } from './user-settings.service';
 import { platformConfigService } from './platform-config.service';
 import { toNumber } from '../utils/decimal.utils';
 import type { AutomatedOrder } from './automation.service';
-
-const prisma = new PrismaClient();
 
 export interface CreateSaleDto {
   orderId: string;

@@ -45,6 +45,12 @@ export const DOCS_REGISTRY: DocEntry[] = [
     category: 'guides',
     description: 'Guía completa para administradores',
   },
+  {
+    slug: 'features-autopilot-avanzado',
+    title: 'Funcionalidades Avanzadas Autopilot',
+    category: 'guides',
+    description: 'Preset 1 artículo, duplicar ganadores, despublicación automática, estado del sistema',
+  },
   // Troubleshooting
   {
     slug: 'troubleshooting',
@@ -76,6 +82,7 @@ export async function loadDoc(slug: string): Promise<string> {
       'architecture': () => import('../../content/docs/ARCHITECTURE.md?raw'),
       'user-guide': () => import('../../content/docs/USER_GUIDE.md?raw'),
       'admin-guide': () => import('../../content/docs/ADMIN_GUIDE.md?raw'),
+      'features-autopilot-avanzado': () => import('../../content/docs/FEATURES_AUTOPILOT_AVANZADO.md?raw'),
     };
 
     const loader = docMap[slug];
