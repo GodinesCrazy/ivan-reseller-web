@@ -1,5 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import api from '@/services/api';
 import { useAuthStore } from '@stores/authStore';
 
@@ -14,14 +13,11 @@ interface SetupStatus {
 }
 
 /**
- * Hook para verificar si el setup está completo
- * Redirige a /setup-required si es necesario (nunca desde /api-settings ni /setup-required)
+ * Hook para verificar si el setup está completo.
+ * No redirige: tras login el usuario siempre llega al dashboard; el setup incompleto
+ * se muestra como aviso en Layout (banner con enlace a /api-settings).
  */
 export function useSetupCheck() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const pathnameRef = useRef(location.pathname);
-  pathnameRef.current = location.pathname;
   const { isAuthenticated, user } = useAuthStore();
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
   const [checking, setChecking] = useState(false);
@@ -31,7 +27,6 @@ export function useSetupCheck() {
       return;
     }
 
-    // Solo verificar para usuarios no-admin
     if (user.role?.toUpperCase() === 'ADMIN') {
       return;
     }
@@ -44,7 +39,7 @@ export function useSetupCheck() {
       setChecking(true);
       const response = await api.get('/api/setup-status');
       const data = response.data;
-      
+
       setSetupStatus({
         setupRequired: data.setupRequired || false,
         hasMarketplace: data.hasMarketplace || false,
@@ -54,14 +49,6 @@ export function useSetupCheck() {
           searchAPI: false
         }
       });
-
-      if (data.setupRequired) {
-        // Usar pathname actual del router (evita redirigir si el usuario ya navegó a /api-settings)
-        const currentPath = pathnameRef.current;
-        if (currentPath !== '/setup-required' && !currentPath.startsWith('/api-settings')) {
-          navigate('/setup-required', { replace: true });
-        }
-      }
     } catch (error: any) {
       console.error('Error checking setup status:', error);
     } finally {
