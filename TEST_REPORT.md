@@ -104,3 +104,15 @@ cd c:\Ivan_Reseller_Web\frontend; npm test -- --run
 # Ciclo de dropshipping (requiere backend arriba y INTERNAL_RUN_SECRET)
 cd c:\Ivan_Reseller_Web\backend; npm run test-full-dropshipping-cycle
 ```
+
+---
+
+## 6. Test vía web (post-commit/push)
+
+**Fecha:** 2026-03-04 (tras push a GitHub)
+
+- **Frontend (Vite):** http://localhost:5173
+  - **Login:** Carga correcta (Ivan Reseller, Username, Password, Ingresar, Solicitar acceso).
+  - **/help:** Página pública OK (Centro de Ayuda, 11 secciones, navegación, Inicio Rápido, Tips).
+  - **/diagnostics:** Redirige a login (ruta protegida; comportamiento esperado).
+- **Backend:** http://localhost:4000 no estaba en ejecución (ERR_CONNECTION_REFUSED). Para probar `GET /api/system/diagnostics` y `GET /api/system/business-diagnostics`, levantar el backend y volver a probar.
