@@ -37,6 +37,7 @@ const statusStyles: Record<string, { className: string; label: string; icon: JSX
 export default function Navbar() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const { toggle } = useSidebar();
   const statuses = useAuthStatusStore((state) => state.statuses);
   const loadingStatus = useAuthStatusStore((state) => state.loading);
   const fetchStatuses = useAuthStatusStore((state) => state.fetchStatuses);
