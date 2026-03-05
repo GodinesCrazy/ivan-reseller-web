@@ -1939,13 +1939,13 @@ export default function APISettings() {
         });
       }
 
-      // Recargar credenciales (con timeout para evitar que se quede colgado)
+      // Recargar credenciales y APIs mínimas con refresh para evitar contradicción entre secciones
       try {
         await Promise.race([
           Promise.all([
-            loadCredentials(),
+            loadCredentials(true),
             fetchAuthStatuses(),
-            loadMinimumDropshippingAPIs(),
+            loadMinimumDropshippingAPIs(true),
           ]),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
         ]);
@@ -2074,9 +2074,10 @@ export default function APISettings() {
         }
       }
 
-      // ✅ MEJORA: Recargar credenciales y estados inmediatamente después de guardar
-      await loadCredentials();
+      // ✅ MEJORA: Recargar credenciales y estados inmediatamente después de guardar (ambas secciones)
+      await loadCredentials(true);
       await fetchAuthStatuses();
+      await loadMinimumDropshippingAPIs(true);
       
       // Limpiar formulario
       setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: {} }));
@@ -3484,7 +3485,7 @@ export default function APISettings() {
                 </div>
                 {/* Botón para refrescar */}
                 <button
-                  onClick={loadMinimumDropshippingAPIs}
+                  onClick={() => { loadCredentials(true); loadMinimumDropshippingAPIs(true); }}
                   disabled={loadingMinimumAPIs}
                   className="flex items-center gap-2 rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
@@ -3497,12 +3498,18 @@ export default function APISettings() {
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {minimumDropshippingAPIs.apis.map((apiItem) => {
-                const isConfigured = apiItem.isConfigured;
-                const isAvailable = apiItem.isAvailable;
+                // Single source of truth: prefer statuses (same as list) when available to avoid contradiction
+                const listStatus = apiItem.apiName !== 'marketplace'
+                  ? statuses[makeEnvKey(apiItem.apiName, 'production')]
+                  : undefined;
+                const isConfigured = listStatus !== undefined ? listStatus.isConfigured : apiItem.isConfigured;
+                const isAvailable = listStatus !== undefined ? listStatus.isAvailable : apiItem.isAvailable;
+                const displayStatus = listStatus?.status ?? apiItem.status;
+                const displayMessage = listStatus?.message ?? apiItem.message;
                 const getStatusIconColor = () => {
                   if (isConfigured && isAvailable) {
-                    return apiItem.status === 'healthy' ? 'text-green-600' : 
-                           apiItem.status === 'degraded' ? 'text-amber-600' : 'text-red-600';
+                    return displayStatus === 'healthy' ? 'text-green-600' : 
+                           displayStatus === 'degraded' ? 'text-amber-600' : 'text-red-600';
                   }
                   return isConfigured ? 'text-amber-600' : 'text-gray-400';
                 };
@@ -3553,7 +3560,7 @@ export default function APISettings() {
                       {isConfigured && isAvailable ? (
                         <p className="text-xs text-green-700 font-medium">✅ Configurada y funcionando</p>
                       ) : isConfigured ? (
-                        <p className="text-xs text-amber-700">{apiItem.message || 'Configurada pero con problemas'}</p>
+                        <p className="text-xs text-amber-700">{displayMessage || 'Configurada pero con problemas'}</p>
                       ) : (
                         <div>
                           <p className="text-xs text-red-700 font-medium mb-2">❌ No configurada</p>
@@ -3722,6 +3729,7 @@ export default function APISettings() {
                     onClick={() => {
                       setError(null);
                       loadCredentials(true);
+                      loadMinimumDropshippingAPIs(true);
                     }}
                     className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition flex items-center gap-2 text-sm"
                   >
@@ -4805,11 +4813,13 @@ export default function APISettings() {
         onClose={() => {
           setWizardOpen(false);
           setWizardInitialAPI(undefined);
-          loadCredentials(); // Recargar credenciales después de cerrar
+          loadCredentials(true);
+          loadMinimumDropshippingAPIs(true);
         }}
         onComplete={(wizardData: WizardData) => {
           toast.success(`Configuración de ${wizardData.selectedAPI} completada exitosamente`);
-          loadCredentials(); // Recargar credenciales después de completar
+          loadCredentials(true);
+          loadMinimumDropshippingAPIs(true);
         }}
         initialAPI={wizardInitialAPI}
       />
