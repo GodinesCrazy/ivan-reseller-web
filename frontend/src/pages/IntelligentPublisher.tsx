@@ -53,18 +53,48 @@ export default function IntelligentPublisher() {
       const response = await api.post(`/api/publisher/approve/${productId}`, { marketplaces });
       const data = response.data;
       setPending((prev) => prev.filter(p => p.id !== productId));
-      
-      // Mostrar mensaje según el resultado real
+
+      // Job encolado: publicación asíncrona (mismo flujo que Queue Publishing Jobs)
+      if (data?.jobQueued === true) {
+        toast.success(
+          'Producto aprobado. La publicación se está procesando; recibirás una notificación cuando termine.',
+          { duration: 6000 }
+        );
+        return;
+      }
+
+      // Fallback síncrono (Redis no disponible): usar publishResults
       if (data?.publishResults && Array.isArray(data.publishResults)) {
         const successCount = data.publishResults.filter((r: any) => r.success).length;
         const totalCount = data.publishResults.length;
-        
+
         if (successCount === totalCount && totalCount > 0) {
           toast.success(`Producto aprobado y publicado en ${successCount} marketplace(s)`);
         } else if (successCount > 0) {
           toast.success(`Producto aprobado. Publicado en ${successCount}/${totalCount} marketplace(s)`);
         } else if (totalCount > 0) {
-          toast.error('Producto aprobado, pero la publicación falló. Revisa tus credenciales.');
+          const failed = data.publishResults.filter((r: any) => !r.success);
+          const errorDetails = failed
+            .map((r: any) => `${r.marketplace || 'Marketplace'}: ${r.error || 'Error desconocido'}`)
+            .join('. ');
+          toast.error(
+            (t: { id: string }) => (
+              <div className="flex flex-col gap-2">
+                <span>Producto aprobado, pero la publicación falló.</span>
+                <span className="text-sm">{errorDetails}</span>
+                <button
+                  onClick={() => {
+                    toast.dismiss(t.id);
+                    navigate('/settings?tab=api-credentials');
+                  }}
+                  className="text-sm font-medium text-primary-600 hover:text-primary-700 underline"
+                >
+                  Ir a Configuración →
+                </button>
+              </div>
+            ),
+            { duration: 10000 }
+          );
         } else {
           toast.success('Producto aprobado');
         }

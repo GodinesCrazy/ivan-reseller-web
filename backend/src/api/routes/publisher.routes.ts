@@ -7,6 +7,7 @@ import { getAliExpressProductCascaded } from '../../services/aliexpress-acquisit
 import { prisma } from '../../config/database';
 import { logger } from '../../config/logger';
 import { toNumber } from '../../utils/decimal.utils';
+import { jobService } from '../../services/job.service';
 
 const router = Router();
 router.use(authenticate);
@@ -441,10 +442,31 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
     
     await productService.updateProductStatus(id, 'APPROVED', req.user!.userId);
 
+    // ✅ Delegar publicación al job (mismo flujo que Queue Publishing Jobs) para evitar timeouts HTTP
+    if (Array.isArray(marketplaces) && marketplaces.length > 0) {
+      const job = await jobService.addPublishingJob({
+        userId: product.userId,
+        productId: product.id,
+        marketplaces,
+        customData,
+      });
+      if (job && job.id) {
+        logger.info('[PUBLISHER] Publishing job queued', { productId: id, jobId: job.id, marketplaces });
+        return res.json({
+          success: true,
+          message: `Product approved. Publication is being processed; you will receive a notification when it finishes.`,
+          jobQueued: true,
+          jobId: job.id,
+        });
+      }
+      // Redis unavailable: fallback to synchronous publish
+      logger.warn('[PUBLISHER] Job queue unavailable, falling back to sync publish', { productId: id });
+    }
+
     let publishResults: Array<{ success: boolean; marketplace?: string; error?: string }> = [];
     if (Array.isArray(marketplaces) && marketplaces.length > 0) {
       const service = new MarketplaceService();
-      // ✅ Publicar por marketplace usando el entorno resuelto en validación
+      // ✅ Publicar por marketplace usando el entorno resuelto en validación (fallback cuando no hay Redis)
       for (const marketplace of marketplaces) {
         const typedMarketplace = marketplace as 'ebay' | 'amazon' | 'mercadolibre';
         const environmentForMarketplace =

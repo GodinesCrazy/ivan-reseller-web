@@ -1,12 +1,66 @@
 /**
  * System routes - diagnostics, health, features
  * GET /api/system/diagnostics - Production readiness diagnostics (no auth)
+ * GET /api/system/status - User status panel (auth required)
  */
 
 import { Router, Request, Response } from 'express';
 import logger from '../../config/logger';
+import { authenticate } from '../../middleware/auth.middleware';
+import { apiAvailability } from '../../services/api-availability.service';
 
 const router = Router();
+
+/**
+ * GET /api/system/status
+ * User status panel: PayPal, eBay, AliExpress, Autopilot, Profit Guard.
+ * Requires authentication. Returns format expected by SystemStatus.tsx.
+ */
+router.get('/status', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const statuses = await apiAvailability.getAllAPIStatus(userId);
+
+    const findAvailable = (apiName: string) =>
+      statuses.find((s) => s.apiName === apiName && s.isAvailable) ?? null;
+
+    const paypalConnected = Boolean(findAvailable('paypal'));
+    const ebayConnected = Boolean(findAvailable('ebay'));
+    const aliexpressOAuth =
+      Boolean(findAvailable('aliexpress-dropshipping')) || Boolean(findAvailable('aliexpress'));
+
+    let autopilotEnabled = false;
+    try {
+      const { prisma } = await import('../../config/database');
+      const configRec = await prisma.systemConfig.findUnique({ where: { key: 'autopilot_config' } });
+      if (configRec?.value) {
+        const parsed = JSON.parse(configRec.value as string) as { enabled?: boolean };
+        autopilotEnabled = parsed.enabled === true;
+      }
+    } catch {
+      // non-fatal
+    }
+
+    const profitGuardEnabled = true; // Built-in service, always active
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        paypalConnected,
+        ebayConnected,
+        aliexpressOAuth,
+        autopilotEnabled,
+        profitGuardEnabled,
+      },
+    });
+  } catch (err: any) {
+    logger.error('[SYSTEM/STATUS] Error', { error: err?.message });
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to load system status',
+    });
+  }
+});
 
 /**
  * GET /api/system/diagnostics
