@@ -3498,18 +3498,12 @@ export default function APISettings() {
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {minimumDropshippingAPIs.apis.map((apiItem) => {
-                // Single source of truth: prefer statuses (same as list) when available to avoid contradiction
-                const listStatus = apiItem.apiName !== 'marketplace'
-                  ? statuses[makeEnvKey(apiItem.apiName, 'production')]
-                  : undefined;
-                const isConfigured = listStatus !== undefined ? listStatus.isConfigured : apiItem.isConfigured;
-                const isAvailable = listStatus !== undefined ? listStatus.isAvailable : apiItem.isAvailable;
-                const displayStatus = listStatus?.status ?? apiItem.status;
-                const displayMessage = listStatus?.message ?? apiItem.message;
+                const isConfigured = apiItem.isConfigured;
+                const isAvailable = apiItem.isAvailable;
                 const getStatusIconColor = () => {
                   if (isConfigured && isAvailable) {
-                    return displayStatus === 'healthy' ? 'text-green-600' : 
-                           displayStatus === 'degraded' ? 'text-amber-600' : 'text-red-600';
+                    return apiItem.status === 'healthy' ? 'text-green-600' : 
+                           apiItem.status === 'degraded' ? 'text-amber-600' : 'text-red-600';
                   }
                   return isConfigured ? 'text-amber-600' : 'text-gray-400';
                 };
@@ -3560,7 +3554,7 @@ export default function APISettings() {
                       {isConfigured && isAvailable ? (
                         <p className="text-xs text-green-700 font-medium">✅ Configurada y funcionando</p>
                       ) : isConfigured ? (
-                        <p className="text-xs text-amber-700">{displayMessage || 'Configurada pero con problemas'}</p>
+                        <p className="text-xs text-amber-700">{apiItem.message || 'Configurada pero con problemas'}</p>
                       ) : (
                         <div>
                           <p className="text-xs text-red-700 font-medium mb-2">❌ No configurada</p>
