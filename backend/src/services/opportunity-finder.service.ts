@@ -24,72 +24,9 @@ import {
   DEFAULT_COMPARATOR_MARKETPLACES,
   OPTIONAL_MARKETPLACES,
 } from '../config/marketplaces.config';
+import type { OpportunityFilters, OpportunityItem, PipelineDiagnostics } from './opportunity-finder.types';
 
-export interface OpportunityFilters {
-  query: string;
-  maxItems?: number;
-  marketplaces?: Array<'ebay' | 'amazon' | 'mercadolibre'>;
-  region?: string; // e.g., 'us', 'uk', 'mx'
-  environment?: 'sandbox' | 'production'; // Environment para credenciales
-  skipTrendsValidation?: boolean; // For smoke test: skip Google Trends filter
-  /** Margen relajado (5%) para búsqueda web - muestra más oportunidades cuando el margen estricto devuelve 0 */
-  relaxedMargin?: boolean;
-  /** Internal: collect pipeline diagnostics for test-full-cycle */
-  _collectDiagnostics?: { current: PipelineDiagnostics };
-}
-
-export interface PipelineDiagnostics {
-  sourcesTried: string[];
-  discovered: number;
-  normalized: number;
-  reason?: 'NO_REAL_PRODUCTS';
-  [key: string]: unknown;
-}
-
-export interface OpportunityItem {
-  productId?: string;
-  title: string;
-  sourceMarketplace: 'aliexpress';
-  aliexpressUrl: string;
-  productUrl?: string; // ✅ Alias para aliexpressUrl (para compatibilidad)
-  image?: string;
-  images?: string[]; // ✅ MEJORADO: Array de todas las imágenes disponibles
-  costUsd: number;
-  costAmount: number;
-  costCurrency: string;
-  baseCurrency: string;
-  price?: number; // ✅ Alias para costUsd (para compatibilidad con deduplicación)
-  suggestedPriceUsd: number;
-  suggestedPriceAmount: number;
-  suggestedPriceCurrency: string;
-  profitMargin: number; // 0-1
-  roiPercentage: number; // 0-100
-  competitionLevel: 'low' | 'medium' | 'high' | 'unknown';
-  marketDemand: string;
-  confidenceScore: number;
-  targetMarketplaces: string[];
-  feesConsidered: Record<string, number>;
-  generatedAt: string;
-  estimatedFields?: string[];
-  estimationNotes?: string[];
-  category?: string; // ✅ Categoría del producto (para deduplicación)
-  shippingCost?: number; // ✅ Costo de envío adicional
-  importTax?: number; // ✅ Impuestos de importación
-  totalCost?: number; // ✅ Costo total (producto + envío + impuestos)
-  targetCountry?: string; // ✅ País destino para cálculo de impuestos
-  // ✅ NUEVO: Datos de demanda real validados con Google Trends
-  trendData?: {
-    trend: 'rising' | 'stable' | 'declining';
-    searchVolume: number;
-    validation: {
-      viable: boolean;
-      confidence: number;
-      reason: string;
-    };
-  };
-  estimatedTimeToFirstSale?: number; // ✅ NUEVO: Días estimados hasta primera venta
-  breakEvenTime?: number; // ✅ NUEVO: Días hasta recuperar inversión (break-even)
-}
+export type { OpportunityFilters, OpportunityItem, PipelineDiagnostics } from './opportunity-finder.types';
 
 class OpportunityFinderService {
   private minMargin = Number(process.env.MIN_OPPORTUNITY_MARGIN || '0.10'); // ✅ Reducido de 0.20 a 0.10 para permitir más oportunidades válidas

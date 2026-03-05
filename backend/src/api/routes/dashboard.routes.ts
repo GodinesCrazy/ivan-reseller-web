@@ -11,8 +11,10 @@ import { handleSetupCheck } from '../../utils/setup-check';
 import { env } from '../../config/env';
 import { wrapAsync } from '../../utils/async-route-wrapper';
 import { getProductPerformance } from '../../services/product-performance.engine';
+import { cacheService } from '../../services/cache.service';
 
 const router = Router();
+const DASHBOARD_STATS_CACHE_TTL = Number(process.env.DASHBOARD_STATS_CACHE_TTL_SECONDS) || 50;
 const prisma = new PrismaClient();
 router.use(authenticate);
 
@@ -67,37 +69,40 @@ router.get('/stats', wrapAsync(async (req: Request, res: Response, next) => {
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
     const userId = isAdmin ? undefined : req.user?.userId;
-    
+
     // ✅ Verificar setup antes de continuar (solo para usuarios no-admin)
     if (!isAdmin && userId) {
       const shouldStop = await handleSetupCheck(userId, res);
       if (shouldStop) {
-        return; // Ya se envió respuesta de setup_required
+        return;
       }
     }
-    
-    // Convertir userId a string para servicios que lo requieren
+
     const userIdString = userId ? String(userId) : undefined;
-    
-    // ✅ FIX: Agregar timeout de 25 segundos para evitar 502 de Vercel (timeout 30s)
-    const timeoutMs = 25000;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Request timeout: Database queries exceeded 25 seconds')), timeoutMs);
-    });
-    
-    const queriesPromise = Promise.all([
-      productService.getProductStats(userId),
-      saleService.getSalesStats(userIdString),
-      commissionService.getCommissionStats(userIdString),
-    ]);
-    
-    const [productStats, salesStats, commissionStats] = await Promise.race([
-      queriesPromise,
-      timeoutPromise,
-    ]) as [any, any, any];
-    
+    const cacheKey = `dashboard:stats:${isAdmin ? 'admin' : userId}`;
+    const payload = await cacheService.getOrSet(
+      cacheKey,
+      async () => {
+        const timeoutMs = 25000;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Request timeout: Database queries exceeded 25 seconds')), timeoutMs);
+        });
+        const queriesPromise = Promise.all([
+          productService.getProductStats(userId),
+          saleService.getSalesStats(userIdString),
+          commissionService.getCommissionStats(userIdString),
+        ]);
+        const [productStats, salesStats, commissionStats] = await Promise.race([
+          queriesPromise,
+          timeoutPromise,
+        ]) as [any, any, any];
+        return { products: productStats, sales: salesStats, commissions: commissionStats };
+      },
+      { ttl: DASHBOARD_STATS_CACHE_TTL }
+    );
+
     const duration = Date.now() - startTime;
-    res.json({ products: productStats, sales: salesStats, commissions: commissionStats });
+    res.json(payload);
   } catch (error: any) {
     const duration = Date.now() - startTime;
     

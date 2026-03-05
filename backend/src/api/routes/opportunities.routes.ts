@@ -4,10 +4,12 @@ import opportunityFinder from '../../services/opportunity-finder.service';
 import ManualAuthRequiredError from '../../errors/manual-auth-required.error';
 import { notificationService } from '../../services/notification.service';
 import opportunityPersistence from '../../services/opportunity.service';
+import { cacheService } from '../../services/cache.service';
 import { z } from 'zod';
 import { logger } from '../../config/logger';
 
 const router = Router();
+const OPPORTUNITIES_CACHE_TTL = Number(process.env.OPPORTUNITIES_CACHE_TTL_SECONDS) || 120;
 
 // Require authentication for all endpoints
 router.use(authenticate);
@@ -43,6 +45,21 @@ router.get('/', async (req, res) => {
 
     if (!query) {
       return res.json({ success: true, items: [], count: 0, data_source: 'profit_engine_real', timestamp: new Date().toISOString() });
+    }
+
+    const marketplacesKey = [...marketplaces].sort().join(',');
+    const envKey = environment ?? 'production';
+    const cacheKey = `opportunities:${userId}:${query.toLowerCase().trim()}:${maxItems}:${marketplacesKey}:${region}:${envKey}`;
+    const cached = await cacheService.get<{ items: any[]; count: number; timestamp: string }>(cacheKey);
+    if (cached != null) {
+      return res.json({
+        success: true,
+        items: cached.items ?? [],
+        count: cached.count ?? 0,
+        data_source: 'profit_engine_real',
+        timestamp: cached.timestamp ?? new Date().toISOString(),
+        _cached: true,
+      });
     }
 
     // Notify start
@@ -210,6 +227,13 @@ router.get('/', async (req, res) => {
     if (progressTimer) clearInterval(progressTimer);
     if (warnTimer) clearTimeout(warnTimer);
 
+    const timestamp = new Date().toISOString();
+    await cacheService.set(
+      cacheKey,
+      { items: opportunities ?? [], count: (opportunities ?? []).length, timestamp },
+      { ttl: OPPORTUNITIES_CACHE_TTL }
+    ).catch(() => {});
+
     console.log('[OPPORTUNITIES API] Found opportunities:', opportunities?.length ?? 0);
 
     return res.json({
@@ -217,7 +241,7 @@ router.get('/', async (req, res) => {
       items: opportunities ?? [],
       count: opportunities?.length ?? 0,
       data_source: 'profit_engine_real',
-      timestamp: new Date().toISOString()
+      timestamp
     });
   } catch (error) {
     // ✅ FIX: Single declaration of correlationId at the top of catch block
