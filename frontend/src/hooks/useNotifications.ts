@@ -100,7 +100,11 @@ export const useNotifications = (): UseNotificationsReturn => {
 
       // Play notification sound for important notifications
       if (notification.priority === 'HIGH' || notification.priority === 'URGENT') {
-        playNotificationSound();
+        if (notification.type === 'SALE_CREATED') {
+          playSaleSound();
+        } else {
+          playNotificationSound();
+        }
       }
     });
 
@@ -210,6 +214,19 @@ function showBrowserNotification(notification: NotificationPayload) {
     };
   } catch (error) {
     log.error('Failed to show browser notification:', error);
+  }
+}
+
+const SALE_SOUND_URL = '/sounds/sonido_venta.mp3';
+
+function playSaleSound() {
+  try {
+    const audio = new Audio(SALE_SOUND_URL);
+    audio.play().catch(() => {
+      playNotificationSound();
+    });
+  } catch {
+    playNotificationSound();
   }
 }
 
