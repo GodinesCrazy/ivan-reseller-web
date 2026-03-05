@@ -53,6 +53,8 @@ router.get('/', async (req: Request, res: Response, next) => {
       cost: toNumber(sale.aliexpressCost || sale.costPrice || 0),
       profit: toNumber(sale.netProfit || sale.grossProfit || 0),
       commission: toNumber(sale.commissionAmount || sale.userCommission || 0),
+      marketplaceFee: toNumber(sale.marketplaceFee ?? 0),
+      grossProfit: toNumber(sale.grossProfit ?? 0),
       status: sale.status,
       trackingNumber: sale.trackingNumber || undefined,
       createdAt: sale.createdAt?.toISOString() || new Date().toISOString()

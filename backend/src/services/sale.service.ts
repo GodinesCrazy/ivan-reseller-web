@@ -982,6 +982,33 @@ export class SaleService {
   }
 
   /**
+   * Derives marketplace from Order. Webhooks use paypalOrderId = "marketplace:orderId";
+   * checkout uses PayPal order ID. Fallback: infer from Product's MarketplaceListing.
+   */
+  private async deriveMarketplaceFromOrder(
+    order: { paypalOrderId?: string | null },
+    productId: number,
+    userId: number
+  ): Promise<string> {
+    const validMarketplaces = ['ebay', 'amazon', 'mercadolibre'] as const;
+    const pid = order.paypalOrderId?.trim();
+    if (pid) {
+      const prefix = pid.split(':')[0]?.toLowerCase();
+      if (prefix && validMarketplaces.includes(prefix as any)) {
+        return prefix;
+      }
+    }
+    const listing = await prisma.marketplaceListing.findFirst({
+      where: { productId, userId },
+      select: { marketplace: true },
+    });
+    if (listing?.marketplace && validMarketplaces.includes(listing.marketplace as any)) {
+      return listing.marketplace.toLowerCase();
+    }
+    return 'checkout';
+  }
+
+  /**
    * Crea una Sale a partir de un Order en estado PURCHASED (tras fulfillment).
    * Requiere Order.userId y un Product (por order.productId o por productUrl del usuario).
    */
@@ -999,7 +1026,7 @@ export class SaleService {
     }
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, userId: true, productId: true, productUrl: true, price: true, currency: true, customerEmail: true, shippingAddress: true },
+      select: { id: true, userId: true, productId: true, productUrl: true, price: true, currency: true, customerEmail: true, shippingAddress: true, paypalOrderId: true },
     });
     if (!order || !order.userId) {
       logger.debug('[SALE] createSaleFromOrder skipped: no order or no userId', { orderId, timestamp: ts });
@@ -1030,11 +1057,12 @@ export class SaleService {
       logger.warn('[SALE] createSaleFromOrder skipped: invalid prices', { orderId, costPrice, salePrice });
       return null;
     }
+    const marketplace = await this.deriveMarketplaceFromOrder(order, product.id, userId);
     try {
       const sale = await this.createSale(userId, {
         orderId: order.id,
         productId: product.id,
-        marketplace: 'paypal',
+        marketplace,
         salePrice,
         costPrice,
         currency: order.currency || 'USD',

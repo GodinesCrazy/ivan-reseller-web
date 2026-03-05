@@ -50,6 +50,8 @@ interface Sale {
   cost: number;
   profit: number;
   commission: number;
+  marketplaceFee?: number;
+  grossProfit?: number;
   status: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
   trackingNumber?: string;
   createdAt: string;
@@ -124,7 +126,7 @@ export default function Sales() {
                          sale.productTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          sale.buyerName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || sale.status === statusFilter;
-    const matchesMarketplace = marketplaceFilter === 'ALL' || sale.marketplace === marketplaceFilter;
+    const matchesMarketplace = marketplaceFilter === 'ALL' || sale.marketplace?.toLowerCase() === marketplaceFilter.toLowerCase();
     return matchesSearch && matchesStatus && matchesMarketplace;
   });
 
@@ -422,9 +424,10 @@ export default function Sales() {
                   className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="ALL">All Marketplaces</option>
-                  <option value="EBAY">eBay</option>
-                  <option value="AMAZON">Amazon</option>
-                  <option value="MERCADOLIBRE">MercadoLibre</option>
+                  <option value="ebay">eBay</option>
+                  <option value="amazon">Amazon</option>
+                  <option value="mercadolibre">MercadoLibre</option>
+                  <option value="checkout">Checkout</option>
                 </select>
                 <select
                   value={dateRange}
@@ -599,22 +602,6 @@ export default function Sales() {
                     </p>
                   </div>
                 )}
-                <div>
-                  <p className="text-sm text-gray-600">Sale Price</p>
-                  <p className="font-medium text-lg">{formatCurrencySimple(selectedSale.salePrice, 'USD')}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Cost</p>
-                  <p className="font-medium">{formatCurrencySimple(selectedSale.cost, 'USD')}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Profit</p>
-                  <p className="font-medium text-green-600 text-lg">+{formatCurrencySimple(selectedSale.profit, 'USD')}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Commission</p>
-                  <p className="font-medium text-orange-600">{formatCurrencySimple(selectedSale.commission, 'USD')}</p>
-                </div>
                 {selectedSale.trackingNumber && (
                   <div className="col-span-2">
                     <p className="text-sm text-gray-600 flex items-center gap-1">
@@ -630,6 +617,38 @@ export default function Sales() {
                     Sale Date
                   </p>
                   <p className="font-medium">{new Date(selectedSale.createdAt).toLocaleString()}</p>
+                </div>
+              </div>
+              {/* Composición financiera */}
+              <div className="border rounded-lg p-4 bg-gray-50 space-y-2">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Composición financiera</h3>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Precio de venta</span>
+                  <span className="font-medium">{formatCurrencySimple(selectedSale.salePrice, 'USD')}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Costo proveedor</span>
+                  <span className="font-medium text-red-600">-{formatCurrencySimple(selectedSale.cost, 'USD')}</span>
+                </div>
+                {(selectedSale.marketplaceFee ?? 0) > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Fee marketplace</span>
+                    <span className="font-medium text-red-600">-{formatCurrencySimple(selectedSale.marketplaceFee ?? 0, 'USD')}</span>
+                  </div>
+                )}
+                {(selectedSale.commission ?? 0) > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Comisión plataforma</span>
+                    <span className="font-medium text-orange-600">-{formatCurrencySimple(selectedSale.commission ?? 0, 'USD')}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm pt-2 border-t">
+                  <span className="text-gray-600">Ganancia bruta</span>
+                  <span className="font-medium">{formatCurrencySimple(selectedSale.grossProfit ?? selectedSale.salePrice - selectedSale.cost, 'USD')}</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold">
+                  <span className="text-gray-900">Ganancia neta</span>
+                  <span className="text-green-600">+{formatCurrencySimple(selectedSale.profit, 'USD')}</span>
                 </div>
               </div>
             </div>

@@ -58,6 +58,7 @@
     "bootstrap-verifier-env": "node scripts/bootstrap-verifier-env.js",
     "inject-apis": "node scripts/inject-apis-from-file.js",
     "clear:aliexpress-dropshipping": "tsx scripts/clear-aliexpress-dropshipping-credentials.ts",
+    "migrate:paypal-marketplace": "tsx scripts/migrate-paypal-marketplace.ts",
     "generate:payoneer-cert": "tsx scripts/generate-payoneer-cert-pem.ts",
     "kill-port": "powershell -ExecutionPolicy Bypass -File scripts/kill-port.ps1",
     "dev:clean": "npm run kill-port && npm run dev"
