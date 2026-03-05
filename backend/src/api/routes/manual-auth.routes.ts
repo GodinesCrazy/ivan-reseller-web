@@ -8,7 +8,7 @@ import { marketplaceAuthStatusService } from '../../services/marketplace-auth-st
 const router = Router();
 
 const PROVIDER_LOGIN_URLS: Record<string, string> = {
-  aliexpress: 'https://passport.aliexpress.com/mini_login.htm?lang=en_US&appName=ae_pc_protection&fromSite=main&returnURL=https%3A%2F%2Fwww.aliexpress.com%2F',
+  aliexpress: 'https://login.aliexpress.com/?fromSite=52&foreSite=main&spm=a2g0o.home.1000002.2.650511a5TtU7UQ',
 };
 
 router.post('/', authenticate, async (req, res) => {
