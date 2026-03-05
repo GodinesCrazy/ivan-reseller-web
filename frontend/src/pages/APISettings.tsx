@@ -276,6 +276,7 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
     description: 'API oficial de AliExpress para extraer datos de productos, precios e imágenes. Más rápida y confiable que scraping. Recomendada para búsqueda de oportunidades.',
     icon: '📊',
     docsUrl: 'https://developer.alibaba.com/help/en/portal',
+    supportsOAuth: true,
     fields: [
       { key: 'appKey', label: 'App Key', required: true, type: 'text', placeholder: '12345678', helpText: 'App Key obtenida de AliExpress Open Platform (console.aliexpress.com)' },
       { key: 'appSecret', label: 'App Secret', required: true, type: 'password', placeholder: 'Tu App Secret', helpText: 'App Secret para calcular la firma de las peticiones' },
@@ -1226,8 +1227,8 @@ export default function APISettings() {
     actionMessage?: string;
     actionButton?: { label: string; onClick: () => void };
   } => {
-    // Para APIs que requieren OAuth (eBay, MercadoLibre, AliExpress Dropshipping)
-    if (['ebay', 'mercadolibre', 'aliexpress-dropshipping'].includes(apiName)) {
+    // Para APIs que requieren OAuth (eBay, MercadoLibre, AliExpress Dropshipping, AliExpress Affiliate)
+    if (['ebay', 'mercadolibre', 'aliexpress-dropshipping', 'aliexpress-affiliate'].includes(apiName)) {
       // ✅ FIX: Verificar credenciales básicas - si hay credential guardada, asumir que tiene credenciales básicas
       // Las credenciales reales (appKey, appSecret, etc.) se obtienen del backend cuando se carga el formulario
       // Si credential existe, significa que se guardaron credenciales básicas
@@ -1250,15 +1251,19 @@ export default function APISettings() {
           // Si no está en formData, verificar statusInfo
           hasToken = status === 'healthy' || status === 'refreshing';
         }
+      } else if (apiName === 'aliexpress-affiliate') {
+        // Affiliate: token puede estar en backend (aliExpressToken global); usar status
+        hasToken = status === 'healthy' || status === 'refreshing';
       } else {
         hasToken = !!(credential && (status === 'healthy' || status === 'refreshing'));
       }
       
+      const isAliExpressOAuth = apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress-affiliate';
       if (!hasBasicCreds) {
         return {
           status: 'not_configured',
           message: 'No configurado',
-          actionMessage: apiName === 'aliexpress-dropshipping' 
+          actionMessage: isAliExpressOAuth
             ? 'Ingresa App Key y App Secret, luego guárdalas.'
             : 'Ingresa las credenciales básicas y guárdalas.',
         };
@@ -1268,7 +1273,7 @@ export default function APISettings() {
         return {
           status: 'partially_configured',
           message: 'Paso 1/2 completado',
-          actionMessage: apiName === 'aliexpress-dropshipping'
+          actionMessage: isAliExpressOAuth
             ? 'App Key y App Secret guardados. Falta completar OAuth para obtener Access Token.'
             : 'Credenciales básicas guardadas. Completa la autorización OAuth.',
           actionButton: {
@@ -1958,15 +1963,15 @@ export default function APISettings() {
       const warnings = saveData.warnings || [];
       
       // ✅ MEJORA: Determinar si requiere OAuth y mostrar mensaje apropiado
-      const isOAuthRequired = ['ebay', 'mercadolibre', 'aliexpress-dropshipping'].includes(apiName);
+      const isOAuthRequired = ['ebay', 'mercadolibre', 'aliexpress-dropshipping', 'aliexpress-affiliate'].includes(apiName);
       const hasBasicCreds = apiName === 'ebay' 
         ? (credentials.appId && credentials.devId && credentials.certId)
         : apiName === 'mercadolibre'
         ? (credentials.clientId && credentials.clientSecret)
-        : apiName === 'aliexpress-dropshipping'
+        : (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress-affiliate')
         ? (credentials.appKey && credentials.appSecret)
         : true;
-      const hasToken = apiName === 'aliexpress-dropshipping'
+      const hasToken = (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress-affiliate')
         ? (credentials.accessToken || credentials.refreshToken)
         : (credentials.token || credentials.refreshToken || credentials.authToken);
       
@@ -2483,6 +2488,15 @@ export default function APISettings() {
           setOauthing(null);
           return;
         }
+      } else if (apiName === 'aliexpress-affiliate' || apiName === 'aliexpress_affiliate') {
+        // AliExpress Affiliate: backend usa redirect_uri canónico (BACKEND_URL + /api/aliexpress/callback); no ruName
+        ruName = null;
+        const missing = ['appKey', 'appSecret'].filter((field) => !String(storedCreds[field] || '').trim());
+        if (missing.length) {
+          toast.error('Completa y guarda App Key y App Secret antes de autorizar con OAuth.');
+          setOauthing(null);
+          return;
+        }
       } else {
         // Para otros marketplaces (eBay, MercadoLibre), validar redirect URI
         ruName = storedCreds.redirectUri || storedCreds.ruName || storedCreds.RuName || null;
@@ -2544,7 +2558,7 @@ export default function APISettings() {
       }
 
       const { data } = await api.get(`/api/marketplace/auth-url/${apiName}`, {
-        params: (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping')
+        params: (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping' || apiName === 'aliexpress-affiliate' || apiName === 'aliexpress_affiliate')
           ? { environment, return_origin: typeof window !== 'undefined' ? window.location.origin : '' }
           : { redirect_uri: ruName, environment, return_origin: typeof window !== 'undefined' ? window.location.origin : '' },
       });
@@ -2634,10 +2648,10 @@ export default function APISettings() {
       
       // ✅ UNA SOLA ventana: eBay y AliExpress usan redirección en esta pestaña (no popup).
       // Evita: doble ventana (popup + main) y pérdida de sesión al volver.
-      const sameWindowOAuth = ['ebay', 'mercadolibre', 'aliexpress-dropshipping', 'aliexpress_dropshipping'].includes(apiName);
+      const sameWindowOAuth = ['ebay', 'mercadolibre', 'aliexpress-dropshipping', 'aliexpress_dropshipping', 'aliexpress-affiliate', 'aliexpress_affiliate'].includes(apiName);
       if (sameWindowOAuth) {
         try {
-          if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping') {
+          if (apiName === 'aliexpress-dropshipping' || apiName === 'aliexpress_dropshipping' || apiName === 'aliexpress-affiliate' || apiName === 'aliexpress_affiliate') {
             sessionStorage.setItem(ALIEXPRESS_OAUTH_REDIRECTING_KEY, '1');
             sessionStorage.setItem(ALIEXPRESS_OAUTH_REDIRECTING_AT_KEY, String(Date.now()));
           }
@@ -3911,8 +3925,8 @@ export default function APISettings() {
                       }
                       
                       if (unifiedStatus.status === 'partially_configured') {
-                        // ✅ FIX OAUTH ROBUSTO: Para aliexpress-dropshipping, agregar botones alternativos
-                        const isAliExpressDropshipping = apiDef.name === 'aliexpress-dropshipping' || apiDef.name === 'aliexpress_dropshipping';
+                        // ✅ FIX OAUTH ROBUSTO: Para aliexpress-dropshipping y aliexpress-affiliate, agregar botones alternativos
+                        const isAliExpressOAuthApi = apiDef.name === 'aliexpress-dropshipping' || apiDef.name === 'aliexpress_dropshipping' || apiDef.name === 'aliexpress-affiliate' || apiDef.name === 'aliexpress_affiliate';
                         
                         // Función helper para obtener URL OAuth (sin estado local)
                         const getOAuthUrlForAliExpress = async (): Promise<string | null> => {
@@ -3928,7 +3942,7 @@ export default function APISettings() {
                               toast.error('Completa y guarda App Key y App Secret antes de autorizar con OAuth.');
                               return null;
                             }
-                            // Backend usa callback canonical /api/marketplace-oauth/callback; no enviar redirect_uri
+                            // Backend usa callback canónico (Dropshipping: /api/marketplace-oauth/callback; Affiliate: /api/aliexpress/callback)
                             const { data: authData } = await api.get(`/api/marketplace/auth-url/${apiDef.name}`, {
                               params: { environment: env },
                             });
@@ -3977,10 +3991,11 @@ export default function APISettings() {
                                     {oauthing === apiDef.name ? 'Autorizando...' : unifiedStatus.actionButton.label}
                                   </button>
                                 )}
-                                {/* ✅ FIX OAUTH ROBUSTO: Botones alternativos para aliexpress-dropshipping */}
-                                {isAliExpressDropshipping && (
+                                {/* ✅ FIX OAUTH ROBUSTO: Botones alternativos para aliexpress-dropshipping y aliexpress-affiliate */}
+                                {isAliExpressOAuthApi && (
                                   <button
-                                    onClick={handleCopyOAuthUrl}
+                                    type="button"
+                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCopyOAuthUrl(); }}
                                     disabled={oauthing === apiDef.name}
                                     className="px-3 py-1 text-xs font-semibold bg-gray-600 text-white rounded hover:bg-gray-700 transition disabled:opacity-50"
                                     title="Copiar link OAuth"
@@ -4166,9 +4181,9 @@ export default function APISettings() {
                         {credential.isActive ? 'ON' : 'OFF'}
                       </button>
 
-                      {/* OAuth Authorization: ocultar botón azul para AliExpress Dropshipping en partially_configured para evitar doble ventana (solo recuadro ámbar) */}
+                      {/* OAuth Authorization: ocultar botón azul para AliExpress Dropshipping/Affiliate en partially_configured para evitar doble ventana (solo recuadro ámbar) */}
                       {apiDef.supportsOAuth && !(
-                        (apiDef.name === 'aliexpress-dropshipping' || apiDef.name === 'aliexpress_dropshipping') &&
+                        (apiDef.name === 'aliexpress-dropshipping' || apiDef.name === 'aliexpress_dropshipping' || apiDef.name === 'aliexpress-affiliate' || apiDef.name === 'aliexpress_affiliate') &&
                         unifiedStatusCard?.status === 'partially_configured'
                       ) && (
                         (() => {

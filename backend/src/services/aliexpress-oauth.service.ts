@@ -1,7 +1,6 @@
 /**
  * AliExpress OAuth2: authorization URL, code exchange, token refresh.
- * Uses ALIEXPRESS_REDIRECT_URI only. No placeholders. No localhost fallback.
- * Canonical redirect: https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback
+ * Uses ALIEXPRESS_REDIRECT_URI when set; otherwise derives from BACKEND_URL + /api/aliexpress/callback.
  */
 
 import axios from 'axios';
@@ -9,6 +8,28 @@ import logger from '../config/logger';
 import { getToken, setToken, type TokenData } from './aliexpress-token.store';
 
 const GLOBAL_TOKEN_ID = 'global';
+
+function normalizeBaseUrl(value: string): string {
+  const raw = value.trim();
+  if (!raw) return '';
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return withProtocol.replace(/\/$/, '');
+}
+
+function getBackendBaseUrl(): string {
+  const explicitBackend = normalizeBaseUrl(process.env.BACKEND_URL || process.env.RAILWAY_STATIC_URL || '');
+  if (explicitBackend) return explicitBackend;
+  if (process.env.NODE_ENV !== 'production') return 'http://localhost:4000';
+  throw new Error('BACKEND_URL is required in production for AliExpress Affiliate OAuth callback.');
+}
+
+/** Canonical redirect URI for Affiliate (must match app config in AliExpress console). */
+export function getAliExpressAffiliateRedirectUri(): string {
+  const explicit = (process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
+  if (explicit) return explicit.replace(/\/$/, '');
+  const base = getBackendBaseUrl();
+  return `${base}/api/aliexpress/callback`;
+}
 
 async function persistTokenToDatabase(tokenData: TokenData): Promise<void> {
   try {
@@ -40,7 +61,6 @@ function fromEnv(key: string): string {
 }
 const APP_KEY = fromEnv('ALIEXPRESS_AFFILIATE_APP_KEY') || fromEnv('ALIEXPRESS_APP_KEY');
 const APP_SECRET = fromEnv('ALIEXPRESS_AFFILIATE_APP_SECRET') || fromEnv('ALIEXPRESS_APP_SECRET');
-const REDIRECT_URI = (process.env.ALIEXPRESS_REDIRECT_URI || '').trim();
 const OAUTH_BASE = (process.env.ALIEXPRESS_OAUTH_BASE || 'https://api-sg.aliexpress.com/oauth').replace(/\/$/, '');
 const API_BASE = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync').replace(/\/$/, '');
 const TOKEN_URL = 'https://api-sg.aliexpress.com/rest/auth/token/create';
@@ -55,11 +75,12 @@ export function getAuthorizationUrl(): string {
     logger.error('[ALIEXPRESS-OAUTH] Missing ALIEXPRESS_AFFILIATE_APP_KEY');
     throw new Error('ALIEXPRESS_AFFILIATE_APP_KEY not configured');
   }
-  if (!REDIRECT_URI) {
-    logger.error('[ALIEXPRESS-OAUTH] Missing ALIEXPRESS_REDIRECT_URI / ALIEXPRESS_CALLBACK_URL');
-    throw new Error('Redirect URI not configured');
+  const redirectUri = getAliExpressAffiliateRedirectUri();
+  if (!redirectUri) {
+    logger.error('[ALIEXPRESS-OAUTH] Missing ALIEXPRESS_REDIRECT_URI and BACKEND_URL');
+    throw new Error('Redirect URI not configured (set ALIEXPRESS_REDIRECT_URI or BACKEND_URL)');
   }
-  const url = `${OAUTH_BASE}/authorize?response_type=code&client_id=${APP_KEY}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+  const url = `${OAUTH_BASE}/authorize?response_type=code&client_id=${APP_KEY}&redirect_uri=${encodeURIComponent(redirectUri)}`;
   console.log('[ALIEXPRESS-OAUTH] Authorization URL:', url);
   logger.info('[ALIEXPRESS-OAUTH] Authorization URL generated', { oauthBase: OAUTH_BASE });
   return url;
@@ -81,22 +102,22 @@ export async function exchangeCodeForToken(code: string): Promise<TokenData> {
   if (!APP_KEY || !APP_SECRET) {
     throw new Error('ALIEXPRESS_AFFILIATE_APP_KEY / ALIEXPRESS_AFFILIATE_APP_SECRET not configured');
   }
-  if (!REDIRECT_URI) {
-    throw new Error('ALIEXPRESS_REDIRECT_URI not configured');
+  const redirectUri = getAliExpressAffiliateRedirectUri();
+  if (!redirectUri) {
+    throw new Error('Redirect URI not configured (set ALIEXPRESS_REDIRECT_URI or BACKEND_URL)');
   }
-  
-  // STRICT: Verify redirect URI matches exactly (no trailing slash, exact match)
-  const canonicalRedirectUri = 'https://ivan-reseller-backend-production.up.railway.app/api/aliexpress/callback';
-  const redirectUriExact = REDIRECT_URI.replace(/\/$/, '');
-  
-  if (redirectUriExact !== canonicalRedirectUri) {
-    console.warn('[ALIEXPRESS-OAUTH] Redirect URI mismatch:', {
-      configured: redirectUriExact,
-      expected: canonicalRedirectUri,
-    });
-    // Use configured URI but log warning
+  const redirectUriExact = redirectUri.replace(/\/$/, '');
+  try {
+    const canonicalRedirectUri = `${getBackendBaseUrl()}/api/aliexpress/callback`;
+    if (redirectUriExact !== canonicalRedirectUri && process.env.ALIEXPRESS_REDIRECT_URI) {
+      logger.warn('[ALIEXPRESS-OAUTH] Redirect URI mismatch with canonical', {
+        configured: redirectUriExact,
+        expected: canonicalRedirectUri,
+      });
+    }
+  } catch {
+    // BACKEND_URL may be unset when ALIEXPRESS_REDIRECT_URI is used; skip warning
   }
-  
   console.log('[ALIEXPRESS-OAUTH] Exchanging code for token');
   const params: Record<string, string> = {
     app_key: APP_KEY,

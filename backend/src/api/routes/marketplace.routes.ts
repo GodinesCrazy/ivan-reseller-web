@@ -505,8 +505,8 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         ? frontendOrigin.replace(/\/$/, '')
         : '';
 
-    // ✅ FIX: Incluir aliexpress-dropshipping en marketplaces soportados
-    const supportedMarketplaces = ['ebay', 'mercadolibre', 'aliexpress-dropshipping', 'aliexpress_dropshipping'];
+    // ✅ FIX: Incluir aliexpress-dropshipping y aliexpress-affiliate en marketplaces soportados
+    const supportedMarketplaces = ['ebay', 'mercadolibre', 'aliexpress-dropshipping', 'aliexpress_dropshipping', 'aliexpress-affiliate', 'aliexpress_affiliate'];
     const normalizedMarketplace = marketplace.toLowerCase().replace('_', '-');
     
     if (!supportedMarketplaces.includes(normalizedMarketplace)) {
@@ -1089,6 +1089,30 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         appKeyPreview: String(appKey).substring(0, 8) + '...',
         duration: `${Date.now() - startTime}ms`,
       });
+    } else if (normalizedMarketplace === 'aliexpress-affiliate') {
+      // AliExpress Affiliate: URL from aliexpress-oauth.service (canonical redirect_uri from BACKEND_URL or ALIEXPRESS_REDIRECT_URI)
+      try {
+        const { getAuthorizationUrl } = await import('../../services/aliexpress-oauth.service');
+        authUrl = getAuthorizationUrl();
+        logger.info('[AliExpress Affiliate OAuth] Authorization URL generated', {
+          correlationId,
+          userId,
+          hasAuthUrl: !!authUrl,
+          duration: `${Date.now() - startTime}ms`,
+        });
+      } catch (err: any) {
+        logger.warn('[AliExpress Affiliate OAuth] Failed to generate auth URL', {
+          correlationId,
+          userId,
+          error: err?.message,
+        });
+        return res.status(422).json({
+          success: false,
+          error: 'AliExpress Affiliate OAuth not configured',
+          message: err?.message || 'Configura ALIEXPRESS_AFFILIATE_APP_KEY y ALIEXPRESS_REDIRECT_URI (o BACKEND_URL) antes de autorizar.',
+          correlationId,
+        });
+      }
     }
 
     // Validar que authUrl se haya generado correctamente
