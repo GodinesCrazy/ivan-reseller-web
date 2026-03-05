@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, TrendingUp, DollarSign, AlertCircle, ExternalLink, Clock, Target } from 'lucide-react';
 import api from '@services/api';
@@ -42,6 +42,19 @@ interface SearchResults {
   };
 }
 
+const FALLBACK_SUGGESTED_SEARCHES = [
+  'iPhone 15 Pro',
+  'MacBook Air M3',
+  'Nike Air Max',
+  'PlayStation 5',
+  'Samsung Galaxy',
+  'Apple Watch',
+  'AirPods Pro',
+  'Gaming Chair',
+  'Smart TV 4K',
+  'Wireless Earbuds',
+];
+
 const UniversalSearchDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -49,19 +62,25 @@ const UniversalSearchDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [useRealScraping, setUseRealScraping] = useState(false);
+  const [suggestedSearches, setSuggestedSearches] = useState<string[]>(FALLBACK_SUGGESTED_SEARCHES);
 
-  const suggestedSearches = [
-    'iPhone 15 Pro',
-    'MacBook Air M3',
-    'Nike Air Max',
-    'PlayStation 5',
-    'Samsung Galaxy',
-    'Apple Watch',
-    'AirPods Pro',
-    'Gaming Chair',
-    'Smart TV 4K',
-    'Wireless Earbuds'
-  ];
+  useEffect(() => {
+    api
+      .get('/api/trends/keywords', { params: { region: 'US', maxKeywords: 10 } })
+      .then((res) => {
+        const keywords = res.data?.data || [];
+        if (Array.isArray(keywords) && keywords.length > 0) {
+          const terms = keywords
+            .slice(0, 10)
+            .map((k: { keyword: string }) => k.keyword)
+            .filter(Boolean);
+          if (terms.length > 0) setSuggestedSearches(terms);
+        }
+      })
+      .catch(() => {
+        // mantener fallback
+      });
+  }, []);
 
   const handleSearch = async (query?: string) => {
     const searchTerm = query || searchQuery;
