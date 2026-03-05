@@ -30,9 +30,10 @@ La app **Affiliate** en AliExpress Open Platform debe tener configurada **exacta
 
 En [AliExpress Open Platform](https://open.aliexpress.com/) ? tu app **Affiliate** ? Configuración ? **Authorized Redirect URI**:
 
-- A?ade exactamente: `https://<tu-backend>/api/aliexpress/callback`  
-  (mismo valor que `ALIEXPRESS_REDIRECT_URI` o que `BACKEND_URL` + `/api/aliexpress/callback`).
+- Añade exactamente: `https://<tu-backend>/api/aliexpress/callback`  
+  (mismo valor que `ALIEXPRESS_REDIRECT_URI` o que `BACKEND_URL` + `/api/aliexpress/callback`). En **API Settings** la tarjeta AliExpress Affiliate API muestra esta URL y un botón para copiarla.
 - Sin barra final, sin diferencias de protocolo (http vs https) ni de dominio.
+- Si solo tienes la app Dropshipping (p. ej. IvanReseller), crea una segunda app para Affiliate en AliExpress y configura en ella esta Callback URL; o añade esta URL como segunda Callback si la consola lo permite.
 
 ---
 

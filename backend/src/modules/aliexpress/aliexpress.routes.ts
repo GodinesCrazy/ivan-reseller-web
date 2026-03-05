@@ -23,6 +23,7 @@ import {
   getDebugAuth,
   getCandidates,
   getOAuthStatusHandler,
+  getOAuthRedirectUriHandler,
   getOAuthUrl,
   getOAuthStart,
   oauthCallback,
@@ -180,6 +181,10 @@ router.get('/affiliate/debug-search', async (_req, res) => {
  */
 router.get('/oauth/status', getOAuthStatusHandler);
 /**
+ * GET /api/aliexpress/oauth/redirect-uri - Canonical callback URL for Affiliate (for AliExpress console)
+ */
+router.get('/oauth/redirect-uri', authenticate, getOAuthRedirectUriHandler);
+/**
  * GET /api/aliexpress/oauth/test-flow - Get OAuth authorization URL for manual test
  */
 router.get('/oauth/test-flow', getOAuthUrl);
@@ -256,6 +261,7 @@ console.log('[ALIEXPRESS-AFFILIATE]   - POST /api/aliexpress/generate-link');
 console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/test-link');
 console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/search');
 console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/health');
+console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/oauth/redirect-uri (canonical callback URL)');
 console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/oauth/url (OAuth start)');
 console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/callback (OAuth callback)');
 console.log('[ALIEXPRESS-AFFILIATE]   - GET /api/aliexpress/candidates (FASE 2)');

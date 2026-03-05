@@ -329,6 +329,7 @@ export default function APISettings() {
     present?: boolean;
   }>>({});
   const [oauthing, setOauthing] = useState<string | null>(null);
+  const [affiliateRedirectUri, setAffiliateRedirectUri] = useState<string | null>(null);
   const [oauthBlockedModal, setOauthBlockedModal] = useState<{ open: boolean; authUrl: string; apiName: string; warning?: string }>({ open: false, authUrl: '', apiName: '', warning: undefined });
   /** Evita abrir dos ventanas OAuth: si ya hay una abierta para esta API, la enfocamos en lugar de abrir otra */
   const openOAuthWindowRef = useRef<{ apiName: string; win: Window } | null>(null);
@@ -488,6 +489,16 @@ export default function APISettings() {
       fetchAuthStatuses();
     }
   }, [authStatuses, fetchAuthStatuses]);
+
+  useEffect(() => {
+    if (!token) return;
+    api.get('/api/aliexpress/oauth/redirect-uri')
+      .then((r) => {
+        const uri = r.data?.redirectUri ?? null;
+        setAffiliateRedirectUri(uri);
+      })
+      .catch(() => setAffiliateRedirectUri(null));
+  }, [token]);
 
   // ✅ NUEVO: Listener de Socket.IO para actualizaciones de estado de APIs en tiempo real
   // path /api/socket.io para Vercel rewrite; VITE_SOCKET_URL para conexión directa a Railway si falla proxy
@@ -4027,6 +4038,36 @@ export default function APISettings() {
                         </div>
                       );
                     })()}
+                    {/* Callback URL para AliExpress Affiliate: mostrar URL exacta para configurar en la consola */}
+                    {apiDef.name === 'aliexpress-affiliate' && (
+                      <div className="mt-2 px-3 py-2 bg-blue-50 border border-blue-200 text-blue-800 rounded text-sm">
+                        <p className="font-semibold text-xs mb-1">Para autorizar OAuth, en la consola de AliExpress (app <strong>Affiliate</strong>) configura como <strong>Callback URL</strong> exactamente:</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <code className="flex-1 min-w-0 text-xs bg-white px-2 py-1 rounded border border-blue-200 break-all">
+                            {affiliateRedirectUri ?? 'Cargando...'}
+                          </code>
+                          {affiliateRedirectUri && (
+                            <button
+                              type="button"
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                try {
+                                  await navigator.clipboard.writeText(affiliateRedirectUri);
+                                  toast.success('Callback URL copiada');
+                                } catch {
+                                  toast.error('No se pudo copiar');
+                                }
+                              }}
+                              className="px-2 py-1 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700"
+                            >
+                              Copiar
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-xs mt-1 text-blue-700">Si solo tienes la app Dropshipping, crea una app Affiliate en AliExpress o añade esta URL si la consola lo permite.</p>
+                      </div>
+                    )}
                     {/* ✅ MEJORA: Solo mostrar badge técnico si no hay estado unificado o para información adicional */}
                     {statusInfo && statusInfo.status === 'healthy' && (() => {
                       const unifiedStatus = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag);

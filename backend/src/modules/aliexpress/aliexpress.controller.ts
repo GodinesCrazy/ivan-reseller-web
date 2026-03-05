@@ -20,7 +20,7 @@ import { aliExpressSearchService } from './aliexpress-search.service';
 import logger from '../../config/logger';
 import env from '../../config/env';
 import { prisma } from '../../config/database';
-import { getAuthorizationUrl, exchangeCodeForToken, getOAuthStatus } from '../../services/aliexpress-oauth.service';
+import { getAuthorizationUrl, exchangeCodeForToken, getOAuthStatus, getAliExpressAffiliateRedirectUri } from '../../services/aliexpress-oauth.service';
 import { getToken } from '../../services/aliexpress-token.store';
 /**
  * Endpoint para generar un link afiliado
@@ -542,6 +542,30 @@ export const getStatusHandler = async (_req: Request, res: Response) => {
 export const getOAuthStatusHandler = async (_req: Request, res: Response) => {
   const status = getOAuthStatus();
   return res.status(200).json(status);
+};
+
+/**
+ * GET /api/aliexpress/oauth/redirect-uri - Canonical callback URL for Affiliate (for AliExpress console)
+ */
+export const getOAuthRedirectUriHandler = async (_req: Request, res: Response) => {
+  try {
+    const redirectUri = getAliExpressAffiliateRedirectUri();
+    if (!redirectUri) {
+      return res.status(503).json({
+        success: false,
+        error: 'Redirect URI not configured',
+        message: 'Configura BACKEND_URL o ALIEXPRESS_REDIRECT_URI en el servidor.',
+      });
+    }
+    return res.status(200).json({ success: true, redirectUri });
+  } catch (err: any) {
+    logger.error('[AliExpress OAuth] getOAuthRedirectUri failed', { error: err?.message });
+    return res.status(503).json({
+      success: false,
+      error: err?.message || 'Redirect URI not configured',
+      message: 'Configura BACKEND_URL o ALIEXPRESS_REDIRECT_URI en el servidor para OAuth Affiliate.',
+    });
+  }
 };
 
 /**
