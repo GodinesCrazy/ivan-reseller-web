@@ -23,9 +23,6 @@ import {
   Line,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -67,6 +64,13 @@ interface SalesStats {
 }
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+
+const MARKETPLACES = [
+  { id: 'ebay', label: 'eBay' },
+  { id: 'amazon', label: 'Amazon' },
+  { id: 'mercadolibre', label: 'Mercado Libre' },
+  { id: 'checkout', label: 'Checkout' },
+] as const;
 
 export default function Sales() {
   const [sales, setSales] = useState<Sale[]>([]);
@@ -160,12 +164,17 @@ export default function Sales() {
     return acc;
   }, []).slice(-7);
 
-  const marketplaceData = Object.entries(
-    salesInPeriod.reduce((acc: Record<string, number>, sale) => {
-      acc[sale.marketplace] = (acc[sale.marketplace] || 0) + sale.salePrice;
-      return acc;
-    }, {})
-  ).map(([name, value]) => ({ name, value }));
+  const norm = (m: string) => (m || 'checkout').toLowerCase().replace(/\s+/g, '') || 'checkout';
+  const totalsByMarketplace = salesInPeriod.reduce((acc: Record<string, number>, sale) => {
+    const raw = norm(sale.marketplace || '');
+    const key = ['ebay', 'amazon', 'mercadolibre', 'checkout'].includes(raw) ? raw : 'checkout';
+    acc[key] = (acc[key] || 0) + sale.salePrice;
+    return acc;
+  }, {});
+  const marketplaceData = MARKETPLACES.map((m) => ({
+    name: m.label,
+    value: totalsByMarketplace[m.id] ?? 0,
+  })).sort((a, b) => b.value - a.value);
 
   const statusData = Object.entries(
     salesInPeriod.reduce((acc: Record<string, number>, sale) => {
@@ -310,23 +319,13 @@ export default function Sales() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={marketplaceData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {marketplaceData.map((_entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
+                  <BarChart data={marketplaceData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
                     <Tooltip />
-                  </PieChart>
+                    <Bar dataKey="value" fill="#3B82F6" />
+                  </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>

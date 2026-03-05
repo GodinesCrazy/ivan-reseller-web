@@ -173,6 +173,18 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
         }
       : null;
 
+    // ✅ Downgrade manual_required when no active session (stale state from DB)
+    // manual_required only makes sense when there's a pending session token to complete
+    if (
+      payload.aliexpress.status === 'manual_required' &&
+      payload.aliexpress.manualSession === null
+    ) {
+      payload.aliexpress.status = 'unknown';
+      payload.aliexpress.requiresManual = false;
+      payload.aliexpress.message =
+        'El sistema funcionará en modo público. Las cookies son opcionales.';
+    }
+
     const duration = Date.now() - startTime;
     const memoryEnd = {
       heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
