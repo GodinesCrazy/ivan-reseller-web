@@ -371,20 +371,21 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
     const requestedEnvironment = environment || await workflowConfigService.getUserEnvironment(product.userId);
     const resolvedMarketplaceEnvironments: Record<string, 'sandbox' | 'production'> = {};
     
-    // ✅ P0.4: Validar credenciales antes de publicar
+    // ✅ P0.4: Verificar que existen credenciales antes de publicar (sin testConnection).
+    // El job worker publica directamente sin testConnection y funciona; testConnection
+    // (getAccountInfo) puede fallar mientras createListing sí funciona. Si publish falla,
+    // el error real se propagará.
     if (Array.isArray(marketplaces) && marketplaces.length > 0) {
       const service = new MarketplaceService();
       const missingCredentials: string[] = [];
-      const invalidCredentials: string[] = [];
-      
-      // Verificar credenciales para cada marketplace
+
       for (const marketplace of marketplaces) {
         try {
           const typedMarketplace = marketplace as 'ebay' | 'amazon' | 'mercadolibre';
           let environmentForMarketplace: 'sandbox' | 'production' = requestedEnvironment;
           let credentials = await service.getCredentials(
-            product.userId, 
-            typedMarketplace, 
+            product.userId,
+            typedMarketplace,
             environmentForMarketplace
           );
 
@@ -409,27 +410,15 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
               });
             }
           }
-          
+
           if (!credentials || !credentials.isActive) {
             missingCredentials.push(marketplace);
-            continue;
-          }
-
-          environmentForMarketplace = credentials.environment || environmentForMarketplace;
-          resolvedMarketplaceEnvironments[marketplace] = environmentForMarketplace;
-          
-          // Validar conexión si las credenciales existen
-          const testResult = await service.testConnection(
-            product.userId,
-            typedMarketplace,
-            environmentForMarketplace
-          );
-          
-          if (!testResult.success) {
-            invalidCredentials.push(marketplace);
+          } else {
+            environmentForMarketplace = credentials.environment || environmentForMarketplace;
+            resolvedMarketplaceEnvironments[marketplace] = environmentForMarketplace;
           }
         } catch (error) {
-          logger.warn(`[PUBLISHER] Error validating credentials for ${marketplace}`, {
+          logger.warn(`[PUBLISHER] Error getting credentials for ${marketplace}`, {
             userId: product.userId,
             marketplace,
             error: error instanceof Error ? error.message : String(error)
@@ -437,8 +426,7 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
           missingCredentials.push(marketplace);
         }
       }
-      
-      // Si faltan credenciales, retornar error descriptivo
+
       if (missingCredentials.length > 0) {
         return res.status(400).json({
           success: false,
@@ -446,18 +434,6 @@ router.post('/approve/:id', async (req: Request, res: Response) => {
           message: `Please configure your ${missingCredentials.join(', ')} credentials before publishing.`,
           missingCredentials,
           action: 'configure_credentials',
-          settingsUrl: '/settings?tab=api-credentials'
-        });
-      }
-      
-      // Si las credenciales son inválidas, retornar error descriptivo
-      if (invalidCredentials.length > 0) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid credentials',
-          message: `Your ${invalidCredentials.join(', ')} credentials are invalid or expired. Please update them in Settings.`,
-          invalidCredentials,
-          action: 'update_credentials',
           settingsUrl: '/settings?tab=api-credentials'
         });
       }
