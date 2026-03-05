@@ -321,8 +321,79 @@ class JobService {
         }
       }
 
+      const successResults = results.filter((r: any) => r.success);
+      const failedResults = results.filter((r: any) => !r.success);
+      const successCount = successResults.length;
+      const allSuccessful = successCount === totalMarketplaces;
+      const partiallySuccessful = successCount > 0 && successCount < totalMarketplaces;
+
+      // Update product status and productData (parity with sync approve flow)
+      const product = await prisma.product.findFirst({
+        where: { id: productId, userId },
+      });
+      if (product) {
+        const currentProductData = product.productData ? JSON.parse(product.productData as string) : {};
+        const publicationStatus: Record<string, any> = {};
+        results.forEach((r: any) => {
+          publicationStatus[r.marketplace || 'unknown'] = {
+            success: r.success,
+            listingId: r.listingId ?? null,
+            listingUrl: r.listingUrl ?? null,
+            error: r.error ?? null,
+            publishedAt: r.success ? new Date().toISOString() : null,
+          };
+        });
+
+        if (allSuccessful) {
+          await this.productService.updateProductStatusSafely(productId, 'PUBLISHED', true, userId);
+          await prisma.product.update({
+            where: { id: productId },
+            data: {
+              productData: JSON.stringify({
+                ...currentProductData,
+                publishStatus: 'FULLY_PUBLISHED',
+                publicationStatus,
+                publishedMarketplaces: successResults.map((r: any) => r.marketplace),
+                publishedAt: new Date().toISOString(),
+              }),
+            },
+          });
+          logger.info('[JOB] Product fully published', { productId, userId, marketplaces: successResults.map((r: any) => r.marketplace) });
+        } else if (partiallySuccessful) {
+          await this.productService.updateProductStatusSafely(productId, 'APPROVED', true, userId);
+          await prisma.product.update({
+            where: { id: productId },
+            data: {
+              productData: JSON.stringify({
+                ...currentProductData,
+                publishStatus: 'PARTIALLY_PUBLISHED',
+                publicationStatus,
+                publishedMarketplaces: successResults.map((r: any) => r.marketplace),
+                failedMarketplaces: failedResults.map((r: any) => ({ marketplace: r.marketplace, error: r.error })),
+                partiallyPublishedAt: new Date().toISOString(),
+              }),
+            },
+          });
+          logger.warn('[JOB] Product partially published', { productId, userId, successCount, totalMarketplaces });
+        } else {
+          await this.productService.updateProductStatusSafely(productId, 'APPROVED', false, userId);
+          await prisma.product.update({
+            where: { id: productId },
+            data: {
+              productData: JSON.stringify({
+                ...currentProductData,
+                publishStatus: 'NOT_PUBLISHED',
+                publicationStatus,
+                failedMarketplaces: failedResults.map((r: any) => ({ marketplace: r.marketplace, error: r.error })),
+                publishAttemptedAt: new Date().toISOString(),
+              }),
+            },
+          });
+          logger.warn('[JOB] All marketplace publications failed', { productId, userId, failedResults });
+        }
+      }
+
       // Log activity
-      const successCount = results.filter(r => r.success).length;
       await prisma.activity.create({
         data: {
           userId,
