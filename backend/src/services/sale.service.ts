@@ -21,6 +21,7 @@ export interface CreateSaleDto {
   currency?: string;
   buyerEmail?: string;
   shippingAddress?: string;
+  environment?: 'sandbox' | 'production';
 }
 
 export class SaleService {
@@ -158,6 +159,17 @@ export class SaleService {
     const adminId: number | null = user && typeof (user as any).createdBy === 'number' ? (user as any).createdBy : null;
     const adminCommission = platformCommission; // Platform commission (goes to admin PayPal)
 
+    // Resolver environment: explícito en DTO o del workflow del usuario
+    let environment: 'sandbox' | 'production' = data.environment ?? 'sandbox';
+    if (!data.environment) {
+      try {
+        const { workflowConfigService } = await import('./workflow-config.service');
+        environment = await workflowConfigService.getUserEnvironment(userId);
+      } catch {
+        logger.warn('[SALE] Could not get user environment, using sandbox', { userId });
+      }
+    }
+
     // ✅ Usar transacción para crear venta, comisiones y actualizar balances de forma atómica
     const sale = await prisma.$transaction(async (tx) => {
       // ✅ RESILIENCIA: Intentar crear venta con currency, si falla (migración no ejecutada), intentar sin currency
@@ -177,6 +189,7 @@ export class SaleService {
             netProfit,
             currency: saleCurrency, // ✅ Guardar moneda de la venta
             status: 'PENDING',
+            environment,
           },
           include: {
             product: true,
@@ -211,6 +224,7 @@ export class SaleService {
               netProfit,
               // currency: omitido temporalmente hasta que se ejecute la migración
               status: 'PENDING',
+              environment,
             },
             include: {
               product: true,
@@ -238,6 +252,7 @@ export class SaleService {
             amount: adminCommission, // Comisión del admin (20% de gross profit)
             currency: saleCurrency, // ✅ Guardar moneda de la comisión (debe coincidir con Sale.currency)
             status: 'PENDING',
+            environment,
           },
         });
       } catch (error: any) {
@@ -254,6 +269,7 @@ export class SaleService {
               amount: adminCommission,
               // currency: omitido temporalmente hasta que se ejecute la migración
               status: 'PENDING',
+              environment,
             },
           });
         } else {
@@ -273,7 +289,8 @@ export class SaleService {
               amount: adminCommission,
               currency: saleCurrency, // ✅ Guardar moneda de la comisión del admin
               commissionType: 'user_sale',
-              status: 'PENDING'
+              status: 'PENDING',
+              environment,
             }
           });
         } catch (error: any) {
@@ -291,7 +308,8 @@ export class SaleService {
                 amount: adminCommission,
                 // currency: omitido temporalmente hasta que se ejecute la migración
                 commissionType: 'user_sale',
-                status: 'PENDING'
+                status: 'PENDING',
+                environment,
               }
             });
           } else {
@@ -318,8 +336,8 @@ export class SaleService {
       return newSale;
     });
 
-    // ✅ Dual PayPal payout: admin (commission) then user (userProfit). Both must succeed.
-    const payoutService = await (await import('./paypal-payout.service')).PayPalPayoutService.fromUserCredentials(userId);
+    // ✅ Dual PayPal payout: admin (commission) then user (userProfit). Both must succeed. Usar environment de la venta.
+    const payoutService = await (await import('./paypal-payout.service')).PayPalPayoutService.fromUserCredentials(userId, environment);
     const adminPaypalEmail = await platformConfigService.getAdminPaypalEmail();
     const userPaypalEmail = (user as any).paypalPayoutEmail?.trim() || null;
 

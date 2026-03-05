@@ -7,6 +7,14 @@ import { z } from 'zod';
 const router = Router();
 router.use(authenticate);
 
+// Resolver environment: query param sandbox | production | all. Default production (solo datos production).
+function resolveEnvironment(query: Record<string, unknown>): 'sandbox' | 'production' | undefined {
+  const env = (query.environment as string)?.toLowerCase();
+  if (env === 'all') return undefined;
+  if (env === 'sandbox' || env === 'production') return env;
+  return 'production'; // default: solo production
+}
+
 // GET /api/commissions - Listar comisiones
 router.get('/', async (req: Request, res: Response, next) => {
   try {
@@ -15,7 +23,8 @@ router.get('/', async (req: Request, res: Response, next) => {
     const isAdmin = userRole === 'ADMIN';
     const userId = isAdmin ? undefined : req.user?.userId;
     const status = req.query.status as string | undefined;
-    const commissions = await commissionService.getCommissions(userId, status);
+    const environment = resolveEnvironment(req.query);
+    const commissions = await commissionService.getCommissions(userId, status, environment);
     
     const { toNumber } = await import('../../utils/decimal.utils');
     // ✅ Mapear datos del backend al formato esperado por el frontend (amount como número)
@@ -43,7 +52,8 @@ router.get('/stats', async (req: Request, res: Response, next) => {
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
     const userId = isAdmin ? undefined : req.user?.userId;
-    const stats = await commissionService.getCommissionStats(userId ? String(userId) : undefined);
+    const environment = resolveEnvironment(req.query);
+    const stats = await commissionService.getCommissionStats(userId ? String(userId) : undefined, environment);
     
     // ✅ Mapear estadísticas al formato esperado por el frontend (montos en dólares, no conteos)
     const mappedStats = {
@@ -126,13 +136,13 @@ router.post('/batch-pay', authorize('ADMIN'), async (req: Request, res: Response
   }
 });
 
-// POST /api/commissions/request-payout - Solicitar pago de comisiones pendientes
+// POST /api/commissions/request-payout - Solicitar pago de comisiones pendientes (solo production por defecto)
 router.post('/request-payout', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
-    
-    // Obtener comisiones pendientes del usuario
-    const pendingCommissions = await commissionService.getCommissions(userId, 'PENDING');
+    const environment = (req.body?.environment as string)?.toLowerCase() === 'sandbox' ? 'sandbox' : 'production';
+    // Obtener comisiones pendientes del usuario (mismo entorno que la página)
+    const pendingCommissions = await commissionService.getCommissions(userId, 'PENDING', environment);
     
     if (pendingCommissions.length === 0) {
       return res.status(400).json({
@@ -174,7 +184,8 @@ router.get('/payout-schedule', async (req: Request, res: Response, next) => {
   try {
     const { toNumber } = await import('../../utils/decimal.utils');
     const userId = req.user!.role === 'ADMIN' ? undefined : req.user!.userId;
-    const scheduledCommissions = await commissionService.getCommissions(userId, 'SCHEDULED');
+    const environment = resolveEnvironment(req.query);
+    const scheduledCommissions = await commissionService.getCommissions(userId, 'SCHEDULED', environment);
 
     const schedule = scheduledCommissions.map((comm: any) => ({
       date: comm.scheduledAt?.toISOString() ?? new Date().toISOString(),

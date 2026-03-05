@@ -179,6 +179,8 @@ model Sale {
   buyerName       String? // Nombre del comprador
   shippingAddress String? // Dirección completa de envío (JSON string o texto)
 
+  environment String @default("sandbox") // sandbox | production
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -191,6 +193,7 @@ model Sale {
   purchaseLogs        PurchaseLog[] // Logs de compras relacionadas
 
   @@index([userId, status])
+  @@index([userId, environment])
   @@index([marketplace, status])
   @@index([createdAt])
   @@index([orderId])
@@ -204,6 +207,7 @@ model Commission {
   amount        Decimal   @db.Decimal(18, 2) // Monto de la comisión en moneda de venta
   currency      String    @default("USD") // Moneda de la comisión (debe coincidir con Sale.currency)
   status        String    @default("PENDING") // PENDING, SCHEDULED, PAID, FAILED
+  environment   String    @default("sandbox") // sandbox | production
   scheduledAt   DateTime?
   paidAt        DateTime?
   failureReason String?
@@ -216,6 +220,7 @@ model Commission {
 
   @@index([userId, createdAt])
   @@index([userId, status])
+  @@index([userId, environment])
   @@index([status, createdAt])
   @@map("commissions")
 }
@@ -299,6 +304,7 @@ model AdminCommission {
   currency       String    @default("USD") // Moneda de la comisión (debe coincidir con Sale.currency)
   commissionType String    @default("user_sale") // user_sale, monthly_fee, etc.
   status         String    @default("PENDING") // PENDING, PAID, FAILED
+  environment    String    @default("sandbox") // sandbox | production
   paidAt         DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

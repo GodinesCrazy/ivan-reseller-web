@@ -8,7 +8,7 @@ import { toNumber } from '../utils/decimal.utils';
 const prisma = new PrismaClient();
 
 export class CommissionService {
-  async getCommissions(userId?: number, status?: string) {
+  async getCommissions(userId?: number, status?: string, environment?: 'sandbox' | 'production') {
     const where: any = {};
     
     if (userId) {
@@ -17,6 +17,10 @@ export class CommissionService {
     
     if (status) {
       where.status = status;
+    }
+
+    if (environment) {
+      where.environment = environment;
     }
 
     return prisma.commission.findMany({
@@ -224,11 +228,14 @@ export class CommissionService {
     };
   }
 
-  async getCommissionStats(userId?: string | number) {
+  async getCommissionStats(userId?: string | number, environment?: 'sandbox' | 'production') {
     const { queryWithTimeout } = await import('../utils/queryWithTimeout');
     // Convertir userId a number si es string (Prisma espera number)
     const userIdNumber = userId ? (typeof userId === 'string' ? parseInt(userId, 10) : userId) : undefined;
-    const where = userIdNumber ? { userId: userIdNumber } : {};
+    const where: any = userIdNumber ? { userId: userIdNumber } : {};
+    if (environment) {
+      where.environment = environment;
+    }
 
     const queriesPromise = Promise.all([
       prisma.commission.count({ where }),

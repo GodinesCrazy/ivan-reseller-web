@@ -404,15 +404,17 @@ export class AdminService {
           }
         });
 
-        // Crear registro de comisión
+        // Crear registro de comisión (mismo environment que la venta)
         for (const sale of thisMonthSales) {
+          const saleEnv = (sale as any).environment === 'production' ? 'production' : 'sandbox';
           await prisma.commission.create({
             data: {
               userId: user.id,
               saleId: sale.id,
               amount: toNumber(sale.grossProfit) * toNumber(user.commissionRate),
               status: 'PAID',
-              paidAt: new Date()
+              paidAt: new Date(),
+              environment: saleEnv
             }
           });
         }

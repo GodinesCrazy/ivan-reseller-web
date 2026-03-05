@@ -707,19 +707,19 @@ export class ScheduledTasksService {
       let paypalAmount = 0;
       const errors: Array<{ commissionId: string; error: string }> = [];
 
-      // Intentar inicializar PayPal Payout Service
-      let paypalService: PayPalPayoutService | null = null;
-      try {
-        paypalService = PayPalPayoutService.fromEnv();
-      } catch (error) {
-        logger.warn('Scheduled Tasks: PayPal service not available, processing without PayPal', { error });
-      }
-
       for (const commission of pendingCommissions) {
         try {
           // ✅ Convertir Decimal a number para operaciones aritméticas
           const commissionAmount = toNumber(commission.amount);
-          
+          // PayPal por comisión: usar environment de la comisión (production/sandbox)
+          const commissionEnv = (commission as any).environment === 'production' ? 'production' : 'sandbox';
+          let paypalService: PayPalPayoutService | null = null;
+          try {
+            paypalService = await PayPalPayoutService.fromUserCredentials(commission.userId, commissionEnv);
+          } catch (error) {
+            logger.warn('Scheduled Tasks: PayPal service not available for commission', { commissionId: commission.id, environment: commissionEnv });
+          }
+
           // Si PayPal está disponible y el monto es mayor a $1, procesar con PayPal
           if (paypalService && commissionAmount >= 1.0) {
             try {

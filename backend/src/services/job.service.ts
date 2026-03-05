@@ -433,7 +433,7 @@ class JobService {
     try {
       await job.updateProgress(10);
 
-      // Get pending commissions
+      // Get pending commissions (include environment for PayPal client)
       const commissions = await prisma.commission.findMany({
         where: {
           ...(userId && { userId }),
@@ -463,9 +463,10 @@ class JobService {
             throw new Error(`Usuario ${commission.userId} no tiene email configurado para pagos`);
           }
 
-          // Intentar crear servicio PayPal desde credenciales
+          // Intentar crear servicio PayPal con el environment de la comisión (production/sandbox)
           const PayPalPayoutService = (await import('./paypal-payout.service')).default;
-          const paypalService = PayPalPayoutService.fromEnv();
+          const commissionEnv = (commission as any).environment === 'production' ? 'production' : 'sandbox';
+          const paypalService = await PayPalPayoutService.fromUserCredentials(commission.userId, commissionEnv);
 
           if (!paypalService) {
             // Si PayPal no está configurado, marcar como programado
