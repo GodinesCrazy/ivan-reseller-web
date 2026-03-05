@@ -45,3 +45,13 @@ En [AliExpress Open Platform](https://open.aliexpress.com/) ? tu app **Affiliate
 5. El estado debería pasar a **Configurado y funcionando**
 
 Si tras autorizar ves "Error de autorización" con "missing access_token" o "IncompleteSignature", comprueba que la Redirect URI de la app Affiliate en AliExpress coincida con la que usa el backend (y que no estés usando la URL de Dropshipping).
+
+---
+
+## Problemas frecuentes
+
+- **"missing access_token" y la URL tiene `provider=aliexpress-dropshipping`**  
+  Significa que el navegador llegó al callback de **Dropshipping** (no al de Affiliate). Para **Affiliate**, la Redirect URI en la consola de AliExpress debe ser exactamente `https://<BACKEND_URL>/api/aliexpress/callback` (con **/api**). No uses `/aliexpress/callback` ni `/api/marketplace-oauth/callback`.
+
+- **BACKEND_URL**  
+  Debe ser la URL del **backend** (donde corre la API), no la del frontend (p. ej. no uses ivanreseller.com si tu API está en otro host como Railway).

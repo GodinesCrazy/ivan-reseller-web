@@ -1077,8 +1077,6 @@ app.use('/api/autopilot', autopilotRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/marketplace-oauth', marketplaceOauthRoutes);
-// ✅ Legacy backend alias for AliExpress OAuth callback path
-app.use('/aliexpress', marketplaceOauthRoutes);
 // ✅ AliExpress Affiliate API routes
 // ✅ CRÍTICO: Logging para confirmar que el router se monta correctamente
 console.log('[APP] Mounting AliExpress routes at /api/aliexpress');
