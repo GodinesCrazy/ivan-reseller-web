@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, TrendingUp, DollarSign, AlertCircle, ExternalLink, Clock, Target } from 'lucide-react';
 import api from '@services/api';
 import { toast } from 'sonner';
@@ -42,6 +43,7 @@ interface SearchResults {
 }
 
 const UniversalSearchDashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -410,7 +412,11 @@ const UniversalSearchDashboard: React.FC = () => {
 
                   {/* Actions */}
                   <div className="flex gap-2">
-                    <button className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/opportunities/${opportunity.id}`)}
+                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                    >
                       Ver Detalles
                     </button>
                     <a
