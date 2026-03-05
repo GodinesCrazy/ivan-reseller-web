@@ -119,9 +119,8 @@ export default function ManualLogin() {
   }, [session?.expiresAt]);
 
   const handleOpenLogin = () => {
-    if (session?.loginUrl) {
-      window.open(session.loginUrl, '_blank', 'noopener,noreferrer');
-    }
+    const url = session?.loginUrl && String(session.loginUrl).trim() ? session.loginUrl : ALIEXPRESS_LOGIN_URL;
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const handleSaveCookies = async () => {
@@ -187,7 +186,7 @@ export default function ManualLogin() {
     );
   }
 
-  const providerLabel = providerLabels[session.provider] || session.provider;
+  const providerLabel = providerLabels[session.provider] || session.provider || 'AliExpress';
 
   return (
     <div className="min-h-screen bg-gray-50">

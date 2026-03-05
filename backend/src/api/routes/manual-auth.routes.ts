@@ -41,15 +41,16 @@ router.get('/:token', async (req, res) => {
     return res.status(404).json({ success: false, error: 'session_not_found' });
   }
 
-  const loginUrl = PROVIDER_LOGIN_URLS[session.provider] || '';
+  const provider = String(session.provider || 'aliexpress').toLowerCase();
+  const loginUrl = PROVIDER_LOGIN_URLS[provider] || PROVIDER_LOGIN_URLS['aliexpress'] || '';
 
   return res.json({
     success: true,
-    provider: session.provider,
+    provider,
     status: session.status,
     loginUrl,
-    expiresAt: session.expiresAt,
-    completedAt: session.completedAt,
+    expiresAt: session.expiresAt ?? null,
+    completedAt: session.completedAt ?? null,
   });
 });
 
