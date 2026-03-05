@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import axios from 'axios';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -101,6 +102,7 @@ export default function Opportunities() {
   });
   const [showAliExpressModal, setShowAliExpressModal] = useState(false);
   const [pendingSearchUrl, setPendingSearchUrl] = useState<string | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (items.length >= 0) console.log('[UI] Opportunities rendered:', items.length);
@@ -122,11 +124,19 @@ export default function Opportunities() {
 
   async function search() {
     if (!query.trim()) return;
+    // Cancel any in-flight search so its response cannot overwrite this one
+    if (searchAbortRef.current) {
+      searchAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
     setLoading(true);
     setError(null);
+    let requestCanceled = false;
     try {
       const response = await api.get('/api/opportunities', {
-        params: { query, maxItems, marketplaces: marketplacesParam, region }
+        params: { query, maxItems, marketplaces: marketplacesParam, region },
+        signal: controller.signal,
       });
 
       const data = response.data;
@@ -156,6 +166,10 @@ export default function Opportunities() {
       setItems(items);
       await fetchAuthStatuses();
     } catch (e: any) {
+      if (axios.isCancel(e)) {
+        requestCanceled = true;
+        return;
+      }
       // ✅ Manejar respuesta 202 (Accepted) cuando se requiere CAPTCHA
       if (e?.response?.status === 202) {
         const captchaData = e.response?.data || {};
@@ -196,7 +210,9 @@ export default function Opportunities() {
       }
       setItems([]);
     } finally {
-      setLoading(false);
+      if (!requestCanceled) {
+        setLoading(false);
+      }
     }
   }
 
@@ -318,6 +334,11 @@ export default function Opportunities() {
       // Si no hay keyword en params, ejecutar búsqueda con query por defecto
       search();
     }
+    return () => {
+      if (searchAbortRef.current) {
+        searchAbortRef.current.abort();
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
