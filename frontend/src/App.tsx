@@ -47,6 +47,7 @@ const Checkout = lazy(() => import('@pages/Checkout'));
 const Diagnostics = lazy(() => import('@pages/Diagnostics'));
 const SetupRequired = lazy(() => import('@pages/SetupRequired'));
 const OnboardingWizard = lazy(() => import('@components/OnboardingWizard'));
+const NotFound = lazy(() => import('@pages/NotFound'));
 import Layout from '@components/layout/Layout';
 import { ErrorBanner } from '@/components/ErrorBanner';
 
@@ -261,7 +262,7 @@ function AppContent() {
       <Route path="/diagnostics" element={<Diagnostics />} />
 
       {/* 404 */}
-      <Route path="*" element={<Navigate to="/" />} />
+      <Route path="*" element={<NotFound />} />
       </Routes>
       <ErrorBanner />
     </Suspense>

@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, RefreshCcw, ShieldCheck, ShieldAlert, Loader2, User } from 'lucide-react';
+import { LogOut, RefreshCcw, ShieldCheck, ShieldAlert, Loader2, User, Menu } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@stores/authStore';
 import { useAuthStatusStore } from '@stores/authStatusStore';
+import { useSidebar } from '@/contexts/SidebarContext';
 
 const statusStyles: Record<string, { className: string; label: string; icon: JSX.Element }> = {
   healthy: {
@@ -90,8 +91,16 @@ export default function Navbar() {
 
   return (
     <nav className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors">
-      <div className="px-8 py-4 flex justify-between items-center">
-        <div className="flex items-center space-x-6">
+      <div className="px-4 md:px-8 py-4 flex justify-between items-center">
+        <div className="flex items-center space-x-4 md:space-x-6">
+          <button
+            type="button"
+            onClick={toggle}
+            className="lg:hidden p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            aria-label="Abrir menú"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
           <div className="flex items-center space-x-3">
             <div className="h-12 w-12 rounded-2xl overflow-hidden border border-blue-100 dark:border-blue-900 shadow-md bg-white dark:bg-gray-700 transition-colors">
               <img

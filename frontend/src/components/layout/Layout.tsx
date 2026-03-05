@@ -5,6 +5,9 @@ import AliexpressOverlayGate from '@/components/AliexpressOverlayGate';
 import { useSetupCheck } from '@/hooks/useSetupCheck';
 import { Settings, X } from 'lucide-react';
 import { useState } from 'react';
+import { SidebarProvider } from '@/contexts/SidebarContext';
+import PageBreadcrumb from '@/components/PageBreadcrumb';
+import CommandPalette from '@/components/CommandPalette';
 
 export default function Layout() {
   const { setupStatus } = useSetupCheck();
@@ -15,8 +18,10 @@ export default function Layout() {
     !setupBannerDismissed;
 
   return (
+    <SidebarProvider>
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
       <AliexpressOverlayGate />
+      <CommandPalette />
       <Navbar />
       {showSetupBanner && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 px-4 py-2 flex items-center justify-between gap-4">
@@ -45,9 +50,11 @@ export default function Layout() {
       <div className="flex">
         <Sidebar />
         <main className="flex-1 p-8 bg-gray-50 dark:bg-gray-900 transition-colors">
+          <PageBreadcrumb />
           <Outlet />
         </main>
       </div>
     </div>
+    </SidebarProvider>
   );
 }
