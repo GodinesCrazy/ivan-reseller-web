@@ -70,6 +70,15 @@ export default function Commissions() {
     monthlyEarnings: 0,
     earningsChange: 0
   });
+
+  const safeStats = {
+    totalPending: Number(stats.totalPending) || 0,
+    totalPaid: Number(stats.totalPaid) || 0,
+    totalCommissions: Number(stats.totalCommissions) || 0,
+    nextPayoutDate: stats.nextPayoutDate ?? '',
+    monthlyEarnings: Number(stats.monthlyEarnings) || 0,
+    earningsChange: Number(stats.earningsChange) || 0
+  };
   const [payoutSchedule, setPayoutSchedule] = useState<PayoutSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -90,9 +99,9 @@ export default function Commissions() {
         api.get('/api/commissions/stats'),
         api.get('/api/commissions/payout-schedule')
       ]);
-      setCommissions(commissionsResponse.data);
-      setStats(statsResponse.data);
-      setPayoutSchedule(scheduleResponse.data);
+      setCommissions(commissionsResponse.data?.commissions ?? []);
+      setStats(statsResponse.data ?? { totalPending: 0, totalPaid: 0, totalCommissions: 0, nextPayoutDate: '', monthlyEarnings: 0, earningsChange: 0 });
+      setPayoutSchedule(scheduleResponse.data?.schedule ?? []);
     } catch (error: any) {
       console.error('Error fetching commissions:', error);
       const status = error?.response?.status;
@@ -105,7 +114,7 @@ export default function Commissions() {
   };
 
   const handleRequestPayout = async () => {
-    if (stats.totalPending < 50) {
+    if (safeStats.totalPending < 50) {
       toast.error('Minimum payout amount is $50');
       return;
     }
@@ -229,11 +238,11 @@ export default function Commissions() {
           </Button>
           <Button 
             onClick={handleRequestPayout}
-            disabled={requestingPayout || stats.totalPending < 50}
+            disabled={requestingPayout || safeStats.totalPending < 50}
             className="flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
           >
             <Wallet className="w-4 h-4" />
-            Request Payout (${stats.totalPending.toFixed(2)})
+            Request Payout (${safeStats.totalPending.toFixed(2)})
           </Button>
         </div>
       </div>
@@ -258,7 +267,7 @@ export default function Commissions() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Paid</p>
-                <p className="text-3xl font-bold text-green-700">${stats.totalPaid.toFixed(2)}</p>
+                <p className="text-3xl font-bold text-green-700">${safeStats.totalPaid.toFixed(2)}</p>
                 <p className="text-xs text-gray-600 mt-1">All time earnings</p>
               </div>
               <CheckCircle className="w-10 h-10 text-green-600" />
@@ -271,10 +280,10 @@ export default function Commissions() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Monthly Earnings</p>
-                <p className="text-3xl font-bold text-blue-700">${stats.monthlyEarnings.toFixed(2)}</p>
-                <p className={`text-xs flex items-center gap-1 mt-1 ${stats.earningsChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <p className="text-3xl font-bold text-blue-700">${safeStats.monthlyEarnings.toFixed(2)}</p>
+                <p className={`text-xs flex items-center gap-1 mt-1 ${safeStats.earningsChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   <TrendingUp className="w-3 h-3" />
-                  {stats.earningsChange >= 0 ? '+' : ''}{stats.earningsChange.toFixed(1)}% vs last month
+                  {safeStats.earningsChange >= 0 ? '+' : ''}{safeStats.earningsChange.toFixed(1)}% vs last month
                 </p>
               </div>
               <TrendingUp className="w-10 h-10 text-blue-600" />
@@ -299,13 +308,13 @@ export default function Commissions() {
       </div>
 
       {/* Info Banner */}
-      {stats.totalPending < 50 && stats.totalPending > 0 && (
+      {safeStats.totalPending < 50 && safeStats.totalPending > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
           <div>
             <p className="font-medium text-blue-900">Minimum Payout Amount</p>
             <p className="text-sm text-blue-700">
-              You need ${(50 - stats.totalPending).toFixed(2)} more to reach the minimum payout amount of $50.00
+              You need ${(50 - safeStats.totalPending).toFixed(2)} more to reach the minimum payout amount of $50.00
             </p>
           </div>
         </div>

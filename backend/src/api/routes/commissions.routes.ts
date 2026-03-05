@@ -17,18 +17,19 @@ router.get('/', async (req: Request, res: Response, next) => {
     const status = req.query.status as string | undefined;
     const commissions = await commissionService.getCommissions(userId, status);
     
-    // ✅ Mapear datos del backend al formato esperado por el frontend
+    const { toNumber } = await import('../../utils/decimal.utils');
+    // ✅ Mapear datos del backend al formato esperado por el frontend (amount como número)
     const mappedCommissions = commissions.map((commission: any) => ({
       id: String(commission.id),
       saleId: String(commission.saleId),
       productTitle: commission.sale?.product?.title || 'Unknown Product',
       marketplace: commission.sale?.marketplace || 'unknown',
-      amount: commission.amount,
+      amount: toNumber(commission.amount),
       status: commission.status,
       paymentDate: commission.paidAt?.toISOString() || null,
       createdAt: commission.createdAt?.toISOString() || new Date().toISOString()
     }));
-    
+
     res.json({ commissions: mappedCommissions });
   } catch (error) {
     next(error);
@@ -44,16 +45,16 @@ router.get('/stats', async (req: Request, res: Response, next) => {
     const userId = isAdmin ? undefined : req.user?.userId;
     const stats = await commissionService.getCommissionStats(userId ? String(userId) : undefined);
     
-    // ✅ Mapear estadísticas al formato esperado por el frontend
+    // ✅ Mapear estadísticas al formato esperado por el frontend (montos en dólares, no conteos)
     const mappedStats = {
-      totalPending: stats.pending || 0,
-      totalPaid: stats.paid || 0,
-      totalCommissions: stats.total || 0,
+      totalPending: Number(stats.pendingAmount) || 0,
+      totalPaid: Number(stats.paidAmount) || 0,
+      totalCommissions: Number(stats.totalAmount) || 0,
       nextPayoutDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // TODO: Calcular desde scheduledAt
-      monthlyEarnings: stats.paidAmount || 0,
+      monthlyEarnings: Number(stats.paidAmount) || 0,
       earningsChange: 0 // TODO: Calcular cambio de ganancias
     };
-    
+
     res.json(mappedStats);
   } catch (error) {
     next(error);
@@ -168,17 +169,18 @@ router.post('/request-payout', async (req: Request, res: Response, next) => {
   }
 });
 
-// GET /api/commissions/payout-schedule - Obtener programación de pagos
+// GET /api/commissions/payout-schedule - Obtener programación de pagos (formato esperado por frontend: date, amount, count, status)
 router.get('/payout-schedule', async (req: Request, res: Response, next) => {
   try {
+    const { toNumber } = await import('../../utils/decimal.utils');
     const userId = req.user!.role === 'ADMIN' ? undefined : req.user!.userId;
     const scheduledCommissions = await commissionService.getCommissions(userId, 'SCHEDULED');
-    
+
     const schedule = scheduledCommissions.map((comm: any) => ({
-      commissionId: comm.id,
-      amount: comm.amount,
-      scheduledDate: comm.scheduledAt?.toISOString() || null,
-      saleId: comm.saleId
+      date: comm.scheduledAt?.toISOString() ?? new Date().toISOString(),
+      amount: toNumber(comm.amount),
+      count: 1,
+      status: 'scheduled' as const
     }));
 
     res.json({
