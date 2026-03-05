@@ -82,18 +82,18 @@ router.get('/stats', async (req: Request, res: Response, next) => {
     const isAdmin = userRole === 'ADMIN';
     const userId = isAdmin ? undefined : (req.user?.userId ? String(req.user.userId) : undefined);
     const days = validatedQuery.days;
-    const stats = await saleService.getSalesStats(userId);
+    const stats = await saleService.getSalesStats(userId, days);
     
     // Calcular promedio de orden y cambios
     const { toNumber } = await import('../../utils/decimal.utils');
     const totalRevenueNum = toNumber(stats.totalRevenue || 0);
-    const totalCommissionsNum = toNumber(stats.totalCommissions || 0);
+    const totalProfitNum = toNumber(stats.totalProfit ?? 0);
     const avgOrderValue = stats.totalSales > 0 ? totalRevenueNum / stats.totalSales : 0;
     
-    // ✅ Mapear estadísticas al formato esperado por el frontend
+    // ✅ Mapear estadísticas al formato esperado por el frontend (mismo período y definición: COMPLETED)
     const mappedStats = {
       totalRevenue: totalRevenueNum,
-      totalProfit: totalRevenueNum - totalCommissionsNum,
+      totalProfit: totalProfitNum,
       totalSales: stats.totalSales || 0,
       avgOrderValue: avgOrderValue,
       revenueChange: 0, // TODO: Calcular cambio de ingresos comparando con período anterior

@@ -2,6 +2,8 @@
   "name": "ivan-reseller-frontend",
   "version": "1.0.1",
   "description": "Ivan Reseller Frontend - React + TypeScript + Vite",
+  "author": "Ivan Reseller",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "npm run sync-docs && vite",

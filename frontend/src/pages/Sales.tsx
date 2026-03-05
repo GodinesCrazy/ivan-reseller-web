@@ -123,6 +123,13 @@ export default function Sales() {
     return <Badge variant={variants[status] || 'secondary'}>{status}</Badge>;
   };
 
+  // Mismo período que las stats (dateRange días) para alinear gráficas con tarjetas
+  const daysNum = parseInt(String(dateRange), 10) || 30;
+  const periodStart = Date.now() - daysNum * 24 * 60 * 60 * 1000;
+  const salesInPeriod = sales.filter((s) => new Date(s.createdAt).getTime() >= periodStart);
+
+  const periodLabel = daysNum === 7 ? 'últimos 7 días' : daysNum === 90 ? 'últimos 90 días' : daysNum === 365 ? 'último año' : 'últimos 30 días';
+
   // Filtrado
   const filteredSales = sales.filter(sale => {
     const matchesSearch = sale.orderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -140,8 +147,8 @@ export default function Sales() {
     currentPage * itemsPerPage
   );
 
-  // Datos para gráficas
-  const revenueData = sales.reduce((acc: any[], sale) => {
+  // Datos para gráficas (mismo período que las stats)
+  const revenueData = salesInPeriod.reduce((acc: any[], sale) => {
     const date = new Date(sale.createdAt).toLocaleDateString('es', { month: 'short', day: 'numeric' });
     const existing = acc.find(item => item.date === date);
     if (existing) {
@@ -154,14 +161,14 @@ export default function Sales() {
   }, []).slice(-7);
 
   const marketplaceData = Object.entries(
-    sales.reduce((acc: Record<string, number>, sale) => {
+    salesInPeriod.reduce((acc: Record<string, number>, sale) => {
       acc[sale.marketplace] = (acc[sale.marketplace] || 0) + sale.salePrice;
       return acc;
     }, {})
   ).map(([name, value]) => ({ name, value }));
 
   const statusData = Object.entries(
-    sales.reduce((acc: Record<string, number>, sale) => {
+    salesInPeriod.reduce((acc: Record<string, number>, sale) => {
       acc[sale.status] = (acc[sale.status] || 0) + 1;
       return acc;
     }, {})
@@ -215,7 +222,7 @@ export default function Sales() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Ingresos totales</p>
+                <p className="text-sm text-gray-600">Ingresos totales ({periodLabel})</p>
                 <p className="text-2xl font-bold">{formatCurrencySimple(stats.totalRevenue, 'USD')}</p>
                 <p className={`text-xs flex items-center gap-1 mt-1 ${stats.revenueChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   <TrendingUp className="w-3 h-3" />
@@ -230,7 +237,7 @@ export default function Sales() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Beneficio total</p>
+                <p className="text-sm text-gray-600">Beneficio total ({periodLabel})</p>
                 <p className="text-2xl font-bold text-green-600">{formatCurrencySimple(stats.totalProfit, 'USD')}</p>
                 <p className={`text-xs flex items-center gap-1 mt-1 ${stats.profitChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   <TrendingUp className="w-3 h-3" />
@@ -245,9 +252,9 @@ export default function Sales() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Total Sales</p>
+                <p className="text-sm text-gray-600">Total Sales ({periodLabel})</p>
                 <p className="text-2xl font-bold">{stats.totalSales}</p>
-                <p className="text-xs text-gray-500 mt-1">pedidos procesados</p>
+                <p className="text-xs text-gray-500 mt-1">pedidos completados</p>
               </div>
               <ShoppingCart className="w-8 h-8 text-purple-600" />
             </div>
@@ -257,7 +264,7 @@ export default function Sales() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Avg Order Value</p>
+                <p className="text-sm text-gray-600">Avg Order Value ({periodLabel})</p>
                 <p className="text-2xl font-bold">{formatCurrencySimple(stats.avgOrderValue, 'USD')}</p>
                 <p className="text-xs text-gray-500 mt-1">por transacción</p>
               </div>

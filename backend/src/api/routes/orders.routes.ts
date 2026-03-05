@@ -16,11 +16,14 @@ const router = Router();
 const FAILED_INSUFFICIENT_FUNDS = 'FAILED_INSUFFICIENT_FUNDS';
 const MAX_RETRIES = 3;
 
+router.use(authenticate);
+
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.userId as number | undefined;
+    const userId = req.user!.userId;
+    const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
     const orders = await prisma.order.findMany({
-      where: userId ? {} : {}, // TODO: add userId to Order and filter by it
+      where: isAdmin ? {} : { userId },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
@@ -33,10 +36,17 @@ router.get('/', async (req: Request, res: Response) => {
 
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id;
+    if (!id || typeof id !== 'string' || id.trim() === '') {
+      return res.status(400).json({ error: 'Invalid order id' });
+    }
     const order = await prisma.order.findUnique({ where: { id } });
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
+    }
+    const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
+    if (!isAdmin && order.userId != null && order.userId !== req.user!.userId) {
+      return res.status(403).json({ error: 'Not authorized to view this order' });
     }
     return res.status(200).json(order);
   } catch (err: any) {
@@ -50,10 +60,10 @@ router.get('/:id', async (req: Request, res: Response) => {
  * Retry fulfillment for an order that failed due to insufficient funds.
  * Requires authentication. Order must be FAILED with FAILED_INSUFFICIENT_FUNDS and fulfillRetryCount < 3.
  */
-router.post('/:id/retry-fulfill', authenticate, async (req: Request, res: Response) => {
+router.post('/:id/retry-fulfill', async (req: Request, res: Response) => {
   try {
     const orderId = req.params.id;
-    const userId = (req as any).user?.userId as number | undefined;
+    const userId = req.user!.userId;
     const order = await prisma.order.findUnique({ where: { id: orderId } });
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });

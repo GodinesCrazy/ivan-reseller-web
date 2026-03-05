@@ -135,26 +135,11 @@ router.get('/summary', async (req: Request, res: Response, next) => {
     const userId = req.user!.userId;
     const range = (req.query.range as string) || 'month';
     
-    // Calcular fechas según el rango
+    // Rango como ventana fija de días (alineado con Sales Ledger y UI "Last 30 Days")
     const now = new Date();
-    let startDate = new Date();
-    
-    switch (range) {
-      case 'week':
-        startDate.setDate(now.getDate() - 7);
-        break;
-      case 'month':
-        startDate.setMonth(now.getMonth() - 1);
-        break;
-      case 'quarter':
-        startDate.setMonth(now.getMonth() - 3);
-        break;
-      case 'year':
-        startDate.setFullYear(now.getFullYear() - 1);
-        break;
-      default:
-        startDate.setMonth(now.getMonth() - 1);
-    }
+    const daysMap: Record<string, number> = { week: 7, month: 30, quarter: 90, year: 365 };
+    const days = daysMap[range] ?? 30;
+    const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
     // Obtener datos consolidados
     const [sales, commissions, products] = await Promise.all([
@@ -178,7 +163,7 @@ router.get('/summary', async (req: Request, res: Response, next) => {
       })
     ]);
 
-    // ✅ MEJORADO: Calcular métricas incluyendo costos adicionales (envío, impuestos)
+    // totalSales aquí = suma de precios de venta (revenue); salesCount = número de ventas (más abajo)
     const totalSales = sales.reduce((sum, s) => sum + toNumber(s.salePrice), 0);
     const totalBaseCosts = sales.reduce((sum, s) => sum + toNumber(s.aliexpressCost || 0), 0);
     
@@ -330,29 +315,14 @@ router.get('/breakdown', async (req: Request, res: Response, next) => {
     const range = (req.query.range as string) || 'month';
     
     const now = new Date();
-    let startDate = new Date();
-    
-    switch (range) {
-      case 'week':
-        startDate.setDate(now.getDate() - 7);
-        break;
-      case 'month':
-        startDate.setMonth(now.getMonth() - 1);
-        break;
-      case 'quarter':
-        startDate.setMonth(now.getMonth() - 3);
-        break;
-      case 'year':
-        startDate.setFullYear(now.getFullYear() - 1);
-        break;
-      default:
-        startDate.setMonth(now.getMonth() - 1);
-    }
+    const daysMapBreakdown: Record<string, number> = { week: 7, month: 30, quarter: 90, year: 365 };
+    const daysBreakdown = daysMapBreakdown[range] ?? 30;
+    const startDateBreakdown = new Date(now.getTime() - daysBreakdown * 24 * 60 * 60 * 1000);
 
     const sales = await prisma.sale.findMany({
       where: {
         userId,
-        createdAt: { gte: startDate }
+        createdAt: { gte: startDateBreakdown }
       },
       include: {
         product: true
@@ -394,37 +364,22 @@ router.get('/cashflow', async (req: Request, res: Response, next) => {
     const range = (req.query.range as string) || 'month';
     
     const now = new Date();
-    let startDate = new Date();
-    
-    switch (range) {
-      case 'week':
-        startDate.setDate(now.getDate() - 7);
-        break;
-      case 'month':
-        startDate.setMonth(now.getMonth() - 1);
-        break;
-      case 'quarter':
-        startDate.setMonth(now.getMonth() - 3);
-        break;
-      case 'year':
-        startDate.setFullYear(now.getFullYear() - 1);
-        break;
-      default:
-        startDate.setMonth(now.getMonth() - 1);
-    }
+    const daysMapCashflow: Record<string, number> = { week: 7, month: 30, quarter: 90, year: 365 };
+    const daysCashflow = daysMapCashflow[range] ?? 30;
+    const startDateCashflow = new Date(now.getTime() - daysCashflow * 24 * 60 * 60 * 1000);
 
     const [sales, commissions] = await Promise.all([
       prisma.sale.findMany({
         where: {
           userId,
-          createdAt: { gte: startDate }
+          createdAt: { gte: startDateCashflow }
         },
         orderBy: { createdAt: 'asc' }
       }),
       prisma.commission.findMany({
         where: {
           userId,
-          createdAt: { gte: startDate }
+          createdAt: { gte: startDateCashflow }
         },
         orderBy: { createdAt: 'asc' }
       })

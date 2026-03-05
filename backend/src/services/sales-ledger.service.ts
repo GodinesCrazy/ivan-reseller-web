@@ -59,19 +59,19 @@ export async function getSalesLedger(userId: number, range?: 'week' | 'month' | 
 
   switch (range || 'month') {
     case 'week':
-      startDate.setDate(now.getDate() - 7);
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       break;
     case 'month':
-      startDate.setMonth(now.getMonth() - 1);
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       break;
     case 'quarter':
-      startDate.setMonth(now.getMonth() - 3);
+      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
       break;
     case 'year':
-      startDate.setFullYear(now.getFullYear() - 1);
+      startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
       break;
     default:
-      startDate.setMonth(now.getMonth() - 1);
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   }
 
   const sales = await prisma.sale.findMany({

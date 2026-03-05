@@ -223,7 +223,11 @@ router.get('/charts/sales', async (req: Request, res: Response, next) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
     const sales = await prisma.sale.findMany({
-      where: userId ? { userId, createdAt: { gte: startDate } } : { createdAt: { gte: startDate } },
+      where: {
+        ...(userId ? { userId } : {}),
+        createdAt: { gte: startDate },
+        status: 'COMPLETED',
+      },
       orderBy: { createdAt: 'asc' },
     });
     const salesByDay = sales.reduce((acc: any, sale) => {

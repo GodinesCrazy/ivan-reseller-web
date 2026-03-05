@@ -910,14 +910,18 @@ export class SaleService {
     return updated;
   }
 
-  async getSalesStats(userId?: string | number) {
+  async getSalesStats(userId?: string | number, days?: number) {
     const { queryWithTimeout } = await import('../utils/queryWithTimeout');
     // Convertir userId a number si es string (Prisma espera number)
     const userIdNumber = userId ? (typeof userId === 'string' ? parseInt(userId, 10) : userId) : undefined;
-    const where = userIdNumber ? { userId: userIdNumber } : {};
+    const baseWhere = userIdNumber ? { userId: userIdNumber } : {};
+    const dateFilter = typeof days === 'number' && days > 0
+      ? { createdAt: { gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000) } }
+      : {};
+    const where = { ...baseWhere, ...dateFilter };
 
     const queriesPromise = Promise.all([
-      prisma.sale.count({ where }),
+      prisma.sale.count({ where: { ...where, status: 'COMPLETED' } }),
       prisma.sale.count({ where: { ...where, status: 'PENDING' } }),
       prisma.sale.count({ where: { ...where, status: 'COMPLETED' } }),
       prisma.sale.count({ where: { ...where, status: 'CANCELLED' } }),
@@ -942,7 +946,7 @@ export class SaleService {
     ] = await queryWithTimeout(queriesPromise, 20000);
 
     const netProfitAgg = await prisma.sale.aggregate({
-      where: { ...where, status: { not: 'PAYOUT_FAILED' } },
+      where: { ...where, status: 'COMPLETED' },
       _sum: { netProfit: true },
     });
     const totalProfit = netProfitAgg._sum.netProfit ?? 0;

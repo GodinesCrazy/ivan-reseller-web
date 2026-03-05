@@ -274,50 +274,54 @@ router.get('/pending', async (req: Request, res: Response) => {
       return { images: [], imageUrl: null };
     };
 
-    // ✅ Enriquecer con información adicional: images (array), imageUrl, description, más detalle
-    const enrichedItems = products.map((item) => {
+    const marketplaceService = new MarketplaceService();
+    const enrichedItems: any[] = [];
+    for (const item of products) {
+      const costNum = toNumber(item.aliexpressPrice);
+      const effectivePrice = marketplaceService.getEffectiveListingPrice(item);
+      if (effectivePrice <= 0 || effectivePrice <= costNum) continue;
       try {
         const productData = item.productData ? JSON.parse(item.productData as string) : {};
         const { images: imagesArr, imageUrl } = parseImages(item.images);
-        return {
+        const profit = effectivePrice - costNum;
+        const roi = costNum > 0 ? (profit / costNum) * 100 : 0;
+        enrichedItems.push({
           ...item,
-          images: imagesArr, // ✅ Array de URLs para carrusel
+          images: imagesArr,
           imageUrl: imageUrl || undefined,
           description: item.description || (productData as any).description || '',
           source: (productData as any).source || 'manual',
           queuedAt: (productData as any).queuedAt || item.createdAt,
           queuedBy: (productData as any).queuedBy || 'user',
-          estimatedCost: (productData as any).estimatedCost ?? item.aliexpressPrice,
-          estimatedProfit: (productData as any).estimatedProfit ?? (toNumber(item.suggestedPrice) - toNumber(item.aliexpressPrice)),
-          estimatedROI: (productData as any).estimatedROI ??
-            (toNumber(item.aliexpressPrice) > 0
-              ? ((toNumber(item.suggestedPrice) - toNumber(item.aliexpressPrice)) / toNumber(item.aliexpressPrice) * 100)
-              : 0)
-        };
-      } catch (parseError) {
-        logger.warn('[PUBLISHER] Failed to parse productData', {
-          productId: item.id,
-          error: parseError instanceof Error ? parseError.message : String(parseError)
+          estimatedCost: costNum,
+          suggestedPrice: effectivePrice,
+          estimatedProfit: profit,
+          estimatedROI: roi
         });
+      } catch (parseError) {
+        logger.warn('[PUBLISHER] Failed to parse productData', { productId: item.id, error: parseError });
         const { images: imagesArr, imageUrl } = parseImages(item.images);
-        return {
+        const profit = effectivePrice - costNum;
+        const roi = costNum > 0 ? (profit / costNum) * 100 : 0;
+        enrichedItems.push({
           ...item,
           images: imagesArr,
           imageUrl: imageUrl || undefined,
           description: item.description || '',
           source: 'manual',
           queuedAt: item.createdAt,
-          estimatedCost: item.aliexpressPrice,
-          estimatedProfit: toNumber(item.suggestedPrice) - toNumber(item.aliexpressPrice),
-          estimatedROI: 0
-        };
+          estimatedCost: costNum,
+          suggestedPrice: effectivePrice,
+          estimatedProfit: profit,
+          estimatedROI: roi
+        });
       }
-    });
-    
-    return res.json({ 
-      success: true, 
-      items: enrichedItems, 
-      count: enrichedItems.length 
+    }
+
+    return res.json({
+      success: true,
+      items: enrichedItems,
+      count: enrichedItems.length
     });
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Failed to list pending';

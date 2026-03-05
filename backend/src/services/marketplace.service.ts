@@ -634,8 +634,9 @@ export class MarketplaceService {
         throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
       }
 
-      // ✅ CORREGIDO: Validar que el precio sea mayor que el costo de AliExpress
-      if (price <= product.aliexpressPrice) {
+      // ✅ Margen estricto: precio debe ser mayor que el costo
+      const costNum = toNumber(product.aliexpressPrice);
+      if (price <= costNum) {
         throw new AppError(`Price (${price}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
       }
 
@@ -772,8 +773,9 @@ export class MarketplaceService {
         throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
       }
 
-      // ✅ CORREGIDO: Validar que el precio sea mayor que el costo de AliExpress
-      if (price <= product.aliexpressPrice) {
+      // ✅ Margen estricto: precio debe ser mayor que el costo
+      const costNumMl = toNumber(product.aliexpressPrice);
+      if (price <= costNumMl) {
         throw new AppError(`Price (${price}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
       }
 
@@ -901,8 +903,9 @@ export class MarketplaceService {
         throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
       }
 
-      // ✅ CORREGIDO: Validar que el precio sea mayor que el costo de AliExpress
-      if (price <= product.aliexpressPrice) {
+      // ✅ Margen estricto: precio debe ser mayor que el costo
+      const costNumAmz = toNumber(product.aliexpressPrice);
+      if (price <= costNumAmz) {
         throw new AppError(`Price (${price}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
       }
 
@@ -1829,32 +1832,31 @@ export class MarketplaceService {
     return preparedImages;
   }
 
-  private resolveListingPrice(product: any, override?: number): number {
-    if (typeof override === 'number' && override > 0) {
+  /**
+   * Precio efectivo que se usará al publicar. No devuelve precio <= costo; así listado y publicación usan la misma regla.
+   * Público para que GET /publisher/pending pueda filtrar y mostrar los mismos valores que la publicación.
+   */
+  getEffectiveListingPrice(product: any, override?: number): number {
+    const costNum = toNumber(product?.aliexpressPrice ?? 0);
+    if (typeof override === 'number' && override > 0 && override > costNum) {
       return override;
     }
     const metadata = this.parseProductMetadata(product);
-    if (typeof metadata?.price === 'number' && metadata.price > 0) {
-      return metadata.price;
-    }
-    // ✅ CORREGIDO: Validar que finalPrice no sea null antes de usarlo
-    if (typeof product?.finalPrice === 'number' && product.finalPrice > 0 && product.finalPrice !== null) {
-      return product.finalPrice;
-    }
-    if (typeof product?.suggestedPrice === 'number' && product.suggestedPrice > 0) {
-      return product.suggestedPrice;
-    }
-    // ✅ CORREGIDO: Validar margen mínimo antes de usar fallback
-    if (typeof product?.aliexpressPrice === 'number' && product.aliexpressPrice > 0) {
-      const fallbackPrice = Math.round(product.aliexpressPrice * 1.45 * 100) / 100;
-      // Validar que el fallback sea mayor que el costo
-      if (fallbackPrice > product.aliexpressPrice) {
-        return fallbackPrice;
-      }
-      // Si el fallback no es válido, retornar 0 (será validado después)
-      return 0;
+    const metaPrice = typeof metadata?.price === 'number' ? metadata.price : 0;
+    if (metaPrice > 0 && metaPrice > costNum) return metaPrice;
+    const finalPrice = typeof product?.finalPrice === 'number' && product.finalPrice !== null ? toNumber(product.finalPrice) : 0;
+    if (finalPrice > 0 && finalPrice > costNum) return finalPrice;
+    const suggestedPrice = typeof product?.suggestedPrice === 'number' ? toNumber(product.suggestedPrice) : 0;
+    if (suggestedPrice > 0 && suggestedPrice > costNum) return suggestedPrice;
+    if (costNum > 0) {
+      const fallbackPrice = Math.round(costNum * 1.45 * 100) / 100;
+      if (fallbackPrice > costNum) return fallbackPrice;
     }
     return 0;
+  }
+
+  private resolveListingPrice(product: any, override?: number): number {
+    return this.getEffectiveListingPrice(product, override);
   }
 
   private resolveListingQuantity(product: any, override?: number): number {

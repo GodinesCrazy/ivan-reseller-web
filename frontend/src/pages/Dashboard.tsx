@@ -228,7 +228,7 @@ export default function Dashboard() {
 
       // Backend: { products, sales: { totalSales (count), totalRevenue, totalProfit, totalCommissions, platformCommissionPaid }, commissions }
       const totalRevenue = Number(stats?.sales?.totalRevenue ?? stats?.sales?.total ?? 0);
-      const totalProfit = Number(stats?.sales?.totalProfit ?? stats?.commissions?.totalAmount ?? stats?.commissions?.total ?? 0);
+      const totalProfit = Number(stats?.sales?.totalProfit ?? 0);
       const platformCommissionPaid = Number(stats?.sales?.platformCommissionPaid ?? stats?.sales?.totalCommissions ?? 0);
       const salesCount = Number(stats?.sales?.totalSales ?? 0);
       const activeProducts = Number(stats?.products?.published ?? stats?.products?.active ?? 0);

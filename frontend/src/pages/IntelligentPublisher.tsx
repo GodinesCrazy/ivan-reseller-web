@@ -321,15 +321,11 @@ function PendingProductCard({
             </div>
           )}
           <div className="text-xs text-gray-500 mt-1 space-y-1">
-            <div>Cost: ${p.estimatedCost ?? p.aliexpressPrice} → Suggested: ${p.suggestedPrice}</div>
-            {(p.estimatedProfit !== undefined && p.estimatedProfit !== null) && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span>Profit: <span className="font-semibold text-green-600">${Number(p.estimatedProfit).toFixed(2)}</span></span>
-                {(p.estimatedROI !== undefined && p.estimatedROI !== null) && (
-                  <span>ROI: <span className="font-semibold text-blue-600">{Number(p.estimatedROI).toFixed(1)}%</span></span>
-                )}
-              </div>
-            )}
+            <div>Cost: ${Number(p.estimatedCost ?? p.aliexpressPrice ?? 0).toFixed(2)} → Suggested: ${Number(p.suggestedPrice ?? 0).toFixed(2)}</div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span>Profit: <span className="font-semibold text-green-600">${Number(p.estimatedProfit ?? 0).toFixed(2)}</span></span>
+              <span>ROI: <span className="font-semibold text-blue-600">{Number(p.estimatedROI ?? 0).toFixed(1)}%</span></span>
+            </div>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className={`px-2 py-0.5 rounded text-xs ${p.source === 'autopilot' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
                 {p.source === 'autopilot' ? '🤖 Autopilot' : '👤 Manual'}
