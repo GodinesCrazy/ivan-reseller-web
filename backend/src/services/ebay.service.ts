@@ -536,6 +536,84 @@ export class EbayService {
   }
 
   /**
+   * When eBay returns 25002 "Offer entity already exist", publish the existing offer or get listingId if already published.
+   */
+  private async handleOfferAlreadyExists(error: any): Promise<EbayListingResponse> {
+    const data = error?.response?.data;
+    const errors = data?.errors;
+    const firstError = Array.isArray(errors) ? errors[0] : null;
+    const errorId = firstError?.errorId;
+    const message = (firstError?.message || error?.message || '').toString();
+
+    const isOfferAlreadyExists =
+      errorId === 25002 ||
+      /Offer entity already exist|already exist/i.test(message);
+
+    if (!isOfferAlreadyExists) {
+      throw error;
+    }
+
+    let offerId: string | null = null;
+    const params = firstError?.parameters;
+    if (Array.isArray(params)) {
+      const offerParam = params.find((p: any) => p?.name === 'offerId');
+      if (offerParam?.value) offerId = String(offerParam.value).trim();
+    }
+    if (!offerId && message) {
+      const match = message.match(/"value"\s*:\s*"(\d+)"/) || message.match(/offerId["\s:]+(\d+)/i);
+      if (match) offerId = match[1];
+    }
+
+    if (!offerId) {
+      logger.warn('eBay 25002: could not extract offerId from response', { data, message });
+      throw error;
+    }
+
+    const invHeaders = { 'Content-Language': 'en-US' };
+
+    try {
+      const publishResponse = await this.apiClient.post(
+        `/sell/inventory/v1/offer/${offerId}/publish`,
+        {},
+        { headers: invHeaders }
+      );
+      const listingId = publishResponse?.data?.listingId;
+      if (listingId) {
+        logger.info('eBay offer already existed; published successfully', { offerId, listingId });
+        return {
+          success: true,
+          itemId: listingId,
+          listingUrl: `https://www.ebay.com/itm/${listingId}`,
+          fees: { insertionFee: 0, finalValueFee: 0 },
+        };
+      }
+    } catch (publishErr: any) {
+      const status = publishErr?.response?.status;
+      const body = publishErr?.response?.data;
+      const alreadyPublished = body?.errors?.some((e: any) => e.errorId === 25002 || /already published|already exist/i.test(String(e?.message || '')));
+      if (alreadyPublished || status === 400 || status === 409) {
+        try {
+          const offerResponse = await this.apiClient.get(`/sell/inventory/v1/offer/${offerId}`, { headers: invHeaders });
+          const listingId = offerResponse?.data?.listingId;
+          if (listingId) {
+            logger.info('eBay offer already published; resolved listingId from getOffer', { offerId, listingId });
+            return {
+              success: true,
+              itemId: listingId,
+              listingUrl: `https://www.ebay.com/itm/${listingId}`,
+              fees: { insertionFee: 0, finalValueFee: 0 },
+            };
+          }
+        } catch (getErr) {
+          logger.warn('eBay getOffer after already-exist failed', { offerId, err: getErr });
+        }
+      }
+    }
+
+    throw error;
+  }
+
+  /**
    * Create eBay listing from inventory item
    */
   async createListing(sku: string, product: EbayProduct): Promise<EbayListingResponse> {
@@ -604,8 +682,19 @@ export class EbayService {
 
         if (!result.success || !result.data) {
           const err = result.error as any;
-          const status = err?.response?.status;
           const body = err?.response?.data;
+          const firstErr = Array.isArray(body?.errors) ? body.errors[0] : null;
+          const isOfferAlreadyExists =
+            firstErr?.errorId === 25002 ||
+            /Offer entity already exist|already exist/i.test(String(firstErr?.message || err?.message || ''));
+          if (isOfferAlreadyExists) {
+            try {
+              return await this.handleOfferAlreadyExists(err);
+            } catch (_) {
+              /* fall through to throw AppError below */
+            }
+          }
+          const status = err?.response?.status;
           const hint = status === 404
             ? ' Crea ubicación y políticas en eBay: Seller Hub → Account → Business Policies; y en Inventory → Locations.'
             : '';
@@ -630,7 +719,11 @@ export class EbayService {
         };
       });
     } catch (error: any) {
-      throw new AppError(`eBay listing creation error: ${error.response?.data?.errors?.[0]?.message || error.message}`, 400);
+      try {
+        return await this.handleOfferAlreadyExists(error);
+      } catch {
+        throw new AppError(`eBay listing creation error: ${error.response?.data?.errors?.[0]?.message || error.message}`, 400);
+      }
     }
   }
 
