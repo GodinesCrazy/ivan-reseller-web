@@ -399,7 +399,10 @@ export default function Autopilot() {
         });
       }
     } catch (error: any) {
-      toast.error('Error loading autopilot data: ' + (error.response?.data?.error || error.message));
+      const status = error?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error loading autopilot data: ' + (error.response?.data?.error || error.message));
+      }
     } finally {
       setLoading(false);
     }
@@ -414,7 +417,10 @@ export default function Autopilot() {
       setLogs(data?.logs || []);
       setShowLogsModal(true);
     } catch (error: any) {
-      toast.error('Error loading logs');
+      const status = error?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error loading logs');
+      }
     }
   };
 

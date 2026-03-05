@@ -196,7 +196,10 @@ export default function FinanceDashboard() {
       const { data } = await api.get('/api/finance/sales-ledger', { params: { range: dateRange } });
       setSalesLedger(data?.sales ?? []);
     } catch (e: any) {
-      toast.error('Error loading sales ledger');
+      const status = e?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error loading sales ledger');
+      }
     }
   };
 
@@ -205,7 +208,10 @@ export default function FinanceDashboard() {
       const { data } = await api.get('/api/finance/working-capital-detail');
       setWorkingCapitalDetail(data?.detail ?? null);
     } catch (e: any) {
-      toast.error('Error loading working capital');
+      const status = e?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error loading working capital');
+      }
     }
   };
 
@@ -214,7 +220,10 @@ export default function FinanceDashboard() {
       const { data } = await api.get('/api/finance/leverage-and-risk');
       setLeverageRisk(data ?? null);
     } catch (e: any) {
-      toast.error('Error loading leverage & risk');
+      const status = e?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error loading leverage & risk');
+      }
     }
   };
 
@@ -223,7 +232,10 @@ export default function FinanceDashboard() {
       const { data } = await api.get('/api/finance/top-products', { params: { days: 90 } });
       setTopProducts(data?.products ?? []);
     } catch (e: any) {
-      toast.error('Error loading top products');
+      const status = e?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error loading top products');
+      }
     }
   };
 
@@ -232,7 +244,10 @@ export default function FinanceDashboard() {
       const { data } = await api.get('/api/finance/capital-allocation');
       setAllocation(data?.allocation ?? null);
     } catch (e: any) {
-      toast.error('Error loading capital allocation');
+      const status = e?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error loading capital allocation');
+      }
     }
   };
 
@@ -253,7 +268,10 @@ export default function FinanceDashboard() {
       setTaxSummary(taxRes.data?.taxSummary || taxSummary);
       setProfitProjection(projectionRes.data?.projection ?? null);
     } catch (error: any) {
-      toast.error('Error loading financial data: ' + (error.response?.data?.error || error.message));
+      const status = error?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error loading financial data: ' + (error.response?.data?.error || error.message));
+      }
     } finally {
       setLoading(false);
     }

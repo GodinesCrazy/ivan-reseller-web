@@ -108,7 +108,10 @@ export default function FlexibleDropshipping() {
       setRules(rulesRes.data?.rules || []);
       setSuppliers(suppliersRes.data?.suppliers || []);
     } catch (error: any) {
-      toast.error('Error loading dropshipping data: ' + (error.response?.data?.error || error.message));
+      const status = error?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error loading dropshipping data: ' + (error.response?.data?.error || error.message));
+      }
     } finally {
       setLoading(false);
     }

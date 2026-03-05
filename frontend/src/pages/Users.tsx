@@ -279,7 +279,10 @@ export default function Users() {
       }));
       setUsers(mappedUsers);
     } catch (error: any) {
-      toast.error('Error loading users: ' + (error.response?.data?.error || error.message));
+      const status = error?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error loading users: ' + (error.response?.data?.error || error.message));
+      }
     } finally {
       setLoading(false);
     }
@@ -330,7 +333,10 @@ export default function Users() {
       setShowDetailsModal(true);
     } catch (error: any) {
       log.error('Error loading user profile:', error);
-      toast.error('Error loading user details: ' + (error.response?.data?.message || error.message));
+      const status = error?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error loading user details: ' + (error.response?.data?.message || error.message));
+      }
     }
   };
 

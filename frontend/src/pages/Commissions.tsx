@@ -93,9 +93,12 @@ export default function Commissions() {
       setCommissions(commissionsResponse.data);
       setStats(statsResponse.data);
       setPayoutSchedule(scheduleResponse.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching commissions:', error);
-      toast.error('Error al cargar comisiones');
+      const status = error?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error al cargar comisiones');
+      }
     } finally {
       setLoading(false);
     }

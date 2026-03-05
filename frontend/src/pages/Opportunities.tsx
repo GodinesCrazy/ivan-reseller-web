@@ -188,7 +188,10 @@ export default function Opportunities() {
         await fetchAuthStatuses();
       } else {
         setError(e?.response?.data?.error || e.message || 'Error fetching opportunities');
-        toast.error(e?.response?.data?.error || e.message || 'Error fetching opportunities');
+        const status = e?.response?.status;
+        if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+          toast.error(e?.response?.data?.error || e.message || 'Error fetching opportunities');
+        }
         await fetchAuthStatuses();
       }
       setItems([]);

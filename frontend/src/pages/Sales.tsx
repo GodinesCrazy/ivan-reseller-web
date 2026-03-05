@@ -101,9 +101,12 @@ export default function Sales() {
       ]);
       setSales(salesResponse.data?.sales || salesResponse.data || []);
       setStats(statsResponse.data || {});
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching sales:', error);
-      toast.error('Error al cargar ventas');
+      const status = error?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error al cargar ventas');
+      }
     } finally {
       setLoading(false);
     }

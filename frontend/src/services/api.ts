@@ -53,6 +53,9 @@ import toast from 'react-hot-toast';
 // ✅ FIX DEFINITIVO: Flag global para evitar spam de toasts 502/network
 let backendDownToastShown = false;
 const BACKEND_DOWN_TOAST_ID = 'backend-down-toast';
+const RATE_LIMIT_TOAST_ID = 'rate-limit-toast';
+const FORBIDDEN_TOAST_ID = 'forbidden-toast';
+const SERVER_ERROR_TOAST_ID = 'server-error-toast';
 
 api.interceptors.response.use(
   (response) => {
@@ -136,15 +139,21 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
     
-    // 403: Prohibido (también significa que CORS funcionó)
+    // 403: Prohibido - un solo toast por tipo para no multiplicar
     if (status === 403) {
-      toast.error('No tienes permisos para realizar esta acción.');
+      toast.error('No tienes permisos para realizar esta acción.', {
+        id: FORBIDDEN_TOAST_ID,
+        duration: 5000,
+      });
       return Promise.reject(error);
     }
-    
-    // 429: Rate limit
+
+    // 429: Rate limit - un solo toast aunque fallen muchas peticiones
     if (status === 429) {
-      toast.error('Demasiadas solicitudes. Por favor, espera un momento.');
+      toast.error('Demasiadas solicitudes. Por favor, espera un momento.', {
+        id: RATE_LIMIT_TOAST_ID,
+        duration: 6000,
+      });
       return Promise.reject(error);
     }
     
@@ -170,10 +179,12 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
     
-    // 5xx: Otros errores del servidor (no 502/503/504)
+    // 5xx: Otros errores del servidor (no 502/503/504) - un solo toast por tipo
     if (status >= 500) {
-      // Solo mostrar toast si no es 502/503/504 (ya manejados arriba)
-      toast.error(`Error del servidor (${status}). Por favor, intenta nuevamente más tarde.`);
+      toast.error(`Error del servidor (${status}). Por favor, intenta nuevamente más tarde.`, {
+        id: SERVER_ERROR_TOAST_ID,
+        duration: 6000,
+      });
       return Promise.reject(error);
     }
     

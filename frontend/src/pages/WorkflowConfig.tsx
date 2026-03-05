@@ -67,7 +67,10 @@ export default function WorkflowConfig() {
       setWorkingCapital(capital);
     } catch (error: any) {
       console.error('Error loading workflow config:', error);
-      toast.error('Error al cargar configuración de workflow');
+      const status = error?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error al cargar configuración de workflow');
+      }
     } finally {
       setLoading(false);
     }

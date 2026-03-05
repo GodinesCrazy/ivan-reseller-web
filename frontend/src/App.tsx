@@ -1,7 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@stores/authStore';
-import { Toaster } from 'react-hot-toast';
 import { log } from '@/utils/logger';
 import { useTheme } from '@/hooks/useTheme';
 const Login = lazy(() => import('@pages/Login'));
@@ -53,12 +52,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 
 /** /help exacto: render sin auth ni stores - NUNCA pantalla en blanco */
 function HelpOnlyPage() {
-  return (
-    <>
-      <HelpCenterSafe />
-      <Toaster />
-    </>
-  );
+  return <HelpCenterSafe />;
 }
 
 function AppContent() {
@@ -270,7 +264,6 @@ function AppContent() {
       <Route path="*" element={<Navigate to="/" />} />
       </Routes>
       <ErrorBanner />
-      <Toaster />
     </Suspense>
   );
 }

@@ -200,9 +200,12 @@ export default function Reports() {
 
       setSuccessStats(statsRes.data?.stats);
       setLearningPatterns(patternsRes.data?.patterns);
-    } catch (error) {
+    } catch (error: any) {
       log.error('Error loading successful operations:', error);
-      toast.error('Error al cargar operaciones exitosas');
+      const status = error?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error al cargar operaciones exitosas');
+      }
     } finally {
       setLoading(false);
     }

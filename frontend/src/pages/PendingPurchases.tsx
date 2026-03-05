@@ -56,7 +56,10 @@ export default function PendingPurchases() {
       setPendingSales(response.data?.sales || response.data || []);
     } catch (error: any) {
       console.error('Error fetching pending purchases:', error);
-      toast.error('Error al cargar compras pendientes');
+      const status = error?.response?.status;
+      if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+        toast.error('Error al cargar compras pendientes');
+      }
     } finally {
       setLoading(false);
     }

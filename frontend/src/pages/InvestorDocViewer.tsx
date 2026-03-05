@@ -54,10 +54,13 @@ export default function InvestorDocViewer() {
         setContent(mdContent);
         setError(null);
       })
-      .catch((err) => {
+      .catch((err: any) => {
         console.error('Error loading investor doc:', err);
         setError(err.message || 'No se pudo cargar la documentación');
-        toast.error('Error al cargar el documento');
+        const status = err?.response?.status;
+        if (status !== 429 && status !== 403 && (status == null || status < 500)) {
+          toast.error('Error al cargar el documento');
+        }
       })
       .finally(() => {
         setLoading(false);
