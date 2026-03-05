@@ -414,7 +414,7 @@ const UniversalSearchDashboard: React.FC = () => {
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => navigate(`/opportunities/${opportunity.id}`)}
+                      onClick={() => navigate(`/opportunities/${opportunity.id}`, { state: { opportunityFromSearch: opportunity } })}
                       className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                     >
                       Ver Detalles

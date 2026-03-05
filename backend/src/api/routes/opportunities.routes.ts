@@ -323,12 +323,17 @@ router.get('/list', async (req, res) => {
   }
 });
 
+const MAX_SAFE_OPPORTUNITY_ID = 2147483647; // PostgreSQL INT max
+
 router.get('/:id', async (req, res) => {
   try {
     const userId = req.user?.userId;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
-    const id = parseInt(String(req.params.id), 10);
-    const data = await opportunityPersistence.getOpportunity(userId, id);
+    const numId = parseInt(String(req.params.id), 10);
+    if (Number.isNaN(numId) || numId < 1 || numId > MAX_SAFE_OPPORTUNITY_ID) {
+      return res.status(404).json({ success: false, error: 'Not found' });
+    }
+    const data = await opportunityPersistence.getOpportunity(userId, numId);
     if (!data) return res.status(404).json({ success: false, error: 'Not found' });
     return res.json({ success: true, ...data });
   } catch (e) {

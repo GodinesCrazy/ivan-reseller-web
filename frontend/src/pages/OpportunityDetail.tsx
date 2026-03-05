@@ -1,18 +1,53 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useLocation, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { Info, Package, Truck, Receipt, CreditCard } from 'lucide-react';
 import { formatCurrencySimple } from '../utils/currency';
 
+/** Map search result shape to API item shape for the detail view */
+function mapSearchOpportunityToItem(opp: any): any {
+  const buyPrice = Number(opp.buyPrice ?? 0);
+  const suggestedPrice = Number(opp.sellPrice ?? 0);
+  const margin = suggestedPrice - buyPrice;
+  const profitMargin = buyPrice > 0 ? margin / buyPrice : 0;
+  const roiPercentage = buyPrice > 0 ? (margin / buyPrice) * 100 : 0;
+  return {
+    id: opp.id,
+    title: opp.name ?? '',
+    sourceMarketplace: opp.marketplace ?? 'ebay',
+    costUsd: buyPrice,
+    suggestedPriceUsd: suggestedPrice,
+    profitMargin,
+    roiPercentage,
+    productUrl: opp.externalUrl ?? '',
+    aliexpressUrl: opp.externalUrl ?? '',
+    baseCurrency: 'USD',
+    suggestedPriceCurrency: 'USD',
+  };
+}
+
 export default function OpportunityDetail() {
   const { id } = useParams();
-  const [item, setItem] = useState<any>(null);
-  const [snapshots, setSnapshots] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const location = useLocation();
+  const fromSearch = location.state?.opportunityFromSearch;
+  const initialItem =
+    fromSearch && id && String(fromSearch.id) === String(id)
+      ? mapSearchOpportunityToItem(fromSearch)
+      : null;
+  const [item, setItem] = useState<any>(initialItem);
+  const [snapshots, setSnapshots] = useState<any[]>(initialItem ? [] : []);
+  const [loading, setLoading] = useState(!initialItem);
 
   useEffect(() => {
     if (!id) return;
+    const stateFromSearch = location.state?.opportunityFromSearch;
+    if (stateFromSearch && String(stateFromSearch.id) === String(id)) {
+      setItem(mapSearchOpportunityToItem(stateFromSearch));
+      setSnapshots([]);
+      setLoading(false);
+      return;
+    }
     (async () => {
       setLoading(true);
       try {
@@ -23,7 +58,7 @@ export default function OpportunityDetail() {
         setLoading(false);
       }
     })();
-  }, [id]);
+  }, [id, location.state]);
 
   if (loading) return <LoadingSpinner text="Cargando oportunidad..." />;
   if (!item) return <div className="p-6 text-center text-gray-500">Oportunidad no encontrada</div>;
