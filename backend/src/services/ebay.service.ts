@@ -537,8 +537,10 @@ export class EbayService {
 
   /**
    * When eBay returns 25002 "Offer entity already exists", publish the existing offer or get listingId if already published.
+   * Retries GET offer / POST publish with delay on 500 to handle eBay server-side delays.
    */
   private async handleOfferAlreadyExists(error: any): Promise<EbayListingResponse> {
+    const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
     const data = error?.response?.data;
     const errors = data?.errors;
     const firstError = Array.isArray(errors) ? errors[0] : null;
@@ -580,16 +582,34 @@ export class EbayService {
       fees: { insertionFee: 0, finalValueFee: 0 },
     });
 
+    const getOfferListingId = async (): Promise<string | null> => {
+      const res = await this.apiClient.get(`/sell/inventory/v1/offer/${offerId}`, { headers: invHeaders });
+      return res?.data?.listingId ?? null;
+    };
+
     // 1. Try GET offer first - listingId may already exist if published
     try {
-      const offerResponse = await this.apiClient.get(`/sell/inventory/v1/offer/${offerId}`, { headers: invHeaders });
-      const listingId = offerResponse?.data?.listingId;
+      const listingId = await getOfferListingId();
       if (listingId) {
         logger.info('eBay offer already existed; recovered listingId from getOffer', { offerId, listingId });
         return successResponse(listingId);
       }
     } catch (getErr: any) {
-      logger.warn('eBay 25002: getOffer failed, will try publish', { offerId, status: getErr?.response?.status });
+      const getStatus = getErr?.response?.status;
+      logger.warn('eBay 25002: getOffer failed, will try publish', { offerId, status: getStatus });
+      if (getStatus === 500) {
+        logger.warn('eBay 25002: retrying getOffer after 500', { offerId, step: 'getOffer' });
+        await delay(2500);
+        try {
+          const listingId = await getOfferListingId();
+          if (listingId) {
+            logger.info('eBay offer already existed; recovered listingId from getOffer retry after 500', { offerId, listingId });
+            return successResponse(listingId);
+          }
+        } catch (getErr2: any) {
+          logger.warn('eBay 25002: getOffer retry after 500 failed', { offerId, status: getErr2?.response?.status });
+        }
+      }
     }
 
     // 2. Try POST publish if GET did not return listingId
@@ -610,10 +630,40 @@ export class EbayService {
       const alreadyPublished = body?.errors?.some((e: any) => e.errorId === 25002 || /already published|already exist[s]?/i.test(String(e?.message || '')));
       logger.warn('eBay 25002: POST publish failed', { offerId, status, alreadyPublished });
 
+      if (status === 500) {
+        logger.warn('eBay 25002: retrying after 500', { offerId, step: 'postPublish' });
+        await delay(2500);
+        try {
+          const listingId = await getOfferListingId();
+          if (listingId) {
+            logger.info('eBay offer already published; resolved listingId from getOffer after publish 500', { offerId, listingId });
+            return successResponse(listingId);
+          }
+        } catch (_) {
+          // Try POST publish once more then GET
+          try {
+            const publishResponse2 = await this.apiClient.post(
+              `/sell/inventory/v1/offer/${offerId}/publish`,
+              {},
+              { headers: invHeaders }
+            );
+            const listingId2 = publishResponse2?.data?.listingId;
+            if (listingId2) return successResponse(listingId2);
+          } catch (_) {
+            /* ignore */
+          }
+          try {
+            const listingId3 = await getOfferListingId();
+            if (listingId3) return successResponse(listingId3);
+          } catch (_) {
+            /* ignore */
+          }
+        }
+      }
+
       if (alreadyPublished || status === 400 || status === 409) {
         try {
-          const retryOfferResponse = await this.apiClient.get(`/sell/inventory/v1/offer/${offerId}`, { headers: invHeaders });
-          const listingId = retryOfferResponse?.data?.listingId;
+          const listingId = await getOfferListingId();
           if (listingId) {
             logger.info('eBay offer already published; resolved listingId from getOffer retry', { offerId, listingId });
             return successResponse(listingId);
@@ -624,7 +674,8 @@ export class EbayService {
       }
     }
 
-    throw error;
+    const clearMessage = `La oferta ya existe en eBay (offerId: ${offerId}). No se pudo obtener el listing; revisa en Seller Hub si ya está publicado o intenta de nuevo en unos minutos.`;
+    throw new AppError(clearMessage, 400);
   }
 
   /**
