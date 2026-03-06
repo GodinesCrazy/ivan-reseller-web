@@ -156,14 +156,39 @@ export default function Products() {
 
   const handlePublish = async (productId: string) => {
     try {
-      const response = await api.patch(`/api/products/${productId}/status`, { status: 'PUBLISHED' });
-      const message = response.data?.message || 'Producto publicado';
-      toast.success(message);
+      const response = await api.post(`/api/publisher/approve/${productId}`, { marketplaces: ['ebay'] });
+      const data = response.data;
+
+      if (data?.jobQueued === true) {
+        toast.success(
+          'Producto en cola de publicación. Recibirás notificación cuando termine; actualiza la lista para ver el enlace.',
+          { duration: 6000 }
+        );
+      } else if (data?.publishResults && Array.isArray(data.publishResults)) {
+        const successCount = data.publishResults.filter((r: any) => r.success).length;
+        const totalCount = data.publishResults.length;
+        if (successCount === totalCount && totalCount > 0) {
+          toast.success(`Producto publicado en ${successCount} marketplace(s). Revisa el enlace en la columna Enlaces.`);
+        } else if (successCount > 0) {
+          toast.success(`Publicado en ${successCount}/${totalCount} marketplace(s). Revisa Enlaces.`);
+        } else {
+          const failed = data.publishResults.filter((r: any) => !r.success);
+          const errMsg = failed.map((r: any) => `${r.marketplace}: ${r.error || 'Error'}`).join('. ');
+          toast.error(errMsg || 'Error al publicar');
+        }
+      } else {
+        toast.success(data?.message || 'Producto aprobado.');
+      }
       fetchProducts();
     } catch (error: any) {
       console.error('Error publishing product:', error);
-      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || 'Error al publicar producto';
-      toast.error(errorMessage);
+      const res = error?.response?.data;
+      const errorMessage = res?.message || res?.error || error?.message || 'Error al publicar producto';
+      if (res?.action === 'configure_credentials' || res?.missingCredentials?.length) {
+        toast.error(`${errorMessage} Configura credenciales en Configuración.`);
+      } else {
+        toast.error(errorMessage);
+      }
     }
   };
 
@@ -421,29 +446,33 @@ export default function Products() {
                             <Badge variant="outline">{product.marketplace}</Badge>
                           </td>
                           <td className="px-4 py-3">
-                            {product.marketplaceUrl ? (
-                              <a
-                                href={product.marketplaceUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-blue-600 hover:underline text-sm"
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                                Ver en {product.marketplace}
-                              </a>
-                            ) : product.aliexpressUrl ? (
-                              <a
-                                href={product.aliexpressUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-gray-600 hover:underline text-sm"
-                              >
-                                <Link2 className="w-4 h-4" />
-                                Proveedor
-                              </a>
-                            ) : (
-                              <span className="text-gray-400 text-sm">—</span>
-                            )}
+                            <div className="flex flex-col gap-1">
+                              {product.marketplaceUrl && (
+                                <a
+                                  href={product.marketplaceUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-blue-600 hover:underline text-sm"
+                                >
+                                  <ExternalLink className="w-4 h-4 shrink-0" />
+                                  Ver en {product.marketplace}
+                                </a>
+                              )}
+                              {product.aliexpressUrl && (
+                                <a
+                                  href={product.aliexpressUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-gray-600 hover:underline text-sm"
+                                >
+                                  <Link2 className="w-4 h-4 shrink-0" />
+                                  Proveedor
+                                </a>
+                              )}
+                              {!product.marketplaceUrl && !product.aliexpressUrl && (
+                                <span className="text-gray-400 text-sm">—</span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900">
                             {formatCurrencySimple(product.price, product.currency || 'USD')}

@@ -755,8 +755,9 @@ export class EbayService {
           if (isOfferAlreadyExists) {
             try {
               return await this.handleOfferAlreadyExists(err);
-            } catch (_) {
-              /* fall through to throw AppError below */
+            } catch (handledError: any) {
+              /* Propagate AppError from handleOfferAlreadyExists (e.g. clear message with offerId) */
+              throw handledError;
             }
           }
           const status = err?.response?.status;
@@ -786,7 +787,12 @@ export class EbayService {
     } catch (error: any) {
       try {
         return await this.handleOfferAlreadyExists(error);
-      } catch {
+      } catch (handledError: any) {
+        /* If handleOfferAlreadyExists threw an AppError with clear message, use it */
+        if (handledError?.message && typeof handledError.message === 'string') {
+          const prefix = handledError.message.startsWith('eBay listing creation error:') ? '' : 'eBay listing creation error: ';
+          throw new AppError(`${prefix}${handledError.message}`, handledError.statusCode ?? 400);
+        }
         const firstErr = error?.response?.data?.errors?.[0];
         const is25002 = firstErr?.errorId === 25002 || /25002|Offer entity already exist[s]?/i.test(String(error?.message || ''));
         const msg = is25002
