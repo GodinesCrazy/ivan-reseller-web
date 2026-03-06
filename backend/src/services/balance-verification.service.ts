@@ -35,7 +35,19 @@ export interface VerificationResult {
 let _paypalService: any = null;
 let _payoneerService: any = null;
 
-function getPayPalService(): any {
+/**
+ * Get PayPal service from env. When environment is provided, does not use cache so production/sandbox use correct credentials.
+ */
+function getPayPalService(environment?: 'sandbox' | 'production'): any {
+  if (environment !== undefined) {
+    try {
+      const { PayPalPayoutService } = require('./paypal-payout.service');
+      return PayPalPayoutService.fromEnv(environment);
+    } catch (e) {
+      logger.warn('[BALANCE-VERIFY] PayPal service not available', { error: (e as Error).message, environment });
+      return null;
+    }
+  }
   if (_paypalService === null) {
     try {
       const { PayPalPayoutService } = require('./paypal-payout.service');
@@ -87,7 +99,7 @@ export async function getPayPalBalance(
   }
 
   if (!service) {
-    service = getPayPalService();
+    service = getPayPalService(environment);
   }
 
   if (!service) {

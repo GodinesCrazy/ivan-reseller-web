@@ -338,6 +338,19 @@ async function main(): Promise<number> {
       console.warn('[CONFIGURE-APIS] save ebay failed:', e?.message || e);
     }
   }
+  if (paypal.liveClientId && paypal.liveSecret) {
+    try {
+      await CredentialsManager.saveCredentials(userId, 'paypal', {
+        clientId: paypal.liveClientId,
+        clientSecret: paypal.liveSecret,
+        environment: 'production',
+      }, 'production');
+      console.log('[CONFIGURE-APIS] Saved PayPal (production) credentials for user', userId);
+      saved++;
+    } catch (e: any) {
+      console.warn('[CONFIGURE-APIS] save paypal failed:', e?.message || e);
+    }
+  }
 
   console.log('[CONFIGURE-APIS] Credentials in DB:', saved);
   await prisma.$disconnect();

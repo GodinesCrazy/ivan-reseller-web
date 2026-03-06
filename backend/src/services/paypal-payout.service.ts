@@ -87,28 +87,37 @@ export class PayPalPayoutService {
   }
 
   /**
-   * Create PayPalPayoutService from environment variables
+   * Create PayPalPayoutService from environment variables.
+   * @param environment When 'production', uses PAYPAL_PRODUCTION_CLIENT_ID/SECRET if set; otherwise PAYPAL_CLIENT_ID/SECRET and PAYPAL_ENVIRONMENT.
    */
-  static fromEnv(): PayPalPayoutService | null {
-    const clientId = process.env.PAYPAL_CLIENT_ID;
-    const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
-    const environment = (process.env.PAYPAL_ENVIRONMENT || 'sandbox') as 'sandbox' | 'production';
+  static fromEnv(environment?: 'sandbox' | 'production'): PayPalPayoutService | null {
+    let clientId: string | undefined;
+    let clientSecret: string | undefined;
+    let env: 'sandbox' | 'production';
 
-    // Log temporal para verificación de variables (no expone valores)
-    console.log('[PAYPAL_ENV_CHECK]', {
-      clientIdPresent: !!process.env.PAYPAL_CLIENT_ID,
-      secretPresent: !!process.env.PAYPAL_CLIENT_SECRET,
-      env: process.env.PAYPAL_ENVIRONMENT,
-    });
-    logger.info('[PAYPAL_ENV_FINAL_CHECK]', {
-      env: process.env.PAYPAL_ENVIRONMENT,
-      clientIdLength: process.env.PAYPAL_CLIENT_ID?.length,
-      secretLength: process.env.PAYPAL_CLIENT_SECRET?.length,
-    });
+    if (environment === 'production') {
+      const prodId = process.env.PAYPAL_PRODUCTION_CLIENT_ID;
+      const prodSecret = process.env.PAYPAL_PRODUCTION_CLIENT_SECRET;
+      if (prodId && prodSecret) {
+        clientId = prodId;
+        clientSecret = prodSecret;
+        env = 'production';
+      } else {
+        clientId = process.env.PAYPAL_CLIENT_ID;
+        clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+        env = (process.env.PAYPAL_ENVIRONMENT || 'sandbox') as 'sandbox' | 'production';
+      }
+    } else {
+      clientId = process.env.PAYPAL_CLIENT_ID;
+      clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+      env = (process.env.PAYPAL_ENVIRONMENT || 'sandbox') as 'sandbox' | 'production';
+    }
+
     logger.info('[PAYPAL_ENV_READY]', {
+      requestedEnv: environment,
+      usingEnv: env,
       clientIdPresent: !!clientId,
       secretPresent: !!clientSecret,
-      environment: environment,
     });
 
     if (!clientId || !clientSecret) {
@@ -116,7 +125,7 @@ export class PayPalPayoutService {
       return null;
     }
 
-    return new PayPalPayoutService({ clientId, clientSecret, environment });
+    return new PayPalPayoutService({ clientId, clientSecret, environment: env });
   }
 
   /**
@@ -245,9 +254,10 @@ export class PayPalPayoutService {
    * ✅ MEJORADO: Check PayPal account balance
    * 
    * Intenta múltiples métodos:
-   * 1. Wallet API (/v1/wallet/balance) - Más preciso, requiere permisos wallet:read
-   * 2. Reporting API - Estima desde transacciones recientes (menos preciso)
-   * 3. Retorna null para usar validación de capital interno como fallback
+   * 1. Balance Accounts API v2 (/v2/wallet/balance-accounts) - API actual de PayPal
+   * 2. Wallet API v1 (/v1/wallet/balance) - Fallback, requiere permisos wallet:read
+   * 3. Reporting API - Estima desde transacciones recientes (menos preciso)
+   * 4. Retorna null para usar validación de capital interno como fallback
    */
   async checkPayPalBalance(): Promise<{ available: number; currency: string; source?: string } | null> {
     try {
@@ -256,44 +266,92 @@ export class PayPalPayoutService {
         throw new Error('No access token available');
       }
 
-      // Método 1: Wallet API (más preciso si está disponible)
+      // Método 1: Balance Accounts API v2 (API actual de PayPal)
+      try {
+        const response = await this.apiClient.get('/v2/wallet/balance-accounts', {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+          },
+        });
+
+        const data = response.data;
+        if (data?.total_available?.value != null) {
+          const balance = {
+            available: parseFloat(String(data.total_available.value)),
+            currency: data.total_available.currency_code || 'USD',
+            source: 'wallet_api'
+          };
+          logger.info('PayPal balance retrieved successfully from Balance Accounts API v2', {
+            available: balance.available,
+            currency: balance.currency,
+            environment: this.credentials.environment
+          });
+          return balance;
+        }
+        // Alternativa: sumar desde balance_accounts si total_available no viene
+        const accounts = data?.balance_accounts;
+        if (Array.isArray(accounts) && accounts.length > 0) {
+          let total = 0;
+          let currency = 'USD';
+          for (const acc of accounts) {
+            if (acc?.available?.value != null) {
+              total += parseFloat(String(acc.available.value));
+              if (acc.available.currency_code) currency = acc.available.currency_code;
+            }
+          }
+          if (total >= 0) {
+            logger.info('PayPal balance retrieved from Balance Accounts API v2 (balance_accounts)', {
+              available: total,
+              currency,
+              environment: this.credentials.environment
+            });
+            return { available: total, currency, source: 'wallet_api' };
+          }
+        }
+      } catch (v2Error: any) {
+        if (v2Error.response?.status !== 404 && v2Error.response?.status !== 403) {
+          logger.debug('PayPal Balance Accounts API v2 error (continuando con alternativas)', {
+            error: v2Error.message,
+            status: v2Error.response?.status
+          });
+        }
+      }
+
+      // Método 2: Wallet API v1 (fallback, puede estar deprecado)
       try {
         const response = await this.apiClient.get('/v1/wallet/balance', {
           headers: {
             'Authorization': `Bearer ${this.accessToken}`,
           },
         });
-        
-        if (response.data && response.data.available_balance) {
+
+        if (response.data?.available_balance) {
           const balance = {
             available: parseFloat(response.data.available_balance.value || '0'),
             currency: response.data.available_balance.currency || 'USD',
             source: 'wallet_api'
           };
-          
-          logger.info('PayPal balance retrieved successfully from Wallet API', {
+          logger.info('PayPal balance retrieved from Wallet API v1', {
             available: balance.available,
             currency: balance.currency,
             environment: this.credentials.environment
           });
-          
           return balance;
         }
       } catch (walletError: any) {
-        // Wallet API no disponible o sin permisos (normal en muchos casos)
         if (walletError.response?.status !== 404 && walletError.response?.status !== 403) {
-          logger.debug('PayPal Wallet API error (continuando con alternativas)', {
+          logger.debug('PayPal Wallet API v1 error (continuando con alternativas)', {
             error: walletError.message,
             status: walletError.response?.status
           });
         }
       }
       
-      // Método 2: Reporting API - Estimar desde transacciones (menos preciso pero útil)
+      // Método 3: Reporting API - Estimar desde transacciones (menos preciso pero útil)
       try {
-        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-        const now = new Date().toISOString();
-        
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+        const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+
         const response = await this.apiClient.get('/v1/reporting/transactions', {
           headers: {
             'Authorization': `Bearer ${this.accessToken}`,
@@ -306,23 +364,21 @@ export class PayPalPayoutService {
           timeout: 10000,
         });
 
-        // Calcular balance estimado desde transacciones
-        const transactions = response.data?.transaction_details || [];
+        const data = response.data;
+        const transactions = Array.isArray(data?.transaction_details) ? data.transaction_details : [];
         let estimatedBalance = 0;
 
-        transactions.forEach((tx: any) => {
-          const amount = parseFloat(tx.transaction_info?.transaction_amount?.value || 0);
-          const eventCode = tx.transaction_info?.transaction_event_code || '';
-          
-          // Sumar ingresos (payments received: T00, T01, T1107)
+        for (const tx of transactions) {
+          const info = tx?.transaction_info;
+          if (!info) continue;
+          const amount = parseFloat(info.transaction_amount?.value ?? '0');
+          const eventCode = String(info.transaction_event_code || '');
           if (eventCode.includes('T00') || eventCode.includes('T01') || eventCode.includes('T1107')) {
             estimatedBalance += amount;
-          }
-          // Restar gastos (payouts sent: T11, T03, T1106)
-          else if (eventCode.includes('T11') || eventCode.includes('T03') || eventCode.includes('T1106')) {
+          } else if (eventCode.includes('T11') || eventCode.includes('T03') || eventCode.includes('T1106')) {
             estimatedBalance -= amount;
           }
-        });
+        }
 
         logger.info('PayPal balance estimado desde Reporting API', {
           estimatedBalance: Math.max(0, estimatedBalance),
@@ -331,15 +387,15 @@ export class PayPalPayoutService {
         });
 
         return {
-          available: Math.max(0, estimatedBalance), // No permitir negativo
+          available: Math.max(0, estimatedBalance),
           currency: 'USD',
           source: 'reporting_api_estimated'
         };
-
       } catch (reportingError: any) {
-        logger.debug('PayPal Reporting API no disponible', {
+        logger.info('PayPal Reporting API no disponible', {
           error: reportingError.message,
-          status: reportingError.response?.status
+          status: reportingError.response?.status,
+          environment: this.credentials.environment
         });
       }
 
