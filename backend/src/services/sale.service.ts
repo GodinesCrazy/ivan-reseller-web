@@ -729,7 +729,7 @@ export class SaleService {
     return sale;
   }
 
-  async getSales(userId?: string | number, status?: string) {
+  async getSales(userId?: string | number, status?: string, environment: 'production' | 'sandbox' | 'all' = 'production') {
     const where: any = {};
     
     if (userId) {
@@ -739,6 +739,10 @@ export class SaleService {
     
     if (status) {
       where.status = status;
+    }
+
+    if (environment !== 'all') {
+      where.environment = environment;
     }
 
     return prisma.sale.findMany({
@@ -910,7 +914,7 @@ export class SaleService {
     return updated;
   }
 
-  async getSalesStats(userId?: string | number, days?: number) {
+  async getSalesStats(userId?: string | number, days?: number, environment: 'production' | 'sandbox' | 'all' = 'production') {
     const { queryWithTimeout } = await import('../utils/queryWithTimeout');
     // Convertir userId a number si es string (Prisma espera number)
     const userIdNumber = userId ? (typeof userId === 'string' ? parseInt(userId, 10) : userId) : undefined;
@@ -918,7 +922,8 @@ export class SaleService {
     const dateFilter = typeof days === 'number' && days > 0
       ? { createdAt: { gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000) } }
       : {};
-    const where = { ...baseWhere, ...dateFilter };
+    const envFilter = environment !== 'all' ? { environment } : {};
+    const where = { ...baseWhere, ...dateFilter, ...envFilter };
 
     const queriesPromise = Promise.all([
       prisma.sale.count({ where: { ...where, status: 'COMPLETED' } }),

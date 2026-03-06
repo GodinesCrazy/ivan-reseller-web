@@ -23,6 +23,7 @@ const getSalesQuerySchema = z.object({
   status: z.enum(['PENDING', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED', 'REFUNDED', 'DELIVERED', 'RETURNED']).optional(),
   page: z.string().optional().transform(val => val ? parseInt(val, 10) : 1).pipe(z.number().int().min(1).max(1000)),
   limit: z.string().optional().transform(val => val ? parseInt(val, 10) : 50).pipe(z.number().int().min(1).max(100)),
+  environment: z.enum(['production', 'sandbox', 'all']).optional().default('production'),
 });
 
 // GET /api/sales - Listar ventas
@@ -36,7 +37,8 @@ router.get('/', async (req: Request, res: Response, next) => {
     const isAdmin = userRole === 'ADMIN';
     const userId = isAdmin ? undefined : String(req.user?.userId || '');
     const status = validatedQuery.status;
-    const sales = await saleService.getSales(userId, status as any);
+    const environment = validatedQuery.environment;
+    const sales = await saleService.getSales(userId, status as any, environment);
     
     // ✅ Mapear datos del backend al formato esperado por el frontend
     const { toNumber } = await import('../../utils/decimal.utils');
@@ -69,6 +71,7 @@ router.get('/', async (req: Request, res: Response, next) => {
 // ✅ PRODUCTION READY: Validación de query parameters para stats
 const getSalesStatsQuerySchema = z.object({
   days: z.string().optional().transform(val => val ? parseInt(val, 10) : 30).pipe(z.number().int().min(1).max(365)),
+  environment: z.enum(['production', 'sandbox', 'all']).optional().default('production'),
 });
 
 // GET /api/sales/stats - Estadísticas
@@ -82,7 +85,8 @@ router.get('/stats', async (req: Request, res: Response, next) => {
     const isAdmin = userRole === 'ADMIN';
     const userId = isAdmin ? undefined : (req.user?.userId ? String(req.user.userId) : undefined);
     const days = validatedQuery.days;
-    const stats = await saleService.getSalesStats(userId, days);
+    const environment = validatedQuery.environment;
+    const stats = await saleService.getSalesStats(userId, days, environment);
     
     // Calcular promedio de orden y cambios
     const { toNumber } = await import('../../utils/decimal.utils');

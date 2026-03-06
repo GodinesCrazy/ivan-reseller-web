@@ -13,6 +13,17 @@ import { getMonthlyProfitProjection } from '../../services/profit-projection.ser
 const router = Router();
 router.use(authenticate);
 
+/** Resolve environment from query (default production). */
+function getEnvironment(req: Request): 'production' | 'sandbox' | 'all' {
+  const v = req.query.environment as string | undefined;
+  return v === 'sandbox' || v === 'all' ? v : 'production';
+}
+
+/** Filter object for Sale/Commission by environment; use in where. */
+function envFilter(env: string): Record<string, string> | object {
+  return env === 'all' ? {} : { environment: env };
+}
+
 /**
  * GET /api/finance/sales-ledger
  * Phase 1: Forensic complete sales ledger per sale
@@ -134,7 +145,9 @@ router.get('/summary', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const range = (req.query.range as string) || 'month';
-    
+    const environment = getEnvironment(req);
+    const envWhere = envFilter(environment);
+
     // Rango como ventana fija de días (alineado con Sales Ledger y UI "Last 30 Days")
     const now = new Date();
     const daysMap: Record<string, number> = { week: 7, month: 30, quarter: 90, year: 365 };
@@ -146,13 +159,15 @@ router.get('/summary', async (req: Request, res: Response, next) => {
       prisma.sale.findMany({
         where: {
           userId,
-          createdAt: { gte: startDate }
+          createdAt: { gte: startDate },
+          ...envWhere
         }
       }),
       prisma.commission.findMany({
         where: {
           userId,
-          createdAt: { gte: startDate }
+          createdAt: { gte: startDate },
+          ...envWhere
         }
       }),
       prisma.product.findMany({
@@ -187,7 +202,8 @@ router.get('/summary', async (req: Request, res: Response, next) => {
     const pendingSales = await prisma.sale.findMany({
       where: {
         userId,
-        status: { in: ['PENDING', 'PROCESSING'] }
+        status: { in: ['PENDING', 'PROCESSING'] },
+        ...envWhere
       },
       include: {
         product: true
@@ -313,7 +329,8 @@ router.get('/breakdown', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const range = (req.query.range as string) || 'month';
-    
+    const envWhere = envFilter(getEnvironment(req));
+
     const now = new Date();
     const daysMapBreakdown: Record<string, number> = { week: 7, month: 30, quarter: 90, year: 365 };
     const daysBreakdown = daysMapBreakdown[range] ?? 30;
@@ -322,7 +339,8 @@ router.get('/breakdown', async (req: Request, res: Response, next) => {
     const sales = await prisma.sale.findMany({
       where: {
         userId,
-        createdAt: { gte: startDateBreakdown }
+        createdAt: { gte: startDateBreakdown },
+        ...envWhere
       },
       include: {
         product: true
@@ -427,7 +445,8 @@ router.get('/tax-summary', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const range = (req.query.range as string) || 'year';
-    
+    const envWhere = envFilter(getEnvironment(req));
+
     const now = new Date();
     let startDate = new Date();
     
@@ -449,14 +468,16 @@ router.get('/tax-summary', async (req: Request, res: Response, next) => {
       prisma.sale.findMany({
         where: {
           userId,
-          createdAt: { gte: startDate }
+          createdAt: { gte: startDate },
+          ...envWhere
         }
       }),
       prisma.commission.findMany({
         where: {
           userId,
           status: 'PAID',
-          paidAt: { gte: startDate }
+          paidAt: { gte: startDate },
+          ...envWhere
         }
       })
     ]);
@@ -494,6 +515,7 @@ router.get('/export/:format', async (req: Request, res: Response, next) => {
     const userId = req.user!.userId;
     const format = req.params.format as 'pdf' | 'excel' | 'csv';
     const range = (req.query.range as string) || 'month';
+    const envWhere = envFilter(getEnvironment(req));
 
     if (!['pdf', 'excel', 'csv'].includes(format)) {
       return res.status(400).json({ success: false, error: 'Invalid format. Use pdf, excel, or csv' });
@@ -525,13 +547,15 @@ router.get('/export/:format', async (req: Request, res: Response, next) => {
       prisma.sale.findMany({
         where: {
           userId,
-          createdAt: { gte: startDate }
+          createdAt: { gte: startDate },
+          ...envWhere
         }
       }),
       prisma.commission.findMany({
         where: {
           userId,
-          createdAt: { gte: startDate }
+          createdAt: { gte: startDate },
+          ...envWhere
         }
       })
     ]);

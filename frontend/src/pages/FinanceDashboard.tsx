@@ -256,10 +256,10 @@ export default function FinanceDashboard() {
     setLoading(true);
     try {
       const [summaryRes, breakdownRes, cashFlowRes, taxRes, projectionRes] = await Promise.all([
-        api.get('/api/finance/summary', { params: { range: dateRange } }),
-        api.get('/api/finance/breakdown', { params: { range: dateRange } }),
-        api.get('/api/finance/cashflow', { params: { range: dateRange } }),
-        api.get('/api/finance/tax-summary', { params: { range: dateRange } }),
+        api.get('/api/finance/summary', { params: { range: dateRange, environment: 'production' } }),
+        api.get('/api/finance/breakdown', { params: { range: dateRange, environment: 'production' } }),
+        api.get('/api/finance/cashflow', { params: { range: dateRange, environment: 'production' } }),
+        api.get('/api/finance/tax-summary', { params: { range: dateRange, environment: 'production' } }),
         api.get('/api/finance/profit-projection')
       ]);
 
@@ -281,7 +281,7 @@ export default function FinanceDashboard() {
   const exportReport = async (format: 'pdf' | 'excel' | 'csv') => {
     try {
       const { data } = await api.get(`/api/finance/export/${format}`, {
-        params: { range: dateRange },
+        params: { range: dateRange, environment: 'production' },
         responseType: 'blob'
       });
 

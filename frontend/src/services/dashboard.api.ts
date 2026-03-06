@@ -37,9 +37,11 @@ export interface RecentActivity {
   }>;
 }
 
+export type DashboardEnvironment = 'production' | 'sandbox' | 'all';
+
 export const dashboardApi = {
-  async getStats(): Promise<DashboardStats> {
-    const response = await api.get('/api/dashboard/stats');
+  async getStats(environment: DashboardEnvironment = 'production'): Promise<DashboardStats> {
+    const response = await api.get('/api/dashboard/stats', { params: { environment } });
     return response.data;
   },
 
@@ -48,8 +50,8 @@ export const dashboardApi = {
     return response.data;
   },
 
-  async getSalesChart(days = 30) {
-    const response = await api.get(`/api/dashboard/charts/sales?days=${days}`);
+  async getSalesChart(days = 30, environment: DashboardEnvironment = 'production') {
+    const response = await api.get('/api/dashboard/charts/sales', { params: { days, environment } });
     return response.data;
   },
 };

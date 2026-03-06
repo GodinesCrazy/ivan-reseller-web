@@ -159,7 +159,7 @@ export default function Dashboard() {
       // ✅ FIX-002: Degradación suave - rastrear errores para mostrar mensaje informativo
       let hasErrors = false;
       const [statsRes, activityRes, opportunitiesRes, aiSuggestionsRes, automationRes] = await Promise.all([
-        api.get('/api/dashboard/stats').catch(err => {
+        api.get('/api/dashboard/stats', { params: { environment: 'production' } }).catch(err => {
           // ✅ FIX: Si es setup_required, no marcar como error (se manejará en App.tsx)
           if (err.response?.data?.setupRequired === true || err.response?.data?.error === 'setup_required') {
             // Redirigir a setup (el hook useSetupCheck se encargará)

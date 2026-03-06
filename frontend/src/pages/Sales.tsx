@@ -100,8 +100,8 @@ export default function Sales() {
     try {
       setLoading(true);
       const [salesResponse, statsResponse] = await Promise.all([
-        api.get('/api/sales'),
-        api.get(`/api/sales/stats?days=${dateRange}`)
+        api.get('/api/sales', { params: { environment: 'production' } }),
+        api.get('/api/sales/stats', { params: { days: dateRange, environment: 'production' } })
       ]);
       setSales(salesResponse.data?.sales || salesResponse.data || []);
       setStats(statsResponse.data || {});

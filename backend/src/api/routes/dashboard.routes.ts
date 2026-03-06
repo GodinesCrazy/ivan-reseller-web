@@ -22,7 +22,9 @@ router.use(authenticate);
 const queryParamsSchema = z.object({
   limit: z.string().optional().transform(val => val ? parseInt(val, 10) : undefined).pipe(z.number().int().min(1).max(100).optional()),
   days: z.string().optional().transform(val => val ? parseInt(val, 10) : undefined).pipe(z.number().int().min(1).max(365).optional()),
+  environment: z.enum(['production', 'sandbox', 'all']).optional().transform(v => (v ?? 'production') as 'production' | 'sandbox' | 'all'),
 });
+const environmentSchema = z.enum(['production', 'sandbox', 'all']).optional().transform(v => (v ?? 'production') as 'production' | 'sandbox' | 'all');
 
 // GET /api/dashboard/stats - Estadísticas del dashboard
 router.get('/stats', wrapAsync(async (req: Request, res: Response, next) => {
@@ -79,7 +81,8 @@ router.get('/stats', wrapAsync(async (req: Request, res: Response, next) => {
     }
 
     const userIdString = userId ? String(userId) : undefined;
-    const cacheKey = `dashboard:stats:${isAdmin ? 'admin' : userId}`;
+    const environment = environmentSchema.parse(req.query.environment);
+    const cacheKey = `dashboard:stats:${isAdmin ? 'admin' : userId}:${environment}`;
     const payload = await cacheService.getOrSet(
       cacheKey,
       async () => {
@@ -87,10 +90,11 @@ router.get('/stats', wrapAsync(async (req: Request, res: Response, next) => {
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error('Request timeout: Database queries exceeded 25 seconds')), timeoutMs);
         });
+        const commissionEnv = environment === 'all' ? undefined : environment;
         const queriesPromise = Promise.all([
           productService.getProductStats(userId),
-          saleService.getSalesStats(userIdString),
-          commissionService.getCommissionStats(userIdString),
+          saleService.getSalesStats(userIdString, undefined, environment),
+          commissionService.getCommissionStats(userIdString, commissionEnv),
         ]);
         const [productStats, salesStats, commissionStats] = await Promise.race([
           queriesPromise,
@@ -220,14 +224,19 @@ router.get('/charts/sales', async (req: Request, res: Response, next) => {
     const userId = isAdmin ? undefined : req.user?.userId;
     
     const days = queryParams.days || 30;
+    const environment = queryParams.environment ?? 'production';
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
+    const salesWhere: Record<string, unknown> = {
+      ...(userId ? { userId } : {}),
+      createdAt: { gte: startDate },
+      status: 'COMPLETED',
+    };
+    if (environment !== 'all') {
+      salesWhere.environment = environment;
+    }
     const sales = await prisma.sale.findMany({
-      where: {
-        ...(userId ? { userId } : {}),
-        createdAt: { gte: startDate },
-        status: 'COMPLETED',
-      },
+      where: salesWhere,
       orderBy: { createdAt: 'asc' },
     });
     const salesByDay = sales.reduce((acc: any, sale) => {
@@ -289,7 +298,9 @@ router.get('/summary', async (req: Request, res: Response, next) => {
     
     // Convertir userId a string para servicios que lo requieren
     const userIdString = userId ? String(userId) : undefined;
-    
+    const environment = environmentSchema.parse(req.query.environment);
+    const commissionEnv = environment === 'all' ? undefined : environment;
+
     // ✅ FIX: Agregar timeout de 25 segundos (mismo que /stats)
     const timeoutMs = 25000;
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -298,8 +309,8 @@ router.get('/summary', async (req: Request, res: Response, next) => {
     
     const queriesPromise = Promise.all([
       productService.getProductStats(userId),
-      saleService.getSalesStats(userIdString),
-      commissionService.getCommissionStats(userIdString),
+      saleService.getSalesStats(userIdString, undefined, environment),
+      commissionService.getCommissionStats(userIdString, commissionEnv),
     ]);
     
     const [productStats, salesStats, commissionStats] = await Promise.race([
