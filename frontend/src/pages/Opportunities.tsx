@@ -65,6 +65,21 @@ const formatMoney = (value: number, currency: string) => {
   return formatCurrencySimple(value, currency);
 };
 
+const STORAGE_KEY = 'opportunities_last_query';
+
+function getInitialQuery(): string {
+  const params = new URLSearchParams(window.location.search);
+  const fromUrl = params.get('query') || params.get('keyword');
+  if (fromUrl?.trim()) return fromUrl.trim();
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored?.trim()) return stored;
+  } catch {
+    /* ignore */
+  }
+  return '';
+}
+
 // Componente de skeleton para tabla
 function TableSkeleton({ rows, columns }: { rows: number; columns: number }) {
   return (
@@ -164,6 +179,11 @@ export default function Opportunities() {
         [];
       console.log('[FRONTEND] Opportunities received:', items.length);
       setItems(items);
+      try {
+        localStorage.setItem(STORAGE_KEY, query.trim());
+      } catch {
+        /* ignore */
+      }
       await fetchAuthStatuses();
     } catch (e: any) {
       if (axios.isCancel(e)) {
@@ -330,8 +350,8 @@ export default function Opportunities() {
           search();
         }, 100);
       }
-    } else {
-      // Si no hay keyword en params, ejecutar búsqueda con query por defecto
+    } else if (query.trim()) {
+      // Si no hay keyword en params pero hay query inicial (URL o localStorage), ejecutar búsqueda
       search();
     }
     return () => {
@@ -590,7 +610,7 @@ export default function Opportunities() {
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Search terms (e.g. organizador cocina)"
+          placeholder="Buscar oportunidades (ej: auriculares, luces solares, organizador cocina)"
           className="border rounded px-3 py-2"
         />
         <select value={region} onChange={e => setRegion(e.target.value)} className="border rounded px-3 py-2">
