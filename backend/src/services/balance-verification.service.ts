@@ -54,12 +54,30 @@ function getPayoneerService(): any {
  * Obtener saldo real de la cuenta PayPal (plataforma) vùa API.
  * Usa Wallet API o Reporting API segùn disponibilidad.
  */
-export async function getPayPalBalance(): Promise<BalanceResult | null> {
-  const service = getPayPalService();
+export async function getPayPalBalance(userId?: number): Promise<BalanceResult | null> {
+  let service: any = null;
+
+  if (userId != null) {
+    try {
+      const { PayPalPayoutService } = require('./paypal-payout.service');
+      service = await PayPalPayoutService.fromUserCredentials(userId);
+    } catch (e) {
+      logger.warn('[BALANCE-VERIFY] getPayPalBalance fromUserCredentials failed, falling back to env', {
+        userId,
+        error: (e as Error).message,
+      });
+    }
+  }
+
+  if (!service) {
+    service = getPayPalService();
+  }
+
   if (!service) {
     logger.warn('[BALANCE-VERIFY] getPayPalBalance: PayPal not configured');
     return null;
   }
+
   try {
     const result = await service.checkPayPalBalance();
     if (result && typeof result.available === 'number') {

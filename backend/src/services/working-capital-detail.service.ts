@@ -43,7 +43,7 @@ async function getCommittedCapitalByUser(userId: number): Promise<number> {
 export async function getWorkingCapitalDetail(userId: number): Promise<WorkingCapitalDetail> {
   const [paypalBalance, payoneerBalance, committedCapital, supplierExposure, historical] =
     await Promise.all([
-      getPayPalBalance(),
+      getPayPalBalance(userId),
       getPayoneerBalance(),
       getCommittedCapitalByUser(userId),
       getSupplierExposure(userId),
