@@ -42,11 +42,14 @@ router.get('/sales-ledger', async (req: Request, res: Response, next) => {
 /**
  * GET /api/finance/working-capital-detail
  * Phase 2: Working capital intelligence
+ * Query: environment=production|sandbox (default production, aligns with dashboard overview).
  */
 router.get('/working-capital-detail', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
-    const detail = await getWorkingCapitalDetail(userId);
+    const env = getEnvironment(req);
+    const envForPayPal = env === 'sandbox' ? 'sandbox' : 'production';
+    const detail = await getWorkingCapitalDetail(userId, envForPayPal);
     res.json({ success: true, detail });
   } catch (error) {
     next(error);
@@ -60,7 +63,9 @@ router.get('/working-capital-detail', async (req: Request, res: Response, next) 
 router.get('/leverage-and-risk', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
-    const wc = await getWorkingCapitalDetail(userId);
+    const env = getEnvironment(req);
+    const envForPayPal = env === 'sandbox' ? 'sandbox' : 'production';
+    const wc = await getWorkingCapitalDetail(userId, envForPayPal);
     const allocation = await calculateMaxNewListingsAllowed(userId, wc.totalCapital);
     const risk = await computeFinanceRisk(userId, wc.totalCapital);
     res.json({
@@ -111,7 +116,9 @@ router.get('/capital-allocation', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const supplierCost = parseFloat((req.query.supplierCost as string) || '0');
-    const wc = await getWorkingCapitalDetail(userId);
+    const env = getEnvironment(req);
+    const envForPayPal = env === 'sandbox' ? 'sandbox' : 'production';
+    const wc = await getWorkingCapitalDetail(userId, envForPayPal);
     const allocation = await calculateMaxNewListingsAllowed(
       userId,
       wc.totalCapital,

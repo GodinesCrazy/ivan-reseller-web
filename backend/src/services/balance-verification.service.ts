@@ -1,8 +1,8 @@
 /**
  * Balance Verification Service
  *
- * Verificaciùn obligatoria de saldo real antes de compra en AliExpress o payout.
- * Usa PayPal API y Payoneer API (cuando estù disponible).
+ * Verificaci?n obligatoria de saldo real antes de compra en AliExpress o payout.
+ * Usa PayPal API y Payoneer API (cuando est? disponible).
  * El sistema NO debe depender de workingCapital para decisiones financieras reales.
  */
 
@@ -13,6 +13,15 @@ export interface BalanceResult {
   currency: string;
   source: 'paypal' | 'payoneer' | 'paypal_estimated';
 }
+
+/** When PayPal balance cannot be retrieved; allows UI to show a specific message. */
+export interface PayPalUnavailableResult {
+  available: 0;
+  currency: string;
+  unavailableReason: 'no_credentials' | 'api_failed';
+}
+
+export type PayPalBalanceResult = BalanceResult | PayPalUnavailableResult | null;
 
 export interface VerificationResult {
   sufficient: boolean;
@@ -51,17 +60,21 @@ function getPayoneerService(): any {
 }
 
 /**
- * Obtener saldo real de la cuenta PayPal (plataforma) vùa API.
- * Usa Wallet API o Reporting API segùn disponibilidad.
+ * Obtener saldo real de la cuenta PayPal (plataforma) via API.
+ * Usa Wallet API o Reporting API segun disponibilidad.
+ * @param environment When provided (e.g. from Finance Dashboard), uses that env for user credentials; otherwise uses getUserEnvironment(userId).
  */
-export async function getPayPalBalance(userId?: number): Promise<BalanceResult | null> {
+export async function getPayPalBalance(
+  userId?: number,
+  environment?: 'sandbox' | 'production'
+): Promise<PayPalBalanceResult> {
   let service: any = null;
 
   if (userId != null) {
-    logger.info('[BALANCE-VERIFY] getPayPalBalance: trying user credentials', { userId });
+    logger.info('[BALANCE-VERIFY] getPayPalBalance: trying user credentials', { userId, environment });
     try {
       const { PayPalPayoutService } = require('./paypal-payout.service');
-      service = await PayPalPayoutService.fromUserCredentials(userId);
+      service = await PayPalPayoutService.fromUserCredentials(userId, environment);
       if (!service) {
         logger.warn('[BALANCE-VERIFY] getPayPalBalance fromUserCredentials returned null, falling back to env');
       }
@@ -79,7 +92,7 @@ export async function getPayPalBalance(userId?: number): Promise<BalanceResult |
 
   if (!service) {
     logger.warn('[BALANCE-VERIFY] getPayPalBalance: PayPal not configured (user and env)');
-    return null;
+    return { available: 0, currency: 'USD', unavailableReason: 'no_credentials' };
   }
 
   try {
@@ -96,7 +109,7 @@ export async function getPayPalBalance(userId?: number): Promise<BalanceResult |
       };
     }
     logger.warn('[BALANCE-VERIFY] getPayPalBalance: checkPayPalBalance returned null');
-    return null;
+    return { available: 0, currency: 'USD', unavailableReason: 'api_failed' };
   } catch (e: any) {
     logger.error('[BALANCE-VERIFY] getPayPalBalance failed', {
       error: e?.message,
@@ -107,7 +120,7 @@ export async function getPayPalBalance(userId?: number): Promise<BalanceResult |
 }
 
 /**
- * Obtener saldo real de Payoneer cuando la API estù implementada.
+ * Obtener saldo real de Payoneer cuando la API est? implementada.
  * Actualmente Payoneer getBalance puede ser stub; retorna null si no disponible.
  */
 export async function getPayoneerBalance(): Promise<BalanceResult | null> {
@@ -135,7 +148,7 @@ export async function getPayoneerBalance(): Promise<BalanceResult | null> {
  */
 export async function hasSufficientBalanceForPurchase(requiredAmountUsd: number): Promise<VerificationResult> {
   const balance = await getPayPalBalance();
-  if (balance == null) {
+  if (balance == null || ('unavailableReason' in balance && balance.unavailableReason)) {
     logger.warn('[BALANCE-VERIFY] Real PayPal balance unavailable; allowing purchase (degraded mode)');
     return {
       sufficient: true,
@@ -152,7 +165,7 @@ export async function hasSufficientBalanceForPurchase(requiredAmountUsd: number)
     available: balance.available,
     required: requiredAmountUsd,
     currency: balance.currency,
-    source: balance.source,
+    source: 'source' in balance ? balance.source : undefined,
     error: sufficient ? undefined : `Insufficient balance: ${balance.available} < ${requiredAmountUsd}`,
   };
 }
@@ -164,7 +177,7 @@ export async function hasSufficientBalanceForPurchase(requiredAmountUsd: number)
  */
 export async function hasSufficientBalanceForPayout(requiredAmountUsd: number): Promise<VerificationResult> {
   const balance = await getPayPalBalance();
-  if (balance == null) {
+  if (balance == null || ('unavailableReason' in balance && balance.unavailableReason)) {
     logger.warn('[BALANCE-VERIFY] Real PayPal balance unavailable; allowing payout (degraded mode)');
     return {
       sufficient: true,
@@ -181,7 +194,7 @@ export async function hasSufficientBalanceForPayout(requiredAmountUsd: number): 
     available: balance.available,
     required: requiredAmountUsd,
     currency: balance.currency,
-    source: balance.source,
+    source: 'source' in balance ? balance.source : undefined,
     error: sufficient ? undefined : `Insufficient balance for payout: ${balance.available} < ${requiredAmountUsd}`,
   };
 }

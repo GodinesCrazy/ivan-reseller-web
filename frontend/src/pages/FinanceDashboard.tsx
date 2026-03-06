@@ -101,6 +101,7 @@ interface WorkingCapitalDetail {
   inPayoneer: number;
   inPayPal: number;
   inPayPalSource?: 'wallet_api' | 'reporting_api_estimated' | 'unavailable';
+  inPayPalUnavailableReason?: 'no_credentials' | 'api_failed';
   inTransit: number;
   committedToOrders: number;
   exposureFromActiveListings: number;
@@ -206,7 +207,9 @@ export default function FinanceDashboard() {
 
   const loadWorkingCapital = async () => {
     try {
-      const { data } = await api.get('/api/finance/working-capital-detail');
+      const { data } = await api.get('/api/finance/working-capital-detail', {
+        params: { environment: 'production' },
+      });
       setWorkingCapitalDetail(data?.detail ?? null);
     } catch (e: any) {
       const status = e?.response?.status;
@@ -459,9 +462,13 @@ export default function FinanceDashboard() {
                       {(() => {
                         const src = workingCapitalDetail.inPayPalSource ?? (workingCapitalDetail.inPayPal === 0 ? 'unavailable' : undefined);
                         if (!src) return null;
+                        const reason = workingCapitalDetail.inPayPalUnavailableReason;
+                        const unavailableTitle = reason === 'api_failed'
+                          ? 'No se pudo obtener el saldo. Revisa permisos wallet:read en tu app PayPal.'
+                          : 'Configura PayPal en Configuración > API Settings para ver tu saldo.';
                         const badge = src === 'wallet_api' ? { label: 'Real', title: 'Saldo real requiere permiso wallet:read en la app PayPal', className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' } :
                           src === 'reporting_api_estimated' ? { label: 'Estimado', title: 'Saldo estimado desde transacciones recientes', className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' } :
-                          { label: 'No disponible', title: 'Configura PayPal en Configuración > API Settings para ver tu saldo.', className: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' };
+                          { label: 'No disponible', title: unavailableTitle, className: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' };
                         return (
                           <span title={badge.title} className={`px-2 py-0.5 rounded text-xs font-medium ${badge.className}`}>
                             {badge.label}

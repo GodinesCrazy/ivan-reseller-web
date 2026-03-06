@@ -11,6 +11,8 @@ import { computeLeverage, getRiskLevel } from './finance-leverage.model';
 
 export type PaypalBalanceSource = 'wallet_api' | 'reporting_api_estimated' | 'unavailable';
 
+export type PaypalUnavailableReason = 'no_credentials' | 'api_failed';
+
 export interface WorkingCapitalDetail {
   totalCapital: number;
   availableCash: number;
@@ -18,6 +20,7 @@ export interface WorkingCapitalDetail {
   inPayoneer: number;
   inPayPal: number;
   inPayPalSource?: PaypalBalanceSource;
+  inPayPalUnavailableReason?: PaypalUnavailableReason;
   inTransit: number;
   committedToOrders: number;
   exposureFromActiveListings: number;
@@ -38,12 +41,16 @@ async function getCommittedCapitalByUser(userId: number): Promise<number> {
 }
 
 /**
- * Get working capital detail for Phase 2 endpoint
+ * Get working capital detail for Phase 2 endpoint.
+ * @param environment When provided (e.g. production), used to fetch PayPal balance with that env; aligns with Finance Dashboard overview.
  */
-export async function getWorkingCapitalDetail(userId: number): Promise<WorkingCapitalDetail> {
+export async function getWorkingCapitalDetail(
+  userId: number,
+  environment?: 'sandbox' | 'production'
+): Promise<WorkingCapitalDetail> {
   const [paypalBalance, payoneerBalance, committedCapital, supplierExposure, historical] =
     await Promise.all([
-      getPayPalBalance(userId),
+      getPayPalBalance(userId, environment),
       getPayoneerBalance(),
       getCommittedCapitalByUser(userId),
       getSupplierExposure(userId),
@@ -52,12 +59,15 @@ export async function getWorkingCapitalDetail(userId: number): Promise<WorkingCa
 
   const inPayPal = paypalBalance?.available ?? 0;
   const inPayoneer = payoneerBalance?.available ?? 0;
+  const hasSource = paypalBalance && 'source' in paypalBalance && paypalBalance.source;
   const inPayPalSource: PaypalBalanceSource =
-    paypalBalance?.source === 'paypal'
+    hasSource && paypalBalance.source === 'paypal'
       ? 'wallet_api'
-      : paypalBalance?.source === 'paypal_estimated'
+      : hasSource && paypalBalance.source === 'paypal_estimated'
         ? 'reporting_api_estimated'
         : 'unavailable';
+  const inPayPalUnavailableReason: PaypalUnavailableReason | undefined =
+    paypalBalance && 'unavailableReason' in paypalBalance ? paypalBalance.unavailableReason : undefined;
   const availableCash = inPayPal + inPayoneer;
 
   // Retained by marketplace: estimated as pending payout (simplified - sum of pending sales value)
@@ -100,6 +110,7 @@ export async function getWorkingCapitalDetail(userId: number): Promise<WorkingCa
     inPayoneer,
     inPayPal,
     inPayPalSource,
+    inPayPalUnavailableReason,
     inTransit,
     committedToOrders: committedCapital,
     exposureFromActiveListings,
