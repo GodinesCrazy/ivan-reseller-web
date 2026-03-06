@@ -100,6 +100,7 @@ interface WorkingCapitalDetail {
   retainedByMarketplace: number;
   inPayoneer: number;
   inPayPal: number;
+  inPayPalSource?: 'wallet_api' | 'reporting_api_estimated' | 'unavailable';
   inTransit: number;
   committedToOrders: number;
   exposureFromActiveListings: number;
@@ -451,7 +452,24 @@ export default function FinanceDashboard() {
                 <h3 className="text-lg font-semibold mb-4">Working Capital</h3>
                 <div className="space-y-3">
                   <div className="flex justify-between"><span className="text-gray-600">Available Cash</span><span className="font-semibold">{formatCurrency(workingCapitalDetail.availableCash)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-600">In PayPal</span><span>{formatCurrency(workingCapitalDetail.inPayPal)}</span></div>
+                  <div className="flex justify-between items-center gap-2">
+                    <span className="text-gray-600">In PayPal</span>
+                    <span className="flex items-center gap-2">
+                      {formatCurrency(workingCapitalDetail.inPayPal)}
+                      {(() => {
+                        const src = workingCapitalDetail.inPayPalSource ?? (workingCapitalDetail.inPayPal === 0 ? 'unavailable' : undefined);
+                        if (!src) return null;
+                        const badge = src === 'wallet_api' ? { label: 'Real', className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' } :
+                          src === 'reporting_api_estimated' ? { label: 'Estimado', className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' } :
+                          { label: 'No disponible', className: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' };
+                        return (
+                          <span title="Saldo real requiere permiso wallet:read en la app PayPal" className={`px-2 py-0.5 rounded text-xs font-medium ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                        );
+                      })()}
+                    </span>
+                  </div>
                   <div className="flex justify-between"><span className="text-gray-600">In Payoneer</span><span>{formatCurrency(workingCapitalDetail.inPayoneer)}</span></div>
                   <div className="flex justify-between"><span className="text-gray-600">Retained by Marketplace</span><span className="text-orange-600">{formatCurrency(workingCapitalDetail.retainedByMarketplace)}</span></div>
                   <div className="flex justify-between"><span className="text-gray-600">In Transit</span><span>{formatCurrency(workingCapitalDetail.inTransit)}</span></div>

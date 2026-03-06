@@ -9,12 +9,15 @@ import { toNumber } from '../utils/decimal.utils';
 import { getSupplierExposure, getHistoricalMetrics } from './capital-allocation.engine';
 import { computeLeverage, getRiskLevel } from './finance-leverage.model';
 
+export type PaypalBalanceSource = 'wallet_api' | 'reporting_api_estimated' | 'unavailable';
+
 export interface WorkingCapitalDetail {
   totalCapital: number;
   availableCash: number;
   retainedByMarketplace: number;
   inPayoneer: number;
   inPayPal: number;
+  inPayPalSource?: PaypalBalanceSource;
   inTransit: number;
   committedToOrders: number;
   exposureFromActiveListings: number;
@@ -49,6 +52,12 @@ export async function getWorkingCapitalDetail(userId: number): Promise<WorkingCa
 
   const inPayPal = paypalBalance?.available ?? 0;
   const inPayoneer = payoneerBalance?.available ?? 0;
+  const inPayPalSource: PaypalBalanceSource =
+    paypalBalance?.source === 'paypal'
+      ? 'wallet_api'
+      : paypalBalance?.source === 'paypal_estimated'
+        ? 'reporting_api_estimated'
+        : 'unavailable';
   const availableCash = inPayPal + inPayoneer;
 
   // Retained by marketplace: estimated as pending payout (simplified - sum of pending sales value)
@@ -90,6 +99,7 @@ export async function getWorkingCapitalDetail(userId: number): Promise<WorkingCa
     retainedByMarketplace,
     inPayoneer,
     inPayPal,
+    inPayPalSource,
     inTransit,
     committedToOrders: committedCapital,
     exposureFromActiveListings,
