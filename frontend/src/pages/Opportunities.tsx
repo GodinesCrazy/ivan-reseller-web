@@ -97,7 +97,7 @@ function TableSkeleton({ rows, columns }: { rows: number; columns: number }) {
 
 export default function Opportunities() {
   const navigate = useNavigate();
-  const [query, setQuery] = useState('organizador cocina');
+  const [query, setQuery] = useState(getInitialQuery);
   const [region, setRegion] = useState('us');
   const [maxItems, setMaxItems] = useState(5);
   const [marketplaces, setMarketplaces] = useState<Marketplace[]>(['ebay', 'amazon', 'mercadolibre']);
