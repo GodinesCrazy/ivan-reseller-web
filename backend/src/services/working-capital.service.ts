@@ -33,7 +33,7 @@ export async function getRealAvailableBalance(): Promise<{ available: number; cu
   return {
     available: balance.available,
     currency: balance.currency || 'USD',
-    source: balance.source,
+    source: 'source' in balance ? balance.source : undefined,
   };
 }
 
