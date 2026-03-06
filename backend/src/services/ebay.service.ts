@@ -536,7 +536,7 @@ export class EbayService {
   }
 
   /**
-   * When eBay returns 25002 "Offer entity already exist", publish the existing offer or get listingId if already published.
+   * When eBay returns 25002 "Offer entity already exists", publish the existing offer or get listingId if already published.
    */
   private async handleOfferAlreadyExists(error: any): Promise<EbayListingResponse> {
     const data = error?.response?.data;
@@ -547,7 +547,7 @@ export class EbayService {
 
     const isOfferAlreadyExists =
       errorId === 25002 ||
-      /Offer entity already exist|already exist/i.test(message);
+      /Offer entity already exist[s]?|already exist[s]?/i.test(message);
 
     if (!isOfferAlreadyExists) {
       throw error;
@@ -560,17 +560,39 @@ export class EbayService {
       if (offerParam?.value) offerId = String(offerParam.value).trim();
     }
     if (!offerId && message) {
-      const match = message.match(/"value"\s*:\s*"(\d+)"/) || message.match(/offerId["\s:]+(\d+)/i);
-      if (match) offerId = match[1];
+      const offerMatch = message.match(/offerId[^}]*"value"\s*:\s*"(\d+)"/i);
+      const valueMatch = message.match(/"value"\s*:\s*"(\d+)"/);
+      const simpleMatch = message.match(/offerId["\s:]+(\d+)/i);
+      offerId = (offerMatch?.[1] ?? valueMatch?.[1] ?? simpleMatch?.[1]) ?? null;
     }
 
     if (!offerId) {
-      logger.warn('eBay 25002: could not extract offerId from response', { data, message });
+      logger.warn('eBay 25002: could not extract offerId from response', { hasData: !!data, messageLength: message?.length });
       throw error;
     }
 
     const invHeaders = { 'Content-Language': 'en-US' };
 
+    const successResponse = (listingId: string) => ({
+      success: true as const,
+      itemId: listingId,
+      listingUrl: `https://www.ebay.com/itm/${listingId}`,
+      fees: { insertionFee: 0, finalValueFee: 0 },
+    });
+
+    // 1. Try GET offer first - listingId may already exist if published
+    try {
+      const offerResponse = await this.apiClient.get(`/sell/inventory/v1/offer/${offerId}`, { headers: invHeaders });
+      const listingId = offerResponse?.data?.listingId;
+      if (listingId) {
+        logger.info('eBay offer already existed; recovered listingId from getOffer', { offerId, listingId });
+        return successResponse(listingId);
+      }
+    } catch (getErr: any) {
+      logger.warn('eBay 25002: getOffer failed, will try publish', { offerId, status: getErr?.response?.status });
+    }
+
+    // 2. Try POST publish if GET did not return listingId
     try {
       const publishResponse = await this.apiClient.post(
         `/sell/inventory/v1/offer/${offerId}/publish`,
@@ -580,32 +602,24 @@ export class EbayService {
       const listingId = publishResponse?.data?.listingId;
       if (listingId) {
         logger.info('eBay offer already existed; published successfully', { offerId, listingId });
-        return {
-          success: true,
-          itemId: listingId,
-          listingUrl: `https://www.ebay.com/itm/${listingId}`,
-          fees: { insertionFee: 0, finalValueFee: 0 },
-        };
+        return successResponse(listingId);
       }
     } catch (publishErr: any) {
       const status = publishErr?.response?.status;
       const body = publishErr?.response?.data;
-      const alreadyPublished = body?.errors?.some((e: any) => e.errorId === 25002 || /already published|already exist/i.test(String(e?.message || '')));
+      const alreadyPublished = body?.errors?.some((e: any) => e.errorId === 25002 || /already published|already exist[s]?/i.test(String(e?.message || '')));
+      logger.warn('eBay 25002: POST publish failed', { offerId, status, alreadyPublished });
+
       if (alreadyPublished || status === 400 || status === 409) {
         try {
-          const offerResponse = await this.apiClient.get(`/sell/inventory/v1/offer/${offerId}`, { headers: invHeaders });
-          const listingId = offerResponse?.data?.listingId;
+          const retryOfferResponse = await this.apiClient.get(`/sell/inventory/v1/offer/${offerId}`, { headers: invHeaders });
+          const listingId = retryOfferResponse?.data?.listingId;
           if (listingId) {
-            logger.info('eBay offer already published; resolved listingId from getOffer', { offerId, listingId });
-            return {
-              success: true,
-              itemId: listingId,
-              listingUrl: `https://www.ebay.com/itm/${listingId}`,
-              fees: { insertionFee: 0, finalValueFee: 0 },
-            };
+            logger.info('eBay offer already published; resolved listingId from getOffer retry', { offerId, listingId });
+            return successResponse(listingId);
           }
-        } catch (getErr) {
-          logger.warn('eBay getOffer after already-exist failed', { offerId, err: getErr });
+        } catch (getErr2) {
+          logger.warn('eBay 25002: getOffer retry after publish failed', { offerId, err: getErr2 });
         }
       }
     }
@@ -686,7 +700,7 @@ export class EbayService {
           const firstErr = Array.isArray(body?.errors) ? body.errors[0] : null;
           const isOfferAlreadyExists =
             firstErr?.errorId === 25002 ||
-            /Offer entity already exist|already exist/i.test(String(firstErr?.message || err?.message || ''));
+            /Offer entity already exist[s]?|already exist[s]?/i.test(String(firstErr?.message || err?.message || ''));
           if (isOfferAlreadyExists) {
             try {
               return await this.handleOfferAlreadyExists(err);
@@ -722,7 +736,12 @@ export class EbayService {
       try {
         return await this.handleOfferAlreadyExists(error);
       } catch {
-        throw new AppError(`eBay listing creation error: ${error.response?.data?.errors?.[0]?.message || error.message}`, 400);
+        const firstErr = error?.response?.data?.errors?.[0];
+        const is25002 = firstErr?.errorId === 25002 || /25002|Offer entity already exist[s]?/i.test(String(error?.message || ''));
+        const msg = is25002
+          ? 'No se pudo recuperar el listing existente en eBay. Revisa en Seller Hub si el producto ya está publicado.'
+          : (firstErr?.message || error?.message || 'Unknown error');
+        throw new AppError(`eBay listing creation error: ${msg}`, 400);
       }
     }
   }
