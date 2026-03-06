@@ -380,7 +380,8 @@ router.get('/cashflow', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const range = (req.query.range as string) || 'month';
-    
+    const envWhere = envFilter(getEnvironment(req));
+
     const now = new Date();
     const daysMapCashflow: Record<string, number> = { week: 7, month: 30, quarter: 90, year: 365 };
     const daysCashflow = daysMapCashflow[range] ?? 30;
@@ -390,14 +391,16 @@ router.get('/cashflow', async (req: Request, res: Response, next) => {
       prisma.sale.findMany({
         where: {
           userId,
-          createdAt: { gte: startDateCashflow }
+          createdAt: { gte: startDateCashflow },
+          ...envWhere
         },
         orderBy: { createdAt: 'asc' }
       }),
       prisma.commission.findMany({
         where: {
           userId,
-          createdAt: { gte: startDateCashflow }
+          createdAt: { gte: startDateCashflow },
+          ...envWhere
         },
         orderBy: { createdAt: 'asc' }
       })

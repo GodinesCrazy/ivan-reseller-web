@@ -17,6 +17,7 @@
     "postinstall": "prisma generate",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:unit": "jest --testPathIgnorePatterns=integration",
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
     "provision:credentials": "tsx scripts/provision-credentials.ts",
