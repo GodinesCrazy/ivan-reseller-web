@@ -58,9 +58,13 @@ export async function getPayPalBalance(userId?: number): Promise<BalanceResult |
   let service: any = null;
 
   if (userId != null) {
+    logger.info('[BALANCE-VERIFY] getPayPalBalance: trying user credentials', { userId });
     try {
       const { PayPalPayoutService } = require('./paypal-payout.service');
       service = await PayPalPayoutService.fromUserCredentials(userId);
+      if (!service) {
+        logger.warn('[BALANCE-VERIFY] getPayPalBalance fromUserCredentials returned null, falling back to env');
+      }
     } catch (e) {
       logger.warn('[BALANCE-VERIFY] getPayPalBalance fromUserCredentials failed, falling back to env', {
         userId,
@@ -74,22 +78,30 @@ export async function getPayPalBalance(userId?: number): Promise<BalanceResult |
   }
 
   if (!service) {
-    logger.warn('[BALANCE-VERIFY] getPayPalBalance: PayPal not configured');
+    logger.warn('[BALANCE-VERIFY] getPayPalBalance: PayPal not configured (user and env)');
     return null;
   }
 
   try {
     const result = await service.checkPayPalBalance();
     if (result && typeof result.available === 'number') {
+      logger.info('[BALANCE-VERIFY] getPayPalBalance success', {
+        source: result.source === 'wallet_api' ? 'paypal' : 'paypal_estimated',
+        available: result.available,
+      });
       return {
         available: result.available,
         currency: result.currency || 'USD',
         source: result.source === 'wallet_api' ? 'paypal' : 'paypal_estimated',
       };
     }
+    logger.warn('[BALANCE-VERIFY] getPayPalBalance: checkPayPalBalance returned null');
     return null;
-  } catch (e) {
-    logger.error('[BALANCE-VERIFY] getPayPalBalance failed', { error: (e as Error).message });
+  } catch (e: any) {
+    logger.error('[BALANCE-VERIFY] getPayPalBalance failed', {
+      error: e?.message,
+      responseStatus: e?.response?.status,
+    });
     return null;
   }
 }

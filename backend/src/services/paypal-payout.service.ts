@@ -134,22 +134,28 @@ export class PayPalPayoutService {
         targetEnv = await workflowConfigService.getUserEnvironment(userId);
       }
 
-      // Obtener credenciales del usuario
-      const entry = await CredentialsManager.getCredentialEntry(userId, 'paypal', targetEnv);
-      
+      // Obtener credenciales del usuario (intentar targetEnv primero, luego el otro entorno)
+      let entry = await CredentialsManager.getCredentialEntry(userId, 'paypal', targetEnv);
+      let usedEnv = targetEnv;
+
       if (!entry || !entry.isActive || !entry.credentials) {
-        logger.debug('PayPal credentials not found in database, trying environment variables', {
+        const otherEnv: 'sandbox' | 'production' = targetEnv === 'sandbox' ? 'production' : 'sandbox';
+        entry = await CredentialsManager.getCredentialEntry(userId, 'paypal', otherEnv);
+        usedEnv = otherEnv;
+      }
+
+      if (!entry || !entry.isActive || !entry.credentials) {
+        logger.debug('PayPal credentials not found in database (tried both envs), trying environment variables', {
           userId,
           environment: targetEnv
         });
-        // Fallback a variables de entorno
         return this.fromEnv();
       }
 
       const creds = entry.credentials as any;
       const clientId = creds.clientId || creds.PAYPAL_CLIENT_ID;
       const clientSecret = creds.clientSecret || creds.PAYPAL_CLIENT_SECRET;
-      const env = creds.environment || creds.PAYPAL_ENVIRONMENT || creds.PAYPAL_MODE || targetEnv;
+      const env = creds.environment || creds.PAYPAL_ENVIRONMENT || creds.PAYPAL_MODE || usedEnv;
 
       if (!clientId || !clientSecret) {
         logger.warn('PayPal credentials incomplete in database, trying environment variables', {
@@ -157,7 +163,6 @@ export class PayPalPayoutService {
           hasClientId: !!clientId,
           hasClientSecret: !!clientSecret
         });
-        // Fallback a variables de entorno
         return this.fromEnv();
       }
 

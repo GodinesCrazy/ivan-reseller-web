@@ -459,11 +459,11 @@ export default function FinanceDashboard() {
                       {(() => {
                         const src = workingCapitalDetail.inPayPalSource ?? (workingCapitalDetail.inPayPal === 0 ? 'unavailable' : undefined);
                         if (!src) return null;
-                        const badge = src === 'wallet_api' ? { label: 'Real', className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' } :
-                          src === 'reporting_api_estimated' ? { label: 'Estimado', className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' } :
-                          { label: 'No disponible', className: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' };
+                        const badge = src === 'wallet_api' ? { label: 'Real', title: 'Saldo real requiere permiso wallet:read en la app PayPal', className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' } :
+                          src === 'reporting_api_estimated' ? { label: 'Estimado', title: 'Saldo estimado desde transacciones recientes', className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' } :
+                          { label: 'No disponible', title: 'Configura PayPal en Configuración > API Settings para ver tu saldo.', className: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' };
                         return (
-                          <span title="Saldo real requiere permiso wallet:read en la app PayPal" className={`px-2 py-0.5 rounded text-xs font-medium ${badge.className}`}>
+                          <span title={badge.title} className={`px-2 py-0.5 rounded text-xs font-medium ${badge.className}`}>
                             {badge.label}
                           </span>
                         );
