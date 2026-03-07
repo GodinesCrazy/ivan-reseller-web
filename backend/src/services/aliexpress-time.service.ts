@@ -45,3 +45,32 @@ export async function getAliExpressTimestamp(): Promise<string> {
     pad(gmt8.getUTCSeconds())
   );
 }
+
+/**
+ * Get current time in GMT+8 as YYYYMMDDHHmmss (compact format, Affiliate-style).
+ * Same UTC source as getAliExpressTimestamp; no separators.
+ */
+export async function getAliExpressTimestampCompact(): Promise<string> {
+  let baseMs = Date.now();
+  try {
+    const res = await axios.get<{ unixtime: number }>(
+      'https://worldtimeapi.org/api/timezone/Etc/UTC',
+      { timeout: 5000 }
+    );
+    if (res.data?.unixtime != null) {
+      baseMs = res.data.unixtime * 1000;
+    }
+  } catch {
+    baseMs = Date.now();
+  }
+  const gmt8Ms = baseMs + 8 * 3600 * 1000;
+  const gmt8 = new Date(gmt8Ms);
+  return (
+    String(gmt8.getUTCFullYear()) +
+    pad(gmt8.getUTCMonth() + 1) +
+    pad(gmt8.getUTCDate()) +
+    pad(gmt8.getUTCHours()) +
+    pad(gmt8.getUTCMinutes()) +
+    pad(gmt8.getUTCSeconds())
+  );
+}
