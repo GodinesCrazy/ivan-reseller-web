@@ -570,18 +570,23 @@ export class AliExpressDropshippingAPIService {
       type VariantDef = {
         name: string;
         signMethod: string;
-        buildSign: (params: Record<string, string>) => string;
+        buildSign: (params: Record<string, string>, signPath?: string) => string;
         includeRedirectUri?: boolean;
         includeFormat?: boolean;
         timestampMode: TimestampMode;
         signMethodOverride?: string;
         signPathOverride?: string;
+        getSignPath?: (currentTokenUrl: string) => string;
       };
+      const getRestSignPath = (url: string) =>
+        url.includes('token/security/create') ? '/rest/auth/token/security/create' : this.TOKEN_CREATE_SIGN_PATH;
+      const getAuthSignPath = (url: string) =>
+        url.includes('token/security/create') ? '/auth/token/security/create' : '/auth/token/create';
       const signatureVariants: VariantDef[] = [
-        // 1-2. Case 2 (Affiliate exact) - 4 params only, no format/redirect_uri in URL
-        { name: 'case2-rest-path', signMethod: 'sha256', includeRedirectUri: false, includeFormat: false, timestampMode: 'ms', buildSign: (p) => generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, p) },
-        { name: 'case2-auth-path', signMethod: 'sha256', includeRedirectUri: false, includeFormat: false, timestampMode: 'ms', signPathOverride: '/auth/token/create', buildSign: (p) => generateAliExpressSignatureNoSecret('/auth/token/create', p) },
-        // 3+. Other variants
+        // 1-2. Case 2 (Affiliate exact) - 4 params only, path matches endpoint
+        { name: 'case2-rest-path', signMethod: 'sha256', includeRedirectUri: false, includeFormat: false, timestampMode: 'ms', getSignPath: getRestSignPath, buildSign: (p, path) => generateAliExpressSignatureNoSecret(path || this.TOKEN_CREATE_SIGN_PATH, p) },
+        { name: 'case2-auth-path', signMethod: 'sha256', includeRedirectUri: false, includeFormat: false, timestampMode: 'ms', signPathOverride: '/auth/token/create', getSignPath: getAuthSignPath, buildSign: (p, path) => generateAliExpressSignatureNoSecret(path || '/auth/token/create', p) },
+        // 3+. Other variants (buildSign ignores signPath)
         { name: 'hmac-sha256-bookends', signMethod: 'sha256', includeRedirectUri: true, includeFormat: true, timestampMode: 'ms', buildSign: (p) => generateHmacSha256WithBookends(p, appSecret) },
         { name: 'sha256-hash-secret-bookends', signMethod: 'sha256', includeRedirectUri: true, includeFormat: true, timestampMode: 'ms', buildSign: (p) => generateAliExpressSignatureWithSecret('', p, appSecret) },
         { name: 'sha256-secret-bookends', signMethod: 'sha256', includeRedirectUri: true, includeFormat: true, timestampMode: 'ms', buildSign: (p) => generateTokenCreateSignature(p, appSecret) },
@@ -592,12 +597,13 @@ export class AliExpressDropshippingAPIService {
         { name: 'hmac-sha256-bookends-4params', signMethod: 'sha256', includeRedirectUri: false, includeFormat: false, timestampMode: 'ms', buildSign: (p) => generateHmacSha256WithBookends(p, appSecret) },
       ];
 
-      // ✅ FIX OAUTH: Retry con timeout (2 intentos con backoff). Try token/create first, then token/security/create.
+      // ✅ FIX OAUTH: Retry con timeout. By default only token/create; token/security/create only if env explicitly enables.
       const { retryWithBackoff } = await import('../utils/retry.util');
       const endpointsToTry = [
         this.TOKEN_CREATE_ENDPOINT,
-        ...(process.env.ALIEXPRESS_DROPSHIPPING_TRY_SECURITY_ENDPOINT !== 'false' ? [this.TOKEN_SECURITY_ENDPOINT] : []),
+        ...(process.env.ALIEXPRESS_DROPSHIPPING_TRY_SECURITY_ENDPOINT === 'true' ? [this.TOKEN_SECURITY_ENDPOINT] : []),
       ];
+      const tokenTimeoutMs = Math.max(5000, parseInt(process.env.ALIEXPRESS_DROPSHIPPING_TOKEN_TIMEOUT_MS || '15000', 10) || 15000);
 
       const result = await retryWithBackoff(
         async () => {
@@ -619,7 +625,8 @@ export class AliExpressDropshippingAPIService {
               };
               if (variant.includeFormat) paramsForSign.format = 'json';
               if (variant.includeRedirectUri && redirectUri) paramsForSign.redirect_uri = redirectUri;
-              const sign = variant.buildSign(paramsForSign);
+              const effectiveSignPath = variant.getSignPath?.(currentTokenUrl);
+              const sign = variant.buildSign(paramsForSign, effectiveSignPath);
               const queryParams: Record<string, string> = { ...paramsForSign };
               const encode = (v: string) => encodeURIComponent(v);
               const qsParts: string[] = [];
@@ -633,14 +640,15 @@ export class AliExpressDropshippingAPIService {
               qsParts.push(`sign=${encode(sign)}`);
               const fullUrl = `${currentTokenUrl}?${qsParts.join('&')}`;
               lastFullUrlRedacted = fullUrl.replace(/code=[^&]+/, 'code=***').replace(/sign=[^&]+/, 'sign=***');
-              logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
-                tokenUrl: currentTokenUrl,
-                method: 'GET',
+              const paramsInRequest = ['app_key', 'code', ...(variant.includeFormat ? ['format'] : []), 'timestamp', 'sign_method', ...(variant.includeRedirectUri && queryParams.redirect_uri ? ['redirect_uri'] : []), 'sign'];
+              logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
                 signatureVariant: variant.name,
-                signMethod: variant.signMethod,
+                endpoint: currentTokenUrl,
+                paramsInRequest,
+                queryPreview: lastFullUrlRedacted,
               });
               const timeoutPromise = new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('Token exchange timeout after 10s')), 10000)
+                setTimeout(() => reject(new Error(`Token exchange timeout after ${tokenTimeoutMs}ms`)), tokenTimeoutMs)
               );
               try {
                 const response = await Promise.race([httpClient.get(fullUrl), timeoutPromise]) as any;
@@ -705,7 +713,7 @@ export class AliExpressDropshippingAPIService {
           maxRetries: 2,
           initialDelay: 1000,
           maxDelay: 3000,
-          timeout: 10000,
+          timeout: tokenTimeoutMs * 3,
           onRetry: (attempt, error, delay) => {
             logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Token exchange retry', {
               attempt,
