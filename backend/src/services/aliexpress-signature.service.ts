@@ -32,6 +32,11 @@ export function generateAliExpressSignatureNoSecret(
     .update(base, 'utf8')
     .digest('hex')
     .toUpperCase();
+  logger.info('[ALIEXPRESS-SIGNATURE] Token create Case 2', {
+    SIGN_BASE_STRING: base,
+    SIGN_GENERATED: hash,
+    paramsCount: sortedKeys.length,
+  });
   return hash;
 }
 

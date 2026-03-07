@@ -572,6 +572,7 @@ export class AliExpressDropshippingAPIService {
         signMethod: string;
         buildSign: (params: Record<string, string>, signPath?: string) => string;
         includeRedirectUri?: boolean;
+        sendRedirectUriUnsigned?: boolean;
         includeFormat?: boolean;
         timestampMode: TimestampMode;
         signMethodOverride?: string;
@@ -583,20 +584,24 @@ export class AliExpressDropshippingAPIService {
       const getAuthSignPath = (url: string) =>
         url.includes('token/security/create') ? '/auth/token/security/create' : '/auth/token/create';
       const signatureVariants: VariantDef[] = [
-        // 1. Case 2 - 4 params (Affiliate exact)
+        // 0. Strict: only 4 params + sign (no redirect_uri, no format in request)
+        { name: 'case2-rest-path-strict', signMethod: 'sha256', includeRedirectUri: false, includeFormat: false, timestampMode: 'ms', getSignPath: getRestSignPath, buildSign: (p, path) => generateAliExpressSignatureNoSecret(path || this.TOKEN_CREATE_SIGN_PATH, p) },
+        // 1. Case 2 - 4 params only (Affiliate exact, per WORKING_INTEGRATION_REPORT)
         { name: 'case2-rest-path', signMethod: 'sha256', includeRedirectUri: false, includeFormat: false, timestampMode: 'ms', getSignPath: getRestSignPath, buildSign: (p, path) => generateAliExpressSignatureNoSecret(path || this.TOKEN_CREATE_SIGN_PATH, p) },
-        // 2. Case 2 with redirect_uri in signature (some Dropshipping apps require it)
+        // 2. Case 2: 4 params signed, redirect_uri sent in request but NOT signed
+        { name: 'case2-rest-path-send-redirect', signMethod: 'sha256', includeRedirectUri: false, sendRedirectUriUnsigned: true, includeFormat: false, timestampMode: 'ms', getSignPath: getRestSignPath, buildSign: (p, path) => generateAliExpressSignatureNoSecret(path || this.TOKEN_CREATE_SIGN_PATH, p) },
+        // 3. Case 2 with redirect_uri in signature (some Dropshipping apps require it)
         { name: 'case2-rest-path-with-redirect', signMethod: 'sha256', includeRedirectUri: true, includeFormat: false, timestampMode: 'ms', getSignPath: getRestSignPath, buildSign: (p, path) => generateAliExpressSignatureNoSecret(path || this.TOKEN_CREATE_SIGN_PATH, p) },
-        // 3. Case 2 auth path
+        // 4. Case 2 auth path
         { name: 'case2-auth-path', signMethod: 'sha256', includeRedirectUri: false, includeFormat: false, timestampMode: 'ms', signPathOverride: '/auth/token/create', getSignPath: getAuthSignPath, buildSign: (p, path) => generateAliExpressSignatureNoSecret(path || '/auth/token/create', p) },
-        // 4-5. HMAC/SHA256 variants
+        // 5-6. HMAC/SHA256 variants
         { name: 'hmac-sha256-bookends', signMethod: 'sha256', includeRedirectUri: true, includeFormat: true, timestampMode: 'ms', buildSign: (p) => generateHmacSha256WithBookends(p, appSecret) },
         { name: 'sha256-hash-secret-bookends', signMethod: 'sha256', includeRedirectUri: true, includeFormat: true, timestampMode: 'ms', buildSign: (p) => generateAliExpressSignatureWithSecret('', p, appSecret) },
       ];
 
-      // Per plan: token/security/create first (doc endpoint), then token/create. Security disabled only if env explicitly false.
+      // Per plan: use token/create only by default; token/security/create only if explicitly enabled.
       const { retryWithBackoff } = await import('../utils/retry.util');
-      const useSecurityEndpoint = process.env.ALIEXPRESS_DROPSHIPPING_TRY_SECURITY_ENDPOINT !== 'false';
+      const useSecurityEndpoint = process.env.ALIEXPRESS_DROPSHIPPING_TRY_SECURITY_ENDPOINT === 'true';
       const endpointsToTry = useSecurityEndpoint
         ? [this.TOKEN_SECURITY_ENDPOINT, this.TOKEN_CREATE_ENDPOINT]
         : [this.TOKEN_CREATE_ENDPOINT];
@@ -627,6 +632,15 @@ export class AliExpressDropshippingAPIService {
               }
               const effectiveSignPath = variant.getSignPath?.(currentTokenUrl);
               const sign = variant.buildSign(paramsForSign, effectiveSignPath);
+              if (variantIndex === 0) {
+                const sortedKeysForLog = Object.keys(paramsForSign).filter((k) => k !== 'sign').sort();
+                let baseForLog = (effectiveSignPath || this.TOKEN_CREATE_SIGN_PATH).startsWith('/') ? (effectiveSignPath || this.TOKEN_CREATE_SIGN_PATH) : `/${effectiveSignPath || this.TOKEN_CREATE_SIGN_PATH}`;
+                for (const k of sortedKeysForLog) baseForLog += k + paramsForSign[k];
+                logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange signature base string (diagnostic prefix)', {
+                  baseStringPrefix: baseForLog.slice(0, 80),
+                  signatureVariant: variant.name,
+                });
+              }
               const queryParams: Record<string, string> = { ...paramsForSign };
               const encode = (v: string) => encodeURIComponent(v);
               const qsParts: string[] = [];
@@ -637,12 +651,13 @@ export class AliExpressDropshippingAPIService {
               addParam('timestamp', queryParams.timestamp);
               addParam('sign_method', queryParams.sign_method);
               if (variant.includeRedirectUri && queryParams.redirect_uri) addParam('redirect_uri', queryParams.redirect_uri);
+              if (variant.sendRedirectUriUnsigned && redirectUri) addParam('redirect_uri', redirectUri);
               if (queryParams.uuid) addParam('uuid', queryParams.uuid);
               qsParts.push(`sign=${encode(sign)}`);
               const bodyString = qsParts.join('&');
               const fullUrl = `${currentTokenUrl}?${bodyString}`;
               lastFullUrlRedacted = fullUrl.replace(/code=[^&]+/, 'code=***').replace(/sign=[^&]+/, 'sign=***');
-              const paramsInRequest = ['app_key', 'code', ...(variant.includeFormat ? ['format'] : []), 'timestamp', 'sign_method', ...(variant.includeRedirectUri && queryParams.redirect_uri ? ['redirect_uri'] : []), ...(queryParams.uuid ? ['uuid'] : []), 'sign'];
+              const paramsInRequest = ['app_key', 'code', ...(variant.includeFormat ? ['format'] : []), 'timestamp', 'sign_method', ...(variant.includeRedirectUri && queryParams.redirect_uri ? ['redirect_uri'] : []), ...(variant.sendRedirectUriUnsigned && redirectUri ? ['redirect_uri'] : []), ...(queryParams.uuid ? ['uuid'] : []), 'sign'];
               const timeoutPromise = new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error(`Token exchange timeout after ${tokenTimeoutMs}ms`)), tokenTimeoutMs)
               );
@@ -658,7 +673,34 @@ export class AliExpressDropshippingAPIService {
               };
 
               let response: any = null;
-              try {
+              const logRejection = (result: { aliCode: string; reqId: string }, method: string) => {
+                const paramsSigned = Object.keys(paramsForSign).sort();
+                const baseStringPreview = variant.name.startsWith('case2')
+                  ? `${variant.signPathOverride ?? this.TOKEN_CREATE_SIGN_PATH}+${paramsSigned.join(',')}`
+                  : `bookends+${paramsSigned.join(',')}`;
+                logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Signature variant rejected', {
+                  endpoint: currentTokenUrl,
+                  signatureVariant: variant.name,
+                  aliCode: result.aliCode,
+                  method,
+                  requestId: result.reqId,
+                  queryUrlRedacted: lastFullUrlRedacted,
+                  paramsSigned,
+                  baseStringPreview,
+                });
+              };
+              const tryGet = async () => {
+                logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
+                  signatureVariant: variant.name,
+                  endpoint: currentTokenUrl,
+                  method: 'GET',
+                  paramsInRequest,
+                  queryPreview: lastFullUrlRedacted,
+                });
+                const getResp = await Promise.race([httpClient.get(fullUrl), timeoutPromise]) as any;
+                return processResponse(getResp);
+              };
+              const tryPost = async () => {
                 logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
                   signatureVariant: variant.name,
                   endpoint: currentTokenUrl,
@@ -672,37 +714,24 @@ export class AliExpressDropshippingAPIService {
                   }),
                   timeoutPromise,
                 ]) as any;
-                const postResult = processResponse(postResp);
+                return processResponse(postResp);
+              };
+              try {
+                const postResult = await tryPost();
                 if (postResult.reqId) lastRequestId = postResult.reqId;
                 if (postResult.hasAccessToken) return postResult.response;
                 lastResponse = postResult.response;
-
                 if (postResult.aliCode === 'IncompleteSignature' || postResult.aliCode === 'IllegalTimestamp') {
-                  logger.warn('[ALIEXPRESS-DROPSHIPPING-API] POST rejected, trying GET fallback', {
-                    endpoint: currentTokenUrl,
-                    signatureVariant: variant.name,
-                    aliCode: postResult.aliCode,
-                    requestId: postResult.reqId,
-                  });
-                  const getResp = await Promise.race([httpClient.get(fullUrl), timeoutPromise]) as any;
-                  const getResult = processResponse(getResp);
+                  logRejection(postResult, 'POST');
+                  const getResult = await tryGet();
                   if (getResult.reqId) lastRequestId = getResult.reqId;
                   if (getResult.hasAccessToken) return getResult.response;
                   lastResponse = getResult.response;
-                  const paramsSigned = Object.keys(paramsForSign).sort();
-                  const baseStringPreview = variant.name.startsWith('case2')
-                    ? `${variant.signPathOverride ?? this.TOKEN_CREATE_SIGN_PATH}+${paramsSigned.join(',')}`
-                    : `bookends+${paramsSigned.join(',')}`;
-                  logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Signature variant rejected', {
-                    endpoint: currentTokenUrl,
-                    signatureVariant: variant.name,
-                    aliCode: getResult.aliCode,
-                    method: 'GET',
-                    requestId: getResult.reqId,
-                    queryUrlRedacted: lastFullUrlRedacted,
-                    paramsSigned,
-                    baseStringPreview,
-                  });
+                  if (getResult.aliCode === 'IncompleteSignature' || getResult.aliCode === 'IllegalTimestamp') {
+                    logRejection(getResult, 'GET');
+                  } else {
+                    return getResult.response;
+                  }
                   continue;
                 }
                 return postResult.response;
@@ -719,33 +748,12 @@ export class AliExpressDropshippingAPIService {
                   error: postError?.message || String(postError),
                 });
                 try {
-                  logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
-                    signatureVariant: variant.name,
-                    endpoint: currentTokenUrl,
-                    method: 'GET',
-                    paramsInRequest,
-                    queryPreview: lastFullUrlRedacted,
-                  });
-                  const getResp = await Promise.race([httpClient.get(fullUrl), timeoutPromise]) as any;
-                  const getResult = processResponse(getResp);
+                  const getResult = await tryGet();
                   if (getResult.reqId) lastRequestId = getResult.reqId;
                   if (getResult.hasAccessToken) return getResult.response;
                   lastResponse = getResult.response;
                   if (getResult.aliCode === 'IncompleteSignature' || getResult.aliCode === 'IllegalTimestamp') {
-                    const paramsSigned = Object.keys(paramsForSign).sort();
-                    const baseStringPreview = variant.name.startsWith('case2')
-                      ? `${variant.signPathOverride ?? this.TOKEN_CREATE_SIGN_PATH}+${paramsSigned.join(',')}`
-                      : `bookends+${paramsSigned.join(',')}`;
-                    logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Signature variant rejected', {
-                      endpoint: currentTokenUrl,
-                      signatureVariant: variant.name,
-                      aliCode: getResult.aliCode,
-                      method: 'GET',
-                      requestId: getResult.reqId,
-                      queryUrlRedacted: lastFullUrlRedacted,
-                      paramsSigned,
-                      baseStringPreview,
-                    });
+                    logRejection(getResult, 'GET');
                   } else {
                     return getResult.response;
                   }

@@ -56,7 +56,11 @@ function getBackendBaseUrl(): string {
 const PRODUCTION_FALLBACK_REDIRECT_URI = 'https://ivanreseller.com/api/marketplace-oauth/callback';
 
 export function getAliExpressDropshippingRedirectUri(): string {
-  const envUri = (process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI || '').trim();
+  const envUri = (
+    process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI ||
+    process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URT ||
+    ''
+  ).trim();
   if (envUri) {
     return normalizeRedirectUri(envUri);
   }
