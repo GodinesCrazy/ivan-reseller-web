@@ -1,6 +1,7 @@
 /**
  * Canonical OAuth helpers for AliExpress Dropshipping.
  * Keep one single redirect_uri for auth URL and token exchange.
+ * Per plan: strict normalization (https, no trailing slash, canonical domain without www).
  */
 
 function normalizeBaseUrl(value: string): string {
@@ -17,6 +18,29 @@ function normalizeUrl(value: string): string {
   return withProtocol.replace(/\/$/, '');
 }
 
+/**
+ * Normalize redirect_uri for AliExpress:
+ * - Force https (never http in production)
+ * - Remove trailing slash
+ * - Use canonical domain (remove www. for ivanreseller.com)
+ */
+function normalizeRedirectUri(value: string): string {
+  let out = normalizeUrl(value);
+  if (!out) return '';
+  try {
+    const u = new URL(out);
+    u.protocol = 'https:';
+    u.pathname = u.pathname.replace(/\/+$/, '') || '/';
+    out = u.toString().replace(/\/$/, '');
+    if (u.hostname.toLowerCase() === 'www.ivanreseller.com') {
+      out = out.replace(/^https:\/\/www\.ivanreseller\.com/i, 'https://ivanreseller.com');
+    }
+  } catch {
+    // fallback: basic trim
+  }
+  return out;
+}
+
 function getBackendBaseUrl(): string {
   // 1) Explicit backend URL configured by ops (preferred)
   const explicitBackend = normalizeBaseUrl(process.env.BACKEND_URL || '');
@@ -28,17 +52,34 @@ function getBackendBaseUrl(): string {
   throw new Error('BACKEND_URL is required in production for AliExpress Dropshipping OAuth callback.');
 }
 
+/** Production fallback canonical redirect URI for ivanreseller.com */
+const PRODUCTION_FALLBACK_REDIRECT_URI = 'https://ivanreseller.com/api/marketplace-oauth/callback';
+
 export function getAliExpressDropshippingRedirectUri(): string {
-  let resolvedRedirectUri = normalizeUrl(process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI || '');
-  if (resolvedRedirectUri) return resolvedRedirectUri;
-
-  const backendBaseUrl = getBackendBaseUrl();
-  resolvedRedirectUri = `${backendBaseUrl}/api/marketplace-oauth/callback`;
-
-  if (process.env.NODE_ENV === 'production' && !resolvedRedirectUri) {
-    throw new Error('Missing canonical redirect URI in production');
+  const envUri = (process.env.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI || '').trim();
+  if (envUri) {
+    return normalizeRedirectUri(envUri);
   }
 
-  return resolvedRedirectUri;
+  if (process.env.NODE_ENV === 'production') {
+    return PRODUCTION_FALLBACK_REDIRECT_URI;
+  }
+
+  const backendBaseUrl = getBackendBaseUrl();
+  return normalizeRedirectUri(`${backendBaseUrl}/api/marketplace-oauth/callback`);
+}
+
+/**
+ * Instructions for AliExpress Developer Console configuration.
+ * Shown when token exchange fails with IncompleteSignature.
+ */
+export function getAliExpressRedirectUriInstructions(): string {
+  const canonical = getAliExpressDropshippingRedirectUri();
+  return `Para resolver IncompleteSignature:
+1. Entra en AliExpress Open Platform → My Apps → Tu app Dropshipping.
+2. En "OAuth Redirect URL" / "Redirect URI", configura EXACTAMENTE:
+   ${canonical}
+3. Sin espacios, con https, sin barra final.
+4. Si usas otro dominio (ej. www.ivanreseller.com), la URL debe coincidir con la que ve el usuario al autorizar.`;
 }
 

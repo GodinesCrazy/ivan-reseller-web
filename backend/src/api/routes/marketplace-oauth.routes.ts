@@ -4,7 +4,7 @@ import { EbayService } from '../../services/ebay.service';
 import { MercadoLibreService } from '../../services/mercadolibre.service';
 import { authenticate } from '../../middleware/auth.middleware';
 import { verifyStateAliExpressSafe } from '../../utils/oauth-state';
-import { getAliExpressDropshippingRedirectUri } from '../../utils/aliexpress-dropshipping-oauth';
+import { getAliExpressDropshippingRedirectUri, getAliExpressRedirectUriInstructions } from '../../utils/aliexpress-dropshipping-oauth';
 import crypto from 'crypto';
 import logger from '../../config/logger';
 
@@ -386,28 +386,29 @@ router.get('/callback', async (req: Request, res: Response) => {
     }
 
     const requestHost = req.get('host') || req.headers['x-forwarded-host'] || null;
+    const canonicalRedirectUri = getAliExpressDropshippingRedirectUri();
     logger.info('[OAuth Callback] Exchanging code for AliExpress Dropshipping tokens', {
       service: 'marketplace-oauth',
       correlationId,
       userId,
       environment,
       codeLength: codeStr.length,
-      redirectUriLength: redirectUri?.length || 0,
+      redirectUriParamLength: redirectUri?.length || 0,
       appKeyPreview: `${String(appKey).slice(0, 6)}...`,
       appSecretLength: String(appSecret).length,
-      redirectUriUsed: getAliExpressDropshippingRedirectUri(),
+      redirectUriUsed: canonicalRedirectUri,
+      canonicalRedirectUriLength: canonicalRedirectUri.length,
+      requestUrl: req.originalUrl || req.url,
       requestHost,
       requestProtocol: req.headers['x-forwarded-proto'] || req.protocol,
       tokenExchangeStatus: 'started',
     });
 
-    const canonicalCallbackUrl = getAliExpressDropshippingRedirectUri();
-
     try {
       // redirect_uri EXACTAMENTE el mismo que en getAuthUrl (canonical)
       const tokens = await aliexpressDropshippingAPIService.exchangeCodeForToken(
         codeStr,
-        canonicalCallbackUrl,
+        canonicalRedirectUri,
         appKey,
         appSecret
       );
@@ -417,7 +418,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         correlationId,
         userId,
         environment,
-        redirectUriUsed: canonicalCallbackUrl,
+        redirectUriUsed: canonicalRedirectUri,
         requestHost,
         tokenExchangeStatus: 'success',
         hasAccessToken: !!tokens.accessToken,
@@ -607,7 +608,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         userId,
         environment,
         elapsed,
-        redirectUriUsed: canonicalCallbackUrl,
+        redirectUriUsed: canonicalRedirectUri,
         requestHost,
         tokenExchangeStatus: 'failed',
         error: tokenError?.message || String(tokenError),
@@ -619,6 +620,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       // ✅ FIX OAUTH: Redirect a frontend con error (una sola respuesta)
       const errorUrl = `${webBaseUrlForRedirect}/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}&error=${encodeURIComponent(tokenError?.message || 'Token exchange failed')}`;
       const errorMessage = tokenError?.message || 'Token exchange failed';
+      const redirectInstructions = getAliExpressRedirectUriInstructions();
       res.status(500).send(`
         <html>
           <head>
@@ -633,11 +635,7 @@ router.get('/callback', async (req: Request, res: Response) => {
           <body>
             <div class="error">❌ Error en la autorización</div>
             <div class="details">${errorMessage}</div>
-            <div class="details" style="margin-top: 16px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; text-align: left;">
-              <strong>AliExpress Dropshipping:</strong> La Redirect URI de la app Dropshipping en AliExpress Open Platform debe coincidir exactamente con:<br/>
-              <code style="word-break:break-all;">${canonicalCallbackUrl}</code><br/>
-              Verifica que esté configurada igual (sin espacios, con https). Si usas ivanreseller.com, el backend debe estar en la misma ruta.
-            </div>
+            <div class="details" style="margin-top: 16px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; text-align: left; white-space: pre-wrap;">${redirectInstructions}</div>
             <div style="font-size: 12px; margin-top: 20px;">Redirigiendo a la aplicación...</div>
             <div style="font-size: 12px; margin-top: 10px;">Si no eres redirigido, <a href="${errorUrl}">haz clic aquí</a></div>
             <div style="text-align: center; margin-top: 30px;">
@@ -1386,22 +1384,24 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
 // ✅ DIAGNÓSTICO: Endpoint para verificar estado del OAuth de AliExpress (sin información sensible)
 router.get('/aliexpress/oauth/debug', async (req: Request, res: Response) => {
   try {
-    // Verificar que el callback es accesible (simulando que llegamos aquí)
+    const canonicalRedirectUri = getAliExpressDropshippingRedirectUri();
+    const instructions = getAliExpressRedirectUriInstructions();
     const callbackReachable = true;
     
     // Obtener información del usuario si está autenticado
-    // Nota: Este endpoint es público para permitir debugging, pero verifica autenticación opcional
-    const userId = req.user?.userId;
+    const userId = (req as any).user?.userId;
     
     if (!userId) {
       return res.json({
         callbackReachable: true,
+        canonicalRedirectUri,
+        instructions,
         hasTokens: false,
         environment: 'unknown',
         lastError: null,
         lastAuthAt: null,
         status: 'not_authenticated',
-        message: 'User not authenticated. This endpoint works, but authentication is required to check token status.'
+        message: 'User not authenticated. En AliExpress Open Platform, la Redirect URL debe ser exactamente: ' + canonicalRedirectUri
       });
     }
     
@@ -1427,29 +1427,34 @@ router.get('/aliexpress/oauth/debug', async (req: Request, res: Response) => {
     
     return res.json({
       callbackReachable: true,
+      canonicalRedirectUri,
+      instructions,
       hasTokens: hasTokensProd || hasTokensSandbox,
       hasTokensProduction: hasTokensProd,
       hasTokensSandbox: hasTokensSandbox,
       environment,
-      lastError: null, // Se puede extender para loggear últimos errores
+      lastError: null,
       lastAuthAt,
       status: (hasTokensProd || hasTokensSandbox) ? 'authorized' : 'not_authorized',
-      message: 'Endpoint working correctly. Use /api/auth-status for detailed status.'
+      message: 'Endpoint working correctly. En AliExpress Open Platform, la Redirect URL debe ser exactamente: ' + canonicalRedirectUri
     });
   } catch (error: any) {
     logger.error('[AliExpress OAuth Debug] Error', {
       error: error.message,
       stack: error.stack
     });
-    
+    const canonicalRedirectUri = getAliExpressDropshippingRedirectUri();
+    const instructions = getAliExpressRedirectUriInstructions();
     return res.status(500).json({
       callbackReachable: true,
+      canonicalRedirectUri,
+      instructions,
       hasTokens: false,
       environment: 'unknown',
       lastError: error.message,
       lastAuthAt: null,
       status: 'error',
-      message: 'Error checking OAuth status'
+      message: 'Error checking OAuth status. En AliExpress Open Platform, la Redirect URL debe ser exactamente: ' + canonicalRedirectUri
     });
   }
 });

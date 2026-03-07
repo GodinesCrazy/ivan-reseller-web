@@ -360,6 +360,30 @@ router.get('/aliexpress-dropshipping-credentials', authenticate, async (req: Req
 });
 
 /**
+ * GET /api/debug/aliexpress-dropshipping-redirect-uri
+ * Endpoint de diagnóstico: canonical redirect URI usado por el backend.
+ * Requiere autenticación. Incluye instrucciones para configurar en AliExpress.
+ */
+router.get('/aliexpress-dropshipping-redirect-uri', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { getAliExpressDropshippingRedirectUri } = await import('../../utils/aliexpress-dropshipping-oauth');
+    const canonicalRedirectUri = getAliExpressDropshippingRedirectUri();
+    const instructions = `En AliExpress Open Platform → My Apps → Tu app Dropshipping, en "OAuth Redirect URL" / "Redirect URI", configura EXACTAMENTE: ${canonicalRedirectUri} (sin espacios, https, sin barra final).`;
+    return res.json({
+      ok: true,
+      canonicalRedirectUri,
+      length: canonicalRedirectUri.length,
+      instructions,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || 'Failed to get redirect URI',
+    });
+  }
+});
+
+/**
  * GET /api/debug/dropshipping-oauth-status
  * Temporary OAuth status endpoint for AliExpress Dropshipping.
  */

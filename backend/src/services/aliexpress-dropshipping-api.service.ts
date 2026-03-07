@@ -547,6 +547,8 @@ export class AliExpressDropshippingAPIService {
         timestampCompact,
         timestampGmt8,
       });
+      // Per plan: prioritize Case 2 SHA256 (no redirect_uri in signature) per WORKING_INTEGRATION_REPORT,
+      // then MD5 apiPath with redirect_uri GMT+8 per ALIEXPRESS_FINAL_WORKING_REPORT, then rest.
       type TimestampMode = 'ms' | 'compact' | 'gmt8';
       const signatureVariants: Array<{
         name: string;
@@ -555,12 +557,12 @@ export class AliExpressDropshippingAPIService {
         includeRedirectUri?: boolean;
         timestampMode: TimestampMode;
       }> = [
-        { name: 'md5-apipath-ms', signMethod: 'md5', includeRedirectUri: true, timestampMode: 'ms', buildSign: (p) => generateAliExpressSignatureMD5(this.TOKEN_CREATE_SIGN_PATH, p, appSecret) },
-        { name: 'md5-apipath-compact', signMethod: 'md5', includeRedirectUri: true, timestampMode: 'compact', buildSign: (p) => generateAliExpressSignatureMD5(this.TOKEN_CREATE_SIGN_PATH, p, appSecret) },
-        { name: 'md5-apipath-gmt8', signMethod: 'md5', includeRedirectUri: true, timestampMode: 'gmt8', buildSign: (p) => generateAliExpressSignatureMD5(this.TOKEN_CREATE_SIGN_PATH, p, appSecret) },
         { name: 'case2-no-secret-ms', signMethod: 'sha256', includeRedirectUri: false, timestampMode: 'ms', buildSign: (p) => generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, p) },
         { name: 'case2-no-secret-compact', signMethod: 'sha256', includeRedirectUri: false, timestampMode: 'compact', buildSign: (p) => generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, p) },
         { name: 'case2-no-secret-gmt8', signMethod: 'sha256', includeRedirectUri: false, timestampMode: 'gmt8', buildSign: (p) => generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, p) },
+        { name: 'md5-apipath-gmt8', signMethod: 'md5', includeRedirectUri: true, timestampMode: 'gmt8', buildSign: (p) => generateAliExpressSignatureMD5(this.TOKEN_CREATE_SIGN_PATH, p, appSecret) },
+        { name: 'md5-apipath-ms', signMethod: 'md5', includeRedirectUri: true, timestampMode: 'ms', buildSign: (p) => generateAliExpressSignatureMD5(this.TOKEN_CREATE_SIGN_PATH, p, appSecret) },
+        { name: 'md5-apipath-compact', signMethod: 'md5', includeRedirectUri: true, timestampMode: 'compact', buildSign: (p) => generateAliExpressSignatureMD5(this.TOKEN_CREATE_SIGN_PATH, p, appSecret) },
         { name: 'sha256-with-redirect-uri', signMethod: 'sha256', includeRedirectUri: true, timestampMode: 'ms', buildSign: (p) => generateTokenCreateSignature(p, appSecret) },
         { name: 'case2-no-secret', signMethod: 'sha256', includeRedirectUri: true, timestampMode: 'ms', buildSign: (p) => generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, p) },
         { name: 'sha256-with-secret-upper', signMethod: 'sha256', includeRedirectUri: true, timestampMode: 'ms', buildSign: (p) => generateAliExpressSignatureWithSecret(this.TOKEN_CREATE_SIGN_PATH, p, appSecret) },
@@ -595,6 +597,7 @@ export class AliExpressDropshippingAPIService {
             if (redirectUri) {
               queryParams.redirect_uri = redirectUri;
             }
+            // URL encoding: signature uses raw values; query string uses httpClient params (axios encodes)
             logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
               tokenUrl,
               method: 'GET',
