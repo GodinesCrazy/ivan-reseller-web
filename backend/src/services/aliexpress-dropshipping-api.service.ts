@@ -639,58 +639,130 @@ export class AliExpressDropshippingAPIService {
               if (variant.includeRedirectUri && queryParams.redirect_uri) addParam('redirect_uri', queryParams.redirect_uri);
               if (queryParams.uuid) addParam('uuid', queryParams.uuid);
               qsParts.push(`sign=${encode(sign)}`);
-              const fullUrl = `${currentTokenUrl}?${qsParts.join('&')}`;
+              const bodyString = qsParts.join('&');
+              const fullUrl = `${currentTokenUrl}?${bodyString}`;
               lastFullUrlRedacted = fullUrl.replace(/code=[^&]+/, 'code=***').replace(/sign=[^&]+/, 'sign=***');
               const paramsInRequest = ['app_key', 'code', ...(variant.includeFormat ? ['format'] : []), 'timestamp', 'sign_method', ...(variant.includeRedirectUri && queryParams.redirect_uri ? ['redirect_uri'] : []), ...(queryParams.uuid ? ['uuid'] : []), 'sign'];
-              logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
-                signatureVariant: variant.name,
-                endpoint: currentTokenUrl,
-                paramsInRequest,
-                queryPreview: lastFullUrlRedacted,
-              });
               const timeoutPromise = new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error(`Token exchange timeout after ${tokenTimeoutMs}ms`)), tokenTimeoutMs)
               );
+
+              const processResponse = (resp: any) => {
+                const pl = resp.data?.data ?? resp.data ?? {};
+                return {
+                  response: resp,
+                  hasAccessToken: !!String(pl.access_token || pl.accessToken || '').trim(),
+                  aliCode: String(pl.code || '').trim(),
+                  reqId: String(pl.request_id ?? resp.data?.request_id ?? '').trim(),
+                };
+              };
+
+              let response: any = null;
               try {
-                const response = await Promise.race([httpClient.get(fullUrl), timeoutPromise]) as any;
-                const payload = response.data?.data ?? response.data ?? {};
-                const hasAccessToken = !!String(payload.access_token || payload.accessToken || '').trim();
-                if (hasAccessToken) return response;
-                lastResponse = response;
-                const aliCode = String(payload.code || '').trim();
-                const reqId = String(payload.request_id ?? response.data?.request_id ?? '').trim();
-                if (reqId) lastRequestId = reqId;
-                if (aliCode === 'IncompleteSignature' || aliCode === 'IllegalTimestamp') {
+                logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
+                  signatureVariant: variant.name,
+                  endpoint: currentTokenUrl,
+                  method: 'POST',
+                  paramsInRequest,
+                  queryPreview: lastFullUrlRedacted,
+                });
+                const postResp = await Promise.race([
+                  httpClient.post(currentTokenUrl, bodyString, {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  }),
+                  timeoutPromise,
+                ]) as any;
+                const postResult = processResponse(postResp);
+                if (postResult.reqId) lastRequestId = postResult.reqId;
+                if (postResult.hasAccessToken) return postResult.response;
+                lastResponse = postResult.response;
+
+                if (postResult.aliCode === 'IncompleteSignature' || postResult.aliCode === 'IllegalTimestamp') {
+                  logger.warn('[ALIEXPRESS-DROPSHIPPING-API] POST rejected, trying GET fallback', {
+                    endpoint: currentTokenUrl,
+                    signatureVariant: variant.name,
+                    aliCode: postResult.aliCode,
+                    requestId: postResult.reqId,
+                  });
+                  const getResp = await Promise.race([httpClient.get(fullUrl), timeoutPromise]) as any;
+                  const getResult = processResponse(getResp);
+                  if (getResult.reqId) lastRequestId = getResult.reqId;
+                  if (getResult.hasAccessToken) return getResult.response;
+                  lastResponse = getResult.response;
                   const paramsSigned = Object.keys(paramsForSign).sort();
-                  const paramsInUrl = [...paramsSigned, 'sign'];
                   const baseStringPreview = variant.name.startsWith('case2')
                     ? `${variant.signPathOverride ?? this.TOKEN_CREATE_SIGN_PATH}+${paramsSigned.join(',')}`
                     : `bookends+${paramsSigned.join(',')}`;
                   logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Signature variant rejected', {
                     endpoint: currentTokenUrl,
                     signatureVariant: variant.name,
-                    aliCode,
-                    requestId: reqId,
+                    aliCode: getResult.aliCode,
+                    method: 'GET',
+                    requestId: getResult.reqId,
                     queryUrlRedacted: lastFullUrlRedacted,
                     paramsSigned,
-                    paramsInUrl,
                     baseStringPreview,
                   });
                   continue;
                 }
-                return response;
-              } catch (error: any) {
-                lastError = error;
-                const respData = error?.response?.data;
+                return postResult.response;
+              } catch (postError: any) {
+                lastError = postError;
+                const respData = postError?.response?.data;
                 if (respData) {
                   const inner = respData?.data ?? respData;
                   const reqId = String(inner?.request_id ?? respData?.request_id ?? '').trim();
                   if (reqId) lastRequestId = reqId;
                 }
-                logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Signature variant request failed', {
+                logger.warn('[ALIEXPRESS-DROPSHIPPING-API] POST failed, trying GET fallback', {
                   signatureVariant: variant.name,
-                  error: error?.message || String(error),
+                  error: postError?.message || String(postError),
                 });
+                try {
+                  logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
+                    signatureVariant: variant.name,
+                    endpoint: currentTokenUrl,
+                    method: 'GET',
+                    paramsInRequest,
+                    queryPreview: lastFullUrlRedacted,
+                  });
+                  const getResp = await Promise.race([httpClient.get(fullUrl), timeoutPromise]) as any;
+                  const getResult = processResponse(getResp);
+                  if (getResult.reqId) lastRequestId = getResult.reqId;
+                  if (getResult.hasAccessToken) return getResult.response;
+                  lastResponse = getResult.response;
+                  if (getResult.aliCode === 'IncompleteSignature' || getResult.aliCode === 'IllegalTimestamp') {
+                    const paramsSigned = Object.keys(paramsForSign).sort();
+                    const baseStringPreview = variant.name.startsWith('case2')
+                      ? `${variant.signPathOverride ?? this.TOKEN_CREATE_SIGN_PATH}+${paramsSigned.join(',')}`
+                      : `bookends+${paramsSigned.join(',')}`;
+                    logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Signature variant rejected', {
+                      endpoint: currentTokenUrl,
+                      signatureVariant: variant.name,
+                      aliCode: getResult.aliCode,
+                      method: 'GET',
+                      requestId: getResult.reqId,
+                      queryUrlRedacted: lastFullUrlRedacted,
+                      paramsSigned,
+                      baseStringPreview,
+                    });
+                  } else {
+                    return getResult.response;
+                  }
+                } catch (getError: any) {
+                  lastError = getError;
+                  const getRespData = getError?.response?.data;
+                  if (getRespData) {
+                    const inner = getRespData?.data ?? getRespData;
+                    const reqId = String(inner?.request_id ?? getRespData?.request_id ?? '').trim();
+                    if (reqId) lastRequestId = reqId;
+                  }
+                  logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Signature variant request failed', {
+                    signatureVariant: variant.name,
+                    methodsTried: 'POST, GET',
+                    error: getError?.message || String(getError),
+                  });
+                }
               }
             }
             if (lastResponse) {
