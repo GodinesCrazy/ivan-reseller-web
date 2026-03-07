@@ -44,8 +44,9 @@ router.get('/authorize/ebay', async (req: Request, res: Response) => {
     const clientId = (process.env.EBAY_APP_ID || process.env.EBAY_CLIENT_ID || '').trim();
     const runame = (process.env.EBAY_RUNAME || '').trim();
     const explicitRedirect = (process.env.EBAY_REDIRECT_URI || '').trim();
-    // RuName (eBay identifier) or full URL. Prefer BACKEND_URL for direct callback (avoids proxy).
-    let redirectUri = runame || explicitRedirect || getEbayRedirectUri();
+    // eBay OAuth 2.0 requires exact full URL. Prefer full URL (e.g. .../api/marketplace-oauth/c) over RuName to avoid invalid_request.
+    const isFullUrl = (s: string) => /^https?:\/\//i.test(s);
+    let redirectUri = (explicitRedirect && isFullUrl(explicitRedirect)) ? explicitRedirect : (runame || explicitRedirect || getEbayRedirectUri());
     const certId = (process.env.EBAY_CERT_ID || process.env.EBAY_CLIENT_SECRET || '').trim();
 
     if (!clientId || !redirectUri) {

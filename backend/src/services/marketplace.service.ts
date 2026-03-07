@@ -299,7 +299,9 @@ export class MarketplaceService {
     const canonicalBackend = backendUrl ? `${backendUrl}/api/marketplace-oauth/oauth/callback/ebay` : '';
     const frontendBase = (process.env.FRONTEND_URL || process.env.WEB_BASE_URL || 'https://www.ivanreseller.com').replace(/\/$/, '');
     const defaultRedirect = canonicalBackend || explicitRedirect || `${frontendBase}/api/marketplace-oauth/oauth/callback/ebay`;
-    const redirectUri = runame || explicitRedirect || canonicalBackend || defaultRedirect;
+    // eBay OAuth 2.0 requires exact full URL. Prefer full URL (e.g. .../api/marketplace-oauth/c) over RuName to avoid invalid_request.
+    const isFullUrl = (s: string) => /^https?:\/\//i.test(s);
+    const redirectUri = (explicitRedirect && isFullUrl(explicitRedirect)) ? explicitRedirect : (runame || explicitRedirect || canonicalBackend || defaultRedirect);
     // eBay requiere RuName (no URL). Configurar EBAY_RUNAME o EBAY_REDIRECT_URI en env.
     if (!appId || !certId || !redirectUri) {
       throw new AppError(
