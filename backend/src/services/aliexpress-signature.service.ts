@@ -80,11 +80,6 @@ export function generateAliExpressSignature(
   const rawHash = crypto.createHash('sha256').update(signatureBaseString, 'utf8').digest('hex');
   const signature = rawHash.toLowerCase();
   
-  console.log('SIGN_BASE_STRING:', signatureBaseString);
-  console.log('SIGN_GENERATED:', signature);
-  console.log('[ALIEXPRESS SIGNATURE] API Path:', normalizedApiPath);
-  console.log('[ALIEXPRESS SIGNATURE] Sorted Params:', sortedKeys.map(k => `${k}=${paramsForSigning[k]}`).join(', '));
-  
   logger.debug('[ALIEXPRESS-SIGNATURE] Case 2', { apiPath: normalizedApiPath, paramsCount: sortedKeys.length });
   return signature;
 }
@@ -168,8 +163,6 @@ export function generateTokenCreateSignature(
   const concatenatedString = sortedKeys.map(k => `${k}${paramsForSigning[k]}`).join('');
   const signatureBaseString = appSecret + concatenatedString + appSecret;
   const signature = crypto.createHash('sha256').update(signatureBaseString, 'utf8').digest('hex').toLowerCase();
-  console.log('SIGN_BASE_STRING (token traditional):', signatureBaseString.replace(appSecret, '***'));
-  console.log('SIGN_GENERATED:', signature);
   return signature;
 }
 
@@ -183,8 +176,30 @@ export function generateTokenCreateSignatureMD5(params: Record<string, string>, 
   const concatenatedString = sortedKeys.map(k => `${k}${paramsForSigning[k]}`).join('');
   const signatureBaseString = appSecret + concatenatedString + appSecret;
   const signature = crypto.createHash('md5').update(signatureBaseString, 'utf8').digest('hex').toLowerCase();
-  console.log('SIGN_BASE_STRING (token MD5):', signatureBaseString.replace(appSecret, '***'));
-  console.log('SIGN_GENERATED:', signature);
+  logger.debug('[ALIEXPRESS-SIGNATURE] Token MD5', { paramsCount: sortedKeys.length });
+  return signature;
+}
+
+/**
+ * Token exchange: MD5 with apiPath per ALIEXPRESS_FINAL_WORKING_REPORT.
+ * Formula: hex(md5(appSecret + apiPath + key1value1+key2value2+... + appSecret))
+ * Params sorted by key (ASCII), excluding 'sign'. Use with sign_method=md5 and GMT+8 timestamp.
+ */
+export function generateAliExpressSignatureMD5(
+  apiPath: string,
+  params: Record<string, string>,
+  appSecret: string
+): string {
+  const normalizedApiPath = apiPath.startsWith('/') ? apiPath : `/${apiPath}`;
+  const paramsForSigning: Record<string, string> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (key !== 'sign' && value !== undefined && value !== null) paramsForSigning[key] = String(value);
+  }
+  const sortedKeys = Object.keys(paramsForSigning).sort();
+  const concatenatedString = sortedKeys.map(k => `${k}${paramsForSigning[k]}`).join('');
+  const signatureBaseString = appSecret + normalizedApiPath + concatenatedString + appSecret;
+  const signature = crypto.createHash('md5').update(signatureBaseString, 'utf8').digest('hex').toLowerCase();
+  logger.debug('[ALIEXPRESS-SIGNATURE] MD5 with apiPath', { apiPath: normalizedApiPath, paramsCount: sortedKeys.length });
   return signature;
 }
 
@@ -210,7 +225,6 @@ export function generateAliExpressSignatureHmac(
     .update(signatureBaseString, 'utf8')
     .digest('hex')
     .toLowerCase();
-  console.log('SIGN_BASE_STRING (HMAC):', signatureBaseString);
-  console.log('SIGN_GENERATED (HMAC):', signature);
+  logger.debug('[ALIEXPRESS-SIGNATURE] HMAC', { apiPath: normalizedApiPath, paramsCount: sortedKeys.length });
   return signature;
 }

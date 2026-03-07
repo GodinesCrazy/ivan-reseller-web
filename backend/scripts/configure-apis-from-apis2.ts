@@ -109,6 +109,7 @@ function extractSendGrid(content: string): string | null {
 function extractAliExpress(content: string): {
   dropshipAppKey: string | null;
   dropshipAppSecret: string | null;
+  dropshipCallbackUrl: string | null;
   affiliateAppKey: string | null;
   affiliateAppSecret: string | null;
   affiliateTrackingId: string | null;
@@ -120,6 +121,7 @@ function extractAliExpress(content: string): {
   const affSection = affIdx >= 0 ? content.slice(affIdx, content.length) : content;
   const dropshipAppKey = (dropSection.match(/AppKey\s*\n\s*(\d+)/) || dropSection.match(/AppKey\s+(\d+)/))?.[1]?.trim() || null;
   const dropshipAppSecret = (dropSection.match(/App Secret\s*\n\s*([A-Za-z0-9]+)/) || content.match(/(uWGIINO42[A-Za-z0-9]+)/))?.[1]?.trim() || null;
+  const dropshipCallbackUrl = (dropSection.match(/Callback\s+URL\s+(https?:\/\/[^\s#]+)/i) || dropSection.match(/Callback\s+URL\s+(\S+)/))?.[1]?.trim() || null;
   const affiliateAppKey = (affSection.match(/AppKey\s*\n\s*(\d+)/) || affSection.match(/AppKey\s+(\d+)/))?.[1]?.trim() || null;
   const affiliateAppSecret = (affSection.match(/App Secret\s*\n\s*(\S+)/) || content.match(/(OKxmE8VL[A-Za-z0-9]+)/))?.[1]?.replace(/\s+HideReset.*$/, '').trim() || null;
   const affiliateTrackingId = (content.match(/ALIEXPRESS_AFFILIATE_TRACKING_ID=(\S+)/))?.[1]?.trim() || null;
@@ -127,6 +129,7 @@ function extractAliExpress(content: string): {
   return {
     dropshipAppKey,
     dropshipAppSecret,
+    dropshipCallbackUrl,
     affiliateAppKey,
     affiliateAppSecret,
     affiliateTrackingId,
@@ -264,6 +267,7 @@ async function main(): Promise<number> {
 
   if (aliexpress.dropshipAppKey) envUpdates.ALIEXPRESS_DROPSHIPPING_APP_KEY = aliexpress.dropshipAppKey;
   if (aliexpress.dropshipAppSecret) envUpdates.ALIEXPRESS_DROPSHIPPING_APP_SECRET = aliexpress.dropshipAppSecret;
+  if (aliexpress.dropshipCallbackUrl) envUpdates.ALIEXPRESS_DROPSHIPPING_REDIRECT_URI = aliexpress.dropshipCallbackUrl;
   if (aliexpress.affiliateAppKey) {
     envUpdates.ALIEXPRESS_APP_KEY = aliexpress.affiliateAppKey;
     envUpdates.ALIEXPRESS_AFFILIATE_APP_KEY = aliexpress.affiliateAppKey;

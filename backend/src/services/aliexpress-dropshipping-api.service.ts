@@ -19,11 +19,13 @@ import { httpClient } from '../config/http-client';
 import type { AliExpressDropshippingCredentials } from '../types/api-credentials.types';
 import {
   generateAliExpressSignatureHmac,
+  generateAliExpressSignatureMD5,
   generateAliExpressSignatureNoSecret,
   generateAliExpressSignatureWithSecret,
   generateTokenCreateSignature,
   generateTokenCreateSignatureMD5,
 } from './aliexpress-signature.service';
+import { getAliExpressTimestamp } from './aliexpress-time.service';
 
 // Tipos de datos de la API
 export interface DropshippingProductInfo {
@@ -532,12 +534,8 @@ export class AliExpressDropshippingAPIService {
     const startTime = Date.now();
     const tokenUrl = this.TOKEN_CREATE_ENDPOINT;
     try {
-      const timestamp = Date.now().toString();
-      const signedParamsBase: Record<string, string> = {
-        app_key: appKey,
-        code,
-        timestamp,
-      };
+      const timestampMs = Date.now().toString();
+      const timestampGmt8 = await getAliExpressTimestamp();
       logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange attempt', {
         event: 'dropshipping_token_exchange_attempt',
         endpoint: tokenUrl,
@@ -548,7 +546,21 @@ export class AliExpressDropshippingAPIService {
         signMethod: 'sha256' | 'md5';
         buildSign: (params: Record<string, string>) => string;
         includeRedirectUri?: boolean;
+        useGmt8Timestamp?: boolean;
       }> = [
+        {
+          name: 'md5-with-apipath-gmt8',
+          signMethod: 'md5',
+          includeRedirectUri: true,
+          useGmt8Timestamp: true,
+          buildSign: (params) => generateAliExpressSignatureMD5(this.TOKEN_CREATE_SIGN_PATH, params, appSecret),
+        },
+        {
+          name: 'case2-no-secret-no-redirect-uri',
+          signMethod: 'sha256',
+          includeRedirectUri: false,
+          buildSign: (params) => generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, params),
+        },
         {
           name: 'sha256-with-redirect-uri',
           signMethod: 'sha256',
@@ -558,26 +570,31 @@ export class AliExpressDropshippingAPIService {
         {
           name: 'case2-no-secret',
           signMethod: 'sha256',
+          includeRedirectUri: true,
           buildSign: (params) => generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, params),
         },
         {
           name: 'sha256-with-secret-upper',
           signMethod: 'sha256',
+          includeRedirectUri: true,
           buildSign: (params) => generateAliExpressSignatureWithSecret(this.TOKEN_CREATE_SIGN_PATH, params, appSecret),
         },
         {
           name: 'sha256-with-secret-lower',
           signMethod: 'sha256',
+          includeRedirectUri: true,
           buildSign: (params) => generateTokenCreateSignature(params, appSecret),
         },
         {
           name: 'sha256-hmac-lower',
           signMethod: 'sha256',
+          includeRedirectUri: true,
           buildSign: (params) => generateAliExpressSignatureHmac(this.TOKEN_CREATE_SIGN_PATH, params, appSecret),
         },
         {
           name: 'md5-with-secret-lower',
           signMethod: 'md5',
+          includeRedirectUri: true,
           buildSign: (params) => generateTokenCreateSignatureMD5(params, appSecret),
         },
       ];
@@ -590,8 +607,11 @@ export class AliExpressDropshippingAPIService {
           let lastResponse: any = null;
           let lastError: Error | null = null;
           for (const variant of signatureVariants) {
+            const timestamp = variant.useGmt8Timestamp ? timestampGmt8 : timestampMs;
             const paramsForSign: Record<string, string> = {
-              ...signedParamsBase,
+              app_key: appKey,
+              code,
+              timestamp,
               sign_method: variant.signMethod,
             };
             if (variant.includeRedirectUri && redirectUri) {

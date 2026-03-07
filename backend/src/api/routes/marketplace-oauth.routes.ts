@@ -634,7 +634,9 @@ router.get('/callback', async (req: Request, res: Response) => {
             <div class="error">❌ Error en la autorización</div>
             <div class="details">${errorMessage}</div>
             <div class="details" style="margin-top: 16px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; text-align: left;">
-              Si estabas autorizando <strong>AliExpress Affiliate</strong>, la Redirect URI de la app Affiliate en AliExpress debe ser exactamente: <code>https://&lt;tu-backend&gt;/api/aliexpress/callback</code> (no uses <code>/api/marketplace-oauth/callback</code> ni <code>/aliexpress/callback</code>).
+              <strong>AliExpress Dropshipping:</strong> La Redirect URI de la app Dropshipping en AliExpress Open Platform debe coincidir exactamente con:<br/>
+              <code style="word-break:break-all;">${canonicalCallbackUrl}</code><br/>
+              Verifica que esté configurada igual (sin espacios, con https). Si usas ivanreseller.com, el backend debe estar en la misma ruta.
             </div>
             <div style="font-size: 12px; margin-top: 20px;">Redirigiendo a la aplicación...</div>
             <div style="font-size: 12px; margin-top: 10px;">Si no eres redirigido, <a href="${errorUrl}">haz clic aquí</a></div>
