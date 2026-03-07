@@ -5,6 +5,7 @@ import { AppError } from '../../middleware/error.middleware';
 import { toNumber } from '../../utils/decimal.utils';
 import { getSalesLedger } from '../../services/sales-ledger.service';
 import { getWorkingCapitalDetail } from '../../services/working-capital-detail.service';
+import { getPayPalBalance } from '../../services/balance-verification.service';
 import { calculateMaxNewListingsAllowed } from '../../services/capital-allocation.engine';
 import { getProductPerformance } from '../../services/product-performance.engine';
 import { computeFinanceRisk } from '../../services/finance-risk.engine';
@@ -51,6 +52,40 @@ router.get('/working-capital-detail', async (req: Request, res: Response, next) 
     const envForPayPal = env === 'sandbox' ? 'sandbox' : 'production';
     const detail = await getWorkingCapitalDetail(userId, envForPayPal);
     res.json({ success: true, detail });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/finance/paypal-balance-debug
+ * Diagnostic: raw PayPal balance result and whether it came from PayPal API or fallback.
+ * Query: environment=production|sandbox (default production).
+ */
+router.get('/paypal-balance-debug', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user!.userId;
+    const env = getEnvironment(req);
+    const envForPayPal = env === 'sandbox' ? 'sandbox' : 'production';
+    const raw = await getPayPalBalance(userId, envForPayPal);
+    const fromPayPalAPI =
+      raw != null &&
+      'source' in raw &&
+      (raw.source === 'paypal' || raw.source === 'paypal_estimated');
+    res.json({
+      success: true,
+      debug: {
+        raw,
+        fromPayPalAPI,
+        message: fromPayPalAPI
+          ? 'Saldo obtenido desde PayPal API (wallet_api o reporting_api_estimated)'
+          : raw != null && 'unavailableReason' in raw
+            ? `PayPal API falló: ${raw.unavailableReason}`
+            : raw == null
+              ? 'PayPal balance check retornó null (error o excepción)'
+              : 'PayPal API no devolvió saldo',
+      },
+    });
   } catch (error) {
     next(error);
   }

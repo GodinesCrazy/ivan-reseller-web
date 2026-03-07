@@ -9,7 +9,7 @@ import { toNumber } from '../utils/decimal.utils';
 import { getSupplierExposure, getHistoricalMetrics } from './capital-allocation.engine';
 import { computeLeverage, getRiskLevel } from './finance-leverage.model';
 
-export type PaypalBalanceSource = 'wallet_api' | 'reporting_api_estimated' | 'unavailable';
+export type PaypalBalanceSource = 'wallet_api' | 'reporting_api_estimated' | 'manual_declared' | 'unavailable';
 
 export type PaypalUnavailableReason = 'no_credentials' | 'api_failed';
 
@@ -48,16 +48,24 @@ export async function getWorkingCapitalDetail(
   userId: number,
   environment?: 'sandbox' | 'production'
 ): Promise<WorkingCapitalDetail> {
-  const [paypalBalance, payoneerBalance, committedCapital, supplierExposure, historical] =
+  const [paypalBalance, payoneerBalance, committedCapital, supplierExposure, historical, workflowConfig] =
     await Promise.all([
       getPayPalBalance(userId, environment),
       getPayoneerBalance(),
       getCommittedCapitalByUser(userId),
       getSupplierExposure(userId),
       getHistoricalMetrics(userId),
+      prisma.userWorkflowConfig.findUnique({ where: { userId } }),
     ]);
 
-  const inPayPal = paypalBalance?.available ?? 0;
+  const hasValidPayPal = paypalBalance && 'available' in paypalBalance && paypalBalance.available != null;
+  const manualFallback = !hasValidPayPal && workflowConfig?.workingCapital != null && toNumber(workflowConfig.workingCapital) > 0;
+
+  const inPayPal = hasValidPayPal
+    ? paypalBalance!.available
+    : manualFallback
+      ? toNumber(workflowConfig!.workingCapital)
+      : 0;
   const inPayoneer = payoneerBalance?.available ?? 0;
   const hasSource = paypalBalance && 'source' in paypalBalance && paypalBalance.source;
   const inPayPalSource: PaypalBalanceSource =
@@ -65,9 +73,11 @@ export async function getWorkingCapitalDetail(
       ? 'wallet_api'
       : hasSource && paypalBalance.source === 'paypal_estimated'
         ? 'reporting_api_estimated'
-        : 'unavailable';
+        : manualFallback
+          ? 'manual_declared'
+          : 'unavailable';
   const inPayPalUnavailableReason: PaypalUnavailableReason | undefined =
-    paypalBalance && 'unavailableReason' in paypalBalance ? paypalBalance.unavailableReason : undefined;
+    manualFallback ? 'api_failed' : paypalBalance && 'unavailableReason' in paypalBalance ? paypalBalance.unavailableReason : undefined;
   const availableCash = inPayPal + inPayoneer;
 
   // Retained by marketplace: estimated as pending payout (simplified - sum of pending sales value)

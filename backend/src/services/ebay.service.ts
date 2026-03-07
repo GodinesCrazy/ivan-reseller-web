@@ -870,8 +870,11 @@ export class EbayService {
         }
 
         const response = result.data;
-        const suggestions = response.data.suggestions || [];
-        return suggestions[0]?.category?.categoryId || '267';
+        const suggestions = response.data?.categorySuggestions || [];
+        const leafId = suggestions[0]?.category?.categoryId;
+        if (leafId) return leafId;
+        // Fallback: 20698 = Kitchen Storage & Organization (leaf bajo Home & Garden)
+        return '20698';
       });
     } catch (error: any) {
       throw new AppError(`eBay category suggestion error: ${error.message}`, 400);

@@ -100,7 +100,7 @@ interface WorkingCapitalDetail {
   retainedByMarketplace: number;
   inPayoneer: number;
   inPayPal: number;
-  inPayPalSource?: 'wallet_api' | 'reporting_api_estimated' | 'unavailable';
+  inPayPalSource?: 'wallet_api' | 'reporting_api_estimated' | 'manual_declared' | 'unavailable';
   inPayPalUnavailableReason?: 'no_credentials' | 'api_failed';
   inTransit: number;
   committedToOrders: number;
@@ -464,10 +464,11 @@ export default function FinanceDashboard() {
                         if (!src) return null;
                         const reason = workingCapitalDetail.inPayPalUnavailableReason;
                         const unavailableTitle = reason === 'api_failed'
-                          ? 'No se pudo obtener el saldo. Revisa permisos wallet:read en tu app PayPal.'
-                          : 'Configura PayPal en Configuración > API Settings para ver tu saldo.';
+                          ? 'No se pudo obtener el saldo. En developer.paypal.com > Apps & Credentials > Ivan_reseller (Live) activa "Balance and Transaction Information" o contacta a PayPal si la API de balance no está disponible para tu cuenta. Alternativa: actualiza tu capital de trabajo en Configuración > Config. workflows para ver un valor estimado en In PayPal.'
+                          : 'Configura PayPal en Configuración > API Settings para ver tu saldo. Alternativa: actualiza tu capital de trabajo en Configuración > Config. workflows para ver un valor estimado en In PayPal.';
                         const badge = src === 'wallet_api' ? { label: 'Real', title: 'Saldo real requiere permiso wallet:read en la app PayPal', className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' } :
                           src === 'reporting_api_estimated' ? { label: 'Estimado', title: 'Saldo estimado desde transacciones recientes', className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' } :
+                          src === 'manual_declared' ? { label: 'Declarado', title: 'Saldo introducido manualmente en Config. workflows. La API de PayPal no está disponible para tu cuenta.', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' } :
                           { label: 'No disponible', title: unavailableTitle, className: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' };
                         return (
                           <span title={badge.title} className={`px-2 py-0.5 rounded text-xs font-medium ${badge.className}`}>

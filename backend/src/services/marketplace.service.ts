@@ -619,7 +619,7 @@ export class MarketplaceService {
           categoryId = categoryResult.data;
         } else {
           // Fallback a categoría por defecto si falla
-          categoryId = '267'; // Default category
+          categoryId = '20698'; // Leaf category: Kitchen Storage & Organization
         }
       }
 

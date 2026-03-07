@@ -63,6 +63,8 @@ Además, en Railway debes tener ya configuradas:
 
 ## PayPal en producción
 
+Guía detallada: [docs/PAYPAL_CONFIGURATION_GUIDE.md](../../docs/PAYPAL_CONFIGURATION_GUIDE.md).
+
 Para pagos reales en Railway:
 
 - `PAYPAL_CLIENT_ID` = Client ID **Live**

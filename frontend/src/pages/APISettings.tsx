@@ -2446,7 +2446,9 @@ export default function APISettings() {
           const startedAtRaw = sessionStorage.getItem(ALIEXPRESS_OAUTH_REDIRECTING_AT_KEY);
           const startedAt = Number(startedAtRaw || '0');
           const age = Date.now() - startedAt;
-          if (Number.isFinite(startedAt) && startedAt > 0 && age <= ALIEXPRESS_OAUTH_REDIRECTING_TTL_MS) {
+          const BLOCK_MS = 2 * 60 * 1000;
+          if (Number.isFinite(startedAt) && startedAt > 0 && age <= BLOCK_MS) {
+            toast.warning('OAuth de AliExpress en curso. Si ya volviste de AliExpress, espera unos segundos o recarga la página.');
             return;
           }
           clearAliExpressOAuthRedirectingFlag();
@@ -2454,6 +2456,7 @@ export default function APISettings() {
       } catch (_) {}
     }
     if (oauthInProgressRef.current[apiName]) {
+      toast.info('OAuth en curso. Espera a que termine la redirección.');
       return;
     }
     if (!isAliExpressDropshipping && openOAuthWindowRef.current?.apiName === apiName) {
@@ -4222,11 +4225,8 @@ export default function APISettings() {
                         {credential.isActive ? 'ON' : 'OFF'}
                       </button>
 
-                      {/* OAuth Authorization: ocultar botón azul para AliExpress Dropshipping/Affiliate en partially_configured para evitar doble ventana (solo recuadro ámbar) */}
-                      {apiDef.supportsOAuth && !(
-                        (apiDef.name === 'aliexpress-dropshipping' || apiDef.name === 'aliexpress_dropshipping' || apiDef.name === 'aliexpress-affiliate' || apiDef.name === 'aliexpress_affiliate') &&
-                        unifiedStatusCard?.status === 'partially_configured'
-                      ) && (
+                      {/* OAuth Authorization: siempre mostrar botón para que el usuario pueda iniciar OAuth */}
+                      {apiDef.supportsOAuth && (
                         (() => {
                           const requiresBaseCreds =
                             diag?.issues?.some((issue) =>

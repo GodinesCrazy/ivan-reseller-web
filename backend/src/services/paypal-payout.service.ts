@@ -309,12 +309,11 @@ export class PayPalPayoutService {
           }
         }
       } catch (v2Error: any) {
-        if (v2Error.response?.status !== 404 && v2Error.response?.status !== 403) {
-          logger.debug('PayPal Balance Accounts API v2 error (continuando con alternativas)', {
-            error: v2Error.message,
-            status: v2Error.response?.status
-          });
-        }
+        logger.info('PayPal Balance API v2 falló', {
+          status: v2Error.response?.status,
+          paypalMessage: v2Error.response?.data?.message ?? v2Error.response?.data?.details?.[0]?.description,
+          environment: this.credentials.environment
+        });
       }
 
       // Método 2: Wallet API v1 (fallback, puede estar deprecado)
@@ -339,12 +338,11 @@ export class PayPalPayoutService {
           return balance;
         }
       } catch (walletError: any) {
-        if (walletError.response?.status !== 404 && walletError.response?.status !== 403) {
-          logger.debug('PayPal Wallet API v1 error (continuando con alternativas)', {
-            error: walletError.message,
-            status: walletError.response?.status
-          });
-        }
+        logger.info('PayPal Wallet API v1 falló', {
+          status: walletError.response?.status,
+          paypalMessage: walletError.response?.data?.message ?? walletError.response?.data?.details?.[0]?.description,
+          environment: this.credentials.environment
+        });
       }
       
       // Método 3: Reporting API - Estimar desde transacciones (menos preciso pero útil)
@@ -392,9 +390,9 @@ export class PayPalPayoutService {
           source: 'reporting_api_estimated'
         };
       } catch (reportingError: any) {
-        logger.info('PayPal Reporting API no disponible', {
-          error: reportingError.message,
+        logger.info('PayPal Reporting API falló', {
           status: reportingError.response?.status,
+          paypalMessage: reportingError.response?.data?.message ?? reportingError.response?.data?.details?.[0]?.description,
           environment: this.credentials.environment
         });
       }

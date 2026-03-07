@@ -69,17 +69,16 @@ function extractEbaySandbox(content: string): { appId: string | null; devId: str
 }
 
 function extractPayPal(content: string): { sandboxClientId: string | null; sandboxSecret: string | null; liveClientId: string | null; liveSecret: string | null } {
-  // APIS2: "Sandbox: Client ID EEKi...", "Live: Client ID EKj..."; luego bloques "Client ID AdLn34...", "Secret EEKi..."; "client ID AYH1...", "secret Key EKj..."
-  const sandboxClientId = (content.match(/Sandbox:\s*\n\s*Client\s+ID\s+(\S+)/i) || content.match(/Client\s+ID\s+(EEKi\S+)/))?.[1]?.trim();
-  const liveClientId = (content.match(/Live:\s*\n\s*Client\s+ID\s+(\S+)/i) || content.match(/Client\s+ID\s+(EKj\S+)/) || content.match(/client\s+ID\s+(AYH1\S+)/i))?.[1]?.trim();
-  const secretEeki = (content.match(/Secret\s+(EEKi\S+)/i))?.[1]?.trim();
-  const secretEkj = (content.match(/secret\s+Key\s+(EKj\S+)/i) || content.match(/secret\s+Key\s+(\S+)/i))?.[1]?.trim();
-  const clientAdLn = (content.match(/Client\s+ID\s+(AdLn\S+)/))?.[1]?.trim();
+  // APIS2: Live usa "client ID AYH1..." (Client ID) + "secret Key EKj..." (Secret). No usar "Live: Client ID EKj..." como Client ID porque EKj... es el Secret.
+  const sandboxClientId = (content.match(/Client\s+ID\s+(AdLn\S+)/))?.[1]?.trim() || (content.match(/Sandbox:\s*\n\s*Client\s+ID\s+(\S+)/i))?.[1]?.trim();
+  const sandboxSecret = (content.match(/Secret\s+(EEKi\S+)/i))?.[1]?.trim();
+  const liveClientId = (content.match(/client\s+ID\s+(AYH1\S+)/i))?.[1]?.trim() || null;
+  const liveSecret = (content.match(/secret\s+Key\s+(EKj\S+)/i) || content.match(/secret\s+Key\s+(\S+)/i))?.[1]?.trim() || null;
   return {
-    sandboxClientId: clientAdLn || sandboxClientId || null,
-    sandboxSecret: secretEeki || null,
-    liveClientId: liveClientId || (content.match(/client\s+ID\s+(AYH1\S+)/i))?.[1]?.trim() || null,
-    liveSecret: secretEkj || null,
+    sandboxClientId: sandboxClientId || null,
+    sandboxSecret: sandboxSecret || null,
+    liveClientId: liveClientId || null,
+    liveSecret: liveSecret || null,
   };
 }
 
