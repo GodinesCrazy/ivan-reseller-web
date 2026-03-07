@@ -924,8 +924,9 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       const appId = cred?.credentials?.appId || process.env.EBAY_APP_ID || '';
       const devId = (cred?.credentials?.devId || process.env.EBAY_DEV_ID || '').trim();
       const certId = cred?.credentials?.certId || process.env.EBAY_CERT_ID || '';
-      const sandbox = !!(cred?.credentials?.sandbox || (process.env.EBAY_SANDBOX === 'true'));
-      
+      // Use only environment from state; do NOT override with EBAY_SANDBOX (would cause client authentication failed)
+      const sandbox = environment === 'sandbox';
+
       logger.info('[OAuth Callback] eBay credentials loaded', {
         service: 'marketplace-oauth',
         userId,
@@ -938,28 +939,57 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       });
       
       // Token exchange solo requiere App ID y Cert ID; Dev ID es opcional
-      if (!appId || !certId) {
-        logger.error('[OAuth Callback] Missing eBay base credentials', {
+      const appIdTrim = String(appId || '').trim();
+      const certIdTrim = String(certId || '').trim();
+      if (!appIdTrim || appIdTrim.length < 3) {
+        logger.error('[OAuth Callback] Missing or invalid eBay App ID', {
           service: 'marketplace-oauth',
           userId,
           environment,
-          hasAppId: !!appId,
-          hasCertId: !!certId
+          hasAppId: !!appIdTrim,
+          appIdLength: appIdTrim?.length || 0
         });
         return res
           .status(400)
-          .send('<html><body>Base credentials missing. Please save App ID and Cert ID before authorizing.</body></html>');
+          .send('<html><body>App ID de eBay incompleto o inválido. Guarda credenciales correctas antes de autorizar.</body></html>');
+      }
+      if (!certIdTrim || certIdTrim.length < 3) {
+        logger.error('[OAuth Callback] Missing or invalid eBay Cert ID', {
+          service: 'marketplace-oauth',
+          userId,
+          environment,
+          hasCertId: !!certIdTrim,
+          certIdLength: certIdTrim?.length || 0
+        });
+        return res
+          .status(400)
+          .send('<html><body>Cert ID de eBay incompleto o inválido. Guarda credenciales correctas antes de autorizar.</body></html>');
+      }
+      if (!redirectUri || !String(redirectUri).trim()) {
+        logger.error('[OAuth Callback] Missing redirect URI in OAuth state', {
+          service: 'marketplace-oauth',
+          userId,
+          environment,
+          redirectUriLength: redirectUri?.length || 0
+        });
+        return res
+          .status(400)
+          .send('<html><body>Redirect URI ausente en el estado OAuth. Vuelve a API Settings, guarda el Redirect URI y pulsa OAuth de nuevo.</body></html>');
       }
       
-      const ebay = new EbayService({ appId, devId, certId, sandbox });
+      const ebay = new EbayService({ appId: appIdTrim, devId, certId: certIdTrim, sandbox });
       
+      const requestHost = req.get('host') || req.headers['x-forwarded-host'] || 'unknown';
       logger.info('[OAuth Callback] Exchanging code for token', {
         service: 'marketplace-oauth',
         userId,
         environment,
+        sandbox,
         codeLength: code.length,
-        redirectUriLength: redirectUri?.length || 0,
-        redirectUriPreview: redirectUri ? redirectUri.substring(0, 50) + '...' : 'N/A'
+        redirectUriLength: redirectUri.length,
+        redirectUriPreview: redirectUri.substring(0, 50) + (redirectUri.length > 50 ? '...' : ''),
+        requestHost: Array.isArray(requestHost) ? requestHost[0] : requestHost,
+        appIdPreview: appIdTrim.substring(0, 8) + '...' + appIdTrim.substring(Math.max(0, appIdTrim.length - 4)),
       });
       
       const tokens = await ebay.exchangeCodeForToken(code, redirectUri);
@@ -1353,43 +1383,44 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
     const errorResponse = e?.response?.data || {};
     const errorStatus = e?.response?.status || 500;
     
-    // 🔍 LOGGING: Registrar error completo
+    // 🔍 LOGGING: Registrar error completo (incl. eBay error codes para diagnóstico)
     logger.error('[OAuth Callback] Error processing OAuth callback', {
       service: 'marketplace-oauth',
       marketplace: req.params.marketplace,
       error: errorMessage,
       errorStatus,
+      errorCode: errorResponse?.error,
+      errorDescription: errorResponse?.error_description,
       errorResponse,
       stack: e?.stack,
       duration: Date.now() - startTime
     });
     
-    const isUnauthorizedClient = errorMessage.toLowerCase().includes('unauthorized_client') || 
+    const isUnauthorizedClient = errorMessage.toLowerCase().includes('unauthorized_client') ||
                                  errorMessage.toLowerCase().includes('oauth client was not found') ||
-                                 errorResponse?.error === 'unauthorized_client';
+                                 errorMessage.toLowerCase().includes('client authentication failed') ||
+                                 errorResponse?.error === 'unauthorized_client' ||
+                                 errorResponse?.error === 'client_authentication_failed';
     
     let userFriendlyMessage = 'Error al completar la autorización OAuth.';
     let troubleshooting = '';
     
     if (isUnauthorizedClient) {
-      userFriendlyMessage = '❌ Error: El App ID de eBay no fue encontrado o no es válido.';
+      userFriendlyMessage = 'Error: Autenticación de eBay fallida (App ID, Cert ID o ambiente).';
       troubleshooting = `
         <div style="text-align: left; max-width: 600px; margin: 20px auto; padding: 15px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 5px;">
           <h3 style="margin-top: 0;">Posibles causas:</h3>
           <ul>
-            <li>El <strong>App ID</strong> que ingresaste no existe en eBay Developer Portal</li>
+            <li>El <strong>App ID</strong> o <strong>Cert ID</strong> no existen en eBay Developer Portal o están mal copiados</li>
             <li>El <strong>App ID</strong> es de <strong>Production</strong> pero estás usando <strong>Sandbox</strong> (o viceversa)</li>
-            <li>El <strong>App ID</strong> no está correctamente registrado en tu cuenta de eBay Developer</li>
-            <li>El <strong>Redirect URI (RuName)</strong> no coincide con el registrado en eBay Developer Portal</li>
+            <li>El <strong>Auth accepted URL</strong> en eBay Developer no coincide exactamente con el Redirect URI configurado</li>
           </ul>
-          <h3>¿Qué hacer?</h3>
+          <h3>Qué hacer:</h3>
           <ol>
-            <li>Ve a <a href="https://developer.ebay.com" target="_blank">eBay Developer Portal</a></li>
-            <li>Verifica que tu aplicación esté creada y activa</li>
-            <li>Confirma que el <strong>App ID</strong>, <strong>Dev ID</strong> y <strong>Cert ID</strong> sean correctos</li>
-            <li>Verifica que el <strong>Redirect URI (RuName)</strong> coincida exactamente</li>
-            <li>Si estás usando <strong>Sandbox</strong>, asegúrate de usar credenciales de Sandbox</li>
-            <li>Si estás usando <strong>Production</strong>, asegúrate de usar credenciales de Production</li>
+            <li>Ve a <a href="https://developer.ebay.com/my/keys" target="_blank">eBay Developer Portal → Keys</a></li>
+            <li>Confirma que App ID y Cert ID correspondan al ambiente (Production vs Sandbox)</li>
+            <li>En <strong>Auth accepted URL</strong>, verifica que coincida exactamente con tu Redirect URI (ej: https://www.ivanreseller.com/api/marketplace-oauth/c)</li>
+            <li>Guarda las credenciales en API Settings y vuelve a pulsar OAuth</li>
           </ol>
         </div>
       `;
@@ -1410,6 +1441,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
           <div class="details">Error técnico: ${errorMessage}</div>
           ${troubleshooting}
           <div style="text-align: center; margin-top: 30px;">
+            <a href="${getFrontendReturnBaseUrl()}/api-settings" style="display: inline-block; margin-right: 10px; padding: 10px 20px; font-size: 16px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Volver a API Settings</a>
             <button onclick="window.close()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
               Cerrar ventana
             </button>
