@@ -385,8 +385,23 @@ router.get('/callback', async (req: Request, res: Response) => {
       `);
     }
 
-    const requestHost = req.get('host') || req.headers['x-forwarded-host'] || null;
+    const rawHost = req.get('host') || req.headers['x-forwarded-host'];
+    const requestHost = Array.isArray(rawHost) ? rawHost[0] : rawHost;
     const canonicalRedirectUri = getAliExpressDropshippingRedirectUri();
+    try {
+      const canonicalHost = new URL(canonicalRedirectUri).hostname;
+      const requestHostname = requestHost ? String(requestHost).replace(/:.*$/, '').toLowerCase() : '';
+      if (requestHostname && canonicalHost !== requestHostname && !requestHostname.endsWith('.' + canonicalHost)) {
+        logger.warn('[OAuth Callback] Host may not match canonical redirect_uri domain', {
+          requestHost,
+          canonicalHost,
+          canonicalRedirectUri,
+          service: 'marketplace-oauth',
+        });
+      }
+    } catch {
+      // ignore URL parse errors
+    }
     logger.info('[OAuth Callback] Exchanging code for AliExpress Dropshipping tokens', {
       service: 'marketplace-oauth',
       correlationId,
@@ -602,6 +617,7 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     } catch (tokenError: any) {
       const elapsed = Date.now() - startTime;
+      const requestId = tokenError?.aliexpressRequestId ?? tokenError?.response?.data?.request_id ?? '';
       logger.error('[OAuth Callback] AliExpress Dropshipping token exchange failed', {
         service: 'marketplace-oauth',
         correlationId,
@@ -613,6 +629,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         tokenExchangeStatus: 'failed',
         error: tokenError?.message || String(tokenError),
         responseData: tokenError?.response?.data,
+        aliexpressRequestId: requestId,
         status: tokenError?.response?.status,
         stack: tokenError?.stack?.substring(0, 500),
       });
@@ -636,6 +653,8 @@ router.get('/callback', async (req: Request, res: Response) => {
             <div class="error">❌ Error en la autorización</div>
             <div class="details">${errorMessage}</div>
             <div class="details" style="margin-top: 16px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; text-align: left; white-space: pre-wrap;">${redirectInstructions}</div>
+            ${requestId ? `<div class="details" style="margin-top: 12px;">Request ID de AliExpress: ${requestId}</div>` : ''}
+            <div class="details" style="margin-top: 12px;">Si contactas soporte AliExpress, indica correlationId: ${correlationId}${requestId ? ` y request_id: ${requestId}` : ''}.</div>
             <div style="font-size: 12px; margin-top: 20px;">Redirigiendo a la aplicación...</div>
             <div style="font-size: 12px; margin-top: 10px;">Si no eres redirigido, <a href="${errorUrl}">haz clic aquí</a></div>
             <div style="text-align: center; margin-top: 30px;">

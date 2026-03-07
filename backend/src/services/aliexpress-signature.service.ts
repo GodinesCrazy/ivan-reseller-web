@@ -204,6 +204,46 @@ export function generateAliExpressSignatureMD5(
 }
 
 /**
+ * HMAC-SHA256 with appSecret bookends (message = appSecret + sortedParams + appSecret, key = appSecret).
+ * Per external docs: HMAC-SHA256(appSecret + key1value1... + appSecret, appSecret), UPPERCASE hex.
+ */
+export function generateHmacSha256WithBookends(
+  params: Record<string, string>,
+  appSecret: string
+): string {
+  const paramsForSigning: Record<string, string> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (key !== 'sign' && value !== undefined && value !== null) paramsForSigning[key] = String(value);
+  }
+  const sortedKeys = Object.keys(paramsForSigning).sort();
+  const concatenatedString = sortedKeys.map(k => `${k}${paramsForSigning[k]}`).join('');
+  const stringToSign = appSecret + concatenatedString + appSecret;
+  return crypto
+    .createHmac('sha256', appSecret)
+    .update(stringToSign, 'utf8')
+    .digest('hex')
+    .toUpperCase();
+}
+
+/**
+ * HMAC-MD5 per Alibaba TOP (sign_method=hmac).
+ * Base string = sorted params only; key = app_secret. Output UPPERCASE hex.
+ */
+export function generateHmacMd5TopStyle(params: Record<string, string>, appSecret: string): string {
+  const paramsForSigning: Record<string, string> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (key !== 'sign' && value !== undefined && value !== null) paramsForSigning[key] = String(value);
+  }
+  const sortedKeys = Object.keys(paramsForSigning).sort();
+  const concatenatedString = sortedKeys.map(k => `${k}${paramsForSigning[k]}`).join('');
+  return crypto
+    .createHmac('md5', appSecret)
+    .update(concatenatedString, 'utf8')
+    .digest('hex')
+    .toUpperCase();
+}
+
+/**
  * Case 2 base string signed with HMAC-SHA256 (key = app_secret).
  * Some Alibaba docs use HMAC; try if plain SHA256 fails.
  */

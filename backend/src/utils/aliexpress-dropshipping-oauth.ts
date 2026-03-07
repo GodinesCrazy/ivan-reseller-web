@@ -79,7 +79,8 @@ export function getAliExpressRedirectUriInstructions(): string {
 1. Entra en AliExpress Open Platform → My Apps → Tu app Dropshipping.
 2. En "OAuth Redirect URL" / "Redirect URI", configura EXACTAMENTE:
    ${canonical}
-3. Sin espacios, con https, sin barra final.
-4. Si usas otro dominio (ej. www.ivanreseller.com), la URL debe coincidir con la que ve el usuario al autorizar.`;
+3. Copia la URL exacta que aparece arriba. Pégala en AliExpress sin modificar. No uses www, ni barra final.
+4. Sin espacios, con https, sin barra final.
+5. Si usas otro dominio (ej. www.ivanreseller.com), la URL debe coincidir con la que ve el usuario al autorizar.`;
 }
 

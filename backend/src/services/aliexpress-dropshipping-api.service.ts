@@ -22,6 +22,8 @@ import {
   generateAliExpressSignatureMD5,
   generateAliExpressSignatureNoSecret,
   generateAliExpressSignatureWithSecret,
+  generateHmacMd5TopStyle,
+  generateHmacSha256WithBookends,
   generateTokenCreateSignature,
   generateTokenCreateSignatureMD5,
 } from './aliexpress-signature.service';
@@ -549,10 +551,11 @@ export class AliExpressDropshippingAPIService {
       });
       // Per plan: prioritize Case 2 SHA256 (no redirect_uri in signature) per WORKING_INTEGRATION_REPORT,
       // then MD5 apiPath with redirect_uri GMT+8 per ALIEXPRESS_FINAL_WORKING_REPORT, then rest.
+      const TOKEN_SIGN_PATH_ALT = '/auth/token/create';
       type TimestampMode = 'ms' | 'compact' | 'gmt8';
       const signatureVariants: Array<{
         name: string;
-        signMethod: 'sha256' | 'md5';
+        signMethod: string;
         buildSign: (params: Record<string, string>) => string;
         includeRedirectUri?: boolean;
         timestampMode: TimestampMode;
@@ -560,6 +563,9 @@ export class AliExpressDropshippingAPIService {
         { name: 'case2-no-secret-ms', signMethod: 'sha256', includeRedirectUri: false, timestampMode: 'ms', buildSign: (p) => generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, p) },
         { name: 'case2-no-secret-compact', signMethod: 'sha256', includeRedirectUri: false, timestampMode: 'compact', buildSign: (p) => generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, p) },
         { name: 'case2-no-secret-gmt8', signMethod: 'sha256', includeRedirectUri: false, timestampMode: 'gmt8', buildSign: (p) => generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, p) },
+        { name: 'case2-alt-path-ms', signMethod: 'sha256', includeRedirectUri: false, timestampMode: 'ms', buildSign: (p) => generateAliExpressSignatureNoSecret(TOKEN_SIGN_PATH_ALT, p) },
+        { name: 'hmac-sha256-bookends-ms', signMethod: 'sha256', includeRedirectUri: true, timestampMode: 'ms', buildSign: (p) => generateHmacSha256WithBookends(p, appSecret) },
+        { name: 'hmac-md5-top-ms', signMethod: 'hmac', includeRedirectUri: true, timestampMode: 'ms', buildSign: (p) => generateHmacMd5TopStyle(p, appSecret) },
         { name: 'md5-apipath-gmt8', signMethod: 'md5', includeRedirectUri: true, timestampMode: 'gmt8', buildSign: (p) => generateAliExpressSignatureMD5(this.TOKEN_CREATE_SIGN_PATH, p, appSecret) },
         { name: 'md5-apipath-ms', signMethod: 'md5', includeRedirectUri: true, timestampMode: 'ms', buildSign: (p) => generateAliExpressSignatureMD5(this.TOKEN_CREATE_SIGN_PATH, p, appSecret) },
         { name: 'md5-apipath-compact', signMethod: 'md5', includeRedirectUri: true, timestampMode: 'compact', buildSign: (p) => generateAliExpressSignatureMD5(this.TOKEN_CREATE_SIGN_PATH, p, appSecret) },
@@ -580,6 +586,8 @@ export class AliExpressDropshippingAPIService {
           let lastError: Error | null = null;
           for (const variant of signatureVariants) {
             const timestamp = variant.timestampMode === 'ms' ? timestampMs : variant.timestampMode === 'compact' ? timestampCompact : timestampGmt8;
+            // Per WORKING report: signature params are app_key, code, sign_method, timestamp (optionally redirect_uri).
+            // format=json goes in query only, not in signature.
             const paramsForSign: Record<string, string> = {
               app_key: appKey,
               code,
@@ -592,12 +600,24 @@ export class AliExpressDropshippingAPIService {
             const sign = variant.buildSign(paramsForSign);
             const queryParams: Record<string, string> = {
               ...paramsForSign,
-              sign,
             };
             if (redirectUri) {
               queryParams.redirect_uri = redirectUri;
             }
-            // URL encoding: signature uses raw values; query string uses httpClient params (axios encodes)
+            // Build URL with sign as last parameter (per AliExpress spec)
+            const encode = (v: string) => encodeURIComponent(v);
+            const qsParts: string[] = [];
+            const addParam = (k: string, v: string) => {
+              if (v != null && v !== '') qsParts.push(`${encode(k)}=${encode(v)}`);
+            };
+            addParam('app_key', queryParams.app_key);
+            addParam('code', queryParams.code);
+            addParam('format', queryParams.format || 'json');
+            addParam('timestamp', queryParams.timestamp);
+            addParam('sign_method', queryParams.sign_method);
+            if (queryParams.redirect_uri) addParam('redirect_uri', queryParams.redirect_uri);
+            qsParts.push(`sign=${encode(sign)}`);
+            const fullUrl = `${tokenUrl}?${qsParts.join('&')}`;
             logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange request', {
               tokenUrl,
               method: 'GET',
@@ -618,9 +638,7 @@ export class AliExpressDropshippingAPIService {
             });
 
             try {
-              const requestPromise = httpClient.get(tokenUrl, {
-                params: queryParams,
-              });
+              const requestPromise = httpClient.get(fullUrl);
               const response = await Promise.race([requestPromise, timeoutPromise]);
               const payload = response.data?.data ?? response.data ?? {};
               const hasAccessToken = !!String(payload.access_token || payload.accessToken || '').trim();
@@ -630,10 +648,14 @@ export class AliExpressDropshippingAPIService {
               lastResponse = response;
               const aliCode = String(payload.code || '').trim();
               if (aliCode === 'IncompleteSignature' || aliCode === 'IllegalTimestamp') {
+                const requestId = payload.request_id ?? response.data?.request_id ?? '';
                 logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Signature/timestamp variant rejected', {
                   signatureVariant: variant.name,
                   signMethod: variant.signMethod,
                   aliCode,
+                  requestId,
+                  redirectUriUsed: redirectUri,
+                  queryUrlRedacted: fullUrl.replace(/code=[^&]+/, 'code=***').replace(/sign=[^&]+/, 'sign=***'),
                 });
                 continue;
               }
@@ -651,7 +673,15 @@ export class AliExpressDropshippingAPIService {
           if (lastResponse) {
             return lastResponse;
           }
-          throw lastError || new Error('All signature variants failed for token exchange');
+          const err = lastError || new Error('All signature variants failed for token exchange');
+          if (lastResponse) {
+            const data = lastResponse.data ?? {};
+            const inner = data?.data ?? data;
+            (err as any).aliexpressRequestId = data.request_id ?? inner?.request_id ?? '';
+            (err as any).aliexpressResponse = data;
+            (err as any).redirectUriUsed = redirectUri;
+          }
+          throw err;
         },
         {
           maxRetries: 2,
@@ -725,15 +755,19 @@ export class AliExpressDropshippingAPIService {
         } else if (!aliCode && !aliMsg) {
           hint = ' Ensure redirect_uri matches exactly the one configured in AliExpress app and used in authorize URL.';
         }
+        const requestId = rawData?.request_id ?? rawData?.data?.request_id ?? '';
         logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token exchange response missing access_token', {
           responseData: rawData,
           elapsed,
           aliCode,
           aliMsg,
+          requestId,
         });
-        throw new Error(
+        const err = new Error(
           `Invalid response from AliExpress OAuth token endpoint: missing access_token.${hint}`
         );
+        (err as any).aliexpressRequestId = requestId;
+        throw err;
       }
 
       const elapsed = Date.now() - startTime;
