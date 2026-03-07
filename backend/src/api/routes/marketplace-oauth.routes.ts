@@ -617,19 +617,25 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     } catch (tokenError: any) {
       const elapsed = Date.now() - startTime;
-      const requestId = tokenError?.aliexpressRequestId ?? tokenError?.response?.data?.request_id ?? '';
+      const requestId = String(
+        tokenError?.aliexpressRequestId ??
+        tokenError?.response?.data?.request_id ??
+        tokenError?.response?.data?.data?.request_id ??
+        ''
+      ).trim();
+      const redirectUriUsed = tokenError?.redirectUriUsed ?? canonicalRedirectUri ?? '';
       logger.error('[OAuth Callback] AliExpress Dropshipping token exchange failed', {
         service: 'marketplace-oauth',
         correlationId,
         userId,
         environment,
         elapsed,
-        redirectUriUsed: canonicalRedirectUri,
+        redirectUriUsed: redirectUriUsed || canonicalRedirectUri,
         requestHost,
         tokenExchangeStatus: 'failed',
+        aliexpressRequestId: requestId || undefined,
         error: tokenError?.message || String(tokenError),
         responseData: tokenError?.response?.data,
-        aliexpressRequestId: requestId,
         status: tokenError?.response?.status,
         stack: tokenError?.stack?.substring(0, 500),
       });
@@ -653,8 +659,8 @@ router.get('/callback', async (req: Request, res: Response) => {
             <div class="error">❌ Error en la autorización</div>
             <div class="details">${errorMessage}</div>
             <div class="details" style="margin-top: 16px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; text-align: left; white-space: pre-wrap;">${redirectInstructions}</div>
-            ${requestId ? `<div class="details" style="margin-top: 12px;">Request ID de AliExpress: ${requestId}</div>` : ''}
-            <div class="details" style="margin-top: 12px;">Si contactas soporte AliExpress, indica correlationId: ${correlationId}${requestId ? ` y request_id: ${requestId}` : ''}.</div>
+            ${requestId ? `<div class="details" style="margin-top: 12px;"><strong>Request ID de AliExpress:</strong> ${requestId}</div>` : ''}
+            <div class="details" style="margin-top: 12px;">Si contactas soporte AliExpress, facilita: correlationId ${correlationId}${requestId ? `, request_id ${requestId}` : ''}${redirectUriUsed ? `, redirect_uri ${redirectUriUsed}` : ''}.</div>
             <div style="font-size: 12px; margin-top: 20px;">Redirigiendo a la aplicación...</div>
             <div style="font-size: 12px; margin-top: 10px;">Si no eres redirigido, <a href="${errorUrl}">haz clic aquí</a></div>
             <div style="text-align: center; margin-top: 30px;">
@@ -1398,6 +1404,18 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
       </html>
     `);
   }
+});
+
+// ✅ DIAGNÓSTICO: Endpoint para obtener redirect_uri canónico (copiar/pegar en AliExpress Console)
+// GET /api/marketplace-oauth/aliexpress/redirect-uri
+router.get('/aliexpress/redirect-uri', (_req: Request, res: Response) => {
+  const canonicalRedirectUri = getAliExpressDropshippingRedirectUri();
+  const instructions = getAliExpressRedirectUriInstructions();
+  return res.json({
+    redirectUri: canonicalRedirectUri,
+    instructions,
+    message: 'Copia redirectUri y pégalo en AliExpress Open Platform → My Apps → Tu app Dropshipping → OAuth Redirect URL',
+  });
 });
 
 // ✅ DIAGNÓSTICO: Endpoint para verificar estado del OAuth de AliExpress (sin información sensible)
