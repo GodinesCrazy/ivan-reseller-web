@@ -162,7 +162,7 @@ export function generateTokenCreateSignature(
   const sortedKeys = Object.keys(paramsForSigning).sort();
   const concatenatedString = sortedKeys.map(k => `${k}${paramsForSigning[k]}`).join('');
   const signatureBaseString = appSecret + concatenatedString + appSecret;
-  const signature = crypto.createHash('sha256').update(signatureBaseString, 'utf8').digest('hex').toLowerCase();
+  const signature = crypto.createHash('sha256').update(signatureBaseString, 'utf8').digest('hex').toUpperCase();
   return signature;
 }
 

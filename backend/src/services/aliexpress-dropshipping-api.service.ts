@@ -22,6 +22,7 @@ import {
   generateAliExpressSignatureWithSecret,
   generateHmacSha256WithBookends,
   generateTokenCreateSignature,
+  generateTokenCreateSignatureMD5,
 } from './aliexpress-signature.service';
 import { getAliExpressTimestamp, getAliExpressTimestampCompact } from './aliexpress-time.service';
 import { getAliExpressDropshippingRedirectUri, getAliExpressRedirectUriInstructions } from '../utils/aliexpress-dropshipping-oauth';
@@ -564,7 +565,7 @@ export class AliExpressDropshippingAPIService {
         timestampCompact,
         timestampGmt8,
       });
-      // Per plan fix_aliexpress_oauth: 6 variants, HMAC-SHA256 bookends first, Case 2 with both paths, SHA256 secret last.
+      // Per plan fix_aliexpress_oauth: extended variants - HMAC-SHA256, SHA256 hash, MD5, timestamps ms/gmt8.
       type TimestampMode = 'ms' | 'compact' | 'gmt8';
       type VariantDef = {
         name: string;
@@ -574,15 +575,21 @@ export class AliExpressDropshippingAPIService {
         includeFormat?: boolean;
         timestampMode: TimestampMode;
         signMethodOverride?: string;
-        signPathOverride?: string; // For Case 2: /auth/token/create vs /rest/auth/token/create
+        signPathOverride?: string;
       };
       const signatureVariants: VariantDef[] = [
-        { name: 'hmac-sha256-bookends', signMethod: 'sha256', includeRedirectUri: true, includeFormat: true, timestampMode: 'ms', buildSign: (p) => generateHmacSha256WithBookends(p, appSecret) },
-        { name: 'hmac-sha256-bookends-no-redirect-in-sign', signMethod: 'sha256', includeRedirectUri: false, includeFormat: true, timestampMode: 'ms', buildSign: (p) => generateHmacSha256WithBookends(p, appSecret) },
-        { name: 'hmac-sha256-bookends-4params', signMethod: 'sha256', includeRedirectUri: false, includeFormat: false, timestampMode: 'ms', buildSign: (p) => generateHmacSha256WithBookends(p, appSecret) },
+        // 1-2. Case 2 (Affiliate exact) - 4 params only, no format/redirect_uri in URL
         { name: 'case2-rest-path', signMethod: 'sha256', includeRedirectUri: false, includeFormat: false, timestampMode: 'ms', buildSign: (p) => generateAliExpressSignatureNoSecret(this.TOKEN_CREATE_SIGN_PATH, p) },
         { name: 'case2-auth-path', signMethod: 'sha256', includeRedirectUri: false, includeFormat: false, timestampMode: 'ms', signPathOverride: '/auth/token/create', buildSign: (p) => generateAliExpressSignatureNoSecret('/auth/token/create', p) },
+        // 3+. Other variants
+        { name: 'hmac-sha256-bookends', signMethod: 'sha256', includeRedirectUri: true, includeFormat: true, timestampMode: 'ms', buildSign: (p) => generateHmacSha256WithBookends(p, appSecret) },
+        { name: 'sha256-hash-secret-bookends', signMethod: 'sha256', includeRedirectUri: true, includeFormat: true, timestampMode: 'ms', buildSign: (p) => generateAliExpressSignatureWithSecret('', p, appSecret) },
         { name: 'sha256-secret-bookends', signMethod: 'sha256', includeRedirectUri: true, includeFormat: true, timestampMode: 'ms', buildSign: (p) => generateTokenCreateSignature(p, appSecret) },
+        { name: 'md5-secret-bookends', signMethod: 'md5', includeRedirectUri: true, includeFormat: true, timestampMode: 'ms', signMethodOverride: 'md5', buildSign: (p) => generateTokenCreateSignatureMD5(p, appSecret) },
+        { name: 'hmac-sha256-bookends-gmt8', signMethod: 'sha256', includeRedirectUri: true, includeFormat: true, timestampMode: 'gmt8', buildSign: (p) => generateHmacSha256WithBookends(p, appSecret) },
+        { name: 'sha256-hash-secret-bookends-gmt8', signMethod: 'sha256', includeRedirectUri: true, includeFormat: true, timestampMode: 'gmt8', buildSign: (p) => generateAliExpressSignatureWithSecret('', p, appSecret) },
+        { name: 'hmac-sha256-bookends-no-redirect-in-sign', signMethod: 'sha256', includeRedirectUri: false, includeFormat: true, timestampMode: 'ms', buildSign: (p) => generateHmacSha256WithBookends(p, appSecret) },
+        { name: 'hmac-sha256-bookends-4params', signMethod: 'sha256', includeRedirectUri: false, includeFormat: false, timestampMode: 'ms', buildSign: (p) => generateHmacSha256WithBookends(p, appSecret) },
       ];
 
       // ✅ FIX OAUTH: Retry con timeout (2 intentos con backoff). Try token/create first, then token/security/create.
@@ -614,16 +621,15 @@ export class AliExpressDropshippingAPIService {
               if (variant.includeRedirectUri && redirectUri) paramsForSign.redirect_uri = redirectUri;
               const sign = variant.buildSign(paramsForSign);
               const queryParams: Record<string, string> = { ...paramsForSign };
-              if (redirectUri) queryParams.redirect_uri = redirectUri;
               const encode = (v: string) => encodeURIComponent(v);
               const qsParts: string[] = [];
               const addParam = (k: string, v: string) => { if (v != null && v !== '') qsParts.push(`${encode(k)}=${encode(v)}`); };
               addParam('app_key', queryParams.app_key);
               addParam('code', queryParams.code);
-              addParam('format', queryParams.format || 'json');
+              if (variant.includeFormat) addParam('format', queryParams.format || 'json');
               addParam('timestamp', queryParams.timestamp);
               addParam('sign_method', queryParams.sign_method);
-              if (queryParams.redirect_uri) addParam('redirect_uri', queryParams.redirect_uri);
+              if (variant.includeRedirectUri && queryParams.redirect_uri) addParam('redirect_uri', queryParams.redirect_uri);
               qsParts.push(`sign=${encode(sign)}`);
               const fullUrl = `${currentTokenUrl}?${qsParts.join('&')}`;
               lastFullUrlRedacted = fullUrl.replace(/code=[^&]+/, 'code=***').replace(/sign=[^&]+/, 'sign=***');
@@ -646,12 +652,20 @@ export class AliExpressDropshippingAPIService {
                 const reqId = String(payload.request_id ?? response.data?.request_id ?? '').trim();
                 if (reqId) lastRequestId = reqId;
                 if (aliCode === 'IncompleteSignature' || aliCode === 'IllegalTimestamp') {
+                  const paramsSigned = Object.keys(paramsForSign).sort();
+                  const paramsInUrl = [...paramsSigned, 'sign'];
+                  const baseStringPreview = variant.name.startsWith('case2')
+                    ? `${variant.signPathOverride ?? this.TOKEN_CREATE_SIGN_PATH}+${paramsSigned.join(',')}`
+                    : `bookends+${paramsSigned.join(',')}`;
                   logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Signature variant rejected', {
                     endpoint: currentTokenUrl,
                     signatureVariant: variant.name,
                     aliCode,
                     requestId: reqId,
                     queryUrlRedacted: lastFullUrlRedacted,
+                    paramsSigned,
+                    paramsInUrl,
+                    baseStringPreview,
                   });
                   continue;
                 }
