@@ -166,7 +166,7 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
       { key: 'EBAY_APP_ID', label: 'App ID (Client ID)', required: true, type: 'text', placeholder: 'IvanMart-IVANRese-PRD-...', helpText: 'Formato: Nombre-Nombre-[SBX|PRD]-hash. Ejemplo: IvanMart-IVANRese-PRD-febbdcd65-626be473' },
       { key: 'EBAY_DEV_ID', label: 'Dev ID', required: true, type: 'text', placeholder: 'Your-DevI-PRD-...' },
       { key: 'EBAY_CERT_ID', label: 'Cert ID (Client Secret)', required: true, type: 'password', placeholder: 'PRD-...' },
-      { key: 'EBAY_REDIRECT_URI', label: 'Redirect URI (RuName o URL)', required: true, type: 'text', placeholder: 'Ivan_Marty-IvanMart-IVANRe-cgcqu o https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/ebay', helpText: 'RuName (ej. Ivan_Marty-IvanMart-IVANRe-cgcqu) O la URL completa (Auth accepted URL de eBay Developer). Debe coincidir exactamente con lo registrado.' },
+      { key: 'EBAY_REDIRECT_URI', label: 'Redirect URI (RuName o URL)', required: true, type: 'text', placeholder: 'https://www.ivanreseller.com/api/marketplace-oauth/c', helpText: 'URL completa (Auth accepted URL de eBay Developer). Ej: https://www.ivanreseller.com/api/marketplace-oauth/c. Debe coincidir EXACTAMENTE con lo registrado en eBay.' },
       { key: 'EBAY_TOKEN', label: 'User Token (opcional)', required: false, type: 'password', placeholder: 'v^1.1#i^1#...' },
     ],
   },

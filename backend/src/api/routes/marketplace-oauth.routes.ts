@@ -718,6 +718,28 @@ router.get('/callback', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/marketplace-oauth/c
+ * eBay callback alias: eBay Developer Portal puede tener "Auth accepted URL" = https://www.ivanreseller.com/api/marketplace-oauth/c
+ * Redirige internamente a /oauth/callback/ebay para reutilizar el mismo handler.
+ */
+router.get('/c', (req: Request, res: Response) => {
+  const { code, state, error, error_description } = req.query;
+  const params = new URLSearchParams();
+  if (code) params.set('code', String(code));
+  if (state) params.set('state', String(state));
+  if (error) params.set('error', String(error));
+  if (error_description) params.set('error_description', String(error_description));
+  const qs = params.toString();
+  const target = `/api/marketplace-oauth/oauth/callback/ebay${qs ? '?' + qs : ''}`;
+  logger.info('[OAuth Callback] eBay /c alias redirecting to oauth/callback/ebay', {
+    hasCode: !!code,
+    hasState: !!state,
+    hasError: !!error,
+  });
+  return res.redirect(302, target);
+});
+
 // Public callback (no auth) to complete OAuth
 router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) => {
   const startTime = Date.now();
