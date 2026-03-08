@@ -17,7 +17,6 @@ import axios, { type AxiosInstance } from 'axios';
 // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
 import { httpClient } from '../config/http-client';
 import type { AliExpressDropshippingCredentials } from '../types/api-credentials.types';
-import { getAliExpressDropshippingRedirectUri } from '../utils/aliexpress-dropshipping-oauth';
 import { generateTokenCreateSignatureHmacSystemInterface } from './aliexpress-signature.service';
 
 // Tipos de datos de la API
@@ -480,8 +479,8 @@ export class AliExpressDropshippingAPIService {
 
   /**
    * Intercambiar authorization code por access token y refresh token.
-   * Algoritmo TOP: appSecret + (key1value1+key2value2...) + appSecret, SHA256, hex uppercase.
-   * redirect_uri incluido en request y firma (exigido por AliExpress).
+   * Algoritmo: HMAC-SHA256(apiPath + sortedParams, appSecret), hex uppercase.
+   * Per ae_sdk v0.6.0: sign_method=sha256, no redirect_uri, POST method.
    */
   async exchangeCodeForToken(
     code: string,
@@ -514,16 +513,12 @@ export class AliExpressDropshippingAPIService {
     const trimmedCode = code.trim();
 
     const TOKEN_SIGN_PATH = '/auth/token/security/create';
-    const redirectUri = (_redirectUri?.trim() || getAliExpressDropshippingRedirectUri()).trim();
     const params: Record<string, string> = {
       app_key: appKey,
       code: trimmedCode,
       timestamp: Date.now().toString(),
-      sign_method: 'hmac',
+      sign_method: 'sha256',
     };
-    if (redirectUri) {
-      params.redirect_uri = redirectUri;
-    }
     const sign = generateTokenCreateSignatureHmacSystemInterface(TOKEN_SIGN_PATH, params, appSecret);
     params.sign = sign;
 
@@ -543,18 +538,18 @@ export class AliExpressDropshippingAPIService {
 
     if (process.env.NODE_ENV !== 'production') {
       const concatenated = paramsSorted.map((k) => k + params[k]).join('');
-      const preview = '[appSecret]' + concatenated + '[appSecret]';
+      const preview = TOKEN_SIGN_PATH + concatenated;
       const baseStringPreview = preview.length > 90 ? preview.substring(0, 50) + '...' + preview.slice(-20) : preview;
-      logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange debug', {
+      logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange debug (HMAC-SHA256)', {
         paramsSorted,
-        baseStringLength: appSecret.length * 2 + concatenated.length,
+        baseStringLength: TOKEN_SIGN_PATH.length + concatenated.length,
         baseStringPreview,
         signPrefix: sign.substring(0, 16) + '...',
       });
     }
 
     try {
-      const response = await httpClient.get(fullUrl, { timeout: 15000 });
+      const response = await httpClient.post(fullUrl, null, { timeout: 15000 });
       const rawData = response.data ?? response;
 
       const parseTokenResponse = (obj: any) => {
