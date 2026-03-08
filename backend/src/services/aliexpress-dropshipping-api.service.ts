@@ -17,6 +17,7 @@ import axios, { type AxiosInstance } from 'axios';
 // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
 import { httpClient } from '../config/http-client';
 import type { AliExpressDropshippingCredentials } from '../types/api-credentials.types';
+import { getAliExpressDropshippingRedirectUri } from '../utils/aliexpress-dropshipping-oauth';
 import { generateTopSignature } from './aliexpress-signature.service';
 
 // Tipos de datos de la API
@@ -479,8 +480,8 @@ export class AliExpressDropshippingAPIService {
 
   /**
    * Intercambiar authorization code por access token y refresh token.
-   * AliExpress Open Platform TOP: GET /rest/auth/token/create, params app_key, code, timestamp, sign_method, format, v, sign.
-   * redirect_uri MUST NOT be sent. Signature: appSecret + sorted_key_value_pairs + appSecret, SHA256, UPPERCASE hex.
+   * Algoritmo TOP: appSecret + (key1value1+key2value2...) + appSecret, SHA256, hex uppercase.
+   * redirect_uri incluido en request y firma (exigido por AliExpress).
    */
   async exchangeCodeForToken(
     code: string,
@@ -494,7 +495,11 @@ export class AliExpressDropshippingAPIService {
     refreshExpiresIn: number;
   }> {
     const appKey = clientId || this.credentials?.appKey;
-    const appSecret = clientSecret || this.credentials?.appSecret;
+    const appSecret = (clientSecret || this.credentials?.appSecret || '')
+      .toString()
+      .replace(/\s+/g, ' ')
+      .replace(/[\uFEFF\u00A0]/g, '')
+      .trim();
 
     if (!appKey || !appSecret) {
       throw new Error('AliExpress Dropshipping API App Key and App Secret are required for token exchange');
@@ -506,16 +511,20 @@ export class AliExpressDropshippingAPIService {
 
     const startTime = Date.now();
     const tokenUrl = this.TOKEN_CREATE_ENDPOINT;
+    const trimmedCode = code.trim();
 
+    const redirectUri = (_redirectUri?.trim() || getAliExpressDropshippingRedirectUri()).trim();
     const params: Record<string, string> = {
       app_key: appKey,
-      code: code.trim(),
+      code: trimmedCode,
       timestamp: Date.now().toString(),
       sign_method: 'sha256',
       format: 'json',
       v: '2.0',
     };
-
+    if (redirectUri) {
+      params.redirect_uri = redirectUri;
+    }
     const sign = generateTopSignature(params, appSecret);
     params.sign = sign;
 
@@ -525,57 +534,65 @@ export class AliExpressDropshippingAPIService {
     const fullUrl = `${tokenUrl}?${qs}`;
     const urlRedacted = fullUrl.replace(/code=[^&]+/, 'code=***').replace(/sign=[^&]+/, 'sign=***');
 
+    const paramsSorted = Object.keys(params).filter((k) => k !== 'sign').sort();
     logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange', {
       tokenExchangeStatus: 'started',
       endpoint: tokenUrl,
-      paramsSorted: Object.keys(params).filter((k) => k !== 'sign').sort(),
+      paramsSorted,
       urlRedacted,
     });
 
     if (process.env.NODE_ENV !== 'production') {
-      logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token params', {
-        params: { ...params, code: '***', sign: params.sign.substring(0, 16) + '...' },
+      const concatenated = paramsSorted.map((k) => k + params[k]).join('');
+      const preview = '[appSecret]' + concatenated + '[appSecret]';
+      const baseStringPreview = preview.length > 90 ? preview.substring(0, 50) + '...' + preview.slice(-20) : preview;
+      logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Token exchange debug', {
+        paramsSorted,
+        baseStringLength: appSecret.length * 2 + concatenated.length,
+        baseStringPreview,
+        signPrefix: sign.substring(0, 16) + '...',
       });
     }
 
     try {
       const response = await httpClient.get(fullUrl, { timeout: 15000 });
-
       const rawData = response.data ?? response;
+
+      const parseTokenResponse = (obj: any) => {
+        const getPayload = (o: any): Record<string, any> | null => {
+          if (!o || typeof o !== 'object') return null;
+          if (String(o.access_token || o.accessToken || '').trim()) return o;
+          const inner = o.token_result ?? o.data ?? o.token_create_response;
+          return inner ? getPayload(inner) : null;
+        };
+        const payload = getPayload(obj) ?? obj ?? {};
+        return {
+          accessToken: String(payload.access_token || payload.accessToken || '').trim(),
+          refreshToken: String(payload.refresh_token || payload.refreshToken || '').trim(),
+          expiresIn: Number(payload.expires_in || payload.expiresIn || 0) || 86400,
+          refreshExpiresIn: Number(payload.refresh_expires_in || payload.refreshExpiresIn || 0) || 2592000,
+        };
+      };
+
       const errorResp = rawData?.error_response ?? rawData?.error_response_data ?? rawData?.error;
-      if (errorResp) {
-        const code = String(errorResp.code ?? errorResp.error_code ?? '').trim();
+      if (errorResp && !rawData?.access_token && !rawData?.token_result?.access_token) {
+        const aliCode = String(errorResp.code ?? errorResp.error_code ?? '').trim();
         const msg = String(errorResp.msg ?? errorResp.sub_msg ?? errorResp.error_msg ?? errorResp.message ?? '').trim();
-        const hint = code ? ` (Code: ${code})` : '';
-        logger.error('[ALIEXPRESS-DROPSHIPPING-API] AliExpress returned error_response', {
-          code,
-          msg,
-          fullError: errorResp,
-        });
-        throw new Error(`AliExpress OAuth error: ${msg || 'Unknown error'}${hint}`);
+        const requestId = rawData?.request_id ?? rawData?.data?.request_id ?? '';
+        const err = new Error(`AliExpress OAuth error: ${msg || 'Unknown error'} (Code: ${aliCode})`);
+        (err as any).aliexpressRequestId = requestId;
+        (err as any).aliexpressResponse = rawData;
+        throw err;
       }
 
-      const getPayload = (obj: any): Record<string, any> | null => {
-        if (!obj || typeof obj !== 'object') return null;
-        if (String(obj.access_token || obj.accessToken || '').trim()) return obj;
-        const inner = obj.token_result ?? obj.data ?? obj.token_create_response;
-        return inner ? getPayload(inner) : null;
-      };
-      const payload = getPayload(rawData) ?? rawData ?? {};
-
-      const accessToken = String(payload.access_token || payload.accessToken || '').trim();
-      const refreshToken = String(payload.refresh_token || payload.refreshToken || '').trim();
-      const expiresIn = Number(payload.expires_in || payload.expiresIn || 0) || 86400;
-      const refreshExpiresIn = Number(payload.refresh_expires_in || payload.refreshExpiresIn || 0) || 2592000;
+      const { accessToken, refreshToken, expiresIn, refreshExpiresIn } = parseTokenResponse(rawData);
 
       if (!accessToken) {
-        const aliCode = String(payload.code ?? rawData?.code ?? '').trim();
-        const aliMsg = String(payload.msg ?? rawData?.msg ?? payload.error_msg ?? rawData?.error_msg ?? '').trim();
+        const aliCode = String(rawData?.code ?? '').trim();
+        const aliMsg = String(rawData?.msg ?? rawData?.error_msg ?? '').trim();
         let hint = aliCode || aliMsg ? ` AliExpress: ${aliMsg || aliCode}` : '';
         if (aliCode === 'ApiCallLimit') {
           hint += ' Espera unos minutos y vuelve a intentar.';
-        } else if (aliCode === 'IncompleteSignature') {
-          hint += ` Usa el algoritmo TOP: appSecret + params + appSecret, sin path en la firma.`;
         }
         const requestId = rawData?.request_id ?? rawData?.data?.request_id ?? '';
         const err = new Error(`Invalid response: missing access_token.${hint}`);
@@ -587,7 +604,6 @@ export class AliExpressDropshippingAPIService {
       logger.info('[ALIEXPRESS-DROPSHIPPING-API] Token exchange successful', {
         tokenExchangeStatus: 'success',
         endpoint: tokenUrl,
-        method: 'GET',
         hasAccessToken: !!accessToken,
         hasRefreshToken: !!refreshToken,
         expiresIn,
@@ -598,9 +614,9 @@ export class AliExpressDropshippingAPIService {
       return { accessToken, refreshToken, expiresIn, refreshExpiresIn };
     } catch (error: any) {
       const errorMessage =
-        error.response?.data?.error_description ||
-        error.response?.data?.error ||
-        error.message ||
+        error.response?.data?.error_description ??
+        error.response?.data?.error ??
+        error.message ??
         'Unknown error';
 
       logger.error('[ALIEXPRESS-DROPSHIPPING-API] Token exchange failed', {

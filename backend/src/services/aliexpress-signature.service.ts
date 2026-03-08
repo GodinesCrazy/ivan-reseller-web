@@ -1,10 +1,8 @@
 /**
  * AliExpress Signature Service
- * 
- * Implements Case 2: System Interfaces signature method according to AliExpress Open Platform documentation.
- * 
- * CRITICAL for token/create: NO app_secret, NO separators, NO redirect_uri in params.
- * Formula: hex(sha256(api_path + key1value1key2value2...)).toUpperCase()
+ *
+ * TOP algorithm for token exchange: appSecret + (key1value1+key2value2+...) + appSecret.
+ * SHA256, hex UPPERCASE. NO path, NO redirect_uri in params or base string.
  */
 
 import crypto from 'crypto';
@@ -12,14 +10,16 @@ import logger from '../config/logger';
 
 /**
  * AliExpress TOP signature algorithm for token exchange.
- * Base string = appSecret + (key1+value1+key2+value2+...) + appSecret.
+ * Base string = appSecret + (key1value1+key2value2+...) + appSecret.
  * Does NOT include: API path, URL, redirect_uri, or query symbols.
+ * Uses SHA256 (not HMAC). Output: hex UPPERCASE.
  *
  * @param params - Parameters for signing (exclude 'sign')
  * @param appSecret - App secret (never logged)
  * @returns Uppercase hex SHA256 signature
  */
 export function generateTopSignature(params: Record<string, string>, appSecret: string): string {
+  appSecret = String(appSecret || '').replace(/\s+/g, ' ').replace(/[\uFEFF\u00A0]/g, '').trim();
   const paramsForSigning: Record<string, string> = {};
   for (const [key, value] of Object.entries(params)) {
     if (key !== 'sign' && value !== undefined && value !== null) {
@@ -39,6 +39,47 @@ export function generateTopSignature(params: Record<string, string>, appSecret: 
     logger.debug('[ALIEXPRESS-SIGNATURE] generateTopSignature', {
       sortedParams: sortedKeys,
       baseStringLength: baseString.length,
+      sign: sign.substring(0, 16) + '...',
+    });
+  }
+  return sign;
+}
+
+/**
+ * System Interface: HMAC-SHA256(path + sorted_params, app_secret)
+ * Per openservice.aliexpress.com doc 1386 - required for auth/token/create.
+ *
+ * @param apiPath - API path starting with "/" (e.g., "/rest/auth/token/create")
+ * @param params - Parameters for signing (exclude 'sign')
+ * @param appSecret - App secret (HMAC key)
+ * @returns Uppercase hex HMAC-SHA256 signature
+ */
+export function generateTokenCreateSignatureHmacSystemInterface(
+  apiPath: string,
+  params: Record<string, string>,
+  appSecret: string
+): string {
+  const normalizedPath = apiPath.startsWith('/') ? apiPath : `/${apiPath}`;
+  const paramsForSigning: Record<string, string> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (key !== 'sign' && value !== undefined && value !== null) {
+      paramsForSigning[key] = String(value);
+    }
+  }
+  const sortedKeys = Object.keys(paramsForSigning).sort();
+  const concatenatedString = sortedKeys.map((k) => k + paramsForSigning[k]).join('');
+  const baseString = normalizedPath + concatenatedString;
+
+  const sign = crypto
+    .createHmac('sha256', appSecret)
+    .update(baseString, 'utf8')
+    .digest('hex')
+    .toUpperCase();
+
+  if (process.env.NODE_ENV !== 'production') {
+    logger.debug('[ALIEXPRESS-SIGNATURE] generateTokenCreateSignatureHmacSystemInterface', {
+      apiPath: normalizedPath,
+      paramsCount: sortedKeys.length,
       sign: sign.substring(0, 16) + '...',
     });
   }

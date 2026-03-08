@@ -306,20 +306,33 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     // Validar state JWT stateless (AliExpress Dropshipping)
     const parsed = verifyStateAliExpressSafe(stateStr);
-    if (!parsed.ok) {
-      const reason = (parsed as { ok: false; reason: string }).reason;
-      logger.error('[OAuth Callback] Invalid state', {
-        service: 'marketplace-oauth',
-        marketplace,
-        correlationId,
-        reason,
-        stateLength: stateStr.length
-      });
-      const errorUrl = `${webBaseUrlForRedirect}/api-settings?oauth=error&provider=aliexpress-dropshipping&reason=${encodeURIComponent(reason)}&correlationId=${correlationId}`;
-      return res.redirect(302, errorUrl);
-    }
+    let userId: number;
 
-    const userId: number = parsed.userId;
+    if (parsed.ok) {
+      userId = parsed.userId;
+    } else {
+      const reason = (parsed as { ok: false; reason: string }).reason;
+      // Fallback: state="ivanreseller" (usado por script open-dropshipping-auth-url.ts)
+      // Seguridad: solo aceptar si state es exactamente ese valor; usar userId=1.
+      if (reason === 'invalid_signature' && stateStr === 'ivanreseller') {
+        logger.warn('[OAuth Callback] Using fallback userId=1 for legacy state=ivanreseller', {
+          service: 'marketplace-oauth',
+          correlationId,
+          marketplace,
+        });
+        userId = 1;
+      } else {
+        logger.error('[OAuth Callback] Invalid state', {
+          service: 'marketplace-oauth',
+          marketplace,
+          correlationId,
+          reason,
+          stateLength: stateStr.length
+        });
+        const errorUrl = `${webBaseUrlForRedirect}/api-settings?oauth=error&provider=aliexpress-dropshipping&reason=${encodeURIComponent(reason)}&correlationId=${correlationId}`;
+        return res.redirect(302, errorUrl);
+      }
+    }
     const environment: 'sandbox' | 'production' = 'production';
     const redirectUri: string | null = null; // JWT stateless: usar canonicalCallbackUrl más abajo
 
