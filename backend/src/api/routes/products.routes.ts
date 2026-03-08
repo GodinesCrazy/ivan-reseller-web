@@ -38,11 +38,21 @@ const createProductSchema = z.object({
 
 const updateProductSchema = createProductSchema.partial();
 
-// ✅ PRODUCTION READY: Validación de query parameters para paginación
 const getProductsQuerySchema = z.object({
   status: z.string().optional(),
   page: z.string().optional().transform(val => val ? parseInt(val, 10) : 1).pipe(z.number().int().min(1).max(1000)),
   limit: z.string().optional().transform(val => val ? parseInt(val, 10) : 50).pipe(z.number().int().min(1).max(100)),
+  search: z.string().optional(),
+  marketplace: z.string().optional(),
+  category: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  dateField: z.enum(['createdAt', 'publishedAt']).optional().default('createdAt'),
+  priceMin: z.string().optional().transform(val => val ? parseFloat(val) : undefined),
+  priceMax: z.string().optional().transform(val => val ? parseFloat(val) : undefined),
+  hasLink: z.enum(['true', 'false']).optional(),
+  sortBy: z.enum(['createdAt', 'price', 'title', 'status', 'publishedAt']).optional().default('createdAt'),
+  sortDir: z.enum(['asc', 'desc']).optional().default('desc'),
 });
 
 // GET /api/products - Listar productos
@@ -65,13 +75,22 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
         return; // Ya se envió respuesta de setup_required
       }
     }
-    const status = validatedQuery.status;
-    
-    // ✅ PRODUCTION READY: Usar paginación con timeout de 25 segundos
     const timeoutMs = 25000;
-    const queryPromise = productService.getProducts(userId, status, {
+    const queryPromise = productService.getProducts(userId, {
+      status: validatedQuery.status,
       page: validatedQuery.page,
       limit: validatedQuery.limit,
+      search: validatedQuery.search,
+      marketplace: validatedQuery.marketplace,
+      category: validatedQuery.category,
+      dateFrom: validatedQuery.dateFrom,
+      dateTo: validatedQuery.dateTo,
+      dateField: validatedQuery.dateField,
+      priceMin: validatedQuery.priceMin,
+      priceMax: validatedQuery.priceMax,
+      hasLink: validatedQuery.hasLink,
+      sortBy: validatedQuery.sortBy,
+      sortDir: validatedQuery.sortDir,
     });
     
     const result = await queryWithTimeout(queryPromise, timeoutMs);
@@ -135,7 +154,8 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
       success: true, 
       data: { products: mappedProducts }, 
       count: mappedProducts.length,
-      pagination: result.pagination, // ✅ PRODUCTION READY: Incluir metadata de paginación
+      pagination: result.pagination,
+      aggregations: result.aggregations,
     });
   } catch (error: any) {
     const duration = Date.now() - startTime;

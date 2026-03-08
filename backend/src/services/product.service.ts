@@ -439,62 +439,119 @@ export class ProductService {
     return product;
   }
 
-  async getProducts(userId?: number, status?: string, pagination?: { page?: number; limit?: number }) {
-    const where: any = {};
-    
-    if (userId) {
-      where.userId = userId;
-    }
-    
-    if (status) {
-      where.status = status;
+  async getProducts(userId?: number, filters?: {
+    status?: string;
+    page?: number;
+    limit?: number;
+    search?: string;
+    marketplace?: string;
+    category?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    dateField?: 'createdAt' | 'publishedAt';
+    priceMin?: number;
+    priceMax?: number;
+    hasLink?: string;
+    sortBy?: string;
+    sortDir?: 'asc' | 'desc';
+  }) {
+    const baseWhere: any = {};
+    if (userId) baseWhere.userId = userId;
+
+    const where: any = { ...baseWhere };
+
+    if (filters?.status) {
+      where.status = filters.status;
     }
 
-    // ✅ PRODUCTION READY: Paginación por defecto para prevenir cargas excesivas
-    const page = pagination?.page || 1;
-    const limit = Math.min(pagination?.limit || 50, 100); // Máximo 100 items por página
+    if (filters?.search) {
+      const term = filters.search.trim();
+      const numericId = parseInt(term, 10);
+      where.OR = [
+        { title: { contains: term, mode: 'insensitive' } },
+        ...(Number.isFinite(numericId) ? [{ id: numericId }] : []),
+      ];
+    }
+
+    if (filters?.category) {
+      where.category = { contains: filters.category, mode: 'insensitive' };
+    }
+
+    const dateField = filters?.dateField || 'createdAt';
+    if (filters?.dateFrom || filters?.dateTo) {
+      where[dateField] = {};
+      if (filters.dateFrom) where[dateField].gte = new Date(filters.dateFrom);
+      if (filters.dateTo) {
+        const end = new Date(filters.dateTo);
+        end.setHours(23, 59, 59, 999);
+        where[dateField].lte = end;
+      }
+    }
+
+    if (filters?.priceMin !== undefined || filters?.priceMax !== undefined) {
+      where.OR = where.OR || undefined;
+      const priceFilter: any = {};
+      if (filters.priceMin !== undefined) priceFilter.gte = filters.priceMin;
+      if (filters.priceMax !== undefined) priceFilter.lte = filters.priceMax;
+      where.finalPrice = priceFilter;
+    }
+
+    if (filters?.marketplace) {
+      where.marketplaceListings = {
+        some: { marketplace: { equals: filters.marketplace, mode: 'insensitive' } },
+      };
+    }
+
+    if (filters?.hasLink === 'true') {
+      where.isPublished = true;
+      where.marketplaceListings = { ...where.marketplaceListings, some: { ...(where.marketplaceListings?.some || {}), listingUrl: { not: null } } };
+    }
+
+    const page = filters?.page || 1;
+    const limit = Math.min(filters?.limit || 50, 100);
     const skip = (page - 1) * limit;
 
-    // Obtener total para metadata de paginación
-    const [products, total] = await Promise.all([
+    const sortField = filters?.sortBy === 'price' ? 'finalPrice' : (filters?.sortBy || 'createdAt');
+    const sortDir = filters?.sortDir || 'desc';
+
+    const [products, total, statusGroups, categoryList] = await Promise.all([
       prisma.product.findMany({
         where,
         skip,
         take: limit,
         include: {
           user: {
-            select: {
-              id: true,
-              username: true,
-              email: true,
-            },
+            select: { id: true, username: true, email: true },
           },
           sales: {
-            select: {
-              id: true,
-              orderId: true,
-              status: true,
-            },
+            select: { id: true, orderId: true, status: true },
           },
           marketplaceListings: {
-            select: {
-              id: true,
-              marketplace: true,
-              listingId: true,
-              listingUrl: true,
-              publishedAt: true,
-            },
-            orderBy: {
-              publishedAt: 'desc',
-            },
+            select: { id: true, marketplace: true, listingId: true, listingUrl: true, publishedAt: true },
+            orderBy: { publishedAt: 'desc' },
           },
         },
-        orderBy: {
-          createdAt: 'desc',
-        },
+        orderBy: { [sortField]: sortDir },
       }),
       prisma.product.count({ where }),
+      prisma.product.groupBy({
+        by: ['status'],
+        where: baseWhere,
+        _count: { _all: true },
+      }),
+      prisma.product.findMany({
+        where: { ...baseWhere, category: { not: null } },
+        select: { category: true },
+        distinct: ['category'],
+        take: 200,
+      }),
     ]);
+
+    const byStatus: Record<string, number> = {};
+    for (const g of statusGroups) {
+      byStatus[g.status] = g._count._all;
+    }
+    const totalAll = Object.values(byStatus).reduce((s, n) => s + n, 0);
 
     return {
       products,
@@ -505,6 +562,11 @@ export class ProductService {
         totalPages: Math.ceil(total / limit),
         hasNextPage: page < Math.ceil(total / limit),
         hasPreviousPage: page > 1,
+      },
+      aggregations: {
+        totalAll,
+        byStatus,
+        categories: categoryList.map(c => c.category).filter(Boolean) as string[],
       },
     };
   }

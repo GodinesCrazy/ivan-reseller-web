@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Package,
@@ -14,7 +14,15 @@ import {
   ExternalLink,
   Calculator,
   Store,
-  Link2
+  Link2,
+  ChevronDown,
+  ChevronUp,
+  X,
+  Download,
+  ArrowUpDown,
+  Calendar,
+  DollarSign,
+  Tag
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +30,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
-import LoadingSpinner, { TableSkeleton } from '@/components/ui/LoadingSpinner';
 import { useCurrency } from '../hooks/useCurrency';
 import MetricLabelWithTooltip from '@/components/MetricLabelWithTooltip';
 import { metricTooltips } from '@/config/metricTooltips';
@@ -39,43 +46,96 @@ interface Product {
   currency?: string;
   stock: number;
   marketplace: string;
-  marketplaceUrl?: string | null; // URL del listing en el marketplace (donde está a la venta)
-  aliexpressUrl?: string | null; // URL del proveedor (origen AliExpress)
+  marketplaceUrl?: string | null;
+  aliexpressUrl?: string | null;
   status: 'PENDING' | 'APPROVED' | 'PUBLISHED' | 'REJECTED';
   imageUrl?: string;
   profit?: number;
   createdAt: string;
 }
 
+interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+interface Aggregations {
+  totalAll: number;
+  byStatus: Record<string, number>;
+  categories: string[];
+}
+
+interface ProductFilters {
+  search: string;
+  status: string;
+  marketplace: string;
+  category: string;
+  dateFrom: string;
+  dateTo: string;
+  dateField: 'createdAt' | 'publishedAt';
+  priceMin: string;
+  priceMax: string;
+  hasLink: string;
+  sortBy: string;
+  sortDir: 'asc' | 'desc';
+}
+
+const DEFAULT_FILTERS: ProductFilters = {
+  search: '',
+  status: 'ALL',
+  marketplace: 'ALL',
+  category: 'ALL',
+  dateFrom: '',
+  dateTo: '',
+  dateField: 'createdAt',
+  priceMin: '',
+  priceMax: '',
+  hasLink: '',
+  sortBy: 'createdAt',
+  sortDir: 'desc',
+};
+
+const ITEMS_PER_PAGE = 25;
+
 export default function Products() {
   const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [marketplaceFilter, setMarketplaceFilter] = useState<string>('ALL');
+  const [filters, setFilters] = useState<ProductFilters>(DEFAULT_FILTERS);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [paginationMeta, setPaginationMeta] = useState<PaginationMeta | null>(null);
+  const [aggregations, setAggregations] = useState<Aggregations | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [workflowByProduct, setWorkflowByProduct] = useState<Record<string, any>>({});
   const [approvingPending, setApprovingPending] = useState(false);
   const { formatMoney } = useCurrency();
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
-  // Batch fetch workflow status para los productos visibles (evita rate limit)
+  const updateFilter = useCallback((key: keyof ProductFilters, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+    if (key !== 'search') setCurrentPage(1);
+  }, []);
+
+  // Debounce search input
   useEffect(() => {
-    const filtered = products.filter(product => {
-      const matchesSearch = product.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.sku.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === 'ALL' || product.status === statusFilter;
-      const matchesMarketplace = marketplaceFilter === 'ALL' || product.marketplace === marketplaceFilter;
-      return matchesSearch && matchesStatus && matchesMarketplace;
-    });
-    const paginated = filtered.slice(
-      (currentPage - 1) * itemsPerPage,
-      currentPage * itemsPerPage
-    );
-    const ids = paginated.map((p) => p.id).filter(Boolean);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(filters.search);
+      setCurrentPage(1);
+    }, 400);
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+  }, [filters.search]);
+
+  // Fetch workflow statuses for visible products
+  useEffect(() => {
+    const ids = products.map((p) => p.id).filter(Boolean);
     if (ids.length === 0) return;
     api.get(`/api/products/workflow-status-batch?ids=${ids.join(',')}`)
       .then((res) => {
@@ -86,71 +146,132 @@ export default function Products() {
         }
       })
       .catch(() => {});
-  }, [products, currentPage, itemsPerPage, searchTerm, statusFilter, marketplaceFilter]);
+  }, [products]);
 
-  useEffect(() => {
-    // ✅ FIX: Pequeño delay para permitir que useSetupCheck verifique primero
-    const timer = setTimeout(() => {
-      fetchProducts();
-    }, 100);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Refetch products every 10s so Autopilot-published products appear without manual refresh
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchProducts(true).catch(() => {});
-    }, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchProducts = async (silent = false) => {
+  const fetchProducts = useCallback(async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const response = await api.get('/api/products');
-      // ✅ FIX: Si es setup_required, no procesar (se manejará en App.tsx)
-      if (response.data?.setupRequired === true || response.data?.error === 'setup_required') {
-        return; // El hook useSetupCheck redirigirá
-      }
-      // El backend devuelve: { success: true, data: { products: [...] }, count: ... }
-      const productsData = response.data?.data?.products || response.data?.products || response.data || [];
+      const params = new URLSearchParams();
+      if (filters.status !== 'ALL') params.set('status', filters.status);
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (filters.marketplace !== 'ALL') params.set('marketplace', filters.marketplace);
+      if (filters.category !== 'ALL') params.set('category', filters.category);
+      if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
+      if (filters.dateTo) params.set('dateTo', filters.dateTo);
+      if (filters.dateFrom || filters.dateTo) params.set('dateField', filters.dateField);
+      if (filters.priceMin) params.set('priceMin', filters.priceMin);
+      if (filters.priceMax) params.set('priceMax', filters.priceMax);
+      if (filters.hasLink) params.set('hasLink', filters.hasLink);
+      params.set('sortBy', filters.sortBy);
+      params.set('sortDir', filters.sortDir);
+      params.set('page', String(currentPage));
+      params.set('limit', String(ITEMS_PER_PAGE));
+
+      const response = await api.get(`/api/products?${params}`);
+      if (response.data?.setupRequired === true || response.data?.error === 'setup_required') return;
+
+      const productsData = response.data?.data?.products || response.data?.products || [];
       setProducts(Array.isArray(productsData) ? productsData : []);
+      if (response.data?.pagination) setPaginationMeta(response.data.pagination);
+      if (response.data?.aggregations) setAggregations(response.data.aggregations);
     } catch (error: any) {
-      // ✅ FIX: Si es setup_required, no mostrar error
-      if (error.response?.data?.setupRequired === true || error.response?.data?.error === 'setup_required') {
-        return; // El hook useSetupCheck redirigirá
-      }
+      if (error.response?.data?.setupRequired === true || error.response?.data?.error === 'setup_required') return;
       console.error('Error fetching products:', error);
-      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || 'Error al cargar productos';
-      toast.error(errorMessage);
+      if (!silent) toast.error(error?.response?.data?.error || 'Error al cargar productos');
     } finally {
       setLoading(false);
     }
+  }, [filters.status, filters.marketplace, filters.category, filters.dateFrom, filters.dateTo, filters.dateField, filters.priceMin, filters.priceMax, filters.hasLink, filters.sortBy, filters.sortDir, debouncedSearch, currentPage]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => { fetchProducts(); }, 100);
+    return () => clearTimeout(timer);
+  }, [fetchProducts]);
+
+  useEffect(() => {
+    const interval = setInterval(() => { fetchProducts(true).catch(() => {}); }, 15000);
+    return () => clearInterval(interval);
+  }, [fetchProducts]);
+
+  const resetFilters = () => {
+    setFilters(DEFAULT_FILTERS);
+    setDebouncedSearch('');
+    setCurrentPage(1);
   };
 
+  // Active filter chips
+  const activeFilters: { key: keyof ProductFilters; label: string; value: string }[] = [];
+  if (filters.status !== 'ALL') activeFilters.push({ key: 'status', label: 'Status', value: filters.status });
+  if (filters.marketplace !== 'ALL') activeFilters.push({ key: 'marketplace', label: 'Marketplace', value: filters.marketplace });
+  if (filters.category !== 'ALL') activeFilters.push({ key: 'category', label: 'Categoria', value: filters.category });
+  if (filters.dateFrom) activeFilters.push({ key: 'dateFrom', label: 'Desde', value: filters.dateFrom });
+  if (filters.dateTo) activeFilters.push({ key: 'dateTo', label: 'Hasta', value: filters.dateTo });
+  if (filters.priceMin) activeFilters.push({ key: 'priceMin', label: 'Precio min', value: `$${filters.priceMin}` });
+  if (filters.priceMax) activeFilters.push({ key: 'priceMax', label: 'Precio max', value: `$${filters.priceMax}` });
+  if (filters.hasLink) activeFilters.push({ key: 'hasLink', label: 'Con enlace', value: filters.hasLink === 'true' ? 'Si' : 'No' });
+  if (debouncedSearch) activeFilters.push({ key: 'search', label: 'Busqueda', value: debouncedSearch });
+
+  const removeFilter = (key: keyof ProductFilters) => {
+    const defaults = DEFAULT_FILTERS;
+    updateFilter(key, defaults[key]);
+  };
+
+  // Stats from aggregations
+  const stats = {
+    total: aggregations?.totalAll ?? products.length,
+    pending: aggregations?.byStatus?.PENDING ?? 0,
+    approved: aggregations?.byStatus?.APPROVED ?? 0,
+    published: aggregations?.byStatus?.PUBLISHED ?? 0,
+  };
+
+  // Summary for visible page
+  const pageRevenue = products.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
+  const pageProfit = products.reduce((sum, p) => sum + (Number(p.profit) || 0), 0);
+
+  // CSV Export
+  const exportToCSV = () => {
+    const csv = [
+      ['ID', 'Titulo', 'Status', 'Marketplace', 'Precio', 'Beneficio', 'URL Marketplace', 'URL Proveedor', 'Fecha'].join(','),
+      ...products.map(p => [
+        p.id,
+        `"${(p.title || '').replace(/"/g, '""')}"`,
+        p.status,
+        p.marketplace,
+        p.price,
+        p.profit || 0,
+        p.marketplaceUrl || '',
+        p.aliexpressUrl || '',
+        new Date(p.createdAt).toLocaleDateString()
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `productos_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    toast.success('CSV exportado');
+  };
+
+  // Action handlers (unchanged logic)
   const handleApprove = async (productId: string) => {
     try {
       const response = await api.patch(`/api/products/${productId}/status`, { status: 'APPROVED' });
-      const message = response.data?.message || 'Producto aprobado';
-      toast.success(message);
+      toast.success(response.data?.message || 'Producto aprobado');
       fetchProducts();
     } catch (error: any) {
-      console.error('Error approving product:', error);
-      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || 'Error al aprobar producto';
-      toast.error(errorMessage);
+      toast.error(error?.response?.data?.error || 'Error al aprobar producto');
     }
   };
 
   const handleReject = async (productId: string) => {
     try {
       const response = await api.patch(`/api/products/${productId}/status`, { status: 'REJECTED' });
-      const message = response.data?.message || 'Producto rechazado';
-      toast.success(message);
+      toast.success(response.data?.message || 'Producto rechazado');
       fetchProducts();
     } catch (error: any) {
-      console.error('Error rejecting product:', error);
-      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || 'Error al rechazar producto';
-      toast.error(errorMessage);
+      toast.error(error?.response?.data?.error || 'Error al rechazar producto');
     }
   };
 
@@ -158,22 +279,15 @@ export default function Products() {
     try {
       const response = await api.post(`/api/publisher/approve/${productId}`, { marketplaces: ['ebay'] });
       const data = response.data;
-
       if (data?.jobQueued === true) {
-        toast.success(
-          'Producto en cola de publicación. Recibirás notificación cuando termine; actualiza la lista para ver el enlace.',
-          { duration: 6000 }
-        );
+        toast.success('Producto en cola de publicacion.', { duration: 6000 });
       } else if (data?.publishResults && Array.isArray(data.publishResults)) {
-        const successCount = data.publishResults.filter((r: any) => r.success).length;
-        const totalCount = data.publishResults.length;
-        if (successCount === totalCount && totalCount > 0) {
-          toast.success(`Producto publicado en ${successCount} marketplace(s). Revisa el enlace en la columna Enlaces.`);
-        } else if (successCount > 0) {
-          toast.success(`Publicado en ${successCount}/${totalCount} marketplace(s). Revisa Enlaces.`);
-        } else {
-          const failed = data.publishResults.filter((r: any) => !r.success);
-          const errMsg = failed.map((r: any) => `${r.marketplace}: ${r.error || 'Error'}`).join('. ');
+        const ok = data.publishResults.filter((r: any) => r.success).length;
+        const total = data.publishResults.length;
+        if (ok === total && total > 0) toast.success(`Publicado en ${ok} marketplace(s).`);
+        else if (ok > 0) toast.success(`Publicado en ${ok}/${total} marketplace(s).`);
+        else {
+          const errMsg = data.publishResults.filter((r: any) => !r.success).map((r: any) => `${r.marketplace}: ${r.error || 'Error'}`).join('. ');
           toast.error(errMsg || 'Error al publicar');
         }
       } else {
@@ -181,42 +295,31 @@ export default function Products() {
       }
       fetchProducts();
     } catch (error: any) {
-      console.error('Error publishing product:', error);
       const res = error?.response?.data;
-      const errorMessage = res?.message || res?.error || error?.message || 'Error al publicar producto';
-      if (res?.action === 'configure_credentials' || res?.missingCredentials?.length) {
-        toast.error(`${errorMessage} Configura credenciales en Configuración.`);
-      } else {
-        toast.error(errorMessage);
-      }
+      const msg = res?.message || res?.error || error?.message || 'Error al publicar';
+      toast.error(res?.action === 'configure_credentials' ? `${msg} Configura credenciales.` : msg);
     }
   };
 
   const handleUnpublish = async (productId: string) => {
-    if (!confirm('¿Despublicar este producto? Se retirará de los marketplaces y el estado pasará a APPROVED.')) return;
+    if (!confirm('Despublicar este producto?')) return;
     try {
       const response = await api.post(`/api/products/${productId}/unpublish`);
-      const message = response.data?.message || 'Producto despublicado';
-      toast.success(message);
+      toast.success(response.data?.message || 'Producto despublicado');
       fetchProducts();
     } catch (error: any) {
-      const err = error?.response?.data?.error || error?.response?.data?.message || 'Error al despublicar';
-      toast.error(err);
+      toast.error(error?.response?.data?.error || 'Error al despublicar');
     }
   };
 
   const handleDelete = async (productId: string) => {
-    if (!confirm('¿Estás seguro de eliminar este producto?')) return;
-
+    if (!confirm('Eliminar este producto?')) return;
     try {
       const response = await api.delete(`/api/products/${productId}`);
-      const message = response.data?.message || 'Producto eliminado';
-      toast.success(message);
+      toast.success(response.data?.message || 'Producto eliminado');
       fetchProducts();
     } catch (error: any) {
-      console.error('Error deleting product:', error);
-      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || 'Error al eliminar producto';
-      toast.error(errorMessage);
+      toast.error(error?.response?.data?.error || 'Error al eliminar producto');
     }
   };
 
@@ -230,36 +333,22 @@ export default function Products() {
     return <Badge variant={variants[status] || 'secondary'}>{status}</Badge>;
   };
 
-  // Filtrado
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.sku.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || product.status === statusFilter;
-    const matchesMarketplace = marketplaceFilter === 'ALL' || product.marketplace === marketplaceFilter;
-    return matchesSearch && matchesStatus && matchesMarketplace;
-  });
+  const totalFiltered = paginationMeta?.total ?? products.length;
+  const totalPages = paginationMeta?.totalPages ?? 1;
 
-  // Paginación
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-  const paginatedProducts = filteredProducts.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  const stats = {
-    total: products.length,
-    pending: products.filter(p => p.status === 'PENDING').length,
-    approved: products.filter(p => p.status === 'APPROVED').length,
-    published: products.filter(p => p.status === 'PUBLISHED').length
-  };
+  const selectClass = "px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200";
 
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
       <div>
         <div className="flex justify-between items-center flex-wrap gap-2">
-          <h1 className="text-3xl font-bold text-gray-900">Productos</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Productos</h1>
           <div className="flex gap-2">
+            <Button variant="outline" className="flex gap-2" onClick={exportToCSV} title="Exportar productos visibles a CSV">
+              <Download className="w-4 h-4" />
+              Exportar CSV
+            </Button>
             {stats.pending > 0 && (
               <Button
                 variant="outline"
@@ -269,8 +358,7 @@ export default function Products() {
                   setApprovingPending(true);
                   try {
                     const res = await api.post('/api/products/approve-pending');
-                    const msg = res.data?.message || 'Productos procesados';
-                    toast.success(msg);
+                    toast.success(res.data?.message || 'Productos procesados');
                     fetchProducts();
                   } catch (e: any) {
                     toast.error(e?.response?.data?.error || 'Error al procesar pendientes');
@@ -288,55 +376,55 @@ export default function Products() {
             </Button>
           </div>
         </div>
-        <p className="text-gray-600 mt-0.5">Productos aprobados y publicados en marketplaces</p>
+        <p className="text-gray-600 dark:text-gray-400 mt-0.5">Productos aprobados y publicados en marketplaces</p>
         <div className="mt-3">
           <CycleStepsBreadcrumb currentStep={3} />
         </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="cursor-pointer hover:ring-2 hover:ring-blue-300 transition-shadow" onClick={() => { updateFilter('status', 'ALL'); }}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Total Products</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total</p>
+                <p className="text-2xl font-bold">{stats.total.toLocaleString()}</p>
               </div>
               <Package className="w-8 h-8 text-blue-600" />
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="cursor-pointer hover:ring-2 hover:ring-yellow-300 transition-shadow" onClick={() => { updateFilter('status', filters.status === 'PENDING' ? 'ALL' : 'PENDING'); }}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Pendientes</p>
-                <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Pendientes</p>
+                <p className="text-2xl font-bold text-yellow-600">{(stats.pending).toLocaleString()}</p>
               </div>
               <Clock className="w-8 h-8 text-yellow-600" />
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="cursor-pointer hover:ring-2 hover:ring-green-300 transition-shadow" onClick={() => { updateFilter('status', filters.status === 'APPROVED' ? 'ALL' : 'APPROVED'); }}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Approved</p>
-                <p className="text-2xl font-bold text-green-600">{stats.approved}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Aprobados</p>
+                <p className="text-2xl font-bold text-green-600">{(stats.approved).toLocaleString()}</p>
               </div>
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="cursor-pointer hover:ring-2 hover:ring-purple-300 transition-shadow" onClick={() => { updateFilter('status', filters.status === 'PUBLISHED' ? 'ALL' : 'PUBLISHED'); }}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Publicados</p>
-                <p className="text-2xl font-bold text-blue-600">{stats.published}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Publicados</p>
+                <p className="text-2xl font-bold text-purple-600">{(stats.published).toLocaleString()}</p>
               </div>
-              <Upload className="w-8 h-8 text-blue-600" />
+              <Upload className="w-8 h-8 text-purple-600" />
             </div>
           </CardContent>
         </Card>
@@ -344,38 +432,56 @@ export default function Products() {
 
       {/* Filters */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="w-5 h-5" />
-            Filters
-          </CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="w-5 h-5" />
+              Filtros
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              {activeFilters.length > 0 && (
+                <Button variant="ghost" onClick={resetFilters} className="text-xs text-gray-500 hover:text-red-500 h-8 px-2">
+                  Limpiar todo
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className="text-xs flex items-center gap-1 h-8 px-2"
+              >
+                {showAdvancedFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                {showAdvancedFilters ? 'Menos filtros' : 'Mas filtros'}
+              </Button>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Row 1: Basic filters (always visible) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
-                placeholder="Buscar por título o SKU..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por titulo o ID..."
+                value={filters.search}
+                onChange={(e) => updateFilter('search', e.target.value)}
                 className="pl-10"
               />
             </div>
             <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              value={filters.status}
+              onChange={(e) => updateFilter('status', e.target.value)}
+              className={selectClass}
             >
-              <option value="ALL">All Status</option>
-              <option value="PENDING">Pending</option>
-              <option value="APPROVED">Approved</option>
-              <option value="PUBLISHED">Published</option>
-              <option value="REJECTED">Rejected</option>
+              <option value="ALL">Todos los estados</option>
+              <option value="PENDING">Pendiente</option>
+              <option value="APPROVED">Aprobado</option>
+              <option value="PUBLISHED">Publicado</option>
+              <option value="REJECTED">Rechazado</option>
             </select>
             <select
-              value={marketplaceFilter}
-              onChange={(e) => setMarketplaceFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              value={filters.marketplace}
+              onChange={(e) => updateFilter('marketplace', e.target.value)}
+              className={selectClass}
             >
               <option value="ALL">Todos los marketplaces</option>
               <option value="EBAY">eBay</option>
@@ -383,192 +489,297 @@ export default function Products() {
               <option value="MERCADOLIBRE">MercadoLibre</option>
             </select>
           </div>
+
+          {/* Row 2-3: Advanced filters (collapsible) */}
+          {showAdvancedFilters && (
+            <div className="space-y-4 pt-2 border-t border-gray-100 dark:border-gray-700">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* Category */}
+                <div>
+                  <label className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <Tag className="w-3 h-3" /> Categoria
+                  </label>
+                  <select
+                    value={filters.category}
+                    onChange={(e) => updateFilter('category', e.target.value)}
+                    className={selectClass + ' w-full'}
+                  >
+                    <option value="ALL">Todas</option>
+                    {(aggregations?.categories || []).map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                {/* Date field selector */}
+                <div>
+                  <label className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <Calendar className="w-3 h-3" /> Tipo de fecha
+                  </label>
+                  <select
+                    value={filters.dateField}
+                    onChange={(e) => updateFilter('dateField', e.target.value)}
+                    className={selectClass + ' w-full'}
+                  >
+                    <option value="createdAt">Fecha creacion</option>
+                    <option value="publishedAt">Fecha publicacion</option>
+                  </select>
+                </div>
+                {/* Date from */}
+                <div>
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Desde</label>
+                  <input
+                    type="date"
+                    value={filters.dateFrom}
+                    onChange={(e) => updateFilter('dateFrom', e.target.value)}
+                    className={selectClass + ' w-full'}
+                  />
+                </div>
+                {/* Date to */}
+                <div>
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Hasta</label>
+                  <input
+                    type="date"
+                    value={filters.dateTo}
+                    onChange={(e) => updateFilter('dateTo', e.target.value)}
+                    className={selectClass + ' w-full'}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* Price min */}
+                <div>
+                  <label className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <DollarSign className="w-3 h-3" /> Precio minimo
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={filters.priceMin}
+                    onChange={(e) => updateFilter('priceMin', e.target.value)}
+                  />
+                </div>
+                {/* Price max */}
+                <div>
+                  <label className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <DollarSign className="w-3 h-3" /> Precio maximo
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="999.99"
+                    value={filters.priceMax}
+                    onChange={(e) => updateFilter('priceMax', e.target.value)}
+                  />
+                </div>
+                {/* Has marketplace link */}
+                <div>
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">Enlace marketplace</label>
+                  <select
+                    value={filters.hasLink}
+                    onChange={(e) => updateFilter('hasLink', e.target.value)}
+                    className={selectClass + ' w-full'}
+                  >
+                    <option value="">Todos</option>
+                    <option value="true">Con enlace</option>
+                    <option value="false">Sin enlace</option>
+                  </select>
+                </div>
+                {/* Sort */}
+                <div>
+                  <label className="flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <ArrowUpDown className="w-3 h-3" /> Ordenar por
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      value={filters.sortBy}
+                      onChange={(e) => updateFilter('sortBy', e.target.value)}
+                      className={selectClass + ' flex-1'}
+                    >
+                      <option value="createdAt">Fecha creacion</option>
+                      <option value="publishedAt">Fecha publicacion</option>
+                      <option value="price">Precio</option>
+                      <option value="title">Titulo</option>
+                      <option value="status">Estado</option>
+                    </select>
+                    <button
+                      onClick={() => updateFilter('sortDir', filters.sortDir === 'asc' ? 'desc' : 'asc')}
+                      className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 text-sm"
+                      title={filters.sortDir === 'asc' ? 'Ascendente' : 'Descendente'}
+                    >
+                      {filters.sortDir === 'asc' ? '↑' : '↓'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Active filter chips */}
+          {activeFilters.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-2">
+              {activeFilters.map(af => (
+                <span
+                  key={af.key}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-700"
+                >
+                  {af.label}: {af.value}
+                  <button onClick={() => removeFilter(af.key)} className="ml-0.5 hover:text-red-500">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+              <button onClick={resetFilters} className="text-xs text-gray-400 hover:text-red-500 underline ml-1">
+                Limpiar todos
+              </button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Products Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>Products List ({filteredProducts.length})</CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle>Productos ({totalFiltered.toLocaleString()})</CardTitle>
+            <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+              <span>Revenue pagina: <strong className="text-gray-700 dark:text-gray-200">{formatCurrencySimple(pageRevenue, 'USD')}</strong></span>
+              <span>Beneficio pagina: <strong className="text-green-600">{formatCurrencySimple(pageProfit, 'USD')}</strong></span>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Cargando productos...</p>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600 dark:text-gray-400">Cargando productos...</p>
             </div>
-          ) : paginatedProducts.length === 0 ? (
+          ) : products.length === 0 ? (
             <div className="text-center py-12 max-w-md mx-auto">
               <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="font-medium text-gray-700 mb-2">Sin productos</p>
-              <p className="text-sm text-gray-600 mb-4">No tienes productos publicados. El ciclo comienza en Tendencias → Oportunidades → Publicación. Los productos aparecen aquí tras aprobar y publicar.</p>
-              <Button onClick={() => navigate('/dashboard?tab=trends')}>Comenzar ciclo (Tendencias)</Button>
+              <p className="font-medium text-gray-700 dark:text-gray-300 mb-2">Sin productos</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                {activeFilters.length > 0
+                  ? 'No hay productos que coincidan con los filtros aplicados.'
+                  : 'No tienes productos publicados. El ciclo comienza en Tendencias.'}
+              </p>
+              {activeFilters.length > 0 ? (
+                <Button variant="outline" onClick={resetFilters}>Limpiar filtros</Button>
+              ) : (
+                <Button onClick={() => navigate('/dashboard?tab=trends')}>Comenzar ciclo (Tendencias)</Button>
+              )}
             </div>
           ) : (
             <>
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gray-50 border-b">
+                  <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SKU</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Marketplace</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Enlaces</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Precio</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Workflow</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Beneficio</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Producto</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">SKU</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Marketplace</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Enlaces</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Precio</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Estado</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Workflow</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Beneficio</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {paginatedProducts.map((product) => (
-                      <>
-                        <tr key={product.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3">
-                            <div
-                              className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 -m-2 p-2 rounded"
-                              onClick={() => { setSelectedProduct(product); setShowModal(true); }}
-                            >
-                              {product.imageUrl ? (
-                                <img src={product.imageUrl} alt={product.title} className="w-10 h-10 rounded object-cover" />
-                              ) : (
-                                <div className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center">
-                                  <Package className="w-5 h-5 text-gray-400" />
-                                </div>
-                              )}
-                              <span className="font-medium text-gray-900 max-w-xs truncate">{product.title}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{product.sku}</td>
-                          <td className="px-4 py-3">
-                            <Badge variant="outline">{product.marketplace}</Badge>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex flex-col gap-1">
-                              {product.marketplaceUrl && (
-                                <a
-                                  href={product.marketplaceUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-blue-600 hover:underline text-sm"
-                                >
-                                  <ExternalLink className="w-4 h-4 shrink-0" />
-                                  Ver en {product.marketplace}
-                                </a>
-                              )}
-                              {product.aliexpressUrl && (
-                                <a
-                                  href={product.aliexpressUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-gray-600 hover:underline text-sm"
-                                >
-                                  <Link2 className="w-4 h-4 shrink-0" />
-                                  Proveedor
-                                </a>
-                              )}
-                              {!product.marketplaceUrl && !product.aliexpressUrl && (
-                                <span className="text-gray-400 text-sm">—</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                            {formatCurrencySimple(product.price, product.currency || 'USD')}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{product.stock}</td>
-                          <td className="px-4 py-3">{getStatusBadge(product.status)}</td>
-                          <td className="px-4 py-3">
-                            <WorkflowStatusIndicator 
-                              productId={Number(product.id)} 
-                              preloadedCurrentStage={workflowByProduct[product.id]?.currentStage}
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            {product.profit && (
-                              <span className="text-sm font-medium text-green-600">
-                                +{formatCurrencySimple(product.profit, product.currency || 'USD')}
-                              </span>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {products.map((product) => (
+                      <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <td className="px-4 py-3">
+                          <div
+                            className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 -m-2 p-2 rounded"
+                            onClick={() => { setSelectedProduct(product); setShowModal(true); }}
+                          >
+                            {product.imageUrl ? (
+                              <img src={product.imageUrl} alt={product.title} className="w-10 h-10 rounded object-cover" />
+                            ) : (
+                              <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded flex items-center justify-center">
+                                <Package className="w-5 h-5 text-gray-400" />
+                              </div>
                             )}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              {/* Botón Preview - Ojo */}
-                              <button
-                                onClick={() => {
-                                  navigate(`/products/${product.id}/preview`);
-                                }}
-                                className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                title="Preview de publicación"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              {/* Botón Información Financiera - Calculadora */}
-                              <button
-                                onClick={() => navigate(`/products/${product.id}/preview?showFinancial=true`)}
-                                className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                                title="Ver información financiera (ganancia, margen, costos)"
-                                aria-label="Ver información financiera"
-                              >
-                                <Calculator className="w-4 h-4 text-purple-600" />
-                              </button>
-                              {product.status === 'PENDING' && (
-                                <>
-                                  <button
-                                    onClick={() => handleApprove(product.id)}
-                                    className="p-1 text-green-600 hover:bg-green-50 rounded"
-                                    title="Approve"
-                                  >
-                                    <CheckCircle className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleReject(product.id)}
-                                    className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                    title="Reject"
-                                  >
-                                    <XCircle className="w-4 h-4" />
-                                  </button>
-                                </>
-                              )}
-                              {product.status === 'APPROVED' && (
-                                <button
-                                  onClick={() => handlePublish(product.id)}
-                                  className="p-1 text-purple-600 hover:bg-purple-50 rounded"
-                                  title="Publish"
-                                >
-                                  <Upload className="w-4 h-4" />
+                            <span className="font-medium text-gray-900 dark:text-gray-100 max-w-xs truncate">{product.title}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{product.sku}</td>
+                        <td className="px-4 py-3">
+                          <Badge variant="outline">{product.marketplace}</Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-1">
+                            {product.marketplaceUrl && (
+                              <a href={product.marketplaceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:underline text-sm">
+                                <ExternalLink className="w-4 h-4 shrink-0" />
+                                Ver en {product.marketplace}
+                              </a>
+                            )}
+                            {product.aliexpressUrl && (
+                              <a href={product.aliexpressUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:underline text-sm">
+                                <Link2 className="w-4 h-4 shrink-0" />
+                                Proveedor
+                              </a>
+                            )}
+                            {!product.marketplaceUrl && !product.aliexpressUrl && (
+                              <span className="text-gray-400 text-sm">—</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {formatCurrencySimple(product.price, product.currency || 'USD')}
+                        </td>
+                        <td className="px-4 py-3">{getStatusBadge(product.status)}</td>
+                        <td className="px-4 py-3">
+                          <WorkflowStatusIndicator
+                            productId={Number(product.id)}
+                            preloadedCurrentStage={workflowByProduct[product.id]?.currentStage}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          {product.profit ? (
+                            <span className="text-sm font-medium text-green-600">
+                              +{formatCurrencySimple(product.profit, product.currency || 'USD')}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button onClick={() => navigate(`/products/${product.id}/preview`)} className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors" title="Preview">
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => navigate(`/products/${product.id}/preview?showFinancial=true`)} className="p-1 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded transition-colors" title="Info financiera">
+                              <Calculator className="w-4 h-4" />
+                            </button>
+                            {product.status === 'PENDING' && (
+                              <>
+                                <button onClick={() => handleApprove(product.id)} className="p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded" title="Aprobar">
+                                  <CheckCircle className="w-4 h-4" />
                                 </button>
-                              )}
-                              {product.status === 'PUBLISHED' && (
-                                <button
-                                  onClick={() => handleUnpublish(product.id)}
-                                  className="p-1 text-amber-600 hover:bg-amber-50 rounded"
-                                  title="Despublicar"
-                                >
-                                  <Archive className="w-4 h-4" />
+                                <button onClick={() => handleReject(product.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Rechazar">
+                                  <XCircle className="w-4 h-4" />
                                 </button>
-                              )}
-                              <button
-                                onClick={() => handleDelete(product.id)}
-                                className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-4 h-4" />
+                              </>
+                            )}
+                            {product.status === 'APPROVED' && (
+                              <button onClick={() => handlePublish(product.id)} className="p-1 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded" title="Publicar">
+                                <Upload className="w-4 h-4" />
                               </button>
-                            </div>
-                          </td>
-                        </tr>
-                        {/* Barra de progreso del workflow */}
-                        <tr key={`${product.id}-workflow`} className="bg-gray-50">
-                          <td colSpan={10} className="px-4 py-2">
-                            <WorkflowProgressBar 
-                              productId={Number(product.id)} 
-                              preloadedStatus={workflowByProduct[product.id]}
-                            />
-                          </td>
-                        </tr>
-                      </>
+                            )}
+                            {product.status === 'PUBLISHED' && (
+                              <button onClick={() => handleUnpublish(product.id)} className="p-1 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded" title="Despublicar">
+                                <Archive className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button onClick={() => handleDelete(product.id)} className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Eliminar">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
@@ -576,24 +787,23 @@ export default function Products() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                  <p className="text-sm text-gray-600">
-                    Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredProducts.length)} of {filteredProducts.length} products
+                <div className="flex items-center justify-between mt-4 pt-4 border-t dark:border-gray-700">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Pagina {currentPage} de {totalPages} ({totalFiltered.toLocaleString()} productos)
                   </p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      Previous
+                  <div className="flex gap-2 items-center">
+                    <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
+                      Primera
                     </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                    >
-                      Next
+                    <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                      Anterior
+                    </Button>
+                    <span className="text-sm font-medium px-2">{currentPage}</span>
+                    <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                      Siguiente
+                    </Button>
+                    <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>
+                      Ultima
                     </Button>
                   </div>
                 </div>
@@ -606,18 +816,14 @@ export default function Products() {
       {/* Product Detail Modal */}
       {showModal && selectedProduct && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Product Details</h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-2 hover:bg-gray-100 rounded"
-              >
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b dark:border-gray-700 flex items-center justify-between">
+              <h2 className="text-2xl font-bold dark:text-gray-100">Detalles del producto</h2>
+              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
             <div className="p-6 space-y-4">
-              {/* ✅ Imagen del producto en el modal de detalles */}
               {selectedProduct.imageUrl ? (
                 <div className="flex justify-center">
                   <img
@@ -625,14 +831,13 @@ export default function Products() {
                     alt={selectedProduct.title}
                     className="w-full max-w-md h-64 object-cover rounded-lg shadow-md"
                     onError={(e) => {
-                      // Si la imagen falla, mostrar placeholder
                       const target = e.target as HTMLImageElement;
                       target.style.display = 'none';
                       const placeholder = target.nextElementSibling as HTMLElement;
                       if (placeholder) placeholder.style.display = 'flex';
                     }}
                   />
-                  <div className="w-full max-w-md h-64 bg-gray-200 rounded-lg flex items-center justify-center hidden">
+                  <div className="w-full max-w-md h-64 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center hidden">
                     <div className="text-center">
                       <Package className="w-16 h-16 text-gray-400 mx-auto mb-2" />
                       <p className="text-gray-500 text-sm">Imagen no disponible</p>
@@ -641,7 +846,7 @@ export default function Products() {
                 </div>
               ) : (
                 <div className="flex justify-center">
-                  <div className="w-full max-w-md h-64 bg-gray-200 rounded-lg flex items-center justify-center">
+                  <div className="w-full max-w-md h-64 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
                     <div className="text-center">
                       <Package className="w-16 h-16 text-gray-400 mx-auto mb-2" />
                       <p className="text-gray-500 text-sm">Sin imagen</p>
@@ -651,35 +856,27 @@ export default function Products() {
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-gray-600">Title</p>
-                  <p className="font-medium">{selectedProduct.title}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Titulo</p>
+                  <p className="font-medium dark:text-gray-100">{selectedProduct.title}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">SKU</p>
-                  <p className="font-medium">{selectedProduct.sku}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">SKU</p>
+                  <p className="font-medium dark:text-gray-100">{selectedProduct.sku}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Price</p>
-                  <p className="font-medium text-lg">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Precio</p>
+                  <p className="font-medium text-lg dark:text-gray-100">
                     {formatCurrencySimple(selectedProduct.price, selectedProduct.currency || 'USD')}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Stock</p>
-                  <p className="font-medium">{selectedProduct.stock} units</p>
-                </div>
-                <div>
-                  <MetricLabelWithTooltip
-                    label="Marketplace"
-                    tooltipBody={metricTooltips.marketplace.body}
-                    className="text-sm text-gray-600"
-                  >
-                    <p className="text-sm text-gray-600">Marketplace</p>
+                  <MetricLabelWithTooltip label="Marketplace" tooltipBody={metricTooltips.marketplace.body} className="text-sm text-gray-600 dark:text-gray-400">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Marketplace</p>
                   </MetricLabelWithTooltip>
                   <Badge variant="outline">{selectedProduct.marketplace}</Badge>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Status</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Estado</p>
                   <div className="flex items-center gap-2">
                     {getStatusBadge(selectedProduct.status)}
                     <MetricLabelWithTooltip
@@ -693,52 +890,37 @@ export default function Products() {
                       }
                       className="inline-block"
                     >
-                      <span className="cursor-help">ℹ️</span>
+                      <span className="cursor-help text-gray-400">?</span>
                     </MetricLabelWithTooltip>
                   </div>
                 </div>
-                {selectedProduct.profit && (
+                {selectedProduct.profit ? (
                   <div>
-                    <MetricLabelWithTooltip
-                      label="Expected Profit"
-                      tooltipBody={metricTooltips.potentialProfit.body}
-                      className="text-sm text-gray-600"
-                    >
-                      <p className="text-sm text-gray-600">Expected Profit</p>
+                    <MetricLabelWithTooltip label="Expected Profit" tooltipBody={metricTooltips.potentialProfit.body} className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Beneficio estimado</p>
                     </MetricLabelWithTooltip>
                     <p className="font-medium text-green-600 text-lg">
                       +{formatCurrencySimple(selectedProduct.profit, selectedProduct.currency || 'USD')}
                     </p>
                   </div>
-                )}
+                ) : null}
                 <div>
-                  <p className="text-sm text-gray-600">Created</p>
-                  <p className="font-medium">{new Date(selectedProduct.createdAt).toLocaleDateString()}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Creado</p>
+                  <p className="font-medium dark:text-gray-100">{new Date(selectedProduct.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>
-              {/* Enlaces: Marketplace (a la venta) y Proveedor (origen) */}
               {(selectedProduct.marketplaceUrl || selectedProduct.aliexpressUrl) && (
-                <div className="pt-4 border-t">
-                  <p className="text-sm font-medium text-gray-700 mb-2">Enlaces</p>
+                <div className="pt-4 border-t dark:border-gray-700">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enlaces</p>
                   <div className="flex flex-wrap gap-3">
                     {selectedProduct.marketplaceUrl && (
-                      <a
-                        href={selectedProduct.marketplaceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-                      >
+                      <a href={selectedProduct.marketplaceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">
                         <Store className="w-4 h-4" />
                         Ver en {selectedProduct.marketplace}
                       </a>
                     )}
                     {selectedProduct.aliexpressUrl && (
-                      <a
-                        href={selectedProduct.aliexpressUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                      >
+                      <a href={selectedProduct.aliexpressUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
                         <Link2 className="w-4 h-4" />
                         Proveedor (AliExpress)
                       </a>
@@ -747,18 +929,17 @@ export default function Products() {
                 </div>
               )}
             </div>
-            <div className="p-6 border-t flex gap-3 justify-end">
+            <div className="p-6 border-t dark:border-gray-700 flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setShowModal(false)}>
-                Close
+                Cerrar
               </Button>
               {selectedProduct.status === 'PUBLISHED' && selectedProduct.marketplaceUrl && (
                 <Button
                   className="flex items-center gap-2"
                   onClick={() => window.open(selectedProduct.marketplaceUrl!, '_blank', 'noopener,noreferrer')}
-                  title={`Abrir en ${selectedProduct.marketplace}`}
                 >
                   <ExternalLink className="w-4 h-4" />
-                  View on Marketplace
+                  Ver en Marketplace
                 </Button>
               )}
             </div>

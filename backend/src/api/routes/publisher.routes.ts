@@ -245,7 +245,7 @@ router.get('/pending', async (req: Request, res: Response) => {
     });
     
     // Admin puede ver todos los productos pendientes, usuarios solo los suyos
-    const items = await productService.getProducts(isAdmin ? undefined : userId, 'PENDING');
+    const items = await productService.getProducts(isAdmin ? undefined : userId, { status: 'PENDING' });
     // ✅ FIX: items puede ser { products: [], pagination: {} }
     const products = (items as any).products || (Array.isArray(items) ? items : []);
     
