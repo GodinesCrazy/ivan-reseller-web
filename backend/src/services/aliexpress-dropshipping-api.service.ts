@@ -18,7 +18,7 @@ import axios, { type AxiosInstance } from 'axios';
 import { httpClient } from '../config/http-client';
 import type { AliExpressDropshippingCredentials } from '../types/api-credentials.types';
 import { getAliExpressDropshippingRedirectUri } from '../utils/aliexpress-dropshipping-oauth';
-import { generateTopSignature } from './aliexpress-signature.service';
+import { generateTokenCreateSignatureHmacSystemInterface } from './aliexpress-signature.service';
 
 // Tipos de datos de la API
 export interface DropshippingProductInfo {
@@ -104,7 +104,7 @@ export class AliExpressDropshippingAPIService {
   private credentials: AliExpressDropshippingCredentials | null = null;
   private readonly TOKEN_CREATE_ENDPOINT =
     (process.env.ALIEXPRESS_DROPSHIPPING_TOKEN_ENDPOINT || '').trim() ||
-    'https://api-sg.aliexpress.com/rest/auth/token/create';
+    'https://api-sg.aliexpress.com/rest/auth/token/security/create';
 
   // Endpoints base de la API
   private readonly ENDPOINT_LEGACY = 'https://gw.api.taobao.com/router/rest';
@@ -513,19 +513,18 @@ export class AliExpressDropshippingAPIService {
     const tokenUrl = this.TOKEN_CREATE_ENDPOINT;
     const trimmedCode = code.trim();
 
+    const TOKEN_SIGN_PATH = '/auth/token/security/create';
     const redirectUri = (_redirectUri?.trim() || getAliExpressDropshippingRedirectUri()).trim();
     const params: Record<string, string> = {
       app_key: appKey,
       code: trimmedCode,
       timestamp: Date.now().toString(),
-      sign_method: 'sha256',
-      format: 'json',
-      v: '2.0',
+      sign_method: 'hmac',
     };
     if (redirectUri) {
       params.redirect_uri = redirectUri;
     }
-    const sign = generateTopSignature(params, appSecret);
+    const sign = generateTokenCreateSignatureHmacSystemInterface(TOKEN_SIGN_PATH, params, appSecret);
     params.sign = sign;
 
     const qs = Object.entries(params)
