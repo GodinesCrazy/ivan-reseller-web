@@ -11,6 +11,41 @@ import crypto from 'crypto';
 import logger from '../config/logger';
 
 /**
+ * AliExpress TOP signature algorithm for token exchange.
+ * Base string = appSecret + (key1+value1+key2+value2+...) + appSecret.
+ * Does NOT include: API path, URL, redirect_uri, or query symbols.
+ *
+ * @param params - Parameters for signing (exclude 'sign')
+ * @param appSecret - App secret (never logged)
+ * @returns Uppercase hex SHA256 signature
+ */
+export function generateTopSignature(params: Record<string, string>, appSecret: string): string {
+  const paramsForSigning: Record<string, string> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (key !== 'sign' && value !== undefined && value !== null) {
+      paramsForSigning[key] = String(value);
+    }
+  }
+  const sortedKeys = Object.keys(paramsForSigning).sort();
+  const concatenatedString = sortedKeys.map((k) => k + paramsForSigning[k]).join('');
+  const baseString = appSecret + concatenatedString + appSecret;
+  const sign = crypto
+    .createHash('sha256')
+    .update(baseString, 'utf8')
+    .digest('hex')
+    .toUpperCase();
+
+  if (process.env.NODE_ENV !== 'production') {
+    logger.debug('[ALIEXPRESS-SIGNATURE] generateTopSignature', {
+      sortedParams: sortedKeys,
+      baseStringLength: baseString.length,
+      sign: sign.substring(0, 16) + '...',
+    });
+  }
+  return sign;
+}
+
+/**
  * Generate AliExpress signature (Case 2 - NO appSecret, NO extra params).
  * Used for /rest/auth/token/create - params: app_key, code, sign_method, timestamp ONLY.
  * @param apiPath - e.g. "/rest/auth/token/create"

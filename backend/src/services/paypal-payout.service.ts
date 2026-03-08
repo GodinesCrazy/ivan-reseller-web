@@ -257,9 +257,25 @@ export class PayPalPayoutService {
    * 1. Balance Accounts API v2 (/v2/wallet/balance-accounts) - API actual de PayPal
    * 2. Wallet API v1 (/v1/wallet/balance) - Fallback, requiere permisos wallet:read
    * 3. Reporting API - Estima desde transacciones recientes (menos preciso)
-   * 4. Retorna null para usar validación de capital interno como fallback
+   * 4. Si todas fallan, retorna { available: 0, error } para diagnóstico (403 = permisos).
    */
-  async checkPayPalBalance(): Promise<{ available: number; currency: string; source?: string } | null> {
+  async checkPayPalBalance(): Promise<
+    | { available: number; currency: string; source?: string }
+    | { available: 0; currency: string; error: { status?: number; message?: string } }
+    | null
+  > {
+    type LastError = { status?: number; message?: string };
+    let lastError: LastError | undefined;
+    const captureError = (err: any) => {
+      lastError = {
+        status: err?.response?.status,
+        message:
+          err?.response?.data?.message ??
+          err?.response?.data?.details?.[0]?.description ??
+          err?.message,
+      };
+    };
+
     try {
       await this.ensureAccessToken();
       if (!this.accessToken) {

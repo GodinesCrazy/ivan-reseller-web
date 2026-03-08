@@ -59,9 +59,11 @@
     "bootstrap-verifier-env": "node scripts/bootstrap-verifier-env.js",
     "inject-apis": "node scripts/inject-apis-from-file.js",
     "clear:aliexpress-dropshipping": "tsx scripts/clear-aliexpress-dropshipping-credentials.ts",
+    "test:dropshipping-token-exchange": "tsx scripts/test-dropshipping-token-exchange-v2.ts",
     "migrate:paypal-marketplace": "tsx scripts/migrate-paypal-marketplace.ts",
     "generate:payoneer-cert": "tsx scripts/generate-payoneer-cert-pem.ts",
     "verify:paypal-balance": "tsx scripts/verify-paypal-balance.ts",
+    "verify:paypal": "tsx scripts/paypal-verification-report.ts",
     "kill-port": "powershell -ExecutionPolicy Bypass -File scripts/kill-port.ps1",
     "dev:clean": "npm run kill-port && npm run dev"
   },

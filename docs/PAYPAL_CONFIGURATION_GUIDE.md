@@ -44,6 +44,23 @@ flowchart TD
 
 ---
 
+## Habilitar saldo real (Balance and Transaction Information)
+
+Para que el saldo "In PayPal" en Finanzas > Working Capital muestre el valor real desde la API (en lugar de "No disponible" o "Declarado"), la app de PayPal debe tener permisos de lectura de balance.
+
+**Pasos concretos:**
+
+1. Ir a [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/applications) e iniciar sesión.
+2. En **Apps & Credentials**, cambiar a **Live** (o **Sandbox** si pruebas en entorno de pruebas).
+3. Hacer clic en tu app REST para abrirla.
+4. En **Features** o **App capabilities**, activar **"Balance and Transaction Information"** o **"Transaction Search"** (como alternativa).
+5. Guardar los cambios.
+6. **Importante**: la propagación puede tardar hasta 9 horas según la documentación de PayPal. Si tras activar sigues viendo "No disponible", espera unas horas y vuelve a probar.
+
+**Nota**: La Balance Accounts API v2 puede requerir solicitud o contacto con el gestor de cuenta de PayPal en algunos planes. Las APIs Wallet v1 y Reporting (usadas como fallback) suelen estar disponibles tras activar los permisos anteriores.
+
+---
+
 ## Paso 2: APIS2.txt con formato correcto
 
 El script `configure-apis-from-apis2.ts` extrae PayPal con estos patrones en `backend/scripts/configure-apis-from-apis2.ts`:
