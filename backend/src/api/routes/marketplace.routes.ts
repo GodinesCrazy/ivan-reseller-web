@@ -540,7 +540,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
 
     const ts = Date.now().toString();
     const nonce = crypto.randomBytes(8).toString('hex');
-    const secret = process.env.ENCRYPTION_KEY || 'default-key';
+    const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-key';
 
     let authUrl = '';
     let formatWarning: string | null = null; // Advertencia de formato del App ID (solo para eBay)
