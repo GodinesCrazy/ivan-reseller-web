@@ -104,16 +104,23 @@ export class MercadoLibreService {
     expiresIn: number;
   }> {
     try {
+      const params = new URLSearchParams();
+      params.append('grant_type', 'authorization_code');
+      params.append('client_id', this.credentials.clientId);
+      params.append('client_secret', this.credentials.clientSecret);
+      params.append('code', code);
+      params.append('redirect_uri', redirectUri);
+
       const response = await axios.post(
         `${this.baseUrl}/oauth/token`,
+        params.toString(),
         {
-          grant_type: 'authorization_code',
-          client_id: this.credentials.clientId,
-          client_secret: this.credentials.clientSecret,
-          code,
-          redirect_uri: redirectUri,
-        },
-        { timeout: 15000 }
+          timeout: 15000,
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+          },
+        }
       );
 
       if (!response.data || !response.data.access_token) {
@@ -140,13 +147,19 @@ export class MercadoLibreService {
     }
 
     try {
-      // ✅ Usar retry para refresh token (crítico para mantener sesión)
+      const params = new URLSearchParams();
+      params.append('grant_type', 'refresh_token');
+      params.append('client_id', this.credentials.clientId);
+      params.append('client_secret', this.credentials.clientSecret);
+      params.append('refresh_token', this.credentials.refreshToken!);
+
+      const { retryMarketplaceOperation } = await import('../utils/retry.util');
       const result = await retryMarketplaceOperation(
-        () => axios.post(`${this.baseUrl}/oauth/token`, {
-          grant_type: 'refresh_token',
-          client_id: this.credentials.clientId,
-          client_secret: this.credentials.clientSecret,
-          refresh_token: this.credentials.refreshToken,
+        () => axios.post(`${this.baseUrl}/oauth/token`, params.toString(), {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+          },
         }),
         'mercadolibre',
         {

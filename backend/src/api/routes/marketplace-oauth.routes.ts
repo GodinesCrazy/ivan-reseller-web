@@ -427,18 +427,35 @@ async function handleMercadoLibreCallback(req: Request, res: Response, code: str
       duration: Date.now() - startTime,
     });
     const webBase = getFrontendReturnBaseUrl();
-    return res.status(500).send(`
+    const errorReturnUrl = `${webBase}/api-settings?oauth=error&provider=mercadolibre&reason=${encodeURIComponent(errorMessage)}`;
+    return res.status(200).send(`
       <!DOCTYPE html>
       <html>
-        <head><meta charset="utf-8"><title>Error de autorización</title>
-          <style>body{font-family:Arial,sans-serif;padding:20px;text-align:center;max-width:600px;margin:2rem auto}.error{color:red;font-size:18px;margin:20px 0}.details{color:#666;font-size:13px;margin-top:10px}.btn{display:inline-block;margin-top:1rem;padding:12px 24px;background:#2563eb;color:white;text-decoration:none;border-radius:6px;font-weight:600}</style>
+        <head>
+          <meta charset="utf-8">
+          <title>Error de autorización - MercadoLibre</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; text-align: center; max-width: 600px; margin: 2rem auto; background: #f8f9fa; color: #333; }
+            .card { background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+            .error-icon { font-size: 48px; margin-bottom: 1rem; }
+            .error { color: #dc2626; font-size: 18px; font-weight: 600; margin: 12px 0; }
+            .details { color: #666; font-size: 14px; margin-top: 12px; padding: 12px; background: #fef2f2; border-radius: 8px; word-break: break-word; }
+            .btn { display: inline-block; margin-top: 1.5rem; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; }
+            .btn:hover { background: #1d4ed8; }
+            .hint { color: #888; font-size: 13px; margin-top: 1rem; }
+          </style>
         </head>
         <body>
-          <div class="error">Error en la autorización de MercadoLibre</div>
-          <div class="details">${errorMessage}</div>
-          <p><a href="${webBase}/api-settings?oauth=error&provider=mercadolibre&reason=${encodeURIComponent(errorMessage)}" class="btn">Volver a API Settings</a></p>
+          <div class="card">
+            <div class="error-icon">&#10060;</div>
+            <div class="error">Error en la autorización de MercadoLibre</div>
+            <div class="details">${errorMessage}</div>
+            <p class="hint">Verifica que el Client ID y Client Secret en API Settings coincidan con los de tu aplicación en MercadoLibre Developers.</p>
+            <p><a href="${errorReturnUrl}" class="btn">Volver a API Settings</a></p>
+          </div>
           <script>
             if(window.opener&&!window.opener.closed){try{window.opener.postMessage({type:'oauth_error',marketplace:'mercadolibre',error:'${errorMessage.replace(/'/g, "\\'").replace(/\n/g, ' ')}'},'*')}catch(e){}}
+            setTimeout(function(){window.location.href='${errorReturnUrl.replace(/'/g, "\\'")}'},8000);
           </script>
         </body>
       </html>
