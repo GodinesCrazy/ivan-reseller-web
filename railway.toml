@@ -1,0 +1,14 @@
+# Railway config - Monorepo: deploy desde backend/
+# https://docs.railway.com/deployments/monorepo
+#
+# Nota: Si el servicio usa Root Directory = backend en Railway Dashboard,
+# el config file debe especificarse como /backend/railway.toml
+# Este archivo en raíz aplica cuando Railway despliega desde la raíz (cd backend).
+
+[build]
+buildCommand = "cd backend && npm install && npm run build"
+
+[deploy]
+startCommand = "cd backend && npm run start:with-migrations"
+healthcheckPath = "/health"
+healthcheckTimeout = 120

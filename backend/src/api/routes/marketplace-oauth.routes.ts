@@ -123,9 +123,27 @@ router.get('/oauth/start/ebay', authenticate, async (req: Request, res: Response
   }
 });
 
+/** base64url regex: A-Za-z0-9_- only */
+const BASE64URL_REGEX = /^[A-Za-z0-9_-]+$/;
+
 function parseState(state: string) {
   try {
-    const decoded = Buffer.from(state, 'base64url').toString('utf8');
+    if (!state || typeof state !== 'string') {
+      return { ok: false, reason: 'invalid_format' };
+    }
+    const trimmedState = state.trim();
+    if (!trimmedState) {
+      return { ok: false, reason: 'invalid_format' };
+    }
+    if (!BASE64URL_REGEX.test(trimmedState)) {
+      logger.warn('[OAuth parseState] Invalid base64url encoding', {
+        stateLength: trimmedState.length,
+        statePreview: trimmedState.substring(0, 40) + (trimmedState.length > 40 ? '...' : ''),
+        hasSpaces: /\s/.test(trimmedState),
+      });
+      return { ok: false, reason: 'invalid_state_encoding' };
+    }
+    const decoded = Buffer.from(trimmedState, 'base64url').toString('utf8');
     const parts = decoded.split('|');
     
     // Formato v3 eBay (9): userId|marketplace|ts|nonce|redirB64|env|expirationTime|returnOrigin|signature
@@ -168,8 +186,8 @@ function parseState(state: string) {
         if (isNaN(expirationTime) || expirationTime < Date.now()) {
           return { ok: false, reason: 'expired', expiredAt: expirationTime, now: Date.now() };
         }
-      } else if (/^https?:\/\//.test(p6)) {
-        // v2 ML: returnOrigin at 6, sig at 7. Normalizar sin trailing slash para coincidir con generación.
+      } else if (/^https?:\/\//.test(p6) || p6 === '') {
+        // v2 ML: returnOrigin at 6, sig at 7. Normalizar sin trailing slash. Permitir vacío.
         returnOrigin = (p6 || '').trim().replace(/\/$/, '');
         sig = p7 || '';
         payloadForSig = [userIdStr, mk, ts, nonce, redirB64, env, returnOrigin].join('|');
@@ -189,12 +207,22 @@ function parseState(state: string) {
 
     const expectedSig = crypto.createHmac('sha256', secret).update(payloadForSig).digest('hex');
     if (expectedSig !== sig) {
+      let redirectUriDecoded = '';
+      try {
+        redirectUriDecoded = Buffer.from(redirB64, 'base64url').toString('utf8');
+      } catch {
+        redirectUriDecoded = '(decode failed)';
+      }
       logger.warn('[OAuth parseState] Signature mismatch', {
+        statePreview: trimmedState ? `${trimmedState.substring(0, 30)}...${trimmedState.substring(Math.max(0, trimmedState.length - 20))}` : 'empty',
+        decodedLength: decoded?.length ?? 0,
+        partsCount: parts?.length ?? 0,
+        redirectUriDecoded: redirectUriDecoded ? redirectUriDecoded.substring(0, 80) + (redirectUriDecoded.length > 80 ? '...' : '') : '(empty)',
+        payloadForSigPreview: payloadForSig ? payloadForSig.substring(0, 80) + (payloadForSig.length > 80 ? '...' : '') : '(empty)',
         payloadLength: payloadForSig.length,
-        partsCount: payloadForSig.split('|').length,
         returnOriginLength: (returnOrigin || '').length,
-        sigLength: sig?.length,
-        expectedSigLength: expectedSig?.length,
+        sigLength: sig?.length ?? 0,
+        expectedSigLength: expectedSig?.length ?? 0,
       });
       return { ok: false, reason: 'invalid_signature' };
     }

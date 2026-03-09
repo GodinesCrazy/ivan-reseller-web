@@ -1382,6 +1382,21 @@ export default function APISettings() {
     };
   };
 
+  /** Mensajes amigables para errores OAuth desde callback (reason param) */
+  const getOAuthErrorMessage = (reason: string, provider: string): string => {
+    const r = reason.toLowerCase();
+    if (r === 'invalid_signature' || r.includes('invalid_signature')) {
+      return 'OAuth está incorrectamente configurado. Verifica en Railway que JWT_SECRET (o ENCRYPTION_KEY) y BACKEND_URL coincidan con MercadoLibre Developer Portal. El Redirect URI debe ser exactamente: https://ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre';
+    }
+    if (r === 'invalid_format' || r === 'invalid_state_encoding') {
+      return 'El estado OAuth llegó corrupto. Vuelve a intentar la autorización desde API Settings.';
+    }
+    if (r === 'expired') return 'La sesión OAuth expiró. Vuelve a iniciar la autorización.';
+    if (r === 'missing_secret') return 'Falta JWT_SECRET en Railway. Configura variables de entorno y redespliega.';
+    if (r === 'invalid_user_or_marketplace') return 'Usuario o marketplace inválido. Cierra sesión, vuelve a entrar e intenta de nuevo.';
+    return `Error en autorización OAuth (${provider}): ${reason}`;
+  };
+
   const getSolutionForError = (error: string): string => {
     const lowerError = error.toLowerCase();
     
@@ -2390,7 +2405,7 @@ export default function APISettings() {
     const oauthStatus = searchParams.get('oauth');
     const provider = searchParams.get('provider');
     const correlationId = searchParams.get('correlationId');
-    const errorParam = searchParams.get('error');
+    const errorParam = searchParams.get('error') || searchParams.get('reason');
 
     if (oauthStatus === 'success' && provider) {
       clearAliExpressOAuthRedirectingFlag();
@@ -2432,14 +2447,16 @@ export default function APISettings() {
       navigate(`/api-settings?${newSearchParams.toString()}`, { replace: true });
     } else if (oauthStatus === 'error' && provider) {
       clearAliExpressOAuthRedirectingFlag();
-      const errorMsg = errorParam || 'Error desconocido en OAuth';
+      const rawReason = errorParam || 'Error desconocido en OAuth';
+      const errorMsg = getOAuthErrorMessage(rawReason, provider);
       log.error('[APISettings] OAuth error detected from URL', {
         provider,
         correlationId,
-        error: errorMsg,
+        reason: rawReason,
+        errorMsg,
       });
 
-      toast.error(`❌ Error en autorización OAuth: ${errorMsg}`);
+      toast.error(`❌ ${errorMsg}`);
       setError(`Error en autorización OAuth: ${errorMsg}`);
 
       // Limpiar query params de la URL
@@ -2448,6 +2465,7 @@ export default function APISettings() {
       newSearchParams.delete('provider');
       newSearchParams.delete('correlationId');
       newSearchParams.delete('error');
+      newSearchParams.delete('reason');
       navigate(`/api-settings?${newSearchParams.toString()}`, { replace: true });
     }
   }, [searchParams, navigate, fetchAuthStatuses, clearAliExpressOAuthRedirectingFlag]);

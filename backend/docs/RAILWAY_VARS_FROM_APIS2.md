@@ -51,7 +51,8 @@ Eso lee `APIS2.txt` y `rail.txt` (en la raíz del repo), extrae todas las claves
 | `ALIEXPRESS_USER` | rail.txt: email AliExpress |
 | `ALIEXPRESS_PASS` | rail.txt: contraseña AliExpress |
 | `INTERNAL_RUN_SECRET` | APIS2 o rail.txt: `INTERNAL_RUN_SECRET=...` |
-| `MERCADOLIBRE_REDIRECT_URI` | URL del callback OAuth del **backend** (ej. `https://tu-backend.up.railway.app/api/marketplace-oauth/oauth/callback/mercadolibre`). Debe coincidir con la configurada en MercadoLibre Developer Portal. |
+| `BACKEND_URL` | URL pública del backend (ej. `https://ivan-reseller-web-production.up.railway.app`). Usada para derivar el redirect URI canónico de MercadoLibre OAuth. Alternativa: `API_URL` o `RAILWAY_STATIC_URL`. |
+| `MERCADOLIBRE_REDIRECT_URI` | Opcional si `BACKEND_URL` o `API_URL` está definido. Si se define, debe ser exactamente la URL registrada en MercadoLibre Developer Portal: `https://<tu-dominio>/api/marketplace-oauth/oauth/callback/mercadolibre`. Sin `BACKEND_URL`, se usa como fallback. |
 | `WEBHOOK_SECRET_MERCADOLIBRE` | MercadoLibre Developer Portal → Tu aplicación → Notificaciones → Secret para validar firma del webhook |
 | `WEBHOOK_SECRET_EBAY` | eBay Developer Portal → Webhooks → Secret |
 | `WEBHOOK_SECRET_AMAZON` | Amazon Seller Central → Notificaciones → Secret |
@@ -62,8 +63,23 @@ Además, en Railway debes tener ya configuradas:
 
 - `DATABASE_URL` (PostgreSQL)
 - `JWT_SECRET`
-- `CORS_ORIGIN` (URL del frontend, p. ej. tu app en Vercel)
+- `CORS_ORIGIN` (URL del frontend, ver sección CORS abajo)
+
+### CORS_ORIGIN - Requisitos para Railway
+
+**Valor correcto** (sin prefijos ni caracteres extra):
+```
+https://www.ivanreseller.com,https://ivanreseller.com
+```
+
+**Errores comunes que causan fallos CORS:**
+- `CORS_ORIGIN=CORS_ORIGIN=https://...` (duplicado o prefijo incrustado)
+- `CORS_ORIGIN=https://www.ivanreseller.com` como prefijo dentro del valor
+- Comillas o espacios extra
+
+En Railway Variables, el valor debe ser **exactamente** las URLs separadas por coma, sin `CORS_ORIGIN=` ni prefijos. Ver [CORS_FIX_FINAL_2.md](../../CORS_FIX_FINAL_2.md) para detalles.
 - `API_URL` (URL pública del backend, p. ej. `https://ivan-reseller-web-production.up.railway.app`)
+- `BACKEND_URL` (o `API_URL`) para OAuth MercadoLibre: el redirect URI canónico se deriva como `{BACKEND_URL}/api/marketplace-oauth/oauth/callback/mercadolibre`. Debe coincidir exactamente con lo registrado en MercadoLibre Developer Portal.
 
 ---
 

@@ -12,6 +12,7 @@ import { logger } from '../../config/logger';
 import { AppError, ErrorCode } from '../../middleware/error.middleware';
 import { getAliExpressDropshippingRedirectUri } from '../../utils/aliexpress-dropshipping-oauth';
 import { getOAuthStateSecret } from '../../utils/oauth-state-secret';
+import { getMercadoLibreRedirectUri } from '../../utils/oauth-redirect-uris';
 
 const router = Router();
 const marketplaceService = new MarketplaceService();
@@ -987,20 +988,21 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const clientId = cred?.credentials?.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '';
       const clientSecret = cred?.credentials?.clientSecret || process.env.MERCADOLIBRE_CLIENT_SECRET || '';
       const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLM';
-      const callbackUrl = typeof redirect_uri === 'string' && redirect_uri.length > 0
-        ? redirect_uri
-        : cred?.credentials?.redirectUri || process.env.MERCADOLIBRE_REDIRECT_URI || '';
-      if (!callbackUrl) {
+      const rawCallbackUrl = typeof redirect_uri === 'string' && redirect_uri.length > 0
+        ? redirect_uri.trim()
+        : (cred?.credentials?.redirectUri || process.env.MERCADOLIBRE_REDIRECT_URI || process.env.MERCADOLIBRE_REDIRECT_URL || getMercadoLibreRedirectUri()).trim();
+      if (!rawCallbackUrl) {
         return res.status(400).json({ success: false, message: 'Missing MercadoLibre Redirect URI' });
       }
-      const redirB64 = Buffer.from(String(callbackUrl)).toString('base64url');
+      const normalizedCallback = String(rawCallbackUrl).trim().replace(/\/$/, '');
+      const redirB64 = Buffer.from(normalizedCallback).toString('base64url');
       // ✅ FIX OAUTH LOGOUT: Incluir returnOrigin para redirigir al mismo host. Normalizar sin trailing slash.
       const normalizedReturnOrigin = (returnOrigin || '').replace(/\/$/, '');
       const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv, normalizedReturnOrigin].join('|');
       const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
       const state = Buffer.from([payload, sig].join('|')).toString('base64url');
       const ml = new MercadoLibreService({ clientId, clientSecret, siteId });
-      const url = new URL(ml.getAuthUrl(String(callbackUrl)));
+      const url = new URL(ml.getAuthUrl(normalizedCallback));
       url.searchParams.set('state', state);
       authUrl = url.toString();
     } else if (normalizedMarketplace === 'aliexpress-dropshipping') {

@@ -848,6 +848,40 @@ fetch('https://ivan-reseller-web-production.up.railway.app/api/auth/me', {
 
 ---
 
+## 9. MERCADOLIBRE - Configuración rápida
+
+### Variables obligatorias
+
+| Variable | Valor |
+|----------|-------|
+| `BACKEND_URL` | `https://ivanreseller.com` |
+| `MERCADOLIBRE_CLIENT_ID` | `8432109661263766` (App ID del Developer Portal) |
+| `MERCADOLIBRE_CLIENT_SECRET` | Tu Client Secret del Developer Portal |
+| `MERCADOLIBRE_REDIRECT_URI` | `https://ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre` |
+| `MERCADOLIBRE_SITE_ID` | `MLC` (Chile) |
+| `JWT_SECRET` | Ya debe existir para auth |
+
+### Script para configurar vía Railway CLI
+
+```powershell
+# 1. Instalar y conectar (si aún no lo hiciste)
+npm install -g @railway/cli
+railway login
+railway link
+
+# 2. Ejecutar script (lee .env.local y pide MERCADOLIBRE_CLIENT_SECRET si falta)
+.\scripts\set-railway-mercadolibre-vars.ps1
+
+# O con nombre de servicio explícito:
+.\scripts\set-railway-mercadolibre-vars.ps1 -ServiceName ivan-reseller-backend
+```
+
+El script configura `BACKEND_URL`, `MERCADOLIBRE_CLIENT_ID`, `MERCADOLIBRE_CLIENT_SECRET`, `MERCADOLIBRE_REDIRECT_URI`, `MERCADOLIBRE_SITE_ID` y `CORS_ORIGIN`. Lee valores de `backend/.env.local` si existe; pide `MERCADOLIBRE_CLIENT_SECRET` si no está definido.
+
+Guía detallada: [backend/docs/MERCADOLIBRE_OAUTH_RAILWAY_SETUP.md](backend/docs/MERCADOLIBRE_OAUTH_RAILWAY_SETUP.md)
+
+---
+
 ## 📚 REFERENCIAS
 
 - **Reporte Completo:** `ENV_AUDIT_REPORT.md`

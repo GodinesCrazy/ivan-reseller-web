@@ -950,12 +950,11 @@ function APIsCredenciales() {
                   </li>
                   <li><strong>Paso 2 - Configuración y scopes:</strong> En la siguiente pantalla, completa:
                     <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
-                      <li><strong>Redirect URI*:</strong> Agrega exactamente: <code className="bg-gray-100 px-1 rounded">https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre</code>
+                      <li><strong>Redirect URI*:</strong> Agrega exactamente una de estas URLs (debe coincidir con BACKEND_URL en Railway):
                         <ul className="list-circle list-inside ml-4 mt-1">
-                          <li>Haz clic en el campo "Redirect URI"</li>
-                          <li>Pega la URL completa</li>
-                          <li>Haz clic en "Agregar Redirect URI" si es necesario</li>
-                          <li>⚠️ <strong>IMPORTANTE:</strong> Debe ser exactamente <code>www.ivanreseller.com</code> (NO uses vercel.app ni otros dominios)</li>
+                          <li><code className="bg-gray-100 px-1 rounded">https://ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre</code> (sin www)</li>
+                          <li>o <code className="bg-gray-100 px-1 rounded">https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre</code> (con www)</li>
+                          <li>⚠️ <strong>IMPORTANTE:</strong> La URL debe coincidir EXACTAMENTE con BACKEND_URL en Railway. Si usas ivanreseller.com aquí, configura BACKEND_URL=https://ivanreseller.com en Railway.</li>
                         </ul>
                       </li>
                       <li><strong>Integración*:</strong> Marca al menos una opción:
@@ -1020,7 +1019,8 @@ function APIsCredenciales() {
                   <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
                     <li>Si ves "Selecciona mínimo una unidad de negocio": Marca al menos "Mercado Libre" en Integración</li>
                     <li>Si ves "Selecciona al menos una opción para cada permiso": Asegúrate de seleccionar un nivel de acceso para cada categoría de permisos</li>
-                    <li>Si el Redirect URI no funciona: Verifica que sea exactamente <code>https://www.ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre</code> (sin espacios, con https://)</li>
+                    <li>Si ves &quot;OAuth está incorrectamente configurado&quot;: Verifica en Railway que JWT_SECRET y BACKEND_URL coincidan con MercadoLibre. Si usas ivanreseller.com (sin www) en MercadoLibre, BACKEND_URL debe ser <code>https://ivanreseller.com</code>.</li>
+                    <li>Si el Redirect URI no funciona: Verifica que coincida exactamente (sin espacios, con https://). Puede ser ivanreseller.com o www.ivanreseller.com según tu configuración.</li>
                   </ul>
                 </div>
               </div>
