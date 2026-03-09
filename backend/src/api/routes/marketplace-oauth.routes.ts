@@ -332,8 +332,8 @@ async function handleMercadoLibreCallback(req: Request, res: Response, code: str
     logger.info('[ML Callback] State parsed', { service: 'marketplace-oauth', userId, environment });
 
     const cred = await marketplaceService.getCredentials(userId, 'mercadolibre', environment);
-    const clientId = cred?.credentials?.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '';
-    const clientSecret = cred?.credentials?.clientSecret || process.env.MERCADOLIBRE_CLIENT_SECRET || '';
+    const clientId = process.env.MERCADOLIBRE_CLIENT_ID || cred?.credentials?.clientId || '';
+    const clientSecret = process.env.MERCADOLIBRE_CLIENT_SECRET || cred?.credentials?.clientSecret || '';
     const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLM';
 
     if (!clientId || !clientSecret) {
@@ -377,6 +377,8 @@ async function handleMercadoLibreCallback(req: Request, res: Response, code: str
 
     const newCreds = {
       ...(cred?.credentials || {}),
+      clientId,
+      clientSecret,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       userId: tokens.userId,
