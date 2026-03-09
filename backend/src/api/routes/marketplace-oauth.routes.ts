@@ -986,8 +986,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
           rawQueryStateLength: String(req.query.state || '').length,
         });
 
-        const debugParams = `&dbg_stLen=${state.length}&dbg_parts=${partsCount}&dbg_reason=${parsed.reason}`;
-        const errorRedirectUrl = `${getFrontendReturnBaseUrl()}/api-settings?oauth=error&provider=${marketplace}&reason=${encodeURIComponent(parsed.reason)}${debugParams}`;
+        const errorRedirectUrl = `${getFrontendReturnBaseUrl()}/api-settings?oauth=error&provider=${marketplace}&reason=${encodeURIComponent(parsed.reason)}`;
         return res.redirect(302, errorRedirectUrl);
       }
 
@@ -1644,109 +1643,6 @@ router.get('/aliexpress/oauth/debug', async (req: Request, res: Response) => {
       message: 'Error checking OAuth status. En AliExpress Open Platform, la Redirect URL debe ser exactamente: ' + canonicalRedirectUri
     });
   }
-});
-
-/**
- * GET /api/marketplace-oauth/debug/oauth-state-roundtrip
- * Diagnostic: creates a MercadoLibre OAuth state and immediately verifies it.
- * Returns detailed info about each step. No auth required (read-only diagnostic).
- */
-router.get('/debug/oauth-state-roundtrip', async (_req: Request, res: Response) => {
-  try {
-    const secret = getOAuthStateSecret();
-    const secretFallback = secret || process.env.JWT_SECRET || 'default-key';
-    const ts = Date.now().toString();
-    const nonce = crypto.randomBytes(8).toString('hex');
-    const testUserId = '1';
-    const testEnv = 'production';
-    const testReturnOrigin = 'https://www.ivanreseller.com';
-
-    // Test compact ML format (new)
-    const tsHex = BigInt(ts).toString(16);
-    const nonceShort = nonce.substring(0, 8);
-    const envChar = 'p';
-    const roFlag = '1';
-    const compactPayload = `ml:${testUserId}:${tsHex}:${nonceShort}:${envChar}:${roFlag}`;
-    const compactSig = crypto.createHmac('sha256', secret).update(compactPayload).digest('hex').substring(0, 16);
-    const state = Buffer.from(`${compactPayload}:${compactSig}`).toString('base64url');
-
-    const verifyResult = parseState(state);
-
-    const secretVerify = getOAuthStateSecret() || process.env.JWT_SECRET || 'default-key';
-    const expectedSig = crypto.createHmac('sha256', secretVerify).update(compactPayload).digest('hex').substring(0, 16);
-
-    res.json({
-      diagnostic: 'oauth-state-roundtrip',
-      state,
-      creation: {
-        secretSource: secret ? 'getOAuthStateSecret()' : '(empty)',
-        secretLength: secret.length,
-        secretFirst4: secret ? secret.substring(0, 4) + '***' : '(empty)',
-        compactPayloadLength: compactPayload.length,
-        compactSigLength: compactSig.length,
-        stateLength: state.length,
-        format: 'compact_ml',
-      },
-      verification: {
-        secretSource: secretVerify === secret ? 'same_as_creation' : 'DIFFERENT_fallback',
-        secretLength: secretVerify.length,
-        secretFirst4: secretVerify ? secretVerify.substring(0, 4) + '***' : '(empty)',
-        expectedSigMatch: expectedSig === compactSig,
-        parseResult: verifyResult,
-      },
-      env: {
-        NODE_ENV: process.env.NODE_ENV || '(not set)',
-        hasJWT_SECRET: !!process.env.JWT_SECRET,
-        JWT_SECRET_length: (process.env.JWT_SECRET || '').length,
-        hasENCRYPTION_KEY: !!process.env.ENCRYPTION_KEY,
-        ENCRYPTION_KEY_length: (process.env.ENCRYPTION_KEY || '').length,
-        hasBACKEND_URL: !!process.env.BACKEND_URL,
-        BACKEND_URL: process.env.BACKEND_URL || '(not set)',
-        hasFRONTEND_URL: !!process.env.FRONTEND_URL,
-        FRONTEND_URL: process.env.FRONTEND_URL || '(not set)',
-        hasMERCADOLIBRE_CLIENT_ID: !!process.env.MERCADOLIBRE_CLIENT_ID,
-        hasMERCADOLIBRE_REDIRECT_URI: !!process.env.MERCADOLIBRE_REDIRECT_URI,
-        hasMERCADOLIBRE_REDIRECT_URL: !!process.env.MERCADOLIBRE_REDIRECT_URL,
-      },
-    });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message, stack: error.stack });
-  }
-});
-
-/**
- * GET /api/marketplace-oauth/debug/verify-state?state=...
- * Diagnostic: verifies a given state parameter and returns detailed results.
- */
-router.get('/debug/verify-state', (req: Request, res: Response) => {
-  const state = String(req.query.state || '');
-  if (!state) return res.status(400).json({ error: 'Missing state query param' });
-  const result = parseState(state);
-  
-  const secret = getOAuthStateSecret();
-  const secretFallback = secret || process.env.JWT_SECRET || 'default-key';
-  
-  let decoded = '';
-  let parts: string[] = [];
-  try {
-    decoded = Buffer.from(state.trim(), 'base64url').toString('utf8');
-    parts = decoded.split('|');
-  } catch {}
-
-  res.json({
-    diagnostic: 'verify-state',
-    stateLength: state.length,
-    decodedLength: decoded.length,
-    partsCount: parts.length,
-    partsPreview: parts.map((p, i) => `[${i}] ${p.length > 40 ? p.substring(0, 40) + '...' : p}`),
-    parseResult: result,
-    secretInfo: {
-      getOAuthStateSecret_length: secret.length,
-      getOAuthStateSecret_first4: secret ? secret.substring(0, 4) + '***' : '(empty)',
-      fallback_used: !secret,
-      fallback_length: secretFallback.length,
-    },
-  });
 });
 
 export default router;
