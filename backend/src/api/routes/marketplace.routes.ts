@@ -11,6 +11,7 @@ import { marketplaceRateLimit, ebayRateLimit, mercadolibreRateLimit, amazonRateL
 import { logger } from '../../config/logger';
 import { AppError, ErrorCode } from '../../middleware/error.middleware';
 import { getAliExpressDropshippingRedirectUri } from '../../utils/aliexpress-dropshipping-oauth';
+import { getOAuthStateSecret } from '../../utils/oauth-state-secret';
 
 const router = Router();
 const marketplaceService = new MarketplaceService();
@@ -540,7 +541,15 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
 
     const ts = Date.now().toString();
     const nonce = crypto.randomBytes(8).toString('hex');
-    const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-key';
+    const secret = getOAuthStateSecret();
+    if (!secret) {
+      return res.status(500).json({
+        success: false,
+        error: 'OAuth state secret not configured',
+        message: 'Configure ENCRYPTION_KEY or JWT_SECRET in Railway variables.',
+        correlationId,
+      });
+    }
 
     let authUrl = '';
     let formatWarning: string | null = null; // Advertencia de formato del App ID (solo para eBay)
@@ -985,8 +994,9 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         return res.status(400).json({ success: false, message: 'Missing MercadoLibre Redirect URI' });
       }
       const redirB64 = Buffer.from(String(callbackUrl)).toString('base64url');
-      // ✅ FIX OAUTH LOGOUT: Incluir returnOrigin para redirigir al mismo host
-      const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv, returnOrigin || ''].join('|');
+      // ✅ FIX OAUTH LOGOUT: Incluir returnOrigin para redirigir al mismo host. Normalizar sin trailing slash.
+      const normalizedReturnOrigin = (returnOrigin || '').replace(/\/$/, '');
+      const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv, normalizedReturnOrigin].join('|');
       const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
       const state = Buffer.from([payload, sig].join('|')).toString('base64url');
       const ml = new MercadoLibreService({ clientId, clientSecret, siteId });

@@ -5,6 +5,7 @@ import { MercadoLibreService } from '../../services/mercadolibre.service';
 import { authenticate } from '../../middleware/auth.middleware';
 import { verifyStateAliExpressSafe } from '../../utils/oauth-state';
 import { getAliExpressDropshippingRedirectUri, getAliExpressRedirectUriInstructions } from '../../utils/aliexpress-dropshipping-oauth';
+import { getOAuthStateSecret } from '../../utils/oauth-state-secret';
 import crypto from 'crypto';
 import logger from '../../config/logger';
 
@@ -71,7 +72,7 @@ router.get('/authorize/ebay', async (req: Request, res: Response) => {
     const userId = 1;
     const ts = Date.now().toString();
     const nonce = crypto.randomBytes(8).toString('hex');
-    const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-key';
+    const secret = getOAuthStateSecret() || process.env.JWT_SECRET || 'default-key';
     const redirB64 = Buffer.from(redirectUri).toString('base64url');
     const expirationTime = Date.now() + 10 * 60 * 1000;
     const payload = [userId, 'ebay', ts, nonce, redirB64, 'production', expirationTime.toString()].join('|');
@@ -168,8 +169,8 @@ function parseState(state: string) {
           return { ok: false, reason: 'expired', expiredAt: expirationTime, now: Date.now() };
         }
       } else if (/^https?:\/\//.test(p6)) {
-        // v2 ML: returnOrigin at 6, sig at 7
-        returnOrigin = (p6 || '').trim();
+        // v2 ML: returnOrigin at 6, sig at 7. Normalizar sin trailing slash para coincidir con generación.
+        returnOrigin = (p6 || '').trim().replace(/\/$/, '');
         sig = p7 || '';
         payloadForSig = [userIdStr, mk, ts, nonce, redirB64, env, returnOrigin].join('|');
       } else {
@@ -181,13 +182,22 @@ function parseState(state: string) {
       payloadForSig = [userIdStr, mk, ts, nonce, redirB64, env].join('|');
     }
     
-    const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default-key';
+    const secret = getOAuthStateSecret() || process.env.JWT_SECRET || 'default-key';
     if (!secret || secret === 'default-key') {
       return { ok: false, reason: 'missing_secret' };
     }
-    
+
     const expectedSig = crypto.createHmac('sha256', secret).update(payloadForSig).digest('hex');
-    if (expectedSig !== sig) return { ok: false, reason: 'invalid_signature' };
+    if (expectedSig !== sig) {
+      logger.warn('[OAuth parseState] Signature mismatch', {
+        payloadLength: payloadForSig.length,
+        partsCount: payloadForSig.split('|').length,
+        returnOriginLength: (returnOrigin || '').length,
+        sigLength: sig?.length,
+        expectedSigLength: expectedSig?.length,
+      });
+      return { ok: false, reason: 'invalid_signature' };
+    }
     
     const redirectUri = Buffer.from(redirB64, 'base64url').toString('utf8');
     const userId = parseInt(userIdStr, 10);
@@ -871,22 +881,6 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
     } else {
       const parsed = parseState(state);
       if (!parsed.ok) {
-        let errorMessage = 'Invalid or expired authorization state.';
-        let hint = 'Vuelve a Configuración → API Settings, guarda las credenciales de eBay y pulsa de nuevo "Autorizar OAuth".';
-        const suggestedRedirect = getEbayRedirectUri();
-        if (parsed.reason === 'expired') {
-          errorMessage = 'El enlace de autorización ha caducado (válido 10 minutos).';
-          hint = 'Pulsa "Autorizar OAuth" de nuevo en API Settings.';
-        } else if (parsed.reason === 'invalid_signature') {
-          errorMessage = 'Error de verificación del estado de autorización.';
-          hint = `En eBay Developer Portal, el Redirect URL debe ser exactamente: ${suggestedRedirect}`;
-        } else if (parsed.reason === 'missing_secret') {
-          errorMessage = 'Configuración del servidor incompleta (ENCRYPTION_KEY).';
-          hint = 'Contacta al administrador. ENCRYPTION_KEY debe estar definido en Railway.';
-        } else if (parsed.reason === 'invalid_format') {
-          errorMessage = 'El enlace de autorización no es válido.';
-        }
-
         logger.error('[OAuth Callback] Invalid state', {
           service: 'marketplace-oauth',
           marketplace,
@@ -894,19 +888,8 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
           stateLength: state.length
         });
 
-        const returnUrlState = getFrontendReturnBaseUrl() + '/api-settings';
-        return res.status(200).send(`
-          <!DOCTYPE html>
-          <html>
-          <head><meta charset="utf-8"><title>Error de autorización</title></head>
-          <body style="font-family: sans-serif; max-width: 560px; margin: 2rem auto; padding: 1.5rem;">
-            <h2>Error de autorización</h2>
-            <p>${errorMessage}</p>
-            <p><strong>Qué hacer:</strong> ${hint}</p>
-            <p><a href="${returnUrlState}" style="display: inline-block; margin-top: 1rem; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Volver a API Settings</a></p>
-          </body>
-          </html>
-        `);
+        const errorRedirectUrl = `${getFrontendReturnBaseUrl()}/api-settings?oauth=error&provider=${marketplace}&reason=${encodeURIComponent(parsed.reason)}`;
+        return res.redirect(302, errorRedirectUrl);
       }
 
       const parsedState = parsed as { userId: number; redirectUri: string; environment: 'sandbox' | 'production'; returnOrigin?: string };

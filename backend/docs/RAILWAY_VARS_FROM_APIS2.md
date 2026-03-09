@@ -51,6 +51,7 @@ Eso lee `APIS2.txt` y `rail.txt` (en la raíz del repo), extrae todas las claves
 | `ALIEXPRESS_USER` | rail.txt: email AliExpress |
 | `ALIEXPRESS_PASS` | rail.txt: contraseña AliExpress |
 | `INTERNAL_RUN_SECRET` | APIS2 o rail.txt: `INTERNAL_RUN_SECRET=...` |
+| `MERCADOLIBRE_REDIRECT_URI` | URL del callback OAuth del **backend** (ej. `https://tu-backend.up.railway.app/api/marketplace-oauth/oauth/callback/mercadolibre`). Debe coincidir con la configurada en MercadoLibre Developer Portal. |
 | `WEBHOOK_SECRET_MERCADOLIBRE` | MercadoLibre Developer Portal → Tu aplicación → Notificaciones → Secret para validar firma del webhook |
 | `WEBHOOK_SECRET_EBAY` | eBay Developer Portal → Webhooks → Secret |
 | `WEBHOOK_SECRET_AMAZON` | Amazon Seller Central → Notificaciones → Secret |
