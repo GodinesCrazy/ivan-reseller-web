@@ -138,7 +138,7 @@ export class MercadoLibrePublisher implements MarketplacePublisher {
       orderBy: { updatedAt: 'desc' },
     });
 
-    const creds = (dbCred?.credentials as Record<string, any>) || {};
+    const creds = (dbCred?.credentials as unknown as Record<string, any>) || {};
     const clientId = creds.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '';
     const clientSecret = creds.clientSecret || process.env.MERCADOLIBRE_CLIENT_SECRET || '';
     const refreshToken = creds.refreshToken || undefined;
