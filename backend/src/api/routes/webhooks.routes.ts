@@ -4,8 +4,45 @@ import { logger } from '../../config/logger';
 import { notificationService } from '../../services/notification.service';
 import { createWebhookSignatureValidator } from '../../middleware/webhook-signature.middleware';
 import { orderFulfillmentService } from '../../services/order-fulfillment.service';
+import { MercadoLibreService } from '../../services/mercadolibre.service';
+import { CredentialsManager, clearCredentialsCache } from '../../services/credentials-manager.service';
+import { decrypt } from '../../utils/encryption';
 
 const router = Router();
+
+export interface MercadoLibreCredentialResult {
+  creds: Record<string, any>;
+  userId: number;
+  environment: 'sandbox' | 'production';
+}
+
+/**
+ * Find MercadoLibre credentials by ML seller user_id (from webhook body.user_id).
+ * Falls back to first active credential if no match (single-seller case).
+ * Returns creds + userId/environment for token refresh persistence.
+ */
+async function findMercadoLibreCredentialsBySellerId(
+  mlSellerId: number | string | undefined
+): Promise<MercadoLibreCredentialResult | null> {
+  const sellerIdStr = mlSellerId != null ? String(mlSellerId) : null;
+  const rows = await prisma.apiCredential.findMany({
+    where: { apiName: 'mercadolibre', isActive: true },
+  });
+  let fallback: MercadoLibreCredentialResult | null = null;
+  for (const row of rows) {
+    try {
+      const creds = JSON.parse(decrypt(row.credentials)) as Record<string, any>;
+      if (!creds?.accessToken) continue;
+      const env = (row.environment || 'production') as 'sandbox' | 'production';
+      const result: MercadoLibreCredentialResult = { creds, userId: row.userId, environment: env };
+      if (sellerIdStr != null && creds?.userId != null && String(creds.userId) === sellerIdStr) return result;
+      if (!fallback) fallback = result;
+    } catch {
+      continue;
+    }
+  }
+  return fallback;
+}
 
 /**
  * Normalize webhook shipping address to Order format (addressLine1, fullName, etc.)
@@ -151,11 +188,61 @@ router.post('/mercadolibre', createWebhookSignatureValidator('mercadolibre'), as
   const correlationId = (req as any).correlationId ?? `webhook-ml-${Date.now()}`;
   try {
     const body: any = req.body || {};
-    const listingId = body.listingId || body.resourceId || body?.order?.order_items?.[0]?.item?.id || body?.order_items?.[0]?.item?.id;
-    const amount = Number(body.amount || body.total_amount || body?.order?.total_amount || body?.order_items?.[0]?.unit_price);
-    const orderId = String(body.id || body.order_id || body.resource || '');
+    let listingId = body.listingId || body.resourceId || body?.order?.order_items?.[0]?.item?.id || body?.order_items?.[0]?.item?.id;
+    let amount = Number(body.amount || body.total_amount || body?.order?.total_amount || body?.order_items?.[0]?.unit_price);
+    let orderId = String(body.id || body.order_id || body.resource || body?.data?.id || '');
+    let receiverAddress = body?.shipping?.receiver_address || body?.order?.shipping?.receiver_address;
+    let buyer = body?.buyer?.nickname || body?.buyer?.first_name || body?.buyer?.last_name || body?.buyer?.email;
+    let buyerEmail = body?.buyer?.email || (body?.buyer?.nickname && body.buyer.nickname.includes('@') ? body.buyer.nickname : null);
 
-    const receiverAddress = body?.shipping?.receiver_address || body?.order?.shipping?.receiver_address;
+    // orders_v2 format: body.data.id = order ID, body.user_id = ML seller id. Fetch full order via API.
+    if (body?.data?.id && !body?.order) {
+      const mlOrderId = String(body.data.id);
+      const mlSellerId = body.user_id;
+      const credResult = await findMercadoLibreCredentialsBySellerId(mlSellerId);
+      if (!credResult) {
+        logger.warn('[WEBHOOK_MERCADOLIBRE] No credentials for seller', { correlationId, mlSellerId });
+        return res.status(200).json({ success: true });
+      }
+      const { creds, userId: credUserId, environment } = credResult;
+      const mlService = new MercadoLibreService(creds as any);
+      let orderData: {
+        order_items?: Array<{ item?: { id?: string }; unit_price?: number }>;
+        total_amount?: number;
+        shipping?: { receiver_address?: any };
+        buyer?: { nickname?: string; email?: string };
+      };
+      try {
+        orderData = await mlService.getOrder(mlOrderId);
+      } catch (err: any) {
+        const is401 = err?.statusCode === 401 || err?.response?.status === 401;
+        if (is401 && creds?.refreshToken) {
+          try {
+            const refreshed = await mlService.refreshAccessToken();
+            const updatedCreds = { ...creds, accessToken: refreshed.accessToken };
+            await CredentialsManager.saveCredentials(credUserId, 'mercadolibre', updatedCreds, environment);
+            clearCredentialsCache(credUserId, 'mercadolibre', environment);
+            const retryService = new MercadoLibreService(updatedCreds as any);
+            orderData = await retryService.getOrder(mlOrderId);
+          } catch (refreshErr: any) {
+            logger.error('[WEBHOOK_MERCADOLIBRE] Token refresh failed', {
+              correlationId,
+              error: (refreshErr as Error)?.message,
+            });
+            throw err;
+          }
+        } else {
+          throw err;
+        }
+      }
+      listingId = orderData?.order_items?.[0]?.item?.id ?? null;
+      amount = Number(orderData?.total_amount ?? 0) || Number(orderData?.order_items?.[0]?.unit_price ?? 0);
+      orderId = mlOrderId;
+      receiverAddress = orderData?.shipping?.receiver_address;
+      buyer = orderData?.buyer?.nickname || orderData?.buyer?.email;
+      buyerEmail = orderData?.buyer?.email ?? null;
+    }
+
     const shippingAddress = receiverAddress ? {
       addressLine1: receiverAddress.address_line || receiverAddress.street_name || '',
       city: receiverAddress.city?.name || receiverAddress.city || '',
@@ -163,11 +250,9 @@ router.post('/mercadolibre', createWebhookSignatureValidator('mercadolibre'), as
       zipCode: receiverAddress.zip_code || receiverAddress.postal_code || '',
       country: receiverAddress.country?.name || receiverAddress.country || '',
     } : null;
-    const buyer = body?.buyer?.nickname || body?.buyer?.first_name || body?.buyer?.last_name || body?.buyer?.email;
-    const buyerEmail = body?.buyer?.email || (body?.buyer?.nickname && body.buyer.nickname.includes('@') ? body.buyer.nickname : null);
 
     if (!listingId) return res.status(400).json({ success: false, error: 'listingId missing' });
-    const result = await recordSaleFromWebhook(
+    await recordSaleFromWebhook(
       { marketplace: 'mercadolibre', listingId, amount, orderId: orderId || undefined, buyer, buyerEmail, shippingAddress },
       correlationId
     );

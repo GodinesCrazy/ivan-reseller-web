@@ -334,6 +334,28 @@ export class MercadoLibreService {
   }
 
   /**
+   * Get order by ID (for webhook processing - orders_v2 sends data.id = order ID)
+   */
+  async getOrder(orderId: string): Promise<{
+    id: string;
+    order_items: Array<{ item: { id: string }; unit_price: number }>;
+    total_amount: number;
+    shipping?: { receiver_address?: any };
+    buyer?: { id?: number; nickname?: string; email?: string };
+  }> {
+    if (!this.credentials.accessToken) {
+      throw new AppError('MercadoLibre access token required to fetch order', 401);
+    }
+    try {
+      const response = await this.apiClient.get(`/orders/${orderId}`);
+      return response.data;
+    } catch (error: any) {
+      const msg = error.response?.data?.message || error.message;
+      throw new AppError(`MercadoLibre getOrder error: ${msg}`, error.response?.status || 400);
+    }
+  }
+
+  /**
    * Update listing quantity
    */
   async updateListingQuantity(itemId: string, quantity: number): Promise<void> {
