@@ -909,14 +909,28 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
     } else {
       const parsed = parseState(state);
       if (!parsed.ok) {
+        let decodedPreview = '';
+        let partsCount = 0;
+        try {
+          const dec = Buffer.from(state.trim(), 'base64url').toString('utf8');
+          decodedPreview = dec.substring(0, 120);
+          partsCount = dec.split('|').length;
+        } catch {}
         logger.error('[OAuth Callback] Invalid state', {
           service: 'marketplace-oauth',
           marketplace,
           reason: parsed.reason,
-          stateLength: state.length
+          stateLength: state.length,
+          stateFirst40: state.substring(0, 40),
+          stateLast20: state.substring(Math.max(0, state.length - 20)),
+          decodedPreview,
+          partsCount,
+          rawQueryState: String(req.query.state || ''),
+          rawQueryStateLength: String(req.query.state || '').length,
         });
 
-        const errorRedirectUrl = `${getFrontendReturnBaseUrl()}/api-settings?oauth=error&provider=${marketplace}&reason=${encodeURIComponent(parsed.reason)}`;
+        const debugParams = `&dbg_stLen=${state.length}&dbg_parts=${partsCount}&dbg_reason=${parsed.reason}`;
+        const errorRedirectUrl = `${getFrontendReturnBaseUrl()}/api-settings?oauth=error&provider=${marketplace}&reason=${encodeURIComponent(parsed.reason)}${debugParams}`;
         return res.redirect(302, errorRedirectUrl);
       }
 
