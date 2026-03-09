@@ -1604,6 +1604,7 @@ router.get('/debug/oauth-state-roundtrip', async (_req: Request, res: Response) 
 
     res.json({
       diagnostic: 'oauth-state-roundtrip',
+      state,
       creation: {
         secretSource: secret ? 'getOAuthStateSecret()' : '(empty)',
         secretLength: secret.length,
