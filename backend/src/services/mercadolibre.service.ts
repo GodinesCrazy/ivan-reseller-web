@@ -76,7 +76,22 @@ export class MercadoLibreService {
       response_type: 'code',
     });
 
-    return `https://auth.mercadolibre.com.ar/authorization?${params.toString()}`;
+    const authDomain = this.getAuthDomain(this.credentials.siteId);
+    return `https://auth.${authDomain}/authorization?${params.toString()}`;
+  }
+
+  private getAuthDomain(siteId: string): string {
+    const domains: Record<string, string> = {
+      MLC: 'mercadolibre.cl',
+      MLM: 'mercadolibre.com.mx',
+      MLA: 'mercadolibre.com.ar',
+      MLB: 'mercadolivre.com.br',
+      MCO: 'mercadolibre.com.co',
+      MLU: 'mercadolibre.com.uy',
+      MPE: 'mercadolibre.com.pe',
+      MEC: 'mercadolibre.com.ec',
+    };
+    return domains[siteId] || 'mercadolibre.com.ar';
   }
 
   /**
