@@ -161,13 +161,11 @@ function parseCompactMlState(decoded: string) {
   const environment = envChar === 's' ? 'sandbox' : 'production';
   const returnOrigin = RETURN_ORIGIN_MAP[roFlag] || '';
 
-  const redirectUri = getMercadoLibreRedirectUri();
-
   return {
     ok: true,
     userId,
     marketplace: 'mercadolibre',
-    redirectUri,
+    redirectUri: '',
     environment: environment as 'sandbox' | 'production',
     hasExpiration: false,
     expirationTime: null,
@@ -1193,16 +1191,23 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
           .send('<html><body>Base credentials missing. Please save Client ID and Client Secret before authorizing.</body></html>');
       }
       
+      const mlRedirectUri = redirectUri
+        || cred?.credentials?.redirectUri
+        || process.env.MERCADOLIBRE_REDIRECT_URI
+        || process.env.MERCADOLIBRE_REDIRECT_URL
+        || getMercadoLibreRedirectUri();
+
       logger.info('[OAuth Callback] Exchanging code for MercadoLibre tokens', {
         service: 'marketplace-oauth',
         userId,
         environment,
         codeLength: code.length,
-        redirectUriLength: redirectUri?.length || 0,
+        redirectUriLength: mlRedirectUri?.length || 0,
+        redirectUriSource: redirectUri ? 'state' : (cred?.credentials?.redirectUri ? 'credentials' : 'env/canonical'),
       });
       
       const ml = new MercadoLibreService({ clientId, clientSecret, siteId });
-      const tokens = await ml.exchangeCodeForToken(code, redirectUri);
+      const tokens = await ml.exchangeCodeForToken(code, mlRedirectUri);
       
       logger.info('[OAuth Callback] MercadoLibre token exchange successful', {
         service: 'marketplace-oauth',
