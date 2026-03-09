@@ -134,7 +134,20 @@ export class MercadoLibreService {
         expiresIn: response.data.expires_in,
       };
     } catch (error: any) {
-      throw new AppError(`MercadoLibre OAuth error: ${error.response?.data?.message || error.message}`, 400);
+      const mlData = error.response?.data;
+      const mlStatus = error.response?.status;
+      const detail = mlData?.message || mlData?.error_description || mlData?.error || error.message;
+      const logger = (await import('../config/logger')).default;
+      logger.error('[MercadoLibre] Token exchange failed', {
+        status: mlStatus,
+        responseData: JSON.stringify(mlData),
+        detail,
+        clientIdLen: this.credentials.clientId?.length,
+        clientIdHasWhitespace: /\s/.test(this.credentials.clientId || ''),
+        secretLen: this.credentials.clientSecret?.length,
+        secretHasWhitespace: /\s/.test(this.credentials.clientSecret || ''),
+      });
+      throw new AppError(`MercadoLibre OAuth error: ${detail}`, 400);
     }
   }
 
