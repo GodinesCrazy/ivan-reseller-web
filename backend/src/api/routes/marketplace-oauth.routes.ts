@@ -308,6 +308,134 @@ function parseState(state: string) {
   }
 }
 
+async function handleMercadoLibreCallback(req: Request, res: Response, code: string, state: string) {
+  const startTime = Date.now();
+  try {
+    const parsed = parseState(state);
+    if (!parsed.ok) {
+      logger.error('[ML Callback] Invalid state', {
+        service: 'marketplace-oauth',
+        reason: parsed.reason,
+        stateLength: state.length,
+      });
+      const errorUrl = `${getFrontendReturnBaseUrl()}/api-settings?oauth=error&provider=mercadolibre&reason=${encodeURIComponent(parsed.reason)}`;
+      return res.redirect(302, errorUrl);
+    }
+
+    const { userId, environment, returnOrigin } = parsed as {
+      userId: number;
+      redirectUri: string;
+      environment: 'sandbox' | 'production';
+      returnOrigin?: string;
+    };
+
+    logger.info('[ML Callback] State parsed', { service: 'marketplace-oauth', userId, environment });
+
+    const cred = await marketplaceService.getCredentials(userId, 'mercadolibre', environment);
+    const clientId = cred?.credentials?.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '';
+    const clientSecret = cred?.credentials?.clientSecret || process.env.MERCADOLIBRE_CLIENT_SECRET || '';
+    const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLM';
+
+    if (!clientId || !clientSecret) {
+      logger.error('[ML Callback] Missing credentials', { service: 'marketplace-oauth', userId, hasClientId: !!clientId, hasClientSecret: !!clientSecret });
+      return res.status(400).send('<html><body>Missing Client ID or Client Secret. Save credentials before authorizing.</body></html>');
+    }
+
+    const mlRedirectUri =
+      cred?.credentials?.redirectUri
+      || process.env.MERCADOLIBRE_REDIRECT_URI
+      || process.env.MERCADOLIBRE_REDIRECT_URL
+      || getMercadoLibreRedirectUri();
+
+    logger.info('[ML Callback] Exchanging code', {
+      service: 'marketplace-oauth',
+      userId,
+      codeLength: code.length,
+      redirectUriLength: mlRedirectUri?.length || 0,
+      redirectUriSource: cred?.credentials?.redirectUri ? 'credentials' : 'env/canonical',
+    });
+
+    const ml = new MercadoLibreService({ clientId, clientSecret, siteId });
+    const tokens = await ml.exchangeCodeForToken(code, mlRedirectUri);
+
+    logger.info('[ML Callback] Token exchange successful', {
+      service: 'marketplace-oauth',
+      userId,
+      hasAccessToken: !!tokens.accessToken,
+      hasRefreshToken: !!tokens.refreshToken,
+    });
+
+    const newCreds = {
+      ...(cred?.credentials || {}),
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      userId: tokens.userId,
+      sandbox: environment === 'sandbox',
+    };
+
+    await marketplaceService.saveCredentials(userId, 'mercadolibre', newCreds, environment);
+
+    const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
+    clearCredentialsCache(userId, 'mercadolibre', environment);
+    clearCredentialsCache(userId, 'mercadolibre', environment === 'sandbox' ? 'production' : 'sandbox');
+
+    const { apiAvailability } = await import('../../services/api-availability.service');
+    await apiAvailability.clearAPICache(userId, 'mercadolibre').catch(() => {});
+    await apiAvailability.checkMercadoLibreAPI(userId, environment).catch(() => {});
+
+    logger.info('[ML Callback] Credentials saved', { service: 'marketplace-oauth', userId, duration: Date.now() - startTime });
+
+    const safeReturnOrigin = returnOrigin || '';
+    const baseForRedirect = safeReturnOrigin || getFrontendReturnBaseUrl();
+    const fallbackReturnUrl = `${baseForRedirect}/api-settings?oauth=success&provider=mercadolibre`;
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head><meta charset="utf-8"><title>Autorización completada</title>
+          <style>body{font-family:Arial,sans-serif;padding:20px;text-align:center;max-width:500px;margin:2rem auto}.success{color:green;font-size:18px;margin:20px 0}.btn{display:inline-block;margin-top:1rem;padding:12px 24px;background:#2563eb;color:white;text-decoration:none;border-radius:6px;font-weight:600}</style>
+        </head>
+        <body>
+          <div class="success">Autorización MercadoLibre completada</div>
+          <p>Redirigiendo...</p>
+          <p><a href="${fallbackReturnUrl}" class="btn">Volver a API Settings</a></p>
+          <script>
+            (function(){
+              if(window.opener&&!window.opener.closed){try{window.opener.postMessage({type:'oauth_success',marketplace:'mercadolibre',timestamp:Date.now()},'*')}catch(e){}}
+              setTimeout(function(){window.location.href='${fallbackReturnUrl.replace(/'/g, "\\'")}'},2000);
+            })();
+          </script>
+        </body>
+      </html>
+    `);
+  } catch (e: any) {
+    const errorMessage = e?.message || 'Unknown error';
+    logger.error('[ML Callback] Error', {
+      service: 'marketplace-oauth',
+      error: errorMessage,
+      status: e?.response?.status,
+      responseData: e?.response?.data,
+      duration: Date.now() - startTime,
+    });
+    const webBase = getFrontendReturnBaseUrl();
+    return res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+        <head><meta charset="utf-8"><title>Error de autorización</title>
+          <style>body{font-family:Arial,sans-serif;padding:20px;text-align:center;max-width:600px;margin:2rem auto}.error{color:red;font-size:18px;margin:20px 0}.details{color:#666;font-size:13px;margin-top:10px}.btn{display:inline-block;margin-top:1rem;padding:12px 24px;background:#2563eb;color:white;text-decoration:none;border-radius:6px;font-weight:600}</style>
+        </head>
+        <body>
+          <div class="error">Error en la autorización de MercadoLibre</div>
+          <div class="details">${errorMessage}</div>
+          <p><a href="${webBase}/api-settings?oauth=error&provider=mercadolibre&reason=${encodeURIComponent(errorMessage)}" class="btn">Volver a API Settings</a></p>
+          <script>
+            if(window.opener&&!window.opener.closed){try{window.opener.postMessage({type:'oauth_error',marketplace:'mercadolibre',error:'${errorMessage.replace(/'/g, "\\'").replace(/\n/g, ' ')}'},'*')}catch(e){}}
+          </script>
+        </body>
+      </html>
+    `);
+  }
+}
+
 // ✅ ALIEXPRESS CALLBACK DIRECTO: Endpoint específico para AliExpress según documentación
 // https://ivanreseller.com/aliexpress/callback
 // ✅ FIX: Maneja directamente el flujo completo sin redirect para evitar que Vercel sirva SPA
@@ -326,21 +454,17 @@ router.get('/callback', async (req: Request, res: Response) => {
     const stateStr = String(state || '');
     const errorStr = String(errorParam || '');
 
-    // Safety net: if a MercadoLibre callback lands here (shared /callback path),
-    // forward to the general OAuth handler.
+    // MercadoLibre callback lands on this shared /callback path.
+    // Handle inline to avoid a 307 redirect round-trip through Vercel.
     if (stateStr) {
       try {
         const decoded = Buffer.from(stateStr.trim(), 'base64url').toString('utf8');
         if (decoded.startsWith('ml:')) {
-          logger.info('[OAuth Callback] MercadoLibre state detected on /callback route, forwarding', {
+          logger.info('[OAuth Callback] MercadoLibre state detected on /callback route, processing inline', {
             service: 'marketplace-oauth',
             stateLength: stateStr.length,
           });
-          const qs = new URLSearchParams();
-          for (const [key, val] of Object.entries(req.query)) {
-            qs.set(key, String(val));
-          }
-          return res.redirect(307, `/api/marketplace-oauth/oauth/callback/mercadolibre?${qs.toString()}`);
+          return handleMercadoLibreCallback(req, res, codeStr, stateStr);
         }
       } catch {}
     }
@@ -1166,107 +1290,7 @@ router.get('/oauth/callback/:marketplace', async (req: Request, res: Response) =
         apiStatusRefreshed: true
       });
     } else if (marketplace === 'mercadolibre') {
-      logger.info('[OAuth Callback] Processing MercadoLibre OAuth', {
-        service: 'marketplace-oauth',
-        userId,
-        environment,
-        codeLength: code.length
-      });
-      
-      const cred = await marketplaceService.getCredentials(userId, 'mercadolibre', environment);
-      const clientId = cred?.credentials?.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '';
-      const clientSecret = cred?.credentials?.clientSecret || process.env.MERCADOLIBRE_CLIENT_SECRET || '';
-      const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLM';
-      
-      if (!clientId || !clientSecret) {
-        logger.error('[OAuth Callback] Missing MercadoLibre base credentials', {
-          service: 'marketplace-oauth',
-          userId,
-          environment,
-          hasClientId: !!clientId,
-          hasClientSecret: !!clientSecret,
-        });
-        return res
-          .status(400)
-          .send('<html><body>Base credentials missing. Please save Client ID and Client Secret before authorizing.</body></html>');
-      }
-      
-      const mlRedirectUri = redirectUri
-        || cred?.credentials?.redirectUri
-        || process.env.MERCADOLIBRE_REDIRECT_URI
-        || process.env.MERCADOLIBRE_REDIRECT_URL
-        || getMercadoLibreRedirectUri();
-
-      logger.info('[OAuth Callback] Exchanging code for MercadoLibre tokens', {
-        service: 'marketplace-oauth',
-        userId,
-        environment,
-        codeLength: code.length,
-        redirectUriLength: mlRedirectUri?.length || 0,
-        redirectUriSource: redirectUri ? 'state' : (cred?.credentials?.redirectUri ? 'credentials' : 'env/canonical'),
-      });
-      
-      const ml = new MercadoLibreService({ clientId, clientSecret, siteId });
-      const tokens = await ml.exchangeCodeForToken(code, mlRedirectUri);
-      
-      logger.info('[OAuth Callback] MercadoLibre token exchange successful', {
-        service: 'marketplace-oauth',
-        userId,
-        environment,
-        hasAccessToken: !!tokens.accessToken,
-        accessTokenLength: tokens.accessToken?.length || 0,
-        hasRefreshToken: !!tokens.refreshToken,
-        refreshTokenLength: tokens.refreshToken?.length || 0,
-        hasUserId: !!tokens.userId,
-      });
-      
-      // ✅ CORRECCIÓN MERCADOLIBRE OAUTH: Sincronizar sandbox flag con environment
-      const newCreds = { 
-        ...(cred?.credentials || {}), 
-        accessToken: tokens.accessToken, 
-        refreshToken: tokens.refreshToken, 
-        userId: tokens.userId,
-        // ✅ CRÍTICO: Sincronizar sandbox flag con environment
-        sandbox: environment === 'sandbox'
-      };
-      
-      logger.info('[OAuth Callback] Saving MercadoLibre credentials', {
-        service: 'marketplace-oauth',
-        userId,
-        environment,
-        sandbox: newCreds.sandbox,
-        credentialKeys: Object.keys(newCreds),
-        hasAccessToken: !!newCreds.accessToken,
-        hasRefreshToken: !!newCreds.refreshToken,
-      });
-      
-      // ✅ CORRECCIÓN: Guardar credenciales con environment explícito
-      await marketplaceService.saveCredentials(userId, 'mercadolibre', newCreds, environment);
-      
-      // ✅ CORRECCIÓN MERCADOLIBRE OAUTH: Limpiar cache de credenciales
-      const { clearCredentialsCache } = await import('../../services/credentials-manager.service');
-      clearCredentialsCache(userId, 'mercadolibre', environment);
-      clearCredentialsCache(userId, 'mercadolibre', environment === 'sandbox' ? 'production' : 'sandbox');
-      
-      // ✅ CORRECCIÓN: Limpiar cache del singleton para que la UI refleje el token
-      const { apiAvailability } = await import('../../services/api-availability.service');
-      await apiAvailability.clearAPICache(userId, 'mercadolibre').catch(() => {});
-      await apiAvailability.checkMercadoLibreAPI(userId, environment).catch((err) => {
-        logger.warn('[OAuth Callback] Error forcing MercadoLibre API status refresh', {
-          error: err?.message || String(err),
-          userId,
-          environment
-        });
-      });
-      
-      logger.info('[OAuth Callback] MercadoLibre credentials saved successfully', {
-        service: 'marketplace-oauth',
-        userId,
-        environment,
-        duration: Date.now() - startTime,
-        cacheCleared: true,
-        apiStatusRefreshed: true
-      });
+      return handleMercadoLibreCallback(req, res, code, state);
     } else if (marketplace === 'aliexpress-dropshipping' || marketplace === 'aliexpress_dropshipping') {
       logger.info('[OAuth Callback] Processing AliExpress Dropshipping OAuth', {
         service: 'marketplace-oauth',
