@@ -146,11 +146,12 @@ interface APIField {
   key: string;
   label: string;
   required: boolean;
-  type: 'text' | 'password' | 'email';
-  disabled?: boolean; // Campo puede estar deshabilitado
-  value?: string | number; // Valor por defecto del campo
+  type: 'text' | 'password' | 'email' | 'select';
+  disabled?: boolean;
+  value?: string | number;
   placeholder?: string;
   helpText?: string;
+  options?: { value: string; label: string }[];
 }
 
 // Definiciones de APIs soportadas
@@ -193,7 +194,19 @@ const API_DEFINITIONS: Record<string, APIDefinition> = {
     fields: [
       { key: 'MERCADOLIBRE_CLIENT_ID', label: 'Client ID (App ID)', required: true, type: 'text', placeholder: '1234567890123456' },
       { key: 'MERCADOLIBRE_CLIENT_SECRET', label: 'Client Secret', required: true, type: 'password', placeholder: 'abcdefghijklmnop...' },
-      { key: 'MERCADOLIBRE_REDIRECT_URI', label: 'Redirect URI', required: false, type: 'text', placeholder: 'http://localhost:5173/auth/callback' },
+      { key: 'MERCADOLIBRE_SITE_ID', label: 'País (Site ID)', required: true, type: 'select', placeholder: 'Selecciona un país',
+        options: [
+          { value: 'MLC', label: '🇨🇱 Chile (MLC)' },
+          { value: 'MLM', label: '🇲🇽 México (MLM)' },
+          { value: 'MLA', label: '🇦🇷 Argentina (MLA)' },
+          { value: 'MLB', label: '🇧🇷 Brasil (MLB)' },
+          { value: 'MCO', label: '🇨🇴 Colombia (MCO)' },
+          { value: 'MLU', label: '🇺🇾 Uruguay (MLU)' },
+          { value: 'MPE', label: '🇵🇪 Perú (MPE)' },
+          { value: 'MEC', label: '🇪🇨 Ecuador (MEC)' },
+        ],
+      },
+      { key: 'MERCADOLIBRE_REDIRECT_URI', label: 'Redirect URI', required: false, type: 'text', placeholder: 'https://ivanreseller.com/api/marketplace-oauth/callback' },
     ],
   },
   groq: {
@@ -1491,6 +1504,7 @@ export default function APISettings() {
         'AMAZON_REGION': 'region',
         'MERCADOLIBRE_CLIENT_ID': 'clientId',
         'MERCADOLIBRE_CLIENT_SECRET': 'clientSecret',
+        'MERCADOLIBRE_SITE_ID': 'siteId',
         'MERCADOLIBRE_REDIRECT_URI': 'redirectUri',
         'GROQ_API_KEY': 'apiKey',
         'SCRAPERAPI_KEY': 'apiKey',
@@ -2182,6 +2196,7 @@ export default function APISettings() {
           'AMAZON_CLIENT_SECRET': 'clientSecret',
           'MERCADOLIBRE_CLIENT_ID': 'clientId',
           'MERCADOLIBRE_CLIENT_SECRET': 'clientSecret',
+          'MERCADOLIBRE_SITE_ID': 'siteId',
           'GROQ_API_KEY': 'apiKey',
           'SCRAPERAPI_KEY': 'apiKey',
           'ZENROWS_API_KEY': 'apiKey',
@@ -4447,7 +4462,7 @@ export default function APISettings() {
                       const fieldKey = field.key;
                       const fieldLabel = field.label;
                       const fieldRequired = field.required !== undefined ? field.required : (field.required || false);
-                      const fieldType = field.type === 'password' || field.type === 'email' ? field.type : 'text';
+                      const fieldType = field.type === 'password' || field.type === 'email' || field.type === 'select' ? field.type : 'text';
                       const fieldPlaceholder = field.placeholder || '';
                       const fieldHelpText = field.helpText;
                       const showKey = `${formKey}:${fieldKey}`;
@@ -4478,27 +4493,67 @@ export default function APISettings() {
                             )}
                           </label>
                           <div className="relative">
-                            <input
-                              type={fieldType === 'password' && !showPasswords[showKey] ? 'password' : 'text'}
-                              value={fieldValue}
-                              onChange={(e) => handleInputChange(apiDef.name, currentEnvironment, fieldKey, e.target.value)}
-                              placeholder={fieldPlaceholder}
-                              disabled={inputDisabled}
-                              name={fieldKey}
-                              id={`${formKey}-${fieldKey}`}
-                              data-form-key={formKey}
-                              data-field-key={fieldKey}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                inputDisabled 
-                                  ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
-                                  : validation.status === 'invalid'
-                                  ? 'border-red-500 bg-red-50'
-                                  : validation.status === 'valid'
-                                  ? 'border-green-500 bg-green-50'
-                                  : 'border-gray-300'
-                              }`}
-                            />
-                            {/* ✅ MEJORA UX: Indicador de validación */}
+                            {field.type === 'select' && field.options ? (
+                              <select
+                                value={fieldValue}
+                                onChange={(e) => handleInputChange(apiDef.name, currentEnvironment, fieldKey, e.target.value)}
+                                disabled={inputDisabled}
+                                name={fieldKey}
+                                id={`${formKey}-${fieldKey}`}
+                                data-form-key={formKey}
+                                data-field-key={fieldKey}
+                                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                  inputDisabled
+                                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                                    : validation.status === 'invalid'
+                                    ? 'border-red-500 bg-red-50'
+                                    : validation.status === 'valid'
+                                    ? 'border-green-500 bg-green-50'
+                                    : 'border-gray-300'
+                                }`}
+                              >
+                                <option value="">{fieldPlaceholder || 'Selecciona...'}</option>
+                                {field.options.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <>
+                                <input
+                                  type={fieldType === 'password' && !showPasswords[showKey] ? 'password' : 'text'}
+                                  value={fieldValue}
+                                  onChange={(e) => handleInputChange(apiDef.name, currentEnvironment, fieldKey, e.target.value)}
+                                  placeholder={fieldPlaceholder}
+                                  disabled={inputDisabled}
+                                  name={fieldKey}
+                                  id={`${formKey}-${fieldKey}`}
+                                  data-form-key={formKey}
+                                  data-field-key={fieldKey}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                    inputDisabled 
+                                      ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
+                                      : validation.status === 'invalid'
+                                      ? 'border-red-500 bg-red-50'
+                                      : validation.status === 'valid'
+                                      ? 'border-green-500 bg-green-50'
+                                      : 'border-gray-300'
+                                  }`}
+                                />
+                                {fieldType === 'password' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowPasswords((prev: Record<string, boolean>) => ({ ...prev, [showKey]: !prev[showKey] }))}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                  >
+                                    {showPasswords[showKey] ? (
+                                      <EyeOff className="w-5 h-5" />
+                                    ) : (
+                                      <Eye className="w-5 h-5" />
+                                    )}
+                                  </button>
+                                )}
+                              </>
+                            )}
                             {validation.status !== 'idle' && !inputDisabled && (
                               <div className="absolute right-10 top-1/2 -translate-y-1/2">
                                 <ValidationIndicator
@@ -4507,19 +4562,6 @@ export default function APISettings() {
                                   size="sm"
                                 />
                               </div>
-                            )}
-                            {fieldType === 'password' && (
-                              <button
-                                type="button"
-                                onClick={() => setShowPasswords((prev: Record<string, boolean>) => ({ ...prev, [showKey]: !prev[showKey] }))}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                              >
-                                {showPasswords[showKey] ? (
-                                  <EyeOff className="w-5 h-5" />
-                                ) : (
-                                  <Eye className="w-5 h-5" />
-                                )}
-                              </button>
                             )}
                           </div>
                           {/* ✅ MEJORA UX: Mensaje de error mejorado */}

@@ -5,32 +5,41 @@ import type { MarketplacePublisher } from './marketplace.publisher';
 import type { PublishMode, PublishResult, PublishableProduct, ValidationResult } from './marketplace.types';
 import { toNumber } from '../../utils/decimal.utils';
 
-const REQUIRED_ENV = ['ML_CLIENT_ID', 'ML_CLIENT_SECRET'];
-
 export class MercadoLibrePublisher implements MarketplacePublisher {
+  private userId?: number;
+
+  setUserId(userId: number) {
+    this.userId = userId;
+  }
+
   async validateCredentials(): Promise<ValidationResult> {
-    const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
-    if (missing.length > 0) {
+    try {
+      const creds = await this.resolveCredentials();
+      if (!creds.clientId || !creds.clientSecret) {
+        return {
+          ok: false,
+          status: 'NOT_CONFIGURED',
+          missing: ['clientId', 'clientSecret'],
+          message: 'Faltan credenciales de MercadoLibre. Configura Client ID y Client Secret en API Settings.',
+        };
+      }
+      if (!creds.accessToken && !creds.refreshToken) {
+        return {
+          ok: false,
+          status: 'NOT_CONFIGURED',
+          missing: ['accessToken'],
+          message: 'Se requiere completar OAuth de MercadoLibre en API Settings.',
+        };
+      }
+      return { ok: true, status: 'OK' };
+    } catch (error) {
       return {
         ok: false,
         status: 'NOT_CONFIGURED',
-        missing,
-        message:
-          'Faltan credenciales de MercadoLibre. Configura ML_CLIENT_ID y ML_CLIENT_SECRET antes de publicar.',
+        missing: [],
+        message: `Error al resolver credenciales: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
-
-    if (!process.env.ML_ACCESS_TOKEN && !process.env.ML_REFRESH_TOKEN) {
-      return {
-        ok: false,
-        status: 'NOT_CONFIGURED',
-        missing: ['ML_ACCESS_TOKEN', 'ML_REFRESH_TOKEN'],
-        message:
-          'Se requiere ML_ACCESS_TOKEN o ML_REFRESH_TOKEN para publicar en MercadoLibre.',
-      };
-    }
-
-    return { ok: true, status: 'OK' };
   }
 
   async testConnection(): Promise<boolean> {
@@ -118,11 +127,23 @@ export class MercadoLibrePublisher implements MarketplacePublisher {
   }
 
   private async resolveCredentials() {
-    const clientId = process.env.ML_CLIENT_ID || '';
-    const clientSecret = process.env.ML_CLIENT_SECRET || '';
-    const refreshToken = process.env.ML_REFRESH_TOKEN || undefined;
-    const siteId = process.env.ML_SITE_ID || 'MLM';
-    let accessToken = process.env.ML_ACCESS_TOKEN || undefined;
+    const { prisma } = await import('../../config/database');
+
+    const dbCred = await prisma.apiCredential.findFirst({
+      where: {
+        apiName: 'mercadolibre',
+        isActive: true,
+        ...(this.userId ? { userId: this.userId } : {}),
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const creds = (dbCred?.credentials as Record<string, any>) || {};
+    const clientId = creds.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '';
+    const clientSecret = creds.clientSecret || process.env.MERCADOLIBRE_CLIENT_SECRET || '';
+    const refreshToken = creds.refreshToken || undefined;
+    const siteId = creds.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC';
+    let accessToken = creds.accessToken || undefined;
 
     if (!accessToken && refreshToken) {
       const mlService = new MercadoLibreService({
@@ -139,7 +160,7 @@ export class MercadoLibrePublisher implements MarketplacePublisher {
 
     if (!accessToken || !userId) {
       throw new Error(
-        'MercadoLibre no tiene access token o userId válido. Verifica ML_ACCESS_TOKEN/ML_REFRESH_TOKEN.',
+        'MercadoLibre no tiene access token o userId válido. Completa OAuth en API Settings.',
       );
     }
 
@@ -156,10 +177,6 @@ export class MercadoLibrePublisher implements MarketplacePublisher {
   private async resolveUserId(accessToken?: string): Promise<string | undefined> {
     if (!accessToken) {
       return undefined;
-    }
-
-    if (process.env.ML_USER_ID) {
-      return process.env.ML_USER_ID;
     }
 
     try {

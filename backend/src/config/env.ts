@@ -270,6 +270,8 @@ const envSchema = z.object({
   ZENROWS_API_KEY: z.string().optional(),
   MERCADOLIBRE_CLIENT_ID: z.string().optional(),
   MERCADOLIBRE_CLIENT_SECRET: z.string().optional(),
+  MERCADOLIBRE_SITE_ID: z.string().default('MLC'),
+  MERCADOLIBRE_REDIRECT_URI: z.string().optional(),
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
   PAYPAL_WEBHOOK_ID: z.string().optional(),
