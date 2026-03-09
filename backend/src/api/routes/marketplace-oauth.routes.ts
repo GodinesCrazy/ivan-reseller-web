@@ -6,6 +6,7 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { verifyStateAliExpressSafe } from '../../utils/oauth-state';
 import { getAliExpressDropshippingRedirectUri, getAliExpressRedirectUriInstructions } from '../../utils/aliexpress-dropshipping-oauth';
 import { getOAuthStateSecret } from '../../utils/oauth-state-secret';
+import { getMercadoLibreRedirectUri } from '../../utils/oauth-redirect-uris';
 import crypto from 'crypto';
 import logger from '../../config/logger';
 
@@ -160,10 +161,7 @@ function parseCompactMlState(decoded: string) {
   const environment = envChar === 's' ? 'sandbox' : 'production';
   const returnOrigin = RETURN_ORIGIN_MAP[roFlag] || '';
 
-  const backendUrl = (process.env.BACKEND_URL || process.env.RAILWAY_STATIC_URL || '').replace(/\/$/, '');
-  const redirectUri = backendUrl
-    ? `${backendUrl}/api/marketplace-oauth/oauth/callback/mercadolibre`
-    : (process.env.MERCADOLIBRE_REDIRECT_URI || process.env.MERCADOLIBRE_REDIRECT_URL || '');
+  const redirectUri = getMercadoLibreRedirectUri();
 
   return {
     ok: true,
@@ -329,6 +327,26 @@ router.get('/callback', async (req: Request, res: Response) => {
     const codeStr = String(code || '');
     const stateStr = String(state || '');
     const errorStr = String(errorParam || '');
+
+    // Safety net: if a MercadoLibre callback lands here (shared /callback path),
+    // forward to the general OAuth handler.
+    if (stateStr) {
+      try {
+        const decoded = Buffer.from(stateStr.trim(), 'base64url').toString('utf8');
+        if (decoded.startsWith('ml:')) {
+          logger.info('[OAuth Callback] MercadoLibre state detected on /callback route, forwarding', {
+            service: 'marketplace-oauth',
+            stateLength: stateStr.length,
+          });
+          const qs = new URLSearchParams();
+          for (const [key, val] of Object.entries(req.query)) {
+            qs.set(key, String(val));
+          }
+          return res.redirect(307, `/api/marketplace-oauth/oauth/callback/mercadolibre?${qs.toString()}`);
+        }
+      } catch {}
+    }
+
     const marketplace = 'aliexpress-dropshipping';
     
     // ✅ LOGGING: Registrar inicio del callback (sin secretos)

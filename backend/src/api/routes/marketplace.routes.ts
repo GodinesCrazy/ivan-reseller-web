@@ -988,13 +988,11 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const clientId = cred?.credentials?.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '';
       const clientSecret = cred?.credentials?.clientSecret || process.env.MERCADOLIBRE_CLIENT_SECRET || '';
       const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLM';
-      const rawCallbackUrl = typeof redirect_uri === 'string' && redirect_uri.length > 0
-        ? redirect_uri.trim()
-        : (cred?.credentials?.redirectUri || process.env.MERCADOLIBRE_REDIRECT_URI || process.env.MERCADOLIBRE_REDIRECT_URL || getMercadoLibreRedirectUri()).trim();
-      if (!rawCallbackUrl) {
-        return res.status(400).json({ success: false, message: 'Missing MercadoLibre Redirect URI' });
+      const canonicalCallback = getMercadoLibreRedirectUri();
+      if (!canonicalCallback) {
+        return res.status(400).json({ success: false, message: 'Missing MercadoLibre Redirect URI. Set BACKEND_URL or MERCADOLIBRE_REDIRECT_URI in Railway.' });
       }
-      const normalizedCallback = String(rawCallbackUrl).trim().replace(/\/$/, '');
+      const normalizedCallback = canonicalCallback.replace(/\/$/, '');
       // MercadoLibre has a ~128 char limit on state. Use compact format:
       // ml:<userId>:<ts_hex>:<nonce_short>:<env_char>:<returnOrigin_flag>:<sig_short>
       // env_char: p=production, s=sandbox
