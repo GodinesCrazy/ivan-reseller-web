@@ -995,12 +995,18 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
         return res.status(400).json({ success: false, message: 'Missing MercadoLibre Redirect URI' });
       }
       const normalizedCallback = String(rawCallbackUrl).trim().replace(/\/$/, '');
-      const redirB64 = Buffer.from(normalizedCallback).toString('base64url');
-      // ✅ FIX OAUTH LOGOUT: Incluir returnOrigin para redirigir al mismo host. Normalizar sin trailing slash.
+      // MercadoLibre has a ~128 char limit on state. Use compact format:
+      // ml:<userId>:<ts_hex>:<nonce_short>:<env_char>:<returnOrigin_flag>:<sig_short>
+      // env_char: p=production, s=sandbox
+      // returnOrigin_flag: 0=none, 1=www.ivanreseller.com, 2=ivanreseller.com
       const normalizedReturnOrigin = (returnOrigin || '').replace(/\/$/, '');
-      const payload = [userId, marketplace, ts, nonce, redirB64, resolvedEnv, normalizedReturnOrigin].join('|');
-      const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
-      const state = Buffer.from([payload, sig].join('|')).toString('base64url');
+      const tsHex = BigInt(ts).toString(16);
+      const nonceShort = nonce.substring(0, 8);
+      const envChar = resolvedEnv === 'sandbox' ? 's' : 'p';
+      const roFlag = normalizedReturnOrigin.includes('www.') ? '1' : (normalizedReturnOrigin.includes('ivanreseller') ? '2' : '0');
+      const compactPayload = `ml:${userId}:${tsHex}:${nonceShort}:${envChar}:${roFlag}`;
+      const compactSig = crypto.createHmac('sha256', secret).update(compactPayload).digest('hex').substring(0, 16);
+      const state = Buffer.from(`${compactPayload}:${compactSig}`).toString('base64url');
       const ml = new MercadoLibreService({ clientId, clientSecret, siteId });
       const url = new URL(ml.getAuthUrl(normalizedCallback));
       url.searchParams.set('state', state);

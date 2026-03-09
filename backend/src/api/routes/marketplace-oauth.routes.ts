@@ -126,6 +126,57 @@ router.get('/oauth/start/ebay', authenticate, async (req: Request, res: Response
 /** base64url regex: A-Za-z0-9_- only */
 const BASE64URL_REGEX = /^[A-Za-z0-9_-]+$/;
 
+const RETURN_ORIGIN_MAP: Record<string, string> = {
+  '1': 'https://www.ivanreseller.com',
+  '2': 'https://ivanreseller.com',
+  '0': '',
+};
+
+function parseCompactMlState(decoded: string) {
+  const parts = decoded.split(':');
+  // ml:<userId>:<tsHex>:<nonce>:<envChar>:<roFlag>:<sig16>
+  if (parts.length !== 7 || parts[0] !== 'ml') {
+    return { ok: false, reason: 'invalid_format' };
+  }
+  const [, userIdStr, tsHex, _nonce, envChar, roFlag, sig] = parts;
+  const userId = parseInt(userIdStr, 10);
+  if (!userId) return { ok: false, reason: 'invalid_user_or_marketplace' };
+
+  const secret = getOAuthStateSecret() || process.env.JWT_SECRET || 'default-key';
+  if (!secret || secret === 'default-key') return { ok: false, reason: 'missing_secret' };
+
+  const payload = `ml:${userIdStr}:${tsHex}:${_nonce}:${envChar}:${roFlag}`;
+  const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex').substring(0, 16);
+  if (expectedSig !== sig) {
+    logger.warn('[OAuth parseCompactMlState] Signature mismatch', {
+      decodedLength: decoded.length,
+      payloadLength: payload.length,
+      sigLength: sig.length,
+      expectedSigLength: expectedSig.length,
+    });
+    return { ok: false, reason: 'invalid_signature' };
+  }
+
+  const environment = envChar === 's' ? 'sandbox' : 'production';
+  const returnOrigin = RETURN_ORIGIN_MAP[roFlag] || '';
+
+  const backendUrl = (process.env.BACKEND_URL || process.env.RAILWAY_STATIC_URL || '').replace(/\/$/, '');
+  const redirectUri = backendUrl
+    ? `${backendUrl}/api/marketplace-oauth/oauth/callback/mercadolibre`
+    : (process.env.MERCADOLIBRE_REDIRECT_URI || process.env.MERCADOLIBRE_REDIRECT_URL || '');
+
+  return {
+    ok: true,
+    userId,
+    marketplace: 'mercadolibre',
+    redirectUri,
+    environment: environment as 'sandbox' | 'production',
+    hasExpiration: false,
+    expirationTime: null,
+    returnOrigin,
+  };
+}
+
 function parseState(state: string) {
   try {
     if (!state || typeof state !== 'string') {
@@ -144,6 +195,12 @@ function parseState(state: string) {
       return { ok: false, reason: 'invalid_state_encoding' };
     }
     const decoded = Buffer.from(trimmedState, 'base64url').toString('utf8');
+
+    // Compact MercadoLibre format: ml:<userId>:<tsHex>:<nonce>:<envChar>:<roFlag>:<sig16>
+    if (decoded.startsWith('ml:')) {
+      return parseCompactMlState(decoded);
+    }
+
     const parts = decoded.split('|');
     
     // Formato v3 eBay (9): userId|marketplace|ts|nonce|redirB64|env|expirationTime|returnOrigin|signature
@@ -1601,20 +1658,22 @@ router.get('/debug/oauth-state-roundtrip', async (_req: Request, res: Response) 
     const ts = Date.now().toString();
     const nonce = crypto.randomBytes(8).toString('hex');
     const testUserId = '1';
-    const testMarketplace = 'mercadolibre';
-    const testRedirectUri = 'https://ivanreseller.com/api/marketplace-oauth/oauth/callback/mercadolibre';
     const testEnv = 'production';
     const testReturnOrigin = 'https://www.ivanreseller.com';
-    const redirB64 = Buffer.from(testRedirectUri).toString('base64url');
 
-    const payload = [testUserId, testMarketplace, ts, nonce, redirB64, testEnv, testReturnOrigin].join('|');
-    const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
-    const state = Buffer.from([payload, sig].join('|')).toString('base64url');
+    // Test compact ML format (new)
+    const tsHex = BigInt(ts).toString(16);
+    const nonceShort = nonce.substring(0, 8);
+    const envChar = 'p';
+    const roFlag = '1';
+    const compactPayload = `ml:${testUserId}:${tsHex}:${nonceShort}:${envChar}:${roFlag}`;
+    const compactSig = crypto.createHmac('sha256', secret).update(compactPayload).digest('hex').substring(0, 16);
+    const state = Buffer.from(`${compactPayload}:${compactSig}`).toString('base64url');
 
     const verifyResult = parseState(state);
 
     const secretVerify = getOAuthStateSecret() || process.env.JWT_SECRET || 'default-key';
-    const expectedSig = crypto.createHmac('sha256', secretVerify).update(payload).digest('hex');
+    const expectedSig = crypto.createHmac('sha256', secretVerify).update(compactPayload).digest('hex').substring(0, 16);
 
     res.json({
       diagnostic: 'oauth-state-roundtrip',
@@ -1623,16 +1682,16 @@ router.get('/debug/oauth-state-roundtrip', async (_req: Request, res: Response) 
         secretSource: secret ? 'getOAuthStateSecret()' : '(empty)',
         secretLength: secret.length,
         secretFirst4: secret ? secret.substring(0, 4) + '***' : '(empty)',
-        payloadLength: payload.length,
-        payloadPartCount: payload.split('|').length,
-        sigLength: sig.length,
+        compactPayloadLength: compactPayload.length,
+        compactSigLength: compactSig.length,
         stateLength: state.length,
+        format: 'compact_ml',
       },
       verification: {
         secretSource: secretVerify === secret ? 'same_as_creation' : 'DIFFERENT_fallback',
         secretLength: secretVerify.length,
         secretFirst4: secretVerify ? secretVerify.substring(0, 4) + '***' : '(empty)',
-        expectedSigMatch: expectedSig === sig,
+        expectedSigMatch: expectedSig === compactSig,
         parseResult: verifyResult,
       },
       env: {
