@@ -347,12 +347,22 @@ async function handleMercadoLibreCallback(req: Request, res: Response, code: str
       || process.env.MERCADOLIBRE_REDIRECT_URL
       || getMercadoLibreRedirectUri();
 
+    const clientIdPreview = clientId ? `${clientId.substring(0, 10)}...${clientId.substring(Math.max(0, clientId.length - 4))}` : '(empty)';
+    const secretLen = clientSecret?.length || 0;
+    const secretPreview = secretLen > 6 ? `${clientSecret.substring(0, 3)}...${clientSecret.substring(secretLen - 3)}` : '(too short)';
+
     logger.info('[ML Callback] Exchanging code', {
       service: 'marketplace-oauth',
       userId,
       codeLength: code.length,
-      redirectUriLength: mlRedirectUri?.length || 0,
+      redirectUri: mlRedirectUri,
       redirectUriSource: cred?.credentials?.redirectUri ? 'credentials' : 'env/canonical',
+      clientIdPreview,
+      clientIdLength: clientId.length,
+      secretLength: secretLen,
+      secretPreview,
+      siteId,
+      tokenEndpoint: 'https://api.mercadolibre.com/oauth/token',
     });
 
     const ml = new MercadoLibreService({ clientId, clientSecret, siteId });
