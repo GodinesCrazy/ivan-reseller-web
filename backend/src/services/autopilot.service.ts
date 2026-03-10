@@ -162,36 +162,45 @@ export class AutopilotSystem extends EventEmitter {
     // ✅ ALTA PRIORIDAD: Inicializar MarketplaceService
     this.marketplaceService = new MarketplaceService();
     
-    // Default configuration (orientada a ~$3000/mes: 150–250 listados, margen y ROI razonables)
+    // Config optimizada para $5K USD/mes neto: productos de $15-120, markup 2.5x, ciclos cada 10 min
     this.config = {
       enabled: false,
-      cycleIntervalMinutes: 90,
-      publicationMode: 'manual',
-      targetMarketplace: 'ebay',
-      maxOpportunitiesPerCycle: 5,
-      maxActiveProducts: 250,
-      minSupplierPrice: 2,
-      maxSupplierPrice: 35,
-      repricingIntervalHours: 12,
-      targetCountry: 'US',
+      cycleIntervalMinutes: 10,
+      publicationMode: 'automatic',
+      targetMarketplace: 'mercadolibre',
+      targetMarketplaces: ['mercadolibre', 'ebay'],
+      maxOpportunitiesPerCycle: 25,
+      maxActiveProducts: 500,
+      minSupplierPrice: 15,
+      maxSupplierPrice: 120,
+      repricingIntervalHours: 6,
+      targetCountry: 'CL',
       searchQueries: [
-        'phone case',
-        'wireless earbuds',
-        'usb charger',
-        'led strip',
-        'car phone holder',
-        'smart watch band',
-        'portable bluetooth speaker',
-        'kitchen organizer',
-        'yoga mat',
-        'resistance bands',
-        'desk organizer',
-        'cable organizer',
+        'audifonos bluetooth premium', 'cargador inalambrico rapido', 'smartwatch deportivo',
+        'camara seguridad wifi hd', 'parlante bluetooth portatil', 'teclado mecanico gamer',
+        'auriculares gamer rgb', 'power bank 20000mah', 'aspiradora portatil auto',
+        'humidificador ultrasonico', 'mouse inalambrico ergonomico', 'lampara led escritorio',
+        'reloj inteligente fitness', 'soporte celular auto magnetico', 'proyector portatil mini',
+        'drone mini camara', 'bascula digital bluetooth', 'purificador aire portatil',
+        'maquina cortar pelo profesional', 'kit herramientas precision',
+        'funda celular silicona', 'organizador escritorio madera', 'luz led tira rgb',
+        'filtro agua grifo cocina', 'cepillo electrico dental', 'bolsa termica almuerzo',
+        'guantes tactiles invierno', 'soporte laptop ajustable', 'termo acero inoxidable',
+        'cortina ducha antimoho', 'alfombrilla raton grande', 'anillo luz selfie',
+        'faja deportiva cintura', 'protector pantalla vidrio', 'organizador cables escritorio',
+        'mini ventilador usb portatil', 'bolsa viaje organizadora', 'espejo maquillaje led',
+        'soporte tablet cama', 'kit limpieza pantallas electronicas',
+        'cargador solar portatil', 'luz nocturna sensor movimiento', 'candado huella digital',
+        'camara accion deportiva', 'microfono usb podcast', 'hub usb tipo c',
+        'router wifi repetidor', 'alarma hogar inteligente', 'monitor presion arterial',
+        'irrigador dental portatil', 'maquina ruido blanco', 'cojin masaje cervical',
+        'dispensador jabon automatico', 'organizador zapatos puerta', 'silla ergonomica cojin',
       ],
-      workingCapital: 1200,
+      workingCapital: 5000,
       minProfitUsd: 8,
-      minRoiPct: 40,
-      optimizationEnabled: false,
+      minRoiPct: 35,
+      optimizationEnabled: true,
+      maxDailyOrders: 100,
     };
 
     // Initialize category performance
@@ -561,8 +570,8 @@ export class AutopilotSystem extends EventEmitter {
       const minProfitUsd = uc?.minProfitUsd ?? this.config.minProfitUsd;
       const minRoiPct = uc?.minRoiPct ?? this.config.minRoiPct;
       return {
-        minProfitUsd: minProfitUsd ?? 10,
-        minRoiPct: minRoiPct ?? 50,
+        minProfitUsd: minProfitUsd ?? 5,
+        minRoiPct: minRoiPct ?? 25,
       };
     } catch {
       return { minProfitUsd: this.config.minProfitUsd, minRoiPct: this.config.minRoiPct };
@@ -655,6 +664,13 @@ export class AutopilotSystem extends EventEmitter {
       console.log('[AUTOPILOT] CYCLE STARTED');
 
       logger.info('Autopilot: Starting new cycle', { query, userId: currentUserId, environment: userEnvironment });
+
+      // 0. Poll marketplaces for new orders (webhook fallback)
+      try {
+        await this.pollMarketplaceOrders(currentUserId, userEnvironment);
+      } catch (pollErr: any) {
+        logger.warn('Autopilot: Order polling failed (non-fatal)', { error: pollErr?.message });
+      }
 
       // 1. Select optimal query
       const selectedQuery = query || this.selectOptimalQuery();
@@ -941,8 +957,7 @@ export class AutopilotSystem extends EventEmitter {
    * Mantenido para compatibilidad
    */
   private calculateProfit(cost: number): number {
-    // Simple markup: 2x the cost
-    const suggestedPrice = cost * 2;
+    const suggestedPrice = cost * 2.5;
     const profit = suggestedPrice - cost;
     return Math.round(profit * 100) / 100;
   }
@@ -985,7 +1000,7 @@ export class AutopilotSystem extends EventEmitter {
         try {
           const cost = toNumber(p.aliexpressPrice || 0);
           const suggested = toNumber((p as any).suggestedPrice || 0);
-          const price = suggested > 0 ? suggested : cost * 2;
+          const price = suggested > 0 ? suggested : cost * 2.5;
           const margin = cost > 0 && price > cost ? ((price - cost) / price) * 100 : 0;
           const status = margin >= 5 ? 'APPROVED' : 'REJECTED';
           const reason = margin >= 5
@@ -1175,12 +1190,29 @@ export class AutopilotSystem extends EventEmitter {
     
     let published = 0;
     let approved = 0;
-    let capitalActuallyUsed = 0; // ✅ Solo capital de productos realmente creados (no duplicados)
+    let capitalActuallyUsed = 0;
     const currentUserId = userId;
     const currentEnvironment = environment || 'sandbox';
     const currentPublishMode = publishMode || this.config.publicationMode;
 
-    for (const opp of opportunities) {
+    const oppUrls = opportunities.map(o => o.url).filter(Boolean);
+    const existingProducts = oppUrls.length > 0
+      ? await prisma.product.findMany({
+          where: { userId, aliexpressUrl: { in: oppUrls } },
+          select: { aliexpressUrl: true },
+        })
+      : [];
+    const knownUrls = new Set(existingProducts.map(p => p.aliexpressUrl));
+    const freshOpportunities = opportunities.filter(o => !knownUrls.has(o.url));
+    if (freshOpportunities.length < opportunities.length) {
+      logger.info('Autopilot: Pre-filtered duplicates', {
+        total: opportunities.length,
+        duplicates: opportunities.length - freshOpportunities.length,
+        fresh: freshOpportunities.length,
+      });
+    }
+
+    for (const opp of freshOpportunities) {
       try {
         if (maxCap > 0) {
           const currentCount = await prisma.marketplaceListing.count({ where: { userId: currentUserId } });
@@ -1357,7 +1389,112 @@ export class AutopilotSystem extends EventEmitter {
   }
 
   /**
-   * ✅ Publish opportunity to marketplace (con userId y environment)
+   * Poll MercadoLibre (and potentially eBay) for new orders not yet in the DB.
+   * Serves as a fallback when marketplace webhooks are not configured.
+   */
+  private async pollMarketplaceOrders(userId: number, environment?: 'sandbox' | 'production'): Promise<void> {
+    try {
+      const creds = await this.marketplaceService.getCredentials(userId, 'mercadolibre', environment);
+      if (!creds?.isActive || !creds.credentials?.accessToken) return;
+
+      const { MercadoLibreService } = await import('./mercadolibre.service');
+      const mlService = new MercadoLibreService({
+        clientId: creds.credentials.clientId || process.env.MERCADOLIBRE_CLIENT_ID || '',
+        clientSecret: creds.credentials.clientSecret || process.env.MERCADOLIBRE_CLIENT_SECRET || '',
+        accessToken: creds.credentials.accessToken,
+        refreshToken: creds.credentials.refreshToken,
+        userId: creds.credentials.userId,
+        siteId: creds.credentials.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
+      });
+
+      const orders = await mlService.searchRecentOrders(10);
+      let newOrders = 0;
+
+      for (const order of orders) {
+        if (order.status !== 'paid') continue;
+
+        const mlOrderId = String(order.id);
+        const existingOrder = await prisma.order.findFirst({
+          where: { paypalOrderId: `mercadolibre:${mlOrderId}` },
+          select: { id: true },
+        });
+        if (existingOrder) continue;
+
+        const orderItems = order.order_items || [];
+        for (const orderItem of orderItems) {
+          const itemId = orderItem?.item?.id;
+          if (!itemId) continue;
+
+          const listing = await prisma.marketplaceListing.findFirst({
+            where: { marketplace: 'mercadolibre', listingId: String(itemId) },
+          });
+          if (!listing) continue;
+
+          const product = await prisma.product.findUnique({ where: { id: listing.productId } });
+          if (!product) continue;
+
+          const buyerNick = order.buyer?.nickname || order.buyer?.email || 'ML Buyer';
+
+          const rawAddr = order.shipping?.receiver_address || {};
+          const normalizedAddr = {
+            fullName: buyerNick,
+            addressLine1: rawAddr.address_line || rawAddr.street_name || '',
+            addressLine2: rawAddr.street_number || '',
+            city: typeof rawAddr.city === 'object' ? rawAddr.city?.name : (rawAddr.city || ''),
+            state: typeof rawAddr.state === 'object' ? rawAddr.state?.name : (rawAddr.state || ''),
+            zipCode: rawAddr.zip_code || rawAddr.postal_code || '',
+            country: typeof rawAddr.country === 'object' ? rawAddr.country?.name : (rawAddr.country || 'CL'),
+            phoneNumber: rawAddr.phone?.number || rawAddr.phone || '',
+          };
+
+          const costUsd = toNumber(product.aliexpressPrice ?? 0);
+          const newOrder = await prisma.order.create({
+            data: {
+              userId,
+              productId: product.id,
+              paypalOrderId: `mercadolibre:${mlOrderId}`,
+              title: product.title || `ML Order ${mlOrderId}`,
+              price: costUsd > 0 ? costUsd : toNumber(product.suggestedPrice ?? 0),
+              currency: 'USD',
+              status: 'PAID',
+              customerName: buyerNick,
+              customerEmail: order.buyer?.email || `${buyerNick}@mercadolibre.cl`,
+              shippingAddress: JSON.stringify(normalizedAddr),
+              productUrl: product.aliexpressUrl || '',
+            },
+          });
+
+          logger.info('[AUTOPILOT] New ML order detected via polling', {
+            mlOrderId,
+            internalOrderId: newOrder.id,
+            productId: product.id,
+            costUsd,
+          });
+
+          try {
+            const { orderFulfillmentService } = await import('./order-fulfillment.service');
+            await orderFulfillmentService.fulfillOrder(newOrder.id);
+          } catch (fulfillErr: any) {
+            logger.warn('[AUTOPILOT] Order fulfillment failed (will retry later)', {
+              orderId: newOrder.id,
+              error: fulfillErr?.message,
+            });
+          }
+
+          newOrders++;
+        }
+      }
+
+      if (newOrders > 0) {
+        logger.info('[AUTOPILOT] Order polling found new orders', { newOrders });
+      }
+    } catch (err: any) {
+      logger.debug('[AUTOPILOT] ML order polling skipped', { error: err?.message });
+    }
+  }
+
+  /**
+   * Publish opportunity to marketplace (con userId y environment)
    * @param userId - ID del usuario (OBLIGATORIO)
    */
   private async publishToMarketplace(opportunity: Opportunity, userId: number, environment?: 'sandbox' | 'production'): Promise<{ success: boolean }> {
@@ -1419,8 +1556,7 @@ export class AutopilotSystem extends EventEmitter {
       //   throw validationError;
       // }
 
-      // ✅ P7: Validar que suggestedPrice sea mayor que aliexpressPrice antes de crear producto
-      const calculatedSuggestedPrice = opportunity.estimatedCost * 2;
+      const calculatedSuggestedPrice = opportunity.estimatedCost * 2.5;
       if (calculatedSuggestedPrice <= opportunity.estimatedCost) {
         logger.error('Autopilot: Invalid price calculation, suggestedPrice must be greater than aliexpressPrice', {
           service: 'autopilot',
@@ -1538,8 +1674,8 @@ export class AutopilotSystem extends EventEmitter {
             sourceMarketplace: 'aliexpress',
             title: opportunity.title,
             costUsd: opportunity.estimatedCost,
-            suggestedPriceUsd: opportunity.estimatedCost * 2,
-            profitMargin: ((opportunity.estimatedCost * 2 - opportunity.estimatedCost) / opportunity.estimatedCost) * 100,
+            suggestedPriceUsd: calculatedSuggestedPrice,
+            profitMargin: ((calculatedSuggestedPrice - opportunity.estimatedCost) / opportunity.estimatedCost) * 100,
             roiPercentage: ((opportunity.estimatedProfit / opportunity.estimatedCost) * 100),
             confidenceScore: (opportunity as any).confidence || (opportunity as any).confidenceScore || 50, // ✅ FIX: confidenceScore no existe en Opportunity, usar type assertion
             status: 'PENDING'
@@ -1755,8 +1891,7 @@ export class AutopilotSystem extends EventEmitter {
     try {
       const currentUserId = userId;
       
-      // ✅ P7: Validar que suggestedPrice sea mayor que aliexpressPrice antes de crear producto
-      const calculatedSuggestedPrice = opportunity.estimatedCost * 2;
+      const calculatedSuggestedPrice = opportunity.estimatedCost * 2.5;
       if (calculatedSuggestedPrice <= opportunity.estimatedCost) {
         logger.error('Autopilot: Invalid price calculation in sendToApprovalQueue, suggestedPrice must be greater than aliexpressPrice', {
           service: 'autopilot',

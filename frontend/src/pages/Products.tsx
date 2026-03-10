@@ -38,6 +38,14 @@ import WorkflowStatusIndicator from '@/components/WorkflowStatusIndicator';
 import WorkflowProgressBar from '@/components/WorkflowProgressBar';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 
+interface MarketplaceListing {
+  id: number;
+  marketplace: string;
+  listingId: string;
+  listingUrl: string | null;
+  publishedAt: string | null;
+}
+
 interface Product {
   id: string;
   title: string;
@@ -47,6 +55,7 @@ interface Product {
   stock: number;
   marketplace: string;
   marketplaceUrl?: string | null;
+  marketplaceListings?: MarketplaceListing[];
   aliexpressUrl?: string | null;
   status: 'PENDING' | 'APPROVED' | 'PUBLISHED' | 'REJECTED';
   imageUrl?: string;
@@ -712,19 +721,33 @@ export default function Products() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-1">
-                            {product.marketplaceUrl && (
+                            {product.marketplaceListings && product.marketplaceListings.length > 0 ? (
+                              product.marketplaceListings.map((listing) => (
+                                listing.listingUrl ? (
+                                  <a key={listing.id} href={listing.listingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:underline text-sm">
+                                    <ExternalLink className="w-4 h-4 shrink-0" />
+                                    Ver en {listing.marketplace}
+                                  </a>
+                                ) : (
+                                  <span key={listing.id} className="inline-flex items-center gap-1 text-gray-500 text-sm">
+                                    <ExternalLink className="w-4 h-4 shrink-0" />
+                                    {listing.marketplace} ({listing.listingId})
+                                  </span>
+                                )
+                              ))
+                            ) : product.marketplaceUrl ? (
                               <a href={product.marketplaceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:underline text-sm">
                                 <ExternalLink className="w-4 h-4 shrink-0" />
                                 Ver en {product.marketplace}
                               </a>
-                            )}
+                            ) : null}
                             {product.aliexpressUrl && (
                               <a href={product.aliexpressUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:underline text-sm">
                                 <Link2 className="w-4 h-4 shrink-0" />
                                 Proveedor
                               </a>
                             )}
-                            {!product.marketplaceUrl && !product.aliexpressUrl && (
+                            {(!product.marketplaceListings || product.marketplaceListings.length === 0) && !product.marketplaceUrl && !product.aliexpressUrl && (
                               <span className="text-gray-400 text-sm">—</span>
                             )}
                           </div>

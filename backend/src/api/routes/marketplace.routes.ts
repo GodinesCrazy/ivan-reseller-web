@@ -987,7 +987,7 @@ router.get('/auth-url/:marketplace', async (req: Request, res: Response) => {
       const cred = await marketplaceService.getCredentials(userId, 'mercadolibre', resolvedEnv);
       const clientId = process.env.MERCADOLIBRE_CLIENT_ID || cred?.credentials?.clientId || '';
       const clientSecret = process.env.MERCADOLIBRE_CLIENT_SECRET || cred?.credentials?.clientSecret || '';
-      const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLM';
+      const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC';
       const rawCallbackUrl = typeof redirect_uri === 'string' && redirect_uri.length > 0
         ? redirect_uri.trim()
         : (cred?.credentials?.redirectUri || process.env.MERCADOLIBRE_REDIRECT_URI || process.env.MERCADOLIBRE_REDIRECT_URL || getMercadoLibreRedirectUri()).trim();

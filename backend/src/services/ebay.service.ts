@@ -159,10 +159,17 @@ export class EbayService {
       throw new AppError('eBay credentials not configured', 400);
     }
 
-    // Prefer current access token; refresh only when explicitly forced (e.g. after 401)
-    // or when no token is available.
     if (!force && this.credentials.token) {
-      return;
+      const expiry = this.tokenExpiry || (this.credentials as any).expiresAt;
+      if (expiry) {
+        const expiresMs = new Date(expiry).getTime();
+        if (expiresMs - Date.now() > 5 * 60 * 1000) {
+          return;
+        }
+        logger.info('eBay access token expiring soon, proactively refreshing');
+      } else {
+        return;
+      }
     }
 
     if (this.credentials.refreshToken) {

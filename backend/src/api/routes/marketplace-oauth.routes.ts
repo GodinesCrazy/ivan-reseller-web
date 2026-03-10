@@ -334,7 +334,7 @@ async function handleMercadoLibreCallback(req: Request, res: Response, code: str
     const cred = await marketplaceService.getCredentials(userId, 'mercadolibre', environment);
     const clientId = process.env.MERCADOLIBRE_CLIENT_ID || cred?.credentials?.clientId || '';
     const clientSecret = process.env.MERCADOLIBRE_CLIENT_SECRET || cred?.credentials?.clientSecret || '';
-    const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLM';
+    const siteId = cred?.credentials?.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC';
 
     if (!clientId || !clientSecret) {
       logger.error('[ML Callback] Missing credentials', { service: 'marketplace-oauth', userId, hasClientId: !!clientId, hasClientSecret: !!clientSecret });
@@ -382,6 +382,7 @@ async function handleMercadoLibreCallback(req: Request, res: Response, code: str
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       userId: tokens.userId,
+      siteId: siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
       sandbox: environment === 'sandbox',
     };
 

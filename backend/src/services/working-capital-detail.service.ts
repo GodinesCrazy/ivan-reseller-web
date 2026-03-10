@@ -58,20 +58,24 @@ export async function getWorkingCapitalDetail(
       prisma.userWorkflowConfig.findUnique({ where: { userId } }),
     ]);
 
-  const hasValidPayPal = paypalBalance && 'available' in paypalBalance && paypalBalance.available != null;
-  const manualFallback = !hasValidPayPal && workflowConfig?.workingCapital != null && toNumber(workflowConfig.workingCapital) > 0;
+  const hasSource = paypalBalance && 'source' in paypalBalance && paypalBalance.source;
+  const isEstimatedZero =
+    hasSource && paypalBalance.source === 'paypal_estimated' && (paypalBalance.available ?? 0) <= 0;
+  const hasReliablePayPal =
+    paypalBalance && 'available' in paypalBalance && paypalBalance.available != null && !isEstimatedZero;
+  const declaredCapital = workflowConfig?.workingCapital != null ? toNumber(workflowConfig.workingCapital) : 0;
+  const manualFallback = !hasReliablePayPal && declaredCapital > 0;
 
-  const inPayPal = hasValidPayPal
+  const inPayPal = hasReliablePayPal
     ? paypalBalance!.available
     : manualFallback
-      ? toNumber(workflowConfig!.workingCapital)
+      ? declaredCapital
       : 0;
   const inPayoneer = payoneerBalance?.available ?? 0;
-  const hasSource = paypalBalance && 'source' in paypalBalance && paypalBalance.source;
   const inPayPalSource: PaypalBalanceSource =
-    hasSource && paypalBalance.source === 'paypal'
+    hasReliablePayPal && hasSource && paypalBalance.source === 'paypal'
       ? 'wallet_api'
-      : hasSource && paypalBalance.source === 'paypal_estimated'
+      : hasReliablePayPal && hasSource && paypalBalance.source === 'paypal_estimated'
         ? 'reporting_api_estimated'
         : manualFallback
           ? 'manual_declared'

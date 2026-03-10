@@ -750,7 +750,11 @@ export class MarketplaceService {
     userId?: number
   ): Promise<PublishResult> {
     try {
-      const mlService = new MercadoLibreService(credentials);
+      const credsWithSiteId: MercadoLibreCredentials = {
+        ...credentials,
+        siteId: credentials.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
+      };
+      const mlService = new MercadoLibreService(credsWithSiteId);
 
       // Predict category if not provided
       let categoryId = customData?.categoryId;
@@ -770,21 +774,30 @@ export class MarketplaceService {
         throw new AppError('Product must have a valid category before publishing. Please specify a category.', 400);
       }
 
-      const price = this.resolveListingPrice(product, customData?.price);
-      if (price <= 0) {
+      const priceUsd = this.resolveListingPrice(product, customData?.price);
+      if (priceUsd <= 0) {
         throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
       }
 
-      // ✅ Margen estricto: precio debe ser mayor que el costo
       const costNumMl = toNumber(product.aliexpressPrice);
-      if (price <= costNumMl) {
-        throw new AppError(`Price (${price}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
+      if (priceUsd <= costNumMl) {
+        throw new AppError(`Price (${priceUsd}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
       }
 
-      // ✅ Q6: Generar título y descripción con IA si está disponible
+      const siteId = credsWithSiteId.siteId || 'MLC';
+      const targetCurrency = mlService.getSiteCurrency(siteId);
+      let price = priceUsd;
+      if (targetCurrency !== 'USD') {
+        const fxService = (await import('./fx.service')).default;
+        price = fxService.convert(priceUsd, 'USD', targetCurrency);
+        logger.info('[ML Publish] Price converted to local currency', {
+          priceUsd, targetCurrency, priceLocal: price, siteId,
+        });
+      }
+
       let finalTitle = customData?.title || product.title;
       let finalDescription = customData?.description || product.description || '';
-      
+
       if (!customData?.title && userId) {
         try {
           finalTitle = await this.generateAITitle(product, 'MercadoLibre', userId);
@@ -792,12 +805,59 @@ export class MarketplaceService {
           logger.debug('Failed to generate AI title for MercadoLibre, using original', { error });
         }
       }
-      
+
       if (!customData?.description && userId) {
         try {
           finalDescription = await this.generateAIDescription(product, 'MercadoLibre', userId);
         } catch (error) {
           logger.debug('Failed to generate AI description for MercadoLibre, using original', { error });
+        }
+      }
+
+      if (finalTitle.length > 60) {
+        finalTitle = finalTitle.substring(0, 57) + '...';
+      }
+      finalTitle = finalTitle.replace(/[^\w\sáéíóúñüÁÉÍÓÚÑÜ.,\-\/()]/gi, '').trim();
+
+      let attributes = customData?.attributes;
+      if (!attributes || attributes.length === 0) {
+        try {
+          const catAttrs = await mlService.getCategoryAttributes(categoryId);
+          const requiredAttrs = catAttrs.filter((a: any) =>
+            a.tags?.required || a.tags?.catalog_required
+          );
+          attributes = [];
+          const dimensionDefaults: Record<string, { val: number; unit: string }> = {
+            WIDTH: { val: 20, unit: 'cm' }, HEIGHT: { val: 15, unit: 'cm' },
+            DEPTH: { val: 10, unit: 'cm' }, LENGTH: { val: 25, unit: 'cm' },
+            WEIGHT: { val: 500, unit: 'g' }, MAX_WEIGHT: { val: 1000, unit: 'g' },
+            NET_WEIGHT: { val: 400, unit: 'g' },
+          };
+          for (const attr of requiredAttrs) {
+            if (attr.id === 'BRAND') {
+              attributes.push({ id: 'BRAND', value: 'Genérico' });
+            } else if (attr.id === 'MODEL') {
+              const model = finalTitle.substring(0, 20).replace(/[^a-zA-Z0-9\- ]/g, '').trim();
+              attributes.push({ id: 'MODEL', value: model || 'Standard' });
+            } else if (dimensionDefaults[attr.id]) {
+              const d = dimensionDefaults[attr.id];
+              const unit = attr.default_unit || d.unit;
+              attributes.push({ id: attr.id, value: `${d.val} ${unit}` });
+            } else if (attr.values && attr.values.length > 0) {
+              attributes.push({ id: attr.id, value: attr.values[0].name });
+            }
+          }
+          logger.info('[ML Publish] Auto-resolved required attributes', {
+            categoryId,
+            attributeCount: attributes.length,
+            attrs: attributes.map((a: any) => a.id).join(','),
+          });
+        } catch (e: any) {
+          logger.warn('[ML Publish] Failed to get category attributes', { error: e.message });
+          attributes = [
+            { id: 'BRAND', value: 'Genérico' },
+            { id: 'MODEL', value: 'Standard' },
+          ];
         }
       }
 
@@ -808,9 +868,10 @@ export class MarketplaceService {
         price,
         quantity: this.resolveListingQuantity(product, customData?.quantity),
         condition: 'new',
-        images: images, // ✅ MULTI-IMAGE: Todas las imágenes preparadas para MercadoLibre
+        images: images,
+        ...(attributes && attributes.length > 0 && { attributes }),
         shipping: {
-          mode: 'me2',
+          mode: 'not_specified',
           freeShipping: false,
         },
       };
@@ -824,13 +885,20 @@ export class MarketplaceService {
 
       const result = await mlService.createListing(mlProduct);
 
-      // ✅ P1: Solo actualizar BD y estado si la publicación fue exitosa
+      if (result.success && result.itemId && result.status && result.status !== 'active') {
+        logger.warn('[MARKETPLACE] ML listing created but NOT active — may be paused or under review', {
+          productId: product.id,
+          itemId: result.itemId,
+          mlStatus: result.status,
+        });
+      }
+
       if (result.success && result.itemId) {
-        // Update product with marketplace info (solo si fue exitoso)
         await this.updateProductMarketplaceInfo(product.id, 'mercadolibre', {
           listingId: result.itemId,
           listingUrl: result.permalink,
           publishedAt: new Date(),
+          mlStatus: result.status,
         });
 
         // ✅ NOTA: El estado del producto se actualizará desde publisher.routes.ts
@@ -1027,16 +1095,18 @@ export class MarketplaceService {
   private async updateProductMarketplaceInfo(
     productId: number, 
     marketplace: string, 
-    info: { listingId: string; listingUrl: string; publishedAt: Date }
+    info: { listingId: string; listingUrl: string; publishedAt: Date; mlStatus?: string }
   ): Promise<void> {
     try {
       const product = await prisma.product.findUnique({ where: { id: productId } });
       if (!product) return;
+      const data: any = { listingUrl: info.listingUrl, publishedAt: info.publishedAt };
+      if (info.mlStatus) data.sku = `status:${info.mlStatus}`;
       const existing = await prisma.marketplaceListing.findFirst({ where: { marketplace, listingId: info.listingId } });
       if (existing) {
-        await prisma.marketplaceListing.update({ where: { id: existing.id }, data: { listingUrl: info.listingUrl, publishedAt: info.publishedAt } });
+        await prisma.marketplaceListing.update({ where: { id: existing.id }, data });
       } else {
-        await prisma.marketplaceListing.create({ data: { productId, userId: product.userId, marketplace, listingId: info.listingId, listingUrl: info.listingUrl, publishedAt: info.publishedAt } });
+        await prisma.marketplaceListing.create({ data: { productId, userId: product.userId, marketplace, listingId: info.listingId, ...data } });
       }
     } catch (error) {
       logger.error('Failed to update product marketplace info', {
@@ -1092,13 +1162,23 @@ export class MarketplaceService {
           if (!credentials || credentials.issues?.length) continue;
 
           switch (marketplace) {
-            case 'ebay':
-              const ebayService = new EbayService({
-                ...(credentials.credentials as EbayCredentials),
-                sandbox: credentials.environment === 'sandbox',
-              });
+            case 'ebay': {
+              const { CredentialsManager } = await import('./credentials-manager.service');
+              const ebayService = new EbayService(
+                {
+                  ...(credentials.credentials as EbayCredentials),
+                  sandbox: credentials.environment === 'sandbox',
+                },
+                {
+                  onCredentialsUpdate: async (updatedCreds) => {
+                    const { sandbox, ...persistable } = updatedCreds;
+                    await CredentialsManager.saveCredentials(userId, 'ebay', persistable, credentials.environment);
+                  },
+                },
+              );
               await ebayService.updateInventoryQuantity(`IVAN-${product.id}`, newQuantity);
               break;
+            }
 
             case 'mercadolibre': {
               const mlService = new MercadoLibreService(credentials.credentials);
@@ -1549,7 +1629,13 @@ export class MarketplaceService {
                 sandbox: credentials.environment === 'sandbox',
               };
               const { EbayService } = await import('./ebay.service');
-              const ebayService = new EbayService(ebayCreds);
+              const { CredentialsManager: CM } = await import('./credentials-manager.service');
+              const ebayService = new EbayService(ebayCreds, {
+                onCredentialsUpdate: async (updatedCreds) => {
+                  const { sandbox, ...persistable } = updatedCreds;
+                  await CM.saveCredentials(userId, 'ebay', persistable, credentials.environment);
+                },
+              });
               
               // eBay usa offerId para actualizar precios
               // Si no tenemos offerId, intentamos usar listingId como SKU
@@ -1807,31 +1893,70 @@ export class MarketplaceService {
     productImages: any,
     marketplace: MarketplaceName
   ): string[] {
-    const allImages = this.parseImageUrls(productImages);
-    
-    if (allImages.length === 0) {
+    const rawImages = this.parseImageUrls(productImages);
+
+    if (rawImages.length === 0) {
       logger.warn('No valid images found for product', { marketplace });
       return [];
     }
 
-    const maxImages = this.getMarketplaceImageLimit(marketplace);
-    const preparedImages = allImages.slice(0, maxImages);
+    let images = Array.from(new Set(rawImages));
 
-    if (allImages.length > maxImages) {
-      logger.info(`Product has ${allImages.length} images, limiting to ${maxImages} for ${marketplace}`, {
-        totalImages: allImages.length,
-        marketplace,
-        maxImages,
-        keptImages: preparedImages.length,
-      });
-    } else {
-      logger.info(`Preparing ${preparedImages.length} images for ${marketplace} publication`, {
-        totalImages: preparedImages.length,
-        marketplace,
-      });
+    if (marketplace === 'mercadolibre') {
+      images = images.map(url => this.upgradeToHighResImage(url));
+      images = images.filter(url => !this.isLowQualityImage(url));
+      images = Array.from(new Set(images));
     }
 
+    const maxImages = this.getMarketplaceImageLimit(marketplace);
+    const preparedImages = images.slice(0, maxImages);
+
+    logger.info(`Preparing ${preparedImages.length} images for ${marketplace} publication`, {
+      totalImages: rawImages.length,
+      afterDedup: images.length,
+      kept: preparedImages.length,
+      marketplace,
+    });
+
     return preparedImages;
+  }
+
+  private upgradeToHighResImage(url: string): string {
+    const isAliCdn = /aliexpress-media\.com|alicdn\.com|ae0[0-9]\.alicdn\.com/i.test(url);
+    if (!isAliCdn) return url;
+
+    let upgraded = url;
+
+    // Strip any existing size suffix (e.g., _200x200, _500x500xz, etc.)
+    upgraded = upgraded
+      .replace(/_\d+x\d+\w*\.(jpg|jpeg|png|webp)/gi, '.$1')
+      .replace(/\.(jpg|jpeg|png)_\d+x\d+\w*\.(jpg|jpeg|png)/gi, '.$1');
+
+    // Convert webp to jpg for maximum marketplace compatibility
+    upgraded = upgraded.replace(/\.webp/gi, '.jpg');
+
+    // Remove query params that force low-res variants
+    upgraded = upgraded.replace(/[?&](bw|bh)=\d+/gi, '');
+
+    // Ensure HTTPS
+    if (upgraded.startsWith('http://')) {
+      upgraded = upgraded.replace('http://', 'https://');
+    }
+
+    return upgraded;
+  }
+
+  private isLowQualityImage(url: string): boolean {
+    const lowResPatterns = [
+      /_50x50/i, /_100x100/i, /_120x120/i, /_200x200/i, /_220x220/i,
+      /_350x350/i, /thumbnail/i, /favicon/i, /icon/i, /logo\./i,
+      /\bplaceholder\b/i, /no-?image/i, /default_img/i,
+    ];
+    if (lowResPatterns.some(p => p.test(url))) return true;
+    if (/\.(gif|bmp|svg)(\?|$)/i.test(url)) return true;
+    // Block webp for ML (not always supported)
+    if (/\.(webp)(\?|$)/i.test(url)) return true;
+    return false;
   }
 
   /**
@@ -1846,12 +1971,12 @@ export class MarketplaceService {
     const metadata = this.parseProductMetadata(product);
     const metaPrice = typeof metadata?.price === 'number' ? metadata.price : 0;
     if (metaPrice > 0 && metaPrice > costNum) return metaPrice;
-    const finalPrice = typeof product?.finalPrice === 'number' && product.finalPrice !== null ? toNumber(product.finalPrice) : 0;
+    const finalPrice = toNumber(product?.finalPrice ?? 0);
     if (finalPrice > 0 && finalPrice > costNum) return finalPrice;
-    const suggestedPrice = typeof product?.suggestedPrice === 'number' ? toNumber(product.suggestedPrice) : 0;
+    const suggestedPrice = toNumber(product?.suggestedPrice ?? 0);
     if (suggestedPrice > 0 && suggestedPrice > costNum) return suggestedPrice;
     if (costNum > 0) {
-      const fallbackPrice = Math.round(costNum * 1.45 * 100) / 100;
+      const fallbackPrice = Math.round(costNum * 2.5 * 100) / 100;
       if (fallbackPrice > costNum) return fallbackPrice;
     }
     return 0;

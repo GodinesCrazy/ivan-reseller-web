@@ -1001,8 +1001,16 @@ export class APIAvailabilityService {
 
     const isOptional = OPTIONAL_MARKETPLACES.includes('mercadolibre');
     try {
-      const requiredFields = ['MERCADOLIBRE_CLIENT_ID', 'MERCADOLIBRE_CLIENT_SECRET'];
-      const credentials = await this.getUserCredentials(userId, 'mercadolibre', environment);
+      // Credenciales en BD usan camelCase (clientId, clientSecret); fallback a env vars
+      const requiredFields = ['clientId', 'clientSecret'];
+      let credentials = await this.getUserCredentials(userId, 'mercadolibre', environment);
+      if (!credentials) {
+        const envClientId = process.env.MERCADOLIBRE_CLIENT_ID || process.env.MERCADOLIBRE_PRODUCTION_CLIENT_ID;
+        const envClientSecret = process.env.MERCADOLIBRE_CLIENT_SECRET || process.env.MERCADOLIBRE_PRODUCTION_CLIENT_SECRET;
+        if (envClientId && envClientSecret) {
+          credentials = { clientId: envClientId, clientSecret: envClientSecret };
+        }
+      }
       if (!credentials) {
         const status: APIStatus = {
           apiName: 'mercadolibre',

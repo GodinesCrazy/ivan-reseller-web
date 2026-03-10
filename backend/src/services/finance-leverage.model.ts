@@ -12,9 +12,9 @@
  * safetyFactor = 0.7 (configurable)
  */
 
-export const DEFAULT_SAFETY_FACTOR = 0.7;
-export const OLR_MIN = 1.5;
-export const OLR_MAX = 4.0;
+export const DEFAULT_SAFETY_FACTOR = 0.85;
+export const OLR_MIN = 2.0;
+export const OLR_MAX = 5.0;
 
 export interface LeverageInputs {
   supplierExposure: number;

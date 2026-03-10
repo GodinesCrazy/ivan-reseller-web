@@ -337,11 +337,41 @@ router.get('/pending', async (req: Request, res: Response) => {
 // GET /api/publisher/listings
 router.get('/listings', async (req: Request, res: Response) => {
   try {
-    const listings = await prisma.marketplaceListing.findMany({
-      where: { userId: req.user!.userId },
-      orderBy: { publishedAt: 'desc' },
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
+    const skip = (page - 1) * limit;
+
+    const where = { userId: req.user!.userId };
+    const [listings, total] = await Promise.all([
+      prisma.marketplaceListing.findMany({
+        where,
+        orderBy: { publishedAt: 'desc' },
+        skip,
+        take: limit,
+        include: { product: { select: { title: true, images: true, aliexpressPrice: true } } },
+      }),
+      prisma.marketplaceListing.count({ where }),
+    ]);
+
+    const items = listings.map((l) => ({
+      ...l,
+      productTitle: l.product?.title || null,
+      productImage: (() => {
+        try {
+          const imgs = JSON.parse(l.product?.images || '[]');
+          return Array.isArray(imgs) && imgs.length > 0 ? imgs[0] : null;
+        } catch { return null; }
+      })(),
+      product: undefined,
+    }));
+
+    return res.json({
+      success: true,
+      items,
+      count: items.length,
+      total,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
-    return res.json({ success: true, items: listings, count: listings.length });
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Failed to list listings';
     return res.status(500).json({ success: false, error: errorMessage });

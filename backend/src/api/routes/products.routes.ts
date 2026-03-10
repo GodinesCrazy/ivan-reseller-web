@@ -95,12 +95,25 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
     
     const result = await queryWithTimeout(queryPromise, timeoutMs);
     
-    // ✅ Construir URL del marketplace cuando listingUrl falta pero listingId existe
     const buildMarketplaceUrl = (marketplace: string, listingId: string | null | undefined): string | null => {
       if (!marketplace || !listingId || typeof listingId !== 'string') return null;
       const m = marketplace.toLowerCase().trim();
       if (m === 'ebay') return `https://www.ebay.com/itm/${listingId}`;
-      if (m === 'mercadolibre' || m === 'ml') return `https://articulo.mercadolibre.com.mx/${listingId}`;
+      if (m === 'mercadolibre' || m === 'ml') {
+        const mlDomains: Record<string, string> = {
+          MLC: 'articulo.mercadolibre.cl',
+          MLA: 'articulo.mercadolibre.com.ar',
+          MLM: 'articulo.mercadolibre.com.mx',
+          MLB: 'produto.mercadolivre.com.br',
+          MLU: 'articulo.mercadolibre.com.uy',
+          MCO: 'articulo.mercadolibre.com.co',
+          MEC: 'articulo.mercadolibre.com.ec',
+          MPE: 'articulo.mercadolibre.com.pe',
+        };
+        const prefix = listingId.replace(/[^A-Z]/g, '').substring(0, 3);
+        const domain = mlDomains[prefix] || 'articulo.mercadolibre.cl';
+        return `https://${domain}/${listingId}`;
+      }
       if (m === 'amazon') return `https://www.amazon.com/dp/${listingId}`;
       return null;
     };
@@ -127,7 +140,13 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
       // ✅ Extraer imageUrl del campo images (JSON)
       const imageUrl = extractImageUrl(product.images);
       
-      // ✅ Obtener información del marketplace más reciente (si está publicado)
+      const allListings = (product.marketplaceListings || []).map((l: any) => ({
+        id: l.id,
+        marketplace: l.marketplace?.toUpperCase() || 'unknown',
+        listingId: l.listingId,
+        listingUrl: l.listingUrl || buildMarketplaceUrl(l.marketplace ?? '', l.listingId) || null,
+        publishedAt: l.publishedAt?.toISOString() || null,
+      }));
       const mostRecentListing = product.marketplaceListings?.[0] || null;
       const marketplace = mostRecentListing?.marketplace?.toUpperCase() || 'unknown';
       const marketplaceUrl = mostRecentListing?.listingUrl || buildMarketplaceUrl(mostRecentListing?.marketplace ?? '', mostRecentListing?.listingId) || null;
@@ -137,15 +156,16 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
         title: product.title,
         description: product.description || '',
         status: product.status,
-        sku: String(product.id), // SKU temporal basado en ID
-        marketplace: marketplace, // ✅ Marketplace del listing más reciente
-        marketplaceUrl: marketplaceUrl, // ✅ URL del listing en el marketplace (donde está a la venta)
-        aliexpressUrl: product.aliexpressUrl || null, // ✅ URL del proveedor (origen)
+        sku: String(product.id),
+        marketplace: marketplace,
+        marketplaceUrl: marketplaceUrl,
+        marketplaceListings: allListings,
+        aliexpressUrl: product.aliexpressUrl || null,
         price: product.finalPrice || product.suggestedPrice || product.aliexpressPrice || 0,
-        currency: product.currency || 'USD', // ✅ Incluir moneda del producto
-        stock: 0, // Valor por defecto
+        currency: product.currency || 'USD',
+        stock: 0,
         profit: calculatedProfit > 0 ? calculatedProfit : 0,
-        imageUrl: imageUrl || undefined, // ✅ Incluir imageUrl extraído
+        imageUrl: imageUrl || undefined,
         createdAt: product.createdAt?.toISOString() || new Date().toISOString()
       };
     });

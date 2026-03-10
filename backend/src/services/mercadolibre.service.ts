@@ -3,7 +3,10 @@ import { trace } from '../utils/boot-trace';
 trace('loading mercadolibre.service');
 
 import axios, { AxiosInstance } from 'axios';
+import FormData from 'form-data';
 import { AppError } from '../middleware/error.middleware';
+import { retryMarketplaceOperation } from '../utils/retry.util';
+import logger from '../config/logger';
 
 export interface MercadoLibreCredentials {
   clientId: string;
@@ -47,7 +50,10 @@ export class MercadoLibreService {
   private baseUrl = 'https://api.mercadolibre.com';
 
   constructor(credentials: MercadoLibreCredentials) {
-    this.credentials = credentials;
+    this.credentials = {
+      ...credentials,
+      siteId: credentials.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
+    };
     
     this.apiClient = axios.create({
       baseURL: this.baseUrl,
@@ -137,7 +143,6 @@ export class MercadoLibreService {
       const mlData = error.response?.data;
       const mlStatus = error.response?.status;
       const detail = mlData?.message || mlData?.error_description || mlData?.error || error.message;
-      const logger = (await import('../config/logger')).default;
       logger.error('[MercadoLibre] Token exchange failed', {
         status: mlStatus,
         responseData: JSON.stringify(mlData),
@@ -166,7 +171,6 @@ export class MercadoLibreService {
       params.append('client_secret', this.credentials.clientSecret);
       params.append('refresh_token', this.credentials.refreshToken!);
 
-      const { retryMarketplaceOperation } = await import('../utils/retry.util');
       const result = await retryMarketplaceOperation(
         () => axios.post(`${this.baseUrl}/oauth/token`, params.toString(), {
           headers: {
@@ -202,6 +206,89 @@ export class MercadoLibreService {
   }
 
   /**
+   * Download an image from a URL and upload it to ML's Picture API.
+   * Returns the ML-hosted picture ID, or null if the upload fails.
+   */
+  async uploadImage(imageUrl: string): Promise<string | null> {
+    try {
+      const imgResp = await axios.get(imageUrl, {
+        responseType: 'arraybuffer',
+        timeout: 15000,
+        maxContentLength: 10 * 1024 * 1024,
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'image/*' },
+      });
+
+      const buffer = Buffer.from(imgResp.data);
+      const MIN_IMAGE_BYTES = 15 * 1024; // 15KB minimum for a quality product photo
+      if (buffer.length < MIN_IMAGE_BYTES) {
+        logger.warn('[MercadoLibre] Image below quality threshold, skipping', {
+          imageUrl: imageUrl.substring(0, 120),
+          bytes: buffer.length,
+          minRequired: MIN_IMAGE_BYTES,
+        });
+        return null;
+      }
+
+      const contentType = imgResp.headers['content-type'] || 'image/jpeg';
+      const ext = contentType.includes('png') ? 'png' : 'jpg';
+
+      const form = new FormData();
+      form.append('file', buffer, { filename: `image.${ext}`, contentType });
+
+      const uploadResp = await axios.post(
+        `${this.baseUrl}/pictures/items/upload`,
+        form,
+        {
+          headers: {
+            ...form.getHeaders(),
+            'Authorization': `Bearer ${this.credentials.accessToken}`,
+          },
+          timeout: 30000,
+          maxContentLength: 10 * 1024 * 1024,
+        },
+      );
+
+      const pictureId = uploadResp.data?.id;
+      const maxSize = uploadResp.data?.max_size;
+      if (!pictureId) {
+        logger.warn('[MercadoLibre] Upload response missing picture id', { imageUrl });
+        return null;
+      }
+
+      if (maxSize) {
+        const [w, h] = String(maxSize).split('x').map(Number);
+        if ((w && w < 600) || (h && h < 600)) {
+          logger.warn('[MercadoLibre] Uploaded image has low resolution, ML may reject it', {
+            pictureId, maxSize, bytes: buffer.length,
+          });
+        }
+      }
+
+      logger.info('[MercadoLibre] Image uploaded successfully', { pictureId, maxSize, bytes: buffer.length });
+      return pictureId;
+    } catch (err: any) {
+      logger.warn('[MercadoLibre] Image upload failed', {
+        imageUrl: imageUrl.substring(0, 120),
+        error: err.response?.data?.message || err.message,
+        status: err.response?.status,
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Upload multiple images to ML. Returns array of successfully uploaded picture IDs.
+   */
+  async uploadImages(imageUrls: string[]): Promise<string[]> {
+    const ids: string[] = [];
+    for (const url of imageUrls) {
+      const id = await this.uploadImage(url);
+      if (id) ids.push(id);
+    }
+    return ids;
+  }
+
+  /**
    * Create MercadoLibre listing
    */
   async createListing(product: MLProduct): Promise<MLListingResponse> {
@@ -209,62 +296,132 @@ export class MercadoLibreService {
       throw new AppError('MercadoLibre authentication required', 401);
     }
 
-    try {
-      const listingData = {
-        title: product.title,
-        category_id: product.categoryId,
-        price: product.price,
-        currency_id: this.getSiteCurrency(this.credentials.siteId),
-        available_quantity: product.quantity,
-        condition: product.condition,
-        listing_type_id: 'gold_special', // Can be gold_special, gold_pro, etc.
-        description: {
-          plain_text: product.description,
-        },
-        pictures: product.images.map(url => ({ source: url })),
-        ...(product.attributes && { attributes: product.attributes }),
-        ...(product.shipping && {
-          shipping: {
-            mode: product.shipping.mode || 'me2',
-            local_pick_up: true,
-            free_shipping: product.shipping.freeShipping || false,
-            ...(product.shipping.cost && { cost: product.shipping.cost }),
-          },
-        }),
-      };
+    // Pre-upload images to ML to avoid AliExpress CDN anti-hotlinking blocks
+    const uploadedIds = await this.uploadImages(product.images);
 
-      // ✅ Usar retry para crear listing
-      const result = await retryMarketplaceOperation(
-        () => this.apiClient.post('/items', listingData),
-        'mercadolibre',
-        {
-          maxRetries: 3,
-          onRetry: (attempt, error, delay) => {
-            logger.warn(`Retrying createListing for MercadoLibre (attempt ${attempt})`, {
-              productTitle: product.title,
-              error: error.message,
-              delay,
-            });
-          },
-        }
+    if (uploadedIds.length === 0) {
+      throw new AppError(
+        `Cannot publish to MercadoLibre: none of the ${product.images.length} product images met quality requirements (min 15KB). Add higher resolution images to this product.`,
+        400,
       );
+    }
+    if (uploadedIds.length === 1) {
+      logger.warn('[MercadoLibre] Only 1 image uploaded — ML listings perform better with 3+ images', {
+        originalCount: product.images.length,
+      });
+    }
 
-      if (!result.success || !result.data) {
-        const errorMessage = result.error?.message || 'Unknown error';
-        throw new AppError(`Failed to create MercadoLibre listing after retries: ${errorMessage}`, 400);
-      }
+    const pictures = uploadedIds.map(id => ({ id }));
+    logger.info('[MercadoLibre] Using pre-uploaded images', { count: uploadedIds.length });
 
-      const response = result.data;
-      return {
-        itemId: response.data.id,
-        permalink: response.data.permalink,
-        status: response.data.status,
+    const listingData: Record<string, any> = {
+      title: product.title,
+      category_id: product.categoryId,
+      price: product.price,
+      currency_id: this.getSiteCurrency(this.credentials.siteId),
+      available_quantity: product.quantity,
+      condition: product.condition,
+      description: {
+        plain_text: product.description,
+      },
+      pictures,
+    };
+
+    if (product.attributes && product.attributes.length > 0) {
+      listingData.attributes = product.attributes.map(attr => ({
+        id: attr.id,
+        value_name: String(attr.value),
+      }));
+    }
+
+    if (product.shipping && product.shipping.mode !== 'not_specified') {
+      listingData.shipping = {
+        mode: product.shipping.mode || 'not_specified',
+        free_shipping: product.shipping.freeShipping || false,
       };
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || 
-                          error.response?.data?.cause?.[0]?.message || 
-                          error.message;
-      throw new AppError(`MercadoLibre listing error: ${errorMessage}`, 400);
+    }
+
+    const listingTypes = ['gold_special', 'gold_pro', 'free'];
+    let lastError: any = null;
+
+    for (const listingType of listingTypes) {
+      listingData.listing_type_id = listingType;
+
+      logger.info('[MercadoLibre] createListing attempt', {
+        title: listingData.title?.substring(0, 60),
+        category_id: listingData.category_id,
+        price: listingData.price,
+        currency_id: listingData.currency_id,
+        listing_type_id: listingType,
+        pictureCount: listingData.pictures?.length,
+        attributeCount: listingData.attributes?.length || 0,
+        siteId: this.credentials.siteId,
+      });
+
+      try {
+        const response = await this.apiClient.post('/items', listingData);
+        const itemId = response.data.id;
+
+        const verified = await this.getItemStatus(itemId);
+        if (verified && verified.status !== 'active') {
+          logger.warn('[MercadoLibre] Listing created but not active', {
+            itemId,
+            status: verified.status,
+            sub_status: verified.sub_status,
+            health: verified.health,
+          });
+        }
+
+        return {
+          success: true,
+          itemId,
+          permalink: verified?.permalink || response.data.permalink,
+          status: verified?.status || response.data.status,
+        };
+      } catch (err: any) {
+        lastError = err;
+        const causes = (err.response?.data?.cause || []).map((c: any) => c.code).join(',');
+        const isListingTypeError = causes.includes('listing_type') ||
+          err.response?.data?.message?.includes('listing_type');
+
+        if (!isListingTypeError) {
+          break;
+        }
+        logger.warn(`[MercadoLibre] listing_type_id ${listingType} rejected, trying next`, { causes });
+      }
+    }
+
+    const mlData = lastError?.response?.data;
+    const causeMessages = (mlData?.cause || []).map((c: any) => `${c.code}: ${c.message}`).join('; ');
+    const errorMessage = causeMessages || mlData?.message || mlData?.error || lastError?.message;
+    logger.error('[MercadoLibre] createListing failed (all listing types)', {
+      status: lastError?.response?.status,
+      message: mlData?.message,
+      cause: JSON.stringify(mlData?.cause),
+      fullResponse: JSON.stringify(mlData),
+    });
+    throw new AppError(`MercadoLibre listing error: ${errorMessage}`, 400);
+  }
+
+  /**
+   * Verify listing status after creation.
+   * Returns the item status from ML API, or null if the check fails.
+   */
+  async getItemStatus(itemId: string): Promise<{ status: string; sub_status?: string[]; health?: number; permalink?: string } | null> {
+    try {
+      const response = await this.apiClient.get(`/items/${itemId}`);
+      return {
+        status: response.data.status,
+        sub_status: response.data.sub_status,
+        health: response.data.health,
+        permalink: response.data.permalink,
+      };
+    } catch (err: any) {
+      logger.warn('[MercadoLibre] getItemStatus failed', {
+        itemId,
+        error: err.response?.data?.message || err.message,
+      });
+      return null;
     }
   }
 
@@ -306,21 +463,36 @@ export class MercadoLibreService {
    */
   async predictCategory(title: string, siteId?: string): Promise<string> {
     const site = siteId || this.credentials.siteId;
-    
+
+    try {
+      const response = await axios.get(
+        `https://api.mercadolibre.com/sites/${site}/domain_discovery/search`,
+        { params: { q: title }, timeout: 10000 }
+      );
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        const categoryId = response.data[0].category_id;
+        logger.info('[MercadoLibre] Category predicted via domain_discovery', { title: title.substring(0, 50), categoryId, site });
+        return categoryId;
+      }
+    } catch (e: any) {
+      logger.debug('[MercadoLibre] domain_discovery failed, trying category_predictor', { error: e.message });
+    }
+
     try {
       const response = await this.apiClient.get(`/sites/${site}/category_predictor/predict`, {
         params: { title },
       });
-
-      if (response.data.length > 0) {
+      if (response.data?.length > 0) {
         return response.data[0].id;
       }
-
-      return 'MLA1051'; // Default to "Otros" category for Argentina
     } catch (error: any) {
-      console.warn('MercadoLibre category prediction failed, using default:', error.message);
-      return 'MLA1051'; // Default category
+      logger.warn('[MercadoLibre] category_predictor failed', { error: error.message, site });
     }
+
+    const defaultCategories: Record<string, string> = {
+      MLC: 'MLC1000', MLA: 'MLA1000', MLB: 'MLB1000', MLM: 'MLM1000',
+    };
+    return defaultCategories[site] || `${site}1000`;
   }
 
   /**
@@ -354,6 +526,41 @@ export class MercadoLibreService {
     } catch (error: any) {
       const msg = error.response?.data?.message || error.message;
       throw new AppError(`MercadoLibre getOrder error: ${msg}`, error.response?.status || 400);
+    }
+  }
+
+  /**
+   * Search recent orders for the authenticated seller.
+   * Used as a polling fallback when webhooks are not configured.
+   */
+  async searchRecentOrders(limit: number = 20): Promise<Array<{
+    id: string;
+    status: string;
+    total_amount: number;
+    currency_id: string;
+    order_items: Array<{ item: { id: string; title: string }; quantity: number; unit_price: number }>;
+    buyer: { id: number; nickname: string; email?: string };
+    shipping?: { receiver_address?: any };
+    date_created: string;
+  }>> {
+    if (!this.credentials.accessToken || !this.credentials.userId) {
+      throw new AppError('MercadoLibre authentication required to search orders', 401);
+    }
+    try {
+      const response = await this.apiClient.get('/orders/search', {
+        params: {
+          seller: this.credentials.userId,
+          sort: 'date_desc',
+          limit: Math.min(limit, 50),
+        },
+      });
+      return response.data?.results || [];
+    } catch (error: any) {
+      logger.warn('[MercadoLibre] searchRecentOrders failed', {
+        error: error.response?.data?.message || error.message,
+        status: error.response?.status,
+      });
+      return [];
     }
   }
 
@@ -452,7 +659,7 @@ export class MercadoLibreService {
   /**
    * Get currency for site
    */
-  private getSiteCurrency(siteId: string): string {
+  getSiteCurrency(siteId: string): string {
     const currencies: { [key: string]: string } = {
       MLA: 'ARS', // Argentina
       MLB: 'BRL', // Brazil
@@ -469,7 +676,7 @@ export class MercadoLibreService {
       MRD: 'DOP', // Dominican Republic
     };
 
-    return currencies[siteId] || 'USD';
+    return currencies[siteId] || currencies[process.env.MERCADOLIBRE_SITE_ID || 'MLC'] || 'CLP';
   }
 
   /**
@@ -536,6 +743,61 @@ export class MercadoLibreService {
       seller_id: r.seller?.id,
       shipping: r.shipping,
     }));
+  }
+  /**
+   * Poll for recent orders from MercadoLibre.
+   * Used as a fallback when webhooks are not configured.
+   */
+  async searchRecentOrders(limit: number = 20): Promise<Array<{
+    id: string;
+    status: string;
+    totalAmount: number;
+    currencyId: string;
+    items: Array<{ itemId: string; title: string; quantity: number; unitPrice: number }>;
+    buyer: { id: number; nickname: string };
+    shippingAddress?: any;
+    dateCreated: string;
+  }>> {
+    if (!this.credentials.accessToken || !this.credentials.userId) {
+      throw new AppError('MercadoLibre authentication required for order polling', 401);
+    }
+
+    try {
+      const response = await this.apiClient.get(`/orders/search`, {
+        params: {
+          seller: this.credentials.userId,
+          sort: 'date_desc',
+          limit: Math.min(limit, 50),
+        },
+        timeout: 15000,
+      });
+
+      const results = response.data?.results || [];
+      return results.map((o: any) => ({
+        id: String(o.id),
+        status: o.status,
+        totalAmount: o.total_amount,
+        currencyId: o.currency_id,
+        items: (o.order_items || []).map((oi: any) => ({
+          itemId: oi.item?.id,
+          title: oi.item?.title,
+          quantity: oi.quantity,
+          unitPrice: oi.unit_price,
+        })),
+        buyer: {
+          id: o.buyer?.id,
+          nickname: o.buyer?.nickname || '',
+        },
+        shippingAddress: o.shipping?.receiver_address,
+        dateCreated: o.date_created,
+      }));
+    } catch (err: any) {
+      logger.warn('[MercadoLibre] searchRecentOrders failed', {
+        error: err.response?.data?.message || err.message,
+        status: err.response?.status,
+      });
+      return [];
+    }
   }
 }
 

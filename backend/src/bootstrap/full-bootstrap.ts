@@ -40,6 +40,33 @@ import { setIsDatabaseReady, setIsRedisReady, updateReadinessState } from '../se
 
 const execAsync = promisify(exec);
 
+const TARGET_WORKING_CAPITAL = 5000;
+
+async function ensureWorkingCapital() {
+  try {
+    const admin = await prisma.user.findUnique({ where: { username: 'admin' }, select: { id: true } });
+    if (!admin) return;
+
+    const config = await prisma.userWorkflowConfig.findUnique({ where: { userId: admin.id } });
+    const current = config?.workingCapital ? Number(config.workingCapital) : 0;
+    if (current < TARGET_WORKING_CAPITAL) {
+      if (config) {
+        await prisma.userWorkflowConfig.update({
+          where: { userId: admin.id },
+          data: { workingCapital: TARGET_WORKING_CAPITAL },
+        });
+      } else {
+        await prisma.userWorkflowConfig.create({
+          data: { userId: admin.id, workingCapital: TARGET_WORKING_CAPITAL },
+        });
+      }
+      console.log(`[BOOTSTRAP] Working capital updated: $${current} -> $${TARGET_WORKING_CAPITAL}`);
+    }
+  } catch (error: any) {
+    console.warn('[BOOTSTRAP] ensureWorkingCapital failed:', error?.message);
+  }
+}
+
 // Helper functions (moved from server.ts)
 async function ensureAdminUser() {
   try {
@@ -185,6 +212,42 @@ export async function fullBootstrap(startTime: number): Promise<void> {
     ensureAdminUser().catch((error) => {
       console.warn('??  Warning: No se pudo verificar/crear usuario admin:', error.message);
     });
+
+    // Ensure working capital is set to $5,000 for the $5K/month target
+    ensureWorkingCapital().catch((error) => {
+      console.warn('??  Warning: Could not update working capital:', error.message);
+    });
+
+    // Ensure autopilot optimization is enabled in persisted config AND running instance
+    (async () => {
+      try {
+        const optimizedFields = {
+          optimizationEnabled: true,
+          publicationMode: 'automatic' as const,
+          targetMarketplaces: ['mercadolibre', 'ebay'],
+          targetMarketplace: 'mercadolibre',
+          cycleIntervalMinutes: 10,
+          maxOpportunitiesPerCycle: 25,
+          workingCapital: 5000,
+          minProfitUsd: 8,
+          minRoiPct: 35,
+        };
+        const cfgRecord = await prisma.systemConfig.findUnique({ where: { key: 'autopilot_config' } });
+        if (cfgRecord?.value) {
+          const saved = JSON.parse(cfgRecord.value as string);
+          if (saved.optimizationEnabled !== true || saved.publicationMode !== 'automatic' || !saved.targetMarketplaces?.includes('mercadolibre')) {
+            Object.assign(saved, optimizedFields);
+            await prisma.systemConfig.update({ where: { key: 'autopilot_config' }, data: { value: JSON.stringify(saved) } });
+            console.log('[BOOTSTRAP] Autopilot config updated in DB: optimization=true, automatic, both marketplaces');
+          }
+        }
+        const { autopilotSystem } = await import('../services/autopilot.service');
+        await autopilotSystem.updateConfig(optimizedFields);
+        console.log('[BOOTSTRAP] Autopilot running config updated: optimizationEnabled=true');
+      } catch (e: any) {
+        console.warn('[BOOTSTRAP] ensureAutopilotConfig:', e?.message);
+      }
+    })();
     
     // Chromium lazy-load (only if needed)
     const scraperBridgeEnabled = env.SCRAPER_BRIDGE_ENABLED ?? true;

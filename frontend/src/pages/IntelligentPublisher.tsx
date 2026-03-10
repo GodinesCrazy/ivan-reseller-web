@@ -24,17 +24,30 @@ export default function IntelligentPublisher() {
   const [bulkMk, setBulkMk] = useState<{ ebay: boolean; mercadolibre: boolean; amazon: boolean }>({ ebay: true, mercadolibre: false, amazon: false });
   const [bulkStatus, setBulkStatus] = useState<{ total: number; queued: number; done: number; errors: number; running: boolean }>({ total: 0, queued: 0, done: 0, errors: 0, running: false });
   const [loading, setLoading] = useState(true);
+  const [listingsPage, setListingsPage] = useState(1);
+  const [listingsTotal, setListingsTotal] = useState(0);
+  const LISTINGS_PER_PAGE = 25;
+  const listingsTotalPages = Math.max(1, Math.ceil(listingsTotal / LISTINGS_PER_PAGE));
 
-  // ✅ CORREGIDO: Recargar productos cuando se navega a esta página (incluye cuando se viene desde preview)
+  const loadListings = useCallback(async (page: number) => {
+    try {
+      const res = await api.get(`/api/publisher/listings?page=${page}&limit=${LISTINGS_PER_PAGE}`);
+      setListings(res.data?.items || []);
+      setListingsTotal(res.data?.pagination?.total ?? res.data?.total ?? 0);
+    } catch (error: any) {
+      console.error('Error loading listings:', error);
+    }
+  }, []);
+
   const loadPublisherData = useCallback(async () => {
     try {
       setLoading(true);
-      const [pendingRes, listingsRes] = await Promise.all([
-        api.get('/api/publisher/pending'), // ✅ Nuevo endpoint con información enriquecida
-        api.get('/api/publisher/listings')
+      const [pendingRes] = await Promise.all([
+        api.get('/api/publisher/pending'),
+        loadListings(1),
       ]);
       setPending(pendingRes.data?.items || []);
-      setListings(listingsRes.data?.items || []);
+      setListingsPage(1);
     } catch (error: any) {
       console.error('Error loading publisher data:', error);
       const status = error?.response?.status;
@@ -44,7 +57,7 @@ export default function IntelligentPublisher() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadListings]);
 
   // ✅ CORREGIDO: Recargar cuando se monta el componente O cuando cambia la location (navegación)
   useEffect(() => {
@@ -131,10 +144,12 @@ export default function IntelligentPublisher() {
 
   // Memoizar productos pendientes limitados
   const pendingLimited = useMemo(() => pending.slice(0, 20), [pending]);
-  
-  // Memoizar listings limitados
-  const listingsLimited = useMemo(() => listings.slice(0, 20), [listings]);
-  
+
+  const goToListingsPage = useCallback((page: number) => {
+    setListingsPage(page);
+    loadListings(page);
+  }, [loadListings]);
+
   // Memoizar progreso de bulk status
   const bulkProgress = useMemo(() => {
     return bulkStatus.total ? (bulkStatus.queued / bulkStatus.total) * 100 : 0;
@@ -260,19 +275,45 @@ export default function IntelligentPublisher() {
       </div>
 
       <div className="mt-6">
-        <div className="text-lg font-semibold mb-2">Published Listings</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-lg font-semibold">Published Listings ({listingsTotal})</div>
+        </div>
         <div className="bg-white border rounded">
-          {listingsLimited.map((l:any)=>(
-            <div key={l.id} className="p-3 border-b flex items-center justify-between">
-              <div className="text-sm">
-                <div className="font-medium">{l.marketplace.toUpperCase()} – {l.listingId}</div>
-                <div className="text-gray-600">{new Date(l.publishedAt).toLocaleString()}</div>
+          {listings.map((l:any)=>(
+            <div key={l.id} className="p-3 border-b flex items-center gap-3">
+              {l.productImage && (
+                <img src={toProxyUrl(l.productImage)} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" referrerPolicy="no-referrer" />
+              )}
+              <div className="flex-1 min-w-0 text-sm">
+                <div className="font-medium truncate">{l.productTitle || l.listingId}</div>
+                <div className="text-gray-500 text-xs">{l.marketplace.toUpperCase()} – {l.listingId} – {l.publishedAt ? new Date(l.publishedAt).toLocaleString() : ''}</div>
               </div>
-              <a href={l.listingUrl} target="_blank" className="text-primary-600 text-sm">Open</a>
+              {l.listingUrl && (
+                <a href={l.listingUrl} target="_blank" rel="noopener noreferrer" className="text-primary-600 text-sm hover:underline flex-shrink-0">Open</a>
+              )}
             </div>
           ))}
           {listings.length===0 && <div className="p-3 text-sm text-gray-600">No listings yet.</div>}
         </div>
+        {listingsTotalPages > 1 && (
+          <div className="flex items-center justify-center gap-3 mt-3 text-sm">
+            <button
+              disabled={listingsPage <= 1}
+              onClick={() => goToListingsPage(Math.max(1, listingsPage - 1))}
+              className="px-3 py-1.5 border rounded disabled:opacity-40 hover:bg-gray-50"
+            >
+              <ChevronLeft className="w-4 h-4 inline" /> Anterior
+            </button>
+            <span className="text-gray-600">Pagina {listingsPage} de {listingsTotalPages} ({listingsTotal} total)</span>
+            <button
+              disabled={listingsPage >= listingsTotalPages}
+              onClick={() => goToListingsPage(Math.min(listingsTotalPages, listingsPage + 1))}
+              className="px-3 py-1.5 border rounded disabled:opacity-40 hover:bg-gray-50"
+            >
+              Siguiente <ChevronRight className="w-4 h-4 inline" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
