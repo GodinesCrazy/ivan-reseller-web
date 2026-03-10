@@ -299,6 +299,23 @@ router.get('/apis', authenticate, async (req, res) => {
         documentation: 'https://2captcha.com/2captcha-api'
       },
 
+      // Google Trends API (SerpAPI) - credenciales guardadas como 'serpapi' en DB
+      {
+        id: API_IDS.GOOGLETRENDS,
+        name: 'Google Trends API (SerpAPI)',
+        apiName: API_NAMES.GOOGLETRENDS,
+        category: API_CATEGORIES.SCRAPING,
+        supportsEnvironments: false,
+        status: (configuredMap.has('serpapi-production') || configuredMap.has('googletrends-production')) ? 'configured' : 'not_configured',
+        isActive: (configuredMap.get('serpapi-production') || configuredMap.get('googletrends-production'))?.isActive || false,
+        lastUpdated: (configuredMap.get('serpapi-production') || configuredMap.get('googletrends-production'))?.updatedAt?.toISOString() || null,
+        fields: [
+          { key: 'SERP_API_KEY', label: 'SerpAPI Key', required: false, type: 'password', placeholder: 'abc123...' }
+        ],
+        description: 'Validar viabilidad de productos usando Google Trends. Opcional: si no se configura, el sistema usa análisis de datos internos.',
+        documentation: 'https://serpapi.com/google-trends-api'
+      },
+
       {
         id: API_IDS.ALIEXPRESS,
         name: 'AliExpress Auto-Purchase',

@@ -302,6 +302,8 @@ export const API_IDS = {
   SLACK: 12,
   OPENAI: 13,
   STRIPE: 14,
+  SERPAPI: 17,
+  GOOGLETRENDS: 17, // Alias - mismo que serpapi
 } as const;
 
 /**
