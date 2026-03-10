@@ -175,6 +175,8 @@ router.get('/status', async (req: Request, res: Response, next) => {
     if (forceRefresh) {
       await apiAvailability.clearAPICache(userId, 'ebay').catch(() => {});
       await apiAvailability.clearAPICache(userId, 'mercadolibre').catch(() => {});
+      await apiAvailability.clearAPICache(userId, 'serpapi').catch(() => {});
+      await apiAvailability.clearAPICache(userId, 'googletrends').catch(() => {});
     }
     
     // ✅ Intentar obtener estados con manejo de errores individual

@@ -1093,6 +1093,18 @@ export default function APISettings() {
       // ✅ FIX: Siempre establecer formData, incluso si normalized está vacío
       // Esto asegura que cuando no hay credenciales para un entorno, el formulario esté vacío
       setFormData((prev: Record<string, Record<string, string>>) => ({ ...prev, [formKey]: normalized }));
+
+      // ✅ FIX SerpAPI: Validar al cargar credenciales para que el campo muestre verde si la clave es válida
+      if ((apiName === 'googletrends' || apiName === 'serpapi') && !masked) {
+        const serpKey = normalized?.SERP_API_KEY || normalized?.apiKey || '';
+        if (serpKey && serpKey.length >= 32 && /^[a-zA-Z0-9]+$/.test(serpKey.trim())) {
+          const validationKey = `${formKey}::SERP_API_KEY`;
+          setFieldValidation((prev: Record<string, FieldValidationState>) => ({
+            ...prev,
+            [validationKey]: { status: 'valid' as FieldValidationStatus }
+          }));
+        }
+      }
     } catch (error) {
       // ✅ FIX: En caso de error, establecer formData como objeto vacío para el nuevo entorno
       // Esto evita mostrar datos del entorno anterior
@@ -1225,6 +1237,18 @@ export default function APISettings() {
         if (field.type === 'password' && value.length < 8) {
           isValid = false;
           errorMessage = 'Debe tener al menos 8 caracteres';
+        }
+
+        // SerpAPI/Google Trends: clave típicamente 40-64 caracteres alfanuméricos
+        if ((fieldKey === 'SERP_API_KEY' || fieldKey === 'apiKey') && (apiName === 'googletrends' || apiName === 'serpapi')) {
+          const trimmed = value.trim();
+          if (trimmed.length >= 32 && /^[a-zA-Z0-9]+$/.test(trimmed)) {
+            isValid = true;
+            errorMessage = undefined;
+          } else if (trimmed.length > 0 && trimmed.length < 32) {
+            isValid = false;
+            errorMessage = 'La SerpAPI Key suele tener 40-64 caracteres';
+          }
         }
       }
 
@@ -1959,6 +1983,17 @@ export default function APISettings() {
       const saveData = response.data?.data || {};
       const immediateStatus = saveData.immediateStatus;
       
+      // ✅ FIX SerpAPI: Marcar campo como válido tras guardar exitosamente
+      const hasSerpKey = credentials?.apiKey || credentials?.SERP_API_KEY || formData[makeFormKey(apiName, currentEnvironment)]?.SERP_API_KEY;
+      if ((apiName === 'googletrends' || apiName === 'serpapi') && hasSerpKey) {
+        const formKey = makeFormKey(apiName, currentEnvironment);
+        const validationKey = `${formKey}::SERP_API_KEY`;
+        setFieldValidation((prev: Record<string, FieldValidationState>) => ({
+          ...prev,
+          [validationKey]: { status: 'valid' as FieldValidationStatus }
+        }));
+      }
+
       // Si hay immediateStatus, actualizar el estado local inmediatamente
       if (immediateStatus && (apiName === 'googletrends' || apiName === 'serpapi')) {
         const statusKey = makeEnvKey(apiName === 'serpapi' ? 'googletrends' : apiName, currentEnvironment);
