@@ -1002,7 +1002,7 @@ export class ProductService {
 
     const products = await prisma.product.findMany({
       where: {
-        status: { in: ['PENDING', 'APPROVED', 'REJECTED'] },
+        status: { in: ['PENDING', 'APPROVED', 'REJECTED'] as string[] },
         marketplaceListings: { none: {} },
         sales: { none: {} },
         createdAt: { lt: cutoff },
@@ -1023,7 +1023,7 @@ export class ProductService {
     cutoff.setDate(cutoff.getDate() - olderThanDays);
 
     const where = {
-      status: { in: ['PENDING', 'APPROVED', 'REJECTED'] as const },
+      status: { in: ['PENDING', 'APPROVED', 'REJECTED'] as string[] },
       marketplaceListings: { none: {} },
       sales: { none: {} },
       createdAt: { lt: cutoff },
