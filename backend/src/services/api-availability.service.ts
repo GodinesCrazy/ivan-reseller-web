@@ -1200,7 +1200,23 @@ export class APIAvailabilityService {
         }
       }
         
+      // ✅ FIX: Si no hay credenciales en DB, verificar variables de entorno (SERP_API_KEY, GOOGLE_TRENDS_API_KEY)
       if (!credentials) {
+        const envApiKey = (process.env.SERP_API_KEY || process.env.GOOGLE_TRENDS_API_KEY || '').trim();
+        if (envApiKey && envApiKey.length > 0) {
+          logger.info('[checkSerpAPI] Usando API key de variables de entorno (sin credenciales en DB)', { userId });
+          const status: APIStatus = {
+            apiName: 'serpapi',
+            name: 'SerpAPI (Google Trends)',
+            isConfigured: true,
+            isAvailable: true,
+            lastChecked: new Date(),
+            message: 'API configurada (variables de entorno)',
+            status: 'healthy'
+          };
+          this.setCached(cacheKey, status).catch(() => {});
+          return status;
+        }
         logger.warn('[checkSerpAPI] No se encontraron credenciales ni con serpapi ni con googletrends', { userId });
         const status: APIStatus = {
           apiName: 'serpapi',

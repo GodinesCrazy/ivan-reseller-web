@@ -61,7 +61,9 @@ function fromEnv(key: string): string {
 }
 const APP_KEY = fromEnv('ALIEXPRESS_AFFILIATE_APP_KEY') || fromEnv('ALIEXPRESS_APP_KEY');
 const APP_SECRET = fromEnv('ALIEXPRESS_AFFILIATE_APP_SECRET') || fromEnv('ALIEXPRESS_APP_SECRET');
-const OAUTH_BASE = (process.env.ALIEXPRESS_OAUTH_BASE || 'https://api-sg.aliexpress.com/oauth').replace(/\/$/, '');
+// OAUTH_BASE: solo la base del path OAuth, sin /authorize (evita duplicado oauth/authorize/authorize)
+const _rawOAuthBase = (process.env.ALIEXPRESS_OAUTH_BASE || 'https://api-sg.aliexpress.com/oauth').replace(/\/$/, '');
+const OAUTH_BASE = _rawOAuthBase.replace(/\/authorize\/?$/i, '') || 'https://api-sg.aliexpress.com/oauth';
 const API_BASE = (process.env.ALIEXPRESS_API_BASE || process.env.ALIEXPRESS_API_BASE_URL || 'https://api-sg.aliexpress.com/sync').replace(/\/$/, '');
 const TOKEN_URL = 'https://api-sg.aliexpress.com/rest/auth/token/create';
 /** api_path for signature must match endpoint path exactly (including /rest). */
