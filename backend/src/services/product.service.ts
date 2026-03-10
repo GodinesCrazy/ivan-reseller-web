@@ -991,6 +991,54 @@ export class ProductService {
     return { fixed, errors };
   }
 
+  /**
+   * Get products that are candidates for cleanup: never published, old enough.
+   * Status PENDING, APPROVED or REJECTED; zero marketplace listings; no sales; createdAt older than olderThanDays.
+   */
+  async getCleanupCandidates(options?: { olderThanDays?: number }): Promise<Array<{ id: number; userId: number; title: string; status: string; createdAt: Date }>> {
+    const olderThanDays = options?.olderThanDays ?? 30;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - olderThanDays);
+
+    const products = await prisma.product.findMany({
+      where: {
+        status: { in: ['PENDING', 'APPROVED', 'REJECTED'] },
+        marketplaceListings: { none: {} },
+        sales: { none: {} },
+        createdAt: { lt: cutoff },
+      },
+      select: { id: true, userId: true, title: true, status: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return products;
+  }
+
+  /**
+   * Delete old products that were never published. Dry run: only return count without deleting.
+   */
+  async cleanupUnpublishedProducts(options?: { olderThanDays?: number; dryRun?: boolean }): Promise<{ deleted: number; dryRun: boolean }> {
+    const olderThanDays = options?.olderThanDays ?? 30;
+    const dryRun = options?.dryRun ?? true;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - olderThanDays);
+
+    const where = {
+      status: { in: ['PENDING', 'APPROVED', 'REJECTED'] as const },
+      marketplaceListings: { none: {} },
+      sales: { none: {} },
+      createdAt: { lt: cutoff },
+    };
+
+    if (dryRun) {
+      const count = await prisma.product.count({ where });
+      return { deleted: count, dryRun: true };
+    }
+
+    const result = await prisma.product.deleteMany({ where });
+    logger.info('Cleanup unpublished products', { deleted: result.count, olderThanDays });
+    return { deleted: result.count, dryRun: false };
+  }
+
   async updateProductStatus(id: number, status: ProductStatus, adminId: number) {
     // ✅ C2: Admin puede ver todos los productos
     const product = await this.getProductById(id, adminId, true);

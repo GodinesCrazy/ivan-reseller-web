@@ -142,15 +142,17 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
       
       const allListings = (product.marketplaceListings || []).map((l: any) => ({
         id: l.id,
-        marketplace: l.marketplace?.toUpperCase() || 'unknown',
+        marketplace: (l.marketplace && String(l.marketplace).trim()) ? String(l.marketplace).toUpperCase() : 'N/A',
         listingId: l.listingId,
         listingUrl: l.listingUrl || buildMarketplaceUrl(l.marketplace ?? '', l.listingId) || null,
         publishedAt: l.publishedAt?.toISOString() || null,
       }));
       const mostRecentListing = product.marketplaceListings?.[0] || null;
-      const marketplace = mostRecentListing?.marketplace?.toUpperCase() || 'unknown';
+      const marketplace = (mostRecentListing?.marketplace && String(mostRecentListing.marketplace).trim())
+        ? String(mostRecentListing.marketplace).toUpperCase()
+        : 'N/A';
       const marketplaceUrl = mostRecentListing?.listingUrl || buildMarketplaceUrl(mostRecentListing?.marketplace ?? '', mostRecentListing?.listingId) || null;
-      const marketplaces = Array.from(new Set(allListings.map((l: { marketplace: string }) => l.marketplace).filter(Boolean)));
+      const marketplaces = Array.from(new Set(allListings.map((l: { marketplace: string }) => l.marketplace).filter((m: string) => m && m !== 'N/A')));
       
       return {
         id: String(product.id),
@@ -299,7 +301,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
       imageUrl: extractImageUrl(product.images) || undefined, // ✅ Incluir imageUrl extraído
       sku: String(product.id), // SKU temporal basado en ID
       stock: 0, // Valor por defecto
-      marketplace: 'unknown',
+      marketplace: 'N/A',
       profit: ((toNumber(product.finalPrice) || toNumber(product.suggestedPrice) || 0) - toNumber(product.aliexpressPrice)) || 0
     };
     
@@ -648,6 +650,47 @@ router.get('/maintenance/inconsistencies', authorize('ADMIN'), async (req: Reque
       success: true,
       count: inconsistencies.length,
       inconsistencies
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/products/maintenance/cleanup-candidates - Productos viejos nunca publicados (Admin only)
+router.get('/maintenance/cleanup-candidates', authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const olderThanDays = req.query.olderThanDays ? Number(req.query.olderThanDays) : 30;
+    const candidates = await productService.getCleanupCandidates({ olderThanDays });
+    res.json({
+      success: true,
+      count: candidates.length,
+      candidates: candidates.map((p) => ({
+        id: p.id,
+        userId: p.userId,
+        title: p.title,
+        status: p.status,
+        createdAt: p.createdAt?.toISOString?.() ?? p.createdAt,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/products/maintenance/cleanup - Borrar productos viejos nunca publicados (Admin only)
+router.post('/maintenance/cleanup', authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = (req.body || {}) as { olderThanDays?: number; dryRun?: boolean };
+    const olderThanDays = body.olderThanDays ?? 30;
+    const dryRun = body.dryRun !== false;
+    const result = await productService.cleanupUnpublishedProducts({ olderThanDays, dryRun });
+    res.json({
+      success: true,
+      deleted: result.deleted,
+      dryRun: result.dryRun,
+      message: result.dryRun
+        ? `${result.deleted} product(s) would be deleted. Send dryRun: false to execute.`
+        : `${result.deleted} product(s) deleted.`,
     });
   } catch (error) {
     next(error);

@@ -41,6 +41,8 @@
     "ebay:set-token": "node scripts/set-ebay-token.js",
     "verify:full-cycle": "node scripts/verify-full-cycle.js",
     "run-autopilot-cycle": "tsx scripts/run-autopilot-cycle-now.ts",
+    "start-autopilot": "tsx scripts/start-autopilot.ts",
+    "check-autopilot-and-sales": "tsx scripts/check-autopilot-and-sales.ts",
     "start-first-cycle-1": "tsx scripts/start-first-cycle-1-article.ts",
     "test-production-cycle": "tsx scripts/test-production-cycle.ts",
     "verify-production-system": "tsx scripts/verify-production-system.ts",

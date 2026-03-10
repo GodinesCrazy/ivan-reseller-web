@@ -111,6 +111,14 @@ const DEFAULT_FILTERS: ProductFilters = {
   sortDir: 'desc',
 };
 
+/** Show "—" when marketplace is unknown, N/A or empty */
+function displayMarketplace(m: string | undefined | null): string {
+  if (m === undefined || m === null) return '—';
+  const s = String(m).trim().toLowerCase();
+  if (s === '' || s === 'unknown' || s === 'n/a') return '—';
+  return String(m).trim();
+}
+
 const ITEMS_PER_PAGE = 25;
 
 export default function Products() {
@@ -761,11 +769,15 @@ export default function Products() {
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1">
                             {product.marketplaceListings && product.marketplaceListings.length > 0 ? (
-                              Array.from(new Set(product.marketplaceListings.map((l: MarketplaceListing) => l.marketplace))).map((mp) => (
-                                <Badge key={mp} variant="outline" className="text-xs">{mp}</Badge>
-                              ))
+                              (() => {
+                                const mps = Array.from(new Set(product.marketplaceListings.map((l: MarketplaceListing) => l.marketplace)))
+                                  .map((mp) => displayMarketplace(mp))
+                                  .filter((mp) => mp !== '—');
+                                if (mps.length === 0) return <Badge variant="outline" className="text-gray-500">—</Badge>;
+                                return mps.map((mp) => <Badge key={mp} variant="outline" className="text-xs">{mp}</Badge>);
+                              })()
                             ) : (
-                              <Badge variant="outline" className="text-gray-500">{product.marketplace || '—'}</Badge>
+                              <Badge variant="outline" className="text-gray-500">{displayMarketplace(product.marketplace)}</Badge>
                             )}
                           </div>
                         </td>
@@ -776,19 +788,19 @@ export default function Products() {
                                 listing.listingUrl ? (
                                   <a key={listing.id} href={listing.listingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:underline text-sm">
                                     <ExternalLink className="w-4 h-4 shrink-0" />
-                                    Ver en {listing.marketplace}
+                                    Ver en {displayMarketplace(listing.marketplace)}
                                   </a>
                                 ) : (
                                   <span key={listing.id} className="inline-flex items-center gap-1 text-gray-500 text-sm">
                                     <ExternalLink className="w-4 h-4 shrink-0" />
-                                    {listing.marketplace} ({listing.listingId})
+                                    {displayMarketplace(listing.marketplace)} ({listing.listingId})
                                   </span>
                                 )
                               ))
                             ) : product.marketplaceUrl ? (
                               <a href={product.marketplaceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:underline text-sm">
                                 <ExternalLink className="w-4 h-4 shrink-0" />
-                                Ver en {product.marketplace}
+                                Ver en {displayMarketplace(product.marketplace)}
                               </a>
                             ) : null}
                             {product.aliexpressUrl && (
@@ -946,7 +958,7 @@ export default function Products() {
                   <MetricLabelWithTooltip label="Marketplace" tooltipBody={metricTooltips.marketplace.body} className="text-sm text-gray-600 dark:text-gray-400">
                     <p className="text-sm text-gray-600 dark:text-gray-400">Marketplace</p>
                   </MetricLabelWithTooltip>
-                  <Badge variant="outline">{selectedProduct.marketplace}</Badge>
+                  <Badge variant="outline">{displayMarketplace(selectedProduct.marketplace)}</Badge>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Estado</p>
@@ -989,7 +1001,7 @@ export default function Products() {
                     {selectedProduct.marketplaceUrl && (
                       <a href={selectedProduct.marketplaceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">
                         <Store className="w-4 h-4" />
-                        Ver en {selectedProduct.marketplace}
+                        Ver en {displayMarketplace(selectedProduct.marketplace)}
                       </a>
                     )}
                     {selectedProduct.aliexpressUrl && (
