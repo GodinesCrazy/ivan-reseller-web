@@ -40,7 +40,7 @@ import { setIsDatabaseReady, setIsRedisReady, updateReadinessState } from '../se
 
 const execAsync = promisify(exec);
 
-const TARGET_WORKING_CAPITAL = 5000;
+const TARGET_WORKING_CAPITAL = 18000;
 
 async function ensureWorkingCapital() {
   try {
@@ -218,7 +218,7 @@ export async function fullBootstrap(startTime: number): Promise<void> {
       console.warn('??  Warning: Could not update working capital:', error.message);
     });
 
-    // Ensure autopilot optimization is enabled in persisted config AND running instance
+    // Ensure autopilot config targets $5K/month: 8K listings, 18K capital, minProfit 12, etc.
     (async () => {
       try {
         const optimizedFields = {
@@ -226,24 +226,35 @@ export async function fullBootstrap(startTime: number): Promise<void> {
           publicationMode: 'automatic' as const,
           targetMarketplaces: ['mercadolibre', 'ebay'],
           targetMarketplace: 'mercadolibre',
-          cycleIntervalMinutes: 10,
-          maxOpportunitiesPerCycle: 25,
-          workingCapital: 5000,
-          minProfitUsd: 8,
-          minRoiPct: 35,
+          cycleIntervalMinutes: 6,
+          maxOpportunitiesPerCycle: 40,
+          maxActiveProducts: 8000,
+          workingCapital: 18000,
+          minProfitUsd: 12,
+          minRoiPct: 40,
+          maxDailyOrders: 200,
         };
         const cfgRecord = await prisma.systemConfig.findUnique({ where: { key: 'autopilot_config' } });
         if (cfgRecord?.value) {
           const saved = JSON.parse(cfgRecord.value as string);
-          if (saved.optimizationEnabled !== true || saved.publicationMode !== 'automatic' || !saved.targetMarketplaces?.includes('mercadolibre')) {
+          const needsUpdate =
+            saved.optimizationEnabled !== true ||
+            saved.publicationMode !== 'automatic' ||
+            !saved.targetMarketplaces?.includes('mercadolibre') ||
+            (saved.maxActiveProducts ?? 0) < 8000 ||
+            (saved.workingCapital ?? 0) < 18000 ||
+            (saved.minProfitUsd ?? 0) < 12 ||
+            (saved.cycleIntervalMinutes ?? 10) > 6 ||
+            (saved.maxOpportunitiesPerCycle ?? 0) < 40;
+          if (needsUpdate) {
             Object.assign(saved, optimizedFields);
             await prisma.systemConfig.update({ where: { key: 'autopilot_config' }, data: { value: JSON.stringify(saved) } });
-            console.log('[BOOTSTRAP] Autopilot config updated in DB: optimization=true, automatic, both marketplaces');
+            console.log('[BOOTSTRAP] Autopilot config updated in DB: $5K/month target params');
           }
         }
         const { autopilotSystem } = await import('../services/autopilot.service');
         await autopilotSystem.updateConfig(optimizedFields);
-        console.log('[BOOTSTRAP] Autopilot running config updated: optimizationEnabled=true');
+        console.log('[BOOTSTRAP] Autopilot running config updated: $5K/month target');
       } catch (e: any) {
         console.warn('[BOOTSTRAP] ensureAutopilotConfig:', e?.message);
       }

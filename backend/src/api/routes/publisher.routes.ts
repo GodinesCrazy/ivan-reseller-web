@@ -341,7 +341,9 @@ router.get('/listings', async (req: Request, res: Response) => {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
     const skip = (page - 1) * limit;
 
-    const where = { userId: req.user!.userId };
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const where = isAdmin ? {} : { userId: req.user!.userId };
     const [listings, total] = await Promise.all([
       prisma.marketplaceListing.findMany({
         where,

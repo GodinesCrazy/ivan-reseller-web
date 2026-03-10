@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -7,6 +8,7 @@ import {
   Filter,
   Search,
   Eye,
+  ExternalLink,
   Download,
   Calendar,
   MapPin
@@ -73,6 +75,7 @@ const MARKETPLACES = [
 ] as const;
 
 export default function Sales() {
+  const navigate = useNavigate();
   const [sales, setSales] = useState<Sale[]>([]);
   const [stats, setStats] = useState<SalesStats>({
     totalRevenue: 0,

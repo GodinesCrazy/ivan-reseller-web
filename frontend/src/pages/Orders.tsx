@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, RefreshCw, ArrowRight } from 'lucide-react';
+import { Package, RefreshCw, ArrowRight, ExternalLink } from 'lucide-react';
 import api from '@/services/api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
@@ -75,7 +75,7 @@ export default function Orders() {
             Actualizar
           </button>
         </div>
-        <p className="text-gray-600 mt-0.5">Órdenes de compra al proveedor y seguimiento de envíos</p>
+        <p className="text-gray-600 mt-0.5">Órdenes de compra al proveedor y seguimiento de envíos. Tras una venta, compra en AliExpress desde <span className="font-medium">Compras pendientes</span> y el estado se actualiza aquí.</p>
         <div className="mt-3">
           <CycleStepsBreadcrumb currentStep={6} />
         </div>
@@ -108,7 +108,19 @@ export default function Orders() {
               {orders.map((order) => (
                 <tr key={order.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm font-mono">{order.id.slice(0, 8)}...</td>
-                  <td className="px-6 py-4 text-sm">{order.title}</td>
+                  <td className="px-6 py-4 text-sm">
+                    {order.productId ? (
+                      <button
+                        onClick={() => navigate(`/products/${order.productId}/preview`)}
+                        className="text-blue-600 hover:underline flex items-center gap-1"
+                      >
+                        {order.title}
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      order.title
+                    )}
+                  </td>
                   <td className="px-6 py-4">
                     <OrderStatusBadge status={order.status} />
                   </td>

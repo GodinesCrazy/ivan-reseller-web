@@ -13,8 +13,18 @@ const STATUS_STYLES: Record<string, string> = {
   FAILED: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  CREATED: 'Creado',
+  PAID: 'Por comprar',
+  PURCHASING: 'Comprando',
+  PURCHASED: 'Comprado',
+  FAILED: 'Fallido',
+  SIMULATED: 'Simulado',
+};
+
 export default function OrderStatusBadge({ status }: { status: string }) {
   const style = STATUS_STYLES[status] || STATUS_STYLES.CREATED;
+  const label = STATUS_LABELS[status] || status;
   const isPurchasing = status === 'PURCHASING';
 
   return (
@@ -22,7 +32,7 @@ export default function OrderStatusBadge({ status }: { status: string }) {
       {isPurchasing && (
         <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
       )}
-      {status}
+      {label}
     </Badge>
   );
 }

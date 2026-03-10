@@ -150,6 +150,7 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
       const mostRecentListing = product.marketplaceListings?.[0] || null;
       const marketplace = mostRecentListing?.marketplace?.toUpperCase() || 'unknown';
       const marketplaceUrl = mostRecentListing?.listingUrl || buildMarketplaceUrl(mostRecentListing?.marketplace ?? '', mostRecentListing?.listingId) || null;
+      const marketplaces = Array.from(new Set(allListings.map((l: { marketplace: string }) => l.marketplace).filter(Boolean)));
       
       return {
         id: String(product.id),
@@ -159,6 +160,7 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
         sku: String(product.id),
         marketplace: marketplace,
         marketplaceUrl: marketplaceUrl,
+        marketplaces,
         marketplaceListings: allListings,
         aliexpressUrl: product.aliexpressUrl || null,
         price: product.finalPrice || product.suggestedPrice || product.aliexpressPrice || 0,

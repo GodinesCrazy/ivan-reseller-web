@@ -36,6 +36,7 @@ import LoadingSpinner, { CardSkeleton } from '@/components/ui/LoadingSpinner';
 import AIOpportunityFinder from '../components/AIOpportunityFinder';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
 import WorkflowSummaryWidget from '@/components/WorkflowSummaryWidget';
+import InventorySummaryCard from '@/components/InventorySummaryCard';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { log } from '@/utils/logger';
 import { getTrendingKeywords, type TrendKeyword } from '@/services/trends.api';
@@ -436,6 +437,8 @@ export default function Dashboard() {
         </div>
       </div>
       )}
+
+      <InventorySummaryCard />
 
       {/* Admin: ingresos plataforma y comisiones por usuario */}
       {user?.role?.toUpperCase() === 'ADMIN' && platformRevenue && (

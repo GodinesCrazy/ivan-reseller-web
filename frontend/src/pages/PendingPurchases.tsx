@@ -12,6 +12,7 @@ import {
   Mail,
   TrendingUp
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,7 @@ interface PendingSale {
 }
 
 export default function PendingPurchases() {
+  const navigate = useNavigate();
   const [pendingSales, setPendingSales] = useState<PendingSale[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<Record<number, boolean>>({});
@@ -101,7 +103,7 @@ export default function PendingPurchases() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Compras Pendientes</h1>
-          <p className="text-gray-600 mt-1">Ventas que requieren compra manual en AliExpress</p>
+          <p className="text-gray-600 mt-1">Ventas que requieren compra manual en AliExpress. Haz clic en el producto para ver detalles. Tras comprar, el seguimiento continúa en Órdenes.</p>
           <div className="mt-3">
             <CycleStepsBreadcrumb currentStep={5} />
           </div>
@@ -147,8 +149,18 @@ export default function PendingPurchases() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <CardTitle className="text-lg flex items-center gap-2">
-                      <Package className="w-5 h-5" />
-                      {sale.productTitle}
+                      <Package className="w-5 h-5 flex-shrink-0" />
+                      {sale.productId ? (
+                        <button
+                          onClick={() => navigate(`/products/${sale.productId}/preview`)}
+                          className="text-left hover:text-blue-600 hover:underline flex items-center gap-1"
+                        >
+                          {sale.productTitle}
+                          <ExternalLink className="w-4 h-4 text-gray-400" />
+                        </button>
+                      ) : (
+                        sale.productTitle
+                      )}
                     </CardTitle>
                     <div className="mt-2 flex items-center gap-2">
                       <Badge variant="outline">{sale.marketplace.toUpperCase()}</Badge>
@@ -249,7 +261,17 @@ export default function PendingPurchases() {
                     <Clock className="w-4 h-4" />
                     <span>Venta realizada: {new Date(sale.createdAt).toLocaleString()}</span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {sale.orderId && (
+                      <Button
+                        variant="outline"
+                        onClick={() => navigate(`/orders/${sale.orderId}`)}
+                        className="flex items-center gap-2"
+                      >
+                        <Package className="w-4 h-4" />
+                        Ver orden
+                      </Button>
+                    )}
                     {sale.aliexpressUrl && (
                       <Button
                         variant="outline"

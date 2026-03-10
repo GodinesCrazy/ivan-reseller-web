@@ -497,8 +497,10 @@ export class ProductService {
     }
 
     if (filters?.marketplace) {
+      const mp = String(filters.marketplace).toLowerCase();
+      const mpNorm = mp === 'ml' ? 'mercadolibre' : mp;
       where.marketplaceListings = {
-        some: { marketplace: { equals: filters.marketplace, mode: 'insensitive' } },
+        some: { marketplace: { equals: mpNorm, mode: 'insensitive' } },
       };
     }
 

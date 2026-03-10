@@ -1,6 +1,40 @@
 import { trace } from '../utils/boot-trace';
 trace('loading marketplace.service');
 
+/** Words that are not brand names; if title starts with one, use "Genérico" for ML BRAND. */
+const GENERIC_TITLE_WORDS = new Set([
+  'wireless', 'bluetooth', 'portable', 'mini', 'professional', 'smart', 'usb', 'led', 'new', 'super', 'pro',
+  'original', 'generic', 'universal', 'multi', 'cute', 'anime', 'car', 'home', 'office', 'magnetic', 'adjustable',
+  'rechargeable', 'waterproof', 'digital', 'electric', 'manual', 'automatic', 'stainless', 'soft', 'hard', 'large',
+  'small', 'set', 'kit', 'pack', 'case', 'cover', 'stand', 'holder', 'organizer', 'charger', 'cable', 'adapter',
+  'battery', 'power', 'hd', 'rgb', 'wifi', 'gaming', 'fitness', 'sports', 'earbuds', 'earphones', 'headphones',
+  'speaker', 'translator', 'adapter', 'converter', 'reader', 'monitor', 'keyboard', 'mouse', 'laptop', 'tablet',
+  'phone', 'camera', 'drone', 'watch', 'band', 'strap', 'bag', 'box', 'pouch', 'sleeve', 'mat', 'pad', 'desk',
+  'wall', 'floor', 'outdoor', 'indoor', 'travel', 'running', 'yoga', 'gift', 'christmas', 'valentine', 'premium',
+  'deluxe', 'basic', 'standard', 'classic', 'modern', 'vintage', 'retro', 'eco', 'organic', 'natural', 'pure',
+  'reusable', 'foldable', 'heavy', 'light', 'thin', 'thick', 'long', 'short', 'wide', 'narrow', 'flat', 'round',
+  'square', 'flexible', 'sturdy', 'durable', 'single', 'double', 'triple', 'full', 'empty', 'open', 'closed',
+  'anti', 'ultra', 'max', 'plus', 'zero', 'no', 'with', 'without', 'free', 'low', 'high', 'extra', 'all',
+  'ai', 'a', 'the', 'for', 'and', 'with', 'inch', 'inches', 'cm', 'mm', 'ft', 'm', 'g', 'kg', 'lb', 'oz',
+  'xl', 'xxl', 'xs', 's', 'm', 'l', '1x', '2x', '3x', '4x', '5x', '6x', '7x', '8x', '9x', '10x', '12x',
+]);
+
+/**
+ * Infer brand from product title for MercadoLibre. Use "Genérico" when no clear brand.
+ * Reduces ML rejections for "brand indicated as generic when product has a real brand".
+ */
+function inferBrandFromTitle(title: string): string | null {
+  if (!title || typeof title !== 'string') return null;
+  const trimmed = title.trim();
+  const first = trimmed.split(/\s+/)[0];
+  if (!first) return null;
+  const normalized = first.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+  if (normalized.length < 2 || normalized.length > 30) return null;
+  if (GENERIC_TITLE_WORDS.has(normalized)) return null;
+  if (/^\d+$/.test(normalized)) return null;
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+}
+
 import { EbayService, EbayCredentials, EbayProduct } from './ebay.service';
 import { MercadoLibreService, MercadoLibreCredentials, MLProduct } from './mercadolibre.service';
 import { AmazonService, AmazonCredentials, AmazonProduct } from './amazon.service';
@@ -835,7 +869,8 @@ export class MarketplaceService {
           };
           for (const attr of requiredAttrs) {
             if (attr.id === 'BRAND') {
-              attributes.push({ id: 'BRAND', value: 'Genérico' });
+              const inferredBrand = inferBrandFromTitle(finalTitle);
+              attributes.push({ id: 'BRAND', value: inferredBrand || 'Genérico' });
             } else if (attr.id === 'MODEL') {
               const model = finalTitle.substring(0, 20).replace(/[^a-zA-Z0-9\- ]/g, '').trim();
               attributes.push({ id: 'MODEL', value: model || 'Standard' });

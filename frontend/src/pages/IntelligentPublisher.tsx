@@ -26,7 +26,7 @@ export default function IntelligentPublisher() {
   const [loading, setLoading] = useState(true);
   const [listingsPage, setListingsPage] = useState(1);
   const [listingsTotal, setListingsTotal] = useState(0);
-  const LISTINGS_PER_PAGE = 25;
+  const LISTINGS_PER_PAGE = 50;
   const listingsTotalPages = Math.max(1, Math.ceil(listingsTotal / LISTINGS_PER_PAGE));
 
   const loadListings = useCallback(async (page: number) => {
@@ -275,8 +275,13 @@ export default function IntelligentPublisher() {
       </div>
 
       <div className="mt-6">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
           <div className="text-lg font-semibold">Published Listings ({listingsTotal})</div>
+          {listingsTotal > 0 && (
+            <span className="text-sm text-gray-500">
+              Mostrando {((listingsPage - 1) * LISTINGS_PER_PAGE) + 1}–{Math.min(listingsPage * LISTINGS_PER_PAGE, listingsTotal)} de {listingsTotal} listados
+            </span>
+          )}
         </div>
         <div className="bg-white border rounded">
           {listings.map((l:any)=>(
@@ -296,19 +301,19 @@ export default function IntelligentPublisher() {
           {listings.length===0 && <div className="p-3 text-sm text-gray-600">No listings yet.</div>}
         </div>
         {listingsTotalPages > 1 && (
-          <div className="flex items-center justify-center gap-3 mt-3 text-sm">
+          <div className="flex items-center justify-center gap-3 mt-3 py-3 border-t bg-gray-50 rounded-b text-sm">
             <button
               disabled={listingsPage <= 1}
               onClick={() => goToListingsPage(Math.max(1, listingsPage - 1))}
-              className="px-3 py-1.5 border rounded disabled:opacity-40 hover:bg-gray-50"
+              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white font-medium"
             >
               <ChevronLeft className="w-4 h-4 inline" /> Anterior
             </button>
-            <span className="text-gray-600">Pagina {listingsPage} de {listingsTotalPages} ({listingsTotal} total)</span>
+            <span className="text-gray-600 font-medium">Página {listingsPage} de {listingsTotalPages} ({listingsTotal} total)</span>
             <button
               disabled={listingsPage >= listingsTotalPages}
               onClick={() => goToListingsPage(Math.min(listingsTotalPages, listingsPage + 1))}
-              className="px-3 py-1.5 border rounded disabled:opacity-40 hover:bg-gray-50"
+              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white font-medium"
             >
               Siguiente <ChevronRight className="w-4 h-4 inline" />
             </button>

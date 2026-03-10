@@ -350,6 +350,81 @@ router.get('/summary', async (req: Request, res: Response, next) => {
   }
 });
 
+// GET /api/dashboard/inventory-summary - Resumen unificado de productos, listings y órdenes
+router.get('/inventory-summary', async (req: Request, res: Response, next) => {
+  try {
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? undefined : req.user?.userId;
+
+    if (!userId && !isAdmin) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const whereUser = userId ? { userId } : {};
+
+    const [
+      productCounts,
+      listingsByMp,
+      ordersByStatus,
+      pendingPurchasesCount,
+    ] = await Promise.all([
+      prisma.product.groupBy({
+        by: ['status'],
+        where: whereUser,
+        _count: { id: true },
+      }),
+      prisma.marketplaceListing.groupBy({
+        by: ['marketplace'],
+        where: whereUser,
+        _count: { id: true },
+      }),
+      prisma.order.groupBy({
+        by: ['status'],
+        where: userId ? { userId } : {},
+        _count: { id: true },
+      }),
+      prisma.sale.count({
+        where: {
+          ...whereUser,
+          status: { in: ['PENDING', 'PROCESSING'] },
+        },
+      }),
+    ]);
+
+    const products = {
+      total: productCounts.reduce((s, p) => s + p._count.id, 0),
+      pending: productCounts.find(p => p.status === 'PENDING')?._count.id ?? 0,
+      approved: productCounts.find(p => p.status === 'APPROVED')?._count.id ?? 0,
+      published: productCounts.find(p => p.status === 'PUBLISHED')?._count.id ?? 0,
+    };
+
+    const listingsByMarketplace = {
+      ebay: listingsByMp.find(l => l.marketplace.toLowerCase() === 'ebay')?._count.id ?? 0,
+      mercadolibre: listingsByMp.find(l => l.marketplace.toLowerCase() === 'mercadolibre' || l.marketplace.toLowerCase() === 'ml')?._count.id ?? 0,
+      amazon: listingsByMp.find(l => l.marketplace.toLowerCase() === 'amazon')?._count.id ?? 0,
+    };
+
+    const ordersByStatusMap = {
+      CREATED: ordersByStatus.find(o => o.status === 'CREATED')?._count.id ?? 0,
+      PAID: ordersByStatus.find(o => o.status === 'PAID')?._count.id ?? 0,
+      PURCHASING: ordersByStatus.find(o => o.status === 'PURCHASING')?._count.id ?? 0,
+      PURCHASED: ordersByStatus.find(o => o.status === 'PURCHASED')?._count.id ?? 0,
+      FAILED: ordersByStatus.find(o => o.status === 'FAILED')?._count.id ?? 0,
+    };
+
+    return res.json({
+      products,
+      listingsByMarketplace,
+      ordersByStatus: ordersByStatusMap,
+      pendingPurchasesCount,
+    });
+  } catch (error: any) {
+    logger.error('Error in /api/dashboard/inventory-summary', { error: error?.message, userId: req.user?.userId });
+    next(error);
+  }
+});
+
 // GET /api/dashboard/autopilot-metrics - Active listings, daily sales, profit today/month, winning products count
 router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
   try {

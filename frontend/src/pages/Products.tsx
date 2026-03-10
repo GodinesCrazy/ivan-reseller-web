@@ -22,7 +22,9 @@ import {
   ArrowUpDown,
   Calendar,
   DollarSign,
-  Tag
+  Tag,
+  AlertCircle,
+  Settings
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +39,7 @@ import { formatCurrencySimple } from '@/utils/currency';
 import WorkflowStatusIndicator from '@/components/WorkflowStatusIndicator';
 import WorkflowProgressBar from '@/components/WorkflowProgressBar';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
+import InventorySummaryCard from '@/components/InventorySummaryCard';
 
 interface MarketplaceListing {
   id: number;
@@ -124,6 +127,7 @@ export default function Products() {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [workflowByProduct, setWorkflowByProduct] = useState<Record<string, any>>({});
   const [approvingPending, setApprovingPending] = useState(false);
+  const [setupRequired, setSetupRequired] = useState(false);
   const { formatMoney } = useCurrency();
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -177,14 +181,26 @@ export default function Products() {
       params.set('limit', String(ITEMS_PER_PAGE));
 
       const response = await api.get(`/api/products?${params}`);
-      if (response.data?.setupRequired === true || response.data?.error === 'setup_required') return;
+      if (response.data?.setupRequired === true || response.data?.error === 'setup_required') {
+        setSetupRequired(true);
+        setProducts([]);
+        setLoading(false);
+        return;
+      }
 
+      setSetupRequired(false);
       const productsData = response.data?.data?.products || response.data?.products || [];
       setProducts(Array.isArray(productsData) ? productsData : []);
       if (response.data?.pagination) setPaginationMeta(response.data.pagination);
       if (response.data?.aggregations) setAggregations(response.data.aggregations);
     } catch (error: any) {
-      if (error.response?.data?.setupRequired === true || error.response?.data?.error === 'setup_required') return;
+      if (error.response?.data?.setupRequired === true || error.response?.data?.error === 'setup_required') {
+        setSetupRequired(true);
+        setProducts([]);
+        setLoading(false);
+        return;
+      }
+      setSetupRequired(false);
       console.error('Error fetching products:', error);
       if (!silent) toast.error(error?.response?.data?.error || 'Error al cargar productos');
     } finally {
@@ -391,6 +407,32 @@ export default function Products() {
         </div>
       </div>
 
+      {setupRequired && (
+        <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-4">
+              <AlertCircle className="w-8 h-8 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-100">Configuración requerida</h3>
+                <p className="mt-1 text-amber-800 dark:text-amber-200">
+                  Para ver y gestionar productos, configura al menos un marketplace (eBay, Mercado Libre o Amazon) y una API de búsqueda (AliExpress Affiliate, ScraperAPI o ZenRows).
+                </p>
+                <Button
+                  variant="outline"
+                  className="mt-4 gap-2"
+                  onClick={() => navigate('/api-settings')}
+                >
+                  <Settings className="w-4 h-4" />
+                  Ir a configuración de APIs
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!setupRequired && <InventorySummaryCard />}
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="cursor-pointer hover:ring-2 hover:ring-blue-300 transition-shadow" onClick={() => { updateFilter('status', 'ALL'); }}>
@@ -493,9 +535,9 @@ export default function Products() {
               className={selectClass}
             >
               <option value="ALL">Todos los marketplaces</option>
-              <option value="EBAY">eBay</option>
-              <option value="AMAZON">Amazon</option>
-              <option value="MERCADOLIBRE">MercadoLibre</option>
+              <option value="ebay">eBay</option>
+              <option value="mercadolibre">Mercado Libre</option>
+              <option value="amazon">Amazon</option>
             </select>
           </div>
 
@@ -717,7 +759,15 @@ export default function Products() {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{product.sku}</td>
                         <td className="px-4 py-3">
-                          <Badge variant="outline">{product.marketplace}</Badge>
+                          <div className="flex flex-wrap gap-1">
+                            {product.marketplaceListings && product.marketplaceListings.length > 0 ? (
+                              Array.from(new Set(product.marketplaceListings.map((l: MarketplaceListing) => l.marketplace))).map((mp) => (
+                                <Badge key={mp} variant="outline" className="text-xs">{mp}</Badge>
+                              ))
+                            ) : (
+                              <Badge variant="outline" className="text-gray-500">{product.marketplace || '—'}</Badge>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-1">
