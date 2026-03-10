@@ -1268,7 +1268,8 @@ export default function APISettings() {
     apiName: string,
     credential: APICredential | undefined,
     statusInfo: APIStatus | { status?: string; message?: string | null; requiresManual?: boolean } | undefined,
-    diag: { issues?: string[]; warnings?: string[] } | null
+    diag: { issues?: string[]; warnings?: string[] } | null,
+    formCreds?: Record<string, string>
   ): {
     status: 'not_configured' | 'partially_configured' | 'configured' | 'error';
     message: string;
@@ -1348,6 +1349,31 @@ export default function APISettings() {
           actionMessage: error || 'Revisa la configuración.',
         };
       }
+    }
+
+    // ✅ FIX Google Trends/SerpAPI: Considerar configurado si hay credential, statusInfo, O clave válida en formulario
+    if (apiName === 'googletrends' || apiName === 'serpapi') {
+      const serpKey = formCreds?.SERP_API_KEY || formCreds?.apiKey || '';
+      const hasValidKeyInForm = serpKey.trim().length >= 32 && /^[a-zA-Z0-9]+$/.test(serpKey.trim());
+      const hasCredential = !!(credential && credential.id > 0);
+      const statusSaysConfigured = !!(statusInfo && (
+        (statusInfo as APIStatus).isConfigured ||
+        (statusInfo as APIStatus).isAvailable ||
+        (statusInfo as APIStatus).status === 'healthy'
+      ));
+      if (hasCredential || statusSaysConfigured || hasValidKeyInForm) {
+        return {
+          status: 'configured',
+          message: statusInfo && 'message' in statusInfo && (statusInfo as APIStatus).message
+            ? (statusInfo as APIStatus).message
+            : 'Configurado y funcionando',
+        };
+      }
+      return {
+        status: 'not_configured',
+        message: 'No configurado',
+        actionMessage: 'Ingresa la SerpAPI Key y guárdala.',
+      };
     }
     
     // Para otras APIs
@@ -3929,7 +3955,7 @@ export default function APISettings() {
               ? STATUS_BADGE_STYLES[statusInfo.status]
               : STATUS_BADGE_STYLES.unknown;
 
-          const unifiedStatusCard = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag);
+          const unifiedStatusCard = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag, formData[formKey]);
 
           return (
             <div
@@ -3993,7 +4019,7 @@ export default function APISettings() {
                     </div>
                     {/* ✅ MEJORA: Estado unificado y claro de configuración */}
                     {(() => {
-                      const unifiedStatus = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag);
+                      const unifiedStatus = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag, formData[formKey]);
                       
                       if (unifiedStatus.status === 'not_configured') {
                         return (
@@ -4141,7 +4167,7 @@ export default function APISettings() {
                     )}
                     {/* ✅ MEJORA: Solo mostrar badge técnico si no hay estado unificado o para información adicional */}
                     {statusInfo && statusInfo.status === 'healthy' && (() => {
-                      const unifiedStatus = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag);
+                      const unifiedStatus = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag, formData[formKey]);
                       // Solo mostrar badge técnico si está completamente configurado
                       if (unifiedStatus.status === 'configured') {
                         return (
@@ -4161,7 +4187,7 @@ export default function APISettings() {
                     })()}
                     {/* Mostrar información técnica adicional solo si no hay estado unificado */}
                     {statusInfo && !['ebay', 'mercadolibre'].includes(apiDef.name) && (() => {
-                      const unifiedStatus = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag);
+                      const unifiedStatus = getUnifiedAPIStatus(apiDef.name, credential, statusInfo, diag, formData[formKey]);
                       if (unifiedStatus.status !== 'configured') {
                         return (
                           <div className="mt-2 space-y-2 text-xs">
