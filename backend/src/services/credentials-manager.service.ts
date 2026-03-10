@@ -34,6 +34,7 @@ function normalizeApiName(apiName: string): string {
   const n = String(apiName || '').toLowerCase().trim();
   if (n === 'aliexpress_affiliate') return 'aliexpress-affiliate';
   if (n === 'aliexpress_dropshipping') return 'aliexpress-dropshipping';
+  if (n === 'googletrends' || n === 'google-trends' || n === 'google_trends') return 'serpapi';
   return n;
 }
 
@@ -49,10 +50,11 @@ export function clearCredentialsCache(
     credentialsCache.clear();
     return;
   }
+  const normalizedApiName = apiName ? normalizeApiName(apiName) : undefined;
   for (const key of credentialsCache.keys()) {
     const [u, a, e] = key.split(':');
     const matchUser = !userId || u === String(userId);
-    const matchApi = !apiName || a === apiName;
+    const matchApi = !normalizedApiName || a === normalizedApiName;
     const matchEnv = !environment || e === environment;
     if (matchUser && matchApi && matchEnv) {
       credentialsCache.delete(key);
@@ -177,6 +179,13 @@ function loadFromEnv(
   // GROQ
   if (n === 'groq') {
     const apiKey = (process.env.GROQ_API_KEY || '').trim();
+    if (!apiKey) return null;
+    return { apiKey };
+  }
+
+  // SerpAPI / Google Trends
+  if (n === 'serpapi') {
+    const apiKey = (process.env.SERP_API_KEY || process.env.GOOGLE_TRENDS_API_KEY || '').trim();
     if (!apiKey) return null;
     return { apiKey };
   }
