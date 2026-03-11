@@ -45,7 +45,60 @@ const TITLE_TYPO_FIXES: [RegExp, string][] = [
 ];
 
 /**
- * Sanitize title for MercadoLibre: fix typos, remove invalid chars. ML allows 60 chars.
+ * ML policy: avoid "tipo X", "símil X", "réplica", "idéntico a", "igual a" for brands.
+ * Replace with "compatible con X" or remove. Applied to title and description.
+ */
+const IP_POLICY_REPLACEMENTS: [RegExp, string][] = [
+  [/\btipo\s+([A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+)/gi, 'compatible con $1'],
+  [/\bsímil\s+([A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+)/gi, 'compatible con $1'],
+  [/\bsimil\s+([A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+)/gi, 'compatible con $1'],
+  [/\bréplica\s+de\s+([A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+)/gi, 'compatible con $1'],
+  [/\breplica\s+de\s+([A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+)/gi, 'compatible con $1'],
+  [/\bidéntico\s+a\s+([A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+)/gi, 'compatible con $1'],
+  [/\bidentico\s+a\s+([A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+)/gi, 'compatible con $1'],
+  [/\bigual\s+a\s+([A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+)/gi, 'compatible con $1'],
+  [/\bréplica\b/gi, ''],
+  [/\breplica\b/gi, ''],
+];
+
+function applyIPPolicySanitization(text: string): string {
+  if (!text || typeof text !== 'string') return text;
+  let s = text;
+  for (const [re, replacement] of IP_POLICY_REPLACEMENTS) {
+    s = s.replace(re, replacement);
+  }
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+/** Patterns that indicate IP policy violation (read-only check). */
+const IP_VIOLATION_PATTERNS: { pattern: RegExp; label: string }[] = [
+  { pattern: /\btipo\s+[A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+/gi, label: 'tipo [marca]' },
+  { pattern: /\bsímil\s+[A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+/gi, label: 'símil [marca]' },
+  { pattern: /\bsimil\s+[A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+/gi, label: 'simil [marca]' },
+  { pattern: /\bréplica\s+de\s+[A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+/gi, label: 'réplica de [marca]' },
+  { pattern: /\breplica\s+de\s+[A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+/gi, label: 'replica de [marca]' },
+  { pattern: /\bidéntico\s+a\s+[A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+/gi, label: 'idéntico a [marca]' },
+  { pattern: /\bidentico\s+a\s+[A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+/gi, label: 'identico a [marca]' },
+  { pattern: /\bigual\s+a\s+[A-Za-z0-9áéíóúñÁÉÍÓÚÑÜ]+/gi, label: 'igual a [marca]' },
+  { pattern: /\bréplica\b/gi, label: 'réplica' },
+  { pattern: /\breplica\b/gi, label: 'replica' },
+];
+
+/**
+ * Check if title and description comply with ML IP policy (no "tipo X", "símil", "réplica", etc.).
+ * Exported for compliance verification.
+ */
+export function checkMLCompliance(title: string, description: string): { compliant: boolean; violations: string[] } {
+  const violations: string[] = [];
+  const text = `${title || ''} ${description || ''}`;
+  for (const { pattern, label } of IP_VIOLATION_PATTERNS) {
+    if (text.match(pattern)) violations.push(label);
+  }
+  return { compliant: violations.length === 0, violations: [...new Set(violations)] };
+}
+
+/**
+ * Sanitize title for MercadoLibre: fix typos, apply IP policy, remove invalid chars. ML allows 60 chars.
  * Exported for use in repair/update flows.
  */
 export function sanitizeTitleForML(title: string): string {
@@ -54,6 +107,7 @@ export function sanitizeTitleForML(title: string): string {
   for (const [re, replacement] of TITLE_TYPO_FIXES) {
     s = s.replace(re, replacement);
   }
+  s = applyIPPolicySanitization(s);
   s = s.replace(/[^\w\sáéíóúñüÁÉÍÓÚÑÜ.,\-\/()]/gi, '').trim();
   if (s.length > 60) s = s.substring(0, 57) + '...';
   return s || 'Producto';
@@ -62,7 +116,7 @@ export function sanitizeTitleForML(title: string): string {
 const ML_DESCRIPTION_MAX = 5000;
 
 /**
- * Sanitize description for MercadoLibre: strip HTML, limit length, remove control chars.
+ * Sanitize description for MercadoLibre: strip HTML, apply IP policy, limit length, remove control chars.
  * Exported for use in repair/update flows.
  */
 export function sanitizeDescriptionForML(desc: string): string {
@@ -77,6 +131,7 @@ export function sanitizeDescriptionForML(desc: string): string {
     .replace(/\s+/g, ' ')
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
     .trim();
+  s = applyIPPolicySanitization(s);
   if (s.length > ML_DESCRIPTION_MAX) s = s.substring(0, ML_DESCRIPTION_MAX - 3) + '...';
   return s || 'Producto de calidad.';
 }
@@ -537,6 +592,31 @@ export class MercadoLibreService {
       };
     } catch (err: any) {
       logger.warn('[MercadoLibre] getItem failed', {
+        itemId,
+        error: err.response?.data?.message || err.message,
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Get item title and description from ML API for compliance check.
+   */
+  async getItemForCompliance(itemId: string): Promise<{ title: string; description: string } | null> {
+    try {
+      const response = await this.apiClient.get(`/items/${itemId}`);
+      const data = response.data;
+      const title = typeof data?.title === 'string' ? data.title : '';
+      const descRaw = data?.description;
+      const description =
+        typeof descRaw === 'string'
+          ? descRaw
+          : descRaw?.plain_text != null
+            ? String(descRaw.plain_text)
+            : '';
+      return { title, description };
+    } catch (err: any) {
+      logger.warn('[MercadoLibre] getItemForCompliance failed', {
         itemId,
         error: err.response?.data?.message || err.message,
       });

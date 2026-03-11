@@ -188,6 +188,27 @@ Body: { "environment": "sandbox" } # o "production"
 
 ---
 
+## 🚀 Habilitar publicación real (producción)
+
+Para que el Autopilot publique en eBay (y no solo simule), debes:
+
+1. **Variable de entorno obligatoria:**
+   ```bash
+   ENABLE_EBAY_PUBLISH=true
+   ```
+   Añadirlo en `.env` del backend. Sin esto, `run:ebay-real-cycle` y el Autopilot no publicarán.
+
+2. **Ejecutar un ciclo real manualmente:**
+   ```bash
+   cd backend && npm run run:ebay-real-cycle
+   ```
+
+3. **Webhooks para postventa:** configurar `WEBHOOK_SECRET_EBAY` (Signing Key en eBay Developer → Notifications) y la URL de notificaciones apuntando a `/api/webhooks/ebay`. Fallback: `process-paid-orders` cada 5 min.
+
+4. **Límites:** max 40 oportunidades por ciclo, 25 productos por petición de publicación.
+
+---
+
 ## 🔍 Notas Técnicas
 
 - **Almacenamiento:** Las credenciales se guardan en la tabla `ApiCredential` encriptadas con AES-256-GCM

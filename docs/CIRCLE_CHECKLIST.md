@@ -119,3 +119,21 @@ Para comprobar que una venta real recorre todo el ciclo sin fallos, verifica est
 - **WEBHOOK_SECRET_MERCADOLIBRE / WEBHOOK_SECRET_EBAY**: recomendado en producción; si no están definidos, los webhooks pasan con warning.
 - **OAuth AliExpress Dropshipping** (o `ALLOW_BROWSER_AUTOMATION` + usuario/contraseña): sin esto, la compra en AliExpress falla.
 - **Capital y límites**: `workingCapital`, límites diarios de compra y (opcional) `ALLOW_PURCHASE_WHEN_LOW_BALANCE`.
+
+---
+
+## 7. Mercado Libre: cumplimiento y suspensiones
+
+Para evitar suspensiones por propiedad intelectual en ML, el software sanitiza títulos/descripciones (tipo, símil, réplica → compatible con) y usa Marca "Genérico" cuando corresponde. Al cerrar listings en ML (unpublish o bulk-close), se eliminan de la BD para que el listado refleje la realidad.
+
+**Documentación detallada:** [MERCADOLIBRE_COMPLIANCE.md](MERCADOLIBRE_COMPLIANCE.md) — políticas de ML, endpoints de diagnóstico/repair/bulk-close, y "falta crear clip".
+
+---
+
+## 7. Mercado Libre: cumplimiento propiedad intelectual
+
+Para evitar suspensiones por infracción de propiedad intelectual, el software sanitiza títulos y descripciones (tipo/símil/réplica → compatible con) y usa BRAND = Genérico cuando corresponde. Las imágenes no deben incluir logos ni texto promocional.
+
+**Documentación detallada:** [docs/MERCADOLIBRE_COMPLIANCE.md](MERCADOLIBRE_COMPLIANCE.md)
+
+**Endpoints útiles:** `GET /api/publisher/listings/ml-status`, `POST /api/publisher/listings/repair-ml`, `POST /api/publisher/listings/ml-bulk-close`.

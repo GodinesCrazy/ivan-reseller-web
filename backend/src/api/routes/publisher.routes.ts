@@ -449,6 +449,68 @@ router.post('/listings/repair-ml', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/publisher/listings/ml-bulk-close — Cerrar en ML y eliminar listings de la BD (software = realidad)
+router.post('/listings/ml-bulk-close', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const listingIds = Array.isArray(req.body?.listingIds)
+      ? req.body.listingIds.filter((id: unknown) => typeof id === 'string' && id.trim()).map((id: string) => id.trim())
+      : undefined;
+    const onlyAlreadyClosed = req.body?.onlyAlreadyClosed === true;
+
+    const marketplaceService = new MarketplaceService();
+    const result = await marketplaceService.mlBulkCloseAndSync(userId, { listingIds, onlyAlreadyClosed });
+
+    return res.json({
+      success: true,
+      closed: result.closed,
+      failed: result.failed,
+      deletedFromDb: result.deletedFromDb,
+      productIdsUpdated: result.productIdsUpdated,
+      errors: result.errors,
+    });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Bulk close failed';
+    logger.error('[PUBLISHER] ml-bulk-close failed', { error: errorMessage });
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
+// GET /api/publisher/listings/ml-status — Diagnóstico: estado de cada listing ML en la API
+router.get('/listings/ml-status', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const limit = Math.min(Math.max(1, Number(req.query.limit) || 200), 500);
+    const marketplaceService = new MarketplaceService();
+    const items = await marketplaceService.getMlListingsStatus(userId, limit);
+    return res.json({ success: true, items, count: items.length });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Failed to get ML status';
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
+// GET /api/publisher/listings/ml-compliance — Verificación: cumplimiento PI (título/descripción) en ML
+router.get('/listings/ml-compliance', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const limit = Math.min(Math.max(1, Number(req.query.limit) || 200), 500);
+    const marketplaceService = new MarketplaceService();
+    const items = await marketplaceService.checkMercadoLibreCompliance(userId, { limit });
+    const compliant = items.filter((i) => i.compliant).length;
+    const nonCompliant = items.filter((i) => !i.compliant).length;
+    return res.json({
+      success: true,
+      items,
+      count: items.length,
+      summary: { compliant, nonCompliant },
+    });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Failed to check ML compliance';
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
 // POST /api/publisher/approve/:id
 // ✅ MEJORADO: Usa ambiente del usuario y mejor logging
 // ✅ Cambiado: Permitir a cualquier usuario autenticado aprobar sus propios productos

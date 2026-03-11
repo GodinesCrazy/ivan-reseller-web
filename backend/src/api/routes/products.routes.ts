@@ -613,18 +613,39 @@ router.post('/:id/unpublish', wrapAsync(async (req: Request, res: Response) => {
     }
   }
 
-  const failed = results.filter((r) => !r.success);
-  const allSucceeded = failed.length === 0;
+  // Sync DB with reality: remove MarketplaceListing rows for successfully closed listings
+  const listings = product.marketplaceListings || [];
+  const successfulListingIds: number[] = [];
+  results.forEach((r, i) => {
+    if (r.success && listings[i]?.id) successfulListingIds.push(listings[i].id);
+  });
+  if (successfulListingIds.length > 0) {
+    await prisma.marketplaceListing.deleteMany({
+      where: { id: { in: successfulListingIds } },
+    });
+    logger.info('[unpublish] MarketplaceListing rows removed to reflect reality', {
+      productId,
+      deletedCount: successfulListingIds.length,
+      listingIds: successfulListingIds,
+    });
+  }
 
-  if (allSucceeded) {
+  // If product has no remaining listings, set to APPROVED and isPublished false
+  const remainingCount = await prisma.marketplaceListing.count({
+    where: { productId },
+  });
+  if (remainingCount === 0) {
     await productService.updateProductStatusSafely(productId, 'APPROVED', false, userId);
   }
+
+  const failed = results.filter((r) => !r.success);
+  const allSucceeded = failed.length === 0;
 
   return res.status(allSucceeded ? 200 : 409).json({
     success: allSucceeded,
     message: allSucceeded
-      ? 'Producto despublicado. Estado actualizado a APPROVED.'
-      : 'Despublicación parcial/fallida en uno o más marketplaces. Estado del producto no modificado.',
+      ? 'Producto despublicado. Listados eliminados de la base de datos. Estado actualizado a APPROVED.'
+      : `Despublicación parcial: ${results.filter((r) => r.success).length} OK, ${failed.length} fallidos. Listados cerrados eliminados de la BD.${remainingCount === 0 ? ' Producto actualizado a APPROVED.' : ''}`,
     marketplaceResults: results
   });
 }));

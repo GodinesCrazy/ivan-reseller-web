@@ -19,6 +19,38 @@ const GENERIC_TITLE_WORDS = new Set([
   'xl', 'xxl', 'xs', 's', 'm', 'l', '1x', '2x', '3x', '4x', '5x', '6x', '7x', '8x', '9x', '10x', '12x',
 ]);
 
+/** Max title length per marketplace (characters) */
+const TITLE_MAX_BY_MARKETPLACE: Record<MarketplaceName, number> = {
+  ebay: 80,
+  mercadolibre: 60,
+  amazon: 200,
+};
+
+/** Truncate title at word boundary to respect marketplace limit */
+function truncateTitleByLimit(title: string, marketplace: MarketplaceName): string {
+  const maxLen = TITLE_MAX_BY_MARKETPLACE[marketplace] ?? 80;
+  if (!title || title.length <= maxLen) return title || '';
+  const truncated = title.slice(0, maxLen);
+  const lastSpace = truncated.lastIndexOf(' ');
+  if (lastSpace > maxLen * 0.6) return truncated.slice(0, lastSpace).trim();
+  return truncated.trim();
+}
+
+/** Build keywords array from product for SEO prompts (category + top words from title) */
+function buildKeywordsFromProduct(product: any): string[] {
+  const kw = new Set<string>();
+  if (product?.category && typeof product.category === 'string') {
+    product.category.split(/[\s,;-]+/).filter(Boolean).slice(0, 3).forEach((w: string) => kw.add(w.trim()));
+  }
+  if (product?.title && typeof product.title === 'string') {
+    product.title.split(/\s+/).filter((w: string) => w.length > 2).slice(0, 5).forEach((w: string) => kw.add(w.replace(/[^a-zA-Z0-9áéíóúñü]/gi, '')));
+  }
+  if (product?.sourceKeyword && typeof product.sourceKeyword === 'string') {
+    product.sourceKeyword.split(/\s+/).filter(Boolean).forEach((w: string) => kw.add(w.trim()));
+  }
+  return Array.from(kw).filter(Boolean).slice(0, 8);
+}
+
 /**
  * Infer brand from product title for MercadoLibre. Use "Genérico" when no clear brand.
  * Reduces ML rejections for "brand indicated as generic when product has a real brand".
@@ -42,6 +74,7 @@ import {
   MLProduct,
   sanitizeTitleForML,
   sanitizeDescriptionForML,
+  checkMLCompliance,
 } from './mercadolibre.service';
 import { AmazonService, AmazonCredentials, AmazonProduct } from './amazon.service';
 import { AppError } from '../middleware/error.middleware';
@@ -682,32 +715,32 @@ export class MarketplaceService {
         throw new AppError(`Price (${price}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
       }
 
-      // ✅ Q6: Generar título y descripción con IA si está disponible (solo si no se proporcionan en customData)
+      const ebayConfig = this.getMarketplaceConfig('ebay');
+      const ebayKeywords = buildKeywordsFromProduct(product);
       let finalTitle = customData?.title || product.title;
       let finalDescription = customData?.description || product.description || '';
-      
+
       if (!customData?.title && userId) {
         try {
-          finalTitle = await this.generateAITitle(product, 'eBay', userId);
+          finalTitle = await this.generateAITitle(product, ebayConfig.displayName, ebayConfig.language, userId, ebayKeywords);
+          finalTitle = truncateTitleByLimit(String(finalTitle || '').replace(/\s+/g, ' ').trim(), 'ebay');
         } catch (error) {
           logger.debug('Failed to generate AI title for eBay, using original', { error });
         }
       }
-      
+
       if (!customData?.description && userId) {
         try {
-          finalDescription = await this.generateAIDescription(product, 'eBay', userId);
+          finalDescription = await this.generateAIDescription(product, ebayConfig.displayName, ebayConfig.language, userId);
         } catch (error) {
           logger.debug('Failed to generate AI description for eBay, using original', { error });
         }
       }
 
-      // eBay Inventory API requires title length 1..80 characters.
-      // Normalize here even when title is AI-generated.
       finalTitle = String(finalTitle || '')
         .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 80);
+        .trim();
+      if (finalTitle.length > 80) finalTitle = truncateTitleByLimit(finalTitle, 'ebay');
       if (!finalTitle) {
         finalTitle = String(product.title || 'Product')
           .replace(/\s+/g, ' ')
@@ -835,12 +868,15 @@ export class MarketplaceService {
         });
       }
 
+      const mlConfig = this.getMarketplaceConfig('mercadolibre');
+      const mlKeywords = buildKeywordsFromProduct(product);
       let finalTitle = customData?.title || product.title;
       let finalDescription = customData?.description || product.description || '';
 
       if (!customData?.title && userId) {
         try {
-          finalTitle = await this.generateAITitle(product, 'MercadoLibre', userId);
+          finalTitle = await this.generateAITitle(product, mlConfig.displayName, mlConfig.language, userId, mlKeywords);
+          finalTitle = truncateTitleByLimit(String(finalTitle || '').replace(/\s+/g, ' ').trim(), 'mercadolibre');
         } catch (error) {
           logger.debug('Failed to generate AI title for MercadoLibre, using original', { error });
         }
@@ -848,13 +884,12 @@ export class MarketplaceService {
 
       if (!customData?.description && userId) {
         try {
-          finalDescription = await this.generateAIDescription(product, 'MercadoLibre', userId);
+          finalDescription = await this.generateAIDescription(product, mlConfig.displayName, mlConfig.language, userId);
         } catch (error) {
           logger.debug('Failed to generate AI description for MercadoLibre, using original', { error });
         }
       }
       finalDescription = sanitizeDescriptionForML(finalDescription || '');
-
       finalTitle = sanitizeTitleForML(finalTitle);
 
       let attributes = customData?.attributes;
@@ -1040,6 +1075,18 @@ export class MarketplaceService {
           continue;
         }
 
+        // Skip listings already closed or paused on ML (update would fail or be irrelevant)
+        const itemStatus = await mlService.getItemStatus(listing.listingId);
+        if (itemStatus && (itemStatus.status === 'closed' || itemStatus.status === 'paused')) {
+          results.push({
+            listingId: listing.listingId,
+            success: false,
+            error: `Listing ${itemStatus.status} on ML; use bulk-close to remove from DB`,
+          });
+          logger.debug('[ML Repair] Skipped closed/paused listing', { listingId: listing.listingId, status: itemStatus.status });
+          continue;
+        }
+
         let categoryId: string | undefined = product.category || undefined;
         if (!categoryId) {
           const mlItem = await mlService.getItem(listing.listingId);
@@ -1109,6 +1156,215 @@ export class MarketplaceService {
   }
 
   /**
+   * Bulk close Mercado Libre listings and remove them from DB so software reflects reality.
+   * @param userId - User ID (only their ML listings are affected)
+   * @param options - listingIds: optional list of ML item IDs; onlyAlreadyClosed: if true, only close those already closed/paused on ML (to clean DB)
+   */
+  async mlBulkCloseAndSync(
+    userId: number,
+    options?: { listingIds?: string[]; onlyAlreadyClosed?: boolean }
+  ): Promise<{
+    closed: number;
+    failed: number;
+    deletedFromDb: number;
+    productIdsUpdated: number[];
+    errors: Array<{ listingId: string; error: string }>;
+  }> {
+    const credentials = await this.getCredentials(userId, 'mercadolibre');
+    if (!credentials || !credentials.isActive) {
+      throw new AppError('Mercado Libre credentials not found or inactive. Connect ML in API Settings.', 400);
+    }
+    const credsWithSiteId: MercadoLibreCredentials = {
+      ...(credentials.credentials as MercadoLibreCredentials),
+      siteId: (credentials.credentials as MercadoLibreCredentials).siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
+    };
+    const mlService = new MercadoLibreService(credsWithSiteId);
+
+    const where: any = { userId, marketplace: 'mercadolibre' };
+    if (options?.listingIds && options.listingIds.length > 0) {
+      where.listingId = { in: options.listingIds };
+    }
+    const listings = await prisma.marketplaceListing.findMany({
+      where,
+      select: { id: true, listingId: true, productId: true },
+      orderBy: { id: 'asc' },
+    });
+
+    const errors: Array<{ listingId: string; error: string }> = [];
+    const deletedListingIds: number[] = [];
+    const productIdsThatLostListing = new Set<number>();
+
+    for (const listing of listings) {
+      if (options?.onlyAlreadyClosed) {
+        const status = await mlService.getItemStatus(listing.listingId);
+        if (!status || (status.status !== 'closed' && status.status !== 'paused')) {
+          continue; // only close those already closed/paused on ML
+        }
+      }
+      try {
+        await mlService.closeListing(listing.listingId);
+        await prisma.marketplaceListing.deleteMany({
+          where: { id: listing.id },
+        });
+        deletedListingIds.push(listing.id);
+        productIdsThatLostListing.add(listing.productId);
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        errors.push({ listingId: listing.listingId, error: msg });
+        logger.warn('[ML BulkClose] Failed to close listing', { listingId: listing.listingId, error: msg });
+      }
+    }
+
+    const productIdsUpdated: number[] = [];
+    for (const productId of productIdsThatLostListing) {
+      const remaining = await prisma.marketplaceListing.count({ where: { productId } });
+      if (remaining === 0) {
+        const { productService } = await import('./product.service');
+        await productService.updateProductStatusSafely(productId, 'APPROVED', false, userId);
+        productIdsUpdated.push(productId);
+      }
+    }
+
+    return {
+      closed: deletedListingIds.length,
+      failed: errors.length,
+      deletedFromDb: deletedListingIds.length,
+      productIdsUpdated,
+      errors,
+    };
+  }
+
+  /**
+   * Get ML listing status for each Mercado Libre listing in DB (diagnosis).
+   * Returns listingId, productId, title, mlStatus (active, closed, paused, under_review, etc).
+   */
+  async getMlListingsStatus(userId: number, limit: number = 200): Promise<Array<{
+    listingId: string;
+    productId: number;
+    productTitle: string | null;
+    mlStatus: string | null;
+    mlSubStatus?: string[];
+    mlHealth?: number;
+  }>> {
+    const credentials = await this.getCredentials(userId, 'mercadolibre');
+    if (!credentials || !credentials.isActive) {
+      throw new AppError('Mercado Libre credentials not found or inactive. Connect ML in API Settings.', 400);
+    }
+    const credsWithSiteId: MercadoLibreCredentials = {
+      ...(credentials.credentials as MercadoLibreCredentials),
+      siteId: (credentials.credentials as MercadoLibreCredentials).siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
+    };
+    const mlService = new MercadoLibreService(credsWithSiteId);
+
+    const listings = await prisma.marketplaceListing.findMany({
+      where: { userId, marketplace: 'mercadolibre' },
+      include: { product: { select: { title: true } } },
+      orderBy: { id: 'asc' },
+      take: Math.min(limit, 500),
+    });
+
+    const results: Array<{
+      listingId: string;
+      productId: number;
+      productTitle: string | null;
+      mlStatus: string | null;
+      mlSubStatus?: string[];
+      mlHealth?: number;
+    }> = [];
+
+    for (const listing of listings) {
+      let mlStatus: string | null = null;
+      let mlSubStatus: string[] | undefined;
+      let mlHealth: number | undefined;
+      try {
+        const status = await mlService.getItemStatus(listing.listingId);
+        if (status) {
+          mlStatus = status.status;
+          mlSubStatus = status.sub_status;
+          mlHealth = status.health;
+        }
+      } catch {
+        // API may fail for deleted/unknown items
+      }
+      results.push({
+        listingId: listing.listingId,
+        productId: listing.productId,
+        productTitle: listing.product?.title ?? null,
+        mlStatus,
+        mlSubStatus,
+        mlHealth,
+      });
+    }
+    return results;
+  }
+
+  /**
+   * Check ML listings for IP policy compliance (title/description: no "tipo X", "símil", "réplica", etc.).
+   */
+  async checkMercadoLibreCompliance(
+    userId: number,
+    options?: { limit?: number }
+  ): Promise<Array<{
+    listingId: string;
+    productId: number;
+    productTitle: string | null;
+    compliant: boolean;
+    violations: string[];
+    titleSnippet?: string;
+  }>> {
+    const credentials = await this.getCredentials(userId, 'mercadolibre');
+    if (!credentials || !credentials.isActive) {
+      throw new AppError('Mercado Libre credentials not found or inactive. Connect ML in API Settings.', 400);
+    }
+    const credsWithSiteId: MercadoLibreCredentials = {
+      ...(credentials.credentials as MercadoLibreCredentials),
+      siteId: (credentials.credentials as MercadoLibreCredentials).siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
+    };
+    const mlService = new MercadoLibreService(credsWithSiteId);
+
+    const limit = Math.min(options?.limit ?? 500, 500);
+    const listings = await prisma.marketplaceListing.findMany({
+      where: { userId, marketplace: 'mercadolibre' },
+      include: { product: { select: { title: true } } },
+      orderBy: { id: 'asc' },
+      take: limit,
+    });
+
+    const results: Array<{
+      listingId: string;
+      productId: number;
+      productTitle: string | null;
+      compliant: boolean;
+      violations: string[];
+      titleSnippet?: string;
+    }> = [];
+
+    for (const listing of listings) {
+      const item = await mlService.getItemForCompliance(listing.listingId);
+      if (!item) {
+        results.push({
+          listingId: listing.listingId,
+          productId: listing.productId,
+          productTitle: listing.product?.title ?? null,
+          compliant: false,
+          violations: ['No se pudo obtener título/descripción desde ML'],
+        });
+        continue;
+      }
+      const { compliant, violations } = checkMLCompliance(item.title, item.description);
+      results.push({
+        listingId: listing.listingId,
+        productId: listing.productId,
+        productTitle: listing.product?.title ?? null,
+        compliant,
+        violations,
+        titleSnippet: item.title ? item.title.substring(0, 80) : undefined,
+      });
+    }
+    return results;
+  }
+
+  /**
    * Publish to Amazon
    */
   private async publishToAmazon(
@@ -1169,21 +1425,23 @@ export class MarketplaceService {
         }
       }
 
-      // ✅ Q6: Generar título y descripción con IA si está disponible
+      const amazonConfig = this.getMarketplaceConfig('amazon');
+      const amazonKeywords = buildKeywordsFromProduct(product);
       let finalTitle = customData?.title || product.title;
       let finalDescription = customData?.description || product.description || '';
-      
+
       if (!customData?.title && userId) {
         try {
-          finalTitle = await this.generateAITitle(product, 'Amazon', userId);
+          finalTitle = await this.generateAITitle(product, amazonConfig.displayName, amazonConfig.language, userId, amazonKeywords);
+          finalTitle = truncateTitleByLimit(String(finalTitle || '').replace(/\s+/g, ' ').trim(), 'amazon');
         } catch (error) {
           logger.debug('Failed to generate AI title for Amazon, using original', { error });
         }
       }
-      
+
       if (!customData?.description && userId) {
         try {
-          finalDescription = await this.generateAIDescription(product, 'Amazon', userId);
+          finalDescription = await this.generateAIDescription(product, amazonConfig.displayName, amazonConfig.language, userId);
         } catch (error) {
           logger.debug('Failed to generate AI description for Amazon, using original', { error });
         }
@@ -1378,19 +1636,32 @@ export class MarketplaceService {
   }
 
   /**
-   * ✅ Q6: Generar título optimizado con IA (si está disponible)
+   * Generate SEO-optimized title with AI. Uses language and optional keywords.
    */
-  private async generateAITitle(product: any, marketplace: string, userId?: number): Promise<string> {
+  private async generateAITitle(
+    product: any,
+    marketplace: string,
+    language: string,
+    userId?: number,
+    keywords?: string[]
+  ): Promise<string> {
     try {
-      // Intentar obtener credenciales de GROQ
       const { CredentialsManager } = await import('./credentials-manager.service');
       const groqCreds = await CredentialsManager.getCredentials(userId || 0, 'groq', 'production');
-      
+
       if (!groqCreds || !groqCreds.apiKey) {
-        return product.title; // Fallback a título original
+        return product.title;
       }
 
-      // ✅ PRODUCTION READY: Usar cliente HTTP configurado con timeout
+      const langInstruction =
+        language === 'es'
+          ? 'Write the title in Spanish (es).'
+          : 'Write the title in English (en).';
+      const keywordLine =
+        keywords && keywords.length > 0
+          ? `\nInclude these search-relevant keywords naturally: ${keywords.join(', ')}.`
+          : '';
+
       const response = await fastHttpClient.post(
         'https://api.groq.com/openai/v1/chat/completions',
         {
@@ -1398,11 +1669,11 @@ export class MarketplaceService {
           messages: [
             {
               role: 'system',
-              content: `You are a professional e-commerce copywriter. Create SEO-optimized product titles for ${marketplace} marketplace. Titles should be clear, keyword-rich, and under 80 characters.`,
+              content: `You are a professional e-commerce copywriter. Create SEO-optimized product titles for ${marketplace}. ${langInstruction} Titles should be clear, keyword-rich, and under 80 characters. Return only the title, no explanations.`,
             },
             {
               role: 'user',
-              content: `Create an optimized product title for ${marketplace}:\nOriginal: ${product.title}\nCategory: ${product.category || 'general'}\n\nReturn only the optimized title, no explanations.`,
+              content: `Create an optimized product title for ${marketplace}:\nOriginal: ${product.title}\nCategory: ${product.category || 'general'}${keywordLine}\n\nReturn only the optimized title, no explanations.`,
             },
           ],
           temperature: 0.7,
@@ -1410,13 +1681,12 @@ export class MarketplaceService {
         },
         {
           headers: {
-            'Authorization': `Bearer ${groqCreds.apiKey}`,
+            Authorization: `Bearer ${groqCreds.apiKey}`,
             'Content-Type': 'application/json',
           },
         }
       );
 
-      // ✅ PRODUCTION READY: Validar estructura de respuesta antes de acceder
       if (!response.data?.choices?.[0]?.message?.content) {
         logger.warn('Invalid response structure from GROQ API', {
           hasData: !!response.data,
@@ -1425,7 +1695,7 @@ export class MarketplaceService {
         });
         return product.title;
       }
-      
+
       const aiTitle = response.data.choices[0].message.content.trim();
       return aiTitle && aiTitle.length > 0 ? aiTitle : product.title;
     } catch (error) {
@@ -1433,7 +1703,7 @@ export class MarketplaceService {
         error: error instanceof Error ? error.message : String(error),
         marketplace,
       });
-      return product.title; // Fallback a título original
+      return product.title;
     }
   }
 
@@ -1515,18 +1785,19 @@ export class MarketplaceService {
         priceInMarketplaceCurrency = suggestedPriceBase;
       }
 
-      // Generate AI title and description (reuse existing methods)
+      const previewKeywords = buildKeywordsFromProduct(product);
       let finalTitle = product.title;
       let finalDescription = product.description || '';
-      
+
       try {
-        finalTitle = await this.generateAITitle(product, marketplaceConfig.displayName, userId);
+        finalTitle = await this.generateAITitle(product, marketplaceConfig.displayName, marketplaceConfig.language, userId, previewKeywords);
+        finalTitle = truncateTitleByLimit(String(finalTitle || '').replace(/\s+/g, ' ').trim(), marketplace);
       } catch (error) {
         logger.debug('Failed to generate AI title for preview, using original', { error });
       }
-      
+
       try {
-        finalDescription = await this.generateAIDescription(product, marketplaceConfig.displayName, userId);
+        finalDescription = await this.generateAIDescription(product, marketplaceConfig.displayName, marketplaceConfig.language, userId);
       } catch (error) {
         logger.debug('Failed to generate AI description for preview, using original', { error });
       }
@@ -1642,40 +1913,38 @@ export class MarketplaceService {
   }
 
   /**
-   * ✅ Q6: Generar descripción optimizada con IA (si está disponible)
+   * Generate SEO-optimized description with AI. Uses language for correct locale.
    */
-  private async generateAIDescription(product: any, marketplace: string, userId?: number): Promise<string> {
+  private async generateAIDescription(
+    product: any,
+    marketplace: string,
+    language: string,
+    userId?: number
+  ): Promise<string> {
     try {
-      // ✅ CORREGIDO: Determinar si la descripción es válida o solo contiene análisis
-      // Si la descripción está vacía, solo contiene "Fortalezas:" o "Recomendaciones:", o tiene menos de 50 caracteres, usar el título para generar una mejor descripción
       const currentDescription = product.description || '';
-      const isDescriptionValid = currentDescription.length >= 50 && 
-        !currentDescription.toLowerCase().startsWith('fortalezas:') && 
+      const isDescriptionValid =
+        currentDescription.length >= 50 &&
+        !currentDescription.toLowerCase().startsWith('fortalezas:') &&
         !currentDescription.toLowerCase().startsWith('recomendaciones:') &&
         !currentDescription.toLowerCase().includes('fortalezas:') &&
         !currentDescription.toLowerCase().includes('recomendaciones:');
-      
-      // ✅ Si la descripción no es válida, usar el título del producto para generar una descripción coherente
-      const descriptionToUse = isDescriptionValid ? currentDescription : '';
-      
-      // Intentar obtener credenciales de GROQ
+
       const { CredentialsManager } = await import('./credentials-manager.service');
       const groqCreds = await CredentialsManager.getCredentials(userId || 0, 'groq', 'production');
-      
+
       if (!groqCreds || !groqCreds.apiKey) {
-        // ✅ Si no hay credenciales, retornar descripción válida o generar una básica desde el título
-        if (isDescriptionValid) {
-          return currentDescription;
-        }
-        // Generar descripción básica desde el título si no hay descripción válida
+        if (isDescriptionValid) return currentDescription;
         return `Product Description:\n\n${product.title}\n\nThis product offers excellent quality and value. Perfect for your needs.`;
       }
 
-      // ✅ PRODUCTION READY: Usar cliente HTTP configurado con timeout
-      // ✅ MEJORADO: Mejorar el prompt para generar descripción más coherente cuando no hay descripción válida
+      const langInstruction =
+        language === 'es'
+          ? 'Write the description in Spanish (es).'
+          : 'Write the description in English (en).';
       const userPrompt = isDescriptionValid
-        ? `Create an optimized product description for ${marketplace}:\nTitle: ${product.title}\nOriginal description: ${currentDescription}\nCategory: ${product.category || 'general'}\n\nReturn only the optimized description, no explanations.`
-        : `Create a comprehensive and compelling product description for ${marketplace} based only on the product title:\nTitle: ${product.title}\nCategory: ${product.category || 'general'}\n\nGenerate a detailed product description (200-400 words) that highlights key features, benefits, and specifications. Make it SEO-friendly and optimized for conversions. Return only the description, no explanations.`;
+        ? `Create an optimized product description for ${marketplace}:\nTitle: ${product.title}\nOriginal description: ${currentDescription}\nCategory: ${product.category || 'general'}\n\n${langInstruction} Return only the optimized description, no explanations.`
+        : `Create a comprehensive and compelling product description for ${marketplace} based only on the product title:\nTitle: ${product.title}\nCategory: ${product.category || 'general'}\n\n${langInstruction} Generate a detailed product description (200-400 words) that highlights key features, benefits, and specifications. Make it SEO-friendly and optimized for conversions. Return only the description, no explanations.`;
 
       const response = await fastHttpClient.post(
         'https://api.groq.com/openai/v1/chat/completions',
@@ -1684,7 +1953,7 @@ export class MarketplaceService {
           messages: [
             {
               role: 'system',
-              content: `You are a professional e-commerce copywriter. Create compelling, SEO-friendly product descriptions for ${marketplace} marketplace. Descriptions should highlight key features, benefits, and be optimized for conversions. Keep it between 200-500 words.`,
+              content: `You are a professional e-commerce copywriter. Create compelling, SEO-friendly product descriptions for ${marketplace}. ${langInstruction} Descriptions should highlight key features, benefits, and be optimized for conversions. Keep it between 200-500 words.`,
             },
             {
               role: 'user',
