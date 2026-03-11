@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '@stores/authStore';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { useInventoryBadges } from '@/hooks/useInventoryBadges';
 import { 
   LayoutDashboard, 
   Package, 
@@ -100,6 +101,7 @@ export default function Sidebar() {
   const { user } = useAuthStore();
   const { isOpen, close } = useSidebar();
   const userRole = user?.role?.toUpperCase() || 'USER';
+  const { pendingPurchasesCount, productsPending } = useInventoryBadges();
 
   const visibleGroups = navGroups.filter((group) => {
     if (group.roles && !group.roles.includes(userRole)) return false;
@@ -120,7 +122,14 @@ export default function Sidebar() {
           <div className="space-y-1">
             {group.items
               .filter((item) => !item.roles || item.roles.includes(userRole))
-              .map((item) => (
+              .map((item) => {
+                const badgeCount =
+                  item.path === '/pending-purchases'
+                    ? pendingPurchasesCount
+                    : item.path === '/products'
+                      ? productsPending
+                      : 0;
+                return (
                 <NavLink
                   key={item.path}
                   to={item.path}
@@ -135,8 +144,14 @@ export default function Sidebar() {
                 >
                   <item.icon className="w-5 h-5 flex-shrink-0" />
                   <span>{item.label}</span>
+                  {badgeCount > 0 && (
+                    <span className="ml-auto min-w-[1.25rem] h-5 px-1.5 flex items-center justify-center rounded-full bg-amber-500 text-white text-xs font-medium">
+                      {badgeCount > 99 ? '99+' : badgeCount}
+                    </span>
+                  )}
                 </NavLink>
-              ))}
+              );
+              })}
           </div>
         </div>
       ))}

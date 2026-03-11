@@ -11,6 +11,8 @@ import api from '@/services/api';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { formatCurrencySimple } from '@/utils/currency';
+import MetricLabelWithTooltip from '@/components/MetricLabelWithTooltip';
+import { metricTooltips } from '@/config/metricTooltips';
 
 interface WorkingCapitalDetail {
   availableCash: number;
@@ -109,19 +111,31 @@ export default function BalanceSummaryWidget() {
 
       <div className="space-y-2">
         <div className="flex justify-between items-center text-sm">
-          <span className="text-gray-600 dark:text-gray-400">Capital disponible</span>
+          <MetricLabelWithTooltip
+            label="Capital disponible"
+            tooltipBody={metricTooltips.capitalDisponible.body}
+            className="text-gray-600 dark:text-gray-400"
+          />
           <span className="font-semibold text-gray-900 dark:text-gray-100">
             {formatCurrencySimple(availableCash, 'USD')}
           </span>
         </div>
         <div className="flex justify-between items-center text-sm">
-          <span className="text-gray-600 dark:text-gray-400">Comprometido a órdenes</span>
+          <MetricLabelWithTooltip
+            label="Comprometido a órdenes"
+            tooltipBody={metricTooltips.comprometidoOrdenes.body}
+            className="text-gray-600 dark:text-gray-400"
+          />
           <span className="font-medium text-gray-700 dark:text-gray-300">
             {formatCurrencySimple(committed, 'USD')}
           </span>
         </div>
         <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <span className="text-sm text-gray-600 dark:text-gray-400">Puede publicar</span>
+          <MetricLabelWithTooltip
+            label="Puede publicar"
+            tooltipBody={metricTooltips.puedePublicar.body}
+            className="text-sm text-gray-600 dark:text-gray-400"
+          />
           {canPublish ? (
             <span className="inline-flex items-center gap-1 text-sm font-medium text-green-600 dark:text-green-400">
               <TrendingUp className="w-4 h-4" />

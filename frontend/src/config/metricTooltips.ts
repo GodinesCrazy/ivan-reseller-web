@@ -173,6 +173,50 @@ export const metricTooltips = {
   dailyLimits: {
     title: 'Límites diarios',
     body: 'Máximo de órdenes y gasto por día. El sistema bloquea nuevas órdenes al alcanzar el límite.'
+  },
+
+  // ==================== INVENTARIO / PUBLICADOS / EXPOSICIÓN ====================
+
+  /** Anuncios publicados: listados activos en marketplaces */
+  publicados: {
+    title: 'Publicados',
+    body: 'Anuncios publicados: número de listados activos en eBay, Mercado Libre y Amazon.'
+  },
+
+  /** Productos pendientes de aprobación */
+  pendientes: {
+    title: 'Pendientes',
+    body: 'Productos pendientes: en espera de aprobación para publicar.'
+  },
+
+  /** Exposición / capital comprometido en anuncios */
+  exposicion: {
+    title: 'Exposición',
+    body: 'Exposición: capital comprometido en anuncios activos. El resto es margen para nuevas publicaciones.'
+  },
+
+  /** Capital disponible para operar */
+  capitalDisponible: {
+    title: 'Capital disponible',
+    body: 'Dinero disponible para comprar stock y cubrir costos. Incluye saldo y límites de crédito configurados.'
+  },
+
+  /** Si puede publicar más según capital/exposición */
+  puedePublicar: {
+    title: 'Puede publicar',
+    body: 'Indica si hay margen de exposición para publicar más anuncios. Depende del capital disponible y del límite de exposición configurado.'
+  },
+
+  /** Capital comprometido en órdenes pendientes de pago */
+  comprometidoOrdenes: {
+    title: 'Comprometido a órdenes',
+    body: 'Dinero reservado para órdenes ya creadas que aún no se ha pagado al proveedor. Reduce el capital disponible hasta que se complete la compra.'
+  },
+
+  /** Ventas pendientes de compra (órdenes por comprar) */
+  porComprar: {
+    title: 'Por comprar',
+    body: 'Ventas confirmadas que aún no se han comprado al proveedor. Requieren ir a Compras pendientes para procesarlas.'
   }
 } as const;
 

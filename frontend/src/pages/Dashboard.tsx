@@ -95,6 +95,7 @@ export default function Dashboard() {
   const [inventorySummary, setInventorySummary] = useState<{
     products: { total: number; pending: number; approved: number; published: number };
     listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
+    listingsTotal?: number;
     ordersByStatus: { CREATED: number; PAID: number; PURCHASING: number; PURCHASED: number; FAILED: number };
     pendingPurchasesCount: number;
   } | null>(null);
@@ -170,7 +171,7 @@ export default function Dashboard() {
       // ✅ B6: CARGAR DATOS REALES DE LA API (completado)
       // ✅ FIX-002: Degradación suave - rastrear errores para mostrar mensaje informativo
       let hasErrors = false;
-      const [statsRes, activityRes, opportunitiesRes, aiSuggestionsRes, automationRes] = await Promise.all([
+      const [statsRes, activityRes, opportunitiesRes, aiSuggestionsRes, automationRes, inventoryRes] = await Promise.all([
         api.get('/api/dashboard/stats', { params: { environment: 'production' } }).catch(err => {
           // ✅ FIX: Si es setup_required, no marcar como error (se manejará en App.tsx)
           if (err.response?.data?.setupRequired === true || err.response?.data?.error === 'setup_required') {
@@ -252,7 +253,13 @@ export default function Dashboard() {
       const totalProfit = Number(stats?.sales?.totalProfit ?? 0);
       const platformCommissionPaid = Number(stats?.sales?.platformCommissionPaid ?? stats?.sales?.totalCommissions ?? 0);
       const salesCount = Number(stats?.sales?.totalSales ?? 0);
-      const activeProducts = Number(stats?.products?.published ?? stats?.products?.active ?? 0);
+      const inv = inventoryRes?.data;
+      const listingsTotal = typeof inv?.listingsTotal === 'number'
+        ? inv.listingsTotal
+        : (inv?.listingsByMarketplace
+          ? (inv.listingsByMarketplace.ebay ?? 0) + (inv.listingsByMarketplace.mercadolibre ?? 0) + (inv.listingsByMarketplace.amazon ?? 0)
+          : undefined);
+      const activeProducts = Number(listingsTotal ?? stats?.products?.published ?? stats?.products?.active ?? 0);
 
       setDashboardData({
         totalRevenue,
@@ -305,9 +312,15 @@ export default function Dashboard() {
       // Inventory summary para InventorySummaryCard (en vivo)
       const inv = inventoryRes.data;
       if (inv && typeof inv === 'object') {
+        const listTotal = typeof inv.listingsTotal === 'number'
+          ? inv.listingsTotal
+          : (inv.listingsByMarketplace
+            ? (inv.listingsByMarketplace.ebay ?? 0) + (inv.listingsByMarketplace.mercadolibre ?? 0) + (inv.listingsByMarketplace.amazon ?? 0)
+            : 0);
         setInventorySummary({
           products: inv.products ?? { total: 0, pending: 0, approved: 0, published: 0 },
           listingsByMarketplace: inv.listingsByMarketplace ?? { ebay: 0, mercadolibre: 0, amazon: 0 },
+          listingsTotal: listTotal,
           ordersByStatus: inv.ordersByStatus ?? { CREATED: 0, PAID: 0, PURCHASING: 0, PURCHASED: 0, FAILED: 0 },
           pendingPurchasesCount: inv.pendingPurchasesCount ?? 0,
         });
@@ -483,6 +496,42 @@ export default function Dashboard() {
 
       {/* Balance resumido - capital disponible, comprometido, puede publicar */}
       <BalanceSummaryWidget />
+
+      {/* Acciones requeridas: compras pendientes y productos pendientes */}
+      {inventorySummary && (inventorySummary.pendingPurchasesCount > 0 || (inventorySummary.products?.pending ?? 0) > 0) && (
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
+          <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-2 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            Acciones requeridas
+          </h3>
+          <ul className="space-y-2 text-sm text-amber-800 dark:text-amber-200">
+            {inventorySummary.pendingPurchasesCount > 0 && (
+              <li className="flex items-center justify-between gap-4 flex-wrap">
+                <span>Tienes {inventorySummary.pendingPurchasesCount} ventas pendientes de compra.</span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/pending-purchases')}
+                  className="font-medium text-amber-700 dark:text-amber-300 hover:underline underline-offset-2"
+                >
+                  Ir a Compras pendientes
+                </button>
+              </li>
+            )}
+            {(inventorySummary.products?.pending ?? 0) > 0 && (
+              <li className="flex items-center justify-between gap-4 flex-wrap">
+                <span>Y {inventorySummary.products.pending} productos pendientes de aprobación.</span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/products')}
+                  className="font-medium text-amber-700 dark:text-amber-300 hover:underline underline-offset-2"
+                >
+                  Ir a Productos
+                </button>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
 
       {/* Autopilot en vivo - estado, fase y progreso del ciclo */}
       <AutopilotLiveWidget />

@@ -15,10 +15,13 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import api from '@/services/api';
+import MetricLabelWithTooltip from '@/components/MetricLabelWithTooltip';
+import { metricTooltips } from '@/config/metricTooltips';
 
 interface InventorySummary {
   products: { total: number; pending: number; approved: number; published: number };
   listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
+  listingsTotal?: number;
   ordersByStatus: { CREATED: number; PAID: number; PURCHASING: number; PURCHASED: number; FAILED: number };
   pendingPurchasesCount: number;
 }
@@ -64,9 +67,11 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
   if (loading || !summary) return null;
 
   const totalListings =
-    summary.listingsByMarketplace.ebay +
-    summary.listingsByMarketplace.mercadolibre +
-    summary.listingsByMarketplace.amazon;
+    typeof summary.listingsTotal === 'number'
+      ? summary.listingsTotal
+      : summary.listingsByMarketplace.ebay +
+        summary.listingsByMarketplace.mercadolibre +
+        summary.listingsByMarketplace.amazon;
   const totalOrders =
     summary.ordersByStatus.CREATED +
     summary.ordersByStatus.PAID +
@@ -98,11 +103,11 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
           >
             <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
               <Package className="w-4 h-4" />
-              Productos
+              <MetricLabelWithTooltip label="Productos" tooltipBody={metricTooltips.pendientes.body} />
             </div>
             <div className="mt-1 font-semibold text-lg">{summary.products.total}</div>
             <div className="text-xs text-gray-500 mt-0.5">
-              {summary.products.pending} pendientes · {summary.products.published} publicados
+              {summary.products.pending} pendientes · {totalListings} anuncios
             </div>
           </div>
 
@@ -112,7 +117,7 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
           >
             <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
               <Store className="w-4 h-4" />
-              Publicados
+              <MetricLabelWithTooltip label="Publicados" tooltipBody={metricTooltips.publicados.body} />
             </div>
             <div className="mt-1 font-semibold text-lg">{totalListings}</div>
             <div className="text-xs text-gray-500 mt-0.5">
@@ -142,7 +147,7 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
           >
             <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
               <ShoppingCart className="w-4 h-4" />
-              Por comprar
+              <MetricLabelWithTooltip label="Por comprar" tooltipBody={metricTooltips.porComprar.body} />
             </div>
             <div className="mt-1 font-semibold text-lg">{summary.pendingPurchasesCount}</div>
             <div className="text-xs text-gray-500 mt-0.5">Compras pendientes</div>
