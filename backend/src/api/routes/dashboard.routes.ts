@@ -405,6 +405,9 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       amazon: listingsByMp.find(l => l.marketplace.toLowerCase() === 'amazon')?._count.id ?? 0,
     };
 
+    const listingsTotal =
+      listingsByMarketplace.ebay + listingsByMarketplace.mercadolibre + listingsByMarketplace.amazon;
+
     const ordersByStatusMap = {
       CREATED: ordersByStatus.find(o => o.status === 'CREATED')?._count.id ?? 0,
       PAID: ordersByStatus.find(o => o.status === 'PAID')?._count.id ?? 0,
@@ -416,6 +419,7 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
     return res.json({
       products,
       listingsByMarketplace,
+      listingsTotal,
       ordersByStatus: ordersByStatusMap,
       pendingPurchasesCount,
     });

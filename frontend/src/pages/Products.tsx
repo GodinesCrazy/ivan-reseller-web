@@ -83,6 +83,12 @@ interface Aggregations {
   categories: string[];
 }
 
+interface InventorySummary {
+  products: { total: number; pending: number; approved: number; published: number };
+  listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
+  listingsTotal?: number;
+}
+
 interface ProductFilters {
   search: string;
   status: string;
@@ -138,6 +144,7 @@ export default function Products() {
   const [workflowByProduct, setWorkflowByProduct] = useState<Record<string, any>>({});
   const [approvingPending, setApprovingPending] = useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
+  const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null);
   const { formatMoney } = useCurrency();
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -190,7 +197,12 @@ export default function Products() {
       params.set('page', String(currentPage));
       params.set('limit', String(ITEMS_PER_PAGE));
 
-      const response = await api.get(`/api/products?${params}`);
+      const [response, invRes] = await Promise.all([
+        api.get(`/api/products?${params}`),
+        api.get<InventorySummary>('/api/dashboard/inventory-summary').catch(() => ({ data: null })),
+      ]);
+      if (invRes?.data) setInventorySummary(invRes.data);
+
       if (response.data?.setupRequired === true || response.data?.error === 'setup_required') {
         setSetupRequired(true);
         setProducts([]);
@@ -218,19 +230,53 @@ export default function Products() {
     }
   }, [filters.status, filters.marketplace, filters.category, filters.dateFrom, filters.dateTo, filters.dateField, filters.priceMin, filters.priceMax, filters.hasLink, filters.sortBy, filters.sortDir, debouncedSearch, currentPage]);
 
+  const fetchInventorySummary = useCallback(async () => {
+    try {
+      const res = await api.get<{
+        products: { total: number; pending: number; approved: number; published: number };
+        listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
+        listingsTotal?: number;
+      }>('/api/dashboard/inventory-summary');
+      if (res.data) {
+        const list = res.data.listingsByMarketplace;
+        const total =
+          typeof res.data.listingsTotal === 'number'
+            ? res.data.listingsTotal
+            : (list?.ebay ?? 0) + (list?.mercadolibre ?? 0) + (list?.amazon ?? 0);
+        setInventorySummary({
+          products: res.data.products ?? { total: 0, pending: 0, approved: 0, published: 0 },
+          listingsByMarketplace: list ?? { ebay: 0, mercadolibre: 0, amazon: 0 },
+          listingsTotal: total,
+        });
+      }
+    } catch {
+      setInventorySummary(null);
+    }
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(() => { fetchProducts(); }, 100);
     return () => clearTimeout(timer);
   }, [fetchProducts]);
 
+  useEffect(() => {
+    fetchInventorySummary();
+  }, [fetchInventorySummary]);
+
   useLiveData({
-    fetchFn: () => fetchProducts(true).catch(() => {}),
+    fetchFn: () => {
+      fetchProducts(true).catch(() => {});
+      fetchInventorySummary();
+    },
     intervalMs: 15000,
     enabled: true,
   });
   useNotificationRefetch({
     handlers: {
-      PRODUCT_PUBLISHED: () => fetchProducts(true),
+      PRODUCT_PUBLISHED: () => {
+        fetchProducts(true);
+        fetchInventorySummary();
+      },
       PRODUCT_SCRAPED: () => fetchProducts(true),
     },
     enabled: true,
@@ -259,13 +305,14 @@ export default function Products() {
     updateFilter(key, defaults[key]);
   };
 
-  // Stats from aggregations
+  // Stats: prefer inventory-summary (single source of truth); fallback to aggregations
   const stats = {
-    total: aggregations?.totalAll ?? products.length,
-    pending: aggregations?.byStatus?.PENDING ?? 0,
-    approved: aggregations?.byStatus?.APPROVED ?? 0,
-    published: aggregations?.byStatus?.PUBLISHED ?? 0,
+    total: inventorySummary?.products?.total ?? aggregations?.totalAll ?? products.length,
+    pending: inventorySummary?.products?.pending ?? aggregations?.byStatus?.PENDING ?? 0,
+    approved: inventorySummary?.products?.approved ?? aggregations?.byStatus?.APPROVED ?? 0,
+    published: inventorySummary?.listingsTotal ?? aggregations?.byStatus?.PUBLISHED ?? 0,
   };
+  const listingsByMarketplace = inventorySummary?.listingsByMarketplace ?? { ebay: 0, mercadolibre: 0, amazon: 0 };
 
   // Summary for visible page
   const pageRevenue = products.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
@@ -303,6 +350,7 @@ export default function Products() {
       const response = await api.patch(`/api/products/${productId}/status`, { status: 'APPROVED' });
       toast.success(response.data?.message || 'Producto aprobado');
       fetchProducts();
+      fetchInventorySummary();
     } catch (error: any) {
       toast.error(error?.response?.data?.error || 'Error al aprobar producto');
     }
@@ -313,6 +361,7 @@ export default function Products() {
       const response = await api.patch(`/api/products/${productId}/status`, { status: 'REJECTED' });
       toast.success(response.data?.message || 'Producto rechazado');
       fetchProducts();
+      fetchInventorySummary();
     } catch (error: any) {
       toast.error(error?.response?.data?.error || 'Error al rechazar producto');
     }
@@ -337,6 +386,7 @@ export default function Products() {
         toast.success(data?.message || 'Producto aprobado.');
       }
       fetchProducts();
+      fetchInventorySummary();
     } catch (error: any) {
       const res = error?.response?.data;
       const msg = res?.message || res?.error || error?.message || 'Error al publicar';
@@ -350,6 +400,7 @@ export default function Products() {
       const response = await api.post(`/api/products/${productId}/unpublish`);
       toast.success(response.data?.message || 'Producto despublicado');
       fetchProducts();
+      fetchInventorySummary();
     } catch (error: any) {
       toast.error(error?.response?.data?.error || 'Error al despublicar');
     }
@@ -361,6 +412,7 @@ export default function Products() {
       const response = await api.delete(`/api/products/${productId}`);
       toast.success(response.data?.message || 'Producto eliminado');
       fetchProducts();
+      fetchInventorySummary();
     } catch (error: any) {
       toast.error(error?.response?.data?.error || 'Error al eliminar producto');
     }
@@ -403,6 +455,7 @@ export default function Products() {
                     const res = await api.post('/api/products/approve-pending');
                     toast.success(res.data?.message || 'Productos procesados');
                     fetchProducts();
+                    fetchInventorySummary();
                   } catch (e: any) {
                     toast.error(e?.response?.data?.error || 'Error al procesar pendientes');
                   } finally {
@@ -492,6 +545,11 @@ export default function Products() {
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Publicados</p>
                 <p className="text-2xl font-bold text-purple-600">{(stats.published).toLocaleString()}</p>
+                {stats.published > 0 && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    eBay: {listingsByMarketplace.ebay} · ML: {listingsByMarketplace.mercadolibre} · Amazon: {listingsByMarketplace.amazon}
+                  </p>
+                )}
               </div>
               <Upload className="w-8 h-8 text-purple-600" />
             </div>

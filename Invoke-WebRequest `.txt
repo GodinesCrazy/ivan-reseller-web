@@ -1,0 +1,5 @@
+Invoke-WebRequest `
+  -Uri "https://ivan-reseller-backend-production.up.railway.app/api/internal/run-ebay-cycle" `
+  -Method POST `
+  -Headers @{ "x-internal-secret" = "TU_INTERNAL_RUN_SECRET" }
+983854818

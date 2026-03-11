@@ -1,0 +1,360 @@
+2026-03-07 13:41:34
+/auth/token/security/create
+ISV
+IncompleteSignature
+chargeable: false
+code: IncompleteSignature
+__tag__:__receive_time__: 1772862094
+channel: 
+request log: 
+type: ISV
+httpMethod: GET
+trial: false
+nick: 
+protocol: default
+sellerId: 
+partner_id: 
+envFlag: live
+requestUrl: /rest/auth/token/security/create?app_key=522578&code=3_522578_W605A4DatcCBp4NYgxeoKCXq213&format=json&sign_method=sha256&sign=59f718ac28fae43f1e15b41a44aca3324efe9195442ba4245026fdeff0eeaded&redirect_uri=https://ivanreseller.com/api/marketplace-oauth/callback&timestamp=1772862068019
+appKey: 522578
+api: /auth/token/security/create
+bizSuccess: 
+shortCode: 
+clientHost: 162.220.232.22
+response log: 
+__tag__:__user_defined_id__: gop_ae_auth_sls gop_ae_push_sls gop_ae_spi_sls gop_ae_ta_sls gop_biz_log new_gop_ae_gw_sls_prod
+userMap: {"_GL_ID":"AE_GLOBAL","_GL_LK":"US|en-US|USD|840","gop_api_trial":"false"}
+message: The request signature does not conform to platform standards
+env: PROD-GLOBAL
+logTime: 1772862094197
+__tag__:SN: 8753fa4c-793a-4f96-b61b-27c662e41aa4
+seviceCostTime: 0
+tenantId: AE_GLOBAL
+serviceProvider: 
+partnerId: 
+executeTime: 2
+requestId: 214125d717728620941954688
+2026-03-07 13:41:33
+/auth/token/security/create
+ISV
+IncompleteSignature
+chargeable: false
+code: IncompleteSignature
+__tag__:__receive_time__: 1772862093
+channel: 
+request log: 
+type: ISV
+httpMethod: GET
+trial: false
+nick: 
+protocol: default
+sellerId: 
+partner_id: 
+envFlag: live
+requestUrl: /rest/auth/token/security/create?app_key=522578&code=3_522578_W605A4DatcCBp4NYgxeoKCXq213&format=json&sign_method=sha256&sign=9BAC12991176B1DE2391EA392CE1C0AE0FD46A5A21AB3DB9A5CC0FC4569A7308&redirect_uri=https://ivanreseller.com/api/marketplace-oauth/callback&timestamp=1772862068019
+appKey: 522578
+api: /auth/token/security/create
+bizSuccess: 
+shortCode: 
+clientHost: 162.220.232.22
+response log: 
+__tag__:__user_defined_id__: gop_ae_auth_sls gop_ae_push_sls gop_ae_spi_sls gop_ae_ta_sls gop_biz_log new_gop_ae_gw_sls_prod
+userMap: {"_GL_ID":"AE_GLOBAL","_GL_LK":"US|en-US|USD|840","gop_api_trial":"false"}
+message: The request signature does not conform to platform standards
+env: PROD-GLOBAL
+logTime: 1772862093511
+__tag__:SN: 1454429d-7e4e-4b47-ab7e-004669d73abf
+seviceCostTime: 0
+tenantId: AE_GLOBAL
+serviceProvider: 
+partnerId: 
+executeTime: 2
+requestId: 212a73a517728620935093944
+2026-03-07 13:41:32
+/auth/token/security/create
+ISV
+IncompleteSignature
+chargeable: false
+code: IncompleteSignature
+__tag__:__receive_time__: 1772862092
+channel: 
+request log: 
+type: ISV
+httpMethod: GET
+trial: false
+nick: 
+protocol: default
+sellerId: 
+partner_id: 
+envFlag: live
+requestUrl: /rest/auth/token/security/create?app_key=522578&code=3_522578_W605A4DatcCBp4NYgxeoKCXq213&format=json&sign_method=sha256&sign=BAF5F6C27A77161A0BED4CE9734F6A69E6C74BD8B177ECA6482A4584AA1F2DB5&redirect_uri=https://ivanreseller.com/api/marketplace-oauth/callback&timestamp=1772862068019
+appKey: 522578
+api: /auth/token/security/create
+bizSuccess: 
+shortCode: 
+clientHost: 162.220.232.22
+response log: 
+__tag__:__user_defined_id__: gop_ae_auth_sls gop_ae_push_sls gop_ae_spi_sls gop_ae_ta_sls gop_biz_log new_gop_ae_gw_sls_prod
+userMap: {"_GL_ID":"AE_GLOBAL","_GL_LK":"US|en-US|USD|840","gop_api_trial":"false"}
+message: The request signature does not conform to platform standards
+env: PROD-GLOBAL
+logTime: 1772862092134
+__tag__:SN: bd714222-8546-428c-835f-8245336332e6
+seviceCostTime: 0
+tenantId: AE_GLOBAL
+serviceProvider: 
+partnerId: 
+executeTime: 3
+requestId: 2102f38b17728620921312600
+2026-03-07 13:41:32
+/auth/token/security/create
+ISV
+IncompleteSignature
+chargeable: false
+code: IncompleteSignature
+__tag__:__receive_time__: 1772862093
+channel: 
+request log: 
+type: ISV
+httpMethod: GET
+trial: false
+nick: 
+protocol: default
+sellerId: 
+partner_id: 
+envFlag: live
+requestUrl: /rest/auth/token/security/create?app_key=522578&code=3_522578_W605A4DatcCBp4NYgxeoKCXq213&format=json&sign_method=sha256&sign=61CF7C6391A647D44C4500D4C4E2A727E96531D99591DC021DD82B0ED141590D&redirect_uri=https://ivanreseller.com/api/marketplace-oauth/callback&timestamp=1772862068019
+appKey: 522578
+api: /auth/token/security/create
+bizSuccess: 
+shortCode: 
+clientHost: 162.220.232.22
+response log: 
+__tag__:__user_defined_id__: gop_ae_auth_sls gop_ae_push_sls gop_ae_spi_sls gop_ae_ta_sls gop_biz_log new_gop_ae_gw_sls_prod
+userMap: {"_GL_ID":"AE_GLOBAL","_GL_LK":"US|en-US|USD|840","gop_api_trial":"false"}
+message: The request signature does not conform to platform standards
+env: PROD-GLOBAL
+logTime: 1772862092825
+__tag__:SN: 53f2f524-94a1-4289-9f6e-4be53657ad9c
+seviceCostTime: 0
+tenantId: AE_GLOBAL
+serviceProvider: 
+partnerId: 
+executeTime: 3
+requestId: 2102e18e17728620928227130
+2026-03-07 13:41:31
+/auth/token/security/create
+ISV
+IncompleteSignature
+chargeable: false
+code: IncompleteSignature
+__tag__:__receive_time__: 1772862093
+channel: 
+request log: 
+type: ISV
+httpMethod: GET
+trial: false
+nick: 
+protocol: default
+sellerId: 
+partner_id: 
+envFlag: live
+requestUrl: /rest/auth/token/security/create?app_key=522578&code=3_522578_W605A4DatcCBp4NYgxeoKCXq213&format=json&sign_method=sha256&sign=2CF2EBCEEC395A2071760C0ECE333AA74CA448C04B9AA18793B90665DD565354&redirect_uri=https://ivanreseller.com/api/marketplace-oauth/callback&timestamp=1772862068019
+appKey: 522578
+api: /auth/token/security/create
+bizSuccess: 
+shortCode: 
+clientHost: 162.220.232.22
+response log: 
+__tag__:__user_defined_id__: gop_ae_auth_sls gop_ae_push_sls gop_ae_spi_sls gop_ae_ta_sls gop_biz_log new_gop_ae_gw_sls_prod
+userMap: {"_GL_ID":"AE_GLOBAL","_GL_LK":"US|en-US|USD|840","gop_api_trial":"false"}
+message: The request signature does not conform to platform standards
+env: PROD-GLOBAL
+logTime: 1772862091448
+__tag__:SN: 00ea1e63-eff7-4bd6-b3ad-15757fe50be2
+seviceCostTime: 0
+tenantId: AE_GLOBAL
+serviceProvider: 
+partnerId: 
+executeTime: 4
+requestId: 2141138a17728620914443299
+2026-03-07 13:41:30
+/auth/token/create
+ISV
+IncompleteSignature
+chargeable: false
+code: IncompleteSignature
+__tag__:__receive_time__: 1772862091
+channel: 
+request log: 
+type: ISV
+httpMethod: GET
+trial: false
+nick: 
+protocol: default
+sellerId: 
+partner_id: 
+envFlag: live
+requestUrl: /rest/auth/token/create?app_key=522578&code=3_522578_W605A4DatcCBp4NYgxeoKCXq213&format=json&sign_method=sha256&sign=59f718ac28fae43f1e15b41a44aca3324efe9195442ba4245026fdeff0eeaded&redirect_uri=https://ivanreseller.com/api/marketplace-oauth/callback&timestamp=1772862068019
+appKey: 522578
+api: /auth/token/create
+bizSuccess: 
+shortCode: 
+clientHost: 162.220.232.22
+response log: 
+__tag__:__user_defined_id__: gop_ae_auth_sls gop_ae_push_sls gop_ae_spi_sls gop_ae_ta_sls gop_biz_log new_gop_ae_gw_sls_prod
+userMap: {"_GL_ID":"AE_GLOBAL","_GL_LK":"US|en-US|USD|840","gop_api_trial":"false","cluster":"aliyun-region-vpc-ap-southeast-1"}
+message: The request signature does not conform to platform standards
+env: PROD-GLOBAL
+logTime: 1772862090575
+__tag__:SN: 1e82638b-de3f-457e-ba76-c2cf0e66fdd3
+seviceCostTime: 0
+tenantId: AE_GLOBAL
+serviceProvider: 
+partnerId: 
+executeTime: 6
+requestId: 0baf585517728620905692875
+2026-03-07 13:41:30
+/auth/token/security/create
+ISV
+IncompleteSignature
+chargeable: false
+code: IncompleteSignature
+__tag__:__receive_time__: 1772862091
+channel: 
+request log: 
+type: ISV
+httpMethod: GET
+trial: false
+nick: 
+protocol: default
+sellerId: 
+partner_id: 
+envFlag: live
+requestUrl: /rest/auth/token/security/create?app_key=522578&code=3_522578_W605A4DatcCBp4NYgxeoKCXq213&format=json&sign_method=sha256&sign=1955891A33B0B6E07830C3529E9E56E3B4FAB6DA6FAE92EB70175CF99457BFC1&redirect_uri=https://ivanreseller.com/api/marketplace-oauth/callback&timestamp=1772862068019
+appKey: 522578
+api: /auth/token/security/create
+bizSuccess: 
+shortCode: 
+clientHost: 162.220.232.22
+response log: 
+__tag__:__user_defined_id__: gop_ae_auth_sls gop_ae_push_sls gop_ae_spi_sls gop_ae_ta_sls gop_biz_log new_gop_ae_gw_sls_prod
+userMap: {"_GL_ID":"AE_GLOBAL","_GL_LK":"US|en-US|USD|840","gop_api_trial":"false"}
+message: The request signature does not conform to platform standards
+env: PROD-GLOBAL
+logTime: 1772862090761
+__tag__:SN: e19bcc76-8692-4dda-98ea-c7b891118b16
+seviceCostTime: 0
+tenantId: AE_GLOBAL
+serviceProvider: 
+partnerId: 
+executeTime: 4
+requestId: 212a745617728620907577296
+2026-03-07 13:41:29
+/auth/token/create
+ISV
+IncompleteSignature
+chargeable: false
+code: IncompleteSignature
+__tag__:__receive_time__: 1772862090
+channel: 
+request log: 
+type: ISV
+httpMethod: GET
+trial: false
+nick: 
+protocol: default
+sellerId: 
+partner_id: 
+envFlag: live
+requestUrl: /rest/auth/token/create?app_key=522578&code=3_522578_W605A4DatcCBp4NYgxeoKCXq213&format=json&sign_method=sha256&sign=9BAC12991176B1DE2391EA392CE1C0AE0FD46A5A21AB3DB9A5CC0FC4569A7308&redirect_uri=https://ivanreseller.com/api/marketplace-oauth/callback&timestamp=1772862068019
+appKey: 522578
+api: /auth/token/create
+bizSuccess: 
+shortCode: 
+clientHost: 162.220.232.22
+response log: 
+__tag__:__user_defined_id__: gop_ae_auth_sls gop_ae_push_sls gop_ae_spi_sls gop_ae_ta_sls gop_biz_log new_gop_ae_gw_sls_prod
+userMap: {"_GL_ID":"AE_GLOBAL","_GL_LK":"US|en-US|USD|840","gop_api_trial":"false"}
+message: The request signature does not conform to platform standards
+env: PROD-GLOBAL
+logTime: 1772862089887
+__tag__:SN: c2a0886e-d14d-404d-a702-50cc8b35d285
+seviceCostTime: 0
+tenantId: AE_GLOBAL
+serviceProvider: 
+partnerId: 
+executeTime: 4
+requestId: 0baf723f17728620898838608
+2026-03-07 13:41:29
+/auth/token/create
+ISV
+IncompleteSignature
+chargeable: false
+code: IncompleteSignature
+__tag__:__receive_time__: 1772862089
+channel: 
+request log: 
+type: ISV
+httpMethod: GET
+trial: false
+nick: 
+protocol: default
+sellerId: 
+partner_id: 
+envFlag: live
+requestUrl: /rest/auth/token/create?app_key=522578&code=3_522578_W605A4DatcCBp4NYgxeoKCXq213&format=json&sign_method=sha256&sign=61CF7C6391A647D44C4500D4C4E2A727E96531D99591DC021DD82B0ED141590D&redirect_uri=https://ivanreseller.com/api/marketplace-oauth/callback&timestamp=1772862068019
+appKey: 522578
+api: /auth/token/create
+bizSuccess: 
+shortCode: 
+clientHost: 162.220.232.22
+response log: 
+__tag__:__user_defined_id__: gop_ae_auth_sls gop_ae_push_sls gop_ae_spi_sls gop_ae_ta_sls gop_biz_log new_gop_ae_gw_sls_prod
+userMap: {"_GL_ID":"AE_GLOBAL","_GL_LK":"US|en-US|USD|840","gop_api_trial":"false"}
+message: The request signature does not conform to platform standards
+env: PROD-GLOBAL
+logTime: 1772862089198
+__tag__:SN: 603471c6-0dbe-4b0e-82a1-85799b8502e4
+seviceCostTime: 0
+tenantId: AE_GLOBAL
+serviceProvider: 
+partnerId: 
+executeTime: 3
+requestId: 2102fa0617728620891954670
+2026-03-07 13:41:28
+/auth/token/create
+ISV
+IncompleteSignature
+chargeable: false
+code: IncompleteSignature
+__tag__:__receive_time__: 1772862088
+channel: 
+request log: 
+type: ISV
+httpMethod: GET
+trial: false
+nick: 
+protocol: default
+sellerId: 
+partner_id: 
+envFlag: live
+requestUrl: /rest/auth/token/create?app_key=522578&code=3_522578_W605A4DatcCBp4NYgxeoKCXq213&format=json&sign_method=sha256&sign=BAF5F6C27A77161A0BED4CE9734F6A69E6C74BD8B177ECA6482A4584AA1F2DB5&redirect_uri=https://ivanreseller.com/api/marketplace-oauth/callback&timestamp=1772862068019
+appKey: 522578
+api: /auth/token/create
+bizSuccess: 
+shortCode: 
+clientHost: 162.220.232.22
+response log: 
+__tag__:__user_defined_id__: gop_ae_auth_sls gop_ae_push_sls gop_ae_spi_sls gop_ae_ta_sls gop_biz_log new_gop_ae_gw_sls_prod
+userMap: {"_GL_ID":"AE_GLOBAL","_GL_LK":"US|en-US|USD|840","gop_api_trial":"false"}
+message: The request signature does not conform to platform standards
+env: PROD-GLOBAL
+logTime: 1772862088513
+__tag__:SN: dfbde55c-ffbf-435b-b5e1-da69534531bb
+seviceCostTime: 0
+tenantId: AE_GLOBAL
+serviceProvider: 
+partnerId: 
+executeTime: 4
+requestId: 2151e4fa17728620885102873
