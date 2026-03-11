@@ -4,9 +4,10 @@ import { api } from '../services/api';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { API_BASE_URL } from '@/config/runtime';
-import { Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Check, X, ChevronLeft, ChevronRight, ExternalLink, Wallet, TrendingUp } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
+import { formatCurrencySimple } from '@/utils/currency';
 
 // Usar proxy de imágenes para evitar bloqueo de hotlink de AliExpress
 function toProxyUrl(url: string): string {
@@ -14,6 +15,18 @@ function toProxyUrl(url: string): string {
   const base = API_BASE_URL.replace(/\/+$/, '');
   const path = base.endsWith('/api') ? '/publisher/proxy-image' : '/api/publisher/proxy-image';
   return `${base}${path}?url=${encodeURIComponent(url)}`;
+}
+
+function sanitizeProductTitle(title: string): string {
+  if (!title || typeof title !== 'string') return title;
+  // Corregir %A (posible corrupción de "para") y otros artefactos de encoding
+  return title
+    .replace(/%A\s+/gi, 'para ')
+    .replace(/\s+%A\s+/g, ' para ');
+}
+
+function formatDateEs(date: Date | string): string {
+  return new Date(date).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 export default function IntelligentPublisher() {
@@ -28,8 +41,16 @@ export default function IntelligentPublisher() {
   const [loading, setLoading] = useState(true);
   const [listingsPage, setListingsPage] = useState(1);
   const [listingsTotal, setListingsTotal] = useState(0);
+  const [pendingPage, setPendingPage] = useState(1);
+  const [capitalData, setCapitalData] = useState<{
+    availableCash: number;
+    canPublish: boolean;
+    remainingExposure: number;
+  } | null>(null);
   const LISTINGS_PER_PAGE = 50;
+  const PENDING_PER_PAGE = 20;
   const listingsTotalPages = Math.max(1, Math.ceil(listingsTotal / LISTINGS_PER_PAGE));
+  const pendingTotalPages = Math.max(1, Math.ceil(pending.length / PENDING_PER_PAGE));
 
   const loadListings = useCallback(async (page: number) => {
     try {
@@ -41,15 +62,39 @@ export default function IntelligentPublisher() {
     }
   }, []);
 
+  const loadCapitalData = useCallback(async () => {
+    try {
+      const [wcRes, allocRes] = await Promise.all([
+        api.get<{ detail?: { availableCash?: number } }>('/api/finance/working-capital-detail', {
+          params: { environment: 'production' },
+        }).catch(() => ({ data: {} })),
+        api.get<{ capitalAllocation?: { canPublish?: boolean; remainingExposure?: number } }>('/api/finance/leverage-and-risk', {
+          params: { environment: 'production' },
+        }).catch(() => ({ data: {} })),
+      ]);
+      const detail = wcRes.data?.detail;
+      const alloc = allocRes.data?.capitalAllocation;
+      setCapitalData({
+        availableCash: detail?.availableCash ?? 0,
+        canPublish: alloc?.canPublish ?? false,
+        remainingExposure: alloc?.remainingExposure ?? 0,
+      });
+    } catch {
+      setCapitalData(null);
+    }
+  }, []);
+
   const loadPublisherData = useCallback(async () => {
     try {
       setLoading(true);
       const [pendingRes] = await Promise.all([
         api.get('/api/publisher/pending'),
         loadListings(1),
+        loadCapitalData(),
       ]);
       setPending(pendingRes.data?.items || []);
       setListingsPage(1);
+      setPendingPage(1);
     } catch (error: any) {
       console.error('Error loading publisher data:', error);
       const status = error?.response?.status;
@@ -59,7 +104,7 @@ export default function IntelligentPublisher() {
     } finally {
       setLoading(false);
     }
-  }, [loadListings]);
+  }, [loadListings, loadCapitalData]);
 
   // ✅ CORREGIDO: Recargar cuando se monta el componente O cuando cambia la location (navegación)
   useEffect(() => {
@@ -154,8 +199,11 @@ export default function IntelligentPublisher() {
     }
   }, [navigate]);
 
-  // Memoizar productos pendientes limitados
-  const pendingLimited = useMemo(() => pending.slice(0, 20), [pending]);
+  // Memoizar productos pendientes paginados
+  const displayedPending = useMemo(() => {
+    const start = (pendingPage - 1) * PENDING_PER_PAGE;
+    return pending.slice(start, start + PENDING_PER_PAGE);
+  }, [pending, pendingPage]);
 
   const goToListingsPage = useCallback((page: number) => {
     setListingsPage(page);
@@ -246,6 +294,29 @@ export default function IntelligentPublisher() {
           }} className="px-4 py-2 bg-primary-600 text-white rounded">Add</button>
         </div>
       </div>
+      {capitalData != null && (
+        <div className="p-4 rounded border bg-white mb-3 flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Capital disponible:</span>
+            <span className="font-semibold text-gray-900">{formatCurrencySimple(capitalData.availableCash, 'USD')}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Puede publicar:</span>
+            {capitalData.canPublish ? (
+              <span className="font-medium text-green-600">
+                Sí
+                {capitalData.remainingExposure > 0 && (
+                  <span className="text-gray-500 font-normal ml-1">(+{formatCurrencySimple(capitalData.remainingExposure, 'USD')})</span>
+                )}
+              </span>
+            ) : (
+              <span className="font-medium text-amber-600">Límite alcanzado</span>
+            )}
+          </div>
+        </div>
+      )}
       <div className="p-4 border rounded bg-white text-gray-700 mb-3 flex items-center justify-between">
         <div>
           Pending approvals: <span className="font-semibold">{pending.length}</span>
@@ -274,7 +345,7 @@ export default function IntelligentPublisher() {
         </button>
       </div>
       <div className="bg-white border rounded">
-        {pendingLimited.map((p: any) => (
+        {displayedPending.map((p: any) => (
           <PendingProductCard
             key={p.id}
             product={p}
@@ -283,7 +354,28 @@ export default function IntelligentPublisher() {
             onApprove={(marketplaces) => approve(p.id, marketplaces)}
           />
         ))}
-        {pending.length===0 && <div className="p-4 text-sm text-gray-600">No pending products.</div>}
+        {pending.length === 0 && <div className="p-4 text-sm text-gray-600">No pending products.</div>}
+        {pending.length > 0 && pendingTotalPages > 1 && (
+          <div className="flex items-center justify-center gap-3 py-3 px-4 border-t bg-gray-50 rounded-b text-sm">
+            <button
+              disabled={pendingPage <= 1}
+              onClick={() => setPendingPage((prev) => Math.max(1, prev - 1))}
+              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white font-medium"
+            >
+              <ChevronLeft className="w-4 h-4 inline" /> Anterior
+            </button>
+            <span className="text-gray-600 font-medium">
+              Página {pendingPage} de {pendingTotalPages} ({pending.length} pendientes)
+            </span>
+            <button
+              disabled={pendingPage >= pendingTotalPages}
+              onClick={() => setPendingPage((prev) => Math.min(pendingTotalPages, prev + 1))}
+              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white font-medium"
+            >
+              Siguiente <ChevronRight className="w-4 h-4 inline" />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="mt-6">
@@ -303,7 +395,7 @@ export default function IntelligentPublisher() {
               )}
               <div className="flex-1 min-w-0 text-sm">
                 <div className="font-medium truncate">{l.productTitle || l.listingId}</div>
-                <div className="text-gray-500 text-xs">{l.marketplace.toUpperCase()} – {l.listingId} – {l.publishedAt ? new Date(l.publishedAt).toLocaleString() : ''}</div>
+                <div className="text-gray-500 text-xs">{l.marketplace.toUpperCase()} – {l.listingId} – {l.publishedAt ? formatDateEs(l.publishedAt) : ''}</div>
               </div>
               {l.listingUrl && (
                 <a href={l.listingUrl} target="_blank" rel="noopener noreferrer" className="text-primary-600 text-sm hover:underline flex-shrink-0">Open</a>
@@ -365,9 +457,9 @@ function PendingProductCard({
     <div className="p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
       <div className="flex items-start gap-3 flex-1 w-full">
         <input type="checkbox" className="mt-1 flex-shrink-0" checked={selected} onChange={(e) => onSelectChange(e.target.checked)} />
-        <ImageCarousel images={imgSources} title={p.title} />
+        <ImageCarousel images={imgSources} title={sanitizeProductTitle(p.title)} />
         <div className="flex-1 min-w-0">
-          <div className="font-medium text-gray-900">{p.title}</div>
+          <div className="font-medium text-gray-900">{sanitizeProductTitle(p.title)}</div>
           {showDesc && (
             <div className="text-xs text-gray-600 mt-1">
               {expanded ? desc : descShort}
@@ -379,16 +471,39 @@ function PendingProductCard({
             </div>
           )}
           <div className="text-xs text-gray-500 mt-1 space-y-1">
-            <div>Cost: ${Number(p.estimatedCost ?? p.aliexpressPrice ?? 0).toFixed(2)} → Suggested: ${Number(p.suggestedPrice ?? 0).toFixed(2)}</div>
+            <div>
+              Cost: {formatCurrencySimple(p.estimatedCost ?? p.aliexpressPrice ?? 0, p.currency || 'USD')}
+              {p.shippingCost != null && p.shippingCost > 0 && (
+                <span> (+ {formatCurrencySimple(p.shippingCost, p.currency || 'USD')} ship)</span>
+              )}
+              {p.totalCost != null && p.totalCost !== (p.estimatedCost ?? p.aliexpressPrice ?? 0) && (
+                <span> = Total: {formatCurrencySimple(p.totalCost, p.currency || 'USD')}</span>
+              )}
+              {' → '}Suggested: {formatCurrencySimple(p.suggestedPrice ?? 0, p.currency || 'USD')}
+            </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <span>Profit: <span className="font-semibold text-green-600">${Number(p.estimatedProfit ?? 0).toFixed(2)}</span></span>
+              <span>Profit: <span className="font-semibold text-green-600">{formatCurrencySimple(p.estimatedProfit ?? 0, p.currency || 'USD')}</span></span>
               <span>ROI: <span className="font-semibold text-blue-600">{Number(p.estimatedROI ?? 0).toFixed(1)}%</span></span>
             </div>
+            {p.estimatedProfitByMarketplace && (
+              <div className="flex items-center gap-2 flex-wrap text-xs">
+                {Object.entries(p.estimatedProfitByMarketplace).map(([mk, val]) => (
+                  <span key={mk}>{mk === 'mercadolibre' ? 'ML' : mk}: <span className="text-green-600">+{formatCurrencySimple(val, p.currency || 'USD')}</span></span>
+                ))}
+              </div>
+            )}
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className={`px-2 py-0.5 rounded text-xs ${p.source === 'autopilot' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
                 {p.source === 'autopilot' ? '🤖 Autopilot' : '👤 Manual'}
               </span>
-              {p.queuedAt && <span className="text-gray-400">Queued: {new Date(p.queuedAt).toLocaleString()}</span>}
+              {p.category && <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">{p.category}</span>}
+              {p.deliveryDays != null && p.deliveryDays > 0 && <span className="text-gray-500">{p.deliveryDays} días envío</span>}
+              {p.queuedAt && <span className="text-gray-400">Queued: {formatDateEs(p.queuedAt)}</span>}
+              {p.aliexpressUrl && (
+                <a href={p.aliexpressUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary-600 hover:underline">
+                  <ExternalLink className="w-3 h-3" /> Ver en AliExpress
+                </a>
+              )}
             </div>
           </div>
         </div>

@@ -8,6 +8,7 @@ import { prisma } from '../../config/database';
 import { logger } from '../../config/logger';
 import { toNumber } from '../../utils/decimal.utils';
 import { jobService } from '../../services/job.service';
+import costCalculator from '../../services/cost-calculator.service';
 
 const router = Router();
 router.use(authenticate);
@@ -278,13 +279,22 @@ router.get('/pending', async (req: Request, res: Response) => {
     const enrichedItems: any[] = [];
     for (const item of products) {
       const costNum = toNumber(item.aliexpressPrice);
+      const shippingNum = toNumber(item.shippingCost ?? 0);
+      const importTaxNum = toNumber(item.importTax ?? 0);
+      const totalCostNum = toNumber(item.totalCost);
+      const effectiveCost = totalCostNum > 0 ? totalCostNum : costNum + shippingNum + importTaxNum;
       const effectivePrice = marketplaceService.getEffectiveListingPrice(item);
-      if (effectivePrice <= 0 || effectivePrice <= costNum) continue;
+      if (effectivePrice <= 0 || effectivePrice <= effectiveCost) continue;
       try {
         const productData = item.productData ? JSON.parse(item.productData as string) : {};
         const { images: imagesArr, imageUrl } = parseImages(item.images);
-        const profit = effectivePrice - costNum;
-        const roi = costNum > 0 ? (profit / costNum) * 100 : 0;
+        const profit = effectivePrice - effectiveCost;
+        const roi = effectiveCost > 0 ? (profit / effectiveCost) * 100 : 0;
+        const deliveryDays = (productData as any).estimatedDeliveryDays ?? (productData as any).shipping?.estimatedDays ?? (productData as any).deliveryDays ?? null;
+        const calcFor = (mk: 'ebay' | 'amazon' | 'mercadolibre') => {
+          const { netProfit } = costCalculator.calculate(mk, effectivePrice, costNum, { shippingCost: shippingNum, importTax: importTaxNum });
+          return Math.round(netProfit * 100) / 100;
+        };
         enrichedItems.push({
           ...item,
           images: imagesArr,
@@ -294,15 +304,26 @@ router.get('/pending', async (req: Request, res: Response) => {
           queuedAt: (productData as any).queuedAt || item.createdAt,
           queuedBy: (productData as any).queuedBy || 'user',
           estimatedCost: costNum,
+          shippingCost: shippingNum > 0 ? shippingNum : undefined,
+          totalCost: effectiveCost,
           suggestedPrice: effectivePrice,
           estimatedProfit: profit,
-          estimatedROI: roi
+          estimatedROI: roi,
+          deliveryDays: typeof deliveryDays === 'number' ? deliveryDays : null,
+          category: item.category || undefined,
+          currency: item.currency || 'USD',
+          aliexpressUrl: item.aliexpressUrl || undefined,
+          estimatedProfitByMarketplace: { ebay: calcFor('ebay'), mercadolibre: calcFor('mercadolibre'), amazon: calcFor('amazon') }
         });
       } catch (parseError) {
         logger.warn('[PUBLISHER] Failed to parse productData', { productId: item.id, error: parseError });
         const { images: imagesArr, imageUrl } = parseImages(item.images);
-        const profit = effectivePrice - costNum;
-        const roi = costNum > 0 ? (profit / costNum) * 100 : 0;
+        const profit = effectivePrice - effectiveCost;
+        const roi = effectiveCost > 0 ? (profit / effectiveCost) * 100 : 0;
+        const calcFor = (mk: 'ebay' | 'amazon' | 'mercadolibre') => {
+          const { netProfit } = costCalculator.calculate(mk, effectivePrice, costNum, { shippingCost: shippingNum, importTax: importTaxNum });
+          return Math.round(netProfit * 100) / 100;
+        };
         enrichedItems.push({
           ...item,
           images: imagesArr,
@@ -311,9 +332,16 @@ router.get('/pending', async (req: Request, res: Response) => {
           source: 'manual',
           queuedAt: item.createdAt,
           estimatedCost: costNum,
+          shippingCost: shippingNum > 0 ? shippingNum : undefined,
+          totalCost: effectiveCost,
           suggestedPrice: effectivePrice,
           estimatedProfit: profit,
-          estimatedROI: roi
+          estimatedROI: roi,
+          deliveryDays: null,
+          category: item.category || undefined,
+          currency: item.currency || 'USD',
+          aliexpressUrl: item.aliexpressUrl || undefined,
+          estimatedProfitByMarketplace: { ebay: calcFor('ebay'), mercadolibre: calcFor('mercadolibre'), amazon: calcFor('amazon') }
         });
       }
     }
