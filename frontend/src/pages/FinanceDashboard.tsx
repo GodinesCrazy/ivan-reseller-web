@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
-import { formatCurrencySimple } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface FinancialData {
   revenue: number;
@@ -155,6 +155,7 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
 ];
 
 export default function FinanceDashboard() {
+  const { formatMoney } = useCurrency();
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
@@ -324,11 +325,7 @@ export default function FinanceDashboard() {
     }
   };
 
-  // ✅ Usar utilidad centralizada de formateo de moneda
-  const formatCurrency = (amount: number) => {
-    // TODO: Obtener moneda del usuario desde settings
-    return formatCurrencySimple(amount, 'USD');
-  };
+  const formatCurrency = (amount: number) => formatMoney(amount);
 
   const formatPercentage = (value: number) => {
     return `${value >= 0 ? '+' : ''}${safeNumber(value).toFixed(2)}%`;

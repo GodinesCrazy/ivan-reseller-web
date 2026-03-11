@@ -107,7 +107,25 @@ export default function AISuggestionsPanel() {
         : [];
       
       setSuggestions(suggestionsData);
-      setAutomationRules([]); // TODO: Implementar reglas de automatización
+      // Cargar reglas de automatización desde API
+      try {
+        const rulesRes = await api.get<{ success?: boolean; data?: { rules?: Array<{ id: string; name: string; type: string; condition: string; action: string; active: boolean; lastExecuted?: string | Date; successRate: number }> } }>('/api/automation/rules');
+        const rawRules = rulesRes.data?.data?.rules ?? [];
+        const mapped: AutomationRule[] = rawRules.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          type: r.type === 'purchasing' || r.type === 'fulfillment' ? 'inventory' : (r.type as 'pricing' | 'inventory' | 'listing'),
+          status: r.active ? 'active' : 'paused',
+          trigger: r.condition ?? '',
+          action: r.action ?? '',
+          lastRun: r.lastExecuted ? (typeof r.lastExecuted === 'string' ? r.lastExecuted : new Date(r.lastExecuted).toISOString()) : '',
+          successRate: typeof r.successRate === 'number' ? r.successRate : 0,
+        }));
+        setAutomationRules(mapped);
+      } catch {
+        // API no disponible o sin reglas: mostrar lista vacía
+        setAutomationRules([]);
+      }
       setLoadError(null);
       
       // ✅ Si no hay sugerencias, no mostrar error (es normal)
@@ -223,14 +241,25 @@ export default function AISuggestionsPanel() {
     }
   };
 
-  const toggleAutomationRule = (ruleId: string) => {
+  const toggleAutomationRule = async (ruleId: string) => {
+    const rule = automationRules.find(r => r.id === ruleId);
+    if (!rule) return;
+    const newStatus = rule.status === 'active' ? 'paused' : 'active';
     setAutomationRules(prev =>
-      prev.map(rule =>
-        rule.id === ruleId
-          ? { ...rule, status: rule.status === 'active' ? 'paused' : 'active' }
-          : rule
+      prev.map(r =>
+        r.id === ruleId ? { ...r, status: newStatus } : r
       )
     );
+    try {
+      await api.put(`/api/automation/rules/${ruleId}`, { active: newStatus === 'active' });
+    } catch (e) {
+      setAutomationRules(prev =>
+        prev.map(r =>
+          r.id === ruleId ? { ...r, status: rule.status } : r
+        )
+      );
+      toast.error('No se pudo actualizar la regla');
+    }
   };
 
   const getPriorityColor = (priority: string) => {

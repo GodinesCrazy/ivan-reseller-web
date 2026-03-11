@@ -87,6 +87,8 @@ interface InventorySummary {
   products: { total: number; pending: number; approved: number; published: number };
   listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
   listingsTotal?: number;
+  ordersByStatus?: { CREATED: number; PAID: number; PURCHASING: number; PURCHASED: number; FAILED: number };
+  pendingPurchasesCount?: number;
 }
 
 interface ProductFilters {
@@ -232,23 +234,8 @@ export default function Products() {
 
   const fetchInventorySummary = useCallback(async () => {
     try {
-      const res = await api.get<{
-        products: { total: number; pending: number; approved: number; published: number };
-        listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
-        listingsTotal?: number;
-      }>('/api/dashboard/inventory-summary');
-      if (res.data) {
-        const list = res.data.listingsByMarketplace;
-        const total =
-          typeof res.data.listingsTotal === 'number'
-            ? res.data.listingsTotal
-            : (list?.ebay ?? 0) + (list?.mercadolibre ?? 0) + (list?.amazon ?? 0);
-        setInventorySummary({
-          products: res.data.products ?? { total: 0, pending: 0, approved: 0, published: 0 },
-          listingsByMarketplace: list ?? { ebay: 0, mercadolibre: 0, amazon: 0 },
-          listingsTotal: total,
-        });
-      }
+      const res = await api.get<InventorySummary>('/api/dashboard/inventory-summary');
+      if (res.data) setInventorySummary(res.data);
     } catch {
       setInventorySummary(null);
     }
@@ -502,7 +489,7 @@ export default function Products() {
         </Card>
       )}
 
-      {!setupRequired && <InventorySummaryCard />}
+      {!setupRequired && <InventorySummaryCard summary={inventorySummary} />}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

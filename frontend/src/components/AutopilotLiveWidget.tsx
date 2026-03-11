@@ -123,7 +123,7 @@ export default function AutopilotLiveWidget() {
         </div>
       )}
 
-      {!status.running && (status.lastRun || status.opportunitiesGenerated != null || status.productsPublished != null) && (
+          {!status.running && (status.lastRun || status.opportunitiesGenerated != null || status.productsPublished != null) && (
         <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
           {status.lastRun && (
             <span>Último: {new Date(status.lastRun).toLocaleString()}</span>
@@ -132,7 +132,7 @@ export default function AutopilotLiveWidget() {
             <span>Oportunidades: {status.opportunitiesGenerated}</span>
           )}
           {status.productsPublished != null && (
-            <span>Publicados: {status.productsPublished}</span>
+            <span>Total publicados (Autopilot): {status.productsPublished}</span>
           )}
         </div>
       )}

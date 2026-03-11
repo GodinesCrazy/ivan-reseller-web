@@ -89,6 +89,10 @@ interface AutopilotMetrics {
   topWinningProducts?: Array<{ productId: number; productTitle: string; winningScore: number }>;
 }
 
+interface InventorySummaryListings {
+  listingsByMarketplace?: { ebay?: number; mercadolibre?: number; amazon?: number };
+}
+
 export default function Autopilot() {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [logs, setLogs] = useState<WorkflowLog[]>([]);
@@ -97,6 +101,7 @@ export default function Autopilot() {
   const [autopilotRunning, setAutopilotRunning] = useState(false);
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatusResponse | null>(null);
   const [autopilotMetrics, setAutopilotMetrics] = useState<AutopilotMetrics | null>(null);
+  const [inventoryListings, setInventoryListings] = useState<InventorySummaryListings | null>(null);
 
   // Modals
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
@@ -365,15 +370,21 @@ export default function Autopilot() {
 
   const loadData = async () => {
     try {
-      const [workflowsRes, statsRes, configRes, metricsRes] = await Promise.all([
+      const [workflowsRes, statsRes, configRes, metricsRes, invRes] = await Promise.all([
         api.get('/api/autopilot/workflows'),
         api.get('/api/autopilot/stats'),
         api.get('/api/autopilot/config').catch(() => ({ data: {} })),
         api.get('/api/dashboard/autopilot-metrics').catch(() => ({ data: {} })),
+        api.get<InventorySummaryListings>('/api/dashboard/inventory-summary').catch(() => ({ data: null })),
       ]);
       
       setWorkflows(workflowsRes.data?.workflows || []);
       setStats(statsRes.data?.stats || null);
+      if (invRes.data?.listingsByMarketplace) {
+        setInventoryListings({ listingsByMarketplace: invRes.data.listingsByMarketplace });
+      } else {
+        setInventoryListings(null);
+      }
       const cfg = configRes.data?.config;
       if (cfg) {
         setSettingsForm((prev) => ({
@@ -723,6 +734,15 @@ export default function Autopilot() {
     return `${minutes}m ${seconds % 60}s`;
   };
 
+  /** Formatea lastRun evitando fechas inválidas (ej. solo hora que se interpreta como 2006) */
+  const formatLastRun = (lastRun: string) => {
+    const d = new Date(lastRun);
+    if (Number.isNaN(d.getTime())) return lastRun;
+    const y = d.getFullYear();
+    if (y < 2010 || y > 2030) return lastRun; // Evitar años claramente erróneos
+    return d.toLocaleString();
+  };
+
   if (loading) {
     return (
       <div className="p-6 space-y-4">
@@ -847,16 +867,19 @@ export default function Autopilot() {
             </div>
           )}
           {!autopilotRunning && (autopilotStatus?.lastRun != null || autopilotStatus?.opportunitiesGenerated != null || autopilotStatus?.productsPublished != null) && (
-            <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-500 dark:text-gray-400">
+            <div className="mt-2 space-y-1">
+              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Último ciclo</div>
+              <div className="flex flex-wrap gap-4 text-xs text-gray-500 dark:text-gray-400">
               {autopilotStatus.lastRun != null && autopilotStatus.lastRun && (
-                <span>Última ejecución: {new Date(autopilotStatus.lastRun).toLocaleString()}</span>
+                <span>Última ejecución: {formatLastRun(autopilotStatus.lastRun)}</span>
               )}
               {autopilotStatus.opportunitiesGenerated != null && (
                 <span>Oportunidades último ciclo: {autopilotStatus.opportunitiesGenerated}</span>
               )}
               {autopilotStatus.productsPublished != null && (
-                <span>Publicados: {autopilotStatus.productsPublished}</span>
+                <span title="Acumulado de todos los ciclos del Autopilot">Total publicados por Autopilot: {autopilotStatus.productsPublished}</span>
               )}
+            </div>
             </div>
           )}
         </div>
@@ -870,9 +893,14 @@ export default function Autopilot() {
               <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
                 <Package className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Active Listings</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm text-gray-600 dark:text-gray-400">Listados activos</div>
                 <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{autopilotMetrics.activeListings}</div>
+                {inventoryListings?.listingsByMarketplace && (
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    eBay: {inventoryListings.listingsByMarketplace.ebay ?? 0} · ML: {inventoryListings.listingsByMarketplace.mercadolibre ?? 0} · Amazon: {inventoryListings.listingsByMarketplace.amazon ?? 0}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1155,13 +1183,13 @@ export default function Autopilot() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-colors">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-colors" title="Porcentaje de ejecuciones de workflows que terminaron correctamente (sin error).">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-green-100 rounded-lg">
               <CheckCircle className="w-6 h-6 text-green-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Success Rate</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400" title="Porcentaje de ejecuciones de workflows que terminaron correctamente (sin error).">Tasa de éxito</div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {stats?.successRate?.toFixed(1) || 0}%
               </div>
@@ -1209,8 +1237,19 @@ export default function Autopilot() {
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {workflows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
-                    No workflows configured yet
+                  <td colSpan={9} className="px-6 py-8 text-center">
+                    <div className="flex flex-col items-center gap-3 text-gray-500 dark:text-gray-400">
+                      <p>No hay workflows configurados.</p>
+                      <p className="text-sm">Crea uno para automatizar búsqueda, análisis o publicación.</p>
+                      <button
+                        type="button"
+                        onClick={() => openWorkflowModal()}
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2 text-sm font-medium"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Crear primer workflow
+                      </button>
+                    </div>
                   </td>
                 </tr>
               )}
