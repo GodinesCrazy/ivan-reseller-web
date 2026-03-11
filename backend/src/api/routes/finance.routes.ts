@@ -27,13 +27,16 @@ function envFilter(env: string): Record<string, string> | object {
 
 /**
  * GET /api/finance/sales-ledger
- * Phase 1: Forensic complete sales ledger per sale
+ * Phase 1: Forensic complete sales ledger per sale.
+ * Query: environment=production|sandbox|all (default production, real data only).
+ * Excludes simulated orders (TEST_SIMULATED, etc.).
  */
 router.get('/sales-ledger', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const range = (req.query.range as string) || 'month';
-    const entries = await getSalesLedger(userId, range as any);
+    const env = getEnvironment(req);
+    const entries = await getSalesLedger(userId, range as any, env);
     res.json({ success: true, sales: entries });
   } catch (error) {
     next(error);

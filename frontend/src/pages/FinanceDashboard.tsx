@@ -198,7 +198,9 @@ export default function FinanceDashboard() {
 
   const loadSalesLedger = async () => {
     try {
-      const { data } = await api.get('/api/finance/sales-ledger', { params: { range: dateRange } });
+      const { data } = await api.get('/api/finance/sales-ledger', {
+        params: { range: dateRange, environment: 'production' },
+      });
       setSalesLedger(data?.sales ?? []);
     } catch (e: any) {
       const status = e?.response?.status;
@@ -285,9 +287,12 @@ export default function FinanceDashboard() {
   };
 
   useLiveData({
-    fetchFn: loadFinancialData,
-    intervalMs: 60000,
-    enabled: true,
+    fetchFn: () => {
+      void loadFinancialData();
+      if (activeTab === 'sales-ledger') void loadSalesLedger();
+    },
+    intervalMs: 30000,
+    enabled: activeTab === 'overview' || activeTab === 'sales-ledger',
   });
   useNotificationRefetch({
     handlers: { SALE_CREATED: loadFinancialData, COMMISSION_CALCULATED: loadFinancialData },
@@ -415,8 +420,10 @@ export default function FinanceDashboard() {
       {activeTab === 'sales-ledger' && (
         <div className="bg-white border rounded-lg overflow-hidden">
           <div className="p-4 border-b">
-            <h2 className="text-lg font-semibold">Sales Ledger (Forensic)</h2>
-            <p className="text-sm text-gray-500">{getDateRangeLabel()}</p>
+            <h2 className="text-lg font-semibold">Estado de cuenta (Sales Ledger)</h2>
+            <p className="text-sm text-gray-500">
+              {getDateRangeLabel()} · Solo ventas reales (excluye simulaciones)
+            </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

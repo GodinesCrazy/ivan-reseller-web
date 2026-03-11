@@ -2,6 +2,7 @@
  * Sales Ledger Service - Forensic Complete Ledger
  * Phase 1: Full breakdown per sale with data integrity tracking.
  * If any financial data is missing ? dataIntegrityIssue, NO silent 0.
+ * Excludes simulated orders (TEST_SIMULATED, etc.) for real data only.
  */
 
 import { prisma } from '../config/database';
@@ -48,12 +49,17 @@ function buildMarketplaceUrl(marketplace: string, listingUrl: string | null): st
 
 /**
  * Compute sales ledger with mandatory formulas and data integrity checks.
+ * Filters by environment (default production) and excludes simulated orders.
  * totalCost = supplierCost + supplierShipping + marketplaceFee + paymentFee + tax + platformCommission
  * grossProfit = salePrice - totalCost
  * marginPercent = grossProfit / salePrice
  * roiPercent = grossProfit / supplierCost (avoid div by 0)
  */
-export async function getSalesLedger(userId: number, range?: 'week' | 'month' | 'quarter' | 'year'): Promise<SalesLedgerEntry[]> {
+export async function getSalesLedger(
+  userId: number,
+  range?: 'week' | 'month' | 'quarter' | 'year',
+  environment: 'production' | 'sandbox' | 'all' = 'production'
+): Promise<SalesLedgerEntry[]> {
   const now = new Date();
   let startDate = new Date();
 
@@ -74,8 +80,23 @@ export async function getSalesLedger(userId: number, range?: 'week' | 'month' | 
       startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   }
 
+  const envWhere = environment === 'all' ? {} : { environment };
+
+  const simulatedOrders = await prisma.order.findMany({
+    where: {
+      aliexpressOrderId: { in: ['SIMULATED_ORDER_ID', 'TEST_SIMULATED', 'REAL_PAYOUT_TEST', 'FINAL_PAYOUT_TEST'] },
+    },
+    select: { id: true },
+  });
+  const excludeOrderIds = simulatedOrders.map((o) => o.id);
+
   const sales = await prisma.sale.findMany({
-    where: { userId, createdAt: { gte: startDate } },
+    where: {
+      userId,
+      createdAt: { gte: startDate },
+      ...envWhere,
+      ...(excludeOrderIds.length > 0 ? { orderId: { notIn: excludeOrderIds } } : {}),
+    },
     include: {
       product: true,
       commission: true,
