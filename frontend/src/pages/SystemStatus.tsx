@@ -3,8 +3,10 @@
  * Shows: PayPal Connected, eBay Connected, AliExpress OAuth, Autopilot Enabled, Profit Guard Enabled
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '@/services/api';
+import { useLiveData } from '@/hooks/useLiveData';
+import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { CheckCircle, XCircle, Loader2, Activity } from 'lucide-react';
 
 interface StatusData {
@@ -20,21 +22,27 @@ export default function SystemStatus() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api
-      .get('/api/system/status')
-      .then((res) => {
-        if (res.data?.success && res.data.data) {
-          setStatus(res.data.data);
-        } else {
-          setError('No se pudo cargar el estado');
-        }
-      })
-      .catch((err) => {
-        setError(err?.response?.data?.error || err?.message || 'Error al cargar');
-      })
-      .finally(() => setLoading(false));
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await api.get('/api/system/status');
+      if (res.data?.success && res.data.data) {
+        setStatus(res.data.data);
+        setError(null);
+      } else {
+        setError('No se pudo cargar el estado');
+      }
+    } catch (err: any) {
+      setError(err?.response?.data?.error || err?.message || 'Error al cargar');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useLiveData({ fetchFn: fetchStatus, intervalMs: 30000, enabled: true });
+  useNotificationRefetch({
+    handlers: { SYSTEM_ALERT: fetchStatus },
+    enabled: true,
+  });
 
   const Item = ({ label, connected }: { label: string; connected: boolean }) => (
     <div className="flex items-center justify-between py-3 px-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">

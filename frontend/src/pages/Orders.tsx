@@ -2,7 +2,7 @@
  * My Orders - Post-sale dropshipping orders
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, RefreshCw, ArrowRight, ExternalLink } from 'lucide-react';
 import api from '@/services/api';
@@ -11,6 +11,8 @@ import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { formatCurrencySimple } from '@/utils/currency';
 import { retryOrderFulfill, type Order } from '@/services/orders.api';
+import { useLiveData } from '@/hooks/useLiveData';
+import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 
 export default function Orders() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -37,7 +39,7 @@ export default function Orders() {
     }
   };
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -48,11 +50,13 @@ export default function Orders() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchOrders();
   }, []);
+
+  useLiveData({ fetchFn: fetchOrders, intervalMs: 15000, enabled: true });
+  useNotificationRefetch({
+    handlers: { SALE_CREATED: fetchOrders },
+    enabled: true,
+  });
 
   if (loading) {
     return (

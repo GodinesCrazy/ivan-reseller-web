@@ -37,10 +37,14 @@ import AIOpportunityFinder from '../components/AIOpportunityFinder';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
 import WorkflowSummaryWidget from '@/components/WorkflowSummaryWidget';
 import InventorySummaryCard from '@/components/InventorySummaryCard';
+import AutopilotLiveWidget from '@/components/AutopilotLiveWidget';
+import BalanceSummaryWidget from '@/components/BalanceSummaryWidget';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { log } from '@/utils/logger';
 import { getTrendingKeywords, type TrendKeyword } from '@/services/trends.api';
 import { useAuthStore } from '@stores/authStore';
+import { useLiveData } from '@/hooks/useLiveData';
+import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 
 export default function Dashboard() {
   const { user } = useAuthStore();
@@ -87,6 +91,13 @@ export default function Dashboard() {
   } | null>(null);
 
   const [businessDiagnostics, setBusinessDiagnostics] = useState<Record<string, { status: string; message?: string; count?: number }> | null>(null);
+
+  const [inventorySummary, setInventorySummary] = useState<{
+    products: { total: number; pending: number; approved: number; published: number };
+    listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
+    ordersByStatus: { CREATED: number; PAID: number; PURCHASING: number; PURCHASED: number; FAILED: number };
+    pendingPurchasesCount: number;
+  } | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -213,7 +224,16 @@ export default function Dashboard() {
             log.warn('⚠️  Error loading automation config (red/CORS):', err.message);
           }
           return { data: { workflows: [] } };
-        })
+        }),
+        // Inventario (productos, listings, órdenes, compras pendientes) - en vivo vía loadDashboardData
+        api.get('/api/dashboard/inventory-summary').catch(err => {
+          if (err.response) {
+            log.warn('⚠️  Error loading inventory summary (HTTP):', err.response.status);
+          } else {
+            log.warn('⚠️  Error loading inventory summary (red/CORS):', err.message);
+          }
+          return { data: null };
+        }),
       ]);
 
       // ✅ FIX-002: Si hay errores y no hay datos reales, mostrar mensaje informativo
@@ -281,6 +301,19 @@ export default function Dashboard() {
       });
 
       setRecentActivity(formattedActivities);
+
+      // Inventory summary para InventorySummaryCard (en vivo)
+      const inv = inventoryRes.data;
+      if (inv && typeof inv === 'object') {
+        setInventorySummary({
+          products: inv.products ?? { total: 0, pending: 0, approved: 0, published: 0 },
+          listingsByMarketplace: inv.listingsByMarketplace ?? { ebay: 0, mercadolibre: 0, amazon: 0 },
+          ordersByStatus: inv.ordersByStatus ?? { CREATED: 0, PAID: 0, PURCHASING: 0, PURCHASED: 0, FAILED: 0 },
+          pendingPurchasesCount: inv.pendingPurchasesCount ?? 0,
+        });
+      } else {
+        setInventorySummary(null);
+      }
     } catch (error: any) {
       log.error('Error loading dashboard data:', error);
       // ✅ FIX-002: No mostrar toast automático, solo marcar error
@@ -289,6 +322,16 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
+
+  useLiveData({
+    fetchFn: loadDashboardData,
+    intervalMs: 30000,
+    enabled: activeTab === 'overview',
+  });
+  useNotificationRefetch({
+    handlers: { SALE_CREATED: loadDashboardData, PRODUCT_PUBLISHED: loadDashboardData },
+    enabled: activeTab === 'overview',
+  });
 
   const formatTimeAgo = (date: Date): string => {
     const now = new Date();
@@ -438,7 +481,13 @@ export default function Dashboard() {
       </div>
       )}
 
-      <InventorySummaryCard />
+      {/* Balance resumido - capital disponible, comprometido, puede publicar */}
+      <BalanceSummaryWidget />
+
+      {/* Autopilot en vivo - estado, fase y progreso del ciclo */}
+      <AutopilotLiveWidget />
+
+      <InventorySummaryCard summary={inventorySummary} />
 
       {/* Admin: ingresos plataforma y comisiones por usuario */}
       {user?.role?.toUpperCase() === 'ADMIN' && platformRevenue && (

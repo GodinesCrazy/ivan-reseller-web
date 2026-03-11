@@ -31,24 +31,35 @@ const ORDER_LABELS: Record<string, string> = {
   FAILED: 'Fallidas',
 };
 
-export default function InventorySummaryCard() {
+export interface InventorySummaryCardProps {
+  /** Si se pasa, usa estos datos (en vivo desde Dashboard). Si no, hace fetch propio. */
+  summary?: InventorySummary | null;
+}
+
+export default function InventorySummaryCard({ summary: summaryProp }: InventorySummaryCardProps = {}) {
   const navigate = useNavigate();
-  const [summary, setSummary] = useState<InventorySummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [internalSummary, setInternalSummary] = useState<InventorySummary | null>(null);
+  const [loading, setLoading] = useState(!summaryProp);
 
   useEffect(() => {
+    if (summaryProp != null) {
+      setLoading(false);
+      return;
+    }
     let mounted = true;
     api
       .get<InventorySummary>('/api/dashboard/inventory-summary')
       .then((res) => {
-        if (mounted && res.data) setSummary(res.data);
+        if (mounted && res.data) setInternalSummary(res.data);
       })
       .catch(() => {})
       .finally(() => {
         if (mounted) setLoading(false);
       });
     return () => { mounted = false; };
-  }, []);
+  }, [summaryProp]);
+
+  const summary = summaryProp ?? internalSummary;
 
   if (loading || !summary) return null;
 

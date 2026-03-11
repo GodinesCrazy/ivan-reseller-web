@@ -40,6 +40,8 @@ import WorkflowStatusIndicator from '@/components/WorkflowStatusIndicator';
 import WorkflowProgressBar from '@/components/WorkflowProgressBar';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import InventorySummaryCard from '@/components/InventorySummaryCard';
+import { useLiveData } from '@/hooks/useLiveData';
+import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 
 interface MarketplaceListing {
   id: number;
@@ -221,10 +223,18 @@ export default function Products() {
     return () => clearTimeout(timer);
   }, [fetchProducts]);
 
-  useEffect(() => {
-    const interval = setInterval(() => { fetchProducts(true).catch(() => {}); }, 15000);
-    return () => clearInterval(interval);
-  }, [fetchProducts]);
+  useLiveData({
+    fetchFn: () => fetchProducts(true).catch(() => {}),
+    intervalMs: 15000,
+    enabled: true,
+  });
+  useNotificationRefetch({
+    handlers: {
+      PRODUCT_PUBLISHED: () => fetchProducts(true),
+      PRODUCT_SCRAPED: () => fetchProducts(true),
+    },
+    enabled: true,
+  });
 
   const resetFilters = () => {
     setFilters(DEFAULT_FILTERS);

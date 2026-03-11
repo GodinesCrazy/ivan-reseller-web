@@ -156,6 +156,20 @@ export class AutopilotSystem extends EventEmitter {
   private lastCycleStartTime: number = 0; // ✅ Rate limiting
   private cycleScheduled: boolean = false; // ✅ FIX: Prevent duplicate scheduleNextCycle
 
+  /** Live cycle state for UI feedback */
+  private currentPhase: 'idle' | 'searching' | 'filtering' | 'analyzing' | 'publishing' = 'idle';
+  private currentCycleProgress: {
+    query?: string;
+    opportunitiesFound?: number;
+    analyzed?: number;
+    published?: number;
+  } = {};
+
+  private resetCycleProgress(): void {
+    this.currentPhase = 'idle';
+    this.currentCycleProgress = {};
+  }
+
   constructor() {
     super();
     
@@ -469,6 +483,7 @@ export class AutopilotSystem extends EventEmitter {
     this.stats.currentStatus = 'idle';
     this.currentUserId = null;
     this.cycleScheduled = false; // ✅ FIX: Reset cycle scheduled flag
+    this.resetCycleProgress();
 
     if (this.cycleTimer) {
       clearTimeout(this.cycleTimer);
@@ -660,6 +675,8 @@ export class AutopilotSystem extends EventEmitter {
       this.stats.currentStatus = 'running';
       this.stats.lastRunTimestamp = new Date();
       this.emit('cycle:started', { timestamp: new Date(), query });
+      this.currentPhase = 'searching';
+      this.currentCycleProgress = {};
       console.log('[AUTOPILOT] CYCLE START');
       console.log('[AUTOPILOT] CYCLE STARTED');
 
@@ -697,6 +714,7 @@ export class AutopilotSystem extends EventEmitter {
         };
 
         logger.warn('Autopilot: Cycle cancelled - no capital', { availableCapital });
+        this.resetCycleProgress();
         this.emit('cycle:completed', result);
         return result;
       }
@@ -714,9 +732,12 @@ export class AutopilotSystem extends EventEmitter {
       }
 
       // 3. Search opportunities (con userId y environment)
+      this.currentPhase = 'searching';
+      this.currentCycleProgress = { query: selectedQuery };
       console.log('[AUTOPILOT] PRODUCTS FOUND: searching...');
       logger.info('[AUTOPILOT] Searching opportunities');
       const opportunities = await this.searchOpportunities(selectedQuery, currentUserId, userEnvironment);
+      this.currentCycleProgress = { ...this.currentCycleProgress, opportunitiesFound: opportunities.length };
       console.log('[AUTOPILOT] PRODUCTS FOUND:', opportunities.length);
       console.log('[AUTOPILOT] opportunities found:', opportunities.length);
       if (opportunities.length === 0) {
@@ -735,6 +756,7 @@ export class AutopilotSystem extends EventEmitter {
 
         logger.info('Autopilot: Cycle completed - no opportunities');
         console.log('[AUTOPILOT] CYCLE COMPLETE (0 opportunities)');
+        this.resetCycleProgress();
         this.emit('cycle:completed', result);
         return result;
       }
@@ -742,6 +764,7 @@ export class AutopilotSystem extends EventEmitter {
       logger.info('Autopilot: Found opportunities', { count: opportunities.length });
 
       // 4. Filter affordable opportunities
+      this.currentPhase = 'filtering';
       const { affordable, capitalReserved } = await this.filterAffordableOpportunities(
         opportunities,
         availableCapital,
@@ -764,9 +787,17 @@ export class AutopilotSystem extends EventEmitter {
 
         logger.info('Autopilot: Cycle completed - no affordable opportunities');
         console.log('[AUTOPILOT] CYCLE COMPLETE (0 affordable)');
+        this.resetCycleProgress();
         this.emit('cycle:completed', result);
         return result;
       }
+
+      this.currentCycleProgress = {
+        ...this.currentCycleProgress,
+        analyzed: affordable.length,
+        published: 0,
+      };
+      this.currentPhase = 'publishing';
 
       logger.info('Autopilot: Affordable opportunities', { 
         count: affordable.length, 
@@ -876,6 +907,7 @@ export class AutopilotSystem extends EventEmitter {
       };
 
       logger.error('Autopilot: Cycle failed', { error });
+      this.resetCycleProgress();
       this.emit('cycle:failed', result);
 
       // ✅ PERSISTENCE: Log every failure
@@ -1234,6 +1266,10 @@ export class AutopilotSystem extends EventEmitter {
           const result = await this.publishToMarketplace(opp, currentUserId, currentEnvironment);
           if (result.success) {
             published++;
+            this.currentCycleProgress = {
+              ...this.currentCycleProgress,
+              published: (this.currentCycleProgress.published ?? 0) + 1,
+            };
             capitalActuallyUsed += opp.estimatedCost || 0;
             console.log('[AUTOPILOT] Product published automatically:', opp.title);
             logger.info('Autopilot: Product published automatically', {
@@ -2403,12 +2439,16 @@ export class AutopilotSystem extends EventEmitter {
     stats: AutopilotStats;
     lastCycle: CycleResult | null;
     config: AutopilotConfig;
+    currentPhase: 'idle' | 'searching' | 'filtering' | 'analyzing' | 'publishing';
+    currentCycleProgress: { query?: string; opportunitiesFound?: number; analyzed?: number; published?: number };
   } {
     return {
       isRunning: this.isRunning,
       stats: { ...this.stats },
       lastCycle: this.lastCycleResult,
-      config: { ...this.config }
+      config: { ...this.config },
+      currentPhase: this.currentPhase,
+      currentCycleProgress: { ...this.currentCycleProgress },
     };
   }
 }

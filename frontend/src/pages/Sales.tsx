@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   DollarSign, 
@@ -34,6 +34,8 @@ import {
 } from 'recharts';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
+import { useLiveData } from '@/hooks/useLiveData';
+import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 
 interface Sale {
@@ -95,11 +97,7 @@ export default function Sales() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  useEffect(() => {
-    fetchSalesData();
-  }, [dateRange]);
-
-  const fetchSalesData = async () => {
+  const fetchSalesData = useCallback(async () => {
     try {
       setLoading(true);
       const [salesResponse, statsResponse] = await Promise.all([
@@ -117,7 +115,17 @@ export default function Sales() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateRange]);
+
+  useEffect(() => {
+    fetchSalesData();
+  }, [fetchSalesData]);
+
+  useLiveData({ fetchFn: fetchSalesData, intervalMs: 15000, enabled: true });
+  useNotificationRefetch({
+    handlers: { SALE_CREATED: fetchSalesData },
+    enabled: true,
+  });
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, any> = {

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useLiveData } from '@/hooks/useLiveData';
+import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -280,6 +282,16 @@ export default function FinanceDashboard() {
       setLoading(false);
     }
   };
+
+  useLiveData({
+    fetchFn: loadFinancialData,
+    intervalMs: 60000,
+    enabled: true,
+  });
+  useNotificationRefetch({
+    handlers: { SALE_CREATED: loadFinancialData, COMMISSION_CALCULATED: loadFinancialData },
+    enabled: true,
+  });
 
   const exportReport = async (format: 'pdf' | 'excel' | 'csv') => {
     try {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Play, 
   Pause, 
@@ -75,6 +75,8 @@ interface AutopilotStatusResponse {
   successRate?: number;
   lastRun?: string | null;
   config?: { targetMarketplaces?: string[]; targetMarketplace?: string };
+  currentPhase?: 'idle' | 'searching' | 'filtering' | 'analyzing' | 'publishing';
+  currentCycleProgress?: { query?: string; opportunitiesFound?: number; analyzed?: number; published?: number };
 }
 
 /** Autopilot business metrics from GET /api/dashboard/autopilot-metrics */
@@ -296,11 +298,10 @@ export default function Autopilot() {
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      checkAutopilotStatus();
-    }, 10000);
+    const ms = autopilotRunning ? 2000 : 10000;
+    const interval = setInterval(checkAutopilotStatus, ms);
     return () => clearInterval(interval);
-  }, []);
+  }, [autopilotRunning]);
 
   // Detectar si eBay tiene credenciales base pero falta OAuth (para mostrar "Conectar eBay" automáticamente)
   useEffect(() => {
@@ -434,6 +435,8 @@ export default function Autopilot() {
         productsPublished: data.productsPublished,
         lastRun: data.lastRun ?? undefined,
         config: data.config,
+        currentPhase: data.currentPhase,
+        currentCycleProgress: data.currentCycleProgress,
       } : null);
       // Sincronizar marketplaces destino desde config
       const cfg = data?.config;
@@ -724,8 +727,8 @@ export default function Autopilot() {
     return (
       <div className="p-6 space-y-4">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-48 mb-4"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-48 mb-4"></div>
+          <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded"></div>
         </div>
       </div>
     );
@@ -757,13 +760,13 @@ export default function Autopilot() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Autopilot</h1>
-          <p className="text-gray-600">Configure and run automated workflows</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Autopilot</h1>
+          <p className="text-gray-600 dark:text-gray-400">Configure and run automated workflows</p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => loadLogs()}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-gray-100"
           >
             <Activity className="w-4 h-4" />
             View All Logs
@@ -805,11 +808,45 @@ export default function Autopilot() {
             Autopilot Status: {autopilotRunning ? 'Running' : 'Stopped'}
           </div>
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            {autopilotRunning 
-              ? 'Ciclo automático activo: buscar oportunidades → publicar. Se ejecuta según el intervalo configurado.'
-              : 'Inicia el autopilot para ejecutar ciclos automáticos (buscar oportunidades y publicar).'}
+            {autopilotRunning ? (
+              (() => {
+                const phase = autopilotStatus?.currentPhase;
+                if (phase === 'searching') return 'Buscando oportunidades en AliExpress con la query configurada…';
+                if (phase === 'filtering') return 'Filtrando productos que cumplen precio mínimo/máximo y criterios…';
+                if (phase === 'analyzing') return 'Analizando rentabilidad y ROI de cada oportunidad…';
+                if (phase === 'publishing') return 'Publicando productos rentables en el marketplace destino…';
+                if (phase === 'idle') return 'Esperando próximo ciclo. Ejecuta según intervalo configurado.';
+                return 'Ciclo automático activo: buscar → filtrar → analizar → publicar.';
+              })()
+            ) : (
+              'Inicia el autopilot para ejecutar ciclos automáticos (buscar oportunidades y publicar).'
+            )}
           </div>
-          {(autopilotStatus?.lastRun != null || autopilotStatus?.opportunitiesGenerated != null || autopilotStatus?.productsPublished != null) && (
+          {autopilotRunning && autopilotStatus?.currentCycleProgress && (autopilotStatus.currentCycleProgress.query || autopilotStatus.currentCycleProgress.opportunitiesFound != null || autopilotStatus.currentCycleProgress.analyzed != null || autopilotStatus.currentCycleProgress.published != null) && (
+            <div className="mt-3 flex flex-wrap gap-2 items-center">
+              {autopilotStatus.currentCycleProgress.query && (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-200 dark:bg-gray-700 text-xs font-medium text-gray-800 dark:text-gray-200" title="Query de búsqueda">
+                  Query: <span className="ml-1 truncate max-w-[200px]">{autopilotStatus.currentCycleProgress.query}</span>
+                </span>
+              )}
+              {autopilotStatus.currentCycleProgress.opportunitiesFound != null && (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 text-xs font-medium">
+                  Oportunidades: {autopilotStatus.currentCycleProgress.opportunitiesFound}
+                </span>
+              )}
+              {autopilotStatus.currentCycleProgress.analyzed != null && (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 text-xs font-medium">
+                  Analizadas: {autopilotStatus.currentCycleProgress.analyzed}
+                </span>
+              )}
+              {autopilotStatus.currentCycleProgress.published != null && (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 text-xs font-medium">
+                  Publicadas: {autopilotStatus.currentCycleProgress.published}
+                </span>
+              )}
+            </div>
+          )}
+          {!autopilotRunning && (autopilotStatus?.lastRun != null || autopilotStatus?.opportunitiesGenerated != null || autopilotStatus?.productsPublished != null) && (
             <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-500 dark:text-gray-400">
               {autopilotStatus.lastRun != null && autopilotStatus.lastRun && (
                 <span>Última ejecución: {new Date(autopilotStatus.lastRun).toLocaleString()}</span>
@@ -1111,7 +1148,7 @@ export default function Autopilot() {
             </div>
             <div>
               <div className="text-sm text-gray-600 dark:text-gray-400">Total Runs</div>
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {stats?.totalRuns || 0}
               </div>
             </div>
@@ -1125,7 +1162,7 @@ export default function Autopilot() {
             </div>
             <div>
               <div className="text-sm text-gray-600 dark:text-gray-400">Success Rate</div>
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {stats?.successRate?.toFixed(1) || 0}%
               </div>
             </div>
@@ -1139,7 +1176,7 @@ export default function Autopilot() {
             </div>
             <div>
               <div className="text-sm text-gray-600 dark:text-gray-400">Items Processed</div>
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {stats?.itemsProcessed || 0}
               </div>
             </div>
@@ -1148,17 +1185,17 @@ export default function Autopilot() {
       </div>
 
       {/* Workflows Table */}
-      <div className="bg-white border rounded-lg overflow-hidden">
-        <div className="bg-gray-50 px-6 py-4 border-b">
-          <h3 className="text-lg font-semibold text-gray-900">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div className="bg-gray-50 dark:bg-gray-900 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Workflows ({workflows.length})
           </h3>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Schedule</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Run</th>
@@ -1178,9 +1215,9 @@ export default function Autopilot() {
                 </tr>
               )}
               {workflows.map((workflow) => (
-                <tr key={workflow.id} className="hover:bg-gray-50">
+                <tr key={workflow.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                   <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">{workflow.name}</div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{workflow.name}</div>
                     {workflow.description && (
                       <div className="text-sm text-gray-500">{workflow.description}</div>
                     )}
@@ -1191,15 +1228,15 @@ export default function Autopilot() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-1 text-sm text-gray-900">
+                    <div className="flex items-center gap-1 text-sm text-gray-900 dark:text-gray-100">
                       <Clock className="w-3 h-3" />
                       {schedules.find(s => s.value === workflow.schedule)?.label || workflow.schedule}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {workflow.lastRun ? new Date(workflow.lastRun).toLocaleString() : 'Never'}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {workflow.nextRun ? new Date(workflow.nextRun).toLocaleString() : '—'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -1207,7 +1244,7 @@ export default function Autopilot() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-1">
-                      <div className="text-sm font-medium text-gray-900">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                         {workflow.successRate?.toFixed(1) || 0}%
                       </div>
                       {workflow.successRate >= 80 ? (
@@ -1493,7 +1530,7 @@ export default function Autopilot() {
             <div className="p-6">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-gray-50 dark:bg-gray-900">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Workflow</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -1512,7 +1549,7 @@ export default function Autopilot() {
                       </tr>
                     )}
                     {logs.map((log) => (
-                      <tr key={log.id} className="hover:bg-gray-50">
+                      <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <td className="px-4 py-3 text-sm text-gray-900">{log.workflowName}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getLogStatusColor(log.status)}`}>

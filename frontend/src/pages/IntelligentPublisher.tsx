@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { useLiveData } from '@/hooks/useLiveData';
+import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { API_BASE_URL } from '@/config/runtime';
 import { Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -63,6 +65,16 @@ export default function IntelligentPublisher() {
   useEffect(() => {
     loadPublisherData();
   }, [loadPublisherData, location.pathname]); // ✅ Agregar location.pathname para recargar al navegar
+
+  useLiveData({
+    fetchFn: loadPublisherData,
+    intervalMs: 30000,
+    enabled: true,
+  });
+  useNotificationRefetch({
+    handlers: { PRODUCT_PUBLISHED: loadPublisherData },
+    enabled: true,
+  });
 
   const approve = useCallback(async (productId: string, marketplaces: string[]) => {
     try {

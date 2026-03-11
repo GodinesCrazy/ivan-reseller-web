@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   ShoppingCart, 
   ExternalLink, 
@@ -20,6 +20,8 @@ import { formatCurrencySimple } from '../utils/currency';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { useLiveData } from '@/hooks/useLiveData';
+import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 
 interface PendingSale {
@@ -47,11 +49,7 @@ export default function PendingPurchases() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<Record<number, boolean>>({});
 
-  useEffect(() => {
-    fetchPendingPurchases();
-  }, []);
-
-  const fetchPendingPurchases = async () => {
+  const fetchPendingPurchases = useCallback(async () => {
     try {
       setLoading(true);
       const response = await api.get('/api/sales/pending-purchases');
@@ -65,7 +63,13 @@ export default function PendingPurchases() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useLiveData({ fetchFn: fetchPendingPurchases, intervalMs: 10000, enabled: true });
+  useNotificationRefetch({
+    handlers: { SALE_CREATED: fetchPendingPurchases },
+    enabled: true,
+  });
 
   const handlePurchaseNow = async (sale: PendingSale) => {
     try {

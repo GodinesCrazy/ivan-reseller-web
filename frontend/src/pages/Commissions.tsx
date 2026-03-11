@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -31,6 +31,8 @@ import {
 } from 'recharts';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
+import { useLiveData } from '@/hooks/useLiveData';
+import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 
 interface Commission {
   id: string;
@@ -87,11 +89,7 @@ export default function Commissions() {
   const [requestingPayout, setRequestingPayout] = useState(false);
   const itemsPerPage = 10;
 
-  useEffect(() => {
-    fetchCommissionsData();
-  }, []);
-
-  const fetchCommissionsData = async () => {
+  const fetchCommissionsData = useCallback(async () => {
     try {
       setLoading(true);
       const [commissionsResponse, statsResponse, scheduleResponse] = await Promise.all([
@@ -111,7 +109,13 @@ export default function Commissions() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useLiveData({ fetchFn: fetchCommissionsData, intervalMs: 30000, enabled: true });
+  useNotificationRefetch({
+    handlers: { SALE_CREATED: fetchCommissionsData, COMMISSION_CALCULATED: fetchCommissionsData },
+    enabled: true,
+  });
 
   const handleRequestPayout = async () => {
     if (safeStats.totalPending < 50) {
