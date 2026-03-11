@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Package,
   CheckCircle,
@@ -131,8 +131,11 @@ function displayMarketplace(m: string | undefined | null): string {
 
 const ITEMS_PER_PAGE = 25;
 
+const VALID_MARKETPLACES = ['ebay', 'mercadolibre', 'amazon', 'ml'];
+
 export default function Products() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ProductFilters>(DEFAULT_FILTERS);
@@ -154,6 +157,17 @@ export default function Products() {
     setFilters(prev => ({ ...prev, [key]: value }));
     if (key !== 'search') setCurrentPage(1);
   }, []);
+
+  // Aplicar marketplace desde URL (?marketplace=ebay|mercadolibre|amazon)
+  useEffect(() => {
+    const mp = searchParams.get('marketplace')?.toLowerCase() || '';
+    const normalized = mp === 'ml' ? 'mercadolibre' : mp;
+    if (normalized && (VALID_MARKETPLACES.includes(normalized) || mp === 'ml')) {
+      const value = normalized || 'mercadolibre';
+      setFilters((prev) => (prev.marketplace === value ? prev : { ...prev, marketplace: value }));
+      setCurrentPage(1);
+    }
+  }, [searchParams]);
 
   // Debounce search input
   useEffect(() => {

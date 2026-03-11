@@ -369,9 +369,19 @@ router.get('/listings', async (req: Request, res: Response) => {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
     const skip = (page - 1) * limit;
 
+    const mpRaw = String(req.query.marketplace || '').trim().toLowerCase();
+    const marketplace = mpRaw === 'ml' ? 'mercadolibre' : mpRaw || undefined;
+    const validMarketplaces = ['ebay', 'mercadolibre', 'amazon'];
+    const marketplaceFilter =
+      marketplace && validMarketplaces.includes(marketplace) ? { marketplace } : undefined;
+
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
-    const where = isAdmin ? {} : { userId: req.user!.userId };
+    const where: Record<string, unknown> = isAdmin ? {} : { userId: req.user!.userId };
+    if (marketplaceFilter) {
+      where.marketplace = marketplaceFilter.marketplace;
+    }
+
     const [listings, total] = await Promise.all([
       prisma.marketplaceListing.findMany({
         where,

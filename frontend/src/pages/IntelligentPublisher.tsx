@@ -41,6 +41,7 @@ export default function IntelligentPublisher() {
   const [loading, setLoading] = useState(true);
   const [listingsPage, setListingsPage] = useState(1);
   const [listingsTotal, setListingsTotal] = useState(0);
+  const [listingsMarketplaceFilter, setListingsMarketplaceFilter] = useState<'all' | 'ebay' | 'mercadolibre' | 'amazon'>('all');
   const [pendingPage, setPendingPage] = useState(1);
   const [capitalData, setCapitalData] = useState<{
     availableCash: number;
@@ -52,15 +53,20 @@ export default function IntelligentPublisher() {
   const listingsTotalPages = Math.max(1, Math.ceil(listingsTotal / LISTINGS_PER_PAGE));
   const pendingTotalPages = Math.max(1, Math.ceil(pending.length / PENDING_PER_PAGE));
 
-  const loadListings = useCallback(async (page: number) => {
+  const loadListings = useCallback(async (page: number, marketplace?: 'all' | 'ebay' | 'mercadolibre' | 'amazon') => {
     try {
-      const res = await api.get(`/api/publisher/listings?page=${page}&limit=${LISTINGS_PER_PAGE}`);
+      const mp = marketplace ?? listingsMarketplaceFilter;
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('limit', String(LISTINGS_PER_PAGE));
+      if (mp && mp !== 'all') params.set('marketplace', mp);
+      const res = await api.get(`/api/publisher/listings?${params.toString()}`);
       setListings(res.data?.items || []);
       setListingsTotal(res.data?.pagination?.total ?? res.data?.total ?? 0);
     } catch (error: any) {
       console.error('Error loading listings:', error);
     }
-  }, []);
+  }, [listingsMarketplaceFilter]);
 
   const loadCapitalData = useCallback(async () => {
     try {
@@ -207,7 +213,13 @@ export default function IntelligentPublisher() {
 
   const goToListingsPage = useCallback((page: number) => {
     setListingsPage(page);
-    loadListings(page);
+    loadListings(page, listingsMarketplaceFilter);
+  }, [loadListings, listingsMarketplaceFilter]);
+
+  const handleListingsMarketplaceFilter = useCallback((mp: 'all' | 'ebay' | 'mercadolibre' | 'amazon') => {
+    setListingsMarketplaceFilter(mp);
+    setListingsPage(1);
+    loadListings(1, mp);
   }, [loadListings]);
 
   // Memoizar progreso de bulk status
@@ -386,6 +398,21 @@ export default function IntelligentPublisher() {
               Mostrando {((listingsPage - 1) * LISTINGS_PER_PAGE) + 1}–{Math.min(listingsPage * LISTINGS_PER_PAGE, listingsTotal)} de {listingsTotal} listados
             </span>
           )}
+        </div>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {(['all', 'ebay', 'mercadolibre', 'amazon'] as const).map((mp) => (
+            <button
+              key={mp}
+              onClick={() => handleListingsMarketplaceFilter(mp)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                listingsMarketplaceFilter === mp
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+              }`}
+            >
+              {mp === 'all' ? 'Todos' : mp === 'mercadolibre' ? 'Mercado Libre' : mp === 'ebay' ? 'eBay' : 'Amazon'}
+            </button>
+          ))}
         </div>
         <div className="bg-white border rounded">
           {listings.map((l:any)=>(

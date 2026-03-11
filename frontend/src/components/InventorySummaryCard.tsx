@@ -120,8 +120,30 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
               <MetricLabelWithTooltip label="Publicados" tooltipBody={metricTooltips.publicados.body} />
             </div>
             <div className="mt-1 font-semibold text-lg">{totalListings}</div>
-            <div className="text-xs text-gray-500 mt-0.5">
-              eBay: {summary.listingsByMarketplace.ebay} · ML: {summary.listingsByMarketplace.mercadolibre} · Amazon: {summary.listingsByMarketplace.amazon}
+            <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); navigate('/products?marketplace=ebay'); }}
+                className="hover:text-primary-600 hover:underline focus:outline-none"
+              >
+                eBay: {summary.listingsByMarketplace.ebay}
+              </button>
+              <span>·</span>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); navigate('/products?marketplace=mercadolibre'); }}
+                className="hover:text-primary-600 hover:underline focus:outline-none"
+              >
+                ML: {summary.listingsByMarketplace.mercadolibre}
+              </button>
+              <span>·</span>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); navigate('/products?marketplace=amazon'); }}
+                className="hover:text-primary-600 hover:underline focus:outline-none"
+              >
+                Amazon: {summary.listingsByMarketplace.amazon}
+              </button>
             </div>
           </div>
 
