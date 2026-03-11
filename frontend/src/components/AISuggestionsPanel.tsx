@@ -107,7 +107,7 @@ export default function AISuggestionsPanel() {
         : [];
       
       setSuggestions(suggestionsData);
-      // Cargar reglas de automatización desde API
+      // Reglas de automatización desde /api/automation/rules
       try {
         const rulesRes = await api.get<{ success?: boolean; data?: { rules?: Array<{ id: string; name: string; type: string; condition: string; action: string; active: boolean; lastExecuted?: string | Date; successRate: number }> } }>('/api/automation/rules');
         const rawRules = rulesRes.data?.data?.rules ?? [];

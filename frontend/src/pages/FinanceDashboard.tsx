@@ -325,6 +325,7 @@ export default function FinanceDashboard() {
     }
   };
 
+  // Moneda del usuario desde settings (useCurrency: API /api/settings + localStorage)
   const formatCurrency = (amount: number) => formatMoney(amount);
 
   const formatPercentage = (value: number) => {
