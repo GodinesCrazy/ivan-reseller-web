@@ -1,20 +1,30 @@
 /**
  * System Status Panel - RC1
- * Shows: PayPal Connected, eBay Connected, AliExpress OAuth, Autopilot Enabled, Profit Guard Enabled
+ * Shows: PayPal, eBay, Mercado Libre, Amazon, AliExpress OAuth, Autopilot, Profit Guard
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import api from '@/services/api';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
-import { CheckCircle, XCircle, Loader2, Activity } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, ExternalLink } from 'lucide-react';
+
+interface StatusDetails {
+  ebay?: { message?: string; error?: string };
+  mercadolibre?: { message?: string; error?: string };
+  amazon?: { message?: string; error?: string };
+}
 
 interface StatusData {
   paypalConnected: boolean;
   ebayConnected: boolean;
+  mercadolibreConnected?: boolean;
+  amazonConnected?: boolean;
   aliexpressOAuth: boolean;
   autopilotEnabled: boolean;
   profitGuardEnabled: boolean;
+  details?: StatusDetails;
 }
 
 export default function SystemStatus() {
@@ -44,16 +54,51 @@ export default function SystemStatus() {
     enabled: true,
   });
 
-  const Item = ({ label, connected }: { label: string; connected: boolean }) => (
-    <div className="flex items-center justify-between py-3 px-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
-      {connected ? (
-        <CheckCircle className="w-5 h-5 text-green-600" />
-      ) : (
-        <XCircle className="w-5 h-5 text-red-500" />
-      )}
-    </div>
-  );
+  const Item = ({
+    label,
+    connected,
+    message,
+    showConnectLink = false,
+  }: {
+    label: string;
+    connected: boolean;
+    message?: string;
+    showConnectLink?: boolean;
+  }) => {
+    const tooltip = message || (connected ? undefined : 'Completa la configuración en API Settings');
+    return (
+      <div
+        className="flex items-center justify-between py-3 px-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+        title={tooltip}
+      >
+        <div className="flex-1 min-w-0">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+          {!connected && message && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate" title={message}>
+              {message}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {connected ? (
+            <CheckCircle className="w-5 h-5 text-green-600" />
+          ) : (
+            <>
+              <XCircle className="w-5 h-5 text-red-500" />
+              {showConnectLink && (
+                <Link
+                  to="/api-settings"
+                  className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:underline inline-flex items-center gap-1"
+                >
+                  Conectar <ExternalLink className="w-3 h-3" />
+                </Link>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -81,7 +126,24 @@ export default function SystemStatus() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
         <Item label="PayPal conectado" connected={status.paypalConnected} />
-        <Item label="eBay conectado" connected={status.ebayConnected} />
+        <Item
+          label="eBay conectado"
+          connected={status.ebayConnected}
+          message={status.details?.ebay?.message || status.details?.ebay?.error}
+          showConnectLink={!status.ebayConnected}
+        />
+        <Item
+          label="Mercado Libre conectado"
+          connected={status.mercadolibreConnected ?? false}
+          message={status.details?.mercadolibre?.message || status.details?.mercadolibre?.error}
+          showConnectLink={!(status.mercadolibreConnected ?? false)}
+        />
+        <Item
+          label="Amazon conectado"
+          connected={status.amazonConnected ?? false}
+          message={status.details?.amazon?.message || status.details?.amazon?.error}
+          showConnectLink={!(status.amazonConnected ?? false)}
+        />
         <Item label="AliExpress OAuth" connected={status.aliexpressOAuth} />
         <Item label="Autopilot habilitado" connected={status.autopilotEnabled} />
         <Item label="Profit Guard habilitado" connected={status.profitGuardEnabled} />

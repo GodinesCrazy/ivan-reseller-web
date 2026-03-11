@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
+import { toast } from 'sonner';
 import { useAuthStore } from '../stores/authStore';
 import { log } from '@/utils/logger';
 import { getSocketOptions } from '../config/runtime';
@@ -37,6 +39,7 @@ interface UseNotificationsReturn {
 }
 
 export const useNotifications = (): UseNotificationsReturn => {
+  const navigate = useNavigate();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [notifications, setNotifications] = useState<NotificationPayload[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -105,6 +108,18 @@ export const useNotifications = (): UseNotificationsReturn => {
         } else {
           playNotificationSound();
         }
+      }
+
+      // Toast visible para ventas
+      if (notification.type === 'SALE_CREATED') {
+        const saleUrl = notification.actions?.find((a) => a.variant === 'success' || a.variant === 'primary')?.url || '/sales';
+        toast.success(notification.message || 'Nueva venta recibida', {
+          duration: 5000,
+          action: {
+            label: 'Ver venta',
+            onClick: () => navigate(saleUrl.startsWith('/') ? saleUrl : `/${saleUrl}`),
+          },
+        });
       }
     });
 

@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Workflow, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import LoadingSpinner from './ui/LoadingSpinner';
 import api from '@/services/api';
+import { useLiveData } from '@/hooks/useLiveData';
 
 interface WorkflowSummary {
   totalProducts: number;
@@ -27,12 +28,6 @@ export default function WorkflowSummaryWidget() {
   const [summary, setSummary] = useState<WorkflowSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
-
-  useEffect(() => {
-    // Por ahora, cargar desde productos y calcular resumen básico
-    // En el futuro se puede crear un endpoint específico /api/dashboard/workflow-summary
-    loadSummary();
-  }, []);
 
   const loadSummary = async () => {
     try {
@@ -86,6 +81,8 @@ export default function WorkflowSummaryWidget() {
       setLoading(false);
     }
   };
+
+  useLiveData({ fetchFn: loadSummary, intervalMs: 15000, enabled: true });
 
   // ✅ FIX-004: Ocultar widget si hay error o no hay datos
   if (hasError || (!loading && (!summary || summary.totalProducts === 0))) {

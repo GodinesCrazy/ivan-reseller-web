@@ -107,45 +107,6 @@ export default function Dashboard() {
     return () => clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    if (user?.role?.toUpperCase() !== 'ADMIN') return;
-    api.get('/api/admin/platform-revenue')
-      .then((res) => {
-        if (res.data?.success && res.data.totalPlatformRevenue !== undefined) {
-          setPlatformRevenue({
-            totalPlatformRevenue: res.data.totalPlatformRevenue ?? 0,
-            totalCommissionsCollected: res.data.totalCommissionsCollected ?? 0,
-            salesCount: res.data.salesCount ?? 0,
-            perUser: res.data.perUser ?? [],
-          });
-        }
-      })
-      .catch(() => {});
-  }, [user?.role]);
-
-  useEffect(() => {
-    api.get('/api/system/business-diagnostics')
-      .then((res) => {
-        if (res.data && typeof res.data === 'object' && !res.data.error) {
-          setBusinessDiagnostics(res.data);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  // Real backend health check
-  useEffect(() => {
-    let cancelled = false;
-    api.get('/api/health')
-      .then((res) => {
-        if (!cancelled) setBackendHealthy(res.status === 200);
-      })
-      .catch(() => {
-        if (!cancelled) setBackendHealthy(false);
-      });
-    return () => { cancelled = true; };
-  }, []);
-
   // Sincronizar tab desde URL (p. ej. /dashboard?tab=trends)
   useEffect(() => {
     if (tabParam && ['overview', 'trends', 'search', 'opportunities', 'suggestions', 'automation'].includes(tabParam)) {
@@ -171,7 +132,8 @@ export default function Dashboard() {
       // ✅ B6: CARGAR DATOS REALES DE LA API (completado)
       // ✅ FIX-002: Degradación suave - rastrear errores para mostrar mensaje informativo
       let hasErrors = false;
-      const [statsRes, activityRes, opportunitiesRes, aiSuggestionsRes, automationRes, inventoryRes] = await Promise.all([
+      const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
+      const [statsRes, activityRes, opportunitiesRes, aiSuggestionsRes, automationRes, inventoryRes, businessDiagRes, healthRes, platformRevRes] = await Promise.all([
         api.get('/api/dashboard/stats', { params: { environment: 'production' } }).catch(err => {
           // ✅ FIX: Si es setup_required, no marcar como error (se manejará en App.tsx)
           if (err.response?.data?.setupRequired === true || err.response?.data?.error === 'setup_required') {
@@ -235,6 +197,12 @@ export default function Dashboard() {
           }
           return { data: null };
         }),
+        // Estado del sistema (business diagnostics)
+        api.get('/api/system/business-diagnostics').catch(() => ({ data: null })),
+        // Backend health
+        api.get('/api/health').then((r) => ({ ok: r.status === 200 })).catch(() => ({ ok: false })),
+        // Ingresos plataforma (solo admin)
+        isAdmin ? api.get('/api/admin/platform-revenue').catch(() => ({ data: null })) : Promise.resolve({ data: null }),
       ]);
 
       // ✅ FIX-002: Si hay errores y no hay datos reales, mostrar mensaje informativo
@@ -327,6 +295,24 @@ export default function Dashboard() {
       } else {
         setInventorySummary(null);
       }
+
+      // Estado del sistema (business diagnostics) - en vivo
+      if (businessDiagRes?.data && typeof businessDiagRes.data === 'object' && !(businessDiagRes.data as any).error) {
+        setBusinessDiagnostics(businessDiagRes.data as Record<string, { status: string; message?: string; count?: number }>);
+      }
+
+      // Backend health - en vivo
+      setBackendHealthy(healthRes?.ok === true);
+
+      // Ingresos plataforma (admin) - en vivo
+      if (isAdmin && platformRevRes?.data?.success && platformRevRes.data.totalPlatformRevenue !== undefined) {
+        setPlatformRevenue({
+          totalPlatformRevenue: platformRevRes.data.totalPlatformRevenue ?? 0,
+          totalCommissionsCollected: platformRevRes.data.totalCommissionsCollected ?? 0,
+          salesCount: platformRevRes.data.salesCount ?? 0,
+          perUser: platformRevRes.data.perUser ?? [],
+        });
+      }
     } catch (error: any) {
       log.error('Error loading dashboard data:', error);
       // ✅ FIX-002: No mostrar toast automático, solo marcar error
@@ -338,11 +324,16 @@ export default function Dashboard() {
 
   useLiveData({
     fetchFn: loadDashboardData,
-    intervalMs: 30000,
+    intervalMs: 15000,
     enabled: activeTab === 'overview',
   });
   useNotificationRefetch({
-    handlers: { SALE_CREATED: loadDashboardData, PRODUCT_PUBLISHED: loadDashboardData },
+    handlers: {
+      SALE_CREATED: loadDashboardData,
+      PRODUCT_PUBLISHED: loadDashboardData,
+      INVENTORY_UPDATED: loadDashboardData,
+      SYSTEM_ALERT: loadDashboardData,
+    },
     enabled: activeTab === 'overview',
   });
 

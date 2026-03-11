@@ -4,6 +4,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 import { api } from '@services/api';
+import { useLiveData } from '@/hooks/useLiveData';
+import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 
 const userCreationSchema = z.object({
   username: z.string().min(3, 'Username debe tener al menos 3 caracteres'),
@@ -192,6 +194,21 @@ export default function AdminPanel() {
       toast.error('Error cargando dashboard');
     }
   };
+
+  useLiveData({ fetchFn: loadDashboard, intervalMs: 30000, enabled: true });
+  useNotificationRefetch({
+    handlers: {
+      SALE_CREATED: () => {
+        loadDashboard();
+        loadAdminCommissions();
+      },
+      USER_ACTION: () => {
+        loadDashboard();
+        loadAdminCommissions();
+      },
+    },
+    enabled: true,
+  });
 
   const onCreateUser = async (data: UserCreationForm) => {
     setIsLoading(true);

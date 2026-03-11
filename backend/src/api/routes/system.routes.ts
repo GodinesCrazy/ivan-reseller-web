@@ -13,7 +13,7 @@ const router = Router();
 
 /**
  * GET /api/system/status
- * User status panel: PayPal, eBay, AliExpress, Autopilot, Profit Guard.
+ * User status panel: PayPal, eBay, Mercado Libre, Amazon, AliExpress, Autopilot, Profit Guard.
  * Requires authentication. Returns format expected by SystemStatus.tsx.
  */
 router.get('/status', authenticate, async (req: Request, res: Response) => {
@@ -24,8 +24,13 @@ router.get('/status', authenticate, async (req: Request, res: Response) => {
     const findAvailable = (apiName: string) =>
       statuses.find((s) => s.apiName === apiName && s.isAvailable) ?? null;
 
+    const findStatus = (apiName: string) =>
+      statuses.find((s) => s.apiName === apiName) ?? null;
+
     const paypalConnected = Boolean(findAvailable('paypal'));
     const ebayConnected = Boolean(findAvailable('ebay'));
+    const mercadolibreConnected = Boolean(findAvailable('mercadolibre'));
+    const amazonConnected = Boolean(findAvailable('amazon'));
     const aliexpressOAuth =
       Boolean(findAvailable('aliexpress-dropshipping')) || Boolean(findAvailable('aliexpress'));
 
@@ -43,14 +48,32 @@ router.get('/status', authenticate, async (req: Request, res: Response) => {
 
     const profitGuardEnabled = true; // Built-in service, always active
 
+    const ebayStatus = findStatus('ebay');
+    const mlStatus = findStatus('mercadolibre');
+    const amazonStatus = findStatus('amazon');
+
+    const details: Record<string, { message?: string; error?: string }> = {};
+    if (ebayStatus && !ebayStatus.isAvailable) {
+      details.ebay = { message: ebayStatus.message, error: ebayStatus.error };
+    }
+    if (mlStatus && !mlStatus.isAvailable) {
+      details.mercadolibre = { message: mlStatus.message, error: mlStatus.error };
+    }
+    if (amazonStatus && !amazonStatus.isAvailable) {
+      details.amazon = { message: amazonStatus.message, error: amazonStatus.error };
+    }
+
     return res.status(200).json({
       success: true,
       data: {
         paypalConnected,
         ebayConnected,
+        mercadolibreConnected,
+        amazonConnected,
         aliexpressOAuth,
         autopilotEnabled,
         profitGuardEnabled,
+        details: Object.keys(details).length > 0 ? details : undefined,
       },
     });
   } catch (err: any) {
