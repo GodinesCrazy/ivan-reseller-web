@@ -15,6 +15,7 @@ import { aliexpressAffiliateAPIService } from './aliexpress-affiliate-api.servic
 import fxService from './fx.service';
 import { toNumber } from '../utils/decimal.utils';
 import { retryFailedOrdersDueToFunds } from './retry-failed-orders.service';
+import { processPaidOrders } from './process-paid-orders.service';
 
 /**
  * Scheduled Tasks Service
@@ -30,6 +31,7 @@ export class ScheduledTasksService {
   private dynamicPricingQueue: Queue | null = null;
   private aliExpressTokenRefreshQueue: Queue | null = null;
   private retryFailedOrdersQueue: Queue | null = null;
+  private processPaidOrdersQueue: Queue | null = null;
   private ebayTrafficSyncQueue: Queue | null = null;
   private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
@@ -40,6 +42,7 @@ export class ScheduledTasksService {
   private dynamicPricingWorker: Worker | null = null;
   private aliExpressTokenRefreshWorker: Worker | null = null;
   private retryFailedOrdersWorker: Worker | null = null;
+  private processPaidOrdersWorker: Worker | null = null;
   private ebayTrafficSyncWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
@@ -102,6 +105,11 @@ export class ScheduledTasksService {
 
     // Retry orders that failed due to insufficient funds: cada 30 min
     this.retryFailedOrdersQueue = new Queue('retry-failed-orders', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Process all PAID orders (pending purchases): cada 5 min
+    this.processPaidOrdersQueue = new Queue('process-paid-orders', {
       connection: this.bullMQRedis as any
     });
 
@@ -302,6 +310,21 @@ export class ScheduledTasksService {
       );
     }
 
+    // Process paid orders (pending purchases) worker
+    if (this.processPaidOrdersQueue) {
+      this.processPaidOrdersWorker = new Worker(
+        'process-paid-orders',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running process paid orders', { jobId: job.id });
+          return await processPaidOrders({ batchSize: 30 });
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+    }
+
     // eBay traffic sync worker (view counts for listing lifetime)
     if (this.ebayTrafficSyncQueue) {
       this.ebayTrafficSyncWorker = new Worker(
@@ -478,6 +501,21 @@ export class ScheduledTasksService {
         {
           repeat: {
             pattern: '*/30 * * * *' // Every 30 minutes
+          },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Process paid orders (pending purchases): every 5 minutes
+    if (this.processPaidOrdersQueue) {
+      this.processPaidOrdersQueue.add(
+        'process-paid-orders-job',
+        {},
+        {
+          repeat: {
+            pattern: '*/5 * * * *' // Every 5 minutes
           },
           removeOnComplete: 5,
           removeOnFail: 5,

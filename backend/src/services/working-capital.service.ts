@@ -1,16 +1,19 @@
 /**
  * Working Capital Service
  *
- * Modelo de gestión de capital de trabajo: capital comprometido vs capital disponible real.
+ * Modelo de gestiï¿½n de capital de trabajo: capital comprometido vs capital disponible real.
  * Permite compras mientras exista capital libre suficiente (freeCapital >= orderCost).
  * No requiere saldo igual al total publicado.
+ * Con ALLOW_PURCHASE_WHEN_LOW_BALANCE=true, permite compras aunque el saldo PayPal sea bajo
+ * (PayPal puede usar la tarjeta asociada como respaldo).
  */
 
 import { prisma } from '../config/database';
 import logger from '../config/logger';
+import { env } from '../config/env';
 import { getPayPalBalance } from './balance-verification.service';
 
-/** Estados de Order que representan capital comprometido (aún no ejecutado o en proceso) */
+/** Estados de Order que representan capital comprometido (aï¿½n no ejecutado o en proceso) */
 const COMMITTED_STATUSES = ['CREATED', 'PAID', 'PURCHASING'] as const;
 
 export interface WorkingCapitalSnapshot {
@@ -22,7 +25,7 @@ export interface WorkingCapitalSnapshot {
 }
 
 /**
- * Saldo real disponible (PayPal API vía balance-verification).
+ * Saldo real disponible (PayPal API vï¿½a balance-verification).
  */
 export async function getRealAvailableBalance(): Promise<{ available: number; currency: string; source?: string }> {
   const balance = await getPayPalBalance();
@@ -38,7 +41,7 @@ export async function getRealAvailableBalance(): Promise<{ available: number; cu
 }
 
 /**
- * Capital comprometido: suma de price de órdenes con status CREATED, PAID o PURCHASING.
+ * Capital comprometido: suma de price de ï¿½rdenes con status CREATED, PAID o PURCHASING.
  * Cuando Order pasa a PURCHASED, FAILED (o CANCELLED si existiera), deja de contar.
  */
 export async function getCommittedCapital(): Promise<number> {
@@ -90,6 +93,20 @@ export async function hasSufficientFreeCapital(orderCost: number): Promise<{
   const balanceUnavailable = snapshot.realAvailableBalance === 0 && snapshot.source === undefined;
   if (balanceUnavailable) {
     logger.warn('[WORKING-CAPITAL] Real balance unavailable (PayPal not configured or API error); allowing purchase (degraded mode)');
+    return {
+      sufficient: true,
+      freeWorkingCapital: snapshot.freeWorkingCapital,
+      required: orderCost,
+      snapshot,
+    };
+  }
+  const maxOrderWhenLowBalance = env.PURCHASE_LOW_BALANCE_MAX_ORDER_USD ?? 500;
+  if (env.ALLOW_PURCHASE_WHEN_LOW_BALANCE && orderCost > 0 && orderCost <= maxOrderWhenLowBalance) {
+    logger.info('[WORKING-CAPITAL] ALLOW_PURCHASE_WHEN_LOW_BALANCE enabled; allowing purchase (PayPal may use linked card)', {
+      orderCost,
+      maxOrderWhenLowBalance,
+      freeWorkingCapital: snapshot.freeWorkingCapital,
+    });
     return {
       sufficient: true,
       freeWorkingCapital: snapshot.freeWorkingCapital,
