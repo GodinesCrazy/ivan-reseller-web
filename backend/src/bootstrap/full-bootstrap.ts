@@ -312,6 +312,21 @@ export async function fullBootstrap(startTime: number): Promise<void> {
       if (!isRedisAvailable) {
         console.log('[BOOT] Redis not available - skipping scheduled tasks');
         logMilestone('[BOOT] Scheduled tasks skipped (Redis unavailable)');
+        // Fallback: run process-paid-orders every 5 min so PAID orders are still fulfilled
+        const PROCESS_PAID_INTERVAL_MS = 5 * 60 * 1000;
+        (async () => {
+          const { processPaidOrders } = await import('../services/process-paid-orders.service');
+          const { logger } = await import('../config/logger');
+          setInterval(async () => {
+            try {
+              await processPaidOrders({ batchSize: 30 });
+            } catch (err: any) {
+              logger.warn('[BOOT] process-paid-orders fallback run failed', { error: err?.message });
+            }
+          }, PROCESS_PAID_INTERVAL_MS);
+          console.log('[BOOT] ✅ process-paid-orders fallback interval started (every 5 min)');
+          logMilestone('[BOOT] process-paid-orders fallback active (no Redis)');
+        })();
       } else {
         const scheduledTasksService = getScheduledTasksService();
         console.log('[BOOT] ✅ Scheduled tasks service initialized');

@@ -25,7 +25,8 @@ export interface CreateSaleDto {
 }
 
 export class SaleService {
-  async createSale(userId: number, data: CreateSaleDto) {
+  /** options.fromFulfillment: when true (e.g. from createSaleFromOrder after PURCHASED), allow creating sale even if product is INACTIVE/unpublished */
+  async createSale(userId: number, data: CreateSaleDto, options?: { fromFulfillment?: boolean }) {
     // Verificar que el producto existe
     const product = await prisma.product.findUnique({
       where: { id: data.productId },
@@ -36,14 +37,14 @@ export class SaleService {
       throw new AppError('Producto no encontrado', 404);
     }
 
-    // ✅ Validar estado del producto antes de crear venta
-    if (product.status === 'INACTIVE' || product.status === 'REJECTED') {
-      throw new AppError(`Cannot create sale for product with status: ${product.status}. Product must be approved and active.`, 400);
-    }
-
-    // ✅ Validar que el producto esté publicado (si se requiere)
-    if (!product.isPublished && product.status !== 'APPROVED') {
-      throw new AppError('Product must be published or approved before creating a sale', 400);
+    // ✅ Validar estado del producto antes de crear venta (skip when creating from fulfillment - order already purchased)
+    if (!options?.fromFulfillment) {
+      if (product.status === 'INACTIVE' || product.status === 'REJECTED') {
+        throw new AppError(`Cannot create sale for product with status: ${product.status}. Product must be approved and active.`, 400);
+      }
+      if (!product.isPublished && product.status !== 'APPROVED') {
+        throw new AppError('Product must be published or approved before creating a sale', 400);
+      }
     }
 
     // ✅ Validación matemática estricta (no valores por defecto 0 silenciosos)
@@ -1095,7 +1096,7 @@ export class SaleService {
         currency: order.currency || 'USD',
         buyerEmail: order.customerEmail || undefined,
         shippingAddress: order.shippingAddress || undefined,
-      });
+      }, { fromFulfillment: true });
       logger.info('[SALE] createSaleFromOrder created', {
         orderId,
         saleId: sale.id,

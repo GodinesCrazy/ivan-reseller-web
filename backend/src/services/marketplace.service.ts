@@ -36,7 +36,13 @@ function inferBrandFromTitle(title: string): string | null {
 }
 
 import { EbayService, EbayCredentials, EbayProduct } from './ebay.service';
-import { MercadoLibreService, MercadoLibreCredentials, MLProduct } from './mercadolibre.service';
+import {
+  MercadoLibreService,
+  MercadoLibreCredentials,
+  MLProduct,
+  sanitizeTitleForML,
+  sanitizeDescriptionForML,
+} from './mercadolibre.service';
 import { AmazonService, AmazonCredentials, AmazonProduct } from './amazon.service';
 import { AppError } from '../middleware/error.middleware';
 import { prisma } from '../config/database';
@@ -847,11 +853,9 @@ export class MarketplaceService {
           logger.debug('Failed to generate AI description for MercadoLibre, using original', { error });
         }
       }
+      finalDescription = sanitizeDescriptionForML(finalDescription || '');
 
-      if (finalTitle.length > 60) {
-        finalTitle = finalTitle.substring(0, 57) + '...';
-      }
-      finalTitle = finalTitle.replace(/[^\w\sáéíóúñüÁÉÍÓÚÑÜ.,\-\/()]/gi, '').trim();
+      finalTitle = sanitizeTitleForML(finalTitle);
 
       let attributes = customData?.attributes;
       if (!attributes || attributes.length === 0) {
@@ -969,6 +973,139 @@ export class MarketplaceService {
         error: error.message,
       };
     }
+  }
+
+  /**
+   * Repair Mercado Libre listings (VIP67 fix): update title, description, attributes with sanitized data.
+   * @param userId - User ID
+   * @param listingIds - Optional array of listingIds to repair; if empty, repairs all ML listings for user in batches
+   * @param maxLimit - When repairing all, max total listings to process (default 2000). Batches of 50.
+   * @returns Results per listing
+   */
+  async repairMercadoLibreListings(
+    userId: number,
+    listingIds?: string[],
+    maxLimit: number = 2000
+  ): Promise<Array<{ listingId: string; success: boolean; error?: string }>> {
+    const credentials = await this.getCredentials(userId, 'mercadolibre');
+    if (!credentials || !credentials.isActive) {
+      throw new AppError('Mercado Libre credentials not found or inactive. Connect ML in API Settings.', 400);
+    }
+    let credsWithSiteId: MercadoLibreCredentials = {
+      ...(credentials.credentials as MercadoLibreCredentials),
+      siteId: (credentials.credentials as MercadoLibreCredentials).siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
+    };
+    let mlService = new MercadoLibreService(credsWithSiteId);
+
+    // Refresh token if available so repair can run without "invalid access token"
+    if (credsWithSiteId.refreshToken) {
+      try {
+        const refreshed = await mlService.refreshAccessToken();
+        const updatedCreds = { ...credsWithSiteId, accessToken: refreshed.accessToken };
+        const { CredentialsManager, clearCredentialsCache } = await import('./credentials-manager.service');
+        const env = (credentials.environment || 'production') as 'sandbox' | 'production';
+        await CredentialsManager.saveCredentials(userId, 'mercadolibre', updatedCreds, env);
+        clearCredentialsCache(userId, 'mercadolibre', env);
+        credsWithSiteId = updatedCreds;
+        mlService = new MercadoLibreService(credsWithSiteId);
+        logger.info('[ML Repair] Token refreshed before repair');
+      } catch (e: any) {
+        logger.warn('[ML Repair] Token refresh failed, continuing with existing token', { error: e?.message });
+      }
+    }
+
+    const BATCH_SIZE = 50;
+    const where: any = { userId, marketplace: 'mercadolibre' };
+    if (listingIds && listingIds.length > 0) {
+      where.listingId = { in: listingIds };
+    }
+
+    const results: Array<{ listingId: string; success: boolean; error?: string }> = [];
+    let skip = 0;
+
+    while (true) {
+      const listings = await prisma.marketplaceListing.findMany({
+        where,
+        include: { product: true },
+        orderBy: { id: 'asc' },
+        skip,
+        take: BATCH_SIZE,
+      });
+      if (listings.length === 0) break;
+      for (const listing of listings) {
+      try {
+        const product = listing.product;
+        if (!product) {
+          results.push({ listingId: listing.listingId, success: false, error: 'Product not found' });
+          continue;
+        }
+
+        let categoryId: string | undefined = product.category || undefined;
+        if (!categoryId) {
+          const mlItem = await mlService.getItem(listing.listingId);
+          categoryId = mlItem?.category_id;
+        }
+        if (!categoryId) {
+          categoryId = await mlService.predictCategory(product.title);
+        }
+
+        let attributes: Array<{ id: string; value: string | number }> = [];
+        try {
+          const catAttrs = await mlService.getCategoryAttributes(categoryId);
+          const requiredAttrs = catAttrs.filter((a: any) =>
+            a.tags?.required || a.tags?.catalog_required
+          );
+          const finalTitle = sanitizeTitleForML(product.title);
+          const dimensionDefaults: Record<string, { val: number; unit: string }> = {
+            WIDTH: { val: 20, unit: 'cm' }, HEIGHT: { val: 15, unit: 'cm' },
+            DEPTH: { val: 10, unit: 'cm' }, LENGTH: { val: 25, unit: 'cm' },
+            WEIGHT: { val: 500, unit: 'g' }, MAX_WEIGHT: { val: 1000, unit: 'g' },
+            NET_WEIGHT: { val: 400, unit: 'g' },
+          };
+          for (const attr of requiredAttrs) {
+            if (attr.id === 'BRAND') {
+              attributes.push({ id: 'BRAND', value: inferBrandFromTitle(finalTitle) || 'Genérico' });
+            } else if (attr.id === 'MODEL') {
+              const model = finalTitle.substring(0, 20).replace(/[^a-zA-Z0-9\- ]/g, '').trim();
+              attributes.push({ id: 'MODEL', value: model || 'Standard' });
+            } else if (dimensionDefaults[attr.id]) {
+              const d = dimensionDefaults[attr.id];
+              const unit = attr.default_unit || d.unit;
+              attributes.push({ id: attr.id, value: `${d.val} ${unit}` });
+            } else if (attr.values && attr.values.length > 0) {
+              attributes.push({ id: attr.id, value: attr.values[0].name });
+            }
+          }
+        } catch (e: any) {
+          logger.warn('[ML Repair] Failed to get category attributes', { listingId: listing.listingId, error: e.message });
+          attributes = []; // No attributes when category unknown — only update title/description to avoid body.invalid_field_types
+        }
+
+        const title = sanitizeTitleForML(product.title);
+        const description = sanitizeDescriptionForML(product.description || `Producto: ${product.title}.`);
+
+        // When we couldn't load category attributes, only send title and description (no attributes/categoryId) to avoid invalid_field_types
+        const sendAttributes = attributes.length > 0;
+        const sendCategoryId = categoryId && sendAttributes;
+
+        await mlService.updateListing(listing.listingId, {
+          title,
+          description,
+          attributes: sendAttributes ? attributes : undefined,
+          categoryId: sendCategoryId ? categoryId : undefined,
+        });
+        results.push({ listingId: listing.listingId, success: true });
+        logger.info('[ML Repair] Listing updated', { listingId: listing.listingId });
+      } catch (err: any) {
+        const msg = err.message || String(err);
+        results.push({ listingId: listing.listingId, success: false, error: msg });
+        logger.warn('[ML Repair] Failed', { listingId: listing.listingId, error: msg });
+      }
+      }
+      skip += listings.length;
+      if (listings.length < BATCH_SIZE || results.length >= maxLimit) break;
+    }
+    return results;
   }
 
   /**

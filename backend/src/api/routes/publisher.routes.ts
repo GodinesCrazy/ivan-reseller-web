@@ -418,6 +418,37 @@ router.get('/listings', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/publisher/listings/repair-ml — Repair Mercado Libre listings (VIP67: title, description, attributes)
+router.post('/listings/repair-ml', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const listingIds = Array.isArray(req.body?.listingIds)
+      ? req.body.listingIds.filter((id: unknown) => typeof id === 'string' && id.trim()).map((id: string) => id.trim())
+      : undefined;
+    const maxLimit = typeof req.body?.limit === 'number' && req.body.limit > 0
+      ? Math.min(req.body.limit, 5000)
+      : 2000;
+
+    const marketplaceService = new MarketplaceService();
+    const results = await marketplaceService.repairMercadoLibreListings(userId, listingIds, maxLimit);
+
+    const repaired = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
+
+    return res.json({
+      success: true,
+      repaired,
+      failed,
+      total: results.length,
+      results,
+    });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Repair failed';
+    logger.error('[PUBLISHER] repair-ml failed', { error: errorMessage });
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
 // POST /api/publisher/approve/:id
 // ✅ MEJORADO: Usa ambiente del usuario y mejor logging
 // ✅ Cambiado: Permitir a cualquier usuario autenticado aprobar sus propios productos

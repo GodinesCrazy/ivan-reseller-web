@@ -57,6 +57,7 @@
     "verify-oauth-db": "tsx scripts/verify-oauth-db.ts",
     "diagnose:ebay": "tsx scripts/diagnose-ebay-credentials.ts",
     "repair:affiliate": "tsx scripts/repair-affiliate-credentials.ts",
+    "repair:ml-listings": "tsx scripts/repair-ml-listings.ts",
     "test-real-placeOrder": "tsx scripts/test-real-placeOrder.ts",
     "bootstrap-env": "node scripts/ensure-env-local.js",
     "bootstrap-verifier-env": "node scripts/bootstrap-verifier-env.js",

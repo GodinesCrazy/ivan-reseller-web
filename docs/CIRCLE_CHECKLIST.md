@@ -16,6 +16,15 @@ Las ventas en ML/eBay notifican al backend; se crea la Order (PAID) y se llama a
 | **Variables de entorno (Railway / .env)** | `WEBHOOK_SECRET_MERCADOLIBRE`, `WEBHOOK_SECRET_EBAY` con los valores que proporcionan ML/eBay. `WEBHOOK_VERIFY_SIGNATURE_MERCADOLIBRE` y `WEBHOOK_VERIFY_SIGNATURE_EBAY` en `true` en producción. |
 | **Verificación** | Tras una venta real en ML o eBay, comprobar en logs que llega la petición a `/api/webhooks/mercadolibre` o `/api/webhooks/ebay` y que se crea la Order y se llama a `fulfillOrder`. |
 
+**Comprobar si los secrets están configurados:** `GET /api/webhooks/status` devuelve `{ ebay: { configured: true|false }, mercadolibre: { configured: true|false }, amazon: { configured: true|false } }` sin revelar valores. Útil para el panel de estado o el checklist de primera venta.
+
+**Guía paso a paso (primera venta):**
+
+1. **URL base del backend:** Usa la URL pública del backend (ej. `https://ivan-reseller-backend-production.up.railway.app`). Sin `/` final.
+2. **Mercado Libre:** En [developers.mercadolibre.com](https://developers.mercadolibre.com) → Tu aplicación → Notificaciones → Añadir URL: `https://TU_BACKEND_URL/api/webhooks/mercadolibre`. Copia el **secret** que ML muestra y configúralo en Railway como `WEBHOOK_SECRET_MERCADOLIBRE`. Opcional: `WEBHOOK_VERIFY_SIGNATURE_MERCADOLIBRE=true`.
+3. **eBay:** En [developer.ebay.com](https://developer.ebay.com) → My Account → Application Keys → tu app → Notifications → Endpoint URL: `https://TU_BACKEND_URL/api/webhooks/ebay`. Configura el **signing key** en Railway como `WEBHOOK_SECRET_EBAY`. Opcional: `WEBHOOK_VERIFY_SIGNATURE_EBAY=true`.
+4. **Verificación:** Tras configurar, llama a `GET /api/webhooks/status` (o revisa el panel de estado): `ebay.configured` y `mercadolibre.configured` deben ser `true`. Luego haz una venta de prueba y revisa logs del backend para confirmar que llega el webhook y se crea la Order.
+
 ### Amazon
 
 - En el código actual **no** hay endpoint de webhook para Amazon en `backend/src/api/routes/webhooks.routes.ts`.
@@ -85,7 +94,28 @@ Si tienes poco saldo en PayPal pero fondos suficientes en la tarjeta asociada, p
 | Webhook Amazon | No implementado | Pendiente si se vende por Amazon. |
 | OAuth AliExpress Dropshipping | Implementado | Completar OAuth por usuario y verificar token en BD. |
 | PayPal (capture + payout) | Implementado | Configurar env y URLs; probar checkout y payout. |
-| Cron PAID (process-paid-orders) | Implementado | Redis activo; job cada 5 min. |
+| Cron PAID (process-paid-orders) | Implementado | Redis activo; job cada 5 min. Sin Redis: fallback setInterval cada 5 min. |
 | ALLOW_PURCHASE_WHEN_LOW_BALANCE | Implementado | Activar y opcionalmente ajustar PURCHASE_LOW_BALANCE_MAX_ORDER_USD. |
 
 Cuando todos los ítems aplicables estén verificados, el círculo venta → Order → fulfill → Sale → payout está cerrado y el sistema puede operar de forma automática con tráfico real.
+
+---
+
+## 6. Flujo primera venta real (verificación punta a punta)
+
+Para comprobar que una venta real recorre todo el ciclo sin fallos, verifica estos puntos en orden.
+
+| Paso | Qué comprobar |
+|------|----------------|
+| **1. Webhook** | ML/eBay envía notificación → `POST /api/webhooks/mercadolibre` o `/ebay`. Si `WEBHOOK_SECRET_*` no está configurado, el webhook se acepta igual y se loguea un warning (no 401). |
+| **2. Order PAID** | En `recordSaleFromWebhook` se crea la Order con `productUrl` (desde `product.aliexpressUrl`); si falta, se rechaza antes de crear la Order. |
+| **3. Fulfill** | Se llama `fulfillOrder(orderId)`. Requiere: OAuth Dropshipping válido **o** `ALLOW_BROWSER_AUTOMATION=true` y credenciales AliExpress; capital suficiente (`hasSufficientFreeCapital`); límites diarios. |
+| **4. Sale** | Al pasar a PURCHASED, `createSaleFromOrder` crea la Sale. Si el producto está INACTIVE o no publicado, la Sale se crea igual (flujo fulfillment) para no bloquear la venta real. |
+| **5. Cron sin Redis** | Si Redis no está disponible, el bootstrap arranca un `setInterval` cada 5 min que ejecuta `processPaidOrders({ batchSize: 30 })`, así las Orders PAID se procesan aunque no haya BullMQ. |
+
+**Variables críticas para el ciclo:**
+
+- **Redis**: necesario para BullMQ y el cron programado; si no hay Redis, el fallback de process-paid-orders mantiene el ciclo.
+- **WEBHOOK_SECRET_MERCADOLIBRE / WEBHOOK_SECRET_EBAY**: recomendado en producción; si no están definidos, los webhooks pasan con warning.
+- **OAuth AliExpress Dropshipping** (o `ALLOW_BROWSER_AUTOMATION` + usuario/contraseña): sin esto, la compra en AliExpress falla.
+- **Capital y límites**: `workingCapital`, límites diarios de compra y (opcional) `ALLOW_PURCHASE_WHEN_LOW_BALANCE`.

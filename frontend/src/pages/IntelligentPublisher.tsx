@@ -4,7 +4,7 @@ import { api } from '../services/api';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { API_BASE_URL } from '@/config/runtime';
-import { Check, X, ChevronLeft, ChevronRight, ExternalLink, Wallet, TrendingUp } from 'lucide-react';
+import { Check, X, ChevronLeft, ChevronRight, ExternalLink, Wallet, TrendingUp, Wrench } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -42,6 +42,7 @@ export default function IntelligentPublisher() {
   const [listingsPage, setListingsPage] = useState(1);
   const [listingsTotal, setListingsTotal] = useState(0);
   const [listingsMarketplaceFilter, setListingsMarketplaceFilter] = useState<'all' | 'ebay' | 'mercadolibre' | 'amazon'>('all');
+  const [repairingMl, setRepairingMl] = useState(false);
   const [pendingPage, setPendingPage] = useState(1);
   const [capitalData, setCapitalData] = useState<{
     availableCash: number;
@@ -215,6 +216,28 @@ export default function IntelligentPublisher() {
     setListingsPage(page);
     loadListings(page, listingsMarketplaceFilter);
   }, [loadListings, listingsMarketplaceFilter]);
+
+  const handleRepairAllMlListings = useCallback(async () => {
+    setRepairingMl(true);
+    const t = toast.loading('Reparando listados de Mercado Libre…');
+    try {
+      const { data } = await api.post('/api/publisher/listings/repair-ml', { limit: 5000 });
+      toast.dismiss(t);
+      const repaired = data?.repaired ?? 0;
+      const failed = data?.failed ?? 0;
+      if (repaired > 0 || failed > 0) {
+        toast.success(`ML: ${repaired} reparados${failed > 0 ? `, ${failed} fallidos` : ''}.`);
+        loadListings(listingsPage, listingsMarketplaceFilter);
+      } else {
+        toast.success('No hay listados ML para reparar.');
+      }
+    } catch (err: any) {
+      toast.dismiss(t);
+      toast.error(err?.response?.data?.error || 'Error al reparar listados ML');
+    } finally {
+      setRepairingMl(false);
+    }
+  }, [listingsPage, listingsMarketplaceFilter]);
 
   const handleListingsMarketplaceFilter = useCallback((mp: 'all' | 'ebay' | 'mercadolibre' | 'amazon') => {
     setListingsMarketplaceFilter(mp);
@@ -399,7 +422,7 @@ export default function IntelligentPublisher() {
             </span>
           )}
         </div>
-        <div className="flex flex-wrap gap-2 mb-3">
+        <div className="flex flex-wrap gap-2 mb-3 items-center">
           {(['all', 'ebay', 'mercadolibre', 'amazon'] as const).map((mp) => (
             <button
               key={mp}
@@ -413,6 +436,16 @@ export default function IntelligentPublisher() {
               {mp === 'all' ? 'Todos' : mp === 'mercadolibre' ? 'Mercado Libre' : mp === 'ebay' ? 'eBay' : 'Amazon'}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={handleRepairAllMlListings}
+            disabled={repairingMl}
+            className="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-800/50 disabled:opacity-50 inline-flex items-center gap-1.5"
+            title="Corregir título, descripción y atributos de todos los listados ML (error VIP67)"
+          >
+            <Wrench className="w-4 h-4" />
+            {repairingMl ? 'Reparando…' : 'Reparar todos los listados ML'}
+          </button>
         </div>
         <div className="bg-white border rounded">
           {listings.map((l:any)=>(

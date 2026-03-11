@@ -10,6 +10,22 @@ import { decrypt } from '../../utils/encryption';
 
 const router = Router();
 
+/**
+ * GET /api/webhooks/status
+ * Returns whether webhook secrets are configured (for dashboard/circle checklist).
+ * Does not expose secret values.
+ */
+router.get('/status', (_req: Request, res: Response) => {
+  const ebaySecret = process.env.WEBHOOK_SECRET_EBAY?.trim();
+  const mlSecret = process.env.WEBHOOK_SECRET_MERCADOLIBRE?.trim();
+  const amazonSecret = process.env.WEBHOOK_SECRET_AMAZON?.trim();
+  res.json({
+    ebay: { configured: !!ebaySecret },
+    mercadolibre: { configured: !!mlSecret },
+    amazon: { configured: !!amazonSecret },
+  });
+});
+
 export interface MercadoLibreCredentialResult {
   creds: Record<string, any>;
   userId: number;
@@ -115,6 +131,21 @@ async function recordSaleFromWebhook(params: {
   const product = await prisma.product.findUnique({ where: { id: listing.productId } });
   if (!product) throw new Error('Product not found');
 
+  // Guarantee productUrl so fulfillOrder does not fail with "Product URL missing"
+  let productUrl = (product.aliexpressUrl || '').trim();
+  if (!productUrl) {
+    const refreshed = await prisma.product.findUnique({
+      where: { id: listing.productId },
+      select: { aliexpressUrl: true },
+    });
+    productUrl = (refreshed?.aliexpressUrl || '').trim();
+  }
+  if (!productUrl) {
+    throw new Error(
+      `Product ${listing.productId} has no AliExpress URL; cannot create order. Ensure the listing's product has aliexpressUrl set.`
+    );
+  }
+
   const salePrice = Number(params.amount || product.suggestedPrice || 0);
   if (!isFinite(salePrice) || salePrice <= 0) throw new Error('Invalid amount');
 
@@ -136,7 +167,7 @@ async function recordSaleFromWebhook(params: {
       shippingAddress: shippingAddressStr,
       status: 'PAID',
       paypalOrderId: `${marketplace}:${marketplaceOrderId}`,
-      productUrl: product.aliexpressUrl || '',
+      productUrl,
     },
   });
 

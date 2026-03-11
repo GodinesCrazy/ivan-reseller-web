@@ -28,12 +28,57 @@ export interface MLProduct {
   attributes?: Array<{
     id: string;
     value: string | number;
+    value_id?: string;
   }>;
   shipping?: {
     mode: string;
     cost?: number;
     freeShipping?: boolean;
   };
+}
+
+/** Common typos from AliExpress/suppliers that break ML display (VIP67). */
+const TITLE_TYPO_FIXES: [RegExp, string][] = [
+  [/\bwirelesss\b/gi, 'wireless'],
+  [/\bbluetoth\b/gi, 'bluetooth'],
+  [/\bblutooth\b/gi, 'bluetooth'],
+];
+
+/**
+ * Sanitize title for MercadoLibre: fix typos, remove invalid chars. ML allows 60 chars.
+ * Exported for use in repair/update flows.
+ */
+export function sanitizeTitleForML(title: string): string {
+  if (!title || typeof title !== 'string') return 'Producto';
+  let s = title.trim();
+  for (const [re, replacement] of TITLE_TYPO_FIXES) {
+    s = s.replace(re, replacement);
+  }
+  s = s.replace(/[^\w\sáéíóúñüÁÉÍÓÚÑÜ.,\-\/()]/gi, '').trim();
+  if (s.length > 60) s = s.substring(0, 57) + '...';
+  return s || 'Producto';
+}
+
+const ML_DESCRIPTION_MAX = 5000;
+
+/**
+ * Sanitize description for MercadoLibre: strip HTML, limit length, remove control chars.
+ * Exported for use in repair/update flows.
+ */
+export function sanitizeDescriptionForML(desc: string): string {
+  if (!desc || typeof desc !== 'string') return 'Producto de calidad.';
+  let s = desc
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, ' ')
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
+    .trim();
+  if (s.length > ML_DESCRIPTION_MAX) s = s.substring(0, ML_DESCRIPTION_MAX - 3) + '...';
+  return s || 'Producto de calidad.';
 }
 
 export interface MLListingResponse {
@@ -289,6 +334,73 @@ export class MercadoLibreService {
   }
 
   /**
+   * Validate listing before publish. Returns { valid: boolean, errors?: string[] }.
+   * Optional: call before createListing to surface ML validation issues.
+   */
+  async validateListing(data: Record<string, any>): Promise<{ valid: boolean; errors?: string[] }> {
+    try {
+      const response = await this.apiClient.post('/items/validate', data, {
+        validateStatus: (s) => s === 204 || s >= 400,
+      });
+      if (response.status === 204) {
+        return { valid: true };
+      }
+      const body = response.data;
+      const errors: string[] = [];
+      if (body?.message) errors.push(body.message);
+      if (body?.error) errors.push(body.error);
+      (body?.cause || []).forEach((c: any) => {
+        if (c?.message) errors.push(`${c.code || ''}: ${c.message}`);
+      });
+      return { valid: false, errors: errors.length ? errors : [JSON.stringify(body)] };
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message;
+      return { valid: false, errors: [msg] };
+    }
+  }
+
+  /**
+   * Resolve attributes to ML API format: use value_id when attribute has predefined values.
+   */
+  private async resolveAttributesForML(
+    attrs: Array<{ id: string; value: string | number; value_id?: string }>,
+    categoryId: string
+  ): Promise<Array<{ id: string; value_id?: string; value_name?: string }>> {
+    let catAttrs: any[] = [];
+    try {
+      catAttrs = await this.getCategoryAttributes(categoryId);
+    } catch {
+      return attrs.map((a) => ({ id: a.id, value_name: String(a.value) }));
+    }
+    const catMap = new Map<string, any>(catAttrs.map((a) => [a.id, a]));
+    const result: Array<{ id: string; value_id?: string; value_name?: string }> = [];
+    for (const attr of attrs) {
+      if (attr.value_id) {
+        result.push({ id: attr.id, value_id: attr.value_id });
+        continue;
+      }
+      const catAttr = catMap.get(attr.id);
+      const valStr = String(attr.value).trim().toLowerCase();
+      if (catAttr?.values && Array.isArray(catAttr.values) && catAttr.values.length > 0) {
+        const match = catAttr.values.find(
+          (v: any) => String(v.name || '').trim().toLowerCase() === valStr
+        );
+        if (match?.id) {
+          result.push({ id: attr.id, value_id: String(match.id) });
+          continue;
+        }
+        const first = catAttr.values[0];
+        if (first?.id) {
+          result.push({ id: attr.id, value_id: String(first.id) });
+          continue;
+        }
+      }
+      result.push({ id: attr.id, value_name: String(attr.value) });
+    }
+    return result;
+  }
+
+  /**
    * Create MercadoLibre listing
    */
   async createListing(product: MLProduct): Promise<MLListingResponse> {
@@ -314,24 +426,28 @@ export class MercadoLibreService {
     const pictures = uploadedIds.map(id => ({ id }));
     logger.info('[MercadoLibre] Using pre-uploaded images', { count: uploadedIds.length });
 
+    const sanitizedTitle = sanitizeTitleForML(product.title);
+    const sanitizedDesc = sanitizeDescriptionForML(product.description);
+
     const listingData: Record<string, any> = {
-      title: product.title,
+      title: sanitizedTitle,
       category_id: product.categoryId,
       price: product.price,
       currency_id: this.getSiteCurrency(this.credentials.siteId),
       available_quantity: product.quantity,
       condition: product.condition,
+      buying_mode: 'buy_it_now',
       description: {
-        plain_text: product.description,
+        plain_text: sanitizedDesc,
       },
       pictures,
     };
 
     if (product.attributes && product.attributes.length > 0) {
-      listingData.attributes = product.attributes.map(attr => ({
-        id: attr.id,
-        value_name: String(attr.value),
-      }));
+      listingData.attributes = await this.resolveAttributesForML(
+        product.attributes,
+        product.categoryId
+      );
     }
 
     if (product.shipping && product.shipping.mode !== 'not_specified') {
@@ -339,9 +455,15 @@ export class MercadoLibreService {
         mode: product.shipping.mode || 'not_specified',
         free_shipping: product.shipping.freeShipping || false,
       };
+    } else if (this.credentials.siteId === 'MLC') {
+      listingData.shipping = { mode: 'me2', free_shipping: false };
     }
 
     const listingTypes = ['gold_special', 'gold_pro', 'free'];
+    const validation = await this.validateListing({ ...listingData, listing_type_id: listingTypes[0] });
+    if (!validation.valid && validation.errors?.length) {
+      logger.warn('[MercadoLibre] Pre-validation reported issues', { errors: validation.errors });
+    }
     let lastError: any = null;
 
     for (const listingType of listingTypes) {
@@ -401,6 +523,25 @@ export class MercadoLibreService {
       fullResponse: JSON.stringify(mlData),
     });
     throw new AppError(`MercadoLibre listing error: ${errorMessage}`, 400);
+  }
+
+  /**
+   * Get full item details from ML API (category_id, title, etc.). For repair flow.
+   */
+  async getItem(itemId: string): Promise<{ category_id?: string; title?: string } | null> {
+    try {
+      const response = await this.apiClient.get(`/items/${itemId}`);
+      return {
+        category_id: response.data?.category_id,
+        title: response.data?.title,
+      };
+    } catch (err: any) {
+      logger.warn('[MercadoLibre] getItem failed', {
+        itemId,
+        error: err.response?.data?.message || err.message,
+      });
+      return null;
+    }
   }
 
   /**
@@ -587,6 +728,54 @@ export class MercadoLibreService {
       });
     } catch (error: any) {
       throw new AppError(`MercadoLibre price update error: ${error.response?.data?.message || error.message}`, 400);
+    }
+  }
+
+  /**
+   * Full update of listing: title, description, attributes. Used for repair flow.
+   * Does NOT update pictures (would require re-upload).
+   */
+  async updateListing(
+    itemId: string,
+    updates: {
+      title?: string;
+      description?: string;
+      attributes?: Array<{ id: string; value: string | number; value_id?: string }>;
+      categoryId?: string;
+    }
+  ): Promise<{ success: boolean; permalink?: string }> {
+    try {
+      const payload: Record<string, any> = {};
+      if (updates.title !== undefined) {
+        payload.title = sanitizeTitleForML(updates.title);
+      }
+      if (updates.description !== undefined) {
+        payload.description = { plain_text: sanitizeDescriptionForML(updates.description) };
+      }
+      if (updates.categoryId) {
+        payload.category_id = updates.categoryId;
+      }
+      let categoryId = updates.categoryId;
+      if (updates.attributes && updates.attributes.length > 0) {
+        if (!categoryId) {
+          const itemRes = await this.apiClient.get(`/items/${itemId}`);
+          categoryId = itemRes.data?.category_id || '';
+        }
+        payload.attributes = await this.resolveAttributesForML(updates.attributes, categoryId);
+      }
+      if (Object.keys(payload).length === 0) {
+        return { success: true };
+      }
+      await this.apiClient.put(`/items/${itemId}`, payload);
+      const verified = await this.getItemStatus(itemId);
+      return {
+        success: true,
+        permalink: verified?.permalink,
+      };
+    } catch (error: any) {
+      const msg = error.response?.data?.message || error.message;
+      logger.error('[MercadoLibre] updateListing failed', { itemId, error: msg });
+      throw new AppError(`MercadoLibre update listing error: ${msg}`, 400);
     }
   }
 

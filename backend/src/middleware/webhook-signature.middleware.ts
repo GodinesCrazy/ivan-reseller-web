@@ -183,6 +183,15 @@ export function createWebhookSignatureValidator(marketplace: MarketplaceWebhook)
     // Obtener secret desde env
     const secretEnvVar = `WEBHOOK_SECRET_${marketplace.toUpperCase()}`;
     const secret = process.env[secretEnvVar];
+    const secretEmpty = !secret || (typeof secret === 'string' && secret.trim() === '');
+
+    if (secretEmpty) {
+      logger.warn('[WebhookSignature] Webhook accepted without verification: secret not configured', {
+        marketplace,
+        envVar: secretEnvVar,
+      });
+      return next();
+    }
 
     // Validar según marketplace
     let validation: SignatureValidationResult;
