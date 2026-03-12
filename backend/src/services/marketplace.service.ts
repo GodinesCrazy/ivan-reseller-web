@@ -85,6 +85,15 @@ import crypto from 'crypto';
 import type { CredentialScope } from '@prisma/client';
 import { toNumber } from '../utils/decimal.utils';
 import { fastHttpClient } from '../config/http-client'; // ✅ PRODUCTION READY: Usar cliente HTTP configurado
+import {
+  sanitizeTitleForEbay,
+  sanitizeDescriptionForEbay,
+  sanitizeTitleForAmazon,
+  sanitizeDescriptionForAmazon,
+  sanitizeTitleForMarketplace,
+  sanitizeDescriptionForMarketplace,
+  checkMarketplaceCompliance,
+} from '../utils/compliance';
 
 // ✅ BAJA PRIORIDAD: Tipo union estricto para marketplace
 export type MarketplaceName = 'ebay' | 'mercadolibre' | 'amazon';
@@ -746,6 +755,18 @@ export class MarketplaceService {
           .replace(/\s+/g, ' ')
           .trim()
           .slice(0, 80) || `Product-${product.id}`;
+      }
+
+      // Apply eBay compliance sanitization (IP policy, Keyword Spam, 80 chars)
+      finalTitle = sanitizeTitleForEbay(finalTitle);
+      finalDescription = sanitizeDescriptionForEbay(finalDescription || '');
+
+      const complianceCheck = checkMarketplaceCompliance('ebay', finalTitle, finalDescription || '');
+      if (!complianceCheck.compliant && complianceCheck.violations.length > 0) {
+        logger.warn('[MARKETPLACE] eBay compliance check: remaining violations after sanitization', {
+          productId: product.id,
+          violations: complianceCheck.violations,
+        });
       }
 
       const ebayProduct: EbayProduct = {
@@ -1447,6 +1468,18 @@ export class MarketplaceService {
         }
       }
 
+      // Apply Amazon compliance sanitization (IP policy, Product Title Policy, 200 chars, no decorative chars)
+      finalTitle = sanitizeTitleForAmazon(String(finalTitle || '').trim());
+      finalDescription = sanitizeDescriptionForAmazon(String(finalDescription || ''));
+
+      const complianceCheck = checkMarketplaceCompliance('amazon', finalTitle, finalDescription);
+      if (!complianceCheck.compliant && complianceCheck.violations.length > 0) {
+        logger.warn('[MARKETPLACE] Amazon compliance check: remaining violations after sanitization', {
+          productId: product.id,
+          violations: complianceCheck.violations,
+        });
+      }
+
       const amazonProduct: AmazonProduct = {
         sku: `IVAN-${product.id}`,
         title: finalTitle,
@@ -1801,6 +1834,10 @@ export class MarketplaceService {
       } catch (error) {
         logger.debug('Failed to generate AI description for preview, using original', { error });
       }
+
+      // Apply marketplace compliance sanitization so preview matches what will be published
+      finalTitle = sanitizeTitleForMarketplace(marketplace, String(finalTitle || '').trim());
+      finalDescription = sanitizeDescriptionForMarketplace(marketplace, String(finalDescription || ''));
 
       // ✅ MULTI-IMAGE: Obtener todas las imágenes del producto para la vista previa
       const images = this.parseImageUrls(product.images);

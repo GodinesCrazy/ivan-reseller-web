@@ -26,6 +26,13 @@ El flujo de creación y repair usa `inferBrandFromTitle` y envía "Genérico" cu
 
 ## Imágenes
 
+### Calidad mínima (tamaño)
+
+- **Mínimo 15 KB por imagen.** Mercado Libre exige fotos de calidad suficiente. El software filtra imágenes por debajo de este umbral en `mercadolibre.service.ts` (MIN_IMAGE_BYTES = 15 * 1024).
+- Si ninguna imagen del producto cumple el requisito, la publicación falla con mensaje: *"none of the product images met quality requirements (min 15KB)"*.
+
+### Contenido (derechos de autor)
+
 - **No incluir** logos o marcas registradas de terceros en las imágenes (a menos que se tenga autorización).
 - **No descargar** fotos de internet que puedan infringir derechos de autor.
 - ML detecta "La portada tiene logos y/o textos" y reduce exposición o inactiva la publicación.
@@ -37,6 +44,7 @@ El flujo de creación y repair usa `inferBrandFromTitle` y envía "Genérico" cu
 ## Categoría
 
 - Usar la categoría correcta para el producto. ML puede inactivar publicaciones en "categoría incorrecta".
+- Algunas **categorías de alto riesgo** exigen requisitos adicionales (p. ej. video/clip obligatorio). Ver sección "Falta crear clip" más abajo.
 
 El software usa `predictCategory` (domain_discovery) al publicar; en repair se conserva o se obtiene desde ML si existe.
 
