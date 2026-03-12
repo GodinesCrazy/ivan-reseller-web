@@ -175,7 +175,7 @@ router.get('/pending-purchases', async (req: Request, res: Response, next) => {
     const saleWhere = {
       userId,
       environment,
-      status: { in: ['PENDING', 'PROCESSING'] as const },
+      status: { in: ['PENDING', 'PROCESSING'] as string[] },
     };
 
     // Obtener ventas pendientes o en procesamiento
@@ -221,9 +221,9 @@ router.get('/pending-purchases', async (req: Request, res: Response, next) => {
         id: sale.id,
         orderId: sale.orderId,
         productId: sale.productId,
-        productTitle: sale.product?.title || 'Unknown Product',
-        productUrl: sale.product?.aliexpressUrl || '',
-        aliexpressUrl: sale.product?.aliexpressUrl || '',
+        productTitle: (sale as any).product?.title || 'Unknown Product',
+        productUrl: (sale as any).product?.aliexpressUrl || '',
+        aliexpressUrl: (sale as any).product?.aliexpressUrl || '',
         marketplace: sale.marketplace,
         salePrice: toNumber(sale.salePrice),
         aliexpressCost: toNumber(sale.aliexpressCost || 0),
