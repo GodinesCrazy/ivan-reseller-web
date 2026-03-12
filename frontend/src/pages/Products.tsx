@@ -42,6 +42,7 @@ import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import InventorySummaryCard from '@/components/InventorySummaryCard';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 interface MarketplaceListing {
   id: number;
@@ -136,6 +137,7 @@ const VALID_MARKETPLACES = ['ebay', 'mercadolibre', 'amazon', 'ml'];
 export default function Products() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { environment } = useEnvironment();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ProductFilters>(DEFAULT_FILTERS);
@@ -215,7 +217,7 @@ export default function Products() {
 
       const [response, invRes] = await Promise.all([
         api.get(`/api/products?${params}`),
-        api.get<InventorySummary>('/api/dashboard/inventory-summary').catch(() => ({ data: null })),
+        api.get<InventorySummary>('/api/dashboard/inventory-summary', { params: { environment } }).catch(() => ({ data: null })),
       ]);
       if (invRes?.data) setInventorySummary(invRes.data);
 
@@ -244,16 +246,16 @@ export default function Products() {
     } finally {
       setLoading(false);
     }
-  }, [filters.status, filters.marketplace, filters.category, filters.dateFrom, filters.dateTo, filters.dateField, filters.priceMin, filters.priceMax, filters.hasLink, filters.sortBy, filters.sortDir, debouncedSearch, currentPage]);
+  }, [filters.status, filters.marketplace, filters.category, filters.dateFrom, filters.dateTo, filters.dateField, filters.priceMin, filters.priceMax, filters.hasLink, filters.sortBy, filters.sortDir, debouncedSearch, currentPage, environment]);
 
   const fetchInventorySummary = useCallback(async () => {
     try {
-      const res = await api.get<InventorySummary>('/api/dashboard/inventory-summary');
+      const res = await api.get<InventorySummary>('/api/dashboard/inventory-summary', { params: { environment } });
       if (res.data) setInventorySummary(res.data);
     } catch {
       setInventorySummary(null);
     }
-  }, []);
+  }, [environment]);
 
   useEffect(() => {
     const timer = setTimeout(() => { fetchProducts(); }, 100);

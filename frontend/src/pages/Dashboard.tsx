@@ -43,6 +43,7 @@ import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { log } from '@/utils/logger';
 import { getTrendingKeywords, type TrendKeyword } from '@/services/trends.api';
 import { useAuthStore } from '@stores/authStore';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 
@@ -53,7 +54,7 @@ export default function Dashboard() {
   const tabParam = searchParams.get('tab');
   const [activeTab, setActiveTab] = useState(tabParam && ['overview', 'trends', 'search', 'opportunities', 'suggestions', 'automation'].includes(tabParam) ? tabParam : 'overview');
   const [isAutomaticMode, setIsAutomaticMode] = useState(true);
-  const [isProductionMode, setIsProductionMode] = useState(false);
+  const { environment, setEnvironment, isProduction: isProductionMode } = useEnvironment();
 
   // Real backend health state
   const [backendHealthy, setBackendHealthy] = useState<boolean | null>(null);
@@ -105,7 +106,7 @@ export default function Dashboard() {
       loadDashboardData();
     }, 100);
     return () => clearTimeout(timer);
-  }, []);
+  }, [environment]);
 
   // Sincronizar tab desde URL (p. ej. /dashboard?tab=trends)
   useEffect(() => {
@@ -134,7 +135,7 @@ export default function Dashboard() {
       let hasErrors = false;
       const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
       const [statsRes, activityRes, opportunitiesRes, aiSuggestionsRes, automationRes, inventoryRes, businessDiagRes, healthRes, platformRevRes] = await Promise.all([
-        api.get('/api/dashboard/stats', { params: { environment: 'production' } }).catch(err => {
+        api.get('/api/dashboard/stats', { params: { environment } }).catch(err => {
           // ✅ FIX: Si es setup_required, no marcar como error (se manejará en App.tsx)
           if (err.response?.data?.setupRequired === true || err.response?.data?.error === 'setup_required') {
             // Redirigir a setup (el hook useSetupCheck se encargará)
@@ -149,7 +150,7 @@ export default function Dashboard() {
           }
           return { data: {} };
         }),
-        api.get('/api/dashboard/recent-activity?limit=10').catch(err => {
+        api.get('/api/dashboard/recent-activity', { params: { limit: 10, environment } }).catch(err => {
           hasErrors = true;
           if (err.response) {
             log.warn('⚠️  Error loading activity (HTTP):', err.response.status);
@@ -189,7 +190,7 @@ export default function Dashboard() {
           return { data: { workflows: [] } };
         }),
         // Inventario (productos, listings, órdenes, compras pendientes) - en vivo vía loadDashboardData
-        api.get('/api/dashboard/inventory-summary').catch(err => {
+        api.get('/api/dashboard/inventory-summary', { params: { environment } }).catch(err => {
           if (err.response) {
             log.warn('⚠️  Error loading inventory summary (HTTP):', err.response.status);
           } else {
@@ -278,7 +279,6 @@ export default function Dashboard() {
       setRecentActivity(formattedActivities);
 
       // Inventory summary para InventorySummaryCard (en vivo)
-      const inv = inventoryRes.data;
       if (inv && typeof inv === 'object') {
         const listTotal = typeof inv.listingsTotal === 'number'
           ? inv.listingsTotal
@@ -736,7 +736,11 @@ export default function Dashboard() {
                   <span className="text-sm text-gray-600">Entorno</span>
                 </div>
                 <button
-                  onClick={() => setIsProductionMode(!isProductionMode)}
+                  onClick={() => {
+                    setEnvironment(isProductionMode ? 'sandbox' : 'production').catch(() => {
+                      toast.error('No se pudo cambiar el entorno');
+                    });
+                  }}
                   className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
                     isProductionMode 
                       ? 'bg-green-100 text-green-800' 

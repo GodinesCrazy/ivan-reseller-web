@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '@/services/api';
 import { useAuthStore } from '@stores/authStore';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 export interface InventoryBadges {
   pendingPurchasesCount: number;
@@ -15,6 +16,7 @@ const REFETCH_MS = 60_000;
  */
 export function useInventoryBadges(): InventoryBadges {
   const { isAuthenticated } = useAuthStore();
+  const { environment } = useEnvironment();
   const [badges, setBadges] = useState<InventoryBadges>({
     pendingPurchasesCount: 0,
     productsPending: 0,
@@ -28,7 +30,7 @@ export function useInventoryBadges(): InventoryBadges {
         const res = await api.get<{
           pendingPurchasesCount?: number;
           products?: { pending?: number };
-        }>('/api/dashboard/inventory-summary');
+        }>('/api/dashboard/inventory-summary', { params: { environment } });
         const data = res.data;
         setBadges({
           pendingPurchasesCount: data?.pendingPurchasesCount ?? 0,
@@ -42,7 +44,7 @@ export function useInventoryBadges(): InventoryBadges {
     fetchSummary();
     const interval = setInterval(fetchSummary, REFETCH_MS);
     return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, environment]);
 
   return badges;
 }

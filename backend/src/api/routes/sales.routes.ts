@@ -168,12 +168,19 @@ router.get('/pending-purchases', async (req: Request, res: Response, next) => {
     const { workflowConfigService } = await import('../../services/workflow-config.service');
     const { toNumber } = await import('../../utils/decimal.utils');
 
+    let environment = (req.query.environment as string)?.toLowerCase();
+    if (environment !== 'sandbox' && environment !== 'production') {
+      environment = (await workflowConfigService.getUserEnvironment(userId)) ?? 'production';
+    }
+    const saleWhere = {
+      userId,
+      environment,
+      status: { in: ['PENDING', 'PROCESSING'] as const },
+    };
+
     // Obtener ventas pendientes o en procesamiento
     const pendingSales = await prisma.sale.findMany({
-      where: {
-        userId: userId,
-        status: { in: ['PENDING', 'PROCESSING'] }
-      },
+      where: saleWhere,
       include: {
         product: true
       },
@@ -186,10 +193,7 @@ router.get('/pending-purchases', async (req: Request, res: Response, next) => {
     const totalCapital = await workflowConfigService.getWorkingCapital(userId);
     
     const pendingOrders = await prisma.sale.findMany({
-      where: {
-        userId: userId,
-        status: { in: ['PENDING', 'PROCESSING'] }
-      }
+      where: saleWhere,
     });
     const pendingCost = pendingOrders.reduce((sum, order) => 
       sum + toNumber(order.aliexpressCost || 0), 0

@@ -6,6 +6,7 @@ import { useSetupCheck } from '@/hooks/useSetupCheck';
 import { Settings, X } from 'lucide-react';
 import { useState } from 'react';
 import { SidebarProvider } from '@/contexts/SidebarContext';
+import { EnvironmentProvider } from '@/contexts/EnvironmentContext';
 import PageBreadcrumb from '@/components/PageBreadcrumb';
 import CommandPalette from '@/components/CommandPalette';
 
@@ -18,6 +19,7 @@ export default function Layout() {
     !setupBannerDismissed;
 
   return (
+    <EnvironmentProvider>
     <SidebarProvider>
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
       <AliexpressOverlayGate />
@@ -56,5 +58,6 @@ export default function Layout() {
       </div>
     </div>
     </SidebarProvider>
+    </EnvironmentProvider>
   );
 }

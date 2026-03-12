@@ -139,12 +139,15 @@ router.get('/stats', wrapAsync(async (req: Request, res: Response, next) => {
   }
 }, { route: '/api/dashboard/stats', serviceName: 'dashboard' }));
 
-// GET /api/dashboard/recent-activity - Actividad reciente
+// GET /api/dashboard/recent-activity - Actividad reciente (Activity no tiene environment; param aceptado para consistencia)
 router.get('/recent-activity', async (req: Request, res: Response, next) => {
   const startTime = Date.now();
   const correlationId = (req as any).correlationId || 'unknown';
   
   try {
+    // Query param environment aceptado para consistencia API (Activity es global por usuario)
+    const _environment = (req.query.environment as string)?.toLowerCase();
+
     // ✅ FIX SIGSEGV: Safe Dashboard Mode - responder array vacío sin DB
     if (env.SAFE_DASHBOARD_MODE) {
       logger.info('[Dashboard Recent Activity] SAFE_DASHBOARD_MODE enabled - returning empty array', {
@@ -361,6 +364,15 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
+    let environment = (req.query.environment as string)?.toLowerCase();
+    if ((environment !== 'sandbox' && environment !== 'production' && environment !== 'all') && userId) {
+      const { workflowConfigService } = await import('../../services/workflow-config.service');
+      environment = (await workflowConfigService.getUserEnvironment(userId)) ?? 'production';
+    } else if (environment !== 'sandbox' && environment !== 'production' && environment !== 'all') {
+      environment = 'production';
+    }
+    const saleEnvFilter = environment === 'all' ? {} : { environment };
+
     const whereUser = userId ? { userId } : {};
 
     const [
@@ -387,6 +399,7 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       prisma.sale.count({
         where: {
           ...whereUser,
+          ...saleEnvFilter,
           status: { in: ['PENDING', 'PROCESSING'] },
         },
       }),
@@ -439,6 +452,13 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
 
+    let environment = (req.query.environment as string)?.toLowerCase();
+    if (environment !== 'sandbox' && environment !== 'production') {
+      const { workflowConfigService } = await import('../../services/workflow-config.service');
+      environment = (await workflowConfigService.getUserEnvironment(userId!)) ?? 'production';
+    }
+    const saleEnvFilter = { environment };
+
     if (env.SAFE_DASHBOARD_MODE) {
       return res.json({
         activeListings: 0,
@@ -462,6 +482,7 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
       prisma.sale.count({
         where: {
           ...whereUser,
+          ...saleEnvFilter,
           createdAt: { gte: todayStart },
           status: { not: 'CANCELLED' },
         },
@@ -469,6 +490,7 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
       prisma.sale.findMany({
         where: {
           ...whereUser,
+          ...saleEnvFilter,
           createdAt: { gte: monthStart },
           status: { not: 'CANCELLED' },
         },
@@ -476,7 +498,7 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
       }),
       prisma.sale.groupBy({
         by: ['productId'],
-        where: { ...whereUser, status: { not: 'CANCELLED' } },
+        where: { ...whereUser, ...saleEnvFilter, status: { not: 'CANCELLED' } },
         _count: { productId: true },
       }),
     ]);
@@ -485,6 +507,7 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
     const profitTodayResult = await prisma.sale.aggregate({
       where: {
         ...whereUser,
+        ...saleEnvFilter,
         createdAt: { gte: todayStart },
         status: { not: 'CANCELLED' },
       },

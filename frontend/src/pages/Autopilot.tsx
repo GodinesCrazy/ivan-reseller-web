@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 interface Workflow {
   id: number;
@@ -94,6 +96,7 @@ interface InventorySummaryListings {
 }
 
 export default function Autopilot() {
+  const { environment } = useEnvironment();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [logs, setLogs] = useState<WorkflowLog[]>([]);
   const [stats, setStats] = useState<AutopilotStats | null>(null);
@@ -300,7 +303,7 @@ export default function Autopilot() {
   useEffect(() => {
     loadData();
     checkAutopilotStatus();
-  }, []);
+  }, [environment]);
 
   useEffect(() => {
     const ms = autopilotRunning ? 2000 : 10000;
@@ -374,8 +377,8 @@ export default function Autopilot() {
         api.get('/api/autopilot/workflows'),
         api.get('/api/autopilot/stats'),
         api.get('/api/autopilot/config').catch(() => ({ data: {} })),
-        api.get('/api/dashboard/autopilot-metrics').catch(() => ({ data: {} })),
-        api.get<InventorySummaryListings>('/api/dashboard/inventory-summary').catch(() => ({ data: null })),
+        api.get('/api/dashboard/autopilot-metrics', { params: { environment } }).catch(() => ({ data: {} })),
+        api.get<InventorySummaryListings>('/api/dashboard/inventory-summary', { params: { environment } }).catch(() => ({ data: null })),
       ]);
       
       setWorkflows(workflowsRes.data?.workflows || []);

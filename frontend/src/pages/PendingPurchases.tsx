@@ -23,6 +23,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 interface PendingSale {
   id: number;
@@ -45,6 +46,7 @@ interface PendingSale {
 
 export default function PendingPurchases() {
   const navigate = useNavigate();
+  const { environment } = useEnvironment();
   const [pendingSales, setPendingSales] = useState<PendingSale[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<Record<number, boolean>>({});
@@ -52,7 +54,7 @@ export default function PendingPurchases() {
   const fetchPendingPurchases = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/sales/pending-purchases');
+      const response = await api.get('/api/sales/pending-purchases', { params: { environment } });
       setPendingSales(response.data?.sales || response.data || []);
     } catch (error: any) {
       console.error('Error fetching pending purchases:', error);
@@ -63,7 +65,7 @@ export default function PendingPurchases() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [environment]);
 
   useLiveData({ fetchFn: fetchPendingPurchases, intervalMs: 10000, enabled: true });
   useNotificationRefetch({

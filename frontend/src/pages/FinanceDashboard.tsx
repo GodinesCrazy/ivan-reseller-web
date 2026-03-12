@@ -25,6 +25,7 @@ import {
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useCurrency } from '../hooks/useCurrency';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 interface FinancialData {
   revenue: number;
@@ -156,6 +157,7 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
 
 export default function FinanceDashboard() {
   const { formatMoney } = useCurrency();
+  const { environment } = useEnvironment();
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
@@ -186,7 +188,7 @@ export default function FinanceDashboard() {
 
   useEffect(() => {
     loadFinancialData();
-  }, [dateRange]);
+  }, [dateRange, environment]);
 
   useEffect(() => {
     if (activeTab === 'sales-ledger') loadSalesLedger();
@@ -194,12 +196,12 @@ export default function FinanceDashboard() {
     else if (activeTab === 'leverage-risk') loadLeverageRisk();
     else if (activeTab === 'top-products') loadTopProducts();
     else if (activeTab === 'capital-allocation') loadCapitalAllocation();
-  }, [activeTab, dateRange]);
+  }, [activeTab, dateRange, environment]);
 
   const loadSalesLedger = async () => {
     try {
       const { data } = await api.get('/api/finance/sales-ledger', {
-        params: { range: dateRange, environment: 'production' },
+        params: { range: dateRange, environment },
       });
       setSalesLedger(data?.sales ?? []);
     } catch (e: any) {
@@ -213,7 +215,7 @@ export default function FinanceDashboard() {
   const loadWorkingCapital = async () => {
     try {
       const { data } = await api.get('/api/finance/working-capital-detail', {
-        params: { environment: 'production' },
+        params: { environment },
       });
       setWorkingCapitalDetail(data?.detail ?? null);
     } catch (e: any) {
@@ -264,10 +266,10 @@ export default function FinanceDashboard() {
     setLoading(true);
     try {
       const [summaryRes, breakdownRes, cashFlowRes, taxRes, projectionRes] = await Promise.all([
-        api.get('/api/finance/summary', { params: { range: dateRange, environment: 'production' } }),
-        api.get('/api/finance/breakdown', { params: { range: dateRange, environment: 'production' } }),
-        api.get('/api/finance/cashflow', { params: { range: dateRange, environment: 'production' } }),
-        api.get('/api/finance/tax-summary', { params: { range: dateRange, environment: 'production' } }),
+        api.get('/api/finance/summary', { params: { range: dateRange, environment } }),
+        api.get('/api/finance/breakdown', { params: { range: dateRange, environment } }),
+        api.get('/api/finance/cashflow', { params: { range: dateRange, environment } }),
+        api.get('/api/finance/tax-summary', { params: { range: dateRange, environment } }),
         api.get('/api/finance/profit-projection')
       ]);
 
@@ -302,7 +304,7 @@ export default function FinanceDashboard() {
   const exportReport = async (format: 'pdf' | 'excel' | 'csv') => {
     try {
       const { data } = await api.get(`/api/finance/export/${format}`, {
-        params: { range: dateRange, environment: 'production' },
+        params: { range: dateRange, environment },
         responseType: 'blob'
       });
 

@@ -16,6 +16,7 @@ import {
 import api from '@services/api';
 import toast from 'react-hot-toast';
 import LoadingSpinner from '@components/ui/LoadingSpinner';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 interface WorkflowConfig {
   environment: 'sandbox' | 'production';
@@ -33,6 +34,7 @@ interface WorkflowConfig {
 }
 
 export default function WorkflowConfig() {
+  const { refreshEnvironment } = useEnvironment();
   const [config, setConfig] = useState<WorkflowConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,7 +56,7 @@ export default function WorkflowConfig() {
       const capital = capitalRes.data?.workingCapital || 500;
 
       setConfig(workflowConfig || {
-        environment: 'sandbox',
+        environment: 'production',
         workflowMode: 'manual',
         stageScrape: 'automatic',
         stageAnalyze: 'automatic',
@@ -111,6 +113,7 @@ export default function WorkflowConfig() {
       }
 
       toast.success('Configuración de workflow guardada exitosamente');
+      refreshEnvironment?.();
     } catch (error: any) {
       console.error('[FRONTEND] Workflow config save failed:', error.response?.data ?? error);
       toast.error(error.response?.data?.error || 'Error al guardar configuración');

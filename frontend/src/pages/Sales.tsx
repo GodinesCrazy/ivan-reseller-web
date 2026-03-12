@@ -37,6 +37,7 @@ import toast from 'react-hot-toast';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 interface Sale {
   id: string;
@@ -78,6 +79,7 @@ const MARKETPLACES = [
 
 export default function Sales() {
   const navigate = useNavigate();
+  const { environment } = useEnvironment();
   const [sales, setSales] = useState<Sale[]>([]);
   const [stats, setStats] = useState<SalesStats>({
     totalRevenue: 0,
@@ -101,8 +103,8 @@ export default function Sales() {
     try {
       setLoading(true);
       const [salesResponse, statsResponse] = await Promise.all([
-        api.get('/api/sales', { params: { environment: 'production' } }),
-        api.get('/api/sales/stats', { params: { days: dateRange, environment: 'production' } })
+        api.get('/api/sales', { params: { environment } }),
+        api.get('/api/sales/stats', { params: { days: dateRange, environment } })
       ]);
       setSales(salesResponse.data?.sales || salesResponse.data || []);
       setStats(statsResponse.data || {});
@@ -115,7 +117,7 @@ export default function Sales() {
     } finally {
       setLoading(false);
     }
-  }, [dateRange]);
+  }, [dateRange, environment]);
 
   useEffect(() => {
     fetchSalesData();

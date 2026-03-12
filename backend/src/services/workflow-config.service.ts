@@ -41,7 +41,7 @@ export class WorkflowConfigService {
       config = await prisma.userWorkflowConfig.create({
         data: {
           userId,
-          environment: 'sandbox',
+          environment: 'production',
           workflowMode: 'manual',
           stageScrape: 'automatic',
           stageAnalyze: 'automatic',

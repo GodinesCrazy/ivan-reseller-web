@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import api from '@/services/api';
 import MetricLabelWithTooltip from '@/components/MetricLabelWithTooltip';
 import { metricTooltips } from '@/config/metricTooltips';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 interface InventorySummary {
   products: { total: number; pending: number; approved: number; published: number };
@@ -41,6 +42,7 @@ export interface InventorySummaryCardProps {
 
 export default function InventorySummaryCard({ summary: summaryProp }: InventorySummaryCardProps = {}) {
   const navigate = useNavigate();
+  const { environment } = useEnvironment();
   const [internalSummary, setInternalSummary] = useState<InventorySummary | null>(null);
   const [loading, setLoading] = useState(!summaryProp);
 
@@ -51,7 +53,7 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
     }
     let mounted = true;
     api
-      .get<InventorySummary>('/api/dashboard/inventory-summary')
+      .get<InventorySummary>('/api/dashboard/inventory-summary', { params: { environment } })
       .then((res) => {
         if (mounted && res.data) setInternalSummary(res.data);
       })
@@ -60,7 +62,7 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
         if (mounted) setLoading(false);
       });
     return () => { mounted = false; };
-  }, [summaryProp]);
+  }, [summaryProp, environment]);
 
   const summary = summaryProp ?? internalSummary;
 
