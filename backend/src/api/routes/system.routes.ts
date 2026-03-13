@@ -276,8 +276,9 @@ router.get('/full-diagnostics', async (_req: Request, res: Response) => {
  * GET /api/system/business-diagnostics
  * Business-level diagnostics: autopilot, marketplace, supplier, payment, database, scheduler, listings, sales.
  * Each section has status (OK/FAIL) and optional message or counts.
+ * Requires authentication. Sales and Listings counts are per-user and filtered by environment.
  */
-router.get('/business-diagnostics', async (_req: Request, res: Response) => {
+router.get('/business-diagnostics', authenticate, async (req: Request, res: Response) => {
   const result: Record<string, { status: string; message?: string; count?: number }> = {
     autopilot: { status: 'FAIL' },
     marketplace: { status: 'FAIL' },
@@ -345,18 +346,21 @@ router.get('/business-diagnostics', async (_req: Request, res: Response) => {
         result.scheduler = { status: 'FAIL', message: 'Could not read stats' };
       }
 
-      // Listings count
+      // Listings count (per-user)
+      const userId = req.user!.userId;
+      const environment = (req.query.environment as string)?.toLowerCase() === 'sandbox' ? 'sandbox' as const : 'production' as const;
       try {
-        const listingsCount = await prisma.marketplaceListing.count();
+        const listingsCount = await prisma.marketplaceListing.count({ where: { userId } });
         result.listings = { status: 'OK', count: listingsCount };
       } catch {
         result.listings = { status: 'FAIL', message: 'Count failed' };
       }
 
-      // Sales count
+      // Sales count (per-user, per-environment, COMPLETED only - real sales)
       try {
-        const salesCount = await prisma.sale.count();
-        result.sales = { status: 'OK', count: salesCount };
+        const saleService = (await import('../../services/sale.service')).saleService;
+        const stats = await saleService.getSalesStats(userId, undefined, environment);
+        result.sales = { status: 'OK', count: stats.totalSales };
       } catch {
         result.sales = { status: 'FAIL', message: 'Count failed' };
       }

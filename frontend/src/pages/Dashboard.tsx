@@ -198,8 +198,8 @@ export default function Dashboard() {
           }
           return { data: null };
         }),
-        // Estado del sistema (business diagnostics)
-        api.get('/api/system/business-diagnostics').catch(() => ({ data: null })),
+        // Estado del sistema (business diagnostics - ventas/listings por usuario y entorno)
+        api.get('/api/system/business-diagnostics', { params: { environment } }).catch(() => ({ data: null })),
         // Backend health
         api.get('/api/health').then((r) => ({ ok: r.status === 200 })).catch(() => ({ ok: false })),
         // Ingresos plataforma (solo admin)
