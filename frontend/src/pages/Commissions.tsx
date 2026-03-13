@@ -33,6 +33,7 @@ import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 interface Commission {
   id: string;
@@ -63,6 +64,7 @@ interface PayoutSchedule {
 }
 
 export default function Commissions() {
+  const { environment } = useEnvironment();
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [stats, setStats] = useState<CommissionStats>({
     totalPending: 0,
@@ -92,10 +94,11 @@ export default function Commissions() {
   const fetchCommissionsData = useCallback(async () => {
     try {
       setLoading(true);
+      const params = { environment };
       const [commissionsResponse, statsResponse, scheduleResponse] = await Promise.all([
-        api.get('/api/commissions'),
-        api.get('/api/commissions/stats'),
-        api.get('/api/commissions/payout-schedule')
+        api.get('/api/commissions', { params }),
+        api.get('/api/commissions/stats', { params }),
+        api.get('/api/commissions/payout-schedule', { params })
       ]);
       setCommissions(commissionsResponse.data?.commissions ?? []);
       setStats(statsResponse.data ?? { totalPending: 0, totalPaid: 0, totalCommissions: 0, nextPayoutDate: '', monthlyEarnings: 0, earningsChange: 0 });
@@ -109,7 +112,7 @@ export default function Commissions() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [environment]);
 
   useLiveData({ fetchFn: fetchCommissionsData, intervalMs: 30000, enabled: true });
   useNotificationRefetch({

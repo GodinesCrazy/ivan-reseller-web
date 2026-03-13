@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Workflow, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import LoadingSpinner from './ui/LoadingSpinner';
 import api from '@/services/api';
 import { useLiveData } from '@/hooks/useLiveData';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 interface WorkflowSummary {
   totalProducts: number;
@@ -25,44 +26,36 @@ interface WorkflowSummary {
 }
 
 export default function WorkflowSummaryWidget() {
+  const { environment } = useEnvironment();
   const [summary, setSummary] = useState<WorkflowSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
-  const loadSummary = async () => {
+  const loadSummary = useCallback(async () => {
     try {
       setLoading(true);
       setHasError(false);
-      // ✅ FIX-004: Manejo robusto de errores - ocultar widget si falla
-      const response = await api.get('/api/products').catch((err) => {
-        // Si es error de red/CORS, marcar como error y ocultar widget
-        setHasError(true);
-        if (!err.response) {
-          console.warn('⚠️  No se pudo cargar resumen de workflows (error de conexión).');
-        }
-        // Retornar estructura vacía
-        return { data: { data: { products: [] }, products: [] } };
-      });
-      
-      const products = response.data?.data?.products || response.data?.products || response.data || [];
-      
-      // ✅ FIX-004: Si no hay productos y hubo error, ocultar widget
-      if (products.length === 0 && hasError) {
-        setHasError(true);
-        setLoading(false);
-        return;
-      }
-      
-      // Calcular resumen básico (simplificado)
-      const summary: WorkflowSummary = {
+      const [productsRes, invRes] = await Promise.all([
+        api.get('/api/products').catch((err) => {
+          if (!err.response) console.warn('⚠️  No se pudo cargar resumen de workflows.');
+          return { data: { data: { products: [] }, products: [] } };
+        }),
+        api.get('/api/dashboard/inventory-summary', { params: { environment } }).catch(() => ({ data: null })),
+      ]);
+      const products = productsRes.data?.data?.products || productsRes.data?.products || productsRes.data || [];
+      const inv = invRes?.data;
+      const orders = inv?.ordersByStatus ?? {};
+      const purchase = (orders.PAID ?? 0) + (orders.PURCHASING ?? 0) + (inv?.pendingPurchasesCount ?? 0);
+      const fulfillment = orders.PURCHASED ?? 0;
+      const summaryData: WorkflowSummary = {
         totalProducts: products.length || 0,
         byStage: {
           scrape: products.filter((p: any) => p.status === 'PENDING').length,
           analyze: products.filter((p: any) => p.status === 'APPROVED' && !p.isPublished).length,
           publish: products.filter((p: any) => p.isPublished).length,
-          purchase: 0, // Se calcularía desde Sales
-          fulfillment: 0, // Se calcularía desde Sales con status SHIPPED
-          customerService: 0, // Se calcularía desde Sales con status CANCELLED/RETURNED
+          purchase,
+          fulfillment,
+          customerService: 0,
         },
         byStatus: {
           completed: products.filter((p: any) => p.isPublished && p.status === 'PUBLISHED').length,
@@ -71,16 +64,15 @@ export default function WorkflowSummaryWidget() {
           failed: products.filter((p: any) => p.status === 'REJECTED').length,
         },
       };
-
-      setSummary(summary);
+      setSummary(summaryData);
+      setHasError(false);
     } catch (error) {
-      // ✅ FIX-004: Marcar error y ocultar widget
       setHasError(true);
       console.warn('⚠️  Error loading workflow summary:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [environment]);
 
   useLiveData({ fetchFn: loadSummary, intervalMs: 15000, enabled: true });
 

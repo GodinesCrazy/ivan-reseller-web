@@ -38,7 +38,8 @@ export default function WorkflowConfig() {
   const [config, setConfig] = useState<WorkflowConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [workingCapital, setWorkingCapital] = useState(500);
+  const [workingCapital, setWorkingCapital] = useState<number | null>(null);
+  const [workingCapitalLoadError, setWorkingCapitalLoadError] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -47,13 +48,15 @@ export default function WorkflowConfig() {
   const loadConfig = async () => {
     try {
       setLoading(true);
+      setWorkingCapitalLoadError(false);
       const [configRes, capitalRes] = await Promise.all([
         api.get('/api/workflow/config'),
         api.get('/api/workflow/working-capital')
       ]);
 
       const workflowConfig = configRes.data?.config;
-      const capital = capitalRes.data?.workingCapital || 500;
+      const capital = capitalRes.data?.workingCapital;
+      const capitalNum = typeof capital === 'number' ? capital : (capitalRes.data != null ? 500 : null);
 
       setConfig(workflowConfig || {
         environment: 'production',
@@ -66,9 +69,11 @@ export default function WorkflowConfig() {
         stageCustomerService: 'manual',
         workingCapital: 500
       });
-      setWorkingCapital(capital);
+      setWorkingCapital(capitalNum);
     } catch (error: any) {
       console.error('Error loading workflow config:', error);
+      setWorkingCapitalLoadError(true);
+      setWorkingCapital(null);
       const status = error?.response?.status;
       if (status !== 429 && status !== 403 && (status == null || status < 500)) {
         toast.error('Error al cargar configuración de workflow');
@@ -231,13 +236,17 @@ export default function WorkflowConfig() {
               type="number"
               min="0"
               step="1"
-              value={workingCapital}
-              onChange={(e) => setWorkingCapital(parseFloat(e.target.value) || 0)}
+              value={workingCapitalLoadError ? '' : (workingCapital ?? '')}
+              placeholder={workingCapitalLoadError ? '— Error al cargar' : undefined}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                setWorkingCapital(isNaN(v) ? null : v);
+                if (workingCapitalLoadError) setWorkingCapitalLoadError(false);
+              }}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
             <p className="text-sm text-gray-500 mt-2">
-              El sistema optimizará la publicación de productos basado en este capital.
-              Por defecto: $500 USD
+              {workingCapitalLoadError ? 'No se pudo cargar el capital. Introduce un valor manualmente o recarga la página.' : 'El sistema optimizará la publicación de productos basado en este capital. Por defecto: $500 USD'}
             </p>
           </div>
 
