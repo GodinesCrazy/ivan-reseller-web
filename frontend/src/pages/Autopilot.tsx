@@ -29,7 +29,6 @@ import {
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
-import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 interface Workflow {
   id: number;
@@ -93,6 +92,9 @@ interface AutopilotMetrics {
 
 interface InventorySummaryListings {
   listingsByMarketplace?: { ebay?: number; mercadolibre?: number; amazon?: number };
+  ordersByStatus?: { CREATED?: number; PAID?: number; PURCHASING?: number; PURCHASED?: number; FAILED?: number };
+  pendingPurchasesCount?: number;
+  salesDeliveredCount?: number;
 }
 
 export default function Autopilot() {
@@ -118,6 +120,8 @@ export default function Autopilot() {
   // Autopilot config: marketplaces destino
   const [targetMarketplaces, setTargetMarketplaces] = useState<string[]>(['ebay']);
   const [savingConfig, setSavingConfig] = useState(false);
+  // API credentials: mostrar aviso si ML/Amazon no conectados (sin bloquear selección)
+  const [marketplaceApiStatus, setMarketplaceApiStatus] = useState<Record<string, { isConfigured: boolean; isAvailable: boolean }>>({});
 
   // Autopilot Settings (extended config)
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
@@ -306,7 +310,7 @@ export default function Autopilot() {
   }, [environment]);
 
   useEffect(() => {
-    const ms = autopilotRunning ? 2000 : 10000;
+    const ms = autopilotRunning ? 4000 : 10000;
     const interval = setInterval(checkAutopilotStatus, ms);
     return () => clearInterval(interval);
   }, [autopilotRunning]);
@@ -373,18 +377,24 @@ export default function Autopilot() {
 
   const loadData = async () => {
     try {
-      const [workflowsRes, statsRes, configRes, metricsRes, invRes] = await Promise.all([
+      const [workflowsRes, statsRes, configRes, metricsRes, invRes, credsRes] = await Promise.all([
         api.get('/api/autopilot/workflows'),
         api.get('/api/autopilot/stats'),
         api.get('/api/autopilot/config').catch(() => ({ data: {} })),
         api.get('/api/dashboard/autopilot-metrics', { params: { environment } }).catch(() => ({ data: {} })),
         api.get<InventorySummaryListings>('/api/dashboard/inventory-summary', { params: { environment } }).catch(() => ({ data: null })),
+        api.get('/api/credentials/status').catch(() => ({ data: {} })),
       ]);
       
       setWorkflows(workflowsRes.data?.workflows || []);
       setStats(statsRes.data?.stats || null);
-      if (invRes.data?.listingsByMarketplace) {
-        setInventoryListings({ listingsByMarketplace: invRes.data.listingsByMarketplace });
+      if (invRes.data) {
+        setInventoryListings({
+          listingsByMarketplace: invRes.data.listingsByMarketplace,
+          ordersByStatus: invRes.data.ordersByStatus,
+          pendingPurchasesCount: invRes.data.pendingPurchasesCount ?? 0,
+          salesDeliveredCount: invRes.data.salesDeliveredCount ?? 0,
+        });
       } else {
         setInventoryListings(null);
       }
@@ -413,6 +423,19 @@ export default function Autopilot() {
           winningProductsCount: metricsRes.data.winningProductsCount ?? 0,
         });
       }
+      // Marketplace API status: para mostrar avisos si no están conectados
+      const apis = credsRes?.data?.data?.apis || [];
+      const statusMap: Record<string, { isConfigured: boolean; isAvailable: boolean }> = {};
+      apis.forEach((entry: { apiName?: string; isConfigured?: boolean; isAvailable?: boolean }) => {
+        const name = String(entry?.apiName || '').toLowerCase();
+        if (['ebay', 'mercadolibre', 'amazon'].includes(name)) {
+          statusMap[name] = {
+            isConfigured: Boolean(entry?.isConfigured),
+            isAvailable: Boolean(entry?.isAvailable),
+          };
+        }
+      });
+      setMarketplaceApiStatus(statusMap);
     } catch (error: any) {
       const status = error?.response?.status;
       if (status !== 429 && status !== 403 && (status == null || status < 500)) {
@@ -815,38 +838,94 @@ export default function Autopilot() {
         </div>
       </div>
 
-      {/* Status Banner */}
-      <div className={`border rounded-lg p-4 flex items-center gap-3 transition-colors ${
-        autopilotRunning ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'
-      }`}>
-        <div className={`p-3 rounded-full ${autopilotRunning ? 'bg-green-100 dark:bg-green-900' : 'bg-gray-100 dark:bg-gray-700'}`}>
-          {autopilotRunning ? (
-            <Activity className="w-6 h-6 text-green-600 dark:text-green-400 animate-pulse" />
-          ) : (
-            <Pause className="w-6 h-6 text-gray-600 dark:text-gray-400" />
-          )}
+      {/* Estado del ciclo actual - Panel mejorado */}
+      <div className="rounded-xl border-2 overflow-hidden">
+        <div className={`px-4 py-3 font-semibold text-sm uppercase tracking-wide ${
+          autopilotRunning ? 'bg-green-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+        }`}>
+          Estado del ciclo actual
         </div>
-        <div className="flex-1">
-          <div className="font-semibold text-gray-900 dark:text-gray-100">
-            Autopilot Status: {autopilotRunning ? 'Running' : 'Stopped'}
-          </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">
+        <div className={`border-t p-4 flex items-start gap-4 transition-colors ${
+          autopilotRunning ? 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
+        }`}>
+          <div className={`p-3 rounded-xl shrink-0 ${autopilotRunning ? 'bg-green-100 dark:bg-green-900/40' : 'bg-gray-100 dark:bg-gray-700'}`}>
             {autopilotRunning ? (
-              (() => {
-                const phase = autopilotStatus?.currentPhase;
-                if (phase === 'searching') return 'Buscando oportunidades en AliExpress con la query configurada…';
-                if (phase === 'filtering') return 'Filtrando productos que cumplen precio mínimo/máximo y criterios…';
-                if (phase === 'analyzing') return 'Analizando rentabilidad y ROI de cada oportunidad…';
-                if (phase === 'publishing') return 'Publicando productos rentables en el marketplace destino…';
-                if (phase === 'idle') return 'Esperando próximo ciclo. Ejecuta según intervalo configurado.';
-                return 'Ciclo automático activo: buscar → filtrar → analizar → publicar.';
-              })()
+              <Activity className="w-8 h-8 text-green-600 dark:text-green-400 animate-pulse" />
             ) : (
-              'Inicia el autopilot para ejecutar ciclos automáticos (buscar oportunidades y publicar).'
+              <Pause className="w-8 h-8 text-gray-600 dark:text-gray-400" />
             )}
           </div>
-          {autopilotRunning && autopilotStatus?.currentCycleProgress && (autopilotStatus.currentCycleProgress.query || autopilotStatus.currentCycleProgress.opportunitiesFound != null || autopilotStatus.currentCycleProgress.analyzed != null || autopilotStatus.currentCycleProgress.published != null) && (
-            <div className="mt-3 flex flex-wrap gap-2 items-center">
+          <div className="flex-1 min-w-0 space-y-3">
+            <div>
+              <div className="font-semibold text-lg text-gray-900 dark:text-gray-100">
+                {autopilotRunning ? 'En ejecución' : 'Detenido'}
+              </div>
+              <div className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                {autopilotRunning ? (
+                  (() => {
+                    const phase = autopilotStatus?.currentPhase;
+                    if (phase === 'searching') return 'Fase 1/7: Buscando oportunidades en AliExpress…';
+                    if (phase === 'filtering') return 'Fase 2/7: Filtrando por criterios de precio y calidad…';
+                    if (phase === 'analyzing') return 'Fase 3/7: Analizando rentabilidad y ROI…';
+                    if (phase === 'publishing') return 'Fase 4/7: Publicando en marketplace(s) destino…';
+                    if (phase === 'idle') return 'Entre ciclos. Siguiente ciclo según intervalo configurado.';
+                    return 'Ciclo activo: buscar → filtrar → analizar → publicar.';
+                  })()
+                ) : (
+                  'Inicia el autopilot para ejecutar ciclos automáticos (buscar oportunidades y publicar).'
+                )}
+              </div>
+            </div>
+            {(() => {
+              const cyclePhases = ['idle', 'searching', 'filtering', 'analyzing', 'publishing'];
+              const allPhaseLabels = ['1.Buscar', '2.Filtrar', '3.Analizar', '4.Publicar', '5.Compra', '6.Envío', '7.Entregado'];
+              const currentIdx = cyclePhases.indexOf(autopilotStatus?.currentPhase || 'idle');
+              const cycleProgress = currentIdx >= 0 ? Math.round((currentIdx / (cyclePhases.length - 1)) * 100) : 0;
+              const orders = inventoryListings?.ordersByStatus ?? {};
+              const compraCount = (orders.PAID ?? 0) + (orders.PURCHASING ?? 0) + (inventoryListings?.pendingPurchasesCount ?? 0);
+              const envioCount = orders.PURCHASED ?? 0;
+              const entregadoCount = inventoryListings?.salesDeliveredCount ?? 0;
+              return (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                    <span>Progreso del ciclo (1-4) y post-venta (5-7)</span>
+                    {autopilotRunning && <span>{cycleProgress}%</span>}
+                  </div>
+                  <div className="flex gap-0.5">
+                    {allPhaseLabels.map((label, i) => {
+                      const isCyclePhase = i < 4;
+                      const isActive = isCyclePhase && currentIdx >= i && autopilotRunning;
+                      const hasData = !isCyclePhase && (
+                        (i === 4 && compraCount > 0) || (i === 5 && envioCount > 0) || (i === 6 && entregadoCount > 0)
+                      );
+                      return (
+                        <div
+                          key={label}
+                          className={`flex-1 h-2 rounded first:rounded-l last:rounded-r ${
+                            isActive ? 'bg-green-500 dark:bg-green-600' : hasData ? 'bg-blue-400 dark:bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'
+                          }`}
+                          title={`${label}${!isCyclePhase ? `: ${i === 4 ? compraCount : i === 5 ? envioCount : entregadoCount}` : ''}`}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    <span className="text-gray-600 dark:text-gray-400">Fases 1-4: ciclo Autopilot</span>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200">
+                      5. Compra: {compraCount}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200">
+                      6. Envío: {envioCount}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200">
+                      7. Entregado: {entregadoCount}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+            {autopilotRunning && autopilotStatus?.currentCycleProgress && (autopilotStatus.currentCycleProgress.query || autopilotStatus.currentCycleProgress.opportunitiesFound != null || autopilotStatus.currentCycleProgress.analyzed != null || autopilotStatus.currentCycleProgress.published != null) && (
+            <div className="flex flex-wrap gap-2 items-center pt-1">
               {autopilotStatus.currentCycleProgress.query && (
                 <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-200 dark:bg-gray-700 text-xs font-medium text-gray-800 dark:text-gray-200" title="Query de búsqueda">
                   Query: <span className="ml-1 truncate max-w-[200px]">{autopilotStatus.currentCycleProgress.query}</span>
@@ -869,10 +948,10 @@ export default function Autopilot() {
               )}
             </div>
           )}
-          {!autopilotRunning && (autopilotStatus?.lastRun != null || autopilotStatus?.opportunitiesGenerated != null || autopilotStatus?.productsPublished != null) && (
-            <div className="mt-2 space-y-1">
-              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Último ciclo</div>
-              <div className="flex flex-wrap gap-4 text-xs text-gray-500 dark:text-gray-400">
+            {!autopilotRunning && (autopilotStatus?.lastRun != null || autopilotStatus?.opportunitiesGenerated != null || autopilotStatus?.productsPublished != null) && (
+            <div className="pt-2 border-t border-gray-200 dark:border-gray-700 mt-2">
+              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Resumen del último ciclo</div>
+              <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-300">
               {autopilotStatus.lastRun != null && autopilotStatus.lastRun && (
                 <span>Última ejecución: {formatLastRun(autopilotStatus.lastRun)}</span>
               )}
@@ -882,9 +961,10 @@ export default function Autopilot() {
               {autopilotStatus.productsPublished != null && (
                 <span title="Acumulado de todos los ciclos del Autopilot">Total publicados por Autopilot: {autopilotStatus.productsPublished}</span>
               )}
-            </div>
+              </div>
             </div>
           )}
+          </div>
         </div>
       </div>
 
@@ -987,18 +1067,30 @@ export default function Autopilot() {
           El Autopilot publicará en los marketplaces seleccionados. Selecciona al menos uno.
         </p>
         <div className="flex flex-wrap gap-4">
-          {['ebay', 'amazon', 'mercadolibre'].map((mp) => (
-            <label key={mp} className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={targetMarketplaces.includes(mp)}
-                onChange={() => toggleMarketplace(mp)}
-                disabled={savingConfig || (targetMarketplaces.length === 1 && targetMarketplaces.includes(mp))}
-                className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
-              />
-              <span className="text-sm font-medium capitalize">{mp === 'mercadolibre' ? 'Mercado Libre' : mp}</span>
-            </label>
-          ))}
+          {['ebay', 'amazon', 'mercadolibre'].map((mp) => {
+            const status = marketplaceApiStatus[mp];
+            const notConnected = status && !status.isAvailable;
+            const displayName = mp === 'mercadolibre' ? 'Mercado Libre' : mp;
+            return (
+              <div key={mp} className="flex flex-col gap-0.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={targetMarketplaces.includes(mp)}
+                    onChange={() => toggleMarketplace(mp)}
+                    disabled={savingConfig || (targetMarketplaces.length === 1 && targetMarketplaces.includes(mp))}
+                    className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                  />
+                  <span className="text-sm font-medium capitalize">{displayName}</span>
+                </label>
+                {notConnected && (
+                  <span className="text-xs text-amber-600 dark:text-amber-400 ml-6">
+                    Conecta {displayName} en Settings &gt; APIs
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

@@ -380,6 +380,7 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       listingsByMp,
       ordersByStatus,
       pendingPurchasesCount,
+      salesDeliveredCount,
     ] = await Promise.all([
       prisma.product.groupBy({
         by: ['status'],
@@ -403,6 +404,13 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
           status: { in: ['PENDING', 'PROCESSING'] },
         },
       }),
+      prisma.sale.count({
+        where: {
+          ...whereUser,
+          ...saleEnvFilter,
+          status: 'DELIVERED',
+        },
+      }),
     ]);
 
     const products = {
@@ -421,6 +429,17 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
     const listingsTotal =
       listingsByMarketplace.ebay + listingsByMarketplace.mercadolibre + listingsByMarketplace.amazon;
 
+    let mercadolibreActiveCount: number | null = null;
+    if (userId) {
+      try {
+        const { MarketplaceService } = await import('../../services/marketplace.service');
+        const ms = new MarketplaceService();
+        mercadolibreActiveCount = await ms.getMlActiveCount(userId);
+      } catch {
+        // Ignore - ML API may be unavailable
+      }
+    }
+
     const ordersByStatusMap = {
       CREATED: ordersByStatus.find(o => o.status === 'CREATED')?._count.id ?? 0,
       PAID: ordersByStatus.find(o => o.status === 'PAID')?._count.id ?? 0,
@@ -433,8 +452,10 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       products,
       listingsByMarketplace,
       listingsTotal,
+      mercadolibreActiveCount: mercadolibreActiveCount ?? undefined,
       ordersByStatus: ordersByStatusMap,
       pendingPurchasesCount,
+      salesDeliveredCount,
     });
   } catch (error: any) {
     logger.error('Error in /api/dashboard/inventory-summary', { error: error?.message, userId: req.user?.userId });
