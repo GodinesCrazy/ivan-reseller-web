@@ -145,6 +145,15 @@ router.put('/config', async (req: Request, res: Response, next) => {
     const userId = req.user?.userId;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
     const data = updateConfigSchema.parse(req.body);
+    // ML policy: maxDuplicatesPerProduct cannot exceed 1 when Mercado Libre is a target
+    const curConfig = autopilotSystem.getStatus().config;
+    const mpList = (data.targetMarketplaces?.length ? data.targetMarketplaces
+      : data.targetMarketplace ? [data.targetMarketplace]
+      : curConfig?.targetMarketplaces?.length ? curConfig.targetMarketplaces
+      : curConfig?.targetMarketplace ? [curConfig.targetMarketplace] : []) as string[];
+    if (mpList.includes('mercadolibre') && typeof data.maxDuplicatesPerProduct === 'number' && data.maxDuplicatesPerProduct > 1) {
+      data.maxDuplicatesPerProduct = 1;
+    }
     await autopilotSystem.updateConfig(data);
     res.json({ success: true, message: 'Configuración actualizada', config: autopilotSystem.getStatus().config });
   } catch (error) {

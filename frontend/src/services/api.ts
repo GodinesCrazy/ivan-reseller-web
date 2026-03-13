@@ -148,8 +148,26 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // 429: Rate limit - un solo toast aunque fallen muchas peticiones
+    // 429: Rate limit - retry with backoff for idempotent GET requests
     if (status === 429) {
+      const config = error.config;
+      const method = (config?.method || 'get').toLowerCase();
+      const retryCount = (config?._retryCount as number) ?? 0;
+      const maxRetries = 2;
+      const retryAfter = error.response?.headers?.['retry-after']
+        ? parseInt(String(error.response.headers['retry-after']), 10)
+        : 30;
+
+      if (method === 'get' && retryCount < maxRetries) {
+        config._retryCount = retryCount + 1;
+        const delay = Math.min(retryAfter * 1000, 30000);
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(api.request(config));
+          }, delay);
+        });
+      }
+
       toast.error('Demasiadas solicitudes. Por favor, espera un momento.', {
         id: RATE_LIMIT_TOAST_ID,
         duration: 6000,

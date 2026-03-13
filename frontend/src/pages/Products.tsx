@@ -88,6 +88,7 @@ interface InventorySummary {
   products: { total: number; pending: number; approved: number; published: number };
   listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
   listingsTotal?: number;
+  mercadolibreActiveCount?: number;
   ordersByStatus?: { CREATED: number; PAID: number; PURCHASING: number; PURCHASED: number; FAILED: number };
   pendingPurchasesCount?: number;
 }
@@ -550,7 +551,13 @@ export default function Products() {
                 <p className="text-2xl font-bold text-purple-600">{(stats.published).toLocaleString()}</p>
                 {stats.published > 0 && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    eBay: {listingsByMarketplace.ebay} · ML: {listingsByMarketplace.mercadolibre} · Amazon: {listingsByMarketplace.amazon}
+                    eBay: {listingsByMarketplace.ebay} · ML: {listingsByMarketplace.mercadolibre}
+                    {typeof inventorySummary?.mercadolibreActiveCount === 'number' && inventorySummary.mercadolibreActiveCount !== listingsByMarketplace.mercadolibre && (
+                      <span className="text-amber-600 dark:text-amber-400" title="Activos en Mercado Libre (verificado via API)">
+                        {' '}({inventorySummary.mercadolibreActiveCount} activos)
+                      </span>
+                    )}
+                    {' · '}Amazon: {listingsByMarketplace.amazon}
                   </p>
                 )}
               </div>

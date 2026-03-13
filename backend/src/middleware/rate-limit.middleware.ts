@@ -53,6 +53,10 @@ export const createRoleBasedRateLimit = () => {
       if (req.path === '/auth/login') return true;
       if (req.path === '/auth/logout') return true;
       if (req.path === '/auth/refresh') return true;
+      // Skip rate limiting for critical config/status endpoints (evita 429 en Autopilot)
+      const p = (req.path || req.originalUrl || '').split('?')[0];
+      if (p.includes('autopilot/config') || p.includes('autopilot/status')) return true;
+      if (p.includes('dashboard/inventory-summary')) return true;
       // Skip rate limiting para ADMIN en ciertos casos
       const user = (req as any).user;
       return user?.role === 'ADMIN' && req.path.startsWith('/api/admin');

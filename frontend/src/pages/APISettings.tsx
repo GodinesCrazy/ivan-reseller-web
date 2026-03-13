@@ -458,8 +458,9 @@ export default function APISettings() {
   }, []);
 
   useEffect(() => {
-    loadCredentials();
-    loadMinimumDropshippingAPIs();
+    // forceRefresh=1 on initial load to bypass cache and trigger fresh health check (allows auto token refresh)
+    loadCredentials(true);
+    loadMinimumDropshippingAPIs(true);
   }, []);
 
   // ✅ FIX EBAY: Recarga forzada al volver de OAuth para que el estado se refleje (evita cache/timing)

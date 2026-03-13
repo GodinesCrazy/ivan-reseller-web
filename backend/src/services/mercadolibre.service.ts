@@ -902,6 +902,27 @@ export class MercadoLibreService {
   }
 
   /**
+   * Get count of active listings from ML API (one request, uses paging.total).
+   */
+  async getActiveListingsCount(): Promise<number | null> {
+    if (!this.credentials.userId) return null;
+    try {
+      const response = await this.apiClient.get(`/users/${this.credentials.userId}/items/search`, {
+        params: { limit: 1, offset: 0, status: 'active' },
+      });
+      const total = response.data?.paging?.total;
+      if (typeof total === 'number' && Number.isFinite(total)) return total;
+      if (typeof total === 'string') {
+        const n = parseInt(total, 10);
+        return Number.isFinite(n) ? n : null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Get user's listings
    */
   async getUserListings(status?: string, limit: number = 50): Promise<any[]> {
@@ -922,6 +943,111 @@ export class MercadoLibreService {
       return response.data.results || [];
     } catch (error: any) {
       throw new AppError(`MercadoLibre listings error: ${error.response?.data?.message || error.message}`, 400);
+    }
+  }
+
+  /**
+   * Get ALL user item IDs from Mercado Libre API (paginated).
+   * Used by ml-close-all-from-api to close every publication in ML, including those not in our DB.
+   * Standard offset pagination works for up to 1000 items; for more, uses search_type=scan.
+   */
+  async getAllUserItemIds(): Promise<string[]> {
+    if (!this.credentials.userId) {
+      throw new AppError('User ID required', 400);
+    }
+
+    const allIds: string[] = [];
+    const limit = 50;
+    const maxItems = 3000; // safety cap
+
+    try {
+      const firstResponse = await this.apiClient.get(
+        `/users/${this.credentials.userId}/items/search`,
+        { params: { limit, offset: 0 } }
+      );
+      const paging = firstResponse.data?.paging || {};
+      const total = paging.total ?? 0;
+      const firstResults: string[] = firstResponse.data?.results || [];
+
+      if (total <= 1000) {
+        for (const id of firstResults) {
+          if (typeof id === 'string' && id.trim()) allIds.push(id.trim());
+        }
+        // Standard offset pagination (ML API limit: offset max 1000)
+        let offset = limit;
+        while (allIds.length < maxItems && offset < total) {
+          const response = await this.apiClient.get(
+            `/users/${this.credentials.userId}/items/search`,
+            { params: { limit, offset } }
+          );
+          const results: string[] = response.data?.results || [];
+          for (const id of results) {
+            if (typeof id === 'string' && id.trim()) allIds.push(id.trim());
+          }
+          if (results.length < limit) break;
+          offset += limit;
+          await new Promise((r) => setTimeout(r, 150));
+        }
+      } else {
+        // >1000 items: use search_type=scan (ML API bypasses 1000 offset limit)
+        try {
+          const scanInit = await this.apiClient.get(
+            `/users/${this.credentials.userId}/items/search`,
+            { params: { search_type: 'scan' } }
+          );
+          let scrollId: string | undefined = scanInit.data?.scroll_id;
+          if (!scrollId) {
+            throw new Error('search_type=scan did not return scroll_id');
+          }
+          while (scrollId && allIds.length < maxItems) {
+            const scanResp = await this.apiClient.get(
+              `/users/${this.credentials.userId}/items/search`,
+              { params: { search_type: 'scan', scroll_id: scrollId } }
+            );
+            const batch: string[] = scanResp.data?.results || [];
+            for (const id of batch) {
+              if (typeof id === 'string' && id.trim()) allIds.push(id.trim());
+            }
+            scrollId = scanResp.data?.scroll_id;
+            if (batch.length === 0) break;
+            await new Promise((r) => setTimeout(r, 150));
+          }
+        } catch (scanErr: any) {
+          logger.warn('[MercadoLibre] search_type=scan failed, returning first 1000 via offset', {
+            error: scanErr?.message || String(scanErr),
+            total,
+          });
+          for (const id of firstResults) {
+            if (typeof id === 'string' && id.trim()) allIds.push(id.trim());
+          }
+          let offset = limit;
+          while (allIds.length < Math.min(1000, maxItems) && offset < 1000) {
+            const resp = await this.apiClient.get(
+              `/users/${this.credentials.userId}/items/search`,
+              { params: { limit, offset } }
+            );
+            const batch: string[] = resp.data?.results || [];
+            for (const id of batch) {
+              if (typeof id === 'string' && id.trim()) allIds.push(id.trim());
+            }
+            if (batch.length < limit) break;
+            offset += limit;
+            await new Promise((r) => setTimeout(r, 150));
+          }
+        }
+      }
+
+      logger.info('[MercadoLibre] getAllUserItemIds', {
+        userId: this.credentials.userId,
+        totalItems: allIds.length,
+        totalFromApi: total,
+      });
+      return allIds;
+    } catch (error: any) {
+      throw new AppError(
+        `MercadoLibre getAllUserItemIds error: ${error.response?.data?.message || error.message}`,
+        400
+      );
     }
   }
 

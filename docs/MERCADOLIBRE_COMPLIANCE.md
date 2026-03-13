@@ -37,7 +37,7 @@ El flujo de creación y repair usa `inferBrandFromTitle` y envía "Genérico" cu
 - **No descargar** fotos de internet que puedan infringir derechos de autor.
 - ML detecta "La portada tiene logos y/o textos" y reduce exposición o inactiva la publicación.
 
-**Acción:** Revisar que las imágenes del producto no contengan logos, texto promocional ni marcas de terceros. El software no puede corregir imágenes por API; hay que reemplazar las fotos manualmente en AliExpress o antes de publicar.
+**Primera imagen (portada):** La portada no puede tener logos ni texto. El software prioriza automáticamente URLs que no contienen "logo", "watermark", "banner" o "text" en la ruta. Aun así, se recomienda revisar manualmente la primera imagen antes de publicar.
 
 ---
 
@@ -50,16 +50,66 @@ El software usa `predictCategory` (domain_discovery) al publicar; en repair se c
 
 ---
 
+## Publicaciones duplicadas
+
+### Política de ML
+
+- **No permitido:** Publicaciones del mismo producto con las mismas condiciones de venta.
+- **No permitido:** Productos idénticos en más de una publicación con diferencias de variantes (ej. color) — las variantes deben ir en **una sola** publicación.
+- **Permitido:** Mismo producto en varias publicaciones solo si ofrecen **distintas formas de envío o condiciones de pago**.
+
+### Cómo cumple el software
+
+- Antes de publicar: verifica que el producto no tenga ya un listing activo en ML (evita duplicados del mismo producto).
+- Autopilot no duplica ganadores en ML (`maxDuplicatesPerProduct` se limita a 1 cuando ML está activo).
+- Si el título coincide o es muy similar (similitud > 0.85) a otra publicación activa, añade un diferenciador: atributo (color, material, etc.) o sufijo `#productId`.
+- El prompt de IA para ML pide explícitamente incluir característica diferenciadora en el título.
+
+---
+
+## Checklist pre-publicación (ML)
+
+Antes de aprobar y publicar un producto en Mercado Libre, verificar:
+
+| Item | Verificación |
+|------|--------------|
+| **Imagen portada** | La primera imagen no tiene logos, texto ni marcas de agua. El software prioriza URLs limpias; revisar manualmente si hay dudas. |
+| **Título** | No incluye "tipo X", "símil", "réplica", "idéntico a" para marcas. Límite 60 caracteres. Si existe título similar, el sistema añade diferenciador. |
+| **Descripción** | Misma sanitización que el título. Sin términos de PI prohibidos. |
+| **Duplicados** | El producto no tiene ya un listing activo en ML para el mismo usuario. |
+| **Atributo Marca** | "Genérico" si no hay marca identificable; nunca "tipo [marca]". |
+| **Imágenes** | Mínimo 15 KB por imagen; preferir resolución alta. Sin thumbnails ni placeholders. |
+
+El software aplica automáticamente sanitización, verificación de duplicados y reordenamiento de imágenes; este checklist sirve como guía para revisión manual en casos dudosos.
+
+**Renovación automática del token:** Al entrar a Settings → API Credentials o al cargar el estado de credenciales, el sistema intenta renovar el token de Mercado Libre automáticamente si este ha expirado (401). No es necesario reconectar manualmente en la mayoría de los casos.
+
+---
+
 ## Eliminar todas las publicaciones ML
 
-Para dejar el software y Mercado Libre como si no se hubieran publicado (cerrar en ML y borrar de la base de datos todas las publicaciones del usuario):
+### Opción A: ml-close-all-from-api (recomendada si hay publicaciones fuera de nuestra BD)
+
+Cierra **todas** las publicaciones del usuario en ML, incluyendo las que no están en nuestra base de datos (manuales, de otras herramientas, etc.). Obtiene la lista completa desde la API de Mercado Libre.
+
+- **Desde la API (usuario autenticado):**  
+  `POST /api/publisher/listings/ml-close-all-from-api`  
+  Body: `{}`
+
+- **Desde consola:**  
+  `cd backend && npx tsx scripts/ml-close-all-from-api.ts <userId>`  
+  Requiere userId obligatorio.
+
+### Opción B: ml-bulk-close (solo listings en nuestra BD)
+
+Cierra solo los listings que están registrados en nuestra base de datos.
 
 - **Desde la API (usuario autenticado):**  
   `POST /api/publisher/listings/ml-bulk-close`  
   Body: `{}` o `{ "listingIds": [] }`  
   No uses `onlyAlreadyClosed: true` si quieres cerrar **todas** las publicaciones (también las activas).
 
-- **Desde consola (sin depender del frontend):**  
+- **Desde consola:**  
   `cd backend && npm run close:ml-all` — cierra todos los listados ML de **todos** los usuarios con listados.  
   `cd backend && npm run close:ml-all <userId>` — cierra solo los listados ML de ese usuario.
 
@@ -87,6 +137,7 @@ El software no soporta subida de clips por API en la versión actual.
 |----------|-------------|
 | `GET /api/publisher/listings/ml-status?limit=200` | Diagnóstico: estado de cada listing ML (active, closed, paused, etc.). |
 | `POST /api/publisher/listings/repair-ml` | Reparar títulos, descripciones, atributos (BRAND Genérico). Omite listings ya cerrados/pausados. |
+| `POST /api/publisher/listings/ml-close-all-from-api` | Cerrar todas las publicaciones ML del usuario (obtiene IDs desde API de ML; incluye las no registradas en BD). |
 | `POST /api/publisher/listings/ml-bulk-close` | Cerrar listings en ML y eliminarlos de la BD (software = realidad). Body: `{ listingIds?: string[], onlyAlreadyClosed?: boolean }`. |
 | `GET /api/publisher/listings/ml-compliance?limit=200` | Verificación de cumplimiento PI: obtiene título/descripción desde ML y devuelve cuáles cumplen y cuáles no (violations: tipo, símil, réplica, etc.). |
 

@@ -481,9 +481,36 @@ export class MarketplaceService {
           return await ebayService.testConnection();
         }
 
-        case 'mercadolibre':
-          const mlService = new MercadoLibreService(credentials.credentials as MercadoLibreCredentials);
-          return await mlService.testConnection();
+        case 'mercadolibre': {
+          let credsWithSiteId: MercadoLibreCredentials = {
+            ...(credentials.credentials as MercadoLibreCredentials),
+            siteId: (credentials.credentials as MercadoLibreCredentials).siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
+          };
+          let mlService = new MercadoLibreService(credsWithSiteId);
+          let result = await mlService.testConnection();
+          // Auto-refresh on 401/unauthorized and retry (avoids manual reconnection when user returns)
+          if (!result.success && credsWithSiteId.refreshToken) {
+            const is401 = /unauthorized|invalid access token|401/i.test(result.message || '');
+            if (is401) {
+              try {
+                const refreshed = await mlService.refreshAccessToken();
+                credsWithSiteId = { ...credsWithSiteId, accessToken: refreshed.accessToken };
+                const { CredentialsManager, clearCredentialsCache } = await import('./credentials-manager.service');
+                const env = (credentials.environment || 'production') as 'sandbox' | 'production';
+                await CredentialsManager.saveCredentials(userId, 'mercadolibre', credsWithSiteId, env);
+                clearCredentialsCache(userId, 'mercadolibre', env);
+                mlService = new MercadoLibreService(credsWithSiteId);
+                result = await mlService.testConnection();
+                if (result.success) {
+                  logger.info('[Marketplace] MercadoLibre token refreshed and testConnection succeeded', { userId, env });
+                }
+              } catch (e: any) {
+                logger.warn('[Marketplace] MercadoLibre token refresh failed', { userId, error: e?.message });
+              }
+            }
+          }
+          return result;
+        }
 
         case 'amazon':
           const amazonService = new AmazonService();
@@ -844,6 +871,19 @@ export class MarketplaceService {
     userId?: number
   ): Promise<PublishResult> {
     try {
+      // ML policy: no duplicate publications of same product with same conditions
+      if (userId) {
+        const existing = await prisma.marketplaceListing.findFirst({
+          where: { productId: product.id, userId, marketplace: 'mercadolibre' },
+        });
+        if (existing) {
+          throw new AppError(
+            'Este producto ya está publicado en Mercado Libre. ML no permite publicaciones duplicadas del mismo producto.',
+            400
+          );
+        }
+      }
+
       const credsWithSiteId: MercadoLibreCredentials = {
         ...credentials,
         siteId: credentials.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
@@ -912,6 +952,11 @@ export class MarketplaceService {
       }
       finalDescription = sanitizeDescriptionForML(finalDescription || '');
       finalTitle = sanitizeTitleForML(finalTitle);
+
+      // ML policy: titles must differ from existing publications (exact + similarity > 0.85)
+      if (userId) {
+        finalTitle = await this.ensureUniqueMlTitle(userId, product, finalTitle);
+      }
 
       let attributes = customData?.attributes;
       if (!attributes || attributes.length === 0) {
@@ -1256,6 +1301,92 @@ export class MarketplaceService {
   }
 
   /**
+   * Close ALL Mercado Libre publications by fetching them from ML API (not just from our DB).
+   * Use when user has publications in ML that we don't track (e.g. created manually or lost sync).
+   * Then syncs our DB: removes closed listings and sets products to APPROVED.
+   */
+  async mlCloseAllFromApi(userId: number): Promise<{
+    closed: number;
+    failed: number;
+    deletedFromDb: number;
+    productIdsUpdated: number[];
+    errors: Array<{ listingId: string; error: string }>;
+  }> {
+    const credentials = await this.getCredentials(userId, 'mercadolibre');
+    if (!credentials || !credentials.isActive) {
+      throw new AppError('Mercado Libre credentials not found or inactive. Connect ML in API Settings.', 400);
+    }
+    const credsWithSiteId: MercadoLibreCredentials = {
+      ...(credentials.credentials as MercadoLibreCredentials),
+      siteId: (credentials.credentials as MercadoLibreCredentials).siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
+    };
+    const mlService = new MercadoLibreService(credsWithSiteId);
+
+    // Refresh token if available
+    if (credsWithSiteId.refreshToken) {
+      try {
+        const refreshed = await mlService.refreshAccessToken();
+        credsWithSiteId.accessToken = refreshed.accessToken;
+        const { CredentialsManager, clearCredentialsCache } = await import('./credentials-manager.service');
+        const env = (credentials.environment || 'production') as 'sandbox' | 'production';
+        await CredentialsManager.saveCredentials(userId, 'mercadolibre', { ...credsWithSiteId, accessToken: refreshed.accessToken }, env);
+        clearCredentialsCache(userId, 'mercadolibre', env);
+      } catch (e: any) {
+        logger.warn('[ML CloseAllFromApi] Token refresh failed, continuing', { error: e?.message });
+      }
+    }
+
+    const itemIds = await mlService.getAllUserItemIds();
+    const errors: Array<{ listingId: string; error: string }> = [];
+    let closed = 0;
+
+    for (const itemId of itemIds) {
+      try {
+        await mlService.closeListing(itemId);
+        closed++;
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        errors.push({ listingId: itemId, error: msg });
+        logger.warn('[ML CloseAllFromApi] Failed to close', { listingId: itemId, error: msg });
+      }
+      await new Promise((r) => setTimeout(r, 100)); // rate limit cushion
+    }
+
+    // Sync DB: remove all ML listings for this user (they're now closed in ML)
+    const deleted = await prisma.marketplaceListing.deleteMany({
+      where: { userId, marketplace: 'mercadolibre' },
+    });
+    const productIdsUpdated: number[] = [];
+    for (const p of await prisma.product.findMany({
+      where: { userId },
+      select: { id: true },
+    })) {
+      const remaining = await prisma.marketplaceListing.count({ where: { productId: p.id } });
+      if (remaining === 0) {
+        const { productService } = await import('./product.service');
+        await productService.updateProductStatusSafely(p.id, 'APPROVED', false, userId);
+        productIdsUpdated.push(p.id);
+      }
+    }
+
+    logger.info('[ML CloseAllFromApi] Completed', {
+      userId,
+      closed,
+      failed: errors.length,
+      deletedFromDb: deleted.count,
+      productIdsUpdated: productIdsUpdated.length,
+    });
+
+    return {
+      closed,
+      failed: errors.length,
+      deletedFromDb: deleted.count,
+      productIdsUpdated,
+      errors,
+    };
+  }
+
+  /**
    * Get ML listing status for each Mercado Libre listing in DB (diagnosis).
    * Returns listingId, productId, title, mlStatus (active, closed, paused, under_review, etc).
    */
@@ -1317,6 +1448,40 @@ export class MarketplaceService {
       });
     }
     return results;
+  }
+
+  private static mlActiveCountCache: Map<number, { count: number; expiresAt: number }> = new Map();
+  private static ML_ACTIVE_COUNT_CACHE_TTL_MS = 5 * 60 * 1000;
+
+  /**
+   * Get count of active listings on Mercado Libre (from ML API).
+   * Cached 5 min to avoid excessive API calls.
+   */
+  async getMlActiveCount(userId: number): Promise<number | null> {
+    const cached = MarketplaceService.mlActiveCountCache.get(userId);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.count;
+    }
+    try {
+      const credentials = await this.getCredentials(userId, 'mercadolibre');
+      if (!credentials || !credentials.isActive) return null;
+      const creds = credentials.credentials as MercadoLibreCredentials;
+      const mlService = new MercadoLibreService({
+        ...creds,
+        siteId: creds.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
+      });
+      const total = await mlService.getActiveListingsCount();
+      if (total !== null && Number.isFinite(total)) {
+        MarketplaceService.mlActiveCountCache.set(userId, {
+          count: total,
+          expiresAt: Date.now() + MarketplaceService.ML_ACTIVE_COUNT_CACHE_TTL_MS,
+        });
+        return total;
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -1690,6 +1855,10 @@ export class MarketplaceService {
         language === 'es'
           ? 'Write the title in Spanish (es).'
           : 'Write the title in English (en).';
+      const mlDifferentiator =
+        (marketplace || '').toLowerCase().includes('mercado')
+          ? ' For Mercado Libre: include a differentiating characteristic (specs, variant, use case, or feature) to comply with duplicate publication policy.'
+          : '';
       const keywordLine =
         keywords && keywords.length > 0
           ? `\nInclude these search-relevant keywords naturally: ${keywords.join(', ')}.`
@@ -1702,7 +1871,7 @@ export class MarketplaceService {
           messages: [
             {
               role: 'system',
-              content: `You are a professional e-commerce copywriter. Create SEO-optimized product titles for ${marketplace}. ${langInstruction} Titles should be clear, keyword-rich, and under 80 characters. Return only the title, no explanations.`,
+              content: `You are a professional e-commerce copywriter. Create SEO-optimized product titles for ${marketplace}. ${langInstruction} Titles should be clear, keyword-rich, and under 80 characters.${mlDifferentiator} Return only the title, no explanations.`,
             },
             {
               role: 'user',
@@ -2249,6 +2418,80 @@ export class MarketplaceService {
     }
   }
 
+  /**
+   * Dice coefficient for word sets: 2*|A∩B|/(|A|+|B|). Returns 0-1.
+   */
+  private titleSimilarity(a: string, b: string): number {
+    if (!a || !b) return 0;
+    const toWords = (s: string) => new Set((s || '').toLowerCase().split(/\s+/).filter((w) => w.length > 1));
+    const wa = toWords(a);
+    const wb = toWords(b);
+    if (wa.size === 0 && wb.size === 0) return 1;
+    if (wa.size === 0 || wb.size === 0) return 0;
+    let intersection = 0;
+    for (const w of wa) {
+      if (wb.has(w)) intersection++;
+    }
+    return (2 * intersection) / (wa.size + wb.size);
+  }
+
+  /**
+   * Extract attribute (color, material, etc.) from product for title differentiator.
+   */
+  private getDifferentiatorFromProduct(product: any): string | null {
+    const pd = product?.productData;
+    if (!pd) return null;
+    const data = typeof pd === 'string' ? (() => { try { return JSON.parse(pd); } catch { return {}; } })() : pd;
+    const color = data.color || data.colour || data.Colour || data.Color;
+    const material = data.material || data.Material;
+    const size = data.size || data.Size;
+    if (typeof color === 'string' && color.trim().length > 0 && color.length <= 20) return color.trim();
+    if (typeof material === 'string' && material.trim().length > 0 && material.length <= 15) return material.trim();
+    if (typeof size === 'string' && size.trim().length > 0 && size.length <= 12) return size.trim();
+    return null;
+  }
+
+  /**
+   * Ensure ML title differs from existing user publications (avoids duplicate policy).
+   * Exact match or similarity > 0.85 → add differentiator (attribute or #productId).
+   */
+  private async ensureUniqueMlTitle(userId: number, product: any, title: string): Promise<string> {
+    const productId = product?.id;
+    const normalize = (t: string) =>
+      (t || '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .replace(/[^\w\sáéíóúñü]/gi, '')
+        .trim();
+    const norm = normalize(title);
+    if (!norm) return title;
+
+    const listings = await prisma.marketplaceListing.findMany({
+      where: { userId, marketplace: 'mercadolibre' },
+      include: { product: { select: { title: true } } },
+    });
+    const existingTitles = listings
+      .filter((l) => l.productId !== productId)
+      .map((l) => normalize((l as any).product?.title || ''))
+      .filter(Boolean);
+
+    const exactMatch = existingTitles.some((t) => t === norm);
+    const similarMatch = existingTitles.some((t) => this.titleSimilarity(norm, t) > 0.85);
+    if (!exactMatch && !similarMatch) return title;
+
+    const maxLen = TITLE_MAX_BY_MARKETPLACE.mercadolibre ?? 60;
+    const attr = this.getDifferentiatorFromProduct(product);
+    const suffix = attr ? ` ${attr}` : ` #${productId}`;
+    const candidate = (title.slice(0, maxLen - suffix.length).trim() + suffix).slice(0, maxLen);
+    logger.info('[ML Publish] Title duplicate/similar, added differentiator', {
+      productId,
+      originalTitle: title.slice(0, 40),
+      differentiator: attr || `#${productId}`,
+      candidate,
+    });
+    return candidate;
+  }
+
   private parseProductMetadata(product: any): Record<string, any> {
     const raw = product?.productData;
     if (!raw) return {};
@@ -2384,6 +2627,8 @@ export class MarketplaceService {
       images = images.map(url => this.upgradeToHighResImage(url));
       images = images.filter(url => !this.isLowQualityImage(url));
       images = Array.from(new Set(images));
+      // ML policy: first image (portada) must not have logos/text - prioritize clean URLs
+      images = this.reorderMlImagesForCleanPortada(images);
     }
 
     const maxImages = this.getMarketplaceImageLimit(marketplace);
@@ -2435,6 +2680,25 @@ export class MarketplaceService {
     // Block webp for ML (not always supported)
     if (/\.(webp)(\?|$)/i.test(url)) return true;
     return false;
+  }
+
+  /**
+   * ML policy: first image (portada) must not have logos/text. Reorder images so URLs
+   * without logo/watermark/banner/text in path come first. Prefer higher-res (no size suffix).
+   */
+  private reorderMlImagesForCleanPortada(urls: string[]): string[] {
+    if (urls.length <= 1) return urls;
+    const suspects = /logo|watermark|water.?mark|text|banner|watermarking/i;
+    const hasSizeSuffix = /_\d{2,4}x\d{2,4}/i; // e.g. _200x200
+    const cleanFirst = urls.filter(u => !suspects.test(u));
+    const suspect = urls.filter(u => suspects.test(u));
+    const combined = [...cleanFirst, ...suspect];
+    // Within clean images, prefer those without thumbnail size suffix (likely higher res)
+    return combined.sort((a, b) => {
+      const aHiRes = !hasSizeSuffix.test(a) ? 1 : 0;
+      const bHiRes = !hasSizeSuffix.test(b) ? 1 : 0;
+      return bHiRes - aHiRes;
+    });
   }
 
   /**

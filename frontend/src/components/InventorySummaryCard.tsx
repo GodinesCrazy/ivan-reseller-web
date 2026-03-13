@@ -23,6 +23,7 @@ interface InventorySummary {
   products: { total: number; pending: number; approved: number; published: number };
   listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
   listingsTotal?: number;
+  mercadolibreActiveCount?: number;
   ordersByStatus: { CREATED: number; PAID: number; PURCHASING: number; PURCHASED: number; FAILED: number };
   pendingPurchasesCount: number;
 }
@@ -137,6 +138,11 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
                 className="hover:text-primary-600 hover:underline focus:outline-none"
               >
                 ML: {summary.listingsByMarketplace.mercadolibre}
+                {typeof summary.mercadolibreActiveCount === 'number' && summary.mercadolibreActiveCount !== summary.listingsByMarketplace.mercadolibre && (
+                  <span className="text-amber-600 dark:text-amber-400" title="Activos en Mercado Libre (verificado via API)">
+                    {' '}({summary.mercadolibreActiveCount} activos)
+                  </span>
+                )}
               </button>
               <span>·</span>
               <button

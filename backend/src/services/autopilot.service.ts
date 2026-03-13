@@ -1374,12 +1374,14 @@ export class AutopilotSystem extends EventEmitter {
 
     const availableCapital = await this.getAvailableCapital(userId);
     const maxCap = this.config.maxActiveProducts ?? 0;
-    const marketplaces: Array<'ebay' | 'mercadolibre' | 'amazon'> = (
+    const allMarketplaces: Array<'ebay' | 'mercadolibre' | 'amazon'> = (
       this.config.targetMarketplaces && this.config.targetMarketplaces.length > 0
         ? this.config.targetMarketplaces.filter((m): m is 'ebay' | 'mercadolibre' | 'amazon' =>
             ['ebay', 'amazon', 'mercadolibre'].includes(String(m).toLowerCase()))
         : [this.config.targetMarketplace as 'ebay' | 'mercadolibre' | 'amazon']
     );
+    // ML policy: no duplicate listings (same product, same conditions) - exclude from winner duplication
+    const marketplaces = allMarketplaces.filter((m) => m !== 'mercadolibre');
     if (marketplaces.length === 0) return { duplicated: 0 };
 
     let duplicated = 0;

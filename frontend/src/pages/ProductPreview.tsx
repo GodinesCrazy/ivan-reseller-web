@@ -618,6 +618,11 @@ export default function ProductPreview() {
                 <ImageIcon className="w-5 h-5" />
                 Imágenes ({preview.images?.length || 0})
               </h2>
+              {preview.marketplace === 'mercadolibre' && (
+                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                  <strong>Mercado Libre:</strong> La primera imagen será la portada. Evita logos y texto en la imagen principal.
+                </div>
+              )}
               {preview.images && preview.images.length > 0 ? (
                 <ImageGallery images={preview.images} />
               ) : (
