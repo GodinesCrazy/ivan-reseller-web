@@ -52,27 +52,36 @@ router.get('/ping', (req: Request, res: Response) => {
  * GET /api/debug/db-health
  * Endpoint público para diagnosticar salud de la base de datos
  * NO requiere autenticación
+ * P0: En producción no expone userCount ni stack en errores (seguridad)
  */
 router.get('/db-health', async (req: Request, res: Response) => {
+  const isProduction = process.env.NODE_ENV === 'production';
   try {
     // Try raw prisma query
     await prisma.$queryRaw`SELECT 1`;
-    
-    // Try user count
-    const userCount = await prisma.user.count();
-    
-    return res.status(200).json({
+
+    const body: Record<string, unknown> = {
       success: true,
       db: 'ok',
-      userCount,
-    });
+    };
+    // userCount solo en desarrollo (info sensible en prod)
+    if (!isProduction) {
+      const userCount = await prisma.user.count();
+      body.userCount = userCount;
+    }
+
+    return res.status(200).json(body);
   } catch (error: any) {
-    return res.status(500).json({
+    const body: Record<string, unknown> = {
       success: false,
       stage: 'db-health',
-      error: error.message,
-      stack: error.stack,
-    });
+      db: 'error',
+    };
+    if (!isProduction) {
+      body.error = error?.message;
+      body.stack = error?.stack;
+    }
+    return res.status(500).json(body);
   }
 });
 
@@ -171,8 +180,12 @@ router.get('/auth-status-crash-safe', async (_req: Request, res: Response) => {
  * ✅ FIX AUTH: GET /api/debug/login-smoke
  * Endpoint temporal para probar login automático y verificar emisión de cookies
  * NO requiere autenticación - hace login automático con admin/admin123
+ * P1: Bloqueado en producción (riesgo de seguridad)
  */
 router.get('/login-smoke', async (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
   try {
     const { authService } = await import('../../services/auth.service');
     const correlationId = (req as any).correlationId || 'unknown';
@@ -452,8 +465,12 @@ router.get('/dropshipping-oauth-status', authenticate, async (req: Request, res:
  *
  * Endpoint de diagnóstico para AliExpress Affiliate API.
  * Una sola llamada con parámetros fijos. Sin auth. Evidencia para AliExpress Support.
+ * P1: Bloqueado en producción (llamadas API sin auth)
  */
-router.get('/aliexpress/probe', async (_req: Request, res: Response) => {
+router.get('/aliexpress/probe', async (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
   const timestamp = new Date().toISOString();
   const apiName = 'aliexpress.affiliate.product.query';
   const method = 'POST';
@@ -553,8 +570,12 @@ router.get('/aliexpress/probe', async (_req: Request, res: Response) => {
  * Endpoint de diagnóstico para eBay Browse API.
  * Una sola llamada con parámetros fijos para probar integración eBay.
  * Sin auth - similar a /api/debug/aliexpress/probe
+ * P1: Bloqueado en producción (usa userId por query)
  */
 router.get('/ebay/probe', async (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
   const timestamp = new Date().toISOString();
   const correlationId = (req as any).correlationId || `ebay-probe-${Date.now()}`;
   const apiName = 'ebay.buy.browse.item_summary.search';
@@ -828,8 +849,12 @@ router.get('/ebay/probe', async (req: Request, res: Response) => {
  * - email: admin@ivanreseller.com
  *
  * This endpoint is PUBLIC (no authentication required) for initial setup.
+ * P1: Bloqueado en producción (riesgo de seguridad)
  */
 router.post('/seed-admin', async (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
   const correlationId = (req as any).correlationId || `seed-admin-${Date.now()}`;
   
   try {
@@ -945,11 +970,14 @@ router.post('/seed-admin', async (req: Request, res: Response) => {
  *
  * Public endpoint to reset admin password (for emergency access recovery).
  * Resets password for user with username "admin" to "admin123".
- * 
+ *
  * This endpoint is PUBLIC (no authentication required) for emergency recovery.
- * ⚠️ SECURITY: Should be disabled or protected in production environments.
+ * P1: Bloqueado en producción (riesgo de seguridad)
  */
 router.post('/reset-admin-password', async (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
   const correlationId = (req as any).correlationId || `reset-admin-password-${Date.now()}`;
   
   try {

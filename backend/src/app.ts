@@ -1145,7 +1145,7 @@ if (internalRoutes) {
 }
 app.use('/api/diag', diagRoutes); // ✅ FIX STABILITY: Endpoint de diagnóstico /api/diag/ping
 app.use('/api/debug', debugRoutes); // ✅ FIX STABILITY: Endpoint de debug /api/debug/auth-status-crash-safe
-app.use('/debug', debugRoutes); // Mantener ruta legacy
+// P2: Ruta legacy /debug eliminada; usar /api/debug
 
 // ✅ DEBUG: Log routers mounted
 console.log('✅ Mounted routers:');
