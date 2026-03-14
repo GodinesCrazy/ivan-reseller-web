@@ -461,6 +461,48 @@ router.post('/listings/repair-ml', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/publisher/listings/ebay-close-all-from-api — Cerrar TODO en eBay desde API (como ML)
+router.post('/listings/ebay-close-all-from-api', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const marketplaceService = new MarketplaceService();
+    const result = await marketplaceService.ebayCloseAllFromApi(userId);
+    return res.json({
+      success: true,
+      closed: result.closed,
+      failed: result.failed,
+      deletedFromDb: result.deletedFromDb,
+      productIdsUpdated: result.productIdsUpdated,
+      errors: result.errors,
+    });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'ebay-close-all-from-api failed';
+    logger.error('[PUBLISHER] ebay-close-all-from-api failed', { error: errorMessage });
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
+// POST /api/publisher/listings/ebay-close-all — Cerrar TODAS las publicaciones en eBay (desde BD)
+router.post('/listings/ebay-close-all', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const marketplaceService = new MarketplaceService();
+    const result = await marketplaceService.ebayBulkCloseAndSync(userId);
+    return res.json({
+      success: true,
+      closed: result.closed,
+      failed: result.failed,
+      deletedFromDb: result.deletedFromDb,
+      productIdsUpdated: result.productIdsUpdated,
+      errors: result.errors,
+    });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'ebay-close-all failed';
+    logger.error('[PUBLISHER] ebay-close-all failed', { error: errorMessage });
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
 // POST /api/publisher/listings/ml-close-all-from-api — Cerrar TODAS las publicaciones en ML (desde API, no solo BD)
 router.post('/listings/ml-close-all-from-api', async (req: Request, res: Response) => {
   try {

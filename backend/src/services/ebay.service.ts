@@ -1029,6 +1029,36 @@ export class EbayService {
   }
 
   /**
+   * Get all SKUs from eBay inventory (paginated). Used for bulk close from API.
+   */
+  async getAllInventorySkus(): Promise<string[]> {
+    const skus: string[] = [];
+    const limit = 200;
+    let offset = 0;
+
+    const invHeaders = { 'Content-Language': 'en-US' };
+
+    while (true) {
+      const resp = await this.apiClient.get('/sell/inventory/v1/inventory_item', {
+        params: { limit, offset },
+        headers: invHeaders,
+      });
+      const items = resp.data?.inventoryItems || [];
+      for (const item of items) {
+        const sku = item?.sku;
+        if (typeof sku === 'string' && sku.trim()) skus.push(sku.trim());
+      }
+      const total = resp.data?.total ?? 0;
+      if (items.length < limit || skus.length >= total) break;
+      offset += limit;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    logger.info('[eBay] getAllInventorySkus', { total: skus.length });
+    return skus;
+  }
+
+  /**
    * Get account information
    */
   async getAccountInfo(): Promise<any> {

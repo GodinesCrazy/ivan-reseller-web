@@ -1369,6 +1369,151 @@ export class MarketplaceService {
   }
 
   /**
+   * Bulk close eBay listings for user: end each listing on eBay, remove from DB, update products to APPROVED.
+   */
+  async ebayBulkCloseAndSync(userId: number): Promise<{
+    closed: number;
+    failed: number;
+    deletedFromDb: number;
+    productIdsUpdated: number[];
+    errors: Array<{ listingId: string; error: string }>;
+  }> {
+    const { resolveEnvironment } = await import('../utils/environment-resolver');
+    const env = await resolveEnvironment({ userId, default: 'production' });
+    const credentials = await this.getCredentials(userId, 'ebay', env);
+    if (!credentials || !credentials.isActive) {
+      throw new AppError('eBay credentials not found or inactive. Connect eBay in API Settings.', 400);
+    }
+    const ebayCreds = {
+      ...(credentials.credentials as EbayCredentials),
+      sandbox: env === 'sandbox',
+    };
+    const ebayService = new EbayService(ebayCreds);
+
+    const listings = await prisma.marketplaceListing.findMany({
+      where: { userId, marketplace: 'ebay' },
+      select: { id: true, listingId: true, sku: true, productId: true },
+      orderBy: { id: 'asc' },
+    });
+
+    const errors: Array<{ listingId: string; error: string }> = [];
+    const productIdsThatLostListing = new Set<number>();
+    let closed = 0;
+
+    for (const listing of listings) {
+      // eBay withdrawOffer needs offerId or SKU. Prefer SKU (IVAN-{productId}) over listingId (eBay item ID).
+      const ebayIdentifier = listing.sku || `IVAN-${listing.productId}`;
+      try {
+        await ebayService.endListing(ebayIdentifier, 'NotAvailable');
+        await prisma.marketplaceListing.deleteMany({ where: { id: listing.id } });
+        productIdsThatLostListing.add(listing.productId);
+        closed++;
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        errors.push({ listingId: ebayIdentifier, error: msg });
+        logger.warn('[eBay BulkClose] Failed to end listing', { listingId: ebayIdentifier, error: msg });
+      }
+      await new Promise((r) => setTimeout(r, 150)); // rate limit cushion
+    }
+
+    const productIdsUpdated: number[] = [];
+    for (const productId of productIdsThatLostListing) {
+      const remaining = await prisma.marketplaceListing.count({ where: { productId } });
+      if (remaining === 0) {
+        const { productService } = await import('./product.service');
+        await productService.updateProductStatusSafely(productId, 'APPROVED', false, userId);
+        productIdsUpdated.push(productId);
+      }
+    }
+
+    logger.info('[eBay BulkClose] Completed', {
+      userId,
+      closed,
+      failed: errors.length,
+      productIdsUpdated: productIdsUpdated.length,
+    });
+
+    return {
+      closed,
+      failed: errors.length,
+      deletedFromDb: closed,
+      productIdsUpdated,
+      errors,
+    };
+  }
+
+  /**
+   * Close ALL eBay offers by fetching them from eBay Inventory API (not just from our DB).
+   * Ensures everything on eBay is withdrawn even if our DB is out of sync.
+   */
+  async ebayCloseAllFromApi(userId: number): Promise<{
+    closed: number;
+    failed: number;
+    deletedFromDb: number;
+    productIdsUpdated: number[];
+    errors: Array<{ sku: string; error: string }>;
+  }> {
+    const { resolveEnvironment } = await import('../utils/environment-resolver');
+    const env = await resolveEnvironment({ userId, default: 'production' });
+    const credentials = await this.getCredentials(userId, 'ebay', env);
+    if (!credentials || !credentials.isActive) {
+      throw new AppError('eBay credentials not found or inactive. Connect eBay in API Settings.', 400);
+    }
+    const ebayService = new EbayService({
+      ...(credentials.credentials as EbayCredentials),
+      sandbox: env === 'sandbox',
+    });
+
+    const skus = await ebayService.getAllInventorySkus();
+    const errors: Array<{ sku: string; error: string }> = [];
+    let closed = 0;
+
+    for (const sku of skus) {
+      try {
+        await ebayService.endListing(sku, 'NotAvailable');
+        closed++;
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        errors.push({ sku, error: msg });
+        logger.warn('[eBay CloseAllFromApi] Failed to withdraw', { sku, error: msg });
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+
+    const deleted = await prisma.marketplaceListing.deleteMany({
+      where: { userId, marketplace: 'ebay' },
+    });
+    const productIdsUpdated: number[] = [];
+    for (const p of await prisma.product.findMany({
+      where: { userId },
+      select: { id: true },
+    })) {
+      const remaining = await prisma.marketplaceListing.count({ where: { productId: p.id } });
+      if (remaining === 0) {
+        const { productService } = await import('./product.service');
+        await productService.updateProductStatusSafely(p.id, 'APPROVED', false, userId);
+        productIdsUpdated.push(p.id);
+      }
+    }
+
+    logger.info('[eBay CloseAllFromApi] Completed', {
+      userId,
+      closed,
+      failed: errors.length,
+      deletedFromDb: deleted.count,
+      productIdsUpdated: productIdsUpdated.length,
+    });
+
+    return {
+      closed,
+      failed: errors.length,
+      deletedFromDb: deleted.count,
+      productIdsUpdated,
+      errors,
+    };
+  }
+
+  /**
    * Close ALL Mercado Libre publications by fetching them from ML API (not just from our DB).
    * Use when user has publications in ML that we don't track (e.g. created manually or lost sync).
    * Then syncs our DB: removes closed listings and sets products to APPROVED.
