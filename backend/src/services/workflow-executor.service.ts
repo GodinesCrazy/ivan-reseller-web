@@ -10,6 +10,8 @@ import { autopilotSystem } from './autopilot.service';
 import opportunityFinder from './opportunity-finder.service';
 import MarketplaceService from './marketplace.service';
 import { productService } from './product.service';
+import { trendSuggestionsService } from './trend-suggestions.service';
+import { trendsService } from './trends.service';
 import { toNumber } from '../utils/decimal.utils';
 
 const prisma = new PrismaClient();
@@ -232,6 +234,35 @@ export class WorkflowExecutorService {
     'yoga mat', 'bandas resistencia', 'soporte movil coche', 'gadgets trending'
   ];
 
+  /**
+   * Selecciona un query óptimo para el ciclo basado en IA/tendencias.
+   * Cadena: trend-suggestions (high/medium) -> trends -> DEFAULT_SEARCH_QUERIES
+   */
+  private async selectOptimalQueryForWorkflow(userId: number): Promise<string> {
+    // 1. Sugerencias por margen/ROI/tendencia
+    const suggestions = await trendSuggestionsService.generateKeywordSuggestions(userId, 10);
+    const highMedium = suggestions
+      .filter((s) => s.priority === 'high' || s.priority === 'medium')
+      .map((s) => s.keyword);
+    const pool1 = [...new Set(highMedium)].slice(0, 5);
+    if (pool1.length > 0) {
+      return pool1[Math.floor(Math.random() * pool1.length)];
+    }
+    // 2. Keywords trending
+    const trending = await trendsService.getTrendingKeywords({
+      userId,
+      maxKeywords: 10,
+      region: 'US'
+    });
+    const pool2 = trending.map((t) => t.keyword).slice(0, 5);
+    if (pool2.length > 0) {
+      return pool2[Math.floor(Math.random() * pool2.length)];
+    }
+    // 3. Fallback
+    const fallback = WorkflowExecutorService.DEFAULT_SEARCH_QUERIES;
+    return fallback[Math.floor(Math.random() * fallback.length)];
+  }
+
   private async executeSearchWorkflow(
     workflow: any,
     userId: number,
@@ -239,10 +270,10 @@ export class WorkflowExecutorService {
   ): Promise<WorkflowExecutionResult> {
     try {
       const actions = workflow.actions as any || {};
-      const query = (actions.query || actions.searchQuery || '').trim()
-        || WorkflowExecutorService.DEFAULT_SEARCH_QUERIES[
-          Math.floor(Math.random() * WorkflowExecutorService.DEFAULT_SEARCH_QUERIES.length)
-        ];
+      let query = (actions.query || actions.searchQuery || '').trim();
+      if (!query) {
+        query = await this.selectOptimalQueryForWorkflow(userId);
+      }
 
       // ✅ Q3: Validar que el environment coincida con el del usuario
       const userConfig = await workflowConfigService.getUserConfig(userId);
