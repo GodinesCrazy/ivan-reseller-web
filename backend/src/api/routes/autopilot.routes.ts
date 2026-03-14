@@ -191,6 +191,7 @@ router.get('/status', async (req: Request, res: Response, next) => {
       lastRun: stats.lastRunTimestamp ? stats.lastRunTimestamp.toISOString() : null,
       lastCycle: stats.lastRunTimestamp,
       currentPhase: status.currentPhase,
+      cycleStartedAt: status.cycleStartedAt ? status.cycleStartedAt.toISOString() : null,
       currentCycleProgress: status.currentCycleProgress,
     });
   } catch (error) {

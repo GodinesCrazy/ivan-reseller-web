@@ -158,15 +158,23 @@ export class AutopilotSystem extends EventEmitter {
 
   /** Live cycle state for UI feedback */
   private currentPhase: 'idle' | 'searching' | 'filtering' | 'analyzing' | 'publishing' = 'idle';
+  private cycleStartedAt: Date | null = null;
   private currentCycleProgress: {
     query?: string;
     opportunitiesFound?: number;
     analyzed?: number;
     published?: number;
+    filteredCount?: number;
+    category?: string;
+    cycleStartedAt?: string;
+    marketplacesTarget?: string[];
+    publishingCurrent?: number;
+    publishingTotal?: number;
   } = {};
 
   private resetCycleProgress(): void {
     this.currentPhase = 'idle';
+    this.cycleStartedAt = null;
     this.currentCycleProgress = {};
   }
 
@@ -674,9 +682,10 @@ export class AutopilotSystem extends EventEmitter {
       this.isRunning = true;
       this.stats.currentStatus = 'running';
       this.stats.lastRunTimestamp = new Date();
+      this.cycleStartedAt = new Date();
       this.emit('cycle:started', { timestamp: new Date(), query });
       this.currentPhase = 'searching';
-      this.currentCycleProgress = {};
+      this.currentCycleProgress = { cycleStartedAt: this.cycleStartedAt.toISOString() };
       console.log('[AUTOPILOT] CYCLE START');
       console.log('[AUTOPILOT] CYCLE STARTED');
 
@@ -733,7 +742,12 @@ export class AutopilotSystem extends EventEmitter {
 
       // 3. Search opportunities (con userId y environment)
       this.currentPhase = 'searching';
-      this.currentCycleProgress = { query: selectedQuery };
+      this.currentCycleProgress = {
+        ...this.currentCycleProgress,
+        query: selectedQuery,
+        category,
+        marketplacesTarget: [...(this.config.targetMarketplaces || [])],
+      };
       console.log('[AUTOPILOT] PRODUCTS FOUND: searching...');
       logger.info('[AUTOPILOT] Searching opportunities');
       const opportunities = await this.searchOpportunities(selectedQuery, currentUserId, userEnvironment);
@@ -795,7 +809,10 @@ export class AutopilotSystem extends EventEmitter {
       this.currentCycleProgress = {
         ...this.currentCycleProgress,
         analyzed: affordable.length,
+        filteredCount: affordable.length,
         published: 0,
+        publishingCurrent: 0,
+        publishingTotal: affordable.length,
       };
       this.currentPhase = 'publishing';
 
@@ -1244,7 +1261,15 @@ export class AutopilotSystem extends EventEmitter {
       });
     }
 
+    const totalToPublish = freshOpportunities.length;
+    let currentIndex = 0;
     for (const opp of freshOpportunities) {
+      currentIndex++;
+      this.currentCycleProgress = {
+        ...this.currentCycleProgress,
+        publishingCurrent: currentIndex,
+        publishingTotal: totalToPublish,
+      };
       try {
         if (maxCap > 0) {
           const currentCount = await prisma.marketplaceListing.count({ where: { userId: currentUserId } });
@@ -2442,7 +2467,19 @@ export class AutopilotSystem extends EventEmitter {
     lastCycle: CycleResult | null;
     config: AutopilotConfig;
     currentPhase: 'idle' | 'searching' | 'filtering' | 'analyzing' | 'publishing';
-    currentCycleProgress: { query?: string; opportunitiesFound?: number; analyzed?: number; published?: number };
+    cycleStartedAt: Date | null;
+    currentCycleProgress: {
+      query?: string;
+      opportunitiesFound?: number;
+      analyzed?: number;
+      published?: number;
+      filteredCount?: number;
+      category?: string;
+      cycleStartedAt?: string;
+      marketplacesTarget?: string[];
+      publishingCurrent?: number;
+      publishingTotal?: number;
+    };
   } {
     return {
       isRunning: this.isRunning,
@@ -2450,6 +2487,7 @@ export class AutopilotSystem extends EventEmitter {
       lastCycle: this.lastCycleResult,
       config: { ...this.config },
       currentPhase: this.currentPhase,
+      cycleStartedAt: this.cycleStartedAt ? new Date(this.cycleStartedAt.getTime()) : null,
       currentCycleProgress: { ...this.currentCycleProgress },
     };
   }

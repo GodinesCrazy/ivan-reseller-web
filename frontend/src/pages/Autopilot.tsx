@@ -77,7 +77,19 @@ interface AutopilotStatusResponse {
   lastRun?: string | null;
   config?: { targetMarketplaces?: string[]; targetMarketplace?: string };
   currentPhase?: 'idle' | 'searching' | 'filtering' | 'analyzing' | 'publishing';
-  currentCycleProgress?: { query?: string; opportunitiesFound?: number; analyzed?: number; published?: number };
+  cycleStartedAt?: string | null;
+  currentCycleProgress?: {
+    query?: string;
+    opportunitiesFound?: number;
+    analyzed?: number;
+    published?: number;
+    filteredCount?: number;
+    category?: string;
+    cycleStartedAt?: string;
+    marketplacesTarget?: string[];
+    publishingCurrent?: number;
+    publishingTotal?: number;
+  };
 }
 
 /** Autopilot business metrics from GET /api/dashboard/autopilot-metrics */
@@ -122,6 +134,9 @@ export default function Autopilot() {
   const [savingConfig, setSavingConfig] = useState(false);
   // API credentials: mostrar aviso si ML/Amazon no conectados (sin bloquear selección)
   const [marketplaceApiStatus, setMarketplaceApiStatus] = useState<Record<string, { isConfigured: boolean; isAvailable: boolean }>>({});
+
+  // Phase summary (colapsable)
+  const [showPhaseSummary, setShowPhaseSummary] = useState(false);
 
   // Autopilot Settings (extended config)
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
@@ -473,6 +488,7 @@ export default function Autopilot() {
         lastRun: data.lastRun ?? undefined,
         config: data.config,
         currentPhase: data.currentPhase,
+        cycleStartedAt: data.cycleStartedAt ?? undefined,
         currentCycleProgress: data.currentCycleProgress,
       } : null);
       // Sincronizar marketplaces destino desde config
@@ -860,17 +876,41 @@ export default function Autopilot() {
               <div className="font-semibold text-lg text-gray-900 dark:text-gray-100">
                 {autopilotRunning ? 'En ejecución' : 'Detenido'}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+              <div className="text-sm text-gray-600 dark:text-gray-400 mt-0.5 space-y-1">
                 {autopilotRunning ? (
-                  (() => {
-                    const phase = autopilotStatus?.currentPhase;
-                    if (phase === 'searching') return 'Fase 1/7: Buscando oportunidades en AliExpress…';
-                    if (phase === 'filtering') return 'Fase 2/7: Filtrando por criterios de precio y calidad…';
-                    if (phase === 'analyzing') return 'Fase 3/7: Analizando rentabilidad y ROI…';
-                    if (phase === 'publishing') return 'Fase 4/7: Publicando en marketplace(s) destino…';
-                    if (phase === 'idle') return 'Entre ciclos. Siguiente ciclo según intervalo configurado.';
-                    return 'Ciclo activo: buscar → filtrar → analizar → publicar.';
-                  })()
+                  <>
+                    {(() => {
+                      const phase = autopilotStatus?.currentPhase;
+                      const prog = autopilotStatus?.currentCycleProgress;
+                      let msg = '';
+                      if (phase === 'searching') msg = 'Fase 1/7: Buscando oportunidades en AliExpress…';
+                      else if (phase === 'filtering') msg = 'Fase 2/7: Filtrando por criterios de precio y calidad…';
+                      else if (phase === 'analyzing') msg = 'Fase 3/7: Analizando rentabilidad y ROI…';
+                      else if (phase === 'publishing') {
+                        const curr = prog?.publishingCurrent;
+                        const tot = prog?.publishingTotal;
+                        msg = (curr != null && tot != null && tot > 0)
+                          ? `Fase 4/7: Publicando en marketplace(s) destino… (producto ${curr} de ${tot})`
+                          : 'Fase 4/7: Publicando en marketplace(s) destino…';
+                      } else if (phase === 'idle') msg = 'Entre ciclos. Siguiente ciclo según intervalo configurado.';
+                      else msg = 'Ciclo activo: buscar → filtrar → analizar → publicar.';
+                      return <span>{msg}</span>;
+                    })()}
+                    {autopilotStatus?.cycleStartedAt && (
+                      <span className="block text-xs text-gray-500 dark:text-gray-500">
+                        Ciclo iniciado hace {Math.floor((Date.now() - new Date(autopilotStatus.cycleStartedAt).getTime()) / 60000)} min
+                      </span>
+                    )}
+                    {autopilotStatus?.config?.targetMarketplaces && autopilotStatus.config.targetMarketplaces.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {autopilotStatus.config.targetMarketplaces.map((mp) => (
+                          <span key={mp} className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 capitalize">
+                            {mp === 'mercadolibre' ? 'Mercado Libre' : mp}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 ) : (
                   'Inicia el autopilot para ejecutar ciclos automáticos (buscar oportunidades y publicar).'
                 )}
@@ -898,37 +938,71 @@ export default function Autopilot() {
                       const hasData = !isCyclePhase && (
                         (i === 4 && compraCount > 0) || (i === 5 && envioCount > 0) || (i === 6 && entregadoCount > 0)
                       );
+                      const phase5Tooltip = 'Pagadas + Comprando en AliExpress + Pendientes de compra';
+                      const phase6Tooltip = 'Órdenes compradas en proveedor, esperando envío';
+                      const phase7Tooltip = 'Ventas marcadas como entregadas';
+                      const tooltip = !isCyclePhase ? (i === 4 ? `${phase5Tooltip} — ${compraCount} en proceso` : i === 5 ? `${phase6Tooltip} — ${envioCount}` : `${phase7Tooltip} — ${entregadoCount}`) : label;
                       return (
                         <div
                           key={label}
                           className={`flex-1 h-2 rounded first:rounded-l last:rounded-r ${
                             isActive ? 'bg-green-500 dark:bg-green-600' : hasData ? 'bg-blue-400 dark:bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'
                           }`}
-                          title={`${label}${!isCyclePhase ? `: ${i === 4 ? compraCount : i === 5 ? envioCount : entregadoCount}` : ''}`}
+                          title={tooltip}
                         />
                       );
                     })}
                   </div>
                   <div className="flex flex-wrap gap-3 text-xs">
                     <span className="text-gray-600 dark:text-gray-400">Fases 1-4: ciclo Autopilot</span>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200" title="Pagadas: X | Comprando: Y | Pendientes: Z — Orden pagada, compra en AliExpress">
                       5. Compra: {compraCount}
                     </span>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200" title="Órdenes compradas en proveedor, esperando envío">
                       6. Envío: {envioCount}
                     </span>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200" title="Ventas marcadas como entregadas">
                       7. Entregado: {entregadoCount}
                     </span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPhaseSummary((v) => !v)}
+                    className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1"
+                  >
+                    {showPhaseSummary ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    {showPhaseSummary ? 'Ocultar' : 'Ver'} descripción de fases
+                  </button>
+                  {showPhaseSummary && (
+                    <div className="mt-2 overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                      <table className="min-w-full text-xs">
+                        <thead className="bg-gray-50 dark:bg-gray-900">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Fase</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Nombre</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Descripción</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                          <tr><td className="px-3 py-2 font-medium">1</td><td>Buscar</td><td>Query a AliExpress / tendencias</td></tr>
+                          <tr><td className="px-3 py-2 font-medium">2</td><td>Filtrar</td><td>Precio, capital, duplicados</td></tr>
+                          <tr><td className="px-3 py-2 font-medium">3</td><td>Analizar</td><td>Rentabilidad, ROI, compliance</td></tr>
+                          <tr><td className="px-3 py-2 font-medium">4</td><td>Publicar</td><td>Crear listados en eBay/ML/Amazon</td></tr>
+                          <tr><td className="px-3 py-2 font-medium">5</td><td>Compra</td><td>Orden pagada, compra en AliExpress</td></tr>
+                          <tr><td className="px-3 py-2 font-medium">6</td><td>Envío</td><td>En tránsito desde proveedor</td></tr>
+                          <tr><td className="px-3 py-2 font-medium">7</td><td>Entregado</td><td>Venta completada</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               );
             })()}
             {autopilotRunning && autopilotStatus?.currentCycleProgress && (autopilotStatus.currentCycleProgress.query || autopilotStatus.currentCycleProgress.opportunitiesFound != null || autopilotStatus.currentCycleProgress.analyzed != null || autopilotStatus.currentCycleProgress.published != null) && (
             <div className="flex flex-wrap gap-2 items-center pt-1">
-              {autopilotStatus.currentCycleProgress.query && (
+              {(autopilotStatus.currentCycleProgress.query || autopilotStatus.currentCycleProgress.opportunitiesFound != null) && (
                 <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-200 dark:bg-gray-700 text-xs font-medium text-gray-800 dark:text-gray-200" title="Query de búsqueda">
-                  Query: <span className="ml-1 truncate max-w-[200px]">{autopilotStatus.currentCycleProgress.query}</span>
+                  Query: <span className="ml-1 truncate max-w-[240px]" title={autopilotStatus.currentCycleProgress.query || ''}>{autopilotStatus.currentCycleProgress.query || 'selección automática'}</span>
                 </span>
               )}
               {autopilotStatus.currentCycleProgress.opportunitiesFound != null && (
@@ -1250,15 +1324,15 @@ export default function Autopilot() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-colors">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-colors" title="Ciclo de dropshipping activo cuando el Autopilot está en ejecución">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-blue-100 rounded-lg">
               <Zap className="w-6 h-6 text-blue-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Active Workflows</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Ciclo activo</div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {stats?.activeWorkflows || 0}
+                {autopilotRunning ? 1 : 0}
               </div>
             </div>
           </div>
@@ -1313,6 +1387,9 @@ export default function Autopilot() {
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Workflows ({workflows.length})
           </h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            Los workflows personalizados permiten automatizar tareas adicionales. El ciclo de dropshipping (buscar, analizar, publicar) se ejecuta automáticamente cuando el Autopilot está activo, sin necesidad de crear workflows.
+          </p>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
