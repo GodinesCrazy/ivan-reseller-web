@@ -1753,6 +1753,15 @@ class OpportunityFinderService {
       }
     });
 
+    const trendsDiscarded = skippedDecliningTrend + skippedLowVolume + skippedLowDemand;
+    if (trendsDiscarded > 0) {
+      logger.info('[OPPORTUNITY-FINDER] Productos descartados por validación de tendencias', {
+        skippedDecliningTrend,
+        skippedLowVolume,
+        skippedLowDemand,
+        totalTrendsDiscarded: trendsDiscarded,
+      });
+    }
     if (opportunities.length === 0 && products.length > 0) {
       logger.warn('PROBLEMA DETECTADO: Se scrapearon productos pero no se generaron oportunidades', {
         service: 'opportunity-finder',

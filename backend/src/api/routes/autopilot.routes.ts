@@ -289,6 +289,40 @@ router.get('/test-cycle', async (req: Request, res: Response, next: NextFunction
 });
 
 /**
+ * GET /api/autopilot/diagnose-search - Diagnóstico de búsqueda (findOpportunitiesWithDiagnostics)
+ */
+router.get('/diagnose-search', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const query = typeof req.query.query === 'string' ? req.query.query : 'phone case';
+    const opportunityFinder = (await import('../../services/opportunity-finder.service')).default;
+    const result = await opportunityFinder.findOpportunitiesWithDiagnostics(userId, {
+      query,
+      maxItems: 10,
+      marketplaces: ['ebay'],
+      skipTrendsValidation: false,
+    });
+    res.json({
+      success: true,
+      query,
+      opportunities: result.opportunities.length,
+      diagnostics: result.diagnostics,
+      sample: result.opportunities[0] ? {
+        title: result.opportunities[0].title?.substring(0, 80),
+        costUsd: result.opportunities[0].costUsd,
+        roiPercentage: result.opportunities[0].roiPercentage,
+      } : null,
+    });
+  } catch (error: any) {
+    logger.error('Error in diagnose-search', { error: error?.message });
+    next(error);
+  }
+});
+
+/**
  * ✅ POST /api/autopilot/run-cycle - Ejecutar un ciclo manualmente (forzar ciclo real)
  */
 router.post('/run-cycle', async (req: Request, res: Response, next: NextFunction) => {

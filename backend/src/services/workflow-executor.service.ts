@@ -296,7 +296,8 @@ export class WorkflowExecutorService {
         query,
         maxItems,
         marketplaces,
-        environment
+        environment,
+        skipTrendsValidation: true, // Evitar descarte masivo por trends (diagnóstico workflow)
       });
 
       logger.info('WorkflowExecutor: Search workflow completado', {
