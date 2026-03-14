@@ -21,8 +21,15 @@ router.get('/workflows', async (req: Request, res: Response, next) => {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
 
-    const workflows = await workflowService.getUserWorkflows(userId);
-    
+    const rawWorkflows = await workflowService.getUserWorkflows(userId);
+    const workflows = rawWorkflows.map((w: any) => {
+      const logs = (w.logs as any[]) || [];
+      const total = logs.length;
+      const successCount = logs.filter((l: any) => l.success === true).length;
+      const successRate = total > 0 ? (successCount / total) * 100 : 0;
+      return { ...w, successRate };
+    });
+
     res.json({
       success: true,
       workflows
@@ -364,16 +371,21 @@ router.get('/workflows/:id/logs', async (req: Request, res: Response, next) => {
     // Verificar ownership y obtener workflow
     const workflow = await workflowService.getWorkflowById(workflowId, userId);
     const rawLogs = (workflow.logs as any[]) || [];
-    const logs = rawLogs.map((log, i) => ({
-      id: i + 1,
-      workflowId: workflow.id,
-      workflowName: workflow.name,
-      status: log.success ? 'success' : 'failed',
-      startedAt: log.timestamp || log.startedAt,
-      duration: log.executionTime,
-      itemsProcessed: log.data?.opportunitiesFound ?? log.data?.itemsProcessed ?? 0,
-      errors: Array.isArray(log.errors) ? log.errors.join('; ') : (log.errors || ''),
-    }));
+    const logs = rawLogs.map((log: any, i: number) => {
+      const parsedData = typeof log.data === 'string'
+        ? (() => { try { return JSON.parse(log.data); } catch { return {}; } })()
+        : (log.data || {});
+      return {
+        id: i + 1,
+        workflowId: workflow.id,
+        workflowName: workflow.name,
+        status: log.success ? 'success' : 'failed',
+        startedAt: log.timestamp || log.startedAt,
+        duration: log.executionTime,
+        itemsProcessed: parsedData.opportunitiesFound ?? parsedData.itemsProcessed ?? 0,
+        errors: Array.isArray(log.errors) ? log.errors.join('; ') : (log.errors || ''),
+      };
+    });
 
     res.json({
       success: true,

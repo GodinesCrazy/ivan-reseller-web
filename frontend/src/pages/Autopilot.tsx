@@ -779,9 +779,9 @@ export default function Autopilot() {
   /** Formatea lastRun evitando fechas inválidas (ej. solo hora que se interpreta como 2006) */
   const formatLastRun = (lastRun: string) => {
     const d = new Date(lastRun);
-    if (Number.isNaN(d.getTime())) return lastRun;
+    if (Number.isNaN(d.getTime())) return '—';
     const y = d.getFullYear();
-    if (y < 2010 || y > 2030) return lastRun; // Evitar años claramente erróneos
+    if (y < 2010 || y > 2030) return '—'; // Evitar mostrar años erróneos como 2006
     return d.toLocaleString();
   };
 
@@ -1399,7 +1399,7 @@ export default function Autopilot() {
             Workflows ({workflows.length})
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Los workflows personalizados automatizan tareas adicionales (ej. búsqueda de oportunidades). Para publicar en eBay o Mercado Libre usa <strong>Start Autopilot</strong>; los workflows tipo &quot;search&quot; solo buscan oportunidades y no publican.
+            Los workflows personalizados automatizan tareas adicionales (ej. búsqueda de oportunidades). El &quot;Resumen del último ciclo&quot; mostrado arriba corresponde al <strong>ciclo principal del Autopilot</strong> (Start Autopilot). Los workflows tipo &quot;search&quot; ejecutan ciclos independientes y solo buscan oportunidades; para publicar en eBay o Mercado Libre usa <strong>Start Autopilot</strong>.
           </p>
         </div>
         <div className="overflow-x-auto">
