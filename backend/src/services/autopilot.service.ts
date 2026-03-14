@@ -71,6 +71,11 @@ export interface Opportunity {
   orders?: number;
   shipping?: any;
   specifications?: Record<string, any>;
+  /** Costos completos y precio sugerido desde opportunity-finder */
+  suggestedPriceUsd?: number;
+  shippingCost?: number;
+  importTax?: number;
+  totalCost?: number;
 }
 
 /**
@@ -987,6 +992,10 @@ export class AutopilotSystem extends EventEmitter {
         description: item.description || `Producto: ${item.title}`,
         rating: 0,
         orders: 0,
+        suggestedPriceUsd: typeof item.suggestedPriceUsd === 'number' ? item.suggestedPriceUsd : undefined,
+        shippingCost: typeof item.shippingCost === 'number' ? item.shippingCost : undefined,
+        importTax: typeof item.importTax === 'number' ? item.importTax : undefined,
+        totalCost: typeof item.totalCost === 'number' ? item.totalCost : undefined,
       }));
 
       console.log('[AUTOPILOT] Opportunities generated:', opportunities.length);
@@ -1619,7 +1628,9 @@ export class AutopilotSystem extends EventEmitter {
       //   throw validationError;
       // }
 
-      const calculatedSuggestedPrice = opportunity.estimatedCost * 2.5;
+      const calculatedSuggestedPrice = (opportunity.suggestedPriceUsd != null && opportunity.suggestedPriceUsd > opportunity.estimatedCost)
+        ? opportunity.suggestedPriceUsd
+        : opportunity.estimatedCost * 2.5;
       if (calculatedSuggestedPrice <= opportunity.estimatedCost) {
         logger.error('Autopilot: Invalid price calculation, suggestedPrice must be greater than aliexpressPrice', {
           service: 'autopilot',
@@ -1684,6 +1695,7 @@ export class AutopilotSystem extends EventEmitter {
               aliexpressUrl: opportunity.url,
               aliexpressPrice: opportunity.estimatedCost,
               suggestedPrice: calculatedSuggestedPrice,
+              finalPrice: calculatedSuggestedPrice,
               currency: (opportunity as any).currency || 'USD', // ✅ Guardar moneda original (si está disponible)
               category: opportunity.category,
               images: JSON.stringify(this.ensureProductImages(opportunity)),
@@ -1692,6 +1704,9 @@ export class AutopilotSystem extends EventEmitter {
                 optimalPublicationDuration: optimization.durationDays,
                 optimizationReasoning: optimization.reasoning
               }),
+              shippingCost: opportunity.shippingCost != null ? opportunity.shippingCost : null,
+              importTax: opportunity.importTax != null ? opportunity.importTax : null,
+              totalCost: opportunity.totalCost != null ? opportunity.totalCost : null,
               status: 'PENDING', // ✅ Cambiar a PENDING inicialmente
               isPublished: false, // ✅ Cambiar a false hasta que se publique exitosamente
             }
@@ -1712,6 +1727,7 @@ export class AutopilotSystem extends EventEmitter {
                 aliexpressUrl: opportunity.url,
                 aliexpressPrice: opportunity.estimatedCost,
                 suggestedPrice: calculatedSuggestedPrice,
+                finalPrice: calculatedSuggestedPrice,
                 // currency: omitido temporalmente hasta que se ejecute la migración
                 category: opportunity.category,
                 images: JSON.stringify(this.ensureProductImages(opportunity)),
@@ -1720,6 +1736,9 @@ export class AutopilotSystem extends EventEmitter {
                   optimalPublicationDuration: optimization.durationDays,
                   optimizationReasoning: optimization.reasoning
                 }),
+                shippingCost: opportunity.shippingCost != null ? opportunity.shippingCost : null,
+                importTax: opportunity.importTax != null ? opportunity.importTax : null,
+                totalCost: opportunity.totalCost != null ? opportunity.totalCost : null,
                 status: 'PENDING',
                 isPublished: false,
               }
@@ -1738,6 +1757,9 @@ export class AutopilotSystem extends EventEmitter {
             title: opportunity.title,
             costUsd: opportunity.estimatedCost,
             suggestedPriceUsd: calculatedSuggestedPrice,
+            shippingCost: opportunity.shippingCost != null ? opportunity.shippingCost : null,
+            importTax: opportunity.importTax != null ? opportunity.importTax : null,
+            totalCost: opportunity.totalCost != null ? opportunity.totalCost : null,
             profitMargin: ((calculatedSuggestedPrice - opportunity.estimatedCost) / opportunity.estimatedCost) * 100,
             roiPercentage: ((opportunity.estimatedProfit / opportunity.estimatedCost) * 100),
             confidenceScore: (opportunity as any).confidence || (opportunity as any).confidenceScore || 50, // ✅ FIX: confidenceScore no existe en Opportunity, usar type assertion
@@ -1966,8 +1988,10 @@ export class AutopilotSystem extends EventEmitter {
     
     try {
       const currentUserId = userId;
-      
-      const calculatedSuggestedPrice = opportunity.estimatedCost * 2.5;
+
+      const calculatedSuggestedPrice = (opportunity.suggestedPriceUsd != null && opportunity.suggestedPriceUsd > opportunity.estimatedCost)
+        ? opportunity.suggestedPriceUsd
+        : opportunity.estimatedCost * 2.5;
       if (calculatedSuggestedPrice <= opportunity.estimatedCost) {
         logger.error('Autopilot: Invalid price calculation in sendToApprovalQueue, suggestedPrice must be greater than aliexpressPrice', {
           service: 'autopilot',
