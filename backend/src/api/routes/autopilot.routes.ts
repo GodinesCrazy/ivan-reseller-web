@@ -363,7 +363,17 @@ router.get('/workflows/:id/logs', async (req: Request, res: Response, next) => {
 
     // Verificar ownership y obtener workflow
     const workflow = await workflowService.getWorkflowById(workflowId, userId);
-    const logs = (workflow.logs as any[]) || [];
+    const rawLogs = (workflow.logs as any[]) || [];
+    const logs = rawLogs.map((log, i) => ({
+      id: i + 1,
+      workflowId: workflow.id,
+      workflowName: workflow.name,
+      status: log.success ? 'success' : 'failed',
+      startedAt: log.timestamp || log.startedAt,
+      duration: log.executionTime,
+      itemsProcessed: log.data?.opportunitiesFound ?? log.data?.itemsProcessed ?? 0,
+      errors: Array.isArray(log.errors) ? log.errors.join('; ') : (log.errors || ''),
+    }));
 
     res.json({
       success: true,

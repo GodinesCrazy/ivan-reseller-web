@@ -953,9 +953,20 @@ export default function Autopilot() {
                       );
                     })}
                   </div>
-                  <div className="flex flex-wrap gap-3 text-xs">
-                    <span className="text-gray-600 dark:text-gray-400">Fases 1-4: ciclo Autopilot</span>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200" title="Pagadas: X | Comprando: Y | Pendientes: Z — Orden pagada, compra en AliExpress">
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300" title="Query a AliExpress / tendencias">
+                      1. Buscar
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300" title="Precio, capital, duplicados">
+                      2. Filtrar
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300" title="Rentabilidad, ROI, compliance">
+                      3. Analizar
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300" title="Crear listados en eBay/ML/Amazon">
+                      4. Publicar
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200" title="Pagadas + Comprando en AliExpress + Pendientes de compra">
                       5. Compra: {compraCount}
                     </span>
                     <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200" title="Órdenes compradas en proveedor, esperando envío">
@@ -1388,7 +1399,7 @@ export default function Autopilot() {
             Workflows ({workflows.length})
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Los workflows personalizados permiten automatizar tareas adicionales. El ciclo de dropshipping (buscar, analizar, publicar) se ejecuta automáticamente cuando el Autopilot está activo, sin necesidad de crear workflows.
+            Los workflows personalizados automatizan tareas adicionales (ej. búsqueda de oportunidades). Para publicar en eBay o Mercado Libre usa <strong>Start Autopilot</strong>; los workflows tipo &quot;search&quot; solo buscan oportunidades y no publican.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -1445,10 +1456,10 @@ export default function Autopilot() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {workflow.lastRun ? new Date(workflow.lastRun).toLocaleString() : 'Never'}
+                    {workflow.lastRun ? formatLastRun(workflow.lastRun) : 'Never'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {workflow.nextRun ? new Date(workflow.nextRun).toLocaleString() : '—'}
+                    {workflow.nextRun ? formatLastRun(workflow.nextRun) : '—'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {workflow.runCount}
@@ -1768,7 +1779,7 @@ export default function Autopilot() {
                           </span>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(log.startedAt).toLocaleString()}
+                          {log.startedAt ? formatLastRun(log.startedAt) : '—'}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                           {formatDuration(log.duration)}
