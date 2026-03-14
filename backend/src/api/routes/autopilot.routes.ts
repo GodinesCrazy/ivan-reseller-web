@@ -415,8 +415,8 @@ router.get('/workflows/:id/logs', async (req: Request, res: Response, next) => {
         workflowName: workflow.name,
         status: log.success ? 'success' : 'failed',
         startedAt: log.timestamp || log.startedAt,
-        duration: log.executionTime,
-        itemsProcessed: parsedData.opportunitiesFound ?? parsedData.itemsProcessed ?? 0,
+        duration: log.executionTime ?? log.duration,
+        itemsProcessed: log.opportunitiesFound ?? parsedData.opportunitiesFound ?? parsedData.itemsProcessed ?? 0,
         errors: Array.isArray(log.errors) ? log.errors.join('; ') : (log.errors || ''),
       };
     });

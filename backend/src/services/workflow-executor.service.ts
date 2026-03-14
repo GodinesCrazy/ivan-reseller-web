@@ -94,12 +94,14 @@ export class WorkflowExecutorService {
       }
 
       // Actualizar estadísticas y logs del workflow
+      const executionTime = Date.now() - startTime;
       const existingLogs = (workflow.logs as any[]) || [];
       const newLog = {
         timestamp: new Date().toISOString(),
         success: result.success,
         message: result.message,
-        executionTime: result.executionTime,
+        executionTime,
+        opportunitiesFound: result.data?.opportunitiesFound ?? 0,
         errors: result.errors || [],
         data: result.data ? JSON.stringify(result.data).substring(0, 500) : null // Limitar tamaño
       };
@@ -116,7 +118,7 @@ export class WorkflowExecutorService {
         }
       });
 
-      result.executionTime = Date.now() - startTime;
+      result.executionTime = executionTime;
 
       logger.info('Workflow ejecutado', {
         workflowId,
