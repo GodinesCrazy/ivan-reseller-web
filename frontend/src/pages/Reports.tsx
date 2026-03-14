@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { log } from '@/utils/logger';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 const safeNumber = (v: unknown): number =>
   typeof v === 'number' && !Number.isNaN(v) ? v : 0;
@@ -108,6 +109,7 @@ interface ExecutiveReport {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
 export default function Reports() {
+  const { environment } = useEnvironment();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('sales');
   const [reportData, setReportData] = useState<any>(null);
@@ -164,12 +166,13 @@ export default function Reports() {
     } else if (activeTab === 'successful-operations') {
       loadSuccessfulOperations();
     }
-  }, [activeTab]);
+  }, [activeTab, environment]);
 
   const loadExecutiveReport = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/reports/executive', {
+      const url = `/api/reports/executive${environment ? `?environment=${environment}` : ''}`;
+      const response = await fetch(url, {
         credentials: 'include', // ✅ FIX AUTH: Incluir cookies
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -233,6 +236,9 @@ export default function Reports() {
       }
       if (filters.format) {
         params.append('format', filters.format);
+      }
+      if (environment) {
+        params.append('environment', environment);
       }
 
       // Build headers conditionally (solo añadir Authorization si existe token)

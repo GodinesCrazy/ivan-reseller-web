@@ -13,8 +13,10 @@ import { formatCurrencySimple } from '@/utils/currency';
 import { retryOrderFulfill, type Order } from '@/services/orders.api';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 export default function Orders() {
+  const { environment } = useEnvironment();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,14 +45,14 @@ export default function Orders() {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.get<Order[]>('/api/orders');
+      const res = await api.get<Order[]>('/api/orders', { params: { environment } });
       setOrders(res.data || []);
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'Error al cargar órdenes');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [environment]);
 
   useLiveData({ fetchFn: fetchOrders, intervalMs: 15000, enabled: true });
   useNotificationRefetch({

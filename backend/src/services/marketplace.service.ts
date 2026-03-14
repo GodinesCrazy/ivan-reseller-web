@@ -67,6 +67,17 @@ function inferBrandFromTitle(title: string): string | null {
   return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
 }
 
+const COLOR_WORDS = /\b(negro|blanco|azul|rojo|verde|amarillo|gris|rosa|morado|naranja|marrón|beige|plateado|dorado|multicolor|black|white|blue|red|green|yellow|gray|pink|purple|orange|brown|silver|gold|multi)\b/gi;
+const MATERIAL_WORDS = /\b(metal|aluminio|acero|plástico|madera|cuero|tela|silicona|vidrio|cristal|metal\.|plastic|wood|leather|fabric|silicone|glass)\b/gi;
+
+function extractFromTitle(title: string, pattern: RegExp): string | null {
+  if (!title || typeof title !== 'string') return null;
+  const m = title.match(pattern);
+  if (!m || m.length === 0) return null;
+  const word = m[0].trim();
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+}
+
 import { EbayService, EbayCredentials, EbayProduct } from './ebay.service';
 import {
   MercadoLibreService,
@@ -85,6 +96,7 @@ import crypto from 'crypto';
 import type { CredentialScope } from '@prisma/client';
 import { toNumber } from '../utils/decimal.utils';
 import { fastHttpClient } from '../config/http-client'; // ✅ PRODUCTION READY: Usar cliente HTTP configurado
+import { resolveDestination } from './destination.service';
 import {
   sanitizeTitleForEbay,
   sanitizeDescriptionForEbay,
@@ -121,6 +133,7 @@ export interface PublishProductRequest {
     quantity?: number;
     title?: string;
     description?: string;
+    primaryImageIndex?: number;
   };
 }
 
@@ -745,13 +758,17 @@ export class MarketplaceService {
         throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
       }
 
-      // ✅ Margen estricto: precio debe ser mayor que el costo
       const costNum = toNumber(product.aliexpressPrice);
-      if (price <= costNum) {
-        throw new AppError(`Price (${price}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
+      const shippingNum = toNumber(product.shippingCost ?? 0);
+      const importTaxNum = toNumber(product.importTax ?? 0);
+      const totalCost = toNumber(product.totalCost) > 0
+        ? toNumber(product.totalCost)
+        : costNum + shippingNum + importTaxNum;
+      if (price <= totalCost) {
+        throw new AppError(`Price (${price}) must be greater than total cost (${totalCost.toFixed(2)}: product + shipping + import tax) to generate profit.`, 400);
       }
 
-      const ebayConfig = this.getMarketplaceConfig('ebay');
+      const ebayConfig = this.getMarketplaceConfig('ebay', credentialEntry.credentials as any);
       const ebayKeywords = buildKeywordsFromProduct(product);
       let finalTitle = customData?.title || product.title;
       let finalDescription = customData?.description || product.description || '';
@@ -871,6 +888,19 @@ export class MarketplaceService {
     userId?: number
   ): Promise<PublishResult> {
     try {
+      // Merge primaryImageIndex from productData (set in ProductPreview) into customData
+      let mergedCustomData = { ...customData };
+      if (typeof mergedCustomData.primaryImageIndex !== 'number') {
+        try {
+          const pd = product.productData ? (typeof product.productData === 'string' ? JSON.parse(product.productData) : product.productData) : {};
+          if (typeof pd.primaryImageIndexForML === 'number' && pd.primaryImageIndexForML >= 0) {
+            mergedCustomData = { ...mergedCustomData, primaryImageIndex: pd.primaryImageIndexForML };
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
+
       // ML policy: no duplicate publications of same product with same conditions
       if (userId) {
         const existing = await prisma.marketplaceListing.findFirst({
@@ -891,14 +921,14 @@ export class MarketplaceService {
       const mlService = new MercadoLibreService(credsWithSiteId);
 
       // Predict category if not provided
-      let categoryId = customData?.categoryId;
+      let categoryId = mergedCustomData?.categoryId;
       if (!categoryId) {
-        categoryId = await mlService.predictCategory(product.title);
+        categoryId = await mlService.predictCategory(product.title, product.description);
       }
 
       // ✅ CORREGIDO: Validar imágenes antes de publicar
       // ✅ MULTI-IMAGE: Preparar todas las imágenes disponibles (hasta el límite de MercadoLibre)
-      const images = this.prepareImagesForMarketplace(product.images, 'mercadolibre');
+      const images = this.prepareImagesForMarketplace(product.images, 'mercadolibre', mergedCustomData);
       if (!images || images.length === 0) {
         throw new AppError('Product must have at least one image before publishing. Please add images to the product.', 400);
       }
@@ -908,18 +938,29 @@ export class MarketplaceService {
         throw new AppError('Product must have a valid category before publishing. Please specify a category.', 400);
       }
 
-      const priceUsd = this.resolveListingPrice(product, customData?.price);
+      const priceUsd = this.resolveListingPrice(product, mergedCustomData?.price);
       if (priceUsd <= 0) {
         throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
       }
 
       const costNumMl = toNumber(product.aliexpressPrice);
-      if (priceUsd <= costNumMl) {
-        throw new AppError(`Price (${priceUsd}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
+      const shippingNumMl = toNumber(product.shippingCost ?? 0);
+      const importTaxNumMl = toNumber(product.importTax ?? 0);
+      const totalCostMl = toNumber(product.totalCost) > 0
+        ? toNumber(product.totalCost)
+        : costNumMl + shippingNumMl + importTaxNumMl;
+      if (priceUsd <= totalCostMl) {
+        throw new AppError(`Price (${priceUsd}) must be greater than total cost (${totalCostMl.toFixed(2)}: product + shipping + import tax) to generate profit.`, 400);
       }
 
       const siteId = credsWithSiteId.siteId || 'MLC';
       const targetCurrency = mlService.getSiteCurrency(siteId);
+      const dest = resolveDestination('mercadolibre', credsWithSiteId);
+      logger.info('[ML Publish] Origin CN → Destination', {
+        siteId,
+        countryCode: dest.countryCode,
+        currency: dest.currency,
+      });
       let price = priceUsd;
       if (targetCurrency !== 'USD') {
         const fxService = (await import('./fx.service')).default;
@@ -929,12 +970,12 @@ export class MarketplaceService {
         });
       }
 
-      const mlConfig = this.getMarketplaceConfig('mercadolibre');
+      const mlConfig = this.getMarketplaceConfig('mercadolibre', credsWithSiteId);
       const mlKeywords = buildKeywordsFromProduct(product);
-      let finalTitle = customData?.title || product.title;
-      let finalDescription = customData?.description || product.description || '';
+      let finalTitle = mergedCustomData?.title || product.title;
+      let finalDescription = mergedCustomData?.description || product.description || '';
 
-      if (!customData?.title && userId) {
+      if (!mergedCustomData?.title && userId) {
         try {
           finalTitle = await this.generateAITitle(product, mlConfig.displayName, mlConfig.language, userId, mlKeywords);
           finalTitle = truncateTitleByLimit(String(finalTitle || '').replace(/\s+/g, ' ').trim(), 'mercadolibre');
@@ -943,12 +984,22 @@ export class MarketplaceService {
         }
       }
 
-      if (!customData?.description && userId) {
+      if (!mergedCustomData?.description && userId) {
         try {
           finalDescription = await this.generateAIDescription(product, mlConfig.displayName, mlConfig.language, userId);
         } catch (error) {
           logger.debug('Failed to generate AI description for MercadoLibre, using original', { error });
         }
+      }
+      // Include AliExpress delivery estimate in description when available
+      const productData = typeof product.productData === 'string' ? (() => { try { return JSON.parse(product.productData || '{}'); } catch { return {}; } })() : (product.productData || {});
+      const estimatedDays = productData.estimatedDeliveryDays ?? productData.shipping?.estimatedDays ?? productData.deliveryDays;
+      if (typeof estimatedDays === 'number' && estimatedDays > 0) {
+        const minDays = Math.max(1, Math.floor(estimatedDays * 0.8));
+        const maxDays = Math.ceil(estimatedDays * 1.2);
+        const deliveryText = `\n\nEntrega estimada: ${minDays}-${maxDays} días (envío internacional).`;
+        const descWithDelivery = (finalDescription || '').trim() + deliveryText;
+        if (descWithDelivery.length <= 5000) finalDescription = descWithDelivery;
       }
       finalDescription = sanitizeDescriptionForML(finalDescription || '');
       finalTitle = sanitizeTitleForML(finalTitle);
@@ -958,13 +1009,15 @@ export class MarketplaceService {
         finalTitle = await this.ensureUniqueMlTitle(userId, product, finalTitle);
       }
 
-      let attributes = customData?.attributes;
+      let attributes = mergedCustomData?.attributes;
       if (!attributes || attributes.length === 0) {
         try {
           const catAttrs = await mlService.getCategoryAttributes(categoryId);
           const requiredAttrs = catAttrs.filter((a: any) =>
             a.tags?.required || a.tags?.catalog_required
           );
+          const optionalImportant = ['COLOR', 'MATERIAL'];
+          const attrIds = new Set(attributes?.map((a: any) => a.id) || []);
           attributes = [];
           const dimensionDefaults: Record<string, { val: number; unit: string }> = {
             WIDTH: { val: 20, unit: 'cm' }, HEIGHT: { val: 15, unit: 'cm' },
@@ -976,15 +1029,30 @@ export class MarketplaceService {
             if (attr.id === 'BRAND') {
               const inferredBrand = inferBrandFromTitle(finalTitle);
               attributes.push({ id: 'BRAND', value: inferredBrand || 'Genérico' });
+              attrIds.add('BRAND');
             } else if (attr.id === 'MODEL') {
               const model = finalTitle.substring(0, 20).replace(/[^a-zA-Z0-9\- ]/g, '').trim();
               attributes.push({ id: 'MODEL', value: model || 'Standard' });
+              attrIds.add('MODEL');
             } else if (dimensionDefaults[attr.id]) {
               const d = dimensionDefaults[attr.id];
               const unit = attr.default_unit || d.unit;
               attributes.push({ id: attr.id, value: `${d.val} ${unit}` });
+              attrIds.add(attr.id);
             } else if (attr.values && attr.values.length > 0) {
               attributes.push({ id: attr.id, value: attr.values[0].name });
+              attrIds.add(attr.id);
+            }
+          }
+          for (const optId of optionalImportant) {
+            if (attrIds.has(optId)) continue;
+            const catAttr = catAttrs.find((a: any) => a.id === optId);
+            if (!catAttr) continue;
+            const val = optId === 'COLOR' ? extractFromTitle(finalTitle, COLOR_WORDS)
+              : optId === 'MATERIAL' ? extractFromTitle(finalTitle, MATERIAL_WORDS) : null;
+            if (val) {
+              attributes.push({ id: optId, value: val });
+              attrIds.add(optId);
             }
           }
           logger.info('[ML Publish] Auto-resolved required attributes', {
@@ -1006,7 +1074,7 @@ export class MarketplaceService {
         description: finalDescription,
         categoryId,
         price,
-        quantity: this.resolveListingQuantity(product, customData?.quantity),
+        quantity: this.resolveListingQuantity(product, mergedCustomData?.quantity),
         condition: 'new',
         images: images,
         ...(attributes && attributes.length > 0 && { attributes }),
@@ -1159,7 +1227,7 @@ export class MarketplaceService {
           categoryId = mlItem?.category_id;
         }
         if (!categoryId) {
-          categoryId = await mlService.predictCategory(product.title);
+          categoryId = await mlService.predictCategory(product.title, product.description);
         }
 
         let attributes: Array<{ id: string; value: string | number }> = [];
@@ -1587,31 +1655,39 @@ export class MarketplaceService {
         throw new AppError('Product is missing pricing information. Actualiza el precio sugerido antes de publicar.', 400);
       }
 
-      // ✅ Margen estricto: precio debe ser mayor que el costo
       const costNumAmz = toNumber(product.aliexpressPrice);
-      if (price <= costNumAmz) {
-        throw new AppError(`Price (${price}) must be greater than AliExpress cost (${product.aliexpressPrice}) to generate profit.`, 400);
+      const shippingNumAmz = toNumber(product.shippingCost ?? 0);
+      const importTaxNumAmz = toNumber(product.importTax ?? 0);
+      const totalCostAmz = toNumber(product.totalCost) > 0
+        ? toNumber(product.totalCost)
+        : costNumAmz + shippingNumAmz + importTaxNumAmz;
+      if (price <= totalCostAmz) {
+        throw new AppError(`Price (${price}) must be greater than total cost (${totalCostAmz.toFixed(2)}: product + shipping + import tax) to generate profit.`, 400);
       }
 
-      // ✅ Obtener moneda base del usuario en lugar de usar USD hardcodeado
-      let currency = 'USD'; // Fallback por defecto
-      if (metadata?.currency) {
-        currency = metadata.currency.toUpperCase();
-      } else {
+      // Moneda e idioma del destino (marketplace)
+      const dest = resolveDestination('amazon', credentials);
+      const currency = dest.currency;
+      let priceInDestCurrency = price;
+      const productCurrency = (metadata?.currency || product.currency || 'USD').toUpperCase();
+      if (productCurrency !== currency) {
         try {
-          const userSettingsService = (await import('./user-settings.service')).default;
-          const baseCurrency = await userSettingsService.getUserBaseCurrency(userId);
-          currency = baseCurrency;
-        } catch (error) {
-          // Si falla obtener moneda del usuario, usar fallback USD
-          logger.warn('[MARKETPLACE] Failed to get user base currency, using USD fallback', {
-            userId,
-            error: error instanceof Error ? error.message : String(error)
+          const fxService = (await import('./fx.service')).default;
+          priceInDestCurrency = fxService.convert(price, productCurrency, currency);
+          logger.info('[Amazon Publish] Price converted to destination currency', {
+            price,
+            productCurrency,
+            currency,
+            priceInDestCurrency,
+          });
+        } catch (err: any) {
+          logger.warn('[Amazon Publish] FX conversion failed, using original price', {
+            error: err?.message,
           });
         }
       }
 
-      const amazonConfig = this.getMarketplaceConfig('amazon');
+      const amazonConfig = this.getMarketplaceConfig('amazon', credentials);
       const amazonKeywords = buildKeywordsFromProduct(product);
       let finalTitle = customData?.title || product.title;
       let finalDescription = customData?.description || product.description || '';
@@ -1649,8 +1725,8 @@ export class MarketplaceService {
         sku: `IVAN-${product.id}`,
         title: finalTitle,
         description: finalDescription,
-        price,
-        currency: currency.toUpperCase(),
+        price: priceInDestCurrency,
+        currency: currency,
         quantity: this.resolveListingQuantity(product, customData?.quantity),
         images: images, // ✅ MULTI-IMAGE: Todas las imágenes preparadas para Amazon
         category,
@@ -1851,10 +1927,15 @@ export class MarketplaceService {
         return product.title;
       }
 
-      const langInstruction =
-        language === 'es'
-          ? 'Write the title in Spanish (es).'
-          : 'Write the title in English (en).';
+      const LANG_MAP: Record<string, string> = {
+        es: 'Write the title in Spanish (es).',
+        en: 'Write the title in English (en).',
+        de: 'Write the title in German (de).',
+        fr: 'Write the title in French (fr).',
+        it: 'Write the title in Italian (it).',
+        pt: 'Write the title in Portuguese (pt).',
+      };
+      const langInstruction = LANG_MAP[language] || LANG_MAP['en'];
       const mlDifferentiator =
         (marketplace || '').toLowerCase().includes('mercado')
           ? ' For Mercado Libre: include a differentiating characteristic (specs, variant, use case, or feature) to comply with duplicate publication policy.'
@@ -1957,9 +2038,11 @@ export class MarketplaceService {
       const credentials = await this.getCredentials(userId, marketplace, environment);
       // No retornar error si no hay credenciales, usar valores por defecto
 
-      // Determine marketplace currency and language
-      // ✅ CORREGIDO: Si no hay credenciales, usar configuración por defecto
-      const marketplaceConfig = this.getMarketplaceConfig(marketplace);
+      // Determine marketplace currency and language from destination (credentials) when available
+      const marketplaceConfig = this.getMarketplaceConfig(
+        marketplace,
+        credentials?.credentials ? (credentials.credentials as any) : undefined
+      );
       const metadata = this.parseProductMetadata(product);
       const productCurrency = (metadata?.currency || product.currency || 'USD').toUpperCase();
       
@@ -2022,31 +2105,38 @@ export class MarketplaceService {
         allImages: images.slice(0, 5).map(img => img.substring(0, 60))
       });
       
-      // Calculate profit
       const costBase = toNumber(product.aliexpressPrice);
-      let costInMarketplaceCurrency = costBase;
-      try {
-        costInMarketplaceCurrency = fxService.convert(
-          costBase,
-          productCurrency,
-          marketplaceConfig.currency
-        );
-      } catch (error: any) {
-        logger.warn('[MarketplaceService] FX conversion failed for cost', {
-          from: productCurrency,
-          to: marketplaceConfig.currency,
-          amount: costBase,
-          error: error?.message
-        });
-        // Fallback: usar costo sin convertir
-        costInMarketplaceCurrency = costBase;
-      }
-      const potentialProfit = priceInMarketplaceCurrency - costInMarketplaceCurrency;
-      const profitMargin = priceInMarketplaceCurrency > 0 
-        ? (potentialProfit / priceInMarketplaceCurrency) * 100 
-        : 0;
+      let shippingCost = toNumber(product.shippingCost ?? metadata?.shippingCost ?? 0);
+      let importTaxVal = toNumber(product.importTax ?? metadata?.importTax ?? 0);
+      const targetCountry = (product.targetCountry || metadata?.targetCountry || '').toString().toUpperCase() || undefined;
 
-      // Calculate fees (reuse cost calculator)
+      if (targetCountry && (shippingCost > 0 || costBase > 0) && importTaxVal === 0) {
+        try {
+          const taxCalculatorService = (await import('./tax-calculator.service')).default;
+          const subtotal = costBase + shippingCost;
+          const taxResult = taxCalculatorService.calculateTax(subtotal, targetCountry);
+          importTaxVal = taxResult.totalTax;
+        } catch (e) {
+          // Ignore tax calc errors
+        }
+      }
+
+      // Convert cost, shipping, importTax to marketplace currency
+      let costInMarketplaceCurrency = costBase;
+      let shippingInMpCurrency = shippingCost;
+      let importTaxInMpCurrency = importTaxVal;
+      const mpCurrency = marketplaceConfig.currency;
+      if (productCurrency.toUpperCase() !== mpCurrency.toUpperCase()) {
+        try {
+          costInMarketplaceCurrency = fxService.convert(costBase, productCurrency, mpCurrency);
+          if (shippingCost > 0) shippingInMpCurrency = fxService.convert(shippingCost, productCurrency, mpCurrency);
+          if (importTaxVal > 0) importTaxInMpCurrency = fxService.convert(importTaxVal, productCurrency, mpCurrency);
+        } catch (error: any) {
+          logger.warn('[MarketplaceService] FX conversion failed for cost/shipping', { error: error?.message });
+        }
+      }
+
+      // Calculate fees with full cost breakdown (shipping + import tax)
       const { CostCalculatorService } = await import('./cost-calculator.service');
       const costCalculator = new CostCalculatorService();
       const fees = costCalculator.calculateAdvanced(
@@ -2054,9 +2144,18 @@ export class MarketplaceService {
         marketplaceConfig.region || 'us',
         priceInMarketplaceCurrency,
         costInMarketplaceCurrency,
-        marketplaceConfig.currency,
-        marketplaceConfig.currency
+        mpCurrency,
+        mpCurrency,
+        {
+          shippingCost: shippingInMpCurrency > 0 ? shippingInMpCurrency : undefined,
+          importTax: importTaxInMpCurrency > 0 ? importTaxInMpCurrency : undefined,
+        }
       );
+
+      const potentialProfit = fees.netProfit;
+      const profitMargin = priceInMarketplaceCurrency > 0
+        ? (potentialProfit / priceInMarketplaceCurrency) * 100
+        : 0;
 
       // Extract tags/keywords from product data
       const tags = metadata?.tags || [];
@@ -2102,14 +2201,27 @@ export class MarketplaceService {
   }
 
   /**
-   * Get marketplace configuration (currency, language, region)
+   * Get marketplace configuration (currency, language, region).
+   * When credentials provided, derives from destination (account site/country).
    */
-  private getMarketplaceConfig(marketplace: MarketplaceName): {
-    currency: string;
-    language: string;
-    displayName: string;
-    region?: string;
-  } {
+  private getMarketplaceConfig(
+    marketplace: MarketplaceName,
+    credentials?: { siteId?: string; marketplace?: string; marketplace_id?: string }
+  ): { currency: string; language: string; displayName: string; region?: string } {
+    const displayNames: Record<MarketplaceName, string> = {
+      ebay: 'eBay',
+      mercadolibre: 'MercadoLibre',
+      amazon: 'Amazon',
+    };
+    if (credentials) {
+      const dest = resolveDestination(marketplace, credentials);
+      return {
+        currency: dest.currency,
+        language: dest.language || 'en',
+        displayName: displayNames[marketplace] || marketplace,
+        region: dest.region,
+      };
+    }
     const configs: Record<MarketplaceName, { currency: string; language: string; displayName: string; region?: string }> = {
       ebay: { currency: 'USD', language: 'en', displayName: 'eBay', region: 'us' },
       mercadolibre: { currency: 'CLP', language: 'es', displayName: 'MercadoLibre', region: 'cl' },
@@ -2144,10 +2256,15 @@ export class MarketplaceService {
         return `Product Description:\n\n${product.title}\n\nThis product offers excellent quality and value. Perfect for your needs.`;
       }
 
-      const langInstruction =
-        language === 'es'
-          ? 'Write the description in Spanish (es).'
-          : 'Write the description in English (en).';
+      const LANG_MAP: Record<string, string> = {
+        es: 'Write the description in Spanish (es).',
+        en: 'Write the description in English (en).',
+        de: 'Write the description in German (de).',
+        fr: 'Write the description in French (fr).',
+        it: 'Write the description in Italian (it).',
+        pt: 'Write the description in Portuguese (pt).',
+      };
+      const langInstruction = LANG_MAP[language] || LANG_MAP['en'];
       const userPrompt = isDescriptionValid
         ? `Create an optimized product description for ${marketplace}:\nTitle: ${product.title}\nOriginal description: ${currentDescription}\nCategory: ${product.category || 'general'}\n\n${langInstruction} Return only the optimized description, no explanations.`
         : `Create a comprehensive and compelling product description for ${marketplace} based only on the product title:\nTitle: ${product.title}\nCategory: ${product.category || 'general'}\n\n${langInstruction} Generate a detailed product description (200-400 words) that highlights key features, benefits, and specifications. Make it SEO-friendly and optimized for conversions. Return only the description, no explanations.`;
@@ -2612,7 +2729,8 @@ export class MarketplaceService {
    */
   private prepareImagesForMarketplace(
     productImages: any,
-    marketplace: MarketplaceName
+    marketplace: MarketplaceName,
+    customData?: { primaryImageIndex?: number }
   ): string[] {
     const rawImages = this.parseImageUrls(productImages);
 
@@ -2627,8 +2745,20 @@ export class MarketplaceService {
       images = images.map(url => this.upgradeToHighResImage(url));
       images = images.filter(url => !this.isLowQualityImage(url));
       images = Array.from(new Set(images));
-      // ML policy: first image (portada) must not have logos/text - prioritize clean URLs
-      images = this.reorderMlImagesForCleanPortada(images);
+      // ML policy: first image (portada) must not have logos/text
+      if (typeof customData?.primaryImageIndex === 'number' && customData.primaryImageIndex >= 0 && customData.primaryImageIndex < images.length) {
+        const idx = customData.primaryImageIndex;
+        const selected = images[idx];
+        images = [selected, ...images.filter((_, i) => i !== idx)];
+        logger.info('[ML] Using user-selected cover image', { primaryImageIndex: idx });
+      } else if (images.length >= 2 && this.areAllFromAliExpress(images)) {
+        // Heuristic: AliExpress first image often has watermark; prefer 2nd as cover
+        const [first, second, ...rest] = images;
+        images = [second, first, ...rest];
+        logger.info('[ML] AliExpress heuristic: using 2nd image as cover');
+      } else {
+        images = this.reorderMlImagesForCleanPortada(images);
+      }
     }
 
     const maxImages = this.getMarketplaceImageLimit(marketplace);
@@ -2682,13 +2812,18 @@ export class MarketplaceService {
     return false;
   }
 
+  private areAllFromAliExpress(urls: string[]): boolean {
+    const aliPattern = /aliexpress-media\.com|alicdn\.com|ae0[0-9]\.alicdn\.com/i;
+    return urls.length > 0 && urls.every(u => aliPattern.test(u));
+  }
+
   /**
    * ML policy: first image (portada) must not have logos/text. Reorder images so URLs
    * without logo/watermark/banner/text in path come first. Prefer higher-res (no size suffix).
    */
   private reorderMlImagesForCleanPortada(urls: string[]): string[] {
     if (urls.length <= 1) return urls;
-    const suspects = /logo|watermark|water.?mark|text|banner|watermarking/i;
+    const suspects = /logo|watermark|water.?mark|text|banner|watermarking|original|wm_|o1\.|o2\.|_q\d+/i;
     const hasSizeSuffix = /_\d{2,4}x\d{2,4}/i; // e.g. _200x200
     const cleanFirst = urls.filter(u => !suspects.test(u));
     const suspect = urls.filter(u => suspects.test(u));

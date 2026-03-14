@@ -22,8 +22,29 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
+    const envParam = (req.query.environment as string)?.toLowerCase();
+    const environment = envParam === 'sandbox' ? 'sandbox' : envParam === 'production' ? 'production' : undefined;
+
+    let whereClause: { userId?: number; id?: { in: string[] } } = isAdmin ? {} : { userId: userId! };
+
+    if (environment) {
+      const saleWhere: { environment: string; userId?: number } = { environment };
+      if (!isAdmin && userId != null) {
+        saleWhere.userId = userId;
+      }
+      const sales = await prisma.sale.findMany({
+        where: saleWhere,
+        select: { orderId: true },
+      });
+      const orderIds = sales.map((s) => s.orderId).filter(Boolean) as string[];
+      if (orderIds.length === 0) {
+        return res.status(200).json([]);
+      }
+      whereClause = { ...whereClause, id: { in: orderIds } };
+    }
+
     const orders = await prisma.order.findMany({
-      where: isAdmin ? {} : { userId },
+      where: whereClause,
       orderBy: { createdAt: 'desc' },
       take: 100,
     });

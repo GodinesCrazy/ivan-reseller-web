@@ -16,6 +16,7 @@ export interface ReportFilters {
   marketplace?: string;
   status?: string;
   productCategory?: string;
+  environment?: 'sandbox' | 'production';
 }
 
 export interface SalesReportData {
@@ -131,6 +132,10 @@ class ReportsService {
         whereClause.status = filters.status;
       }
 
+      if (filters.environment) {
+        whereClause.environment = filters.environment;
+      }
+
       const sales = await prisma.sale.findMany({
         where: whereClause,
         include: {
@@ -186,15 +191,16 @@ class ReportsService {
         whereClause.status = filters.status;
       }
 
+      const salesInclude: { select: { salePrice: true; grossProfit: true }; where?: { environment: string } } = {
+        select: { salePrice: true, grossProfit: true },
+      };
+      if (filters.environment) {
+        salesInclude.where = { environment: filters.environment };
+      }
       const products = await prisma.product.findMany({
         where: whereClause,
         include: {
-          sales: {
-            select: {
-              salePrice: true,
-              grossProfit: true
-            }
-          }
+          sales: salesInclude
         },
         orderBy: {
           createdAt: 'desc'
@@ -230,8 +236,14 @@ class ReportsService {
   /**
    * Generate user performance report
    */
-  async generateUserPerformanceReport(): Promise<UserPerformanceData[]> {
+  async generateUserPerformanceReport(filters?: ReportFilters): Promise<UserPerformanceData[]> {
     try {
+      const salesInclude: { select: { salePrice: true; grossProfit: true; commissionAmount: true; marketplace: true }; where?: { environment: string } } = {
+        select: { salePrice: true, grossProfit: true, commissionAmount: true, marketplace: true },
+      };
+      if (filters?.environment) {
+        salesInclude.where = { environment: filters.environment };
+      }
       const users = await prisma.user.findMany({
         include: {
           products: {
@@ -240,14 +252,7 @@ class ReportsService {
               status: true
             }
           },
-          sales: {
-            select: {
-              salePrice: true,
-              grossProfit: true,
-              commissionAmount: true,
-              marketplace: true
-            }
-          }
+          sales: salesInclude
         }
       });
 
@@ -295,15 +300,18 @@ class ReportsService {
   /**
    * Generate marketplace analytics
    */
-  async generateMarketplaceAnalytics(): Promise<MarketplaceAnalytics[]> {
+  async generateMarketplaceAnalytics(filters?: ReportFilters): Promise<MarketplaceAnalytics[]> {
     try {
-      // Get sales data grouped by marketplace
       const marketplaces = ['ebay', 'mercadolibre', 'amazon'];
       const analytics: MarketplaceAnalytics[] = [];
 
       for (const marketplace of marketplaces) {
+        const where: { marketplace: string; environment?: string } = { marketplace };
+        if (filters?.environment) {
+          where.environment = filters.environment;
+        }
         const sales = await prisma.sale.findMany({
-          where: { marketplace },
+          where,
           include: {
             product: {
               select: {
@@ -326,7 +334,7 @@ class ReportsService {
         const conversionRate = products.length > 0 ? (totalSales / products.length) * 100 : 0;
 
         // Calculate monthly trends (last 6 months)
-        const monthlyTrend = await this.calculateMonthlyTrends(marketplace);
+        const monthlyTrend = await this.calculateMonthlyTrends(marketplace, filters?.environment);
 
         analytics.push({
           marketplace,
@@ -352,7 +360,7 @@ class ReportsService {
   /**
    * Calculate monthly trends for marketplace
    */
-  private async calculateMonthlyTrends(marketplace: string): Promise<Array<{ month: string; sales: number; revenue: number; }>> {
+  private async calculateMonthlyTrends(marketplace: string, environment?: 'sandbox' | 'production'): Promise<Array<{ month: string; sales: number; revenue: number; }>> {
     const trends = [];
     const now = new Date();
     
@@ -360,14 +368,15 @@ class ReportsService {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const nextMonth = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
       
+      const where: { marketplace: string; createdAt: { gte: Date; lt: Date }; environment?: string } = {
+        marketplace,
+        createdAt: { gte: date, lt: nextMonth },
+      };
+      if (environment) {
+        where.environment = environment;
+      }
       const sales = await prisma.sale.findMany({
-        where: {
-          marketplace,
-          createdAt: {
-            gte: date,
-            lt: nextMonth
-          }
-        }
+        where,
       });
 
       const totalSales = sales.length;
@@ -386,14 +395,16 @@ class ReportsService {
   /**
    * Generate executive dashboard report
    */
-  async generateExecutiveReport(): Promise<ExecutiveReportData> {
+  async generateExecutiveReport(filters?: ReportFilters): Promise<ExecutiveReportData> {
     try {
+      const saleWhere = filters?.environment ? { environment: filters.environment } : {};
       // Summary statistics
       const totalUsers = await prisma.user.count();
       const totalProducts = await prisma.product.count();
-      const totalSales = await prisma.sale.count();
+      const totalSales = await prisma.sale.count({ where: saleWhere });
       
       const revenueData = await prisma.sale.aggregate({
+        where: saleWhere,
         _sum: {
           salePrice: true,
           grossProfit: true
@@ -411,10 +422,10 @@ class ReportsService {
       const conversionRate = totalProducts > 0 ? (totalSales / totalProducts) * 100 : 0;
 
       // Get marketplace breakdown
-      const marketplaceBreakdown = await this.generateMarketplaceAnalytics();
+      const marketplaceBreakdown = await this.generateMarketplaceAnalytics(filters);
 
       // Get top performers
-      const topPerformers = await this.generateUserPerformanceReport();
+      const topPerformers = await this.generateUserPerformanceReport(filters);
       topPerformers.sort((a, b) => b.totalRevenue - a.totalRevenue);
 
       // Calculate monthly trends
@@ -443,13 +454,14 @@ class ReportsService {
           }
         });
 
+        const monthSalesWhere: { createdAt: { gte: Date; lt: Date }; environment?: string } = {
+          createdAt: { gte: date, lt: nextMonth },
+        };
+        if (filters?.environment) {
+          monthSalesWhere.environment = filters.environment;
+        }
         const monthSales = await prisma.sale.findMany({
-          where: {
-            createdAt: {
-              gte: date,
-              lt: nextMonth
-            }
-          },
+          where: monthSalesWhere,
           select: {
             salePrice: true
           }

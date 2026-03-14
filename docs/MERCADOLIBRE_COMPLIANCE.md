@@ -26,6 +26,17 @@ El flujo de creación y repair usa `inferBrandFromTitle` y envía "Genérico" cu
 
 ## Imágenes
 
+### Fotos de portada (requisitos ML)
+
+- **Tamaño recomendado: 1200 x 1200 píxeles.** ML recomienda esta resolución mínima para la imagen principal.
+- **Producto de frente, centrado, completo y bien iluminado.**
+- **Fondos claros o con textura** que muestren el producto en contexto.
+- **No incluir** logos, textos ni marcas de agua. ML detecta "La portada tiene logos y/o textos" y reduce exposición o inactiva la publicación.
+
+**Selección de portada en ProductPreview:** Antes de enviar a aprobación, el usuario puede elegir qué imagen será la portada con el botón "Usar como portada" en cada miniatura. Se guarda en `productData.primaryImageIndexForML` y se aplica al publicar.
+
+**Heurística AliExpress:** Cuando todas las imágenes provienen de AliExpress, el software usa la **segunda imagen como portada** (la primera suele ser la hero con watermark; las de galería a menudo están más limpias).
+
 ### Calidad mínima (tamaño)
 
 - **Mínimo 15 KB por imagen.** Mercado Libre exige fotos de calidad suficiente. El software filtra imágenes por debajo de este umbral en `mercadolibre.service.ts` (MIN_IMAGE_BYTES = 15 * 1024).
@@ -37,7 +48,7 @@ El flujo de creación y repair usa `inferBrandFromTitle` y envía "Genérico" cu
 - **No descargar** fotos de internet que puedan infringir derechos de autor.
 - ML detecta "La portada tiene logos y/o textos" y reduce exposición o inactiva la publicación.
 
-**Primera imagen (portada):** La portada no puede tener logos ni texto. El software prioriza automáticamente URLs que no contienen "logo", "watermark", "banner" o "text" en la ruta. Aun así, se recomienda revisar manualmente la primera imagen antes de publicar.
+**Reordenamiento automático:** El software prioriza URLs que no contienen "logo", "watermark", "banner", "text", "original" u otros patrones sospechosos. La selección manual de portada en ProductPreview tiene prioridad.
 
 ---
 
@@ -46,7 +57,7 @@ El flujo de creación y repair usa `inferBrandFromTitle` y envía "Genérico" cu
 - Usar la categoría correcta para el producto. ML puede inactivar publicaciones en "categoría incorrecta".
 - Algunas **categorías de alto riesgo** exigen requisitos adicionales (p. ej. video/clip obligatorio). Ver sección "Falta crear clip" más abajo.
 
-El software usa `predictCategory` (domain_discovery) al publicar; en repair se conserva o se obtiene desde ML si existe.
+El software usa `predictCategory` (domain_discovery + category_predictor) con **título y descripción** (primeros 150 caracteres) para mejorar la predicción de categoría. En repair se conserva o se obtiene desde ML si existe.
 
 ---
 
@@ -73,7 +84,7 @@ Antes de aprobar y publicar un producto en Mercado Libre, verificar:
 
 | Item | Verificación |
 |------|--------------|
-| **Imagen portada** | La primera imagen no tiene logos, texto ni marcas de agua. El software prioriza URLs limpias; revisar manualmente si hay dudas. |
+| **Imagen portada** | Seleccionar en ProductPreview una imagen sin logos, texto ni marcas de agua. Mínimo 1200x1200 recomendado. El software aplica heurística AliExpress y reordenamiento automático; la selección manual tiene prioridad. |
 | **Título** | No incluye "tipo X", "símil", "réplica", "idéntico a" para marcas. Límite 60 caracteres. Si existe título similar, el sistema añade diferenciador. |
 | **Descripción** | Misma sanitización que el título. Sin términos de PI prohibidos. |
 | **Duplicados** | El producto no tiene ya un listing activo en ML para el mismo usuario. |

@@ -94,9 +94,13 @@ export class SuccessfulOperationService {
   /**
    * Obtener estadísticas de operaciones exitosas del usuario
    */
-  async getUserSuccessStats(userId: number) {
+  async getUserSuccessStats(userId: number, environment?: 'sandbox' | 'production') {
+    const where: { userId: number; sale?: { environment: string } } = { userId };
+    if (environment) {
+      where.sale = { environment };
+    }
     const operations = await prisma.successfulOperation.findMany({
-      where: { userId },
+      where,
       include: {
         product: true,
         sale: true
@@ -136,8 +140,11 @@ export class SuccessfulOperationService {
   /**
    * Obtener patrones de aprendizaje de operaciones exitosas
    */
-  async getLearningPatterns(userId?: number) {
-    const where = userId ? { userId, actualSuccess: true } : { actualSuccess: true };
+  async getLearningPatterns(userId?: number, environment?: 'sandbox' | 'production') {
+    const where: { userId?: number; actualSuccess: boolean; sale?: { environment: string } } = userId ? { userId, actualSuccess: true } : { actualSuccess: true };
+    if (environment) {
+      where.sale = { environment };
+    }
 
     const successfulOps = await prisma.successfulOperation.findMany({
       where,

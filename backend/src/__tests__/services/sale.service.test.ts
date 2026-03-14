@@ -101,9 +101,9 @@ describe('SaleService', () => {
 
       const result = await saleService.createSale(userId, saleData);
 
-      const grossProfit = saleData.salePrice - saleData.costPrice;
+      const grossProfit = saleData.salePrice - saleData.costPrice - (saleData.platformFees || 0);
       const expectedCommission = grossProfit * 0.20;
-      const expectedNetProfit = grossProfit - expectedCommission - saleData.platformFees;
+      const expectedNetProfit = grossProfit - expectedCommission;
 
       expect(result.grossProfit).toBe(grossProfit);
       expect(result.commissionAmount).toBe(expectedCommission);

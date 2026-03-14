@@ -8,6 +8,7 @@ import { Check, X, ChevronLeft, ChevronRight, ExternalLink, Wallet, TrendingUp, 
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 // Usar proxy de imágenes para evitar bloqueo de hotlink de AliExpress
 function toProxyUrl(url: string): string {
@@ -31,6 +32,7 @@ function formatDateEs(date: Date | string): string {
 
 export default function IntelligentPublisher() {
   const location = useLocation();
+  const { environment } = useEnvironment();
   const navigate = useNavigate();
   const [pending, setPending] = useState<any[]>([]);
   const [listings, setListings] = useState<any[]>([]);
@@ -73,10 +75,10 @@ export default function IntelligentPublisher() {
     try {
       const [wcRes, allocRes] = await Promise.all([
         api.get<{ detail?: { availableCash?: number } }>('/api/finance/working-capital-detail', {
-          params: { environment: 'production' },
+          params: { environment },
         }).catch(() => ({ data: {} })),
         api.get<{ capitalAllocation?: { canPublish?: boolean; remainingExposure?: number } }>('/api/finance/leverage-and-risk', {
-          params: { environment: 'production' },
+          params: { environment },
         }).catch(() => ({ data: {} })),
       ]);
       const detail = wcRes.data?.detail;
@@ -89,7 +91,7 @@ export default function IntelligentPublisher() {
     } catch {
       setCapitalData(null);
     }
-  }, []);
+  }, [environment]);
 
   const loadPublisherData = useCallback(async () => {
     try {

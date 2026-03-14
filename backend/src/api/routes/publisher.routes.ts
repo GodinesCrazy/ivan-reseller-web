@@ -45,9 +45,11 @@ router.get('/proxy-image', async (req: Request, res: Response) => {
 
 // POST /api/publisher/send_for_approval/:productId
 // ✅ OBJETIVO: Enviar un producto existente a Intelligent Publisher (asegurar status PENDING)
+// Body opcional: { primaryImageIndex?: number } - imagen de portada para Mercado Libre
 router.post('/send_for_approval/:productId', async (req: Request, res: Response) => {
   try {
     const productId = Number(req.params.productId);
+    const { primaryImageIndex } = req.body || {};
     const userId = req.user!.userId;
     const userRole = req.user?.role?.toUpperCase();
     const isAdmin = userRole === 'ADMIN';
@@ -65,6 +67,16 @@ router.post('/send_for_approval/:productId', async (req: Request, res: Response)
         success: false, 
         error: 'Producto no encontrado o no tienes permiso para acceder a él' 
       });
+    }
+
+    // ✅ Guardar primaryImageIndex en productData si se proporciona (para ML portada)
+    if (typeof primaryImageIndex === 'number' && primaryImageIndex >= 0) {
+      const currentData = product.productData ? JSON.parse(String(product.productData)) : {};
+      await prisma.product.update({
+        where: { id: productId },
+        data: { productData: JSON.stringify({ ...currentData, primaryImageIndexForML: primaryImageIndex }) },
+      });
+      logger.info('[PUBLISHER] primaryImageIndex saved for ML', { productId, primaryImageIndex });
     }
 
     // ✅ CORREGIDO: Asegurar que el producto esté en estado PENDING (siempre actualizar para forzar refresco)

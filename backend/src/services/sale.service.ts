@@ -18,6 +18,8 @@ export interface CreateSaleDto {
   salePrice: number;
   costPrice: number;
   platformFees?: number;
+  shippingCost?: number; // Costo envío (en baseCurrency, se convierte a saleCurrency)
+  importTax?: number;   // Impuestos importación (en baseCurrency, se convierte a saleCurrency)
   currency?: string;
   buyerEmail?: string;
   shippingAddress?: string;
@@ -108,34 +110,52 @@ export class SaleService {
       }
     }
 
-    // ✅ Validar que salePrice sea mayor que costPrice (ambos en misma moneda)
-    if (data.salePrice <= costPriceInSaleCurrency) {
-      throw new AppError(`Sale price (${data.salePrice} ${saleCurrency}) must be greater than cost price (${costPriceInSaleCurrency} ${saleCurrency}) to generate profit`, 400);
+    // Convertir shippingCost e importTax a saleCurrency (vienen en baseCurrency)
+    let shippingInSaleCurrency = 0;
+    let importTaxInSaleCurrency = 0;
+    if ((data.shippingCost ?? 0) > 0 || (data.importTax ?? 0) > 0) {
+      if (saleCurrency.toUpperCase() !== costCurrency.toUpperCase()) {
+        try {
+          if ((data.shippingCost ?? 0) > 0) shippingInSaleCurrency = fxService.convert(data.shippingCost!, costCurrency, saleCurrency);
+          if ((data.importTax ?? 0) > 0) importTaxInSaleCurrency = fxService.convert(data.importTax!, costCurrency, saleCurrency);
+        } catch (e) {
+          shippingInSaleCurrency = data.shippingCost ?? 0;
+          importTaxInSaleCurrency = data.importTax ?? 0;
+        }
+      } else {
+        shippingInSaleCurrency = data.shippingCost ?? 0;
+        importTaxInSaleCurrency = data.importTax ?? 0;
+      }
     }
 
-    // ✅ Calcular ganancias y comisiones (ambos en saleCurrency)
-    const grossProfit = data.salePrice - costPriceInSaleCurrency;
-    const platformFees = data.platformFees || 0;
+    const effectiveCost = costPriceInSaleCurrency + shippingInSaleCurrency + importTaxInSaleCurrency;
 
-    // ✅ Platform commission from config (default 10% of gross profit)
+    // Validar que salePrice sea mayor que costo efectivo total (producto + envío + impuestos)
+    if (data.salePrice <= effectiveCost) {
+      throw new AppError(`Sale price (${data.salePrice} ${saleCurrency}) must be greater than total cost (${effectiveCost.toFixed(2)} ${saleCurrency}: product + shipping + import tax) to generate profit`, 400);
+    }
+
+    // Calcular ganancias y comisiones (ambos en saleCurrency)
+    const platformFees = data.platformFees || 0;
+    const grossProfit = data.salePrice - effectiveCost - platformFees;
+
+    // Platform commission from config (default 10% of gross profit)
     const commissionPct = await platformConfigService.getCommissionPct();
     const { roundMoney } = require('../utils/money.utils');
     const grossProfitNum = toNumber(grossProfit);
     const platformCommission = roundMoney((grossProfitNum * commissionPct) / 100, saleCurrency);
-    const userProfit = roundMoney(grossProfitNum - platformCommission, saleCurrency);
-    const netProfit = roundMoney(userProfit - platformFees, saleCurrency);
+    const netProfit = roundMoney(grossProfitNum - platformCommission, saleCurrency);
 
-    // ✅ Validación matemática: netProfit = salePrice - supplierCost - marketplaceFee - paymentFee - platformCommission
-    const marketplaceFee = platformFees; // platformFees = marketplaceFee + paymentFee when passed
-    const expectedNetProfit = data.salePrice - costPriceInSaleCurrency - marketplaceFee - platformCommission;
+    // Validación matemática: netProfit = salePrice - effectiveCost - platformFees - platformCommission
+    const expectedNetProfit = data.salePrice - effectiveCost - platformFees - platformCommission;
     const diff = Math.abs(toNumber(netProfit) - expectedNetProfit);
     if (diff > 0.05) {
       logger.error('[SALE] CRITICAL: netProfit validation failed', {
         netProfit: toNumber(netProfit),
         expectedNetProfit,
         salePrice: data.salePrice,
-        costPrice: costPriceInSaleCurrency,
-        marketplaceFee,
+        effectiveCost,
+        platformFees,
         platformCommission,
         diff,
       });
@@ -1061,18 +1081,18 @@ export class SaleService {
       return null;
     }
     const userId = order.userId;
-    let product: { id: number; aliexpressPrice: any; userId: number } | null = null;
+    let product: { id: number; aliexpressPrice: any; userId: number; shippingCost?: any; importTax?: any; currency?: string } | null = null;
     if (order.productId) {
       product = await prisma.product.findFirst({
         where: { id: order.productId, userId },
-        select: { id: true, aliexpressPrice: true, userId: true },
+        select: { id: true, aliexpressPrice: true, userId: true, shippingCost: true, importTax: true, currency: true },
       }) as any;
     }
     if (!product && order.productUrl) {
       const normalized = order.productUrl.trim();
       product = await prisma.product.findFirst({
         where: { userId, aliexpressUrl: { contains: normalized.length > 50 ? normalized.slice(0, 50) : normalized } },
-        select: { id: true, aliexpressPrice: true, userId: true },
+        select: { id: true, aliexpressPrice: true, userId: true, shippingCost: true, importTax: true, currency: true },
       }) as any;
     }
     if (!product) {
@@ -1086,6 +1106,57 @@ export class SaleService {
       return null;
     }
     const marketplace = await this.deriveMarketplaceFromOrder(order, product.id, userId);
+    const saleCurrency = order.currency || 'USD';
+    const baseCurrency = product.currency || 'USD';
+
+    // Region para cost calculator (marketplace -> region default)
+    const marketplaceToRegion: Record<string, string> = {
+      mercadolibre: 'cl',
+      ebay: 'us',
+      amazon: 'us',
+      checkout: 'us',
+    };
+    const region = marketplaceToRegion[marketplace] || 'us';
+
+    let shippingCost = toNumber(product.shippingCost ?? 0);
+    let importTax = toNumber(product.importTax ?? 0);
+
+    // Convertir shipping/import a saleCurrency para cost calculator
+    if ((shippingCost > 0 || importTax > 0) && saleCurrency.toUpperCase() !== baseCurrency.toUpperCase()) {
+      try {
+        if (shippingCost > 0) shippingCost = fxService.convert(shippingCost, baseCurrency, saleCurrency);
+        if (importTax > 0) importTax = fxService.convert(importTax, baseCurrency, saleCurrency);
+      } catch (e) {
+        // Mantener valores originales si falla la conversión
+      }
+    }
+
+    // Calcular platformFees (marketplace + payment) con cost calculator
+    let platformFees = 0;
+    const validMp = ['ebay', 'amazon', 'mercadolibre'].includes(marketplace);
+    if (validMp) {
+      try {
+        const { CostCalculatorService } = await import('./cost-calculator.service');
+        const costCalc = new CostCalculatorService();
+        const { breakdown } = costCalc.calculateAdvanced(
+          marketplace as 'ebay' | 'amazon' | 'mercadolibre',
+          region,
+          salePrice,
+          costPrice,
+          saleCurrency,
+          baseCurrency,
+          { shippingCost: shippingCost > 0 ? shippingCost : undefined, importTax: importTax > 0 ? importTax : undefined }
+        );
+        platformFees = (breakdown.marketplaceFee ?? 0) + (breakdown.paymentFee ?? 0);
+      } catch (e: any) {
+        logger.warn('[SALE] createSaleFromOrder: cost calculator failed, platformFees=0', { orderId, error: e?.message });
+      }
+    }
+
+    // shippingCost/importTax para createSale deben estar en baseCurrency
+    const shippingCostBase = toNumber(product.shippingCost ?? 0);
+    const importTaxBase = toNumber(product.importTax ?? 0);
+
     try {
       const sale = await this.createSale(userId, {
         orderId: order.id,
@@ -1093,7 +1164,10 @@ export class SaleService {
         marketplace,
         salePrice,
         costPrice,
-        currency: order.currency || 'USD',
+        platformFees,
+        shippingCost: shippingCostBase > 0 ? shippingCostBase : undefined,
+        importTax: importTaxBase > 0 ? importTaxBase : undefined,
+        currency: saleCurrency,
         buyerEmail: order.customerEmail || undefined,
         shippingAddress: order.shippingAddress || undefined,
       }, { fromFulfillment: true });

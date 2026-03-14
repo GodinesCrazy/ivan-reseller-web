@@ -27,6 +27,7 @@ export interface CreateProductDto {
   importTax?: number;
   totalCost?: number;
   targetCountry?: string;
+  originCountry?: string;
   estimatedDeliveryDays?: number;
   productData?: Record<string, any>;
 }
@@ -47,6 +48,7 @@ export interface UpdateProductDto {
   importTax?: number;
   totalCost?: number;
   targetCountry?: string;
+  originCountry?: string;
   estimatedDeliveryDays?: number;
   productData?: Record<string, any>;
 }
@@ -340,6 +342,7 @@ export class ProductService {
           importTax: importTax !== undefined ? importTax : null,
           totalCost: totalCost !== undefined ? totalCost : null,
           targetCountry: targetCountry || null,
+          originCountry: rest.aliexpressUrl ? 'CN' : null,
           status: 'PENDING',
           isPublished: false,
         },
@@ -626,6 +629,7 @@ export class ProductService {
       importTax,
       totalCost,
       targetCountry,
+      originCountry,
       estimatedDeliveryDays,
       currency,
       productData,
@@ -656,6 +660,7 @@ export class ProductService {
     if (typeof importTax === 'number') updateData.importTax = importTax;
     if (typeof totalCost === 'number') updateData.totalCost = totalCost;
     if (typeof targetCountry === 'string') updateData.targetCountry = targetCountry;
+    if (typeof originCountry === 'string') updateData.originCountry = originCountry;
 
     if (imageUrl || imageUrls?.length) {
       updateData.images = buildImagePayload(imageUrl, imageUrls);

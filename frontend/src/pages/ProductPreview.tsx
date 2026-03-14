@@ -11,9 +11,10 @@ import ProductWorkflowPipeline from '@/components/ProductWorkflowPipeline';
 
 /**
  * Image Gallery Component with Navigation
- * Displays all product images in a carousel with thumbnails
+ * Displays all product images in a carousel with thumbnails.
+ * When onSelectCover is provided (ML), allows selecting which image is the cover.
  */
-function ImageGallery({ images }: { images: string[] }) {
+function ImageGallery({ images, primaryImageIndex = 0, onSelectCover }: { images: string[]; primaryImageIndex?: number; onSelectCover?: (index: number) => void }) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const goToPrevious = () => {
@@ -73,24 +74,38 @@ function ImageGallery({ images }: { images: string[] }) {
       {images.length > 1 && (
         <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
           {images.map((img, idx) => (
-            <button
-              key={idx}
-              onClick={() => goToImage(idx)}
-              className={`aspect-square rounded-lg overflow-hidden border-2 transition-all ${
-                idx === currentIndex
-                  ? 'border-blue-600 ring-2 ring-blue-200'
-                  : 'border-gray-200 hover:border-gray-400'
-              }`}
-            >
-              <img
-                src={img}
-                alt={`Thumbnail ${idx + 1}`}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = 'https://via.placeholder.com/100?text=No+Image';
-                }}
-              />
-            </button>
+            <div key={idx} className="relative">
+              <button
+                onClick={() => goToImage(idx)}
+                className={`aspect-square rounded-lg overflow-hidden border-2 transition-all w-full ${
+                  idx === currentIndex
+                    ? 'border-blue-600 ring-2 ring-blue-200'
+                    : 'border-gray-200 hover:border-gray-400'
+                }`}
+              >
+                <img
+                  src={img}
+                  alt={`Thumbnail ${idx + 1}`}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/100?text=No+Image';
+                  }}
+                />
+              </button>
+              {onSelectCover && (
+                <button
+                  type="button"
+                  onClick={() => onSelectCover(idx)}
+                  className={`mt-1 w-full text-xs py-1 rounded ${
+                    idx === primaryImageIndex
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {idx === primaryImageIndex ? 'Portada' : 'Usar como portada'}
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -158,6 +173,7 @@ export default function ProductPreview() {
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [lifetimeDecision, setLifetimeDecision] = useState<any>(null);
   const [loadingLifetime, setLoadingLifetime] = useState(false);
+  const [primaryImageIndex, setPrimaryImageIndex] = useState(0);
 
   useEffect(() => {
     if (!id) {
@@ -179,7 +195,9 @@ export default function ProductPreview() {
       });
 
       if (response.data?.success && response.data?.data) {
-        setPreview(response.data.data);
+        const data = response.data.data;
+        setPreview(data);
+        setPrimaryImageIndex(0);
         
         // ✅ Si viene con parámetro showFinancial, abrir modal automáticamente
         if (showFinancialParam) {
@@ -236,7 +254,8 @@ export default function ProductPreview() {
       
       // ✅ OBJETIVO: En lugar de publicar directamente, enviar a Intelligent Publisher
       // Usar endpoint específico que asegura el producto esté en PENDING
-      const response = await api.post(`/api/publisher/send_for_approval/${id}`);
+      const body = preview?.marketplace === 'mercadolibre' ? { primaryImageIndex } : {};
+      const response = await api.post(`/api/publisher/send_for_approval/${id}`, body);
 
       if (response.data?.success) {
         toast.success('✅ Producto enviado a Intelligent Publisher para aprobación');
@@ -620,11 +639,15 @@ export default function ProductPreview() {
               </h2>
               {preview.marketplace === 'mercadolibre' && (
                 <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-                  <strong>Mercado Libre:</strong> La primera imagen será la portada. Evita logos y texto en la imagen principal.
+                  <strong>Mercado Libre:</strong> La portada no puede tener logos ni texto. Selecciona como portada una imagen sin marcas de agua.
                 </div>
               )}
               {preview.images && preview.images.length > 0 ? (
-                <ImageGallery images={preview.images} />
+                <ImageGallery
+                  images={preview.images}
+                  primaryImageIndex={primaryImageIndex}
+                  onSelectCover={preview.marketplace === 'mercadolibre' ? setPrimaryImageIndex : undefined}
+                />
               ) : (
                 <div className="text-center py-8 text-gray-500">
                   No hay imágenes disponibles

@@ -132,6 +132,7 @@ model Product {
   importTax       Decimal?  @db.Decimal(18, 2) // Impuestos de importación (IVA/aranceles) en moneda base
   totalCost       Decimal?  @db.Decimal(18, 2) // Costo total (producto + envío + impuestos) en moneda base
   targetCountry   String? // País destino para cálculo de impuestos (CL, ES, US, etc.)
+  originCountry   String? // País de origen (CN para AliExpress/China)
   status          String    @default("PENDING") // PENDING, APPROVED, REJECTED, PUBLISHED, INACTIVE
   isPublished     Boolean   @default(false)
   publishedAt     DateTime?

@@ -15,8 +15,10 @@ router.get('/success-stats', async (req: Request, res: Response, next) => {
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
+    const envParam = (req.query.environment as string)?.toLowerCase();
+    const environment = (envParam === 'sandbox' || envParam === 'production') ? envParam : undefined;
 
-    const stats = await successfulOperationService.getUserSuccessStats(userId);
+    const stats = await successfulOperationService.getUserSuccessStats(userId, environment);
     res.json({ success: true, stats });
   } catch (error) {
     next(error);
@@ -27,8 +29,10 @@ router.get('/success-stats', async (req: Request, res: Response, next) => {
 router.get('/learning-patterns', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user?.userId;
+    const envParam = (req.query.environment as string)?.toLowerCase();
+    const environment = (envParam === 'sandbox' || envParam === 'production') ? envParam : undefined;
     // userId es opcional - si no se proporciona, retorna patrones globales
-    const patterns = await successfulOperationService.getLearningPatterns(userId);
+    const patterns = await successfulOperationService.getLearningPatterns(userId, environment);
     res.json({ success: true, patterns });
   } catch (error) {
     next(error);

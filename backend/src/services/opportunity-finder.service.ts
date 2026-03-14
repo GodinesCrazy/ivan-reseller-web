@@ -15,6 +15,7 @@ import { formatPriceByCurrency } from '../utils/currency.utils';
 import { workflowConfigService } from './workflow-config.service';
 import { logger } from '../config/logger';
 import taxCalculatorService from './tax-calculator.service'; // ✅ MEJORADO: Servicio de impuestos
+import { regionToCountryCode } from './destination.service';
 import { getGoogleTrendsService, type TrendData } from './google-trends.service'; // ✅ NUEVO: Google Trends para validar demanda real
 // ✅ PRODUCTION READY: Usar cliente HTTP centralizado con timeout
 import { scrapingHttpClient } from '../config/http-client';
@@ -613,7 +614,7 @@ class OpportunityFinderService {
           : await CredentialsManager.getCredentials(userId, 'aliexpress-affiliate', environment);
         if (affiliateCreds) {
           aliexpressAffiliateAPIService.setCredentials(affiliateCreds);
-          const countryCode = baseCurrency === 'CLP' ? 'CL' : baseCurrency === 'MXN' ? 'MX' : 'US';
+          const countryCode = regionToCountryCode(region);
           const affiliateResult = await aliexpressAffiliateAPIService.searchProducts({
             keywords: query,
             pageNo: 1,
@@ -732,7 +733,7 @@ class OpportunityFinderService {
         }
         if (affiliateCreds) {
           aliexpressAffiliateAPIService.setCredentials(affiliateCreds as import('../types/api-credentials.types').AliExpressAffiliateCredentials);
-          const countryCode = baseCurrency === 'CLP' ? 'CL' : baseCurrency === 'MXN' ? 'MX' : 'US';
+          const countryCode = regionToCountryCode(region);
           const affiliateResultB = await aliexpressAffiliateAPIService.searchProducts({
             keywords: query,
             pageNo: 1,

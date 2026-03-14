@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Settings, Globe, Zap, Database, Eye, EyeOff, Save, RefreshCw, CheckCircle, AlertTriangle } from 'lucide-react';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 type Marketplace = 'ebay' | 'mercadolibre' | 'amazon';
 
@@ -28,6 +29,7 @@ const MARKETPLACES: { key: Marketplace; label: string; icon: any; fields: { key:
 ];
 
 export default function APIKeys() {
+  const { environment } = useEnvironment();
   const [saving, setSaving] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [status, setStatus] = useState<Record<Marketplace, { present: boolean; isActive: boolean }>>({
@@ -44,7 +46,7 @@ export default function APIKeys() {
     MARKETPLACES.forEach(async (m) => {
       try {
         // Usar endpoint unificado /api/credentials
-        const { data } = await api.get(`/api/credentials/${m.key}?environment=production`);
+        const { data } = await api.get(`/api/credentials/${m.key}`, { params: { environment } });
         setStatus((prev) => ({ ...prev, [m.key]: { present: !!data?.data, isActive: !!data?.data?.isActive } }));
         
         // Si hay credenciales, cargar datos en el formulario
@@ -58,7 +60,7 @@ export default function APIKeys() {
         // Si no hay credenciales, mantener estado por defecto
       }
     });
-  }, []);
+  }, [environment]);
 
   const save = async (mk: Marketplace) => {
     setSaving(mk);
@@ -66,7 +68,7 @@ export default function APIKeys() {
       // Usar endpoint unificado /api/credentials
       await api.post('/api/credentials', {
         apiName: mk,
-        environment: 'production',
+        environment,
         credentials: form[mk],
         isActive: true
       });

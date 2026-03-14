@@ -4,6 +4,7 @@ trace('loading competitor-analyzer.service');
 import { EbayService } from './ebay.service';
 import { AmazonService } from './amazon.service';
 import { MercadoLibreService } from './mercadolibre.service';
+import { REGION_TO_EBAY_MARKETPLACE, REGION_TO_ML_SITE } from './destination.service';
 import { prisma } from '../config/database';
 import { MarketplaceService } from './marketplace.service';
 import logger from '../config/logger';
@@ -67,10 +68,7 @@ export class CompetitorAnalyzerService {
             sandbox: creds.environment === 'sandbox',
           });
 
-          const marketplaceMap: Record<string, string> = {
-            us: 'EBAY_US', uk: 'EBAY_GB', de: 'EBAY_DE', es: 'EBAY_ES', fr: 'EBAY_FR', it: 'EBAY_IT', au: 'EBAY_AU', ca: 'EBAY_CA', mx: 'EBAY_MX'
-          };
-          const marketplace_id = marketplaceMap[region] || 'EBAY_US';
+          const marketplace_id = REGION_TO_EBAY_MARKETPLACE[region] || 'EBAY_US';
           const res = await ebay.searchProducts({ keywords: productTitle, marketplace_id, limit: 20, sort: '-price' });
 
           const prices = res
@@ -112,8 +110,7 @@ export class CompetitorAnalyzerService {
             topListings,
           };
         } else if (mp === 'mercadolibre') {
-          const regionToSite: Record<string, string> = { mx: 'MLM', ar: 'MLA', br: 'MLB', cl: 'MLC', co: 'MCO', uy: 'MLU', pe: 'MPE' };
-          let siteId = regionToSite[region] || 'MLM';
+          let siteId = REGION_TO_ML_SITE[region] || 'MLM';
 
           const marketplace = new MarketplaceService();
           const rec = await marketplace.getCredentials(userId, 'mercadolibre');

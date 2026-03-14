@@ -5,6 +5,7 @@ import ManualAuthRequiredError from '../../errors/manual-auth-required.error';
 import { notificationService } from '../../services/notification.service';
 import opportunityPersistence from '../../services/opportunity.service';
 import { cacheService } from '../../services/cache.service';
+import { getDefaultRegionForUser } from '../../services/regional-config.service';
 import { z } from 'zod';
 import { logger } from '../../config/logger';
 
@@ -38,7 +39,12 @@ router.get('/', async (req, res) => {
     const validatedQuery = opportunitiesQuerySchema.parse(req.query);
     const query = validatedQuery.query.trim();
     const maxItems = validatedQuery.maxItems;
-    const region = validatedQuery.region;
+    let region = validatedQuery.region;
+    // Use RegionalConfig as default when region is default ('us')
+    if (region === 'us') {
+      const defaultRegion = await getDefaultRegionForUser(userId);
+      if (defaultRegion) region = defaultRegion;
+    }
     const marketplacesParam = validatedQuery.marketplaces;
     const marketplaces = marketplacesParam.split(',').map(s => s.trim()).filter(Boolean) as Array<'ebay'|'amazon'|'mercadolibre'>;
     const environment = validatedQuery.environment; // Opcional, se obtiene del usuario si no se especifica

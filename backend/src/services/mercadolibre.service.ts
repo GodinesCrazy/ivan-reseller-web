@@ -362,6 +362,9 @@ export class MercadoLibreService {
             pictureId, maxSize, bytes: buffer.length,
           });
         }
+        if ((w && w < 1200) || (h && h < 1200)) {
+          logger.warn('[MercadoLibre] Cover image below 1200x1200 recommended by ML', { pictureId, maxSize });
+        }
       }
 
       logger.info('[MercadoLibre] Image uploaded successfully', { pictureId, maxSize, bytes: buffer.length });
@@ -681,14 +684,24 @@ export class MercadoLibreService {
 
   /**
    * Predict category for a product
+   * @param title - Product title
+   * @param description - Optional description (first 150 chars used to improve matching)
+   * @param siteId - Optional site ID
    */
-  async predictCategory(title: string, siteId?: string): Promise<string> {
+  async predictCategory(title: string, description?: string, siteId?: string): Promise<string> {
     const site = siteId || this.credentials.siteId;
+    let q = String(title || '').trim();
+    if (description && typeof description === 'string') {
+      const clean = description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      if (clean) {
+        q = `${q} ${clean.substring(0, 150)}`;
+      }
+    }
 
     try {
       const response = await axios.get(
         `https://api.mercadolibre.com/sites/${site}/domain_discovery/search`,
-        { params: { q: title }, timeout: 10000 }
+        { params: { q }, timeout: 10000 }
       );
       if (Array.isArray(response.data) && response.data.length > 0) {
         const categoryId = response.data[0].category_id;
@@ -701,7 +714,7 @@ export class MercadoLibreService {
 
     try {
       const response = await this.apiClient.get(`/sites/${site}/category_predictor/predict`, {
-        params: { title },
+        params: { title: q },
       });
       if (response.data?.length > 0) {
         return response.data[0].id;

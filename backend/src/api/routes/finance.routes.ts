@@ -199,13 +199,16 @@ router.get('/summary', async (req: Request, res: Response, next) => {
     const days = daysMap[range] ?? 30;
     const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
-    // Obtener datos consolidados
+    // Obtener datos consolidados (sales con product para shipping/import de productos vendidos)
     const [sales, commissions, products] = await Promise.all([
       prisma.sale.findMany({
         where: {
           userId,
           createdAt: { gte: startDate },
           ...envWhere
+        },
+        include: {
+          product: { select: { shippingCost: true, importTax: true } }
         }
       }),
       prisma.commission.findMany({
@@ -227,9 +230,9 @@ router.get('/summary', async (req: Request, res: Response, next) => {
     const totalSales = sales.reduce((sum, s) => sum + toNumber(s.salePrice), 0);
     const totalBaseCosts = sales.reduce((sum, s) => sum + toNumber(s.aliexpressCost || 0), 0);
     
-    // ✅ Incluir costos adicionales de productos (si están disponibles)
-    const totalShippingCosts = products.reduce((sum, p) => sum + toNumber(p.shippingCost || 0), 0);
-    const totalImportTaxes = products.reduce((sum, p) => sum + toNumber(p.importTax || 0), 0);
+    // Shipping e import tax solo de productos vendidos (no de todos los productos)
+    const totalShippingCosts = sales.reduce((sum, s) => sum + toNumber((s as any).product?.shippingCost ?? 0), 0);
+    const totalImportTaxes = sales.reduce((sum, s) => sum + toNumber((s as any).product?.importTax ?? 0), 0);
     const totalMarketplaceFees = sales.reduce((sum, s) => sum + toNumber(s.marketplaceFee || 0), 0);
     
     const totalCosts = totalBaseCosts + totalShippingCosts + totalImportTaxes + totalMarketplaceFees;

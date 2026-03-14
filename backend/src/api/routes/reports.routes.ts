@@ -64,6 +64,10 @@ router.get('/sales', async (req, res) => {
     if (req.query.status) {
       filters.status = req.query.status as string;
     }
+    const envParam = (req.query.environment as string)?.toLowerCase();
+    if (envParam === 'sandbox' || envParam === 'production') {
+      filters.environment = envParam;
+    }
 
     const format = req.query.format as string || 'json';
 
@@ -204,6 +208,10 @@ router.get('/products', async (req, res) => {
     if (req.query.status) {
       filters.status = req.query.status as string;
     }
+    const envParamProducts = (req.query.environment as string)?.toLowerCase();
+    if (envParamProducts === 'sandbox' || envParamProducts === 'production') {
+      filters.environment = envParamProducts;
+    }
 
     const format = req.query.format as string || 'json';
     const productsData = await reportsService.generateProductReport(filters);
@@ -283,8 +291,14 @@ router.get('/products', async (req, res) => {
  */
 router.get('/users', async (req, res) => {
   try {
+    const filters: ReportFilters = {};
+    validateAndSetUserIdFilter(req, filters);
+    const envParamUsers = (req.query.environment as string)?.toLowerCase();
+    if (envParamUsers === 'sandbox' || envParamUsers === 'production') {
+      filters.environment = envParamUsers;
+    }
     const format = req.query.format as string || 'json';
-    const usersData = await reportsService.generateUserPerformanceReport();
+    const usersData = await reportsService.generateUserPerformanceReport(filters);
 
     switch (format.toLowerCase()) {
       case 'excel':
@@ -412,8 +426,13 @@ router.get('/marketplace-analytics', async (req, res) => {
  */
 router.get('/executive', async (req, res) => {
   try {
+    const filters: ReportFilters = {};
+    const envParamExec = (req.query.environment as string)?.toLowerCase();
+    if (envParamExec === 'sandbox' || envParamExec === 'production') {
+      filters.environment = envParamExec;
+    }
     const format = req.query.format as string || 'json';
-    const executiveData = await reportsService.generateExecutiveReport();
+    const executiveData = await reportsService.generateExecutiveReport(filters);
 
     switch (format.toLowerCase()) {
       case 'excel':
