@@ -1868,6 +1868,19 @@ export class AutopilotSystem extends EventEmitter {
             listingId: firstSuccess.listingId,
             environment: currentEnvironment
           });
+
+          // Notify user by email for each successful marketplace publication
+          const { notificationService } = await import('./notification.service');
+          for (const r of successResults) {
+            if (r.success && r.listingUrl) {
+              notificationService.notifyProductPublished(
+                currentUserId,
+                product.id,
+                r.marketplace,
+                r.listingUrl
+              );
+            }
+          }
         } else {
           logger.warn('Autopilot: Failed to publish product to marketplace(s)', {
             service: 'autopilot',

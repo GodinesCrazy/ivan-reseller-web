@@ -227,6 +227,11 @@ export class WorkflowExecutorService {
   /**
    * ✅ Q3: Ejecutar workflow de tipo 'search' - Sin consumir capital, solo búsqueda
    */
+  private static readonly DEFAULT_SEARCH_QUERIES = [
+    'wireless earbuds', 'auriculares bluetooth', 'organizador cocina', 'luces solares',
+    'yoga mat', 'bandas resistencia', 'soporte movil coche', 'gadgets trending'
+  ];
+
   private async executeSearchWorkflow(
     workflow: any,
     userId: number,
@@ -234,15 +239,10 @@ export class WorkflowExecutorService {
   ): Promise<WorkflowExecutionResult> {
     try {
       const actions = workflow.actions as any || {};
-      const query = actions.query || actions.searchQuery || '';
-
-      if (!query) {
-        return {
-          success: false,
-          message: 'El workflow de búsqueda requiere un query en las acciones',
-          errors: ['Query no especificado']
-        };
-      }
+      const query = (actions.query || actions.searchQuery || '').trim()
+        || WorkflowExecutorService.DEFAULT_SEARCH_QUERIES[
+          Math.floor(Math.random() * WorkflowExecutorService.DEFAULT_SEARCH_QUERIES.length)
+        ];
 
       // ✅ Q3: Validar que el environment coincida con el del usuario
       const userConfig = await workflowConfigService.getUserConfig(userId);

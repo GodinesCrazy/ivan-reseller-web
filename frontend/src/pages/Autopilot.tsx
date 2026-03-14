@@ -634,7 +634,7 @@ export default function Autopilot() {
         enabled: true,
         schedule: 'manual',
         conditions: {},
-        actions: { marketplaces: defaultMarketplaces }
+        actions: { marketplaces: defaultMarketplaces, query: '' }
       });
     }
     setShowWorkflowModal(true);
