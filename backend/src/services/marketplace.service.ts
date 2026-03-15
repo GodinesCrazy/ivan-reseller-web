@@ -914,11 +914,28 @@ export class MarketplaceService {
         }
       }
 
-      const credsWithSiteId: MercadoLibreCredentials = {
+      let credsWithSiteId: MercadoLibreCredentials = {
         ...credentials,
         siteId: credentials.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
       };
-      const mlService = new MercadoLibreService(credsWithSiteId);
+      let mlService = new MercadoLibreService(credsWithSiteId);
+
+      // Refresh token before publish (avoids 401 "invalid access token" when token expired)
+      if (credsWithSiteId.refreshToken && userId) {
+        try {
+          const refreshed = await mlService.refreshAccessToken();
+          credsWithSiteId = { ...credsWithSiteId, accessToken: refreshed.accessToken };
+          const { CredentialsManager, clearCredentialsCache } = await import('./credentials-manager.service');
+          const { workflowConfigService } = await import('./workflow-config.service');
+          const env = await workflowConfigService.getUserEnvironment(userId);
+          await CredentialsManager.saveCredentials(userId, 'mercadolibre', credsWithSiteId, env);
+          clearCredentialsCache(userId, 'mercadolibre', env);
+          mlService = new MercadoLibreService(credsWithSiteId);
+          logger.info('[ML Publish] Token refreshed before publish', { userId });
+        } catch (e: any) {
+          logger.warn('[ML Publish] Token refresh failed, continuing with existing token', { error: e?.message });
+        }
+      }
 
       // Predict category if not provided
       let categoryId = mergedCustomData?.categoryId;
@@ -2055,7 +2072,7 @@ export class MarketplaceService {
   }
 
   /**
-   * Generate SEO-optimized title with AI. Uses language and optional keywords.
+   * Generate SEO-optimized title with AI. Uses marketplace-specific structure when USE_LISTING_SEO_MODULE is enabled; else legacy prompt.
    */
   private async generateAITitle(
     product: any,
@@ -2064,6 +2081,21 @@ export class MarketplaceService {
     userId?: number,
     keywords?: string[]
   ): Promise<string> {
+    if (process.env.USE_LISTING_SEO_MODULE !== 'false') {
+      try {
+        const { listingSEOService } = await import('./listing-seo.service');
+        const title = await listingSEOService.generateTitle(
+          { title: product.title, description: product.description, category: product.category },
+          marketplace,
+          language,
+          userId,
+          keywords
+        );
+        if (title && title.trim().length > 0) return title.trim();
+      } catch (e) {
+        logger.debug('Listing SEO title failed, using legacy', { error: (e as Error)?.message });
+      }
+    }
     try {
       const { CredentialsManager } = await import('./credentials-manager.service');
       const groqCreds = await CredentialsManager.getCredentials(userId || 0, 'groq', 'production');
@@ -2315,6 +2347,7 @@ export class MarketplaceService {
             category: product.category,
             aliexpressPrice: costBase,
             aliexpressCurrency: productCurrency,
+            winnerDetectedAt: product.winnerDetectedAt?.toISOString() ?? null,
           },
           marketplace: marketplace,
           title: finalTitle,
@@ -2376,7 +2409,7 @@ export class MarketplaceService {
   }
 
   /**
-   * Generate SEO-optimized description with AI. Uses language for correct locale.
+   * Generate SEO-optimized description with AI. Uses listing-seo module when USE_LISTING_SEO_MODULE is enabled; else legacy.
    */
   private async generateAIDescription(
     product: any,
@@ -2384,6 +2417,20 @@ export class MarketplaceService {
     language: string,
     userId?: number
   ): Promise<string> {
+    if (process.env.USE_LISTING_SEO_MODULE !== 'false') {
+      try {
+        const { listingSEOService } = await import('./listing-seo.service');
+        const desc = await listingSEOService.generateDescription(
+          { title: product.title, description: product.description, category: product.category },
+          marketplace,
+          language,
+          userId
+        );
+        if (desc && desc.trim().length > 0) return desc.trim();
+      } catch (e) {
+        logger.debug('Listing SEO description failed, using legacy', { error: (e as Error)?.message });
+      }
+    }
     try {
       const currentDescription = product.description || '';
       const isDescriptionValid =

@@ -1903,6 +1903,19 @@ export class AutopilotSystem extends EventEmitter {
               );
             }
           }
+          // Notify about any marketplaces that failed (partial success)
+          const failedResults = publishResults.filter((r) => !r.success);
+          if (failedResults.length > 0) {
+            const failedByMp = failedResults.map((r) => `${r.marketplace}: ${r.error || 'Error desconocido'}`).join('. ');
+            notificationService.sendToUser(currentUserId, {
+              type: 'SYSTEM_ALERT',
+              title: 'Autopilot: Publicación parcial',
+              message: `Publicado en ${successResults.map((r) => r.marketplace).join(', ')}, pero falló en: ${failedByMp}`,
+              priority: 'NORMAL',
+              category: 'SYSTEM',
+              data: { productId: product.id, successMarketplaces: successResults.map((r) => r.marketplace), failedResults },
+            });
+          }
         } else {
           logger.warn('Autopilot: Failed to publish product to marketplace(s)', {
             service: 'autopilot',
@@ -1928,15 +1941,34 @@ export class AutopilotSystem extends EventEmitter {
           );
           
           // Actualizar productData con información del error
+          const errorDetail = publishResults
+            .filter((r) => !r.success)
+            .map((r) => `${r.marketplace}: ${r.error || 'Error desconocido'}`)
+            .join('; ');
           await prisma.product.update({
             where: { id: product.id },
             data: {
               productData: JSON.stringify({
                 ...JSON.parse(product.productData || '{}'),
-                publishError: publishResults.find((r) => !r.success)?.error || 'Publication failed',
+                publishError: errorDetail || 'Publication failed',
                 publishAttemptedAt: new Date().toISOString()
               })
             }
+          });
+          // Notificar al usuario con mensajes específicos por marketplace
+          const { notificationService } = await import('./notification.service');
+          const mpLabels: Record<string, string> = { mercadolibre: 'MercadoLibre', ebay: 'eBay', amazon: 'Amazon' };
+          const failedMsg = publishResults
+            .filter((r) => !r.success)
+            .map((r) => `${mpLabels[r.marketplace] || r.marketplace}: ${r.error || 'Error desconocido'}`)
+            .join('. ');
+          notificationService.sendToUser(currentUserId, {
+            type: 'SYSTEM_ALERT',
+            title: 'Autopilot: Publicación fallida',
+            message: `No se pudo publicar en ${marketplacesToPublish.join(', ')}. ${failedMsg}. Revisa credenciales y cumplimiento en Settings → API Settings.`,
+            priority: 'NORMAL',
+            category: 'SYSTEM',
+            data: { productId: product.id, marketplaces: marketplacesToPublish, errors: publishResults.filter((r) => !r.success) },
           });
         }
       } catch (publishError: any) {

@@ -63,29 +63,45 @@ export class DynamicPricingService {
     const comp = analysis[key];
     const avgCompetitor = comp?.averagePrice ?? 0;
     const competitorPrices = comp?.prices ?? [];
-    const averageCompetitorPrice = competitorPrices.length > 0
-      ? competitorPrices.reduce((a, b) => a + b, 0) / competitorPrices.length
-      : avgCompetitor;
 
-    let targetPrice = averageCompetitorPrice > 0 ? averageCompetitorPrice * 0.98 : oldPrice;
-    const maxAllowedPrice = averageCompetitorPrice > 0 ? averageCompetitorPrice * 1.1 : supplierPriceUsd * 3;
-    targetPrice = Math.min(targetPrice, maxAllowedPrice);
-    targetPrice = Math.round(targetPrice * 100) / 100;
-
-    const profitCheck = checkProfitGuard({
-      sellingPriceUsd: targetPrice,
-      supplierPriceUsd,
-      taxUsd,
-      shippingUsd,
-    });
-    if (!profitCheck.allowed) {
-      const minPrice =
-        supplierPriceUsd +
-        profitCheck.breakdown.platformFeesUsd +
-        profitCheck.breakdown.paypalFeesUsd +
-        taxUsd +
-        shippingUsd;
-      targetPrice = Math.ceil(minPrice * 1.05 * 100) / 100;
+    let targetPrice: number;
+    if (process.env.USE_PRICING_ENGINE === 'true' && competitorPrices.length > 0) {
+      const { computeSuggestedPrice } = await import('./pricing-engine.service');
+      const result = computeSuggestedPrice({
+        competitorPrices,
+        supplierPriceUsd,
+        marketplace,
+        shippingUsd,
+        taxUsd,
+        useSpecFactor: true,
+      });
+      targetPrice = result.success ? result.suggestedPriceUsd : oldPrice;
+      if (!result.success && result.error) {
+        logger.warn('[DYNAMIC-PRICING] Pricing engine failed, using legacy', { productId, error: result.error });
+      }
+    } else {
+      const averageCompetitorPrice = competitorPrices.length > 0
+        ? competitorPrices.reduce((a, b) => a + b, 0) / competitorPrices.length
+        : avgCompetitor;
+      targetPrice = averageCompetitorPrice > 0 ? averageCompetitorPrice * 0.98 : oldPrice;
+      const maxAllowedPrice = averageCompetitorPrice > 0 ? averageCompetitorPrice * 1.1 : supplierPriceUsd * 3;
+      targetPrice = Math.min(targetPrice, maxAllowedPrice);
+      targetPrice = Math.round(targetPrice * 100) / 100;
+      const profitCheck = checkProfitGuard({
+        sellingPriceUsd: targetPrice,
+        supplierPriceUsd,
+        taxUsd,
+        shippingUsd,
+      });
+      if (!profitCheck.allowed) {
+        const minPrice =
+          supplierPriceUsd +
+          profitCheck.breakdown.platformFeesUsd +
+          profitCheck.breakdown.paypalFeesUsd +
+          taxUsd +
+          shippingUsd;
+        targetPrice = Math.ceil(minPrice * 1.05 * 100) / 100;
+      }
     }
 
     try {

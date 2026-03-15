@@ -389,6 +389,14 @@ function readCorsOrigins(): string[] {
     }
   }
 
+  // En desarrollo, siempre permitir localhost para Vite/frontend local
+  if (process.env.NODE_ENV !== 'production') {
+    const localOrigins = ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000'];
+    for (const o of localOrigins) {
+      if (!origins.includes(o)) origins.push(o);
+    }
+  }
+
   // Deduplicar (case-insensitive para hostname)
   const uniqueOrigins: string[] = [];
   const seenHostnames = new Set<string>();

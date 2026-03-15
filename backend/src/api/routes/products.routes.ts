@@ -170,7 +170,8 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
         stock: 0,
         profit: calculatedProfit > 0 ? calculatedProfit : 0,
         imageUrl: imageUrl || undefined,
-        createdAt: product.createdAt?.toISOString() || new Date().toISOString()
+        createdAt: product.createdAt?.toISOString() || new Date().toISOString(),
+        winnerDetectedAt: product.winnerDetectedAt?.toISOString() ?? null
       };
     });
     
@@ -295,14 +296,15 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
       return null;
     };
     
-    // ✅ Mapear producto para incluir imageUrl
+    // ✅ Mapear producto para incluir imageUrl y winnerDetectedAt en ISO
     const mappedProduct = {
       ...product,
       imageUrl: extractImageUrl(product.images) || undefined, // ✅ Incluir imageUrl extraído
       sku: String(product.id), // SKU temporal basado en ID
       stock: 0, // Valor por defecto
       marketplace: 'N/A',
-      profit: ((toNumber(product.finalPrice) || toNumber(product.suggestedPrice) || 0) - toNumber(product.aliexpressPrice)) || 0
+      profit: ((toNumber(product.finalPrice) || toNumber(product.suggestedPrice) || 0) - toNumber(product.aliexpressPrice)) || 0,
+      winnerDetectedAt: product.winnerDetectedAt?.toISOString() ?? null
     };
     
     res.json({ success: true, data: mappedProduct });

@@ -137,6 +137,7 @@ model Product {
   isPublished     Boolean   @default(false)
   publishedAt     DateTime?
   approvalId      String? // Marketplace approval ID
+  winnerDetectedAt DateTime? // Spec: set when sales in last N days >= threshold (winner detection)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

@@ -15,6 +15,7 @@ export interface Product {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  winnerDetectedAt?: string | null;
 }
 
 export interface CreateProductRequest {

@@ -33,6 +33,8 @@ export class ScheduledTasksService {
   private retryFailedOrdersQueue: Queue | null = null;
   private processPaidOrdersQueue: Queue | null = null;
   private ebayTrafficSyncQueue: Queue | null = null;
+  private listingOptimization48hQueue: Queue | null = null;
+  private winnerDetectionQueue: Queue | null = null;
   private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
@@ -44,6 +46,8 @@ export class ScheduledTasksService {
   private retryFailedOrdersWorker: Worker | null = null;
   private processPaidOrdersWorker: Worker | null = null;
   private ebayTrafficSyncWorker: Worker | null = null;
+  private listingOptimization48hWorker: Worker | null = null;
+  private winnerDetectionWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
 
@@ -115,6 +119,16 @@ export class ScheduledTasksService {
 
     // eBay Analytics: sync view counts for listing lifetime optimization
     this.ebayTrafficSyncQueue = new Queue('ebay-traffic-sync', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Spec: listing optimization every 48h (impressions>200 and sales==0 -> reprice, optional title refresh)
+    this.listingOptimization48hQueue = new Queue('listing-optimization-48h', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Spec: winner detection every 24h (sales in last 3 days >= 5 -> mark winner)
+    this.winnerDetectionQueue = new Queue('winner-detection', {
       connection: this.bullMQRedis as any
     });
   }
@@ -340,6 +354,36 @@ export class ScheduledTasksService {
         }
       );
     }
+
+    if (this.listingOptimization48hQueue) {
+      const { runListingOptimization48h } = await import('./listing-optimization-loop.service');
+      this.listingOptimization48hWorker = new Worker(
+        'listing-optimization-48h',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running listing optimization 48h', { jobId: job.id });
+          return await runListingOptimization48h();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+    }
+
+    if (this.winnerDetectionQueue) {
+      const { runWinnerDetection } = await import('./winner-detector.service');
+      this.winnerDetectionWorker = new Worker(
+        'winner-detection',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running winner detection', { jobId: job.id });
+          return await runWinnerDetection();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+    }
   }
 
   private async runAliExpressTokenRefresh(): Promise<{ refreshed: boolean; reason?: string }> {
@@ -531,6 +575,32 @@ export class ScheduledTasksService {
         {},
         {
           repeat: { pattern: ebaySyncCron },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Spec: listing optimization every 48h (impressions>200 and sales==0 -> reprice, optional title refresh)
+    if (this.listingOptimization48hQueue) {
+      this.listingOptimization48hQueue.add(
+        'listing-optimization-48h-run',
+        {},
+        {
+          repeat: { pattern: process.env.LISTING_OPTIMIZATION_48H_CRON || '0 0 */2 * *' }, // Every 2 days at midnight
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Spec: winner detection every 24h (sales in last 3 days >= 5 -> mark winner)
+    if (this.winnerDetectionQueue) {
+      this.winnerDetectionQueue.add(
+        'winner-detection-run',
+        {},
+        {
+          repeat: { pattern: process.env.WINNER_DETECTION_CRON || '0 2 * * *' }, // 2:00 AM daily
           removeOnComplete: 5,
           removeOnFail: 5,
         }
@@ -1271,8 +1341,20 @@ export class ScheduledTasksService {
     if (this.ebayTrafficSyncWorker) {
       await this.ebayTrafficSyncWorker.close();
     }
+    if (this.listingOptimization48hWorker) {
+      await this.listingOptimization48hWorker.close();
+    }
+    if (this.winnerDetectionWorker) {
+      await this.winnerDetectionWorker.close();
+    }
     if (this.ebayTrafficSyncQueue) {
       await this.ebayTrafficSyncQueue.close();
+    }
+    if (this.listingOptimization48hQueue) {
+      await this.listingOptimization48hQueue.close();
+    }
+    if (this.winnerDetectionQueue) {
+      await this.winnerDetectionQueue.close();
     }
   }
 

@@ -398,4 +398,24 @@ router.get('/platform-revenue', authenticate, authorize('ADMIN'), async (req, re
   }
 });
 
+/**
+ * Retry payout for a sale in PAYOUT_FAILED or PAYOUT_SKIPPED_INSUFFICIENT_FUNDS - ADMIN only
+ */
+router.post('/sales/:id/retry-payout', authenticate, authorize('ADMIN'), async (req, res, next) => {
+  try {
+    const saleId = parseInt(req.params.id, 10);
+    if (isNaN(saleId)) {
+      return res.status(400).json({ success: false, message: 'ID de venta inválido' });
+    }
+    const { saleService } = await import('../../services/sale.service');
+    const result = await saleService.retryPayout(saleId);
+    if (result.success) {
+      return res.json({ success: true, message: 'Payout ejecutado correctamente' });
+    }
+    return res.status(400).json({ success: false, message: result.message });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

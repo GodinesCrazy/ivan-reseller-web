@@ -1,6 +1,7 @@
 /**
  * Centralized marketplace policy compliance: sanitization and validation.
  * Ensures titles and descriptions meet eBay, MercadoLibre, and Amazon policies.
+ * See docs/MARKETPLACE_POLICY_COMPLIANCE.md for a summary of rules per marketplace.
  */
 
 import {

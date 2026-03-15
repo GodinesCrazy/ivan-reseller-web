@@ -34,6 +34,8 @@ export interface FullCycleResponse {
   stages: FullCycleStages;
   stageResults: FullCycleStages;
   diagnostics: string[] | { stageCount: number };
+  /** Set when post-sale completed and a Sale was created (utilidad) */
+  saleCreated?: { saleId: number; netProfit: number } | null;
 }
 
 export async function runTestFullDropshippingCycle(req: Request, res: Response): Promise<void> {
@@ -62,6 +64,7 @@ export async function runTestFullDropshippingCycle(req: Request, res: Response):
     accounting: { ok: false, real: false },
   };
   const diagnostics: string[] = [];
+  let saleCreatedResult: { saleId: number; netProfit: number } | null = null;
   let firstOpportunity: {
     costUsd: number;
     suggestedPriceUsd: number;
@@ -177,15 +180,25 @@ export async function runTestFullDropshippingCycle(req: Request, res: Response):
       const { prisma } = await import('../../config/database');
       const { checkDailyLimits } = await import('../../services/daily-limits.service');
       const price = firstOpportunity?.suggestedPriceUsd ?? 10.99;
-      const limitCheck = await checkDailyLimits(1, price);
+      const firstUserForSale = await prisma.user.findFirst({
+        where: { isActive: true },
+        select: { id: true },
+      });
+      const userIdForOrder = firstUserForSale?.id ?? 1;
+      const limitCheck = await checkDailyLimits(userIdForOrder, price);
       if (!limitCheck.ok) {
         stageResults.sale = { ok: false, real: false, error: limitCheck.error };
         diagnostics.push(`sale: ${limitCheck.error}`);
       } else {
+        const userId = userIdForOrder;
         const productUrl =
           firstOpportunity?.aliexpressUrl ||
           firstOpportunity?.productUrl ||
           'https://www.aliexpress.com/item/example.html';
+        const productForOrder = await prisma.product.findFirst({
+          where: { userId, status: { in: ['APPROVED', 'PUBLISHED'] } },
+          select: { id: true },
+        });
         const shippingAddress = JSON.stringify({
         fullName: 'Test Buyer',
         addressLine1: '123 Test St',
@@ -197,6 +210,8 @@ export async function runTestFullDropshippingCycle(req: Request, res: Response):
         });
         const order = await prisma.order.create({
         data: {
+          userId,
+          productId: productForOrder?.id ?? undefined,
           title: firstOpportunity?.title ?? 'Test Order',
           price,
           currency: 'USD',
@@ -204,7 +219,7 @@ export async function runTestFullDropshippingCycle(req: Request, res: Response):
           customerEmail: 'test@example.com',
           shippingAddress,
           status: 'PAID',
-          paypalOrderId: null,
+          paypalOrderId: `test-full-cycle:${Date.now()}`, // Placeholder; overwritten by real PayPal ID on capture
           productUrl,
         },
       });
@@ -319,6 +334,15 @@ export async function runTestFullDropshippingCycle(req: Request, res: Response):
             : undefined,
         };
         if (!stageResults.accounting.ok) diagnostics.push('accounting: order not found');
+        if (orderForAccounting?.status === 'PURCHASED') {
+          const sale = await prisma.sale.findFirst({
+            where: { orderId: order.id },
+            select: { id: true, netProfit: true },
+          });
+          if (sale) {
+            saleCreatedResult = { saleId: sale.id, netProfit: Number(sale.netProfit ?? 0) };
+          }
+        }
       }
       }
     }
@@ -375,6 +399,7 @@ export async function runTestFullDropshippingCycle(req: Request, res: Response):
     stages: stageResults,
     stageResults,
     diagnostics: diagnostics.length ? diagnostics : { stageCount: 10 },
+    saleCreated: saleCreatedResult ?? undefined,
   };
 
   logger.info('[INTERNAL] test-full-dropshipping-cycle completed', {

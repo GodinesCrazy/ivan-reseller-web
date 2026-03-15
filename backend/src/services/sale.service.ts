@@ -366,8 +366,11 @@ export class SaleService {
     const autopilotMode = (process.env.AUTOPILOT_MODE || 'sandbox') as 'production' | 'sandbox';
     if (!payoutService || !userPaypalEmail || !adminPaypalEmail) {
       if (autopilotMode === 'production') {
-        logger.error('[SALE] AUTOPILOT_MODE=production: cannot skip payouts - missing config', {
+        const reason = 'missing_config: PAYPAL credentials or adminPaypalEmail or user paypalPayoutEmail';
+        logger.error('[SALE] PAYOUT_FAILED: missing config (production mode)', {
           saleId: sale.id,
+          orderId: sale.orderId,
+          reason,
           hasPayoutService: !!payoutService,
           hasUserPaypal: !!userPaypalEmail,
           hasAdminPaypal: !!adminPaypalEmail,
@@ -385,8 +388,10 @@ export class SaleService {
         where: { id: sale.id },
         data: { status: 'PAYOUT_FAILED' },
       });
-      logger.warn('[SALE] Payout skipped: missing PayPal config or user paypalPayoutEmail', {
+      logger.warn('[SALE] PAYOUT_FAILED: missing PayPal config or user paypalPayoutEmail (sandbox)', {
         saleId: sale.id,
+        orderId: sale.orderId,
+        reason: 'missing_config',
         hasPayoutService: !!payoutService,
         hasUserPaypal: !!userPaypalEmail,
         hasAdminPaypal: !!adminPaypalEmail,
@@ -416,16 +421,19 @@ export class SaleService {
     const { hasSufficientBalanceForPayout } = await import('./balance-verification.service');
     const payoutBalanceCheck = await hasSufficientBalanceForPayout(totalPayoutAmount);
     if (!payoutBalanceCheck.sufficient) {
-      await prisma.sale.update({
-        where: { id: sale.id },
-        data: { status: 'PAYOUT_SKIPPED_INSUFFICIENT_FUNDS' as any },
-      });
-      logger.warn('[SALE] Payout skipped: insufficient real balance', {
+      const reason = `insufficient_balance: required=${payoutBalanceCheck.required}, available=${payoutBalanceCheck.available}`;
+      logger.warn('[SALE] PAYOUT_SKIPPED_INSUFFICIENT_FUNDS', {
         saleId: sale.id,
+        orderId: sale.orderId,
+        reason,
         required: payoutBalanceCheck.required,
         available: payoutBalanceCheck.available,
         source: payoutBalanceCheck.source,
         error: payoutBalanceCheck.error,
+      });
+      await prisma.sale.update({
+        where: { id: sale.id },
+        data: { status: 'PAYOUT_SKIPPED_INSUFFICIENT_FUNDS' as any },
       });
       return sale;
     }
@@ -448,11 +456,17 @@ export class SaleService {
         senderItemId: `sale-${sale.id}-admin`,
       });
       if (!adminRes.success) {
+        const reason = `admin_payout_failed: ${adminRes.error}`;
+        logger.error('[SALE] PAYOUT_FAILED: admin payout failed', {
+          saleId: sale.id,
+          orderId: sale.orderId,
+          reason,
+          error: adminRes.error,
+        });
         await prisma.sale.update({
           where: { id: sale.id },
           data: { status: 'PAYOUT_FAILED' },
         });
-        logger.error('[SALE] Admin payout failed', { saleId: sale.id, error: adminRes.error });
         throw new AppError(`Admin payout failed: ${adminRes.error}`, 502);
       }
       adminPayoutId = adminRes.batchId || null;
@@ -486,11 +500,18 @@ export class SaleService {
           senderItemId: `sale-${sale.id}-user`,
         });
         if (!userRes.success) {
+          const reason = `user_payout_failed: ${userRes.error}`;
+          logger.error('[SALE] PAYOUT_FAILED: user payout failed', {
+            saleId: sale.id,
+            orderId: sale.orderId,
+            reason,
+            error: userRes.error,
+            adminPayoutId,
+          });
           await prisma.sale.update({
             where: { id: sale.id },
             data: { status: 'PAYOUT_FAILED', adminPayoutId } as any,
           });
-          logger.error('[SALE] User payout failed', { saleId: sale.id, error: userRes.error });
           throw new AppError(`User payout failed: ${userRes.error}`, 502);
         }
         userPayoutId = userRes.batchId || null;
@@ -1027,6 +1048,169 @@ export class SaleService {
       salesCount: totalCommission._count.id,
       perUser: perUserTable,
     };
+  }
+
+  /**
+   * Admin: Retry payout for a sale in PAYOUT_FAILED or PAYOUT_SKIPPED_INSUFFICIENT_FUNDS.
+   * Re-runs the dual payout (admin + user) if config and balance are now available.
+   */
+  async retryPayout(saleId: number): Promise<{ success: boolean; message?: string }> {
+    const sale = await prisma.sale.findUnique({
+      where: { id: saleId },
+      include: {
+        product: true,
+        user: {
+          select: {
+            id: true,
+            paypalPayoutEmail: true,
+            payoneerPayoutEmail: true,
+            createdBy: true,
+          },
+        },
+      },
+    });
+    if (!sale) {
+      return { success: false, message: 'Venta no encontrada' };
+    }
+    const allowedStatuses = ['PAYOUT_FAILED', 'PAYOUT_SKIPPED_INSUFFICIENT_FUNDS'];
+    if (!allowedStatuses.includes(sale.status)) {
+      return {
+        success: false,
+        message: `Venta no está en estado retryable (actual: ${sale.status}). Solo PAYOUT_FAILED o PAYOUT_SKIPPED_INSUFFICIENT_FUNDS.`,
+      };
+    }
+    const userId = sale.userId;
+    const user = sale.user as any;
+    const adminId: number | null = user?.createdBy ?? null;
+    const environment = (sale.environment || 'sandbox') as 'sandbox' | 'production';
+
+    const payoutService = await (await import('./paypal-payout.service')).PayPalPayoutService.fromUserCredentials(userId, environment);
+    const adminPaypalEmail = await platformConfigService.getAdminPaypalEmail();
+    const userPaypalEmail = user?.paypalPayoutEmail?.trim() || null;
+
+    if (!payoutService || !userPaypalEmail || !adminPaypalEmail) {
+      logger.warn('[SALE] retryPayout: config still missing', { saleId, hasPayoutService: !!payoutService, hasUserPaypal: !!userPaypalEmail, hasAdminPaypal: !!adminPaypalEmail });
+      return {
+        success: false,
+        message: 'Configuración PayPal incompleta. Verifique PAYPAL_*, adminPaypalEmail en PlatformConfig y paypalPayoutEmail del usuario.',
+      };
+    }
+
+    const saleFresh = await prisma.sale.findUnique({
+      where: { id: saleId },
+      select: { payoutExecuted: true, adminPayoutId: true, userPayoutId: true },
+    });
+    const alreadyPaid = (saleFresh as any)?.payoutExecuted === true || (!!saleFresh?.adminPayoutId && !!saleFresh?.userPayoutId);
+    if (alreadyPaid) {
+      return { success: false, message: 'El payout ya fue ejecutado (idempotente)' };
+    }
+
+    const commissionAmountNum = toNumber(sale.commissionAmount);
+    const netProfitNum = toNumber(sale.netProfit);
+    if (commissionAmountNum <= 0 && netProfitNum <= 0) {
+      return { success: false, message: 'Sin monto a pagar (comisión y ganancia neta <= 0)' };
+    }
+
+    const totalPayoutAmount = commissionAmountNum + netProfitNum;
+    const { hasSufficientBalanceForPayout } = await import('./balance-verification.service');
+    const payoutBalanceCheck = await hasSufficientBalanceForPayout(totalPayoutAmount);
+    if (!payoutBalanceCheck.sufficient) {
+      logger.warn('[SALE] retryPayout: insufficient balance', {
+        saleId,
+        required: payoutBalanceCheck.required,
+        available: payoutBalanceCheck.available,
+      });
+      return {
+        success: false,
+        message: `Saldo insuficiente. Requerido: ${payoutBalanceCheck.required}, disponible: ${payoutBalanceCheck.available}`,
+      };
+    }
+
+    let adminPayoutId: string | null = null;
+    let userPayoutId: string | null = null;
+
+    try {
+      if (commissionAmountNum > 0) {
+        const adminRes = await payoutService.sendPayout({
+          recipientEmail: adminPaypalEmail,
+          amount: commissionAmountNum,
+          currency: sale.currency,
+          note: `Platform commission (retry) - Sale ${sale.orderId}`,
+          senderItemId: `sale-${sale.id}-admin-retry`,
+        });
+        if (!adminRes.success) {
+          logger.error('[SALE] retryPayout: admin payout failed', { saleId, error: adminRes.error });
+          await prisma.sale.update({ where: { id: saleId }, data: { status: 'PAYOUT_FAILED' } });
+          return { success: false, message: `Admin payout failed: ${adminRes.error}` };
+        }
+        adminPayoutId = adminRes.batchId || null;
+      }
+
+      if (netProfitNum > 0) {
+        let userPayoutOk = false;
+        const userPayoneerEmail = user?.payoneerPayoutEmail?.trim() || null;
+        const payoneerService = (await import('./payoneer.service')).PayoneerService.fromEnv();
+        const preferPayoneer = process.env.PAYOUT_PROVIDER === 'payoneer';
+        if (payoneerService && userPayoneerEmail && preferPayoneer) {
+          const payoneerRes = await payoneerService.withdrawFunds({
+            recipientEmail: userPayoneerEmail,
+            amount: netProfitNum,
+            currency: sale.currency,
+            note: `Your profit (retry) - Sale ${sale.orderId}`,
+            senderItemId: `sale-${sale.id}-user-retry`,
+          });
+          if (payoneerRes.success) {
+            userPayoutId = payoneerRes.batchId || payoneerRes.transactionId || 'payoneer';
+            userPayoutOk = true;
+          }
+        }
+        if (!userPayoutOk) {
+          const userRes = await payoutService.sendPayout({
+            recipientEmail: userPaypalEmail,
+            amount: netProfitNum,
+            currency: sale.currency,
+            note: `Your profit (retry) - Sale ${sale.orderId}`,
+            senderItemId: `sale-${sale.id}-user-retry`,
+          });
+          if (!userRes.success) {
+            logger.error('[SALE] retryPayout: user payout failed', { saleId, error: userRes.error });
+            await prisma.sale.update({
+              where: { id: saleId },
+              data: { status: 'PAYOUT_FAILED', adminPayoutId } as any,
+            });
+            return { success: false, message: `User payout failed: ${userRes.error}` };
+          }
+          userPayoutId = userRes.batchId || null;
+        }
+      }
+
+      await prisma.sale.update({
+        where: { id: saleId },
+        data: { adminPayoutId, userPayoutId, payoutExecuted: true } as any,
+      });
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          balance: { increment: netProfitNum },
+          totalEarnings: { increment: netProfitNum },
+          totalSales: { increment: 1 },
+        },
+      });
+      if (adminId && commissionAmountNum > 0) {
+        await prisma.user.update({
+          where: { id: adminId },
+          data: { balance: { increment: commissionAmountNum }, totalEarnings: { increment: commissionAmountNum } },
+        });
+      }
+
+      logger.info('[SALE] retryPayout success', { saleId, adminPayoutId, userPayoutId });
+      return { success: true };
+    } catch (err: any) {
+      logger.error('[SALE] retryPayout exception', { saleId, error: err?.message });
+      await prisma.sale.update({ where: { id: saleId }, data: { status: 'PAYOUT_FAILED' } });
+      return { success: false, message: err?.message || 'Error desconocido en retry payout' };
+    }
   }
 
   /**

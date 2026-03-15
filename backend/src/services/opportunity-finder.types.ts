@@ -64,6 +64,12 @@ export interface OpportunityItem {
   };
   estimatedTimeToFirstSale?: number;
   breakEvenTime?: number;
+  /** Supplier filters (spec): orders >= 300, rating >= 4.5, reviews >= 50, shipping <= 15 days, supplier_score >= 90% */
+  supplierOrdersCount?: number;
+  supplierRating?: number;
+  supplierReviewsCount?: number;
+  shippingDaysMax?: number;
+  supplierScorePct?: number;
 }
 
 /** Raw product shape returned by discovery (Affiliate API or fallbacks) */
@@ -85,4 +91,10 @@ export interface DiscoveryProduct {
   images?: string[];
   shippingCost?: number;
   source?: string;
+  /** Optional supplier metrics for product selection filters (spec) */
+  supplierOrdersCount?: number;
+  supplierRating?: number;
+  supplierReviewsCount?: number;
+  shippingDaysMax?: number;
+  supplierScorePct?: number;
 }

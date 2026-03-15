@@ -37,6 +37,14 @@ class OpportunityFinderService {
   private minTrendConfidence = Number(process.env.MIN_TREND_CONFIDENCE || '30'); // Confianza mínima de tendencias (%)
   private maxTimeToFirstSale = Number(process.env.MAX_TIME_TO_FIRST_SALE || '60'); // Días máximos hasta primera venta
   private maxBreakEvenTime = Number(process.env.MAX_BREAK_EVEN_TIME || '90'); // Días máximos hasta break-even
+  // ✅ Spec product selection: supplier filters (default 0 or 999 = off to preserve current behavior)
+  private minSupplierOrders = Number(process.env.MIN_SUPPLIER_ORDERS || '0');
+  private minSupplierRating = Number(process.env.MIN_SUPPLIER_RATING || '0');
+  private minSupplierReviews = Number(process.env.MIN_SUPPLIER_REVIEWS || '0');
+  private maxShippingDays = Number(process.env.MAX_SHIPPING_DAYS || '999');
+  private minSupplierScorePct = Number(process.env.MIN_SUPPLIER_SCORE_PCT || '0');
+  /** Spec market validation: sales_competition_ratio = estimated_sales / listing_count >= this (default 0 = off) */
+  private minSalesCompetitionRatio = Number(process.env.MIN_SALES_COMPETITION_RATIO || '0');
 
   /**
    * ✅ NUEVO: Detectar y eliminar oportunidades duplicadas o muy similares
@@ -89,6 +97,57 @@ class OpportunityFinderService {
     }
 
     return unique;
+  }
+
+  /**
+   * Apply spec supplier filters (orders, rating, reviews, shipping days, supplier score).
+   * When env thresholds are 0 or 999 (max days), filtering is disabled so current behavior is preserved.
+   * When a value is missing on the opportunity, we allow it (no reject).
+   */
+  private applySupplierFilters(opportunities: OpportunityItem[]): OpportunityItem[] {
+    if (this.minSupplierOrders <= 0 && this.minSupplierRating <= 0 && this.minSupplierReviews <= 0 &&
+        this.maxShippingDays >= 999 && this.minSupplierScorePct <= 0) {
+      return opportunities;
+    }
+    const filtered = opportunities.filter((opp) => {
+      if (this.minSupplierOrders > 0 && opp.supplierOrdersCount != null && opp.supplierOrdersCount < this.minSupplierOrders) {
+        logger.debug('[OPPORTUNITY-FINDER] Filtered by supplier orders', { title: opp.title?.substring(0, 40), supplierOrdersCount: opp.supplierOrdersCount, min: this.minSupplierOrders });
+        return false;
+      }
+      if (this.minSupplierRating > 0 && opp.supplierRating != null && opp.supplierRating < this.minSupplierRating) {
+        logger.debug('[OPPORTUNITY-FINDER] Filtered by supplier rating', { title: opp.title?.substring(0, 40), supplierRating: opp.supplierRating, min: this.minSupplierRating });
+        return false;
+      }
+      if (this.minSupplierReviews > 0 && opp.supplierReviewsCount != null && opp.supplierReviewsCount < this.minSupplierReviews) {
+        logger.debug('[OPPORTUNITY-FINDER] Filtered by supplier reviews', { title: opp.title?.substring(0, 40), supplierReviewsCount: opp.supplierReviewsCount, min: this.minSupplierReviews });
+        return false;
+      }
+      if (this.maxShippingDays < 999 && opp.shippingDaysMax != null && opp.shippingDaysMax > this.maxShippingDays) {
+        logger.debug('[OPPORTUNITY-FINDER] Filtered by shipping days', { title: opp.title?.substring(0, 40), shippingDaysMax: opp.shippingDaysMax, max: this.maxShippingDays });
+        return false;
+      }
+      if (this.minSupplierScorePct > 0 && opp.supplierScorePct != null && opp.supplierScorePct < this.minSupplierScorePct) {
+        logger.debug('[OPPORTUNITY-FINDER] Filtered by supplier score', { title: opp.title?.substring(0, 40), supplierScorePct: opp.supplierScorePct, min: this.minSupplierScorePct });
+        return false;
+      }
+      return true;
+    });
+    const supplierRemoved = opportunities.length - filtered.length;
+    if (supplierRemoved > 0) {
+      logger.info('[OPPORTUNITY-FINDER] Supplier filters applied', {
+        original: opportunities.length,
+        afterFilters: filtered.length,
+        removed: supplierRemoved,
+        thresholds: {
+          minSupplierOrders: this.minSupplierOrders,
+          minSupplierRating: this.minSupplierRating,
+          minSupplierReviews: this.minSupplierReviews,
+          maxShippingDays: this.maxShippingDays,
+          minSupplierScorePct: this.minSupplierScorePct,
+        },
+      });
+    }
+    return filtered;
   }
 
   /**
@@ -637,6 +696,12 @@ class OpportunityFinderService {
                 const imgs = [p.productMainImageUrl, ...(p.productSmallImageUrls || [])].filter(
                   (x: any) => x && typeof x === 'string' && x.startsWith('http')
                 );
+                const deliveryDays = p.shipping_info?.delivery_days;
+                const shippingDaysMax = deliveryDays != null
+                  ? (typeof deliveryDays === 'string' && deliveryDays.includes('-')
+                      ? Math.max(...deliveryDays.split('-').map((d: string) => parseInt(d.trim(), 10) || 0))
+                      : parseInt(String(deliveryDays), 10))
+                  : undefined;
                 return {
                   title: p.productTitle,
                   price: priceInBase,
@@ -652,6 +717,11 @@ class OpportunityFinderService {
                   imageUrl: imgs[0],
                   images: imgs,
                   productId: p.productId,
+                  supplierOrdersCount: p.volume != null ? Number(p.volume) : undefined,
+                  supplierRating: p.evaluate_score != null ? Number(p.evaluate_score) : undefined,
+                  supplierReviewsCount: p.volume != null ? Number(p.volume) : undefined,
+                  shippingDaysMax: Number.isFinite(shippingDaysMax) ? shippingDaysMax : undefined,
+                  supplierScorePct: p.evaluate_rate != null ? (Number(p.evaluate_rate) <= 1 ? Number(p.evaluate_rate) * 100 : Number(p.evaluate_rate)) : undefined,
                 };
               })
               .filter(
@@ -1186,6 +1256,7 @@ class OpportunityFinderService {
     let skippedLowVolume = 0; // ✅ NUEVO: Contador de productos descartados por bajo volumen de búsqueda
     let skippedSlowSale = 0; // ✅ NUEVO: Contador de productos descartados por tiempo largo hasta primera venta
     let skippedLongBreakEven = 0; // ✅ NUEVO: Contador de productos descartados por tiempo largo hasta break-even
+    let skippedLowSalesRatio = 0; // ✅ Spec: sales_competition_ratio = estimated_sales / listing_count >= MIN_SALES_COMPETITION_RATIO
     let processedCount = 0;
 
     for (const product of products) {
@@ -1524,6 +1595,30 @@ class OpportunityFinderService {
         continue;
       }
 
+      // ✅ Spec: market demand gate — sales_competition_ratio = estimated_sales / listing_count >= MIN_SALES_COMPETITION_RATIO (default 0 = off)
+      if (this.minSalesCompetitionRatio > 0 && analyses.length > 0) {
+        const estimatedMonthlySales = trendsValidation?.searchVolume != null && trendsValidation.searchVolume > 0
+          ? trendsValidation.searchVolume
+          : null;
+        let maxRatio = 0;
+        for (const a of analyses) {
+          if (a.listingsFound <= 0) continue;
+          const estimated = estimatedMonthlySales ?? a.listingsFound * 0.5;
+          const ratio = estimated / a.listingsFound;
+          if (ratio > maxRatio) maxRatio = ratio;
+        }
+        if (maxRatio < this.minSalesCompetitionRatio) {
+          logger.info('[OPPORTUNITY-FINDER] Producto descartado - ratio demanda/competencia bajo', {
+            title: product.title.substring(0, 50),
+            maxRatio: Math.round(maxRatio * 100) / 100,
+            minRequired: this.minSalesCompetitionRatio,
+            estimatedMonthlySales: estimatedMonthlySales ?? 'heuristic',
+          });
+          skippedLowSalesRatio++;
+          continue;
+        }
+      }
+
       if (manualAuthPending) {
         estimationNotes.push('Sesión de AliExpress pendiente de confirmación. Completa el login manual desde la barra superior para obtener datos completos.');
       }
@@ -1695,6 +1790,11 @@ class OpportunityFinderService {
         generatedAt: new Date().toISOString(),
         estimatedFields,
         estimationNotes,
+        supplierOrdersCount: (product as any).supplierOrdersCount,
+        supplierRating: (product as any).supplierRating,
+        supplierReviewsCount: (product as any).supplierReviewsCount,
+        shippingDaysMax: (product as any).shippingDaysMax,
+        supplierScorePct: (product as any).supplierScorePct,
       };
 
       logger.info('[PIPELINE] EVALUATED', { title: opp.title?.substring(0, 40), profitMargin: (opp.profitMargin * 100).toFixed(1) });
@@ -1743,6 +1843,7 @@ class OpportunityFinderService {
       skippedLowVolume, // NUEVO: Productos descartados por bajo volumen de búsqueda
       skippedSlowSale, // NUEVO: Productos descartados por tiempo largo hasta primera venta
       skippedLongBreakEven, // NUEVO: Productos descartados por tiempo largo hasta break-even
+      skippedLowSalesRatio, // Spec: ratio demanda/competencia < MIN_SALES_COMPETITION_RATIO
       opportunitiesFound: opportunities.length,
       qualityFilters: {
         minMargin: `${(this.minMargin * 100).toFixed(1)}%`,
@@ -1778,6 +1879,8 @@ class OpportunityFinderService {
     logger.info('[PIPELINE][EVALUATED]', { count: opportunities.length });
     // ✅ NUEVO: Aplicar deduplicación antes de retornar
     const uniqueOpportunities = this.deduplicateOpportunities(opportunities);
+    // ✅ Spec: apply supplier filters (orders, rating, reviews, shipping days, supplier score) when env set
+    const afterSupplierFilters = this.applySupplierFilters(uniqueOpportunities);
 
     logger.info('Búsqueda de oportunidades completada', {
       service: 'opportunity-finder',
@@ -1785,10 +1888,11 @@ class OpportunityFinderService {
       query,
       totalFound: opportunities.length,
       uniqueOpportunities: uniqueOpportunities.length,
+      afterSupplierFilters: afterSupplierFilters.length,
       duplicatesRemoved: opportunities.length - uniqueOpportunities.length
     });
 
-    return uniqueOpportunities;
+    return afterSupplierFilters;
   }
 
   /**

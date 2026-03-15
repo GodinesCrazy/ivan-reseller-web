@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Play, 
   Pause, 
@@ -29,6 +29,7 @@ import {
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
+import { formatLastRun } from '@/utils/date';
 
 interface Workflow {
   id: number;
@@ -319,6 +320,9 @@ export default function Autopilot() {
   const [customCron, setCustomCron] = useState('');
   const [cronError, setCronError] = useState<string | null>(null);
 
+  // Ref para polling periódico (evita closure obsoleta)
+  const loadDataRef = useRef<() => Promise<void>>(() => Promise.resolve());
+
   useEffect(() => {
     loadData();
     checkAutopilotStatus();
@@ -329,6 +333,17 @@ export default function Autopilot() {
     const interval = setInterval(checkAutopilotStatus, ms);
     return () => clearInterval(interval);
   }, [autopilotRunning]);
+
+  // Polling periódico de workflows, stats, metrics, inventario (información en vivo)
+  useEffect(() => {
+    const ms = autopilotRunning ? 15000 : 20000; // 15s corriendo, 20s parado
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadDataRef.current();
+      }
+    }, ms);
+    return () => clearInterval(interval);
+  }, [autopilotRunning, environment]);
 
   // Detectar si eBay tiene credenciales base pero falta OAuth (para mostrar "Conectar eBay" automáticamente)
   useEffect(() => {
@@ -460,6 +475,7 @@ export default function Autopilot() {
       setLoading(false);
     }
   };
+  loadDataRef.current = loadData;
 
   const loadLogs = async (workflowId?: number) => {
     try {
@@ -776,13 +792,14 @@ export default function Autopilot() {
     return `${minutes}m ${seconds % 60}s`;
   };
 
-  /** Formatea lastRun evitando fechas inválidas (ej. solo hora que se interpreta como 2006) */
-  const formatLastRun = (lastRun: string) => {
-    const d = new Date(lastRun);
-    if (Number.isNaN(d.getTime())) return '—';
+  /** Devuelve minutos desde una fecha ISO, o null si es inválida/extraña (evita mostrar "2006") */
+  const getMinutesAgo = (isoDate: string | null | undefined): number | null => {
+    if (!isoDate) return null;
+    const d = new Date(isoDate);
+    if (Number.isNaN(d.getTime())) return null;
     const y = d.getFullYear();
-    if (y < 2010 || y > 2030) return '—'; // Evitar mostrar años erróneos como 2006
-    return d.toLocaleString();
+    if (y < 2010 || y > 2030) return null;
+    return Math.floor((Date.now() - d.getTime()) / 60000);
   };
 
   if (loading) {
@@ -896,11 +913,14 @@ export default function Autopilot() {
                       else msg = 'Ciclo activo: buscar → filtrar → analizar → publicar.';
                       return <span>{msg}</span>;
                     })()}
-                    {autopilotStatus?.cycleStartedAt && (
-                      <span className="block text-xs text-gray-500 dark:text-gray-500">
-                        Ciclo iniciado hace {Math.floor((Date.now() - new Date(autopilotStatus.cycleStartedAt).getTime()) / 60000)} min
-                      </span>
-                    )}
+                    {(() => {
+                      const mins = getMinutesAgo(autopilotStatus?.cycleStartedAt);
+                      return mins != null ? (
+                        <span className="block text-xs text-gray-500 dark:text-gray-500">
+                          Ciclo iniciado hace {mins} min
+                        </span>
+                      ) : null;
+                    })()}
                     {autopilotStatus?.config?.targetMarketplaces && autopilotStatus.config.targetMarketplaces.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-1">
                         {autopilotStatus.config.targetMarketplaces.map((mp) => (

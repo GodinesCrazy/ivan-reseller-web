@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Save, Clock, Info, Calculator, Trash2, Plus, MoveUp, MoveDown } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Save, Clock, Info, Calculator, Trash2, Plus, MoveUp, MoveDown, Award } from 'lucide-react';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -711,6 +711,21 @@ export default function ProductPreview() {
                 Moneda: <span className="font-medium">{preview.currency}</span>
               </div>
             </div>
+
+            {/* Ganador / Info del agente */}
+            {preview.product?.winnerDetectedAt && (
+              <div className="bg-white rounded-lg shadow p-6 border-l-4 border-emerald-500">
+                <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                  <Award className="w-5 h-5 text-emerald-600" />
+                  Ganador
+                </h2>
+                <p className="text-sm text-gray-700">
+                  Ganador detectado el{' '}
+                  <span className="font-medium">{new Date(preview.product.winnerDetectedAt).toLocaleDateString()}</span>.
+                  Este producto cumple la regla de ventas (últimos N días &gt;= umbral).
+                </p>
+              </div>
+            )}
 
             {/* ✅ Optimización de Tiempo de Publicación */}
             {lifetimeDecision && !loadingLifetime && (

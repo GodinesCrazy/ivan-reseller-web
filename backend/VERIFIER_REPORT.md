@@ -129,6 +129,33 @@ git rev-parse HEAD
 
 ---
 
+## Test E2E: ciclo completo hasta utilidad
+
+El test de ciclo completo puede ejecutarse **hasta la generación de utilidad** (registro `Sale` con `netProfit`) cuando se incluye post-sale (PayPal capture + fulfillment + compra AliExpress).
+
+### Comandos
+
+- **Solo discovery (por defecto):**  
+  `npm run test-full-dropshipping-cycle` o `npm run test:dropshipping-cycle`  
+  Env: `INTERNAL_RUN_SECRET`; backend corriendo. No ejecuta PayPal ni compra; no crea Sale.
+
+- **Ciclo hasta utilidad (post-sale):**  
+  `SKIP_POST_SALE=0 npm run test-full-dropshipping-cycle`  
+  o `npm run test:full-dropshipping-e2e` (mismo script; para E2E hasta utilidad configurar `SKIP_POST_SALE=0` en el entorno).  
+  Requiere: además de lo anterior, PayPal configurado (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, etc.) y, para compra real, AliExpress (p. ej. `ALLOW_BROWSER_AUTOMATION`, `ALIEXPRESS_USER`, `ALIEXPRESS_PASS`). En `AUTOPILOT_MODE=production` el handler no permite `skipPostSale=true`.
+
+### Qué comprueba
+
+- **Estructura:** Respuesta 200 con `stageResults` (trends, aliexpressSearch, pricing, marketplaceCompare, publish, sale, paypalCapture, aliexpressPurchase, tracking, accounting).
+- **Utilidad:** Cuando post-sale se ejecuta (`SKIP_POST_SALE=0`), la respuesta debe incluir `saleCreated: { saleId, netProfit }` si el ciclo llegó a PURCHASED y se creó una Sale. El script imprime "--- Utilidad (Sale) ---" cuando existe; si post-sale corrió pero no hay `saleCreated`, el script **falla** (exit 1) para garantizar que el E2E verifica generación de utilidad.
+
+### Criterios de éxito
+
+- **Discovery-only:** `success === true` cuando trends, aliexpressSearch, pricing, marketplaceCompare y publish son reales (APIs configuradas). No se exige `saleCreated`.
+- **Hasta utilidad:** Con `SKIP_POST_SALE=0`, además de `success === true` y etapas post-sale reales, la respuesta debe incluir `saleCreated` con `saleId` y `netProfit`; si falta, el script devuelve exit code 1. El handler crea el Order con `userId` (y `productId` si hay producto APPROVED/PUBLISHED del usuario) para que `createSaleFromOrder` genere la Sale y el `netProfit`.
+
+---
+
 ## Summary
 
 - **Env inventory:** `backend/ENV_INVENTORY.md`

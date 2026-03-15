@@ -67,6 +67,7 @@ interface Product {
   imageUrl?: string;
   profit?: number;
   createdAt: string;
+  winnerDetectedAt?: string | null;
 }
 
 interface PaginationMeta {
@@ -820,6 +821,7 @@ export default function Products() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Enlaces</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Precio</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Estado</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Ganador</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Workflow</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Beneficio</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Acciones</th>
@@ -896,6 +898,19 @@ export default function Products() {
                           {formatCurrencySimple(product.price, product.currency || 'USD')}
                         </td>
                         <td className="px-4 py-3">{getStatusBadge(product.status)}</td>
+                        <td className="px-4 py-3">
+                          {product.winnerDetectedAt ? (
+                            <Badge
+                              variant="secondary"
+                              className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+                              title={`Ganador detectado el ${new Date(product.winnerDetectedAt).toLocaleDateString()}. Regla: ventas en los últimos N días >= umbral.`}
+                            >
+                              Ganador
+                            </Badge>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <WorkflowStatusIndicator
                             productId={Number(product.id)}

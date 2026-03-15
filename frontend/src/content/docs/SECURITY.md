@@ -18,6 +18,7 @@
 7. [Logging y Auditoría](#logging-y-auditoría)
 8. [Backups](#backups)
 9. [Checklist de Seguridad](#checklist-de-seguridad)
+10. [Rutas de Debug e Internal en Producción](#rutas-de-debug-e-internal-en-produccion)
 
 ---
 
@@ -358,6 +359,40 @@ psql $DATABASE_URL < backup_20250127.sql
 - [ ] Actualizar dependencias (npm audit)
 - [ ] Revisar accesos de usuarios (eliminar inactivos)
 - [ ] Verificar que no haya credenciales expuestas en logs
+
+---
+
+## 🔧 Rutas de Debug e Internal en Produccion
+
+### Endpoints Debug (`/api/debug/*`)
+
+| Endpoint | Produccion | Descripcion |
+|----------|------------|-------------|
+| `/api/debug/ping` | Activo | Healthcheck basico (sin dependencias) |
+| `/api/debug/build-info` | Activo | Diagnostico de build (sin DB) |
+| `/api/debug/auth-status-crash-safe` | Activo | Memoria y uptime (healthcheck) |
+| `/api/debug/db-health` | Activo (restringido) | Estado DB; en prod NO expone userCount ni stack |
+| `/api/debug/login-smoke` | **404** | Login automatico admin (bloqueado en prod) |
+| `/api/debug/seed-admin` | **404** | Crear usuario admin (bloqueado en prod) |
+| `/api/debug/reset-admin-password` | **404** | Reset password admin (bloqueado en prod) |
+| `/api/debug/aliexpress/probe` | **404** | Probe AliExpress sin auth (bloqueado en prod) |
+| `/api/debug/ebay/probe` | **404** | Probe eBay sin auth (bloqueado en prod) |
+
+Endpoints con autenticacion (aliexpress-dropshipping-credentials, aliexpress/test-search, etc.) siguen activos en produccion para diagnostico autenticado.
+
+### Rutas Internal (`/api/internal/*`)
+
+Todas las rutas bajo `/api/internal/*` estan protegidas por:
+
+- Header `x-internal-secret` con valor `INTERNAL_RUN_SECRET`
+- Si el secret no coincide: 401 Unauthorized
+- Si `INTERNAL_RUN_SECRET` no esta configurado: el endpoint responde 503
+
+Usadas para tests internos, ciclos de eBay, OAuth bootstrap, etc. No exponer `INTERNAL_RUN_SECRET` publicamente.
+
+### Ruta Legacy
+
+La ruta `/debug` (sin prefijo `/api`) ha sido eliminada. Usar `/api/debug` en su lugar.
 
 ---
 

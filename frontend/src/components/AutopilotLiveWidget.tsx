@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, Pause, ChevronRight } from 'lucide-react';
 import api from '@/services/api';
+import { formatLastRun } from '@/utils/date';
 
 interface AutopilotStatus {
   running: boolean;
@@ -126,7 +127,7 @@ export default function AutopilotLiveWidget() {
           {!status.running && (status.lastRun || status.opportunitiesGenerated != null || status.productsPublished != null) && (
         <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
           {status.lastRun && (
-            <span>Último: {new Date(status.lastRun).toLocaleString()}</span>
+            <span>Último: {formatLastRun(status.lastRun)}</span>
           )}
           {status.opportunitiesGenerated != null && (
             <span>Oportunidades: {status.opportunitiesGenerated}</span>
