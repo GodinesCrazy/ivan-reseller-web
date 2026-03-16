@@ -111,12 +111,13 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 // Must be THE FIRST app.use() – no DB, Redis, queues, auth, or heavy deps.
 // ====================================
 app.use((req: Request, res: Response, next: NextFunction) => {
-  if (req.method !== 'GET' || (req.path !== '/health' && req.path !== '/ready')) {
+  const isReadyPath = req.path === '/ready' || req.path === '/api/ready';
+  if (req.method !== 'GET' || (req.path !== '/health' && !isReadyPath)) {
     return next();
   }
   
-  // Handle /ready endpoint - Phase 5: 200 only if DB connected, 503 otherwise
-  if (req.path === '/ready') {
+  // Handle /ready and /api/ready - Phase 5: 200 only if DB connected, 503 otherwise
+  if (isReadyPath) {
     const start = Date.now();
     const correlationId = (req as any).correlationId || `ready-${Date.now()}`;
     const isDbReady = (global as any).__isDatabaseReady === true;
