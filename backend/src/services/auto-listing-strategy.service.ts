@@ -221,7 +221,10 @@ export async function runAutoListingStrategy(enqueueJobs: boolean = true): Promi
       }
       return perMarketplaceToday.get(mp)!;
     };
-    const incMarketplace = (mp: string) => perMarketplaceToday.set(mp, (perMarketplaceToday.get(mp) ?? await countDecisionsTodayByMarketplace(mp)) + 1);
+    const incMarketplace = async (mp: string) => {
+      const count = await getCount(mp);
+      perMarketplaceToday.set(mp, count + 1);
+    };
 
     for (const c of toProcess) {
       const marketplace = await selectMarketplace(c.productId, c.userId);
@@ -243,7 +246,7 @@ export async function runAutoListingStrategy(enqueueJobs: boolean = true): Promi
           },
         });
         result.decisionsCreated++;
-        incMarketplace(marketplace);
+        await incMarketplace(marketplace);
 
         if (enqueueJobs) {
           const job = await jobService.addPublishingJob({

@@ -76,7 +76,7 @@ export class ScheduledTasksService {
     
     if (isRedisAvailable && this.bullMQRedis) {
       this.initializeQueues();
-      this.initializeWorkers();
+      void this.initializeWorkers();
       this.scheduleTasks();
     } else {
       logger.warn('Scheduled Tasks: Redis not available - scheduled tasks disabled');
@@ -206,7 +206,7 @@ export class ScheduledTasksService {
   /**
    * Inicializar workers para procesar tareas
    */
-  private initializeWorkers(): void {
+  private async initializeWorkers(): Promise<void> {
     if (!isRedisAvailable) return;
 
     if (!this.bullMQRedis) return;
@@ -528,7 +528,7 @@ export class ScheduledTasksService {
         'market-intelligence',
         async (job) => {
           logger.info('Scheduled Tasks: Running market intelligence', { jobId: job.id });
-          const userId = (job.data?.userId as number) | undefined;
+          const userId = job.data?.userId as number | undefined;
           return await runMarketIntelligence(userId);
         },
         {
