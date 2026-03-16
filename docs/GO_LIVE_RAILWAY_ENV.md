@@ -91,21 +91,21 @@ cd backend && npx prisma migrate deploy
 
 Para que el deploy pase el healthcheck en Railway:
 
-1. **Código:** El backend usa `server-bootstrap.ts`: responde `GET /health` con 200 en cuanto el puerto está en escucha y carga el servidor completo en `setImmediate` para no bloquear. Asegúrate de desplegar desde `main` con ese fix (commit que incluye "healthcheck - load server in setImmediate").
+1. **Start sin migraciones:** El `startCommand` en `backend/railway.json` es **`npm run start`** (no `start:with-migrations`). Así el proceso arranca y abre el puerto en segundos; `/health` responde 200 y el healthcheck pasa. Si se ejecutaran migraciones antes de arrancar Node, el healthcheck fallaría durante 1–2 minutos.
 
-2. **Configuración Railway:** El healthcheck debe apuntar a **`/health`** (no a `/`). En el repo está definido en:
-   - `backend/railway.json`: `"healthcheckPath": "/health"`, `"healthcheckTimeout": 120`
-   - `railway.json` (raíz) y `railway.toml`: mismo path por si se despliega desde raíz.
+2. **Migraciones en Release Command:** En Railway Dashboard → tu servicio backend → **Settings** → **Deploy**:
+   - **Release Command:** `npx prisma migrate deploy`  
+   Así las migraciones se ejecutan en la fase de release (antes de cambiar el tráfico al nuevo deploy) y el Start Command solo hace `node dist/server-bootstrap.js`.
 
-3. **Verificar tras el deploy:**
-   - En Railway: pestaña **Deployments** → último deploy debe quedar en estado **Success** (no "Healthcheck failed").
-   - Desde tu máquina:
-     ```bash
-     curl -s https://ivan-reseller-backend-production.up.railway.app/health
-     ```
-     Debe devolver `{"status":"ok","timestamp":"..."}`.
+3. **Código:** El backend usa `server-bootstrap.ts`: responde `GET /health` con 200 en cuanto el puerto está en escucha y carga el servidor completo en `setImmediate` para no bloquear.
 
-Si el healthcheck falla, revisa los logs del **deploy** (build) y de la **replica** (runtime): que el servicio arranque con `npm run start` y que no haya errores antes del primer GET /health.
+4. **Configuración Railway:** El healthcheck debe apuntar a **`/health`**. En el repo: `backend/railway.json` con `"healthcheckPath": "/health"`, `"healthcheckTimeout": 120`.
+
+5. **Verificar tras el deploy:**
+   - En Railway: pestaña **Deployments** → último deploy en **Success** (no "Healthcheck failed").
+   - Desde tu máquina: `curl -s https://ivan-reseller-backend-production.up.railway.app/health` → debe devolver `{"status":"ok","timestamp":"..."}`.
+
+Si el healthcheck falla, revisa los logs de la **replica** (runtime): que el servicio arranque con `npm run start` y que no haya errores antes del primer GET /health.
 
 ---
 
