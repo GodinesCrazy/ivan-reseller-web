@@ -38,17 +38,30 @@ async function loginForApi(baseUrl: string): Promise<string> {
 
 async function applyViaApi(baseUrl: string): Promise<void> {
   const token = await loginForApi(baseUrl);
-  const url = `${baseUrl.replace(/\/$/, '')}/api/autopilot/apply-early-stage-config`;
-  const res = await fetch(url, {
+  const base = baseUrl.replace(/\/$/, '');
+  // Use PUT /api/autopilot/config (exists in production); fallback if POST apply-early-stage-config returns 404
+  const body = {
+    cycleIntervalMinutes: 15,
+    workingCapital: 5000,
+    maxOpportunitiesPerCycle: 25,
+    maxActiveProducts: 1000,
+    maxDailyOrders: 50,
+  };
+  let res = await fetch(`${base}/api/autopilot/apply-early-stage-config`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
   });
+  if (res.status === 404) {
+    res = await fetch(`${base}/api/autopilot/config`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok || res.status < 200 || res.status >= 300) {
-    throw new Error(data.error || data.message || `Request failed ${res.status}`);
+    const msg = data.error || data.message || data.details || `Request failed ${res.status}`;
+    throw new Error(`${msg} (HTTP ${res.status})`);
   }
   console.log('Early-stage autopilot config applied (via API).');
 }

@@ -43,9 +43,12 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('[BOOT] Health listening on port', PORT);
   (global as any).__earlyHttpServer = server;
   (global as any).__earlyPort = PORT;
-  try {
-    require('./server'); // eslint-disable-line
-  } catch (err: any) {
-    console.error('[BOOT] Server load failed (/health still works):', err?.message || err);
-  }
+  // Load full server in next tick so /health can be served immediately (Railway healthcheck)
+  setImmediate(() => {
+    try {
+      require('./server'); // eslint-disable-line
+    } catch (err: any) {
+      console.error('[BOOT] Server load failed (/health still works):', err?.message || err);
+    }
+  });
 });
