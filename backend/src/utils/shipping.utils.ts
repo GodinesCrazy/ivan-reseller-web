@@ -3,25 +3,29 @@
  * Use getEffectiveShippingCost() wherever margin/totalCost use product.shippingCost so missing data uses a configurable default (not 0).
  */
 
+import { Prisma } from '@prisma/client';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
+import { toNumber } from './decimal.utils';
 
 function getDefaultShippingCostUsd(): number {
   const n = (env as { DEFAULT_SHIPPING_COST_USD?: number }).DEFAULT_SHIPPING_COST_USD;
   return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : 5.99;
 }
 
+/** Accepts Prisma product (Decimal) or plain object (number). */
 export interface ProductWithShippingCost {
-  shippingCost?: number | null;
+  shippingCost?: number | Prisma.Decimal | null;
 }
 
 export interface MetadataWithShippingCost {
-  shippingCost?: number | null;
+  shippingCost?: number | Prisma.Decimal | null;
 }
 
 /**
  * Returns the shipping cost to use for margin/totalCost calculations.
  * Uses product.shippingCost (or metadata.shippingCost) when present and valid; otherwise the configured default (env DEFAULT_SHIPPING_COST_USD, default 5.99).
+ * Accepts Prisma Decimal or number.
  */
 export function getEffectiveShippingCost(
   product: ProductWithShippingCost,
@@ -31,8 +35,9 @@ export function getEffectiveShippingCost(
   const fromProduct = product?.shippingCost;
   const fromMeta = metadata?.shippingCost;
   const val = fromProduct ?? fromMeta;
-  if (val != null && typeof val === 'number' && Number.isFinite(val) && val >= 0) {
-    return val;
+  if (val != null && val !== '' && (typeof val !== 'number' || !Number.isNaN(val))) {
+    const num = toNumber(val as Prisma.Decimal | number);
+    if (Number.isFinite(num) && num >= 0) return num;
   }
   const defaultVal = options?.defaultIfMissing ?? getDefaultShippingCostUsd();
   logger.debug('[SHIPPING] Using default cost (product has no shippingCost)', {
