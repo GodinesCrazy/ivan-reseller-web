@@ -91,11 +91,9 @@ cd backend && npx prisma migrate deploy
 
 Para que el deploy pase el healthcheck en Railway:
 
-1. **Start sin migraciones:** El `startCommand` en `backend/railway.json` es **`npm run start`** (no `start:with-migrations`). Así el proceso arranca y abre el puerto en segundos; `/health` responde 200 y el healthcheck pasa. Si se ejecutaran migraciones antes de arrancar Node, el healthcheck fallaría durante 1–2 minutos.
+1. **Start sin migraciones:** El `startCommand` en `backend/railway.json` es **`npm run start`** (no `start:with-migrations`). Así el proceso arranca y abre el puerto en segundos; `/health` responde 200 y el healthcheck pasa.
 
-2. **Migraciones en Release Command:** En Railway Dashboard → tu servicio backend → **Settings** → **Deploy**:
-   - **Release Command:** `npx prisma migrate deploy`  
-   Así las migraciones se ejecutan en la fase de release (antes de cambiar el tráfico al nuevo deploy) y el Start Command solo hace `node dist/server-bootstrap.js`.
+2. **Migraciones en pre-deploy:** En `backend/railway.json` está definido **`preDeployCommand`: `["npx prisma migrate deploy"]`**. Railway ejecuta las migraciones entre el build y el deploy (en un contenedor con la misma imagen y variables); no hace falta configurar nada en el Dashboard.
 
 3. **Código:** El backend usa `server-bootstrap.ts`: responde `GET /health` con 200 en cuanto el puerto está en escucha y carga el servidor completo en `setImmediate` para no bloquear.
 
