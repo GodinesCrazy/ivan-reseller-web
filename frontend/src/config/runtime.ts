@@ -10,14 +10,19 @@ export const isDevelopment = import.meta.env.DEV;
 
 /**
  * Obtiene y normaliza la URL base de la API (deployment automation).
- * - Si VITE_API_URL está definida (relativa o absoluta), se usa.
- * - Si no: en browser con hostname vercel.app → "/api" (proxy).
- * - Si no: en desarrollo → localhost; en producción → "/api".
- * - Elimina trailing slashes.
+ * - Producción en ivanreseller.com / www: SIEMPRE "/api" (proxy Vercel → Railway).
+ * - Si no: VITE_API_URL si está definida (relativa o absoluta).
+ * - Si no: vercel.app → "/api"; desarrollo → localhost; producción → "/api".
  */
 export function getApiBaseUrl(): string {
-  const rawUrl = import.meta.env.VITE_API_URL?.trim();
+  const hostname = typeof window !== 'undefined' ? window.location?.hostname : '';
 
+  // Producción en dominio propio: forzar proxy (evita VITE_API_URL incorrecta en Vercel)
+  if (hostname === 'ivanreseller.com' || hostname === 'www.ivanreseller.com') {
+    return '/api';
+  }
+
+  const rawUrl = import.meta.env.VITE_API_URL?.trim();
   if (rawUrl) {
     const normalized = rawUrl.replace(/\/+$/, '');
     if (normalized.startsWith('/')) return normalized;
@@ -25,10 +30,7 @@ export function getApiBaseUrl(): string {
     console.warn('⚠️  VITE_API_URL formato inválido, usando default');
   }
 
-  // TASK 1: Auto-detect Vercel → use /api proxy (no manual VITE_API_URL)
-  if (typeof window !== 'undefined' && typeof window.location?.hostname === 'string' && window.location.hostname.includes('vercel.app')) {
-    return '/api';
-  }
+  if (hostname.includes('vercel.app')) return '/api';
   if (isDevelopment) {
     console.warn('⚠️  VITE_API_URL no configurada, usando fallback: http://localhost:4000');
     return 'http://localhost:4000';
