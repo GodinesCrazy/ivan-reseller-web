@@ -376,4 +376,71 @@ router.get('/business-diagnostics', authenticate, async (req: Request, res: Resp
   }
 });
 
+/**
+ * Phase 12: GET /api/system/readiness-report
+ * System readiness report: deployment status, worker status, marketplace/supplier integrations,
+ * automation mode status, sales optimization readiness. Used for autonomous operation validation.
+ */
+router.get('/readiness-report', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { runSystemHealthCheck, isSystemReadyForAutonomous } = await import(
+      '../../services/system-health.service'
+    );
+    const health = await runSystemHealthCheck();
+
+    const deploymentStatus =
+      process.env.NODE_ENV === 'production'
+        ? 'production'
+        : process.env.DEPLOYMENT_ENV || process.env.NODE_ENV || 'development';
+    const workerStatus =
+      health.redis === 'ok' && health.bullmq === 'ok' ? 'running' : health.redis === 'unknown' ? 'unknown' : 'degraded';
+
+    const { prisma } = await import('../../config/database');
+    const marketplaceCreds = await prisma.apiCredential.count({
+      where: {
+        apiName: { in: ['ebay', 'mercadolibre', 'amazon'] },
+        isActive: true,
+      },
+    });
+    const supplierCreds = await prisma.apiCredential.count({
+      where: { apiName: 'aliexpress', isActive: true },
+    });
+
+    const autonomousModeEnabled = process.env.AUTONOMOUS_OPERATION_MODE === 'true';
+    const canEnableAutonomous = isSystemReadyForAutonomous(health) && !health.alerts.length;
+
+    const salesOptimizationReadiness = {
+      mercadolibreCompetitivePrice: true,
+      mercadolibreShippingSignals: true,
+      mercadolibreAttributeCompleteness: true,
+    };
+
+    return res.status(200).json({
+      success: true,
+      deploymentStatus,
+      workerStatus,
+      health: {
+        database: health.database,
+        redis: health.redis,
+        bullmq: health.bullmq,
+        marketplaceApi: health.marketplaceApi,
+        supplierApi: health.supplierApi,
+        alerts: health.alerts,
+      },
+      marketplaceIntegrations: { configured: marketplaceCreds > 0, count: marketplaceCreds },
+      supplierIntegrations: { configured: supplierCreds > 0, count: supplierCreds },
+      automationModeStatus: autonomousModeEnabled ? 'enabled' : 'disabled',
+      canEnableAutonomous,
+      salesOptimizationReadiness,
+      timestamp: health.timestamp,
+    });
+  } catch (err: any) {
+    logger.error('[SYSTEM/READINESS-REPORT] Error', { error: err?.message });
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Readiness report failed',
+    });
+  }
+});
+
 export default router;

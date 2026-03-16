@@ -45,21 +45,28 @@ async function getEbayAccessToken(userId: number): Promise<string | null> {
   return creds.token || null;
 }
 
+/** Result per listing: impressions and optional clicks (views) */
+export interface TrafficReportRow {
+  impressions: number;
+  clicks: number;
+}
+
 /**
- * Fetch traffic report from eBay Analytics API
+ * Fetch traffic report from eBay Analytics API.
+ * Fetches LISTING_IMPRESSION_TOTAL and LISTING_VIEWS_TOTAL (views = clicks to View Item page).
  */
 async function fetchTrafficReport(
   accessToken: string,
   listingIds: string[],
   sandbox: boolean
-): Promise<Map<string, number>> {
+): Promise<Map<string, TrafficReportRow>> {
   const base = sandbox ? EBAY_SANDBOX_ANALYTICS : EBAY_ANALYTICS_BASE;
-  const metric = 'LISTING_IMPRESSION_TOTAL';
+  const metrics = 'LISTING_IMPRESSION_TOTAL,LISTING_VIEWS_TOTAL';
   const filter = listingIds.length > 0 ? `listingIds:{${listingIds.slice(0, 200).join(',')}}` : undefined;
 
   const params = new URLSearchParams();
   params.set('dimension', 'LISTING');
-  params.set('metric', metric);
+  params.set('metric', metrics);
   if (filter) params.set('filter', filter);
 
   const url = `${base}/traffic_report?${params.toString()}`;
@@ -71,14 +78,19 @@ async function fetchTrafficReport(
     timeout: 30000,
   });
 
-  const map = new Map<string, number>();
+  const map = new Map<string, TrafficReportRow>();
   const records = res.data?.records || [];
   for (const rec of records) {
     const listingId = rec.value || rec.metadataValues?.[0]?.value;
     if (!listingId) continue;
-    const val = rec.metadataValues?.find((m) => m.key === metric || !m.key)?.value;
-    const count = parseInt(val || '0', 10);
-    if (!isNaN(count)) map.set(listingId, count);
+    const meta = rec.metadataValues || [];
+    const byKey = (k: string) => meta.find((m) => (m.key || '').toUpperCase() === k)?.value;
+    const impressions = parseInt(byKey('LISTING_IMPRESSION_TOTAL') ?? meta.find((m) => !m.key)?.value ?? '0', 10);
+    const clicks = parseInt(byKey('LISTING_VIEWS_TOTAL') ?? '0', 10);
+    map.set(listingId, {
+      impressions: !isNaN(impressions) ? impressions : 0,
+      clicks: !isNaN(clicks) ? clicks : 0,
+    });
   }
   return map;
 }
@@ -110,9 +122,9 @@ export async function syncViewCountsForUser(userId: number): Promise<SyncResult>
   }
 
   const listingIds = listings.map((l) => l.listingId);
-  let counts: Map<string, number>;
+  let traffic: Map<string, TrafficReportRow>;
   try {
-    counts = await fetchTrafficReport(token, listingIds, env === 'sandbox');
+    traffic = await fetchTrafficReport(token, listingIds, env === 'sandbox');
   } catch (err: any) {
     const msg = err?.response?.data?.message || err?.message || 'Unknown';
     logger.warn('[EBAY-TRAFFIC-SYNC] API error', { userId, error: msg });
@@ -120,13 +132,21 @@ export async function syncViewCountsForUser(userId: number): Promise<SyncResult>
   }
 
   let updated = 0;
+  const today = new Date();
   for (const listing of listings) {
-    const viewCount = counts.get(listing.listingId);
-    if (viewCount !== undefined) {
+    const row = traffic.get(listing.listingId);
+    if (row !== undefined) {
+      const viewCount = row.impressions;
       await prisma.marketplaceListing.update({
         where: { id: listing.id },
         data: { viewCount },
       });
+      try {
+        const { upsertListingMetricImpressions } = await import('./listing-metrics-writer.service');
+        await upsertListingMetricImpressions(listing.id, 'ebay', today, row.impressions, row.clicks);
+      } catch (e) {
+        logger.warn('[EBAY-TRAFFIC-SYNC] Failed to write listing_metrics', { listingId: listing.id, error: (e as Error)?.message });
+      }
       updated++;
     }
   }

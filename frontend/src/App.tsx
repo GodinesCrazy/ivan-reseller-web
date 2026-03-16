@@ -8,6 +8,7 @@ const Dashboard = lazy(() => import('@pages/Dashboard'));
 const Opportunities = lazy(() => import('@pages/Opportunities'));
 const OpportunitiesHistory = lazy(() => import('@pages/OpportunitiesHistory'));
 const OpportunityDetail = lazy(() => import('@pages/OpportunityDetail'));
+const ProductResearch = lazy(() => import('@pages/ProductResearch'));
 const Autopilot = lazy(() => import('@pages/Autopilot'));
 const Products = lazy(() => import('@pages/Products'));
 const ProductPreview = lazy(() => import('@pages/ProductPreview'));
@@ -45,6 +46,7 @@ const Orders = lazy(() => import('@pages/Orders'));
 const OrderDetail = lazy(() => import('@pages/OrderDetail'));
 const Checkout = lazy(() => import('@pages/Checkout'));
 const Diagnostics = lazy(() => import('@pages/Diagnostics'));
+const ControlCenter = lazy(() => import('@pages/ControlCenter'));
 const SetupRequired = lazy(() => import('@pages/SetupRequired'));
 const OnboardingWizard = lazy(() => import('@components/OnboardingWizard'));
 const NotFound = lazy(() => import('@pages/NotFound'));
@@ -195,11 +197,13 @@ function AppContent() {
       >
         <Route index element={<Navigate to="/dashboard" />} />
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="control-center" element={<ControlCenter />} />
         
         {/* Opportunities System */}
         <Route path="opportunities" element={<Opportunities />} />
         <Route path="opportunities/history" element={<OpportunitiesHistory />} />
         <Route path="opportunities/:id" element={<OpportunityDetail />} />
+        <Route path="product-research" element={<ProductResearch />} />
         
         {/* Automation */}
         <Route path="autopilot" element={<Autopilot />} />

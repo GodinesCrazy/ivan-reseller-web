@@ -16,13 +16,26 @@ export interface WinnerDetectionResult {
 }
 
 /**
- * Run winner detection: for each user, find products with sales in last N days >= threshold, set winnerDetectedAt.
+ * Run winner detection: (1) sales-based: products with sales in last N days >= threshold -> Product.winnerDetectedAt.
+ * (2) Phase 3 metrics-based: listing_metrics impressions/conversion/sales -> winning_products table.
  */
 export async function runWinnerDetection(): Promise<WinnerDetectionResult> {
   const result: WinnerDetectionResult = { detected: 0, updated: 0, errors: [] };
   const since = new Date(Date.now() - WINNER_DAYS_WINDOW * 24 * 60 * 60 * 1000);
 
   try {
+    // Phase 3: metrics-based winner detection (listing_metrics -> winning_products)
+    try {
+      const { runMetricsBasedWinnerDetection } = await import('./winner-detection.service');
+      const metricsResult = await runMetricsBasedWinnerDetection();
+      result.detected += metricsResult.winnersStored;
+      result.updated += metricsResult.winnersStored;
+      result.errors.push(...metricsResult.errors);
+    } catch (phase3Err: any) {
+      logger.warn('[WINNER-DETECTOR] Phase 3 metrics-based detection failed', { error: phase3Err?.message });
+      result.errors.push(`metrics-based: ${phase3Err?.message || String(phase3Err)}`);
+    }
+
     const salesByProduct = await prisma.sale.groupBy({
       by: ['productId', 'userId'],
       where: {

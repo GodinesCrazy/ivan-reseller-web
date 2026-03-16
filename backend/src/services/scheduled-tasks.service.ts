@@ -33,9 +33,19 @@ export class ScheduledTasksService {
   private retryFailedOrdersQueue: Queue | null = null;
   private processPaidOrdersQueue: Queue | null = null;
   private ebayTrafficSyncQueue: Queue | null = null;
-  private listingOptimization48hQueue: Queue | null = null;
-  private winnerDetectionQueue: Queue | null = null;
-  private financialAlertsWorker: Worker | null = null;
+    private listingOptimization48hQueue: Queue | null = null;
+    private winnerDetectionQueue: Queue | null = null;
+    private winnerFollowUpQueue: Queue | null = null;
+    private inventorySyncQueue: Queue | null = null;
+    private listingMetricsAggregateQueue: Queue | null = null;
+    private marketIntelligenceQueue: Queue | null = null;
+    private autoListingStrategyQueue: Queue | null = null;
+    private dynamicMarketplaceOptimizationQueue: Queue | null = null;
+    private globalDemandRadarQueue: Queue | null = null;
+    private aiStrategyBrainQueue: Queue | null = null;
+    private autonomousScalingQueue: Queue | null = null;
+    private conversionRateOptimizationQueue: Queue | null = null;
+    private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
   private fxRatesWorker: Worker | null = null;
@@ -46,8 +56,18 @@ export class ScheduledTasksService {
   private retryFailedOrdersWorker: Worker | null = null;
   private processPaidOrdersWorker: Worker | null = null;
   private ebayTrafficSyncWorker: Worker | null = null;
-  private listingOptimization48hWorker: Worker | null = null;
-  private winnerDetectionWorker: Worker | null = null;
+    private listingOptimization48hWorker: Worker | null = null;
+    private winnerDetectionWorker: Worker | null = null;
+    private winnerFollowUpWorker: Worker | null = null;
+    private inventorySyncWorker: Worker | null = null;
+    private listingMetricsAggregateWorker: Worker | null = null;
+    private marketIntelligenceWorker: Worker | null = null;
+    private autoListingStrategyWorker: Worker | null = null;
+    private dynamicMarketplaceOptimizationWorker: Worker | null = null;
+    private globalDemandRadarWorker: Worker | null = null;
+    private aiStrategyBrainWorker: Worker | null = null;
+    private autonomousScalingWorker: Worker | null = null;
+    private conversionRateOptimizationWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
 
@@ -129,6 +149,56 @@ export class ScheduledTasksService {
 
     // Spec: winner detection every 24h (sales in last 3 days >= 5 -> mark winner)
     this.winnerDetectionQueue = new Queue('winner-detection', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 3: winner follow-up (optional optimization / scaling when WINNER_TRIGGER_FOLLOW_UP=true)
+    this.winnerFollowUpQueue = new Queue('winner-follow-up', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 1: Inventory sync every 6 hours (check AliExpress stock, pause/resume listings)
+    this.inventorySyncQueue = new Queue('inventory-sync', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 5: Listing metrics aggregate (sales + conversion into listing_metrics) daily
+    this.listingMetricsAggregateQueue = new Queue('listing-metrics-aggregate', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 4: Market Intelligence Engine — daily opportunity discovery
+    this.marketIntelligenceQueue = new Queue('market-intelligence', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 5: Auto Listing Strategy — daily listing decisions + publish jobs
+    this.autoListingStrategyQueue = new Queue('auto-listing-strategy', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 6: Dynamic Marketplace Optimization — every 12h
+    this.dynamicMarketplaceOptimizationQueue = new Queue('dynamic-marketplace-optimization', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 7: Global Demand Radar — daily
+    this.globalDemandRadarQueue = new Queue('global-demand-radar', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 8: AI Strategy Brain — daily
+    this.aiStrategyBrainQueue = new Queue('ai-strategy-brain', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 9: Autonomous Scaling Engine — daily
+    this.autonomousScalingQueue = new Queue('autonomous-scaling-engine', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 11: Conversion Rate Optimization — every 12 hours
+    this.conversionRateOptimizationQueue = new Queue('conversion-rate-optimization', {
       connection: this.bullMQRedis as any
     });
   }
@@ -356,11 +426,11 @@ export class ScheduledTasksService {
     }
 
     if (this.listingOptimization48hQueue) {
-      const { runListingOptimization48h } = await import('./listing-optimization-loop.service');
       this.listingOptimization48hWorker = new Worker(
         'listing-optimization-48h',
         async (job) => {
           logger.info('Scheduled Tasks: Running listing optimization 48h', { jobId: job.id });
+          const { runListingOptimization48h } = await import('./listing-optimization-loop.service');
           return await runListingOptimization48h();
         },
         {
@@ -371,11 +441,11 @@ export class ScheduledTasksService {
     }
 
     if (this.winnerDetectionQueue) {
-      const { runWinnerDetection } = await import('./winner-detector.service');
       this.winnerDetectionWorker = new Worker(
         'winner-detection',
         async (job) => {
           logger.info('Scheduled Tasks: Running winner detection', { jobId: job.id });
+          const { runWinnerDetection } = await import('./winner-detector.service');
           return await runWinnerDetection();
         },
         {
@@ -383,6 +453,223 @@ export class ScheduledTasksService {
           concurrency: 1,
         }
       );
+    }
+
+    if (this.winnerFollowUpQueue) {
+      this.winnerFollowUpWorker = new Worker(
+        'winner-follow-up',
+        async (job) => {
+          const { productId, listingId, marketplace, userId } = job.data as { productId: number; listingId: number; marketplace: string; userId: number };
+          logger.info('Scheduled Tasks: Winner follow-up', { productId, listingId, marketplace, userId });
+          if (process.env.WINNER_FOLLOW_UP_RUN_OPTIMIZATION === 'true') {
+            try {
+              const { runListingOptimization48h } = await import('./listing-optimization-loop.service');
+              await runListingOptimization48h();
+            } catch (e: any) {
+              logger.warn('Scheduled Tasks: Winner follow-up optimization skipped', { error: e?.message });
+            }
+          }
+          return { productId, listingId, marketplace };
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 2,
+        }
+      );
+    }
+
+    if (this.inventorySyncQueue) {
+      this.inventorySyncWorker = new Worker(
+        'inventory-sync',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running inventory sync', { jobId: job.id });
+          const { runInventorySync } = await import('./inventory-sync.service');
+          return await runInventorySync();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.inventorySyncWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Inventory sync failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
+
+    if (this.listingMetricsAggregateQueue) {
+      this.listingMetricsAggregateWorker = new Worker(
+        'listing-metrics-aggregate',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running listing metrics aggregate', { jobId: job.id });
+          const { aggregateSalesIntoListingMetricsForDate } = await import('./listing-metrics-writer.service');
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          return await aggregateSalesIntoListingMetricsForDate(yesterday);
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.listingMetricsAggregateWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Listing metrics aggregate failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
+
+    if (this.marketIntelligenceQueue) {
+      const { runMarketIntelligence } = await import('./market-intelligence.service');
+      this.marketIntelligenceWorker = new Worker(
+        'market-intelligence',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running market intelligence', { jobId: job.id });
+          const userId = (job.data?.userId as number) | undefined;
+          return await runMarketIntelligence(userId);
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.marketIntelligenceWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Market intelligence failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
+
+    if (this.autoListingStrategyQueue) {
+      const { runAutoListingStrategy } = await import('./auto-listing-strategy.service');
+      this.autoListingStrategyWorker = new Worker(
+        'auto-listing-strategy',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running auto listing strategy', { jobId: job.id });
+          const enqueue = job.data?.enqueueJobs !== false;
+          return await runAutoListingStrategy(enqueue);
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.autoListingStrategyWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Auto listing strategy failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
+
+    if (this.dynamicMarketplaceOptimizationQueue) {
+      const { runDynamicMarketplaceOptimization } = await import('./dynamic-marketplace-optimization.service');
+      this.dynamicMarketplaceOptimizationWorker = new Worker(
+        'dynamic-marketplace-optimization',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running dynamic marketplace optimization', { jobId: job.id });
+          const execute = job.data?.executeActions !== false;
+          return await runDynamicMarketplaceOptimization(execute);
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.dynamicMarketplaceOptimizationWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Dynamic marketplace optimization failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
+
+    if (this.globalDemandRadarQueue) {
+      const { runGlobalDemandRadar } = await import('./global-demand-radar.service');
+      this.globalDemandRadarWorker = new Worker(
+        'global-demand-radar',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running global demand radar', { jobId: job.id });
+          return await runGlobalDemandRadar();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.globalDemandRadarWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Global demand radar failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
+
+    if (this.aiStrategyBrainQueue) {
+      const { runAIStrategyBrain } = await import('./ai-strategy-brain.service');
+      this.aiStrategyBrainWorker = new Worker(
+        'ai-strategy-brain',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running AI Strategy Brain', { jobId: job.id });
+          return await runAIStrategyBrain();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.aiStrategyBrainWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: AI Strategy Brain failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
+
+    if (this.autonomousScalingQueue) {
+      const { runAutonomousScalingEngine } = await import('./autonomous-scaling-engine.service');
+      this.autonomousScalingWorker = new Worker(
+        'autonomous-scaling-engine',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running Autonomous Scaling Engine', { jobId: job.id });
+          return await runAutonomousScalingEngine();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.autonomousScalingWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Autonomous Scaling Engine failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
+
+    if (this.conversionRateOptimizationQueue) {
+      const { runConversionRateOptimization } = await import('./conversion-rate-optimization.service');
+      this.conversionRateOptimizationWorker = new Worker(
+        'conversion-rate-optimization',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running Conversion Rate Optimization', { jobId: job.id });
+          return await runConversionRateOptimization(true);
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.conversionRateOptimizationWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Conversion Rate Optimization failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
     }
   }
 
@@ -601,6 +888,123 @@ export class ScheduledTasksService {
         {},
         {
           repeat: { pattern: process.env.WINNER_DETECTION_CRON || '0 2 * * *' }, // 2:00 AM daily
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Phase 1: Inventory sync every 6 hours
+    if (this.inventorySyncQueue) {
+      this.inventorySyncQueue.add(
+        'inventory-sync-run',
+        {},
+        {
+          repeat: { pattern: process.env.INVENTORY_SYNC_CRON || '0 */6 * * *' },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Phase 5: Listing metrics aggregate (sales → listing_metrics) daily at 3:30 AM
+    if (this.listingMetricsAggregateQueue) {
+      this.listingMetricsAggregateQueue.add(
+        'listing-metrics-aggregate-run',
+        {},
+        {
+          repeat: { pattern: process.env.LISTING_METRICS_AGGREGATE_CRON || '30 3 * * *' },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Phase 4: Market Intelligence — daily at 5:00 AM
+    if (this.marketIntelligenceQueue) {
+      this.marketIntelligenceQueue.add(
+        'market-intelligence-run',
+        {},
+        {
+          repeat: { pattern: process.env.MARKET_INTELLIGENCE_CRON || '0 5 * * *' },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Phase 5: Auto Listing Strategy — daily at 6:00 AM (after market intelligence)
+    if (this.autoListingStrategyQueue) {
+      this.autoListingStrategyQueue.add(
+        'auto-listing-strategy-run',
+        { enqueueJobs: true },
+        {
+          repeat: { pattern: process.env.AUTO_LISTING_STRATEGY_CRON || '0 6 * * *' },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Phase 6: Dynamic Marketplace Optimization — every 12 hours
+    if (this.dynamicMarketplaceOptimizationQueue) {
+      this.dynamicMarketplaceOptimizationQueue.add(
+        'dynamic-marketplace-optimization-run',
+        { executeActions: true },
+        {
+          repeat: { pattern: process.env.DYNAMIC_OPTIMIZATION_CRON || '0 */12 * * *' },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Phase 7: Global Demand Radar — daily at 4:00 AM
+    if (this.globalDemandRadarQueue) {
+      this.globalDemandRadarQueue.add(
+        'global-demand-radar-run',
+        {},
+        {
+          repeat: { pattern: process.env.GLOBAL_DEMAND_RADAR_CRON || '0 4 * * *' },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Phase 8: AI Strategy Brain — daily at 7:00 AM
+    if (this.aiStrategyBrainQueue) {
+      this.aiStrategyBrainQueue.add(
+        'ai-strategy-brain-run',
+        {},
+        {
+          repeat: { pattern: process.env.AI_STRATEGY_BRAIN_CRON || '0 7 * * *' },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Phase 9: Autonomous Scaling Engine — daily at 8:00 AM
+    if (this.autonomousScalingQueue) {
+      this.autonomousScalingQueue.add(
+        'autonomous-scaling-run',
+        {},
+        {
+          repeat: { pattern: process.env.AUTONOMOUS_SCALING_CRON || '0 8 * * *' },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Phase 11: Conversion Rate Optimization — every 12 hours
+    if (this.conversionRateOptimizationQueue) {
+      this.conversionRateOptimizationQueue.add(
+        'conversion-rate-optimization-run',
+        {},
+        {
+          repeat: { pattern: process.env.CRO_CRON || '0 */12 * * *' },
           removeOnComplete: 5,
           removeOnFail: 5,
         }
@@ -1293,6 +1697,18 @@ export class ScheduledTasksService {
   }
 
   /**
+   * Phase 3: Enqueue winner follow-up job (optional optimization / scaling).
+   * Called from winner-detection.service when WINNER_TRIGGER_FOLLOW_UP=true.
+   */
+  async addWinnerFollowUpJob(payload: { productId: number; listingId: number; marketplace: string; userId: number }): Promise<void> {
+    if (!this.winnerFollowUpQueue) return;
+    await this.winnerFollowUpQueue.add('winner-follow-up-one', payload, {
+      removeOnComplete: 50,
+      removeOnFail: 10,
+    });
+  }
+
+  /**
    * Cerrar workers y limpiar recursos
    */
   async shutdown(): Promise<void> {
@@ -1347,6 +1763,12 @@ export class ScheduledTasksService {
     if (this.winnerDetectionWorker) {
       await this.winnerDetectionWorker.close();
     }
+    if (this.winnerFollowUpWorker) {
+      await this.winnerFollowUpWorker.close();
+    }
+    if (this.winnerFollowUpQueue) {
+      await this.winnerFollowUpQueue.close();
+    }
     if (this.ebayTrafficSyncQueue) {
       await this.ebayTrafficSyncQueue.close();
     }
@@ -1355,6 +1777,18 @@ export class ScheduledTasksService {
     }
     if (this.winnerDetectionQueue) {
       await this.winnerDetectionQueue.close();
+    }
+    if (this.inventorySyncWorker) {
+      await this.inventorySyncWorker.close();
+    }
+    if (this.inventorySyncQueue) {
+      await this.inventorySyncQueue.close();
+    }
+    if (this.listingMetricsAggregateWorker) {
+      await this.listingMetricsAggregateWorker.close();
+    }
+    if (this.listingMetricsAggregateQueue) {
+      await this.listingMetricsAggregateQueue.close();
     }
   }
 

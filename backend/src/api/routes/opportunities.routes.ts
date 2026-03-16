@@ -6,6 +6,7 @@ import { notificationService } from '../../services/notification.service';
 import opportunityPersistence from '../../services/opportunity.service';
 import { cacheService } from '../../services/cache.service';
 import { getDefaultRegionForUser } from '../../services/regional-config.service';
+import competitorAnalyzer from '../../services/competitor-analyzer.service';
 import { z } from 'zod';
 import { logger } from '../../config/logger';
 
@@ -333,6 +334,145 @@ router.get('/', async (req, res) => {
         : 'Error procesando oportunidades. Por favor, intenta de nuevo más tarde.',
       query: req.query.query || '',
       correlationId // ✅ FIX: Include correlationId for client tracking
+    });
+  }
+});
+
+// --- Phase 2: Product Research API (lightweight search, no job notifications) ---
+const researchQuerySchema = z.object({
+  query: z.string().min(1, 'Query is required'),
+  maxItems: z.string().optional().transform((v) => (v ? parseInt(v, 10) : 5)).pipe(z.number().int().min(1).max(15)),
+  marketplaces: z.string().optional().default('ebay,amazon,mercadolibre'),
+  region: z.string().optional().default('us'),
+  environment: z.enum(['sandbox', 'production']).optional(),
+});
+
+router.get('/research', async (req, res) => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+
+    const parsed = researchQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, error: 'Invalid parameters', details: parsed.error.flatten() });
+    }
+    const { query, maxItems, marketplaces: marketplacesCsv, region: regionParam, environment } = parsed.data;
+    let region = regionParam;
+    if (region === 'us') {
+      const defaultRegion = await getDefaultRegionForUser(userId);
+      if (defaultRegion) region = defaultRegion;
+    }
+    const marketplaces = marketplacesCsv.split(',').map((s) => s.trim()).filter(Boolean) as Array<'ebay' | 'amazon' | 'mercadolibre'>;
+
+    const opportunities = await opportunityFinder.searchOpportunities(query, userId, {
+      maxItems,
+      marketplaces,
+      region,
+      environment,
+      skipTrendsValidation: true,
+      relaxedMargin: true,
+    });
+
+    return res.json({
+      success: true,
+      items: opportunities ?? [],
+      count: (opportunities ?? []).length,
+      data_source: 'research',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (e: any) {
+    if (e instanceof ManualAuthRequiredError) {
+      const frontendBaseUrl = process.env.FRONTEND_URL || (req.headers?.origin || 'https://www.ivanreseller.com');
+      return res.status(202).json({
+        success: false,
+        requiresManualAuth: true,
+        captchaRequired: true,
+        provider: e.provider,
+        token: e.token,
+        resolveCaptchaUrl: `${frontendBaseUrl}/resolve-captcha/${e.token}`,
+        message: 'AliExpress requiere que resuelvas un CAPTCHA para continuar.',
+        expiresAt: e.expiresAt,
+      });
+    }
+    const msg = e?.message || String(e);
+    const isCredentials = msg.includes('credentials') || msg.includes('CREDENTIALS_ERROR') || msg.includes('AUTH_REQUIRED');
+    return res.status(isCredentials ? 422 : 500).json({
+      success: false,
+      error: isCredentials ? 'missing_credentials' : 'internal_error',
+      message: msg,
+    });
+  }
+});
+
+// POST /api/opportunities/add-from-research — save one research item as opportunity (runs competitor analysis then save)
+const addFromResearchSchema = z.object({
+  title: z.string().min(1),
+  sourceMarketplace: z.string().default('aliexpress'),
+  costUsd: z.number(),
+  shippingCost: z.number().optional(),
+  importTax: z.number().optional(),
+  totalCost: z.number().optional(),
+  targetCountry: z.string().optional(),
+  suggestedPriceUsd: z.number(),
+  profitMargin: z.number(),
+  roiPercentage: z.number(),
+  competitionLevel: z.string(),
+  marketDemand: z.string(),
+  confidenceScore: z.number(),
+  feesConsidered: z.record(z.number()).optional(),
+  targetMarketplaces: z.array(z.string()).default(['ebay']),
+});
+
+router.post('/add-from-research', async (req, res) => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+
+    const parsed = addFromResearchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.flatten() });
+    }
+    const data = parsed.data;
+    let region = 'us';
+    try {
+      const defaultRegion = await getDefaultRegionForUser(userId);
+      if (defaultRegion) region = defaultRegion;
+    } catch {
+      /* ignore */
+    }
+
+    const analyses = await competitorAnalyzer.analyzeCompetition(
+      userId,
+      data.title,
+      data.targetMarketplaces as Array<'ebay' | 'amazon' | 'mercadolibre'>,
+      region
+    );
+
+    const opp = await opportunityPersistence.saveOpportunity(userId, {
+      title: data.title,
+      sourceMarketplace: data.sourceMarketplace,
+      costUsd: data.costUsd,
+      shippingCost: data.shippingCost,
+      importTax: data.importTax,
+      totalCost: data.totalCost,
+      targetCountry: data.targetCountry,
+      suggestedPriceUsd: data.suggestedPriceUsd,
+      profitMargin: data.profitMargin,
+      roiPercentage: data.roiPercentage,
+      competitionLevel: data.competitionLevel,
+      marketDemand: data.marketDemand,
+      confidenceScore: data.confidenceScore,
+      feesConsidered: data.feesConsidered ?? {},
+      targetMarketplaces: data.targetMarketplaces,
+    }, analyses);
+
+    return res.json({ success: true, opportunityId: opp.id, message: 'Opportunity saved.' });
+  } catch (e: any) {
+    logger.error('[opportunities/add-from-research]', { error: e?.message, userId: (req as any).user?.userId });
+    return res.status(500).json({
+      success: false,
+      error: 'internal_error',
+      message: e?.message || 'Failed to save opportunity.',
     });
   }
 });

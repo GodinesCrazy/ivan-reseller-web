@@ -52,6 +52,11 @@ model User {
   marketplacePublications MarketplacePublication[]
   opportunities           Opportunity[]
   aiSuggestions           AISuggestion[]
+  winningProducts         WinningProduct[]
+  marketOpportunities      MarketOpportunity[]
+  autoListingDecisions    AutoListingDecision[]
+  strategyDecisions       StrategyDecision[]
+  scalingActions          ScalingAction[]
   manualAuthSessions      ManualAuthSession[]
   marketplaceAuthStatuses MarketplaceAuthStatus[]
   sharedCredentials       ApiCredential[]         @relation("SharedCredentialOwner")
@@ -138,6 +143,9 @@ model Product {
   publishedAt     DateTime?
   approvalId      String? // Marketplace approval ID
   winnerDetectedAt DateTime? // Spec: set when sales in last N days >= threshold (winner detection)
+  // Phase 1: Inventory sync — supplier stock from AliExpress, last check time
+  supplierStock         Int?      // Last known stock from supplier (AliExpress)
+  supplierStockCheckedAt DateTime? // When supplier stock was last checked
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -148,11 +156,83 @@ model Product {
   marketplaceListings  MarketplaceListing[]
   marketplacePublications MarketplacePublication[]
   purchaseLogs         PurchaseLog[] // Logs de compras relacionadas
+  winningProducts      WinningProduct[]
+  marketOpportunities  MarketOpportunity[]
+  autoListingDecisions AutoListingDecision[]
+  strategyDecisions    StrategyDecision[]
+  scalingActions       ScalingAction[]
 
   @@index([userId, status])
   @@index([status, isPublished])
   @@index([createdAt])
   @@map("products")
+}
+
+// Phase 9: Autonomous Scaling Engine — scaling_actions (republish | expand_marketplace | increase_quantity | trigger_optimization)
+model ScalingAction {
+  id           Int       @id @default(autoincrement())
+  userId       Int
+  productId    Int
+  marketplace  String    // target marketplace
+  actionType   String    // republish | expand_marketplace | increase_quantity | trigger_optimization
+  score        Decimal   @db.Decimal(5, 2)   // 0–100 scaleScore
+  executed     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([productId])
+  @@index([marketplace])
+  @@index([actionType])
+  @@index([createdAt])
+  @@index([executed])
+  @@map("scaling_actions")
+}
+
+// Phase 8: AI Strategy Brain — strategic decisions (scale_listing | expand_marketplace | adjust_price | pause_listing)
+model StrategyDecision {
+  id           Int       @id @default(autoincrement())
+  userId       Int
+  productId    Int
+  decisionType String
+  score        Decimal   @db.Decimal(5, 2)   // 0–100
+  reason       String
+  executed     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([productId])
+  @@index([decisionType])
+  @@index([createdAt])
+  @@index([executed])
+  @@map("strategy_decisions")
+}
+
+// Phase 5: Auto Listing Strategy Engine — decisions (productId, marketplace, priorityScore, executed)
+model AutoListingDecision {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  productId       Int
+  marketplace     String    // mercadolibre | ebay | amazon
+  priorityScore   Decimal   @db.Decimal(5, 2)   // 0–100
+  decisionReason  String    // e.g. "high_opportunity_winner"
+  executed        Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([productId])
+  @@index([marketplace])
+  @@index([createdAt])
+  @@index([executed])
+  @@map("auto_listing_decisions")
 }
 
 model Sale {
@@ -384,9 +464,141 @@ model MarketplaceListing {
   // Relations
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listingMetrics ListingMetric[]
+  winningProducts WinningProduct[]
+  listingOptimizationActions ListingOptimizationAction[]
+  conversionOptimizationActions ConversionOptimizationAction[]
 
   @@unique([marketplace, listingId])
   @@map("marketplace_listings")
+}
+
+// Phase 11: Conversion Rate Optimization Engine — CRO actions (image_optimization | price_adjustment | title_restructuring | description_improvement | attribute_completion)
+model ConversionOptimizationAction {
+  id         Int       @id @default(autoincrement())
+  listingId  Int       // FK MarketplaceListing.id
+  actionType String    // image_optimization | price_adjustment | title_restructuring | description_improvement | attribute_completion
+  reason     String    // e.g. high_impressions_low_ctr, high_ctr_low_conversion, competitor_price_advantage, low_image_engagement
+  score      Decimal   @db.Decimal(5, 2)   // 0–100 priority/impact score
+  executed   Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+
+  marketplaceListing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([actionType])
+  @@index([createdAt])
+  @@index([executed])
+  @@map("conversion_optimization_actions")
+}
+
+// Phase 6: Dynamic Marketplace Optimization — actions (price_adjustment, title_seo_update, image_rotation, marketplace_expansion)
+model ListingOptimizationAction {
+  id          Int       @id @default(autoincrement())
+  listingId   Int       // FK MarketplaceListing.id
+  actionType  String    // price_adjustment | title_seo_update | image_rotation | marketplace_expansion
+  reason      String    // e.g. low_ctr, low_conversion, competitor_lower, declining_velocity
+  executed    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  marketplaceListing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([actionType])
+  @@index([createdAt])
+  @@index([executed])
+  @@map("listing_optimization_actions")
+}
+
+// Phase 1: Listing performance metrics (aggregated by listing, by date)
+model ListingMetric {
+  id            Int      @id @default(autoincrement())
+  listingId     Int      // FK to MarketplaceListing.id (our internal id)
+  marketplace   String   // ebay, mercadolibre, amazon
+  impressions   Int      @default(0)
+  clicks        Int      @default(0)
+  sales         Int      @default(0)
+  conversionRate Decimal? @db.Decimal(8, 4) // 0-1 or percentage stored as decimal
+  price         Decimal? @db.Decimal(18, 2)
+  competitorPrice Decimal? @db.Decimal(18, 2)
+  date          DateTime @db.Date // Calendar date for aggregation
+
+  marketplaceListing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, date])
+  @@index([listingId])
+  @@index([marketplace, date])
+  @@map("listing_metrics")
+}
+
+// Phase 3: Winner Product Detection — stores detected winners per listing (score, reason, criteria)
+model WinningProduct {
+  id                   Int       @id @default(autoincrement())
+  productId            Int
+  marketplaceListingId Int?      // FK to MarketplaceListing.id (null if product-level only)
+  marketplace          String    // ebay, mercadolibre, amazon
+  userId               Int
+  score                Decimal   @db.Decimal(10, 4)   // 0-100 or similar
+  reason               String    // e.g. "high_conversion_sales_velocity"
+  detectedAt           DateTime  @default(now())
+  metadata             Json?     // optional: { impressions, clicks, sales, conversionRate, salesVelocity }
+
+  product            Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  marketplaceListing MarketplaceListing? @relation(fields: [marketplaceListingId], references: [id], onDelete: Cascade)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([productId])
+  @@index([marketplace])
+  @@index([detectedAt])
+  @@map("winning_products")
+}
+
+// Phase 4: Market Intelligence Engine — discovered high-potential products (0–100 score)
+model MarketOpportunity {
+  id                Int       @id @default(autoincrement())
+  userId             Int
+  productId          Int?      // Our internal Product.id (null when from external source only)
+  externalProductId  String?   // e.g. AliExpress product id
+  source             String    // aliexpress | listing_metrics | competitor | google_trends
+  score              Decimal   @db.Decimal(5, 2)   // 0–100 composite
+  trendScore         Decimal?  @db.Decimal(5, 2)
+  demandScore        Decimal?  @db.Decimal(5, 2)
+  competitionScore   Decimal?  @db.Decimal(5, 2)
+  marginScore        Decimal?  @db.Decimal(5, 2)
+  supplierScore      Decimal?  @db.Decimal(5, 2)
+  detectedAt         DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([productId])
+  @@index([source])
+  @@index([detectedAt])
+  @@index([score])
+  @@map("market_opportunities")
+}
+
+// Phase 7: Global Demand Radar — external demand signals (trendScore 0–100)
+model DemandSignal {
+  id                 Int       @id @default(autoincrement())
+  source             String    // google_trends | amazon_bestsellers | ebay_sold | aliexpress_trending
+  externalProductId  String?   // External ID when applicable
+  keyword            String
+  trendScore         Decimal   @db.Decimal(5, 2)   // 0–100
+  demandScore        Decimal?  @db.Decimal(5, 2)
+  confidence         Decimal   @db.Decimal(5, 4)   // 0–1
+  detectedAt         DateTime  @default(now())
+  metadata           Json?     // Extra payload per source
+
+  @@index([source])
+  @@index([keyword])
+  @@index([detectedAt])
+  @@index([trendScore])
+  @@map("demand_signals")
 }
 
 model MarketplacePublication {

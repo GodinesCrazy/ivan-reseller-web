@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { CheckCircle2, XCircle, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
-import { getDiagnosticsInfo } from '@/config/runtime';
+import { getDiagnosticsInfo, API_BASE_URL } from '@/config/runtime';
 import api from '@/services/api';
 
 interface DiagnosticResult {
@@ -122,7 +122,73 @@ export default function Diagnostics() {
       });
     }
 
-    // 6. Test CORS (preflight)
+    // 6. TASK 3: Production connectivity (api, auth, analytics, product research)
+    try {
+      const connResponse = await api.get('/api/connectivity');
+      const connData = connResponse.data as { ok?: boolean; checks?: Record<string, unknown> };
+      newResults.push({
+        name: 'Connectivity (/api/connectivity)',
+        status: connResponse.status === 200 && connData?.ok ? 'success' : 'error',
+        message: connData?.ok ? 'Backend API reachable' : `Unexpected: ${connResponse.status}`,
+        data: connData,
+      });
+    } catch (error: any) {
+      newResults.push({
+        name: 'Connectivity (/api/connectivity)',
+        status: 'error',
+        message: `Error: ${error.message}`,
+      });
+    }
+
+    // 7. Auth endpoint (200 or 401 = endpoint works)
+    try {
+      const status = await api.get('/api/auth-status').then((r) => r.status).catch((e: any) => e.response?.status as number);
+      newResults.push({
+        name: 'Auth Endpoint (/api/auth-status)',
+        status: status === 200 || status === 401 ? 'success' : 'error',
+        message: status === 200 ? 'Authenticated' : status === 401 ? 'Unauthenticated (endpoint OK)' : `Status: ${status}`,
+      });
+    } catch (error: any) {
+      newResults.push({
+        name: 'Auth Endpoint (/api/auth-status)',
+        status: 'error',
+        message: `Error: ${error.message}`,
+      });
+    }
+
+    // 8. Analytics endpoint
+    try {
+      const status = await api.get('/api/analytics/listings').then((r) => r.status).catch((e: any) => e.response?.status as number);
+      newResults.push({
+        name: 'Analytics (/api/analytics/listings)',
+        status: status === 200 || status === 401 ? 'success' : 'error',
+        message: status === 200 ? 'OK' : status === 401 ? 'Auth required (endpoint OK)' : `Status: ${status}`,
+      });
+    } catch (error: any) {
+      newResults.push({
+        name: 'Analytics (/api/analytics/listings)',
+        status: 'error',
+        message: `Error: ${error.message}`,
+      });
+    }
+
+    // 9. Product research endpoint
+    try {
+      const status = await api.get('/api/opportunities/research').then((r) => r.status).catch((e: any) => e.response?.status as number);
+      newResults.push({
+        name: 'Product Research (/api/opportunities/research)',
+        status: status === 200 || status === 401 ? 'success' : 'error',
+        message: status === 200 ? 'OK' : status === 401 ? 'Auth required (endpoint OK)' : `Status: ${status}`,
+      });
+    } catch (error: any) {
+      newResults.push({
+        name: 'Product Research (/api/opportunities/research)',
+        status: 'error',
+        message: `Error: ${error.message}`,
+      });
+    }
+
+    // 10. Test CORS (preflight)
     try {
       const corsResponse = await fetch(`${API_BASE_URL}/health`, {
         method: 'OPTIONS',

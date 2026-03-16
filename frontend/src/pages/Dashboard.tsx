@@ -101,6 +101,75 @@ export default function Dashboard() {
     pendingPurchasesCount: number;
   } | null>(null);
 
+  const [autoListingDecisions, setAutoListingDecisions] = useState<Array<{
+    id: number;
+    productId: number;
+    productTitle: string | null;
+    productStatus: string | null;
+    marketplace: string;
+    priorityScore: number;
+    decisionReason: string;
+    executed: boolean;
+    createdAt: string;
+  }>>([]);
+
+  const [listingOptimizationActions, setListingOptimizationActions] = useState<Array<{
+    id: number;
+    listingId: number;
+    productId: number | null;
+    productTitle: string | null;
+    marketplace: string | null;
+    actionType: string;
+    reason: string;
+    executed: boolean;
+    createdAt: string;
+  }>>([]);
+
+  const [demandSignals, setDemandSignals] = useState<Array<{
+    id: number;
+    keyword: string;
+    trendScore: number;
+    source: string;
+    confidence: number;
+    detectedAt: string;
+  }>>([]);
+
+  const [strategyDecisions, setStrategyDecisions] = useState<Array<{
+    id: number;
+    productId: number;
+    productTitle: string | null;
+    productStatus: string | null;
+    decisionType: string;
+    score: number;
+    reason: string;
+    executed: boolean;
+    createdAt: string;
+  }>>([]);
+
+  const [scalingActions, setScalingActions] = useState<Array<{
+    id: number;
+    productId: number;
+    productTitle: string | null;
+    marketplace: string;
+    actionType: string;
+    score: number;
+    executed: boolean;
+    createdAt: string;
+  }>>([]);
+
+  const [conversionOptimizationActions, setConversionOptimizationActions] = useState<Array<{
+    id: number;
+    listingId: number;
+    productId: number | null;
+    productTitle: string | null;
+    marketplace: string | null;
+    actionType: string;
+    reason: string;
+    score: number;
+    executed: boolean;
+    createdAt: string;
+  }>>([]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       loadDashboardData();
@@ -134,7 +203,7 @@ export default function Dashboard() {
       // ✅ FIX-002: Degradación suave - rastrear errores para mostrar mensaje informativo
       let hasErrors = false;
       const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
-      const [statsRes, activityRes, opportunitiesRes, aiSuggestionsRes, automationRes, inventoryRes, businessDiagRes, healthRes, platformRevRes] = await Promise.all([
+      const allResponses = await Promise.all([
         api.get('/api/dashboard/stats', { params: { environment } }).catch(err => {
           // ✅ FIX: Si es setup_required, no marcar como error (se manejará en App.tsx)
           if (err.response?.data?.setupRequired === true || err.response?.data?.error === 'setup_required') {
@@ -204,7 +273,26 @@ export default function Dashboard() {
         api.get('/api/health').then((r) => ({ ok: r.status === 200 })).catch(() => ({ ok: false })),
         // Ingresos plataforma (solo admin)
         isAdmin ? api.get('/api/admin/platform-revenue').catch(() => ({ data: null })) : Promise.resolve({ data: null }),
+        // Phase 5: Auto Listing Strategy decisions
+        api.get('/api/analytics/auto-listing-decisions', { params: { limit: 20 } }).catch(() => ({ data: null })),
+        // Phase 6: Listing Optimization actions
+        api.get('/api/analytics/listing-optimization-actions', { params: { limit: 20 } }).catch(() => ({ data: null })),
+        // Phase 7: Demand Radar
+        api.get('/api/analytics/demand-signals', { params: { limit: 15, minTrendScore: 20 } }).catch(() => ({ data: null })),
+        // Phase 8: Strategy Brain
+        api.get('/api/analytics/strategy-decisions', { params: { limit: 20 } }).catch(() => ({ data: null })),
+        // Phase 9: Autonomous Scaling
+        api.get('/api/analytics/scaling-actions', { params: { limit: 20 } }).catch(() => ({ data: null })),
+        // Phase 11: Conversion Rate Optimization
+        api.get('/api/analytics/conversion-optimization-actions', { params: { limit: 20 } }).catch(() => ({ data: null })),
       ]);
+      const [statsRes, activityRes, opportunitiesRes, aiSuggestionsRes, automationRes, inventoryRes, businessDiagRes, healthRes, platformRevRes] = allResponses;
+      const autoListingRes = allResponses[9] as any;
+      const listingOptRes = allResponses[10] as any;
+      const demandRadarRes = allResponses[11] as any;
+      const strategyRes = allResponses[12] as any;
+      const scalingRes = allResponses[13] as any;
+      const conversionOptimizationRes = allResponses[14] as any;
 
       // ✅ FIX-002: Si hay errores y no hay datos reales, mostrar mensaje informativo
       const hasRealData = statsRes.data && Object.keys(statsRes.data).length > 0;
@@ -313,6 +401,13 @@ export default function Dashboard() {
           perUser: platformRevRes.data.perUser ?? [],
         });
       }
+
+      if (autoListingRes?.data?.decisions) setAutoListingDecisions(autoListingRes.data.decisions);
+      if (listingOptRes?.data?.actions) setListingOptimizationActions(listingOptRes.data.actions);
+      if (demandRadarRes?.data?.signals) setDemandSignals(demandRadarRes.data.signals);
+      if (strategyRes?.data?.decisions) setStrategyDecisions(strategyRes.data.decisions);
+      if (scalingRes?.data?.actions) setScalingActions(scalingRes.data.actions);
+      if (conversionOptimizationRes?.data?.actions) setConversionOptimizationActions(conversionOptimizationRes.data.actions);
     } catch (error: any) {
       log.error('Error loading dashboard data:', error);
       // ✅ FIX-002: No mostrar toast automático, solo marcar error
@@ -573,6 +668,310 @@ export default function Dashboard() {
       {/* Workflow Summary Widget */}
       <div className="mt-6">
         <WorkflowSummaryWidget />
+      </div>
+
+      {/* Phase 9: Autonomous Scaling — scaled products, scale score, marketplace expansion */}
+      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+          <Zap className="h-5 w-5 text-amber-500" />
+          Autonomous Scaling
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Productos escalados a más marketplaces (ganadores replicados en eBay, Amazon, etc.).
+        </p>
+        {scalingActions.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No hay acciones de escalado recientes.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Producto</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Marketplace</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Acción</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Score</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Estado</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scalingActions.map((a) => (
+                  <tr key={a.id} className="border-b border-gray-100 dark:border-gray-700/50">
+                    <td className="py-2">
+                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[180px] block" title={a.productTitle ?? ''}>
+                        {a.productTitle ?? '—'}
+                      </span>
+                    </td>
+                    <td className="py-2 capitalize text-gray-700 dark:text-gray-300">{a.marketplace}</td>
+                    <td className="py-2 text-gray-700 dark:text-gray-300">{a.actionType.replace(/_/g, ' ')}</td>
+                    <td className="py-2 font-medium text-gray-900 dark:text-gray-100">{a.score.toFixed(0)}</td>
+                    <td className="py-2">
+                      {a.executed ? (
+                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                          <CheckCircle className="h-4 w-4" />
+                          Ejecutado
+                        </span>
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400">Pendiente</span>
+                      )}
+                    </td>
+                    <td className="py-2 text-gray-500 dark:text-gray-500">{new Date(a.createdAt).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Phase 11: Conversion Rate Optimization — recent CRO actions, conversion improvements */}
+      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+          <Target className="h-5 w-5 text-emerald-500" />
+          Conversion Optimization
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Mejoras automáticas de conversión: títulos, precios, descripciones e imágenes (cada 12 h).
+        </p>
+        {conversionOptimizationActions.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No hay acciones de CRO recientes.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Producto</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Marketplace</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Acción</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Razón</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Score</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Estado</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {conversionOptimizationActions.map((a) => (
+                  <tr key={a.id} className="border-b border-gray-100 dark:border-gray-700/50">
+                    <td className="py-2">
+                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[180px] block" title={a.productTitle ?? ''}>
+                        {a.productTitle ?? '—'}
+                      </span>
+                    </td>
+                    <td className="py-2 capitalize text-gray-700 dark:text-gray-300">{a.marketplace ?? '—'}</td>
+                    <td className="py-2 text-gray-700 dark:text-gray-300">{a.actionType.replace(/_/g, ' ')}</td>
+                    <td className="py-2 text-gray-600 dark:text-gray-400">{a.reason.replace(/_/g, ' ')}</td>
+                    <td className="py-2 font-medium text-gray-900 dark:text-gray-100">{a.score.toFixed(0)}</td>
+                    <td className="py-2">
+                      {a.executed ? (
+                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                          <CheckCircle className="h-4 w-4" />
+                          Ejecutado
+                        </span>
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400">Pendiente</span>
+                      )}
+                    </td>
+                    <td className="py-2 text-gray-500 dark:text-gray-500">{new Date(a.createdAt).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Phase 8: Strategy Brain — top strategic products, scores, recommended actions */}
+      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+          <Brain className="h-5 w-5 text-violet-500" />
+          Strategy Brain
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Decisiones estratégicas del sistema (escala, expansión, precio, pausa). Se ejecuta diariamente.
+        </p>
+        {strategyDecisions.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No hay decisiones recientes.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Producto</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Acción</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Score</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Razón</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Estado</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {strategyDecisions.map((d) => (
+                  <tr key={d.id} className="border-b border-gray-100 dark:border-gray-700/50">
+                    <td className="py-2">
+                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[180px] block" title={d.productTitle ?? ''}>
+                        {d.productTitle ?? '—'}
+                      </span>
+                    </td>
+                    <td className="py-2 text-gray-700 dark:text-gray-300">{d.decisionType.replace(/_/g, ' ')}</td>
+                    <td className="py-2 font-medium text-gray-900 dark:text-gray-100">{d.score.toFixed(0)}</td>
+                    <td className="py-2 text-gray-600 dark:text-gray-400">{d.reason.replace(/_/g, ' ')}</td>
+                    <td className="py-2">
+                      {d.executed ? (
+                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                          <CheckCircle className="h-4 w-4" />
+                          Ejecutado
+                        </span>
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400">Pendiente</span>
+                      )}
+                    </td>
+                    <td className="py-2 text-gray-500 dark:text-gray-500">{new Date(d.createdAt).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Phase 7: Demand Radar — top trending keywords, trend growth, sources */}
+      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-emerald-500" />
+          Demand Radar
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Keywords en tendencia (score, fuente). Actualizado diariamente por el Global Demand Radar.
+        </p>
+        {demandSignals.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No hay señales recientes.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {demandSignals.map((s) => (
+              <span
+                key={s.id}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200 text-sm"
+                title={`Score: ${s.trendScore} · ${s.source}`}
+              >
+                <span className="font-medium">{s.keyword}</span>
+                <span className="opacity-80">{s.trendScore.toFixed(0)}</span>
+                <span className="text-xs opacity-70">{s.source.replace(/_/g, ' ')}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Phase 6: Listing Optimization — optimization actions, performance improvements, recent adjustments */}
+      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+          <BarChart3 className="h-5 w-5 text-indigo-500" />
+          Listing Optimization
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Acciones del motor de optimización dinámica (precio, título SEO, expansión de marketplace).
+        </p>
+        {listingOptimizationActions.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No hay acciones recientes. El motor se ejecuta cada 12 h.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Producto</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Marketplace</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Acción</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Razón</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Estado</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {listingOptimizationActions.map((a) => (
+                  <tr key={a.id} className="border-b border-gray-100 dark:border-gray-700/50">
+                    <td className="py-2">
+                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[200px] block" title={a.productTitle ?? ''}>
+                        {a.productTitle ?? '—'}
+                      </span>
+                    </td>
+                    <td className="py-2 capitalize text-gray-700 dark:text-gray-300">{a.marketplace ?? '—'}</td>
+                    <td className="py-2 text-gray-700 dark:text-gray-300">{a.actionType.replace(/_/g, ' ')}</td>
+                    <td className="py-2 text-gray-600 dark:text-gray-400">{a.reason.replace(/_/g, ' ')}</td>
+                    <td className="py-2">
+                      {a.executed ? (
+                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                          <CheckCircle className="h-4 w-4" />
+                          Ejecutado
+                        </span>
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400">Pendiente</span>
+                      )}
+                    </td>
+                    <td className="py-2 text-gray-500 dark:text-gray-500">
+                      {new Date(a.createdAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Phase 5: Auto Listing Strategy — recommended products, priority, marketplace, execution status */}
+      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+          <Zap className="h-5 w-5 text-amber-500" />
+          Auto Listing Strategy
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Productos recomendados por el motor de estrategia (prioridad, marketplace, estado de publicación).
+        </p>
+        {autoListingDecisions.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-500 py-4">No hay decisiones recientes. El motor se ejecuta diariamente.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Producto</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Marketplace</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Prioridad</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Razón</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Estado</th>
+                  <th className="text-left py-2 font-medium text-gray-700 dark:text-gray-300">Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {autoListingDecisions.map((d) => (
+                  <tr key={d.id} className="border-b border-gray-100 dark:border-gray-700/50">
+                    <td className="py-2">
+                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[200px] block" title={d.productTitle ?? ''}>
+                        {d.productTitle ?? '—'}
+                      </span>
+                    </td>
+                    <td className="py-2 capitalize text-gray-700 dark:text-gray-300">{d.marketplace}</td>
+                    <td className="py-2 font-medium text-gray-900 dark:text-gray-100">{d.priorityScore.toFixed(0)}</td>
+                    <td className="py-2 text-gray-600 dark:text-gray-400">{d.decisionReason.replace(/_/g, ' ')}</td>
+                    <td className="py-2">
+                      {d.executed ? (
+                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                          <CheckCircle className="h-4 w-4" />
+                          Encolado
+                        </span>
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400">Pendiente</span>
+                      )}
+                    </td>
+                    <td className="py-2 text-gray-500 dark:text-gray-500">
+                      {new Date(d.createdAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Business Diagnostics - Estado del sistema */}

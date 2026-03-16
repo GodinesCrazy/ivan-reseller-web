@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { prisma } from '../config/database';
 import { signAwsRequest } from '../utils/aws-sigv4';
 import { retryMarketplaceOperation } from '../utils/retry.util';
+import { acquireMarketplaceRateLimit } from './marketplace-rate-limit.service';
 import { logger } from '../config/logger';
 
 // Amazon SP-API Configuration
@@ -76,6 +77,10 @@ class AmazonService {
         'Content-Type': 'application/json',
         'User-Agent': 'Ivan-Reseller/1.0'
       }
+    });
+    this.httpClient.interceptors.request.use(async (config) => {
+      await acquireMarketplaceRateLimit('amazon');
+      return config;
     });
   }
 

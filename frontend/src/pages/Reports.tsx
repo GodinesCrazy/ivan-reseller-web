@@ -35,7 +35,9 @@ import {
   AlertCircle,
   CheckCircle,
   Brain,
-  Target
+  Target,
+  BarChart3,
+  Trophy
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { log } from '@/utils/logger';
@@ -79,6 +81,26 @@ interface MarketplaceAnalytics {
     sales: number;
     revenue: number;
   }>;
+}
+
+/** Phase 2: Listing metrics from GET /api/analytics/listings */
+interface ListingMetricRow {
+  listingId: number;
+  marketplaceListingId: string;
+  marketplace: string;
+  listingUrl: string | null;
+  productId: number | null;
+  productTitle: string | null;
+  suggestedPrice: number | null;
+  supplierStock: number | null;
+  publishedAt: string | null;
+  impressions: number;
+  clicks: number;
+  sales: number;
+  conversionRate: number | null;
+  price: number | null;
+  competitorPrice: number | null;
+  viewCount: number;
 }
 
 interface ExecutiveReport {
@@ -144,6 +166,18 @@ export default function Reports() {
       description: 'Analytics comparativo por marketplace'
     },
     {
+      id: 'listing-performance',
+      name: 'Rendimiento Listings',
+      icon: BarChart3,
+      description: 'Impresiones, clics, ventas y conversión por listing (Phase 2)'
+    },
+    {
+      id: 'winning-products',
+      name: 'Productos Ganadores',
+      icon: Trophy,
+      description: 'Productos detectados como ganadores por impresiones, conversión y ventas (Phase 3)'
+    },
+    {
       id: 'successful-operations',
       name: 'Operaciones Exitosas',
       icon: TrendingUp,
@@ -160,13 +194,83 @@ export default function Reports() {
   const [successStats, setSuccessStats] = useState<any>(null);
   const [learningPatterns, setLearningPatterns] = useState<any>(null);
 
+  const [listingAnalytics, setListingAnalytics] = useState<{ listings: ListingMetricRow[]; days: number; marketplace: string } | null>(null);
+  const [listingAnalyticsLoading, setListingAnalyticsLoading] = useState(false);
+  const [listingDays, setListingDays] = useState(30);
+  const [listingMarketplace, setListingMarketplace] = useState<string>('');
+
+  const [winningProducts, setWinningProducts] = useState<{ winners: any[]; days: number; marketplace: string } | null>(null);
+  const [winningProductsLoading, setWinningProductsLoading] = useState(false);
+  const [winningProductsDays, setWinningProductsDays] = useState(90);
+  const [winningProductsMarketplace, setWinningProductsMarketplace] = useState<string>('');
+
+  const loadListingAnalytics = async () => {
+    setListingAnalyticsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('days', String(listingDays));
+      params.set('limit', '100');
+      if (listingMarketplace) params.set('marketplace', listingMarketplace);
+      const res = await api.get(`/api/analytics/listings?${params.toString()}`);
+      setListingAnalytics({
+        listings: res.data?.listings ?? [],
+        days: res.data?.days ?? listingDays,
+        marketplace: res.data?.marketplace ?? (listingMarketplace || 'all'),
+      });
+    } catch (e) {
+      log.error('Listing analytics load failed', e);
+      toast.error('Error al cargar métricas de listings');
+      setListingAnalytics(null);
+    } finally {
+      setListingAnalyticsLoading(false);
+    }
+  };
+
+  const loadWinningProducts = async () => {
+    setWinningProductsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('days', String(winningProductsDays));
+      params.set('limit', '100');
+      if (winningProductsMarketplace) params.set('marketplace', winningProductsMarketplace);
+      const res = await api.get(`/api/analytics/winning-products?${params.toString()}`);
+      setWinningProducts({
+        winners: res.data?.winners ?? [],
+        days: res.data?.days ?? winningProductsDays,
+        marketplace: res.data?.marketplace ?? (winningProductsMarketplace || 'all'),
+      });
+    } catch (e) {
+      log.error('Winning products load failed', e);
+      toast.error('Error al cargar productos ganadores');
+      setWinningProducts(null);
+    } finally {
+      setWinningProductsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'executive') {
       loadExecutiveReport();
     } else if (activeTab === 'successful-operations') {
       loadSuccessfulOperations();
+    } else if (activeTab === 'listing-performance') {
+      loadListingAnalytics();
+    } else if (activeTab === 'winning-products') {
+      loadWinningProducts();
     }
   }, [activeTab, environment]);
+
+  useEffect(() => {
+    if (activeTab === 'listing-performance') {
+      loadListingAnalytics();
+    }
+  }, [listingDays, listingMarketplace]);
+
+  useEffect(() => {
+    if (activeTab === 'winning-products') {
+      loadWinningProducts();
+    }
+  }, [winningProductsDays, winningProductsMarketplace]);
 
   const loadExecutiveReport = async () => {
     try {
@@ -597,7 +701,7 @@ export default function Reports() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1">
           {reportTypes.map((type) => (
             <TabsTrigger key={type.id} value={type.id}>
               <type.icon className="h-4 w-4 mr-2" />
@@ -783,6 +887,253 @@ export default function Reports() {
             </Card>
           </TabsContent>
         ))}
+
+        {/* Listing Performance (Phase 2) */}
+        <TabsContent value="listing-performance">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Rendimiento por listing
+              </CardTitle>
+              <p className="text-gray-600">Impresiones, clics, ventas y conversión desde GET /api/analytics/listings</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-4 items-center">
+                <div>
+                  <Label>Días</Label>
+                  <Select value={String(listingDays)} onValueChange={(v) => setListingDays(Number(v))}>
+                    <SelectTrigger className="w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="7">7</SelectItem>
+                      <SelectItem value="30">30</SelectItem>
+                      <SelectItem value="90">90</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Marketplace</Label>
+                  <Select value={listingMarketplace || 'all'} onValueChange={(v) => setListingMarketplace(v === 'all' ? '' : v)}>
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="ebay">eBay</SelectItem>
+                      <SelectItem value="mercadolibre">MercadoLibre</SelectItem>
+                      <SelectItem value="amazon">Amazon</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button variant="outline" size="sm" onClick={loadListingAnalytics} disabled={listingAnalyticsLoading}>
+                  <RefreshCw className={`h-4 w-4 mr-1 ${listingAnalyticsLoading ? 'animate-spin' : ''}`} />
+                  Actualizar
+                </Button>
+              </div>
+
+              {listingAnalyticsLoading && (
+                <div className="flex justify-center py-8">
+                  <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+                </div>
+              )}
+
+              {!listingAnalyticsLoading && listingAnalytics && (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-gray-600">Impresiones</p>
+                        <p className="text-2xl font-bold">
+                          {listingAnalytics.listings.reduce((s, r) => s + (r.impressions || 0), 0).toLocaleString()}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-gray-600">Clics</p>
+                        <p className="text-2xl font-bold">
+                          {listingAnalytics.listings.reduce((s, r) => s + (r.clicks || 0), 0).toLocaleString()}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-gray-600">Ventas</p>
+                        <p className="text-2xl font-bold">
+                          {listingAnalytics.listings.reduce((s, r) => s + (r.sales || 0), 0).toLocaleString()}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-sm text-gray-600">Conv. promedio</p>
+                        <p className="text-2xl font-bold">
+                          {(() => {
+                            const withRate = listingAnalytics.listings.filter((r) => r.conversionRate != null && r.conversionRate > 0);
+                            if (withRate.length === 0) return '—';
+                            const avg = withRate.reduce((s, r) => s + (r.conversionRate ?? 0), 0) / withRate.length;
+                            return `${(avg * 100).toFixed(2)}%`;
+                          })()}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {listingAnalytics.listings.length > 0 && (
+                    <ResponsiveContainer width="100%" height={280}>
+                      <BarChart
+                        data={['ebay', 'mercadolibre', 'amazon'].map((mp) => {
+                          const rows = listingAnalytics!.listings.filter((r) => r.marketplace === mp);
+                          return {
+                            name: mp,
+                            impresiones: rows.reduce((s, r) => s + r.impressions, 0),
+                            clics: rows.reduce((s, r) => s + r.clicks, 0),
+                            ventas: rows.reduce((s, r) => s + r.sales, 0),
+                          };
+                        })}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="impresiones" fill="#0088FE" name="Impresiones" />
+                        <Bar dataKey="clics" fill="#00C49F" name="Clics" />
+                        <Bar dataKey="ventas" fill="#FFBB28" name="Ventas" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Listing / Producto</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Marketplace</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Impresiones</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Clics</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ventas</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Conv.%</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {listingAnalytics.listings.slice(0, 50).map((r) => (
+                          <tr key={`${r.listingId}-${r.marketplace}`}>
+                            <td className="px-3 py-2 text-sm text-gray-900 truncate max-w-[200px]" title={r.productTitle ?? ''}>
+                              {r.productTitle ?? r.marketplaceListingId}
+                            </td>
+                            <td className="px-3 py-2 text-sm text-gray-600">{r.marketplace}</td>
+                            <td className="px-3 py-2 text-sm text-right">{r.impressions.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-sm text-right">{r.clicks.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-sm text-right">{r.sales.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-sm text-right">
+                              {r.conversionRate != null ? `${(Number(r.conversionRate) * 100).toFixed(2)}%` : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {listingAnalytics.listings.length > 50 && (
+                      <p className="text-center text-gray-500 py-2 text-sm">Mostrando 50 de {listingAnalytics.listings.length} listings</p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {!listingAnalyticsLoading && listingAnalytics && listingAnalytics.listings.length === 0 && (
+                <p className="text-gray-500 text-center py-8">No hay datos de listings en el período seleccionado.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Winning Products (Phase 3) */}
+        <TabsContent value="winning-products">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trophy className="h-5 w-5" />
+                Productos ganadores
+              </CardTitle>
+              <p className="text-gray-600">Detectados por impresiones, conversión y velocidad de ventas (motor Phase 3)</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-4 items-center">
+                <div>
+                  <Label>Días</Label>
+                  <Select value={String(winningProductsDays)} onValueChange={(v) => setWinningProductsDays(Number(v))}>
+                    <SelectTrigger className="w-28">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="30">30</SelectItem>
+                      <SelectItem value="90">90</SelectItem>
+                      <SelectItem value="365">365</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Marketplace</Label>
+                  <Select value={winningProductsMarketplace || 'all'} onValueChange={(v) => setWinningProductsMarketplace(v === 'all' ? '' : v)}>
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="ebay">eBay</SelectItem>
+                      <SelectItem value="mercadolibre">MercadoLibre</SelectItem>
+                      <SelectItem value="amazon">Amazon</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button variant="outline" size="sm" onClick={loadWinningProducts} disabled={winningProductsLoading}>
+                  <RefreshCw className={`h-4 w-4 mr-1 ${winningProductsLoading ? 'animate-spin' : ''}`} />
+                  Actualizar
+                </Button>
+              </div>
+              {winningProductsLoading && (
+                <div className="flex justify-center py-8">
+                  <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+                </div>
+              )}
+              {!winningProductsLoading && winningProducts && winningProducts.winners.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Marketplace</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Score</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ventas</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Velocidad</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Conv.%</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Detectado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {winningProducts.winners.map((w: any) => (
+                        <tr key={w.id}>
+                          <td className="px-3 py-2 text-sm text-gray-900 truncate max-w-[220px]" title={w.productTitle ?? ''}>{w.productTitle ?? `Product ${w.productId}`}</td>
+                          <td className="px-3 py-2 text-sm text-gray-600">{w.marketplace}</td>
+                          <td className="px-3 py-2 text-sm text-right font-medium">{typeof w.score === 'number' ? w.score.toFixed(2) : w.score}</td>
+                          <td className="px-3 py-2 text-sm text-right">{w.sales != null ? w.sales : '—'}</td>
+                          <td className="px-3 py-2 text-sm text-right">{w.salesVelocity != null ? w.salesVelocity.toFixed(2) : '—'}</td>
+                          <td className="px-3 py-2 text-sm text-right">{w.conversionRate != null ? `${(w.conversionRate * 100).toFixed(2)}%` : '—'}</td>
+                          <td className="px-3 py-2 text-sm text-gray-500">{w.detectedAt ? new Date(w.detectedAt).toLocaleDateString() : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {!winningProductsLoading && winningProducts && winningProducts.winners.length === 0 && (
+                <p className="text-gray-500 text-center py-8">No hay productos ganadores detectados en el período. El worker se ejecuta diariamente.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Successful Operations Tab */}
         <TabsContent value="successful-operations">

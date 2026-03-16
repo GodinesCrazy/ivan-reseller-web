@@ -15,6 +15,7 @@ export interface ListingOptimizationResult {
   processed: number;
   repriced: number;
   titleRefreshed: number;
+  imageRotated: number;
   errors: string[];
 }
 
@@ -23,7 +24,7 @@ export interface ListingOptimizationResult {
  * Finds products with marketplace listings that qualify (impressions > threshold and 0 sales, or no metrics: 48h published and 0 sales), then reprice and optionally refresh title.
  */
 export async function runListingOptimization48h(): Promise<ListingOptimizationResult> {
-  const result: ListingOptimizationResult = { processed: 0, repriced: 0, titleRefreshed: 0, errors: [] };
+  const result: ListingOptimizationResult = { processed: 0, repriced: 0, titleRefreshed: 0, imageRotated: 0, errors: [] };
   const since = new Date(Date.now() - HOURS_SINCE_PUBLISH * 60 * 60 * 1000);
 
   try {
@@ -71,10 +72,10 @@ export async function runListingOptimization48h(): Promise<ListingOptimizationRe
 
       if (!shouldOptimize) continue;
 
+      const marketplace = (listing.marketplace || 'ebay') as 'ebay' | 'amazon' | 'mercadolibre';
       try {
         const { dynamicPricingService } = await import('./dynamic-pricing.service');
         const supplierPrice = toNumber(product.aliexpressPrice) || 0;
-        const marketplace = (listing.marketplace || 'ebay') as 'ebay' | 'amazon' | 'mercadolibre';
         const repriceResult = await dynamicPricingService.repriceByProduct(product.id, supplierPrice, marketplace, userId);
         if (repriceResult.success && repriceResult.newSuggestedPriceUsd != null) {
           await prisma.product.update({
@@ -111,6 +112,16 @@ export async function runListingOptimization48h(): Promise<ListingOptimizationRe
         } catch {
           // Optional: skip if title refresh fails
         }
+      }
+
+      // Phase 1: Optionally change main image when LISTING_OPTIMIZATION_CHANGE_IMAGE=true.
+      // Full implementation would rotate primary image and call marketplace update listing API.
+      if (process.env.LISTING_OPTIMIZATION_CHANGE_IMAGE === 'true') {
+        logger.debug('[LISTING-OPTIMIZATION-48H] Optional image change enabled (no-op for now)', {
+          productId: product.id,
+          listingId: listing.id,
+        });
+        // TODO: Rotate productData.primaryImageIndexForML / primaryImageIndex and call marketplace update image when API supports it.
       }
     }
 

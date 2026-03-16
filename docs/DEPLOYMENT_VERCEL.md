@@ -113,26 +113,16 @@ Si no configuras `VITE_API_URL`, el frontend usará `/api` como fallback y Verce
 
 ---
 
-## 📝 Paso 4: Verificar vercel.json
+## 📝 Paso 4: Verificar vercel.json y API (automático)
 
-El archivo `vercel.json` en la raíz del proyecto debe tener:
+**Configuración automática (recomendada):** En Vercel → Settings → Environment Variables, define `VITE_API_URL` con la URL completa de tu backend en Railway (ej: `https://tu-app.railway.app`). El frontend usará esa URL y no se requiere proxy. Asegura que en Railway `CORS_ORIGIN` incluya tu dominio de Vercel.
 
-```json
-{
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://tu-backend.railway.app/api/:path*"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
-}
-```
+**Alternativa (proxy same-origin):** Si prefieres no exponer la URL del backend, en Vercel → Settings → Rewrites añade: Source ` /api/:path* `, Destination `https://TU_BACKEND_RAILWAY.app/api/:path*`. Deja `VITE_API_URL` sin definir en Production para que el frontend use `/api`.
 
-**Asegúrate de actualizar la URL del backend en `vercel.json` si usas la Opción B.**
+- **Root del frontend:** `frontend/`
+- **Build:** `npm run build`
+- **Output:** `dist`
+- `vercel.json` solo incluye la regla SPA (rutas no-asset → `index.html`).
 
 ---
 

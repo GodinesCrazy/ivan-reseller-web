@@ -62,6 +62,7 @@ import configAuditRoutes from './api/routes/config-audit.routes';
 import manualCaptchaRoutes from './api/routes/manual-captcha.routes';
 import accessRequestsRoutes from './api/routes/access-requests.routes';
 import listingLifetimeRoutes from './api/routes/listing-lifetime.routes';
+import analyticsRoutes from './api/routes/analytics.routes';
 import meetingRoomRoutes from './api/routes/meeting-room.routes';
 import debugRoutes from './api/routes/debug.routes';
 import helpRoutes from './api/routes/help.routes';
@@ -508,6 +509,19 @@ function createCorsHardenedMiddleware(allowedOriginsList: string[]) {
           isAllowed = true;
           matchedOrigin = domainMatch;
           matchedRule = 'domain-match';
+        } else {
+          // TASK 2: Dynamic origins — Vercel deployments (*.vercel.app) and localhost
+          try {
+            const url = new URL(origin);
+            const host = url.hostname.toLowerCase();
+            if (host.endsWith('.vercel.app') || host === 'localhost' || host === '127.0.0.1') {
+              isAllowed = true;
+              matchedOrigin = origin;
+              matchedRule = host.endsWith('.vercel.app') ? 'vercel-app' : 'localhost';
+            }
+          } catch {
+            // invalid origin
+          }
         }
       }
     }
@@ -637,6 +651,7 @@ const corsOptions: CorsOptions = {
     try {
       const url = new URL(origin);
       const hostNoWww = url.hostname.toLowerCase().replace(/^www\./, '');
+      const hostname = url.hostname.toLowerCase();
       const protocol = url.protocol;
       
       // Verificar si el hostname (sin www) está permitido
@@ -664,8 +679,13 @@ const corsOptions: CorsOptions = {
         }
       }
 
+      // TASK 2: Vercel deployments and localhost (dynamic, no manual CORS_ORIGIN)
+      if (hostname.endsWith('.vercel.app') || hostname === 'localhost' || hostname === '127.0.0.1') {
+        logger.debug('CORS: Origin allowed (vercel/localhost)', { origin, hostname });
+        return callback(null, origin);
+      }
+
       // Verificar patrones dinámicos (AliExpress, etc.)
-      const hostname = url.hostname.toLowerCase();
       if (dynamicOriginMatchers.some((pattern) => pattern.test(hostname))) {
         logger.debug('CORS: Origin allowed (pattern match)', { origin, hostname });
         return callback(null, origin); // ✅ Devolver origin original
@@ -831,6 +851,21 @@ app.get('/api/health', async (_req: Request, res: Response) => {
       service: 'ivan-reseller-backend'
     });
   }
+});
+
+// ✅ TASK 3: Production connectivity validation (frontend → backend, auth, analytics, product research)
+app.get('/api/connectivity', (_req: Request, res: Response) => {
+  res.status(200).json({
+    ok: true,
+    backend: true,
+    timestamp: new Date().toISOString(),
+    checks: {
+      api: true,
+      authEndpoint: '/api/auth-status',
+      analyticsEndpoint: '/api/analytics/listings',
+      productResearchEndpoint: '/api/opportunities/research',
+    },
+  });
 });
 
 // ✅ FASE 0: Version endpoint (for deployment verification)
@@ -1132,6 +1167,7 @@ app.use('/api/auth-status', authStatusRoutes);
 app.use('/api/setup-status', setupStatusRoutes);
 app.use('/api/config-audit', configAuditRoutes);
 app.use('/api/listing-lifetime', listingLifetimeRoutes);
+app.use('/api/analytics', analyticsRoutes);
 app.use('/api/meeting-room', meetingRoomRoutes);
 app.use('/api/help', helpRoutes);
 app.use('/api/trends', trendsRoutes); // ✅ FASE 1: Detección de Tendencias

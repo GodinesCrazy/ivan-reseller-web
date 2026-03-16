@@ -6,6 +6,7 @@ import axios, { AxiosInstance } from 'axios';
 import FormData from 'form-data';
 import { AppError } from '../middleware/error.middleware';
 import { retryMarketplaceOperation } from '../utils/retry.util';
+import { acquireMarketplaceRateLimit } from './marketplace-rate-limit.service';
 import logger from '../config/logger';
 
 export interface MercadoLibreCredentials {
@@ -163,6 +164,11 @@ export class MercadoLibreService {
       },
     });
 
+    // Phase 1: Per-marketplace rate limit
+    this.apiClient.interceptors.request.use(async (config) => {
+      await acquireMarketplaceRateLimit('mercadolibre');
+      return config;
+    });
     // Add request interceptor for authentication
     this.apiClient.interceptors.request.use((config) => {
       if (this.credentials.accessToken) {
@@ -307,6 +313,7 @@ export class MercadoLibreService {
 
   /**
    * Download an image from a URL and upload it to ML's Picture API.
+   * Phase 2: Runs image pipeline (resize min 1200x1200, normalize format) before upload.
    * Returns the ML-hosted picture ID, or null if the upload fails.
    */
   async uploadImage(imageUrl: string): Promise<string | null> {
@@ -318,7 +325,21 @@ export class MercadoLibreService {
         headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'image/*' },
       });
 
-      const buffer = Buffer.from(imgResp.data);
+      let buffer = Buffer.from(imgResp.data);
+      const contentType = imgResp.headers['content-type'] || 'image/jpeg';
+
+      // Phase 2: Image pipeline — resize (min 1200x1200), normalize to JPEG
+      try {
+        const { processBuffer } = await import('./image-pipeline.service');
+        const processed = await processBuffer(buffer, contentType);
+        buffer = processed.buffer;
+      } catch (pipeErr: any) {
+        logger.warn('[MercadoLibre] Image pipeline failed, using original', {
+          imageUrl: imageUrl.substring(0, 80),
+          error: pipeErr?.message,
+        });
+      }
+
       const MIN_IMAGE_BYTES = 15 * 1024; // 15KB minimum for a quality product photo
       if (buffer.length < MIN_IMAGE_BYTES) {
         logger.warn('[MercadoLibre] Image below quality threshold, skipping', {
@@ -329,11 +350,8 @@ export class MercadoLibreService {
         return null;
       }
 
-      const contentType = imgResp.headers['content-type'] || 'image/jpeg';
-      const ext = contentType.includes('png') ? 'png' : 'jpg';
-
       const form = new FormData();
-      form.append('file', buffer, { filename: `image.${ext}`, contentType });
+      form.append('file', buffer, { filename: 'image.jpg', contentType: 'image/jpeg' });
 
       const uploadResp = await axios.post(
         `${this.baseUrl}/pictures/items/upload`,

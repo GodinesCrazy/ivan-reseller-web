@@ -5,6 +5,7 @@ import axios, { AxiosInstance } from 'axios';
 import { AppError } from '../middleware/error.middleware';
 import { URLSearchParams } from 'url';
 import { retryMarketplaceOperation } from '../utils/retry.util';
+import { acquireMarketplaceRateLimit } from './marketplace-rate-limit.service';
 import logger from '../config/logger';
 
 export interface EbayCredentials {
@@ -128,6 +129,11 @@ export class EbayService {
       },
     });
 
+    // Phase 1: Per-marketplace rate limit (wait if at limit before each API call)
+    this.apiClient.interceptors.request.use(async (config) => {
+      await acquireMarketplaceRateLimit('ebay');
+      return config;
+    });
     // Add request interceptor for authentication
     this.apiClient.interceptors.request.use((config) => {
       if (this.credentials?.token) {

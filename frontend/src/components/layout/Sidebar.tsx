@@ -43,6 +43,7 @@ const navGroups: NavGroup[] = [
     title: 'Flujo principal',
     items: [
       { path: '/dashboard', label: 'Panel', icon: LayoutDashboard },
+      { path: '/control-center', label: 'Control Center', icon: Activity },
       { path: '/dashboard?tab=trends', label: 'Ciclo (Tendencias)', icon: TrendingUp },
       { path: '/opportunities', label: 'Oportunidades', icon: Search },
       { path: '/autopilot', label: 'Autopilot', icon: Bot },
