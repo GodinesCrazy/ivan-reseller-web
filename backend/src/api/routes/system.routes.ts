@@ -443,4 +443,52 @@ router.get('/readiness-report', authenticate, async (req: Request, res: Response
   }
 });
 
+/**
+ * Phase 13: GET /api/system/launch-readiness
+ * Launch readiness: listing compliance, profitability, system health, systemReadyForAutonomousOperation.
+ */
+router.get('/launch-readiness', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { getLaunchReadinessReport } = await import('../../services/launch-audit.service');
+    const report = await getLaunchReadinessReport(userId);
+    return res.status(200).json({ success: true, ...report });
+  } catch (err: any) {
+    logger.error('[SYSTEM/LAUNCH-READINESS] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Launch readiness failed' });
+  }
+});
+
+/**
+ * Phase 13: GET /api/system/launch-report
+ * Full launch report: audited listings, repaired, profitability, fee intelligence, autonomous status.
+ */
+router.get('/launch-report', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { getLaunchReport } = await import('../../services/launch-audit.service');
+    const report = await getLaunchReport(userId);
+    return res.status(200).json({ success: true, ...report });
+  } catch (err: any) {
+    logger.error('[SYSTEM/LAUNCH-REPORT] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Launch report failed' });
+  }
+});
+
+/**
+ * Phase 13: POST /api/system/run-listing-compliance-audit
+ * Run listing compliance audit (MercadoLibre Chile, eBay US) and create repair actions.
+ */
+router.post('/run-listing-compliance-audit', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { runListingComplianceAudit } = await import('../../services/launch-audit.service');
+    const result = await runListingComplianceAudit(userId);
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/RUN-LISTING-COMPLIANCE-AUDIT] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Compliance audit failed' });
+  }
+});
+
 export default router;

@@ -107,7 +107,36 @@ export class MarketplacePublishService {
       };
     }
 
+    const { runFeeIntelligenceAndFlag } = await import('../../services/marketplace-fee-intelligence.service');
+
     for (const product of products) {
+      const listPrice = product.suggestedPrice ?? product.finalPrice ?? 0;
+      const runFeeCheck = (marketplace === 'mercadolibre' || marketplace === 'ebay') && mode !== PublishMode.SIMULATED && listPrice;
+      if (runFeeCheck) {
+        const productRow = await prisma.product.findUnique({
+          where: { id: product.id },
+          select: { totalCost: true, aliexpressPrice: true, shippingCost: true },
+        });
+        const supplierCost = productRow?.totalCost
+          ? Number(productRow.totalCost)
+          : Number(productRow?.aliexpressPrice || 0) + Number(productRow?.shippingCost || 0);
+        const { allowed } = await runFeeIntelligenceAndFlag(
+          product.id,
+          marketplace as 'mercadolibre' | 'ebay',
+          Number(listPrice),
+          supplierCost,
+          productRow?.shippingCost ? Number(productRow.shippingCost) : undefined
+        );
+        if (!allowed) {
+          results.push({
+            productId: product.id,
+            status: 'skipped',
+            message: 'Margen por debajo del mínimo permitido (MIN_ALLOWED_MARGIN). No se publica.',
+          });
+          continue;
+        }
+      }
+
       logger.info('[MARKETPLACE] Publishing product', {
         marketplace,
         productId: product.id,

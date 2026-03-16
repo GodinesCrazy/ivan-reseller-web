@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { authenticate } from '../../middleware/auth.middleware';
+import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { autopilotSystem } from '../../services/autopilot.service';
 import { workflowConfigService } from '../../services/workflow-config.service';
 import { workflowService } from '../../services/workflow.service';
@@ -163,6 +163,31 @@ router.put('/config', async (req: Request, res: Response, next) => {
     }
     await autopilotSystem.updateConfig(data);
     res.json({ success: true, message: 'Configuración actualizada', config: autopilotSystem.getStatus().config });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const EARLY_STAGE_CONFIG_OVERRIDES = {
+  cycleIntervalMinutes: 15,
+  workingCapital: 5000,
+  maxOpportunitiesPerCycle: 25,
+  maxActiveProducts: 1000,
+  maxDailyOrders: 50,
+};
+
+/**
+ * POST /api/autopilot/apply-early-stage-config - Apply early-stage overrides (admin only).
+ * Uses the backend's existing DB connection; no extra connection required.
+ */
+router.post('/apply-early-stage-config', authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await autopilotSystem.updateConfig(EARLY_STAGE_CONFIG_OVERRIDES);
+    res.json({
+      success: true,
+      message: 'Early-stage config applied',
+      config: autopilotSystem.getStatus().config,
+    });
   } catch (error) {
     next(error);
   }

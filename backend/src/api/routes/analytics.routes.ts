@@ -729,4 +729,56 @@ router.get('/marketplace-performance', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Phase 13: GET /api/analytics/fee-intelligence
+ * Calculate marketplace fee intelligence for a product or given params.
+ * Query: marketplace (mercadolibre|ebay), listingPrice, supplierCost; or productId to use product costs.
+ */
+router.get('/fee-intelligence', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId as number | undefined;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const marketplace = (req.query.marketplace as string)?.toLowerCase();
+    const productId = req.query.productId ? Number(req.query.productId) : null;
+    let listingPrice = req.query.listingPrice != null ? Number(req.query.listingPrice) : null;
+    let supplierCost = req.query.supplierCost != null ? Number(req.query.supplierCost) : null;
+
+    if (productId && (!listingPrice || !supplierCost)) {
+      const product = await prisma.product.findFirst({
+        where: { id: productId, userId },
+        select: { suggestedPrice: true, finalPrice: true, aliexpressPrice: true, totalCost: true, shippingCost: true },
+      });
+      if (!product) return res.status(404).json({ error: 'Product not found' });
+      listingPrice = listingPrice ?? Number(product.suggestedPrice ?? product.finalPrice ?? product.aliexpressPrice ?? 0);
+      supplierCost = supplierCost ?? (product.totalCost ? Number(product.totalCost) : Number(product.aliexpressPrice ?? 0) + Number(product.shippingCost ?? 0));
+    }
+
+    if (!marketplace || marketplace !== 'mercadolibre' && marketplace !== 'ebay') {
+      return res.status(400).json({ error: 'marketplace (mercadolibre|ebay) required' });
+    }
+    if (listingPrice == null || listingPrice < 0 || supplierCost == null) {
+      return res.status(400).json({ error: 'listingPrice and supplierCost (or productId) required' });
+    }
+
+    const { calculateFeeIntelligence, isProfitabilityAllowed, getMinAllowedMargin } = await import(
+      '../../services/marketplace-fee-intelligence.service'
+    );
+    const result = calculateFeeIntelligence({
+      marketplace: marketplace as 'mercadolibre' | 'ebay',
+      listingPrice,
+      supplierCost,
+      currency: marketplace === 'mercadolibre' ? 'CLP' : 'USD',
+    });
+    return res.json({
+      ...result,
+      allowed: isProfitabilityAllowed(result),
+      minAllowedMargin: getMinAllowedMargin(),
+    });
+  } catch (e: any) {
+    logger.error('[analytics/fee-intelligence] Error', { error: e?.message });
+    return res.status(500).json({ error: e?.message || 'Internal server error' });
+  }
+});
+
 export default router;

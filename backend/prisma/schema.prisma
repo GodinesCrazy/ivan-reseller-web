@@ -161,6 +161,7 @@ model Product {
   autoListingDecisions AutoListingDecision[]
   strategyDecisions    StrategyDecision[]
   scalingActions       ScalingAction[]
+  unprofitableListingFlags UnprofitableListingFlag[]
 
   @@index([userId, status])
   @@index([status, isPublished])
@@ -468,9 +469,47 @@ model MarketplaceListing {
   winningProducts WinningProduct[]
   listingOptimizationActions ListingOptimizationAction[]
   conversionOptimizationActions ConversionOptimizationAction[]
+  listingAuditActions ListingAuditAction[]
 
   @@unique([marketplace, listingId])
   @@map("marketplace_listings")
+}
+
+// Phase 13: Launch Audit — listing compliance repair actions (title_restructuring | attribute_completion | description_improvement | image_regeneration | price_correction | category_correction)
+model ListingAuditAction {
+  id         Int       @id @default(autoincrement())
+  listingId  Int       // FK MarketplaceListing.id
+  marketplace String   // mercadolibre, ebay
+  actionType String   // title_restructuring | attribute_completion | description_improvement | image_regeneration | price_correction | category_correction
+  reason     String
+  executed   Boolean   @default(false)
+  createdAt  DateTime @default(now())
+
+  marketplaceListing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([marketplace])
+  @@index([actionType])
+  @@index([executed])
+  @@index([createdAt])
+  @@map("listing_audit_actions")
+}
+
+// Phase 13: Profitability Safeguard — flag when expected margin < MIN_ALLOWED_MARGIN (do not publish/scale)
+model UnprofitableListingFlag {
+  id              Int       @id @default(autoincrement())
+  productId       Int
+  marketplace     String    // mercadolibre, ebay
+  expectedMargin  Decimal   @db.Decimal(8, 4) // e.g. -5.25 or 2.50 (percent)
+  reason         String
+  createdAt       DateTime  @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([marketplace])
+  @@index([createdAt])
+  @@map("unprofitable_listing_flags")
 }
 
 // Phase 11: Conversion Rate Optimization Engine — CRO actions (image_optimization | price_adjustment | title_restructuring | description_improvement | attribute_completion)

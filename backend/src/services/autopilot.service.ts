@@ -189,15 +189,15 @@ export class AutopilotSystem extends EventEmitter {
     // ✅ ALTA PRIORIDAD: Inicializar MarketplaceService
     this.marketplaceService = new MarketplaceService();
     
-    // Config optimizada para $5K USD/mes neto: 8K listings, 4% conv, $15.50 avg profit
+    // Early-stage defaults (escalar después a 8K/18K según full-bootstrap)
     this.config = {
       enabled: false,
-      cycleIntervalMinutes: 6,
+      cycleIntervalMinutes: 15,
       publicationMode: 'automatic',
       targetMarketplace: 'mercadolibre',
       targetMarketplaces: ['mercadolibre', 'ebay'],
-      maxOpportunitiesPerCycle: 40,
-      maxActiveProducts: 8000,
+      maxOpportunitiesPerCycle: 25,
+      maxActiveProducts: 1000,
       minSupplierPrice: 15,
       maxSupplierPrice: 120,
       repricingIntervalHours: 6,
@@ -223,11 +223,11 @@ export class AutopilotSystem extends EventEmitter {
         'irrigador dental portatil', 'maquina ruido blanco', 'cojin masaje cervical',
         'dispensador jabon automatico', 'organizador zapatos puerta', 'silla ergonomica cojin',
       ],
-      workingCapital: 18000,
+      workingCapital: 5000,
       minProfitUsd: 12,
       minRoiPct: 40,
       optimizationEnabled: true,
-      maxDailyOrders: 200,
+      maxDailyOrders: 50,
     };
 
     // Initialize category performance
