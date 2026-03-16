@@ -29,6 +29,12 @@ interface ControlCenterFunnel {
   counts: Record<string, number>;
 }
 
+interface SalesAccelerationMode {
+  enabled: boolean;
+  strategy: string;
+  recentOptimizations: string[];
+}
+
 interface ReadinessReport {
   success: boolean;
   deploymentStatus: string;
@@ -37,6 +43,7 @@ interface ReadinessReport {
     database: string;
     redis: string;
     bullmq: string;
+    workers?: string;
     marketplaceApi: string;
     supplierApi: string;
     alerts: string[];
@@ -46,6 +53,7 @@ interface ReadinessReport {
   automationModeStatus: string;
   canEnableAutonomous: boolean;
   salesOptimizationReadiness: Record<string, boolean>;
+  salesAccelerationMode?: SalesAccelerationMode;
   timestamp?: string;
 }
 
@@ -145,10 +153,12 @@ export default function ControlCenter() {
               </div>
             </div>
             <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
-              {statusIcon(readiness.workerStatus)}
+              {statusIcon(readiness.health.workers ?? readiness.workerStatus)}
               <div>
                 <p className="font-medium text-gray-900 dark:text-gray-100">Workers</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{readiness.workerStatus}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {readiness.health.workers ?? readiness.workerStatus}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
@@ -185,6 +195,27 @@ export default function ControlCenter() {
               Supplier: <strong>{readiness.supplierIntegrations.configured ? 'Yes' : 'No'}</strong>
             </span>
           </div>
+          {readiness.salesAccelerationMode && (
+            <div className="mt-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
+              <h3 className="font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <Target className="h-4 w-4" />
+                Sales Acceleration Mode
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {readiness.salesAccelerationMode.enabled ? 'Enabled' : 'Disabled'}
+                {readiness.salesAccelerationMode.enabled && readiness.salesAccelerationMode.strategy && (
+                  <> — {readiness.salesAccelerationMode.strategy}</>
+                )}
+              </p>
+              {readiness.salesAccelerationMode.recentOptimizations?.length > 0 && (
+                <ul className="mt-2 list-disc list-inside text-sm text-gray-600 dark:text-gray-300">
+                  {readiness.salesAccelerationMode.recentOptimizations.slice(0, 5).map((opt, i) => (
+                    <li key={i}>{opt}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
       )}
 

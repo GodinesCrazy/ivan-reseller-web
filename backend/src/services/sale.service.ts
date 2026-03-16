@@ -956,16 +956,30 @@ export class SaleService {
     return updated;
   }
 
+  /**
+   * Phase 23: For production, exclude test/mock/demo order IDs so dashboard shows only real marketplace sales.
+   */
+  private static realSalesFilter(environment: string): Record<string, unknown> {
+    if (environment !== 'production') return {};
+    return {
+      AND: [
+        { orderId: { not: { startsWith: 'test' } } },
+        { orderId: { not: { startsWith: 'mock' } } },
+        { orderId: { not: { startsWith: 'demo' } } },
+      ],
+    };
+  }
+
   async getSalesStats(userId?: string | number, days?: number, environment: 'production' | 'sandbox' | 'all' = 'production') {
     const { queryWithTimeout } = await import('../utils/queryWithTimeout');
-    // Convertir userId a number si es string (Prisma espera number)
     const userIdNumber = userId ? (typeof userId === 'string' ? parseInt(userId, 10) : userId) : undefined;
     const baseWhere = userIdNumber ? { userId: userIdNumber } : {};
     const dateFilter = typeof days === 'number' && days > 0
       ? { createdAt: { gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000) } }
       : {};
     const envFilter = environment !== 'all' ? { environment } : {};
-    const where = { ...baseWhere, ...dateFilter, ...envFilter };
+    const realFilter = SaleService.realSalesFilter(environment);
+    const where = { ...baseWhere, ...dateFilter, ...envFilter, ...realFilter };
 
     const queriesPromise = Promise.all([
       prisma.sale.count({ where: { ...where, status: 'COMPLETED' } }),

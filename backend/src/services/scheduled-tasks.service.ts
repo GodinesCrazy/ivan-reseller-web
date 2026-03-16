@@ -49,6 +49,7 @@ export class ScheduledTasksService {
     private listingStateReconciliationQueue: Queue | null = null;
     private competitorIntelligenceQueue: Queue | null = null;
     private autonomousRevenueMonitorQueue: Queue | null = null;
+    private salesAccelerationQueue: Queue | null = null;
     private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
@@ -75,6 +76,7 @@ export class ScheduledTasksService {
     private listingStateReconciliationWorker: Worker | null = null;
     private competitorIntelligenceWorker: Worker | null = null;
     private autonomousRevenueMonitorWorker: Worker | null = null;
+    private salesAccelerationWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
 
@@ -223,6 +225,11 @@ export class ScheduledTasksService {
 
     // Phase 22: Autonomous Revenue Monitor — every 6 hours
     this.autonomousRevenueMonitorQueue = new Queue('autonomous-revenue-monitor', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 23: Sales Acceleration Mode — every 3 hours
+    this.salesAccelerationQueue = new Queue('sales-acceleration', {
       connection: this.bullMQRedis as any
     });
   }
@@ -827,6 +834,35 @@ export class ScheduledTasksService {
         });
       });
     }
+
+    // Phase 23: Sales Acceleration Mode — every 3 hours
+    if (this.salesAccelerationQueue) {
+      this.salesAccelerationWorker = new Worker(
+        'sales-acceleration',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running sales acceleration mode', { jobId: job.id });
+          const { runSalesAccelerationMode } = await import('./sales-acceleration-mode.service');
+          return await runSalesAccelerationMode();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.salesAccelerationWorker.on('completed', (job, result) => {
+        logger.info('Scheduled Tasks: Sales acceleration completed', {
+          jobId: job?.id,
+          ran: result?.ran,
+          optimizations: result?.optimizationsTriggered?.length,
+        });
+      });
+      this.salesAccelerationWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Sales acceleration failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
   }
 
   private async runAliExpressTokenRefresh(): Promise<{ refreshed: boolean; reason?: string }> {
@@ -1212,6 +1248,21 @@ export class ScheduledTasksService {
         }
       );
       logger.info('Scheduled Tasks: Autonomous revenue monitor scheduled', { cron: revenueMonitorCron });
+    }
+
+    // Phase 23: Sales Acceleration Mode — every 3 hours
+    const salesAccelerationCron = process.env.SALES_ACCELERATION_CRON || '0 */3 * * *';
+    if (this.salesAccelerationQueue) {
+      this.salesAccelerationQueue.add(
+        'sales-acceleration-run',
+        {},
+        {
+          repeat: { pattern: salesAccelerationCron },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+      logger.info('Scheduled Tasks: Sales acceleration scheduled', { cron: salesAccelerationCron });
     }
 
     logger.info('Scheduled Tasks: Tasks scheduled successfully');
@@ -2004,6 +2055,12 @@ export class ScheduledTasksService {
     }
     if (this.autonomousRevenueMonitorQueue) {
       await this.autonomousRevenueMonitorQueue.close();
+    }
+    if (this.salesAccelerationWorker) {
+      await this.salesAccelerationWorker.close();
+    }
+    if (this.salesAccelerationQueue) {
+      await this.salesAccelerationQueue.close();
     }
   }
 

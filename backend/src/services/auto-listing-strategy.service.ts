@@ -16,7 +16,10 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { jobService } from './job.service';
 
 const AUTO_LISTING_MIN_SCORE = Number(process.env.AUTO_LISTING_MIN_SCORE || '50');
-const AUTO_LISTING_MAX_PER_DAY = Number(process.env.AUTO_LISTING_MAX_PER_DAY || '20');
+// Phase 23: Sales Acceleration Mode can raise limit via AUTONOMOUS_MAX_LISTINGS_PER_DAY (e.g. 40)
+const AUTO_LISTING_MAX_PER_DAY = Number(
+  process.env.AUTONOMOUS_MAX_LISTINGS_PER_DAY || process.env.AUTO_LISTING_MAX_PER_DAY || '20'
+);
 const AUTO_LISTING_MAX_PER_MARKETPLACE = Number(process.env.AUTO_LISTING_MAX_PER_MARKETPLACE || '10');
 const AUTO_LISTING_MIN_MARGIN_PCT = Number(process.env.AUTO_LISTING_MIN_MARGIN_PCT || '15');
 

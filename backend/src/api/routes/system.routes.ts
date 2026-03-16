@@ -393,7 +393,7 @@ router.get('/readiness-report', authenticate, async (req: Request, res: Response
         ? 'production'
         : process.env.DEPLOYMENT_ENV || process.env.NODE_ENV || 'development';
     const workerStatus =
-      health.redis === 'ok' && health.bullmq === 'ok' ? 'running' : health.redis === 'unknown' ? 'unknown' : 'degraded';
+      health.workers === 'ok' ? 'running' : health.workers === 'fail' ? 'degraded' : health.redis === 'ok' || health.bullmq === 'ok' ? 'degraded' : 'unknown';
 
     const { prisma } = await import('../../config/database');
     const marketplaceCreds = await prisma.apiCredential.count({
@@ -415,6 +415,24 @@ router.get('/readiness-report', authenticate, async (req: Request, res: Response
       mercadolibreAttributeCompleteness: true,
     };
 
+    // Phase 23: Sales Acceleration Mode status for Control Center
+    let salesAccelerationMode: { enabled: boolean; strategy: string; recentOptimizations: string[] } = {
+      enabled: false,
+      strategy: 'Disabled',
+      recentOptimizations: [],
+    };
+    try {
+      const { getSalesAccelerationStatus } = await import('../../services/sales-acceleration-mode.service');
+      const acc = await getSalesAccelerationStatus();
+      salesAccelerationMode = {
+        enabled: acc.enabled,
+        strategy: acc.strategy,
+        recentOptimizations: acc.recentOptimizations,
+      };
+    } catch {
+      // non-fatal
+    }
+
     return res.status(200).json({
       success: true,
       deploymentStatus,
@@ -423,6 +441,7 @@ router.get('/readiness-report', authenticate, async (req: Request, res: Response
         database: health.database,
         redis: health.redis,
         bullmq: health.bullmq,
+        workers: health.workers,
         marketplaceApi: health.marketplaceApi,
         supplierApi: health.supplierApi,
         alerts: health.alerts,
@@ -432,6 +451,7 @@ router.get('/readiness-report', authenticate, async (req: Request, res: Response
       automationModeStatus: autonomousModeEnabled ? 'enabled' : 'disabled',
       canEnableAutonomous,
       salesOptimizationReadiness,
+      salesAccelerationMode,
       timestamp: health.timestamp,
     });
   } catch (err: any) {
@@ -488,6 +508,36 @@ router.post('/run-listing-compliance-audit', authenticate, async (req: Request, 
   } catch (err: any) {
     logger.error('[SYSTEM/RUN-LISTING-COMPLIANCE-AUDIT] Error', { error: err?.message });
     return res.status(500).json({ success: false, error: err?.message || 'Compliance audit failed' });
+  }
+});
+
+/**
+ * Phase 23: GET /api/system/sales-acceleration-status
+ * Sales Acceleration Mode status for Control Center (enabled, strategy, recent optimizations).
+ */
+router.get('/sales-acceleration-status', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const { getSalesAccelerationStatus } = await import('../../services/sales-acceleration-mode.service');
+    const status = await getSalesAccelerationStatus();
+    return res.status(200).json({ success: true, ...status });
+  } catch (err: any) {
+    logger.error('[SYSTEM/SALES-ACCELERATION-STATUS] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to load sales acceleration status' });
+  }
+});
+
+/**
+ * Phase 23: POST /api/system/run-sales-acceleration
+ * Run Sales Acceleration Mode once (triggers optimizations when enabled).
+ */
+router.post('/run-sales-acceleration', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const { runSalesAccelerationMode } = await import('../../services/sales-acceleration-mode.service');
+    const result = await runSalesAccelerationMode();
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/RUN-SALES-ACCELERATION] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Sales acceleration run failed' });
   }
 });
 

@@ -80,21 +80,16 @@ export const redis = new Proxy({} as Redis, {
 /**
  * Redis connection para BullMQ (Workers y Queues)
  * BullMQ requiere maxRetriesPerRequest: null para operaciones bloqueantes
- * ✅ P0: NO retorna conexión si SAFE_BOOT=true
+ * ✅ P0: Only skip when SAFE_BOOT is explicitly 'true' (Phase 23: fix workers in production)
  */
 export const getBullMQRedisConnection = () => {
-  // ✅ P0: Check SAFE_BOOT before creating connection
-  const safeBoot = process.env.SAFE_BOOT === 'true' || (process.env.SAFE_BOOT !== 'false' && process.env.NODE_ENV === 'production');
-  
-  if (safeBoot) {
-    console.log('🛡️  SAFE_BOOT: skipping BullMQ Redis connection');
+  if (process.env.SAFE_BOOT === 'true') {
+    console.log('🛡️  SAFE_BOOT=true: skipping BullMQ Redis connection');
     return null;
   }
-  
   if (!REDIS_URL) {
     return null;
   }
-  
   return new Redis(REDIS_URL, {
     maxRetriesPerRequest: null, // BullMQ requiere null para operaciones bloqueantes
     retryStrategy: (times) => {

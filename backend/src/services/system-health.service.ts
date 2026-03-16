@@ -1,12 +1,14 @@
 /**
  * Phase 12: System Health Monitoring
- * Tracks: DB, Redis, BullMQ (queue backlog), marketplace API, supplier API.
- * Triggers alerts when queues stall, API errors increase, inventory sync fails, publishing fails repeatedly.
+ * Phase 23: Redis and Worker health return ok/fail/degraded (no "unknown" when REDIS_URL set).
+ * Tracks: DB, Redis, BullMQ (workers), marketplace API, supplier API.
  */
 
 import { prisma } from '../config/database';
-import { redis, isRedisAvailable, getBullMQRedisConnection } from '../config/redis';
+import { redis, getBullMQRedisConnection } from '../config/redis';
 import { logger } from '../config/logger';
+
+const REDIS_URL = process.env.REDIS_URL;
 
 export type HealthStatus = 'ok' | 'degraded' | 'fail' | 'unknown';
 
@@ -14,6 +16,7 @@ export interface SystemHealthResult {
   database: HealthStatus;
   redis: HealthStatus;
   bullmq: HealthStatus;
+  workers: HealthStatus;
   marketplaceApi: HealthStatus;
   supplierApi: HealthStatus;
   alerts: string[];
@@ -30,8 +33,13 @@ async function checkDatabase(): Promise<HealthStatus> {
   }
 }
 
+/**
+ * Phase 23: Always attempt Redis ping; return ok when connected, fail when error, degraded when no URL.
+ */
 async function checkRedis(): Promise<HealthStatus> {
-  if (!isRedisAvailable) return 'unknown';
+  if (!REDIS_URL || REDIS_URL.trim() === '') {
+    return 'degraded'; // No Redis configured (was "unknown")
+  }
   try {
     const pong = await redis.ping();
     return pong === 'PONG' ? 'ok' : 'degraded';
@@ -42,12 +50,28 @@ async function checkRedis(): Promise<HealthStatus> {
 }
 
 /**
- * BullMQ workers depend on Redis. If Redis is ok, workers can run; no per-queue backlog here.
+ * BullMQ depends on Redis. When REDIS_URL set and Redis ping ok, BullMQ can run.
  */
 async function checkBullMQ(): Promise<HealthStatus> {
-  if (!getBullMQRedisConnection() || !isRedisAvailable) return 'unknown';
-  const redisStatus = await checkRedis();
-  return redisStatus === 'ok' ? 'ok' : redisStatus;
+  if (!REDIS_URL || REDIS_URL.trim() === '') return 'degraded';
+  const conn = getBullMQRedisConnection();
+  if (!conn) return 'degraded';
+  try {
+    const pong = await conn.ping();
+    return pong === 'PONG' ? 'ok' : 'degraded';
+  } catch (e: any) {
+    logger.warn('[SYSTEM-HEALTH] BullMQ Redis check failed', { error: e?.message });
+    return 'fail';
+  }
+}
+
+/**
+ * Phase 23: Worker health derived from Redis + BullMQ (workers use same Redis).
+ */
+function deriveWorkersStatus(redisStatus: HealthStatus, bullmq: HealthStatus): HealthStatus {
+  if (redisStatus === 'ok' && bullmq === 'ok') return 'ok';
+  if (redisStatus === 'fail' || bullmq === 'fail') return 'fail';
+  return 'degraded';
 }
 
 /**
@@ -98,10 +122,12 @@ export async function runSystemHealthCheck(): Promise<SystemHealthResult> {
     checkMarketplaceApi(),
     checkSupplierApi(),
   ]);
+  const workers = deriveWorkersStatus(redisStatus, bullmq);
 
   if (database === 'fail') alerts.push('Database connectivity failed');
   if (redisStatus === 'fail') alerts.push('Redis connectivity failed');
   if (bullmq === 'fail') alerts.push('BullMQ/Redis workers unavailable');
+  if (workers === 'fail') alerts.push('Workers unavailable');
   if (marketplaceApi === 'fail') alerts.push('Marketplace API health check failed');
   if (supplierApi === 'fail') alerts.push('Supplier API health check failed');
 
@@ -109,6 +135,7 @@ export async function runSystemHealthCheck(): Promise<SystemHealthResult> {
     database,
     redis: redisStatus,
     bullmq,
+    workers,
     marketplaceApi,
     supplierApi,
     alerts,
