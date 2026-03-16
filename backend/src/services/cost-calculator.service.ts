@@ -14,6 +14,7 @@ export interface CostBreakdown {
 
 import fx from './fx.service';
 import { logger } from '../config/logger';
+import { getDefaultShippingCost } from '../utils/shipping.utils';
 
 export class CostCalculatorService {
   // Base default fees; region can override
@@ -45,7 +46,7 @@ export class CostCalculatorService {
     const cfg = this.defaults[marketplace] || this.defaults.ebay;
     const marketplaceFee = salePriceUsd * cfg.fee;
     const paymentFee = salePriceUsd * cfg.paymentFee;
-    const shippingCost = opts?.shippingCost ?? 0;
+    const shippingCost = opts?.shippingCost ?? getDefaultShippingCost();
     const importTax = opts?.importTax ?? 0; // ✅ MEJORADO: Impuestos de importación
     const taxes = salePriceUsd * (opts?.taxesPct ?? 0); // Otros impuestos como porcentaje
     const otherCosts = opts?.otherCosts ?? 0;
@@ -105,7 +106,7 @@ export class CostCalculatorService {
       // Fallback: usar costo sin convertir
       costInSaleCurrency = sourceCost;
     }
-    const shippingCost = opts?.shippingCost ?? 0;
+    const shippingCost = opts?.shippingCost ?? getDefaultShippingCost();
     const importTax = opts?.importTax ?? 0; // ✅ MEJORADO: Impuestos de importación
     const taxes = salePrice * (opts?.taxesPct ?? 0); // Otros impuestos como porcentaje
     const otherCosts = opts?.otherCosts ?? 0;

@@ -682,6 +682,10 @@ router.post('/ebay-bootstrap-fulfillment-policy', validateInternalSecret, async 
       });
     }
 
+    // Fase 2.2: configurable shipping; align with DEFAULT_SHIPPING_COST_USD for margin consistency
+    const ebayShippingUsd = (process.env.EBAY_DEFAULT_SHIPPING_USD && parseFloat(process.env.EBAY_DEFAULT_SHIPPING_USD)) || 4.99;
+    const shippingValue = Math.max(0, ebayShippingUsd).toFixed(2);
+
     const payload = {
       name: policyName,
       description: 'Standard international shipping policy for API listings',
@@ -697,7 +701,7 @@ router.post('/ebay-bootstrap-fulfillment-policy', validateInternalSecret, async 
               sortOrder: 1,
               shippingCarrierCode: 'GENERIC',
               shippingServiceCode: 'StandardShippingFromOutsideUS',
-              shippingCost: { value: '4.99', currency: 'USD' },
+              shippingCost: { value: shippingValue, currency: 'USD' },
               additionalShippingCost: { value: '0.0', currency: 'USD' },
             },
           ],

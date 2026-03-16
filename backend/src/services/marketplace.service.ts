@@ -95,6 +95,7 @@ import logger from '../config/logger';
 import crypto from 'crypto';
 import type { CredentialScope } from '@prisma/client';
 import { toNumber } from '../utils/decimal.utils';
+import { getEffectiveShippingCost } from '../utils/shipping.utils';
 import { fastHttpClient } from '../config/http-client'; // ✅ PRODUCTION READY: Usar cliente HTTP configurado
 import { resolveDestination } from './destination.service';
 import {
@@ -759,7 +760,7 @@ export class MarketplaceService {
       }
 
       const costNum = toNumber(product.aliexpressPrice);
-      const shippingNum = toNumber(product.shippingCost ?? 0);
+      const shippingNum = getEffectiveShippingCost(product);
       const importTaxNum = toNumber(product.importTax ?? 0);
       const totalCost = toNumber(product.totalCost) > 0
         ? toNumber(product.totalCost)
@@ -968,7 +969,7 @@ export class MarketplaceService {
       }
 
       const costNumMl = toNumber(product.aliexpressPrice);
-      const shippingNumMl = toNumber(product.shippingCost ?? 0);
+      const shippingNumMl = getEffectiveShippingCost(product);
       const importTaxNumMl = toNumber(product.importTax ?? 0);
       const totalCostMl = toNumber(product.totalCost) > 0
         ? toNumber(product.totalCost)
@@ -1100,6 +1101,15 @@ export class MarketplaceService {
         }
       }
 
+      // Fase 2.1: shipping from product when available; else free_shipping if shippingCost 0 or very low
+      const effectiveShippingCost = getEffectiveShippingCost(product);
+      const freeShipping = effectiveShippingCost < 1;
+      const shippingFromProduct = (product as any).shipping;
+      const mlShipping =
+        shippingFromProduct && shippingFromProduct.mode && shippingFromProduct.mode !== 'not_specified'
+          ? { mode: shippingFromProduct.mode as string, freeShipping: Boolean(shippingFromProduct.freeShipping) }
+          : { mode: 'me2' as const, freeShipping };
+
       const mlProduct: MLProduct = {
         title: finalTitle,
         description: finalDescription,
@@ -1109,10 +1119,7 @@ export class MarketplaceService {
         condition: 'new',
         images: images,
         ...(attributes && attributes.length > 0 && { attributes }),
-        shipping: {
-          mode: 'not_specified',
-          freeShipping: false,
-        },
+        shipping: mlShipping,
       };
 
       logger.info('Publishing product to MercadoLibre with multiple images', {
@@ -1832,7 +1839,7 @@ export class MarketplaceService {
       }
 
       const costNumAmz = toNumber(product.aliexpressPrice);
-      const shippingNumAmz = toNumber(product.shippingCost ?? 0);
+      const shippingNumAmz = getEffectiveShippingCost(product);
       const importTaxNumAmz = toNumber(product.importTax ?? 0);
       const totalCostAmz = toNumber(product.totalCost) > 0
         ? toNumber(product.totalCost)
@@ -2297,7 +2304,7 @@ export class MarketplaceService {
       });
       
       const costBase = toNumber(product.aliexpressPrice);
-      let shippingCost = toNumber(product.shippingCost ?? metadata?.shippingCost ?? 0);
+      let shippingCost = getEffectiveShippingCost(product, metadata ?? undefined);
       let importTaxVal = toNumber(product.importTax ?? metadata?.importTax ?? 0);
       const targetCountry = (product.targetCountry || metadata?.targetCountry || '').toString().toUpperCase() || undefined;
 

@@ -9,6 +9,7 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { prisma } from '../../config/database';
 import { logger } from '../../config/logger';
 import { toNumber } from '../../utils/decimal.utils';
+import { getEffectiveShippingCost } from '../../utils/shipping.utils';
 
 const router = Router();
 router.use(authenticate);
@@ -751,7 +752,7 @@ router.get('/fee-intelligence', async (req: Request, res: Response) => {
       });
       if (!product) return res.status(404).json({ error: 'Product not found' });
       listingPrice = listingPrice ?? Number(product.suggestedPrice ?? product.finalPrice ?? product.aliexpressPrice ?? 0);
-      supplierCost = supplierCost ?? (product.totalCost ? Number(product.totalCost) : Number(product.aliexpressPrice ?? 0) + Number(product.shippingCost ?? 0));
+      supplierCost = supplierCost ?? (product.totalCost ? Number(product.totalCost) : Number(product.aliexpressPrice ?? 0) + getEffectiveShippingCost(product));
     }
 
     if (!marketplace || marketplace !== 'mercadolibre' && marketplace !== 'ebay') {

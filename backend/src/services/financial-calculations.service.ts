@@ -9,6 +9,7 @@ import { trace } from '../utils/boot-trace';
 trace('loading financial-calculations.service');
 
 import fx from './fx.service';
+import { getDefaultShippingCost } from '../utils/shipping.utils';
 
 export interface ProfitCalculationInput {
   sourcePrice: number;
@@ -54,7 +55,6 @@ export class FinancialCalculationsService {
   } as const;
 
   private readonly defaultFixedCosts = {
-    shippingCost: 5.99,
     packagingCost: 2.50,
     advertisingCost: 3.00,
   };
@@ -91,7 +91,7 @@ export class FinancialCalculationsService {
     // Calcular costos
     const marketplaceFeeAmount = targetPrice * marketplaceFeePct;
     const paymentFeeAmount = targetPrice * paymentFeePct;
-    const shippingCost = fees.shippingCost ?? this.defaultFixedCosts.shippingCost;
+    const shippingCost = fees.shippingCost ?? getDefaultShippingCost();
     const packagingCost = fees.packagingCost ?? this.defaultFixedCosts.packagingCost;
     const advertisingCost = fees.advertisingCost ?? this.defaultFixedCosts.advertisingCost;
     const taxes = targetPrice * (fees.taxesPct ?? 0);

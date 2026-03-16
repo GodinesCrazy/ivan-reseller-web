@@ -368,6 +368,12 @@ const envSchema = z.object({
     const nodeEnv = process.env.NODE_ENV || 'development';
     return nodeEnv === 'production';
   }),
+
+  // Fase 1 shipping: default cost when product has no shippingCost (margin/totalCost calculations)
+  DEFAULT_SHIPPING_COST_USD: z.string().default('5.99').transform((val) => {
+    const n = parseFloat(val);
+    return Number.isFinite(n) && n >= 0 ? n : 5.99;
+  }),
 });
 
 // Asegurar que DATABASE_URL esté en process.env

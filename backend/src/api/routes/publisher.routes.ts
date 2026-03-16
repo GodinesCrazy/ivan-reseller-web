@@ -7,6 +7,7 @@ import { getAliExpressProductCascaded } from '../../services/aliexpress-acquisit
 import { prisma } from '../../config/database';
 import { logger } from '../../config/logger';
 import { toNumber } from '../../utils/decimal.utils';
+import { getEffectiveShippingCost } from '../../utils/shipping.utils';
 import { jobService } from '../../services/job.service';
 import costCalculator from '../../services/cost-calculator.service';
 
@@ -291,7 +292,7 @@ router.get('/pending', async (req: Request, res: Response) => {
     const enrichedItems: any[] = [];
     for (const item of products) {
       const costNum = toNumber(item.aliexpressPrice);
-      const shippingNum = toNumber(item.shippingCost ?? 0);
+      const shippingNum = getEffectiveShippingCost(item);
       const importTaxNum = toNumber(item.importTax ?? 0);
       const totalCostNum = toNumber(item.totalCost);
       const effectiveCost = totalCostNum > 0 ? totalCostNum : costNum + shippingNum + importTaxNum;

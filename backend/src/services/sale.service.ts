@@ -9,6 +9,7 @@ import { notificationService } from './notification.service';
 import { UserSettingsService } from './user-settings.service';
 import { platformConfigService } from './platform-config.service';
 import { toNumber } from '../utils/decimal.utils';
+import { getEffectiveShippingCost } from '../utils/shipping.utils';
 import type { AutomatedOrder } from './automation.service';
 
 export interface CreateSaleDto {
@@ -1316,7 +1317,7 @@ export class SaleService {
     };
     const region = marketplaceToRegion[marketplace] || 'us';
 
-    let shippingCost = toNumber(product.shippingCost ?? 0);
+    let shippingCost = getEffectiveShippingCost(product);
     let importTax = toNumber(product.importTax ?? 0);
 
     // Convertir shipping/import a saleCurrency para cost calculator
@@ -1352,7 +1353,7 @@ export class SaleService {
     }
 
     // shippingCost/importTax para createSale deben estar en baseCurrency
-    const shippingCostBase = toNumber(product.shippingCost ?? 0);
+    const shippingCostBase = getEffectiveShippingCost(product);
     const importTaxBase = toNumber(product.importTax ?? 0);
 
     try {
