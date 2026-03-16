@@ -281,10 +281,10 @@ export class ScheduledTasksService {
       );
     }
 
-    // ✅ Worker para optimizador de tiempo de publicación
+    // ✅ Worker para optimizador de tiempo de publicación (name must match queue: listing-lifetime-optimizer)
     if (this.listingLifetimeQueue) {
       this.listingLifetimeWorker = new Worker(
-        'listing-lifetime-optimization',
+        'listing-lifetime-optimizer',
         async (job) => {
           logger.info('Scheduled Tasks: Running listing lifetime optimization', { jobId: job.id });
           return await this.processListingLifetimeOptimization();
@@ -294,6 +294,24 @@ export class ScheduledTasksService {
           concurrency: 1
         }
       );
+    }
+
+    // ✅ Worker para despublicación automática de productos (capital/conversión)
+    if (this.productUnpublishQueue) {
+      this.productUnpublishWorker = new Worker(
+        'product-unpublish',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running product unpublish', { jobId: job.id });
+          await this.processProductUnpublish(job);
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.productUnpublishWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Product unpublish failed', { jobId: job?.id, error: err?.message });
+      });
     }
 
     // Event listeners

@@ -17,6 +17,16 @@ Configura en **Railway** (proyecto backend) las siguientes variables. Sin ellas 
 | `EBAY_FVF_PER_ORDER_USD` | `0.4` | Fee por orden eBay (USD) |
 | `AUTONOMOUS_OPERATION_MODE` | `true` | Activar solo cuando en Control Center el readiness muestre "ready to enable" y `GET /api/system/readiness-report` devuelva `canEnableAutonomous: true` y sin alertas. Ver `docs/PHASE18_FINAL_MATURITY_REPORT.md` §11. |
 
+**Phase 19 — Límites recomendados al activar modo autónomo (auditoría profunda):**
+
+| Variable | Valor recomendado | Propósito |
+|----------|-------------------|-----------|
+| `AUTONOMOUS_MAX_LISTINGS_PER_DAY` | `20` | Tope seguro de nuevos listados por día. |
+| `MIN_ALLOWED_MARGIN` | `20` | Margen mínimo % (más conservador que 5–8 en early-stage). |
+| `RATE_LIMIT_LISTINGS_PER_HOUR` | `10` | Respetar APIs y evitar throttling. |
+
+Ver `docs/PHASE19_DEEP_SYSTEM_AUDIT_REPORT.md` (Task 15).
+
 ---
 
 ## 2. Checklist de variables obligatorias en producción
