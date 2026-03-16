@@ -291,7 +291,7 @@ export class MarketplacePublishService {
     }
 
     try {
-      await prisma.marketplaceListing.create({
+      const created = await prisma.marketplaceListing.create({
         data: {
           productId: product.id,
           userId: product.userId,
@@ -301,6 +301,33 @@ export class MarketplacePublishService {
           publishedAt: new Date(),
         },
       });
+
+      // Phase 15: Validate publication with marketplace before marking as active
+      const { listingStateReconciliationService } = await import(
+        '../../services/listing-state-reconciliation.service'
+      );
+      const verification = await listingStateReconciliationService.verifyListing({
+        id: created.id,
+        listingId: result.listingId,
+        marketplace,
+        userId: product.userId,
+      });
+
+      if (verification.result !== 'ACTIVE') {
+        await listingStateReconciliationService.recordErrorAndUpdateStatus(
+          created.id,
+          marketplace,
+          verification.errorType || 'marketplace_rejection',
+          verification.errorMessage || 'Post-publish validation failed'
+        );
+        logger.warn('[MARKETPLACE] Publish validation failed; listing marked failed_publish', {
+          productId: product.id,
+          marketplace,
+          listingId: result.listingId,
+          result: verification.result,
+        });
+        return;
+      }
 
       await prisma.product.update({
         where: { id: product.id },

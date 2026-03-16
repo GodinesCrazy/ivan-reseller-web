@@ -461,6 +461,9 @@ model MarketplaceListing {
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  // Phase 15: Listing state reconciliation — sync with marketplace reality
+  status            String    @default("active") // active | paused | failed_publish | not_found
+  lastReconciledAt  DateTime?
 
   // Relations
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -470,9 +473,29 @@ model MarketplaceListing {
   listingOptimizationActions ListingOptimizationAction[]
   conversionOptimizationActions ConversionOptimizationAction[]
   listingAuditActions ListingAuditAction[]
+  listingPublishErrors ListingPublishError[]
 
   @@unique([marketplace, listingId])
+  @@index([status])
   @@map("marketplace_listings")
+}
+
+// Phase 15: Publish error classification (marketplace_rejection | validation_error | api_error | rate_limit)
+model ListingPublishError {
+  id          Int      @id @default(autoincrement())
+  listingId   Int      // FK MarketplaceListing.id
+  marketplace String
+  errorType   String   // marketplace_rejection | validation_error | api_error | rate_limit
+  errorMessage String?
+  createdAt   DateTime @default(now())
+
+  marketplaceListing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([marketplace])
+  @@index([errorType])
+  @@index([createdAt])
+  @@map("listing_publish_errors")
 }
 
 // Phase 13: Launch Audit — listing compliance repair actions (title_restructuring | attribute_completion | description_improvement | image_regeneration | price_correction | category_correction)

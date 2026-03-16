@@ -430,6 +430,30 @@ router.get('/listings', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/publisher/listings/run-reconciliation-audit — Phase 15: full listing state audit (all listings vs marketplace)
+router.post('/listings/run-reconciliation-audit', async (req: Request, res: Response) => {
+  try {
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? undefined : req.user!.userId;
+
+    const { listingStateReconciliationService } = await import(
+      '../../services/listing-state-reconciliation.service'
+    );
+    const result = await listingStateReconciliationService.runFullAudit({ userId });
+
+    return res.json({
+      success: true,
+      ...result,
+      message: `Audit completed: ${result.scanned} scanned, ${result.corrected} corrected, ${result.errors} errors.`,
+    });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Reconciliation audit failed';
+    logger.error('[PUBLISHER] run-reconciliation-audit failed', { error: errorMessage });
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
 // POST /api/publisher/listings/repair-ml — Repair Mercado Libre listings (VIP67: title, description, attributes)
 router.post('/listings/repair-ml', async (req: Request, res: Response) => {
   try {

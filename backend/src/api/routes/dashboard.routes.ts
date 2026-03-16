@@ -389,7 +389,7 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       }),
       prisma.marketplaceListing.groupBy({
         by: ['marketplace'],
-        where: whereUser,
+        where: { ...whereUser, status: 'active' },
         _count: { id: true },
       }),
       prisma.order.groupBy({
@@ -499,7 +499,7 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
     const whereUser = userId ? { userId } : undefined;
 
     const [activeListings, salesToday, salesMonth, productsWithSales] = await Promise.all([
-      prisma.marketplaceListing.count({ where: whereUser }),
+      prisma.marketplaceListing.count({ where: { ...whereUser, status: 'active' } }),
       prisma.sale.count({
         where: {
           ...whereUser,

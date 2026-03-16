@@ -16,6 +16,7 @@ import fxService from './fx.service';
 import { toNumber } from '../utils/decimal.utils';
 import { retryFailedOrdersDueToFunds } from './retry-failed-orders.service';
 import { processPaidOrders } from './process-paid-orders.service';
+import { listingStateReconciliationService } from './listing-state-reconciliation.service';
 
 /**
  * Scheduled Tasks Service
@@ -45,6 +46,7 @@ export class ScheduledTasksService {
     private aiStrategyBrainQueue: Queue | null = null;
     private autonomousScalingQueue: Queue | null = null;
     private conversionRateOptimizationQueue: Queue | null = null;
+    private listingStateReconciliationQueue: Queue | null = null;
     private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
@@ -68,6 +70,7 @@ export class ScheduledTasksService {
     private aiStrategyBrainWorker: Worker | null = null;
     private autonomousScalingWorker: Worker | null = null;
     private conversionRateOptimizationWorker: Worker | null = null;
+    private listingStateReconciliationWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
 
@@ -201,6 +204,11 @@ export class ScheduledTasksService {
 
     // Phase 11: Conversion Rate Optimization — every 12 hours
     this.conversionRateOptimizationQueue = new Queue('conversion-rate-optimization', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 15: Listing state reconciliation — every 30 minutes
+    this.listingStateReconciliationQueue = new Queue('listing-state-reconciliation', {
       connection: this.bullMQRedis as any
     });
   }
@@ -673,6 +681,35 @@ export class ScheduledTasksService {
         });
       });
     }
+
+    // Phase 15: Listing state reconciliation — verify published listings match marketplace
+    if (this.listingStateReconciliationQueue) {
+      this.listingStateReconciliationWorker = new Worker(
+        'listing-state-reconciliation',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running listing state reconciliation', { jobId: job.id });
+          return await listingStateReconciliationService.reconcileAll({ batchSize: 100 });
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.listingStateReconciliationWorker.on('completed', (job, result) => {
+        logger.info('Scheduled Tasks: Listing state reconciliation completed', {
+          jobId: job?.id,
+          scanned: result?.scanned,
+          updated: result?.updated,
+          republishEnqueued: result?.republishEnqueued,
+        });
+      });
+      this.listingStateReconciliationWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Listing state reconciliation failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
   }
 
   private async runAliExpressTokenRefresh(): Promise<{ refreshed: boolean; reason?: string }> {
@@ -1007,6 +1044,19 @@ export class ScheduledTasksService {
         {},
         {
           repeat: { pattern: process.env.CRO_CRON || '0 */12 * * *' },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Phase 15: Listing state reconciliation — every 30 minutes
+    if (this.listingStateReconciliationQueue) {
+      this.listingStateReconciliationQueue.add(
+        'listing-state-reconciliation-run',
+        {},
+        {
+          repeat: { pattern: process.env.LISTING_RECONCILIATION_CRON || '*/30 * * * *' },
           removeOnComplete: 5,
           removeOnFail: 5,
         }
