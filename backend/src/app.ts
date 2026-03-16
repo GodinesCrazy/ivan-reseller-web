@@ -84,8 +84,13 @@ app.set('trust proxy', 1);
 // Phase 5: Health first (before any other middleware) for Railway
 // /health: 200 as soon as Express is listening (liveness) - Railway needs fast 200
 // /ready: 200 only when DB connected (readiness)
+const healthPayload = () => ({ status: 'ok', timestamp: new Date().toISOString() });
 app.get('/health', (_req: Request, res: Response) => {
-  return res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  return res.status(200).json(healthPayload());
+});
+// Frontend/proxy may call /api/health (same-origin /api); mirror response
+app.get('/api/health', (_req: Request, res: Response) => {
+  return res.status(200).json(healthPayload());
 });
 
 // ✅ PRODUCTION FIX DEFINITIVO: Deshabilitar ETag para /api/* para evitar 304 sin CORS

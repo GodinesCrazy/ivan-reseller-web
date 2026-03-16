@@ -62,17 +62,26 @@ https://www.ivanreseller.com,https://ivanreseller.com,https://ivan-reseller-web.
 
 1. Vercel Dashboard → Tu proyecto → **Settings** → **Environment Variables**
 
-### **B. Verificar VITE_API_URL:**
+### **B. Verificar VITE_API_URL o BACKEND_URL:**
 
-**Debe existir:**
+**Recomendado (llamadas directas al backend):**
 ```
 VITE_API_URL = https://ivan-reseller-web-production.up.railway.app
 ```
 
-**Si NO existe, agrégala:**
+**Alternativa (solo proxy):** Si no usas VITE_API_URL, el proxy de Vercel usa la URL inyectada en el build. Configura una de estas para que el rewrite apunte a tu backend:
+```
+BACKEND_URL = https://ivan-reseller-web-production.up.railway.app
+```
+o, si tu backend en Railway tiene otro nombre (ej. `ivan-reseller-backend-production`):
+```
+BACKEND_URL = https://ivan-reseller-backend-production.up.railway.app
+```
+
+**Si VITE_API_URL no existe y quieres llamadas directas:**
 1. Click **"Add New"**
 2. **Name:** `VITE_API_URL`
-3. **Value:** `https://ivan-reseller-web-production.up.railway.app`
+3. **Value:** La URL pública de tu backend en Railway (sin `/api` al final)
 4. **Environments:** Todas (Production, Preview, Development)
 5. Click **"Save"**
 6. Haz un nuevo redeploy
