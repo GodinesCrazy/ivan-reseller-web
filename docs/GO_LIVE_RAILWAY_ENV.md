@@ -87,6 +87,28 @@ cd backend && npx prisma migrate deploy
 
 ---
 
+## 3b. Healthcheck Railway y verificación post-deploy
+
+Para que el deploy pase el healthcheck en Railway:
+
+1. **Código:** El backend usa `server-bootstrap.ts`: responde `GET /health` con 200 en cuanto el puerto está en escucha y carga el servidor completo en `setImmediate` para no bloquear. Asegúrate de desplegar desde `main` con ese fix (commit que incluye "healthcheck - load server in setImmediate").
+
+2. **Configuración Railway:** El healthcheck debe apuntar a **`/health`** (no a `/`). En el repo está definido en:
+   - `backend/railway.json`: `"healthcheckPath": "/health"`, `"healthcheckTimeout": 120`
+   - `railway.json` (raíz) y `railway.toml`: mismo path por si se despliega desde raíz.
+
+3. **Verificar tras el deploy:**
+   - En Railway: pestaña **Deployments** → último deploy debe quedar en estado **Success** (no "Healthcheck failed").
+   - Desde tu máquina:
+     ```bash
+     curl -s https://ivan-reseller-backend-production.up.railway.app/health
+     ```
+     Debe devolver `{"status":"ok","timestamp":"..."}`.
+
+Si el healthcheck falla, revisa los logs del **deploy** (build) y de la **replica** (runtime): que el servicio arranque con `npm run start` y que no haya errores antes del primer GET /health.
+
+---
+
 ## 4. Prerrequisitos antes de activar
 
 - Al menos un **usuario activo** con `paypalPayoutEmail` configurado (el autopilot inicia solo si existe).
