@@ -76,7 +76,9 @@ export class ScheduledTasksService {
     
     if (isRedisAvailable && this.bullMQRedis) {
       this.initializeQueues();
-      void this.initializeWorkers();
+      this.initializeWorkers().catch((err) => {
+        logger.error('Scheduled Tasks: initializeWorkers failed (workers disabled)', { error: err?.message || String(err) });
+      });
       this.scheduleTasks();
     } else {
       logger.warn('Scheduled Tasks: Redis not available - scheduled tasks disabled');

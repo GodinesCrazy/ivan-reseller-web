@@ -224,9 +224,14 @@ export const errorHandler = (
   }
 
   // ✅ PRODUCTION FIX: NO borrar headers CORS existentes
-  // El error handler NO debe hacer res.setHeader que sobrescriba CORS headers
-  // CORS middleware ya corrió antes, así que los headers están presentes
-  
+  // Si por algún motivo CORS no se aplicó (ej. error antes del middleware), asegurar origen ivanreseller.com
+  const origin = req.headers.origin;
+  const allowedProductionOrigins = ['https://www.ivanreseller.com', 'https://ivanreseller.com'];
+  if (origin && allowedProductionOrigins.includes(origin) && !res.getHeader('Access-Control-Allow-Origin')) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+
   // ✅ HOTFIX: Wrap in try/catch to prevent uncaught exceptions
   try {
     res.status(statusCode).json(response);

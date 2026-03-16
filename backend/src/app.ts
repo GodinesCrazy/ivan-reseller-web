@@ -299,6 +299,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // ✅ PRODUCTION FIX DEFINITIVO: Parser SUPER ROBUSTO para leer CORS origins
 // Maneja casos edge: CORS_ORIGIN= incrustado, comillas, espacios, etc.
 function readCorsOrigins(): string[] {
+  // ✅ CRÍTICO: Orígenes de producción SIEMPRE primero (ivanreseller.com)
+  const productionFallbacks = ['https://www.ivanreseller.com', 'https://ivanreseller.com'];
+  const origins: string[] = [...productionFallbacks];
+
   // Normalizar origin: trim, remover trailing slash
   const normalizeOrigin = (origin: string): string => {
     return origin.trim().replace(/\/+$/, '');
@@ -345,48 +349,34 @@ function readCorsOrigins(): string[] {
       .map(normalizeOrigin);
   };
 
-  let origins: string[] = [];
-
-  // Prioridad 1: CORS_ORIGINS (plural) - preferir plural si existe
+  // Prioridad 1: CORS_ORIGINS (plural) - agregar al inicio si existe
   if (process.env.CORS_ORIGINS) {
-    origins = parseOrigins(process.env.CORS_ORIGINS);
-  }
-
-  // Prioridad 2: CORS_ORIGIN (singular) - solo si plural no dio resultados
-  if (origins.length === 0 && process.env.CORS_ORIGIN) {
-    origins = parseOrigins(process.env.CORS_ORIGIN);
-  }
-
-  // Prioridad 3: FRONTEND_URL como fallback
-  if (origins.length === 0 && env.FRONTEND_URL) {
-    const normalized = normalizeOrigin(env.FRONTEND_URL);
-    if (normalized && (normalized.startsWith('http://') || normalized.startsWith('https://'))) {
-      origins = [normalized];
-      // Agregar versión www y sin www automáticamente
-      try {
-        const url = new URL(normalized);
-        if (url.hostname.startsWith('www.')) {
-          origins.push(normalized.replace('www.', ''));
-        } else {
-          origins.push(normalized.replace(url.hostname, `www.${url.hostname}`));
-        }
-      } catch {
-        // Ignorar si no se puede parsear
-      }
+    const fromEnv = parseOrigins(process.env.CORS_ORIGINS);
+    for (const o of fromEnv) {
+      if (o && !origins.includes(o)) origins.unshift(o);
     }
   }
 
-  // ✅ CRÍTICO: SIEMPRE agregar fallback de producción (incluso si ya hay origins)
-  // Esto garantiza que https://www.ivanreseller.com y https://ivanreseller.com SIEMPRE funcionen
-  const productionFallbacks = [
-    'https://www.ivanreseller.com',
-    'https://ivanreseller.com'
-  ];
-  
-  // Agregar fallbacks si no están ya presentes
-  for (const fallback of productionFallbacks) {
-    if (!origins.includes(fallback)) {
-      origins.push(fallback);
+  // Prioridad 2: CORS_ORIGIN (singular)
+  if (process.env.CORS_ORIGIN) {
+    const fromEnv = parseOrigins(process.env.CORS_ORIGIN);
+    for (const o of fromEnv) {
+      if (o && !origins.includes(o)) origins.unshift(o);
+    }
+  }
+
+  // Prioridad 3: FRONTEND_URL
+  if (env.FRONTEND_URL) {
+    const normalized = normalizeOrigin(env.FRONTEND_URL);
+    if (normalized && (normalized.startsWith('http://') || normalized.startsWith('https://')) && !origins.includes(normalized)) {
+      origins.unshift(normalized);
+      try {
+        const url = new URL(normalized);
+        const other = url.hostname.startsWith('www.') ? normalized.replace('www.', '') : `https://www.${url.hostname}`;
+        if (!origins.includes(other)) origins.unshift(other);
+      } catch {
+        // ignore
+      }
     }
   }
 

@@ -12,7 +12,10 @@
    - **Frontend (Vercel):** Connect repo to Vercel; deploy from `main`. Set env: `VITE_API_URL` (backend URL).
    - **Backend (Railway):** Deploy from `main`. Set env: `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, marketplace and supplier keys, and Phase 12 vars below.
 
-4. **Environment variables (backend)**
+4. **Environment variables (backend en Railway)**
+   - **CORS (crítico para ivanreseller.com):**  
+     `CORS_ORIGINS=https://www.ivanreseller.com,https://ivanreseller.com`  
+     (El backend ya incluye estos orígenes por defecto; configurarlos en Railway evita problemas si el parseo falla.)
    - `AUTONOMOUS_OPERATION_MODE` — set to `true` only after readiness checks pass.
    - `AUTONOMOUS_MAX_LISTINGS_PER_DAY` — safety cap (e.g. 50).
    - `AUTONOMOUS_MIN_MARGIN_PCT` — minimum margin for price/scaling (e.g. 10).
