@@ -73,6 +73,7 @@ model User {
   adminMeetings           MeetingRoom[]           @relation("AdminMeetings") // Reuniones donde el usuario es admin
   orders                  Order[]                 // Órdenes de checkout (PayPal → AliExpress)
   purchaseLogs            PurchaseLog[] // Logs de compras automáticas
+  competitorInsights      CompetitorInsight[]
 
   @@index([email])
   @@index([username])
@@ -474,9 +475,11 @@ model MarketplaceListing {
   conversionOptimizationActions ConversionOptimizationAction[]
   listingAuditActions ListingAuditAction[]
   listingPublishErrors ListingPublishError[]
+  competitorInsights   CompetitorInsight[]
 
   @@unique([marketplace, listingId])
   @@index([status])
+  @@index([userId, marketplace])
   @@map("marketplace_listings")
 }
 
@@ -739,6 +742,34 @@ model CompetitionSnapshot {
   opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
 
   @@map("competition_snapshots")
+}
+
+// Phase 18: Competitor Intelligence — per listing/category, marketplace, keyword patterns, price range, competition score
+model CompetitorInsight {
+  id                  Int       @id @default(autoincrement())
+  listingId           Int?      // our MarketplaceListing.id (null when category-level only)
+  userId              Int
+  marketplace         String    // mercadolibre, ebay
+  categoryId          String?
+  keywordPatterns     String?   // JSON array of top keywords
+  priceMin            Decimal?  @db.Decimal(18, 2)
+  priceMax            Decimal?  @db.Decimal(18, 2)
+  priceMedian         Decimal?  @db.Decimal(18, 2)
+  imageCountAvg       Float?
+  salesVelocityEst    Float?    // estimated sales velocity from competitors
+  competitionScore    Decimal?  @db.Decimal(5, 2)   // 0–100
+  competitorCount     Int?
+  analyzedAt          DateTime  @default(now())
+  metadata            Json?     // raw sample listings, etc.
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketplaceListing MarketplaceListing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([listingId])
+  @@index([marketplace])
+  @@index([analyzedAt])
+  @@map("competitor_insights")
 }
 
 // ✅ SUGERENCIAS IA

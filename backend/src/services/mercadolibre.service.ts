@@ -954,6 +954,40 @@ export class MercadoLibreService {
   }
 
   /**
+   * Phase 18: Get item visits (impressions) from MercadoLibre.
+   * GET /users/{user_id}/items_visits?ids=id1,id2 (batch, max ~20 per request).
+   * Returns map itemId -> visits (total in period).
+   */
+  async getItemVisits(itemIds: string[]): Promise<Record<string, number>> {
+    if (!this.credentials.userId || !itemIds?.length) return {};
+    const unique = [...new Set(itemIds.filter((id) => typeof id === 'string' && id.trim()))];
+    if (unique.length === 0) return {};
+    const result: Record<string, number> = {};
+    const batchSize = 20;
+    for (let i = 0; i < unique.length; i += batchSize) {
+      const batch = unique.slice(i, i + batchSize);
+      try {
+        const response = await this.apiClient.get(
+          `/users/${this.credentials.userId}/items_visits`,
+          { params: { ids: batch.join(',') } }
+        );
+        const data = response.data || {};
+        for (const id of batch) {
+          const v = data[id];
+          result[id] = typeof v === 'object' && v != null && typeof v.visits === 'number' ? v.visits : 0;
+        }
+      } catch (err: any) {
+        logger.warn('[MercadoLibre] getItemVisits batch failed', {
+          batch: batch.length,
+          error: err.response?.data?.message || err.message,
+        });
+        for (const id of batch) result[id] = 0;
+      }
+    }
+    return result;
+  }
+
+  /**
    * Get user's listings
    */
   async getUserListings(status?: string, limit: number = 50): Promise<any[]> {

@@ -47,6 +47,7 @@ export class ScheduledTasksService {
     private autonomousScalingQueue: Queue | null = null;
     private conversionRateOptimizationQueue: Queue | null = null;
     private listingStateReconciliationQueue: Queue | null = null;
+    private competitorIntelligenceQueue: Queue | null = null;
     private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
@@ -71,6 +72,7 @@ export class ScheduledTasksService {
     private autonomousScalingWorker: Worker | null = null;
     private conversionRateOptimizationWorker: Worker | null = null;
     private listingStateReconciliationWorker: Worker | null = null;
+    private competitorIntelligenceWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
 
@@ -209,6 +211,11 @@ export class ScheduledTasksService {
 
     // Phase 15: Listing state reconciliation — every 30 minutes
     this.listingStateReconciliationQueue = new Queue('listing-state-reconciliation', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 18: Competitor Intelligence — daily
+    this.competitorIntelligenceQueue = new Queue('competitor-intelligence', {
       connection: this.bullMQRedis as any
     });
   }
@@ -514,6 +521,14 @@ export class ScheduledTasksService {
         'listing-metrics-aggregate',
         async (job) => {
           logger.info('Scheduled Tasks: Running listing metrics aggregate', { jobId: job.id });
+          const { runMercadoLibreMetricsIngestion } = await import('./mercadolibre-metrics-ingestion.service');
+          try {
+            await runMercadoLibreMetricsIngestion();
+          } catch (mlErr: any) {
+            logger.warn('Scheduled Tasks: ML metrics ingestion failed (continuing aggregate)', {
+              error: mlErr?.message,
+            });
+          }
           const { aggregateSalesIntoListingMetricsForDate } = await import('./listing-metrics-writer.service');
           const yesterday = new Date();
           yesterday.setDate(yesterday.getDate() - 1);
@@ -705,6 +720,42 @@ export class ScheduledTasksService {
       });
       this.listingStateReconciliationWorker.on('failed', (job, err) => {
         logger.error('Scheduled Tasks: Listing state reconciliation failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
+
+    if (this.competitorIntelligenceQueue) {
+      this.competitorIntelligenceWorker = new Worker(
+        'competitor-intelligence',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running competitor intelligence', { jobId: job.id });
+          const { runCompetitorAnalysisForUser } = await import('./competitor-intelligence.service');
+          const users = await prisma.user.findMany({
+            where: { isActive: true },
+            select: { id: true },
+          });
+          let analyzed = 0;
+          const errors: string[] = [];
+          for (const u of users) {
+            try {
+              const r = await runCompetitorAnalysisForUser(u.id);
+              analyzed += r.analyzed;
+              errors.push(...r.errors);
+            } catch (e: any) {
+              errors.push(`User ${u.id}: ${e?.message || String(e)}`);
+            }
+          }
+          return { analyzed, usersProcessed: users.length, errors: errors.length };
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.competitorIntelligenceWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Competitor intelligence failed', {
           jobId: job?.id,
           error: err?.message,
         });
@@ -933,7 +984,7 @@ export class ScheduledTasksService {
       );
     }
 
-    // Phase 1: Inventory sync every 6 hours
+    // Phase 1: Inventory sync every 6 hours (Phase 18: attempts for recovery)
     if (this.inventorySyncQueue) {
       this.inventorySyncQueue.add(
         'inventory-sync-run',
@@ -942,6 +993,8 @@ export class ScheduledTasksService {
           repeat: { pattern: process.env.INVENTORY_SYNC_CRON || '0 */6 * * *' },
           removeOnComplete: 5,
           removeOnFail: 5,
+          attempts: 2,
+          backoff: { type: 'exponential', delay: 120000 },
         }
       );
     }
@@ -1050,7 +1103,7 @@ export class ScheduledTasksService {
       );
     }
 
-    // Phase 15: Listing state reconciliation — every 30 minutes
+    // Phase 15: Listing state reconciliation — every 30 minutes (Phase 18: attempts for recovery)
     if (this.listingStateReconciliationQueue) {
       this.listingStateReconciliationQueue.add(
         'listing-state-reconciliation-run',
@@ -1059,6 +1112,23 @@ export class ScheduledTasksService {
           repeat: { pattern: process.env.LISTING_RECONCILIATION_CRON || '*/30 * * * *' },
           removeOnComplete: 5,
           removeOnFail: 5,
+          attempts: 2,
+          backoff: { type: 'exponential', delay: 60000 },
+        }
+      );
+    }
+
+    // Phase 18: Competitor Intelligence — daily at 5:30 AM (after market intelligence)
+    if (this.competitorIntelligenceQueue) {
+      this.competitorIntelligenceQueue.add(
+        'competitor-intelligence-run',
+        {},
+        {
+          repeat: { pattern: process.env.COMPETITOR_INTELLIGENCE_CRON || '30 5 * * *' },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+          attempts: 2,
+          backoff: { type: 'exponential', delay: 120000 },
         }
       );
     }
@@ -1841,6 +1911,12 @@ export class ScheduledTasksService {
     }
     if (this.listingMetricsAggregateQueue) {
       await this.listingMetricsAggregateQueue.close();
+    }
+    if (this.competitorIntelligenceWorker) {
+      await this.competitorIntelligenceWorker.close();
+    }
+    if (this.competitorIntelligenceQueue) {
+      await this.competitorIntelligenceQueue.close();
     }
   }
 

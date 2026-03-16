@@ -769,7 +769,14 @@ export class MarketplaceService {
       }
 
       const ebayConfig = this.getMarketplaceConfig('ebay', credentialEntry.credentials as any);
-      const ebayKeywords = buildKeywordsFromProduct(product);
+      let ebayKeywords = buildKeywordsFromProduct(product);
+      try {
+        const { getCompetitorKeywordSuggestions } = await import('./competitor-intelligence.service');
+        const competitorKw = await getCompetitorKeywordSuggestions(userId, 'ebay', product.categoryId ?? undefined);
+        ebayKeywords = [...ebayKeywords, ...competitorKw].filter((w, i, a) => a.indexOf(w) === i).slice(0, 15);
+      } catch {
+        // optional: competitor insights for SEO
+      }
       let finalTitle = customData?.title || product.title;
       let finalDescription = customData?.description || product.description || '';
 
@@ -988,7 +995,14 @@ export class MarketplaceService {
       }
 
       const mlConfig = this.getMarketplaceConfig('mercadolibre', credsWithSiteId);
-      const mlKeywords = buildKeywordsFromProduct(product);
+      let mlKeywords = buildKeywordsFromProduct(product);
+      try {
+        const { getCompetitorKeywordSuggestions } = await import('./competitor-intelligence.service');
+        const competitorKw = await getCompetitorKeywordSuggestions(userId, 'mercadolibre', product.categoryId ?? undefined);
+        mlKeywords = [...mlKeywords, ...competitorKw].filter((w, i, a) => a.indexOf(w) === i).slice(0, 15);
+      } catch {
+        // optional: competitor insights for SEO
+      }
       let finalTitle = mergedCustomData?.title || product.title;
       let finalDescription = mergedCustomData?.description || product.description || '';
 

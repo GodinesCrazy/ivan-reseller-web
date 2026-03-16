@@ -15,7 +15,7 @@ Configura en **Railway** (proyecto backend) las siguientes variables. Sin ellas 
 | `EBAY_INSERTION_FEE_USD` | `0.35` | Fee inserción eBay (USD) |
 | `EBAY_FVF_PCT` | `13.25` | Final value fee % eBay |
 | `EBAY_FVF_PER_ORDER_USD` | `0.4` | Fee por orden eBay (USD) |
-| `AUTONOMOUS_OPERATION_MODE` | `true` | (Opcional) Activar cuando `launch-report` esté OK |
+| `AUTONOMOUS_OPERATION_MODE` | `true` | Activar solo cuando en Control Center el readiness muestre "ready to enable" y `GET /api/system/readiness-report` devuelva `canEnableAutonomous: true` y sin alertas. Ver `docs/PHASE18_FINAL_MATURITY_REPORT.md` §11. |
 
 ---
 
