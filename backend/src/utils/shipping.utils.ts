@@ -35,7 +35,7 @@ export function getEffectiveShippingCost(
   const fromProduct = product?.shippingCost;
   const fromMeta = metadata?.shippingCost;
   const val = fromProduct ?? fromMeta;
-  if (val != null && val !== '' && (typeof val !== 'number' || !Number.isNaN(val))) {
+  if (val != null && (typeof val !== 'number' || !Number.isNaN(val))) {
     const num = toNumber(val as Prisma.Decimal | number);
     if (Number.isFinite(num) && num >= 0) return num;
   }
