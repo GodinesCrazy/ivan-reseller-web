@@ -48,6 +48,7 @@ export class ScheduledTasksService {
     private conversionRateOptimizationQueue: Queue | null = null;
     private listingStateReconciliationQueue: Queue | null = null;
     private competitorIntelligenceQueue: Queue | null = null;
+    private autonomousRevenueMonitorQueue: Queue | null = null;
     private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
@@ -73,6 +74,7 @@ export class ScheduledTasksService {
     private conversionRateOptimizationWorker: Worker | null = null;
     private listingStateReconciliationWorker: Worker | null = null;
     private competitorIntelligenceWorker: Worker | null = null;
+    private autonomousRevenueMonitorWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
 
@@ -216,6 +218,11 @@ export class ScheduledTasksService {
 
     // Phase 18: Competitor Intelligence — daily
     this.competitorIntelligenceQueue = new Queue('competitor-intelligence', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 22: Autonomous Revenue Monitor — every 6 hours
+    this.autonomousRevenueMonitorQueue = new Queue('autonomous-revenue-monitor', {
       connection: this.bullMQRedis as any
     });
   }
@@ -779,6 +786,47 @@ export class ScheduledTasksService {
         });
       });
     }
+
+    // Phase 22: Autonomous Revenue Monitor — every 6 hours
+    if (this.autonomousRevenueMonitorQueue) {
+      this.autonomousRevenueMonitorWorker = new Worker(
+        'autonomous-revenue-monitor',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running autonomous revenue monitor', { jobId: job.id });
+          const { runAutonomousRevenueMonitor } = await import('./autonomous-revenue-monitor.service');
+          const report = await runAutonomousRevenueMonitor({ triggerOptimizations: true });
+          const triggered = report.optimizationActions.some((a) => a.triggered);
+          if (triggered) {
+            if (this.dynamicPricingQueue) {
+              await this.dynamicPricingQueue.add('revenue-monitor-trigger', {}, { removeOnComplete: 5 });
+            }
+            if (this.conversionRateOptimizationQueue) {
+              this.conversionRateOptimizationQueue.add('revenue-monitor-trigger', {}, { removeOnComplete: 5 }).catch(() => {});
+            }
+            if (this.dynamicMarketplaceOptimizationQueue) {
+              this.dynamicMarketplaceOptimizationQueue.add('revenue-monitor-trigger', { executeActions: true }, { removeOnComplete: 5 }).catch(() => {});
+            }
+          }
+          return { reportTimestamp: report.timestamp, actionsTriggered: triggered };
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.autonomousRevenueMonitorWorker.on('completed', (job, result) => {
+        logger.info('Scheduled Tasks: Autonomous revenue monitor completed', {
+          jobId: job?.id,
+          actionsTriggered: result?.actionsTriggered,
+        });
+      });
+      this.autonomousRevenueMonitorWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Autonomous revenue monitor failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
   }
 
   private async runAliExpressTokenRefresh(): Promise<{ refreshed: boolean; reason?: string }> {
@@ -1149,6 +1197,21 @@ export class ScheduledTasksService {
           backoff: { type: 'exponential', delay: 120000 },
         }
       );
+    }
+
+    // Phase 22: Autonomous Revenue Monitor — every 6 hours
+    const revenueMonitorCron = process.env.REVENUE_MONITOR_CRON || '0 */6 * * *';
+    if (this.autonomousRevenueMonitorQueue) {
+      this.autonomousRevenueMonitorQueue.add(
+        'autonomous-revenue-monitor-run',
+        {},
+        {
+          repeat: { pattern: revenueMonitorCron },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+      logger.info('Scheduled Tasks: Autonomous revenue monitor scheduled', { cron: revenueMonitorCron });
     }
 
     logger.info('Scheduled Tasks: Tasks scheduled successfully');
@@ -1935,6 +1998,12 @@ export class ScheduledTasksService {
     }
     if (this.competitorIntelligenceQueue) {
       await this.competitorIntelligenceQueue.close();
+    }
+    if (this.autonomousRevenueMonitorWorker) {
+      await this.autonomousRevenueMonitorWorker.close();
+    }
+    if (this.autonomousRevenueMonitorQueue) {
+      await this.autonomousRevenueMonitorQueue.close();
     }
   }
 

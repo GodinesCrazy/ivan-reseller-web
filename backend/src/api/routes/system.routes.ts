@@ -491,4 +491,35 @@ router.post('/run-listing-compliance-audit', authenticate, async (req: Request, 
   }
 });
 
+/**
+ * Phase 22: GET /api/system/revenue-monitor-report
+ * Last Autonomous Revenue Monitor report (stored after each run).
+ */
+router.get('/revenue-monitor-report', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const { getLastRevenueMonitorReport } = await import('../../services/autonomous-revenue-monitor.service');
+    const report = await getLastRevenueMonitorReport();
+    return res.status(200).json({ success: true, report: report ?? null });
+  } catch (err: any) {
+    logger.error('[SYSTEM/REVENUE-MONITOR-REPORT] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to load revenue monitor report' });
+  }
+});
+
+/**
+ * Phase 22: POST /api/system/run-revenue-monitor
+ * Run Autonomous Revenue Monitor once (and optionally trigger optimization jobs).
+ */
+router.post('/run-revenue-monitor', authenticate, async (req: Request, res: Response) => {
+  try {
+    const triggerOptimizations = (req.body?.triggerOptimizations as boolean) !== false;
+    const { runAutonomousRevenueMonitor } = await import('../../services/autonomous-revenue-monitor.service');
+    const report = await runAutonomousRevenueMonitor({ triggerOptimizations });
+    return res.status(200).json({ success: true, report });
+  } catch (err: any) {
+    logger.error('[SYSTEM/RUN-REVENUE-MONITOR] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Revenue monitor run failed' });
+  }
+});
+
 export default router;

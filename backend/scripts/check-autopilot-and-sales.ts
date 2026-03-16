@@ -10,6 +10,7 @@
  *
  * Usage:
  *   npm run check-autopilot-and-sales
+ *   npx tsx scripts/check-autopilot-and-sales.ts https://ivan-reseller-backend-production.up.railway.app
  *   Or: API_BASE_URL=https://... AUTOPILOT_LOGIN_USER=... AUTOPILOT_LOGIN_PASSWORD=... npx tsx scripts/check-autopilot-and-sales.ts
  */
 
@@ -21,7 +22,12 @@ import axios, { AxiosInstance } from 'axios';
 config({ path: path.join(process.cwd(), '.env.local'), override: true });
 config({ path: path.join(process.cwd(), '.env'), override: true });
 
-const API_BASE_URL = (process.env.API_BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
+const baseUrlArg = process.argv[2];
+const defaultBase = (process.env.API_BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
+const API_BASE_URL =
+  baseUrlArg && (baseUrlArg.startsWith('http://') || baseUrlArg.startsWith('https://'))
+    ? baseUrlArg.replace(/\/$/, '')
+    : defaultBase;
 const LOGIN_USER = process.env.AUTOPILOT_LOGIN_USER || process.env.E2E_LOGIN_USER;
 const LOGIN_PASSWORD = process.env.AUTOPILOT_LOGIN_PASSWORD || process.env.E2E_LOGIN_PASSWORD;
 
@@ -86,6 +92,7 @@ async function main(): Promise<void> {
 
   const marketplacesStr = targetMarketplaces.length > 0 ? targetMarketplaces.join(', ') : 'none';
   console.log('--- Autopilot ---');
+  console.log(`Autopilot activado: ${running ? 'sí' : 'no'}`);
   console.log(`Autopilot: ${running ? 'running' : 'stopped'} | lastRun: ${lastRun ?? 'n/a'} | targetMarketplaces: ${marketplacesStr}`);
 
   // 2. Optional: GET config to confirm
@@ -118,6 +125,28 @@ async function main(): Promise<void> {
     const parts = Object.entries(byMarketplace).map(([mp, count]) => `${mp}: ${count}`);
     console.log('--- Ventas ---');
     console.log(`Ventas: ${total} total (${parts.join(', ')})`);
+  }
+
+  // 4. Autopilot metrics (profit today/month, daily sales, active listings)
+  console.log('--- Utilidades ---');
+  const metricsRes = await client.get('/api/dashboard/autopilot-metrics', { headers: authHeaders });
+  if (metricsRes.status !== 200) {
+    console.error('[check-autopilot-and-sales] GET /api/dashboard/autopilot-metrics failed:', metricsRes.status);
+    console.log('Generando utilidades: no disponible (error API)');
+  } else {
+    const m = metricsRes.data as {
+      profitToday?: number;
+      profitMonth?: number;
+      dailySales?: number;
+      activeListings?: number;
+    };
+    const profitToday = m.profitToday ?? 0;
+    const profitMonth = m.profitMonth ?? 0;
+    const dailySales = m.dailySales ?? 0;
+    const activeListings = m.activeListings ?? 0;
+    console.log(`profitToday: ${profitToday}, profitMonth: ${profitMonth}, dailySales: ${dailySales}, activeListings: ${activeListings}`);
+    const hasProfit = (profitMonth != null && profitMonth > 0) || (profitToday != null && profitToday > 0);
+    console.log(`Generando utilidades: ${hasProfit ? 'sí' : 'no'}`);
   }
 
   process.exit(0);
