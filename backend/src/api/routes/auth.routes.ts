@@ -5,6 +5,7 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { loginRateLimit } from '../../middleware/rate-limit.middleware';
 import { changePasswordSchema as changePasswordValidationSchema, registerPasswordSchema } from '../../utils/password-validation';
 import { z } from 'zod';
+import logger from '../../config/logger';
 import { prisma } from '../../config/database';
 import bcrypt from 'bcryptjs';
 
@@ -38,6 +39,7 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
 // POST /api/auth/login - Cookie-based session (JWT in httpOnly cookie)
 router.post('/login', async (req: Request, res: Response) => {
   try {
+    console.log('[LOGIN] body keys:', Object.keys(req.body || {}));
     const { username, password } = req.body || {};
     if (!username || !password) {
       return res.status(400).json({
@@ -54,12 +56,25 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ success: false });
     }
 
-    const ok = await bcrypt.compare(password, user.password);
+    let ok: boolean;
+    try {
+      ok = await bcrypt.compare(password, user.password);
+    } catch (bcryptErr) {
+      console.error('LOGIN_FATAL_ERROR bcrypt', bcryptErr);
+      return res.status(401).json({ success: false });
+    }
     if (!ok) {
       return res.status(401).json({ success: false });
     }
 
-    const token = authService.generateToken(user.id, user.username, user.role);
+    // Set JWT in httpOnly cookie for session persistence (cross-origin: Vercel -> Railway)
+    let token: string;
+    try {
+      token = authService.generateToken(user.id, user.username, user.role);
+    } catch (tokenErr) {
+      console.error('LOGIN_FATAL_ERROR token', tokenErr);
+      return res.status(500).json({ success: false });
+    }
 
     try {
       res.cookie('token', token, {
@@ -69,8 +84,9 @@ router.post('/login', async (req: Request, res: Response) => {
         path: '/',
         maxAge: 60 * 60 * 1000, // 1 hour
       });
-    } catch (_) {
-      // Session still works via response body
+    } catch (cookieErr) {
+      console.error('COOKIE_SET_FAILED', cookieErr);
+      // Still return success - session works via response body
     }
 
     const requestOrigin = req.headers.origin;
@@ -79,6 +95,7 @@ router.post('/login', async (req: Request, res: Response) => {
     }
     res.header('Access-Control-Allow-Credentials', 'true');
 
+    console.log('[LOGIN] success for user', user.username);
     return res.json({
       success: true,
       user: {
@@ -88,7 +105,7 @@ router.post('/login', async (req: Request, res: Response) => {
       },
     });
   } catch (err) {
-    console.error('[LOGIN]', err);
+    console.error('LOGIN_FATAL_ERROR', err);
     return res.status(500).json({
       success: false,
       error: 'Internal login error',
