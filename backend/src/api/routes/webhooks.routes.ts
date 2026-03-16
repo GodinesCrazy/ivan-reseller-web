@@ -191,6 +191,7 @@ async function recordSaleFromWebhook(params: {
         category: 'SALE',
         priority: 'HIGH',
         data: { orderId: order.id, saleId: sale.id, marketplaceOrderId, marketplace, amount: salePrice },
+        actions: [{ id: 'view_sale', label: 'Ver venta', url: '/sales', variant: 'primary' }],
       });
       return sale;
     }

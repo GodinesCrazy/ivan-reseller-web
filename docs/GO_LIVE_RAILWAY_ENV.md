@@ -27,6 +27,14 @@ Configura en **Railway** (proyecto backend) las siguientes variables. Sin ellas 
 
 Ver `docs/PHASE19_DEEP_SYSTEM_AUDIT_REPORT.md` (Task 15).
 
+**Notificaciones de venta por email:**
+
+| Variable | Valor | Propósito |
+|----------|--------|-----------|
+| `EMAIL_ENABLED` | `true` | Enviar notificaciones (ej. ventas) al email del usuario. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | (según proveedor) | Configuración SMTP (Gmail, SendGrid, etc.). |
+| `SALE_NOTIFICATION_EMAIL` | (ej. `ivanmarty5338@gmail.com`) | Copia de cada aviso de venta a este correo (o único destinatario si el usuario no tiene email). |
+
 ---
 
 ## 2. Checklist de variables obligatorias en producción

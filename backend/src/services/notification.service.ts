@@ -233,26 +233,25 @@ class NotificationService {
   }
 
   /**
-   * ✅ MEJORADO: Enviar notificación por email
+   * ✅ MEJORADO: Enviar notificación por email.
+   * Para SALE_CREATED: envía a user.email (si existe y EMAIL_ENABLED) y/o a SALE_NOTIFICATION_EMAIL si está configurado.
    */
   private async sendEmailNotification(userId: number, notification: NotificationPayload): Promise<void> {
     try {
       const { prisma } = await import('../config/database');
       const user = await prisma.user.findUnique({ where: { id: userId } });
-      
-      if (!user || !user.email) {
-        return; // No email configured
-      }
-
-      // Verificar si email está habilitado
       const emailEnabled = process.env.EMAIL_ENABLED === 'true';
-      if (!emailEnabled) {
-        return; // Email notifications disabled
+      const saleNotificationEmail = (process.env.SALE_NOTIFICATION_EMAIL || '').trim();
+      const isSaleCreated = notification.type === 'SALE_CREATED';
+
+      // Determinar destinatarios: usuario (si tiene email y email habilitado) y/o correo adicional de ventas
+      const sendToUser = user?.email && emailEnabled;
+      const sendToSaleEmail = isSaleCreated && saleNotificationEmail.length > 0;
+      if (!sendToUser && !sendToSaleEmail) {
+        return;
       }
 
-      // Usar servicio de email si está disponible
       const { default: nodemailer } = await import('nodemailer');
-      
       const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'smtp.gmail.com',
         port: parseInt(process.env.SMTP_PORT || '587'),
@@ -263,6 +262,8 @@ class NotificationService {
         },
       });
 
+      const frontendUrl = (process.env.FRONTEND_URL || process.env.WEB_BASE_URL || '').replace(/\/$/, '');
+      const salesLink = frontendUrl ? `${frontendUrl}/sales` : '/sales';
       const emailSubject = `[Ivan Reseller] ${notification.title}`;
       const emailHtml = `
         <!DOCTYPE html>
@@ -289,14 +290,19 @@ class NotificationService {
               ${notification.data ? `
                 <div style="background: white; padding: 15px; border-radius: 5px; margin: 15px 0;">
                   <strong>Detalles:</strong><br>
-                  ${Object.entries(notification.data).map(([key, value]) => 
+                  ${Object.entries(notification.data).map(([key, value]) =>
                     `<strong>${key}:</strong> ${value}<br>`
                   ).join('')}
                 </div>
               ` : ''}
-              ${notification.actions && notification.actions.length > 0 ? `
+              ${frontendUrl ? `
                 <div style="text-align: center; margin: 20px 0;">
-                  ${notification.actions.map(action => 
+                  <a href="${salesLink}" class="button">Ver ventas</a>
+                </div>
+              ` : ''}
+              ${notification.actions && notification.actions.length > 0 && !frontendUrl ? `
+                <div style="text-align: center; margin: 20px 0;">
+                  ${notification.actions.map(action =>
                     action.url ? `<a href="${action.url}" class="button">${action.label}</a>` : ''
                   ).join(' ')}
                 </div>
@@ -310,17 +316,29 @@ class NotificationService {
         </html>
       `;
 
-      await transporter.sendMail({
+      const mailOptions = {
         from: process.env.SMTP_FROM || 'noreply@ivanreseller.com',
-        to: user.email,
         subject: emailSubject,
         html: emailHtml,
         text: notification.message,
-      });
+      };
 
-      console.log(`📧 Email notification sent to ${user.email}: ${notification.title}`);
+      if (sendToUser && user!.email) {
+        await transporter.sendMail({
+          ...mailOptions,
+          to: user!.email,
+        });
+        console.log(`📧 Email notification sent to ${user!.email}: ${notification.title}`);
+      }
+
+      if (sendToSaleEmail && saleNotificationEmail) {
+        await transporter.sendMail({
+          ...mailOptions,
+          to: saleNotificationEmail,
+        });
+        console.log(`📧 Sale notification copy sent to ${saleNotificationEmail}: ${notification.title}`);
+      }
     } catch (error) {
-      // No fallar si el email no se puede enviar
       console.error('Error sending email notification', error);
     }
   }
