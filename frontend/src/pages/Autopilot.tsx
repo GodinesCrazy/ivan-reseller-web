@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   Play, 
   Pause, 
@@ -67,6 +67,9 @@ interface AutopilotStats {
   lastRunTime?: string;
 }
 
+/** Id used for the virtual "main cycle" workflow row (not stored in DB). */
+const MAIN_CYCLE_WORKFLOW_ID = 0;
+
 /** Production status from GET /api/autopilot/status */
 interface AutopilotStatusResponse {
   running: boolean;
@@ -76,7 +79,12 @@ interface AutopilotStatusResponse {
   opportunitiesGenerated?: number;
   successRate?: number;
   lastRun?: string | null;
-  config?: { targetMarketplaces?: string[]; targetMarketplace?: string };
+  config?: {
+    targetMarketplaces?: string[];
+    targetMarketplace?: string;
+    cycleIntervalMinutes?: number;
+    enabled?: boolean;
+  };
   currentPhase?: 'idle' | 'searching' | 'filtering' | 'analyzing' | 'publishing';
   cycleStartedAt?: string | null;
   currentCycleProgress?: {
@@ -383,6 +391,39 @@ export default function Autopilot() {
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, []);
+
+  // Workflow virtual del ciclo principal (Start Autopilot) para mostrarlo en la tabla
+  const mainCycleWorkflow = useMemo((): Workflow | null => {
+    if (autopilotStatus == null && stats == null) return null;
+    const intervalMin = autopilotStatus?.config?.cycleIntervalMinutes ?? 15;
+    const lastRunRaw = autopilotStatus?.lastRun ?? stats?.lastRunTime ?? null;
+    const lastRun = typeof lastRunRaw === 'string' ? lastRunRaw : (lastRunRaw != null ? new Date(lastRunRaw).toISOString() : null);
+    let nextRun: string | undefined;
+    if (lastRun) {
+      const next = new Date(new Date(lastRun).getTime() + intervalMin * 60 * 1000);
+      nextRun = next.toISOString();
+    }
+    return {
+      id: MAIN_CYCLE_WORKFLOW_ID,
+      name: 'Ciclo principal Autopilot',
+      description: 'Buscar oportunidades y publicar en marketplaces (Start/Stop arriba).',
+      type: 'publish',
+      enabled: autopilotRunning ?? autopilotStatus?.config?.enabled ?? false,
+      schedule: `Cada ${intervalMin} min`,
+      lastRun: lastRun ?? undefined,
+      nextRun,
+      runCount: stats?.totalRuns ?? 0,
+      successRate: ((stats?.successRate ?? 0) * 100),
+      createdAt: '',
+      conditions: {},
+      actions: {},
+    };
+  }, [autopilotStatus, stats, autopilotRunning]);
+
+  const displayWorkflows = useMemo(
+    () => (mainCycleWorkflow ? [mainCycleWorkflow, ...workflows] : workflows),
+    [mainCycleWorkflow, workflows]
+  );
 
   const handleConnectEbay = async () => {
     setEbayOAuthing(true);
@@ -740,6 +781,18 @@ export default function Autopilot() {
       loadData();
     } catch (error: any) {
       const errorMessage = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Error ejecutando workflow';
+      toast.error(errorMessage);
+    }
+  };
+
+  const runMainCycle = async () => {
+    try {
+      await api.post('/api/autopilot/run-cycle', {});
+      toast.success('Ciclo principal ejecutado');
+      loadData();
+      checkAutopilotStatus();
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Error ejecutando ciclo';
       toast.error(errorMessage);
     }
   };
@@ -1416,7 +1469,7 @@ export default function Autopilot() {
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
         <div className="bg-gray-50 dark:bg-gray-900 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Workflows ({workflows.length})
+            Workflows ({displayWorkflows.length})
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
             Los workflows personalizados automatizan tareas adicionales (ej. búsqueda de oportunidades). El &quot;Resumen del último ciclo&quot; mostrado arriba corresponde al <strong>ciclo principal del Autopilot</strong> (Start Autopilot). Los workflows tipo &quot;search&quot; ejecutan ciclos independientes y solo buscan oportunidades; para publicar en eBay o Mercado Libre usa <strong>Start Autopilot</strong>.
@@ -1438,7 +1491,7 @@ export default function Autopilot() {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {workflows.length === 0 && (
+              {displayWorkflows.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-6 py-8 text-center">
                     <div className="flex flex-col items-center gap-3 text-gray-500 dark:text-gray-400">
@@ -1456,10 +1509,22 @@ export default function Autopilot() {
                   </td>
                 </tr>
               )}
-              {workflows.map((workflow) => (
-                <tr key={workflow.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+              {displayWorkflows.map((workflow) => {
+                const isMainCycle = workflow.id === MAIN_CYCLE_WORKFLOW_ID;
+                return (
+                <tr
+                  key={workflow.id}
+                  className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isMainCycle ? 'border-l-4 border-primary-500 bg-gray-50/50 dark:bg-gray-900/50' : ''}`}
+                >
                   <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{workflow.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{workflow.name}</span>
+                      {isMainCycle && (
+                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200">
+                          Principal
+                        </span>
+                      )}
+                    </div>
                     {workflow.description && (
                       <div className="text-sm text-gray-500">{workflow.description}</div>
                     )}
@@ -1512,51 +1577,55 @@ export default function Autopilot() {
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end gap-2">
                       <button
-                        onClick={() => runWorkflow(workflow.id)}
+                        onClick={() => isMainCycle ? runMainCycle() : runWorkflow(workflow.id)}
                         className="text-green-600 hover:text-green-900"
-                        title="Run Now"
+                        title={isMainCycle ? 'Ejecutar ciclo ahora' : 'Run Now'}
                       >
                         <Play className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => loadLogs(workflow.id)}
+                        onClick={() => (isMainCycle ? loadLogs() : loadLogs(workflow.id))}
                         className="text-purple-600 hover:text-purple-900"
                         title="View Logs"
                       >
                         <Activity className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => openWorkflowModal(workflow)}
-                        className="text-blue-600 hover:text-blue-900"
-                        title="Edit"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => duplicateWorkflow(workflow)}
-                        className="text-gray-600 hover:text-gray-900"
-                        title="Duplicate"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => toggleWorkflow(workflow.id, workflow.enabled)}
-                        className="text-yellow-600 hover:text-yellow-900"
-                        title={workflow.enabled ? 'Disable' : 'Enable'}
-                      >
-                        {workflow.enabled ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                      </button>
-                      <button
-                        onClick={() => deleteWorkflow(workflow.id)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {!isMainCycle && (
+                        <>
+                          <button
+                            onClick={() => openWorkflowModal(workflow)}
+                            className="text-blue-600 hover:text-blue-900"
+                            title="Edit"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => duplicateWorkflow(workflow)}
+                            className="text-gray-600 hover:text-gray-900"
+                            title="Duplicate"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => toggleWorkflow(workflow.id, workflow.enabled)}
+                            className="text-yellow-600 hover:text-yellow-900"
+                            title={workflow.enabled ? 'Disable' : 'Enable'}
+                          >
+                            {workflow.enabled ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                          </button>
+                          <button
+                            onClick={() => deleteWorkflow(workflow.id)}
+                            className="text-red-600 hover:text-red-900"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         </div>
