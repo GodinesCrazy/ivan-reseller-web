@@ -23,22 +23,22 @@ interface CycleStepsBreadcrumbProps {
 
 export default function CycleStepsBreadcrumb({ currentStep, compact = false }: CycleStepsBreadcrumbProps) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+    <div className="flex flex-wrap items-center gap-1.5 text-xs dark:text-gray-300">
       {STEPS.map((step, i) => {
         const Icon = step.icon;
         const isCurrent = step.id === currentStep;
         const href = step.path + (step.search || '');
         return (
           <span key={step.id} className="flex items-center gap-1">
-            {i > 0 && <span className="text-gray-300">→</span>}
+            {i > 0 && <span className="text-gray-300 dark:text-gray-500">→</span>}
             {isCurrent ? (
-              <span className="flex items-center gap-1 px-2 py-1 bg-primary-100 text-primary-800 rounded font-medium">
+              <span className="flex items-center gap-1 px-2 py-1 bg-primary-100 text-primary-800 rounded font-medium dark:bg-primary-900/50 dark:text-primary-200">
                 <Icon className="w-3.5 h-3.5" /> {step.label}
               </span>
             ) : (
               <Link
                 to={href}
-                className="flex items-center gap-1 px-2 py-1 text-gray-600 hover:bg-gray-100 rounded hover:text-primary-600 transition"
+                className="flex items-center gap-1 px-2 py-1 text-gray-600 hover:bg-gray-100 rounded hover:text-primary-600 transition dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
               >
                 <Icon className="w-3.5 h-3.5" /> {step.label}
               </Link>
