@@ -105,6 +105,11 @@ export class WorkflowSchedulerService {
             await this.scheduleWorkflow(workflow.id, workflow.userId, workflow.schedule);
             scheduledCount++;
 
+            // If nextRun in DB is in the past, recalculate and persist so UI shows correct next run
+            if (workflow.nextRun && workflow.nextRun < new Date()) {
+              await this.updateNextRun(workflow.id, workflow.schedule);
+            }
+
             logger.debug('WorkflowScheduler: Workflow cargado y programado', {
               workflowId: workflow.id,
               userId: workflow.userId,
@@ -216,6 +221,9 @@ export class WorkflowSchedulerService {
             this.unscheduleWorkflow(workflowId);
             return;
           }
+
+          // Update nextRun at start of tick so DB stays correct even if execution fails
+          await this.updateNextRun(workflowId, cronExpression);
 
           // ✅ Q2: Ejecutar workflow usando el executor (integración correcta)
           const result = await workflowExecutorService.executeWorkflow(workflowId, userId);

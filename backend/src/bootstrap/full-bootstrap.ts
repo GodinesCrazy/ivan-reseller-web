@@ -407,7 +407,12 @@ export async function fullBootstrap(startTime: number): Promise<void> {
       await workflowSchedulerService.initialize();
       logMilestone('Workflow Scheduler initialized');
     } catch (error: any) {
-      console.warn('??  Warning: Could not initialize workflow scheduler:', error.message);
+      const { logger } = await import('../config/logger');
+      logger.error('[BOOT] Workflow Scheduler failed to initialize – Autopilot cron cycles will not run', {
+        error: error?.message || String(error),
+        stack: error?.stack,
+      });
+      console.error('[BOOT] Workflow Scheduler failed to initialize. Autopilot scheduled cycles will not run until next deploy or manual reload.');
     }
 
     // Autopilot: init and auto-start when config.enabled (done inside initializeAutopilot)

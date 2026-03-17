@@ -103,6 +103,8 @@ router.get('/diagnostics', async (_req: Request, res: Response) => {
     lastCycle: null,
     productsPublished: 0,
     production_ready: false,
+    workflowSchedulerInitialized: false,
+    workflowScheduledCount: 0,
   };
 
   try {
@@ -160,6 +162,19 @@ router.get('/diagnostics', async (_req: Request, res: Response) => {
       }
     }
 
+    // Workflow scheduler (cron) state – reflects whether Autopilot workflow cycles are actually scheduled
+    try {
+      const { workflowSchedulerService } = await import('../../services/workflow-scheduler.service');
+      const wsStatus = workflowSchedulerService.getStatus();
+      diagnostics.workflowSchedulerInitialized = wsStatus.initialized;
+      diagnostics.workflowScheduledCount = wsStatus.scheduledWorkflows;
+      if (wsStatus.initialized && wsStatus.scheduledWorkflows > 0) {
+        diagnostics.scheduler = 'active';
+      }
+    } catch {
+      // non-fatal
+    }
+
     // Production ready = all critical OK
     const allOk =
       diagnostics.autopilot === 'OK' &&
@@ -197,6 +212,8 @@ router.get('/full-diagnostics', async (_req: Request, res: Response) => {
     lastCycle: null,
     productsInDatabase: 0,
     productsPublished: 0,
+    workflowSchedulerInitialized: 0,
+    workflowScheduledCount: 0,
   };
 
   try {
@@ -252,6 +269,19 @@ router.get('/full-diagnostics', async (_req: Request, res: Response) => {
       } catch {
         // non-fatal
       }
+    }
+
+    // Workflow scheduler (cron) state
+    try {
+      const { workflowSchedulerService } = await import('../../services/workflow-scheduler.service');
+      const wsStatus = workflowSchedulerService.getStatus();
+      diagnostics.workflowSchedulerInitialized = wsStatus.initialized ? 1 : 0;
+      diagnostics.workflowScheduledCount = wsStatus.scheduledWorkflows;
+      if (wsStatus.initialized && wsStatus.scheduledWorkflows > 0) {
+        diagnostics.scheduler = 'OK';
+      }
+    } catch {
+      // non-fatal
     }
 
     // Overall system

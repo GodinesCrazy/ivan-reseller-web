@@ -209,6 +209,21 @@ router.get('/status', async (req: Request, res: Response, next) => {
     const lastCycle = status.lastCycle;
     const workflowMode = await workflowConfigService.getWorkflowMode(userId);
 
+    let workflowScheduler: { initialized: boolean; scheduledCount: number } = {
+      initialized: false,
+      scheduledCount: 0,
+    };
+    try {
+      const { workflowSchedulerService } = await import('../../services/workflow-scheduler.service');
+      const wsStatus = workflowSchedulerService.getStatus();
+      workflowScheduler = {
+        initialized: wsStatus.initialized,
+        scheduledCount: wsStatus.scheduledWorkflows,
+      };
+    } catch {
+      // non-fatal
+    }
+
     res.json({
       success: true,
       running: isRunning,
@@ -225,6 +240,7 @@ router.get('/status', async (req: Request, res: Response, next) => {
       currentPhase: status.currentPhase,
       cycleStartedAt: status.cycleStartedAt ? status.cycleStartedAt.toISOString() : null,
       currentCycleProgress: status.currentCycleProgress,
+      workflowScheduler,
     });
   } catch (error) {
     next(error);
