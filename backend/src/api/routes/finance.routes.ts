@@ -629,7 +629,9 @@ router.get('/export/:format', async (req: Request, res: Response, next) => {
         `Total Profit,${totalProfit.toFixed(2)}`,
         `Gross Margin,${grossMargin.toFixed(2)}%`,
         `Sales Count,${sales.length}`,
-        `Commissions Count,${commissions.length}`
+        `Commissions Count,${commissions.length}`,
+        '',
+        'Note: All figures from recorded sales and commissions for the selected period.'
       ].join('\n');
 
       res.setHeader('Content-Type', 'text/csv');

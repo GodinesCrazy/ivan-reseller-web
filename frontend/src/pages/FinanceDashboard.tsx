@@ -20,7 +20,8 @@ import {
   Shield,
   Award,
   Target,
-  RotateCcw
+  RotateCcw,
+  Info
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
@@ -348,6 +349,10 @@ export default function FinanceDashboard() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Finance Dashboard</h1>
           <p className="text-gray-600">Consolidated KPIs: sales, commissions, payouts and balances</p>
+          <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5" title="Origen de los datos">
+            <Info className="w-3.5 h-3.5 shrink-0" />
+            Los datos de Summary, Ledger, Cashflow y Tax provienen de ventas y comisiones registradas. La proyección de beneficio es una estimación. El capital disponible puede venir de la API de PayPal o de tu configuración.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex border border-gray-300 rounded-lg overflow-hidden">
@@ -748,6 +753,7 @@ export default function FinanceDashboard() {
               <> · {profitProjection.historicalSales} ventas en los últimos 90 días</>
             )}
           </div>
+          <p className="mt-2 text-xs text-gray-500">Esta proyección es una estimación, no un dato contable.</p>
         </div>
       )}
 
