@@ -1735,6 +1735,41 @@ export class MarketplaceService {
     }
   }
 
+  private static ebayActiveCountCache: Map<number, { count: number; expiresAt: number }> = new Map();
+  private static EBAY_ACTIVE_COUNT_CACHE_TTL_MS = 5 * 60 * 1000;
+
+  /**
+   * Get count of active offers (published listings) on eBay (from eBay Inventory API).
+   * Cached 5 min to avoid excessive API calls.
+   */
+  async getEbayActiveCount(userId: number): Promise<number | null> {
+    const cached = MarketplaceService.ebayActiveCountCache.get(userId);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.count;
+    }
+    try {
+      const { resolveEnvironment } = await import('../utils/environment-resolver');
+      const env = await resolveEnvironment({ userId, default: 'production' });
+      const credentials = await this.getCredentials(userId, 'ebay', env);
+      if (!credentials || !credentials.isActive) return null;
+      const ebayService = new EbayService({
+        ...(credentials.credentials as EbayCredentials),
+        sandbox: env === 'sandbox',
+      });
+      const total = await ebayService.getActiveOffersCount();
+      if (total !== null && Number.isFinite(total)) {
+        MarketplaceService.ebayActiveCountCache.set(userId, {
+          count: total,
+          expiresAt: Date.now() + MarketplaceService.EBAY_ACTIVE_COUNT_CACHE_TTL_MS,
+        });
+        return total;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Check ML listings for IP policy compliance (title/description: no "tipo X", "símil", "réplica", etc.).
    */

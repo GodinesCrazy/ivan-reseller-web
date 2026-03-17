@@ -1065,6 +1065,46 @@ export class EbayService {
   }
 
   /**
+   * Get count of active offers (published listings) from eBay Inventory API.
+   * Used for dashboard "Publicados" to show real marketplace count.
+   * Returns null on error or missing credentials.
+   */
+  async getActiveOffersCount(): Promise<number | null> {
+    try {
+      await this.ensureAccessToken();
+      const invHeaders = { 'Content-Language': 'en-US' };
+      const resp = await this.apiClient.get('/sell/inventory/v1/offer', {
+        params: { limit: 1, offset: 0 },
+        headers: invHeaders,
+      });
+      const total = resp.data?.total;
+      if (typeof total === 'number' && Number.isFinite(total) && total >= 0) return total;
+      if (typeof total === 'string') {
+        const n = parseInt(total, 10);
+        if (Number.isFinite(n) && n >= 0) return n;
+      }
+      // If no total in response, paginate to count
+      let count = 0;
+      const limit = 200;
+      let offset = 0;
+      while (true) {
+        const page = await this.apiClient.get('/sell/inventory/v1/offer', {
+          params: { limit, offset },
+          headers: invHeaders,
+        });
+        const offers = page.data?.offers || [];
+        count += offers.length;
+        if (offers.length < limit) break;
+        offset += limit;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return count;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Get account information
    */
   async getAccountInfo(): Promise<any> {
