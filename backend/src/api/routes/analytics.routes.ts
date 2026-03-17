@@ -540,6 +540,9 @@ router.get('/control-center-funnel', async (req: Request, res: Response) => {
     if (!userId && !isAdmin) return res.status(401).json({ error: 'Unauthorized' });
 
     const whereUser = isAdmin ? {} : { userId: userId! };
+    const rawEnv = (req.query.environment as string)?.toLowerCase();
+    const environment = rawEnv === 'sandbox' || rawEnv === 'all' ? rawEnv : 'production';
+    const saleEnvFilter = environment === 'all' ? {} : { environment };
 
     const [
       trendSignalsCount,
@@ -571,6 +574,7 @@ router.get('/control-center-funnel', async (req: Request, res: Response) => {
       by: ['marketplace'],
       where: {
         ...(isAdmin ? {} : { userId }),
+        ...saleEnvFilter,
         createdAt: { gte: since },
         status: { in: ['DELIVERED', 'COMPLETED'] },
       },

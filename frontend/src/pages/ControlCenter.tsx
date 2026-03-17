@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import api from '@services/api';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 interface FunnelStage {
   stage: string;
@@ -72,6 +73,7 @@ interface AutopilotStatus {
 }
 
 export default function ControlCenter() {
+  const { environment } = useEnvironment();
   const [funnel, setFunnel] = useState<ControlCenterFunnel | null>(null);
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
   const [metrics, setMetrics] = useState<AutopilotMetrics | null>(null);
@@ -84,9 +86,9 @@ export default function ControlCenter() {
     setLoading(true);
     setError(null);
     Promise.all([
-      api.get('/api/analytics/control-center-funnel').then((r) => r.data),
+      api.get('/api/analytics/control-center-funnel', { params: { environment } }).then((r) => r.data),
       api.get('/api/system/readiness-report').then((r) => r.data),
-      api.get('/api/dashboard/autopilot-metrics').then((r) => r.data),
+      api.get('/api/dashboard/autopilot-metrics', { params: { environment } }).then((r) => r.data),
       api.get('/api/autopilot/status').then((r) => r.data).catch(() => ({ running: false, status: 'unknown', lastRun: null })),
     ])
       .then(([funnelData, readinessData, metricsData, autopilotData]) => {
@@ -118,7 +120,7 @@ export default function ControlCenter() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [environment]);
 
   const statusIcon = (status: string) => {
     if (status === 'ok' || status === 'enabled' || status === 'running') {
