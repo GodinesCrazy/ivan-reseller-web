@@ -1,5 +1,20 @@
 # Redis en Railway: Redis y Workers en "ok"
 
+## Recuperacion rapida (Redis parado)
+
+Si en Control Center ves Redis o Workers en "degraded" o "fail" (o en Railway el Redis muestra "The database deployment has stopped running"), ejecuta con **Railway CLI** desde el directorio del backend (con el proyecto enlazado, `railway link`, y CLI instalado):
+
+1. **Reiniciar Redis:**  
+   `railway service restart -s Redis -y`
+
+2. **Redeploy del backend:**  
+   `railway service redeploy -s ivan-reseller-backend -y`
+
+O desde la raiz del repo puedes ejecutar el script:  
+`./backend/scripts/railway-restart-redis-and-backend.ps1` (Windows PowerShell) o `./backend/scripts/railway-restart-redis-and-backend.sh` (Linux/Mac).
+
+En el Dashboard de Railway tambien puedes: servicio **Redis** > Deployments o Database > **Restart** (o Redeploy); y servicio **ivan-reseller-backend** > **Redeploy**. Luego comprueba en Control Center que Redis y Workers pasen a "ok".
+
 ## Por que Redis y Workers salen "degraded"
 
 En el Control Center, **Redis** y **Workers** aparecen en estado "degraded" cuando en el backend de Railway **no esta configurada la variable `REDIS_URL`** (o esta vacia). El sistema de salud comprueba:

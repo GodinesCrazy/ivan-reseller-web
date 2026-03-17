@@ -225,6 +225,30 @@ export default function ControlCenter() {
             )}
           </div>
 
+          {((readiness.health.redis === 'degraded' || readiness.health.redis === 'fail') ||
+            ((readiness.health.workers ?? readiness.workerStatus) === 'degraded' ||
+              (readiness.health.workers ?? readiness.workerStatus) === 'fail')) && (
+            <div className="mt-4 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+              <p className="font-medium text-amber-800 dark:text-amber-200">
+                Redis o Workers no disponibles
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                Los jobs del Dashboard (Demand Radar, Strategy Brain, etc.) no se ejecutan. Reinicia
+                Redis en Railway: servicio Redis → Deployments o Database → Restart/Redeploy. Si hace
+                falta, redeploya también el backend (ivan-reseller-backend).
+              </p>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-2 font-mono bg-amber-100/50 dark:bg-amber-900/30 px-2 py-1 rounded">
+                railway service restart -s Redis -y
+                <br />
+                railway service redeploy -s ivan-reseller-backend -y
+              </p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                Ejecutar desde el directorio backend con Railway CLI enlazado. Ver más en
+                backend/docs/RAILWAY_REDIS_SETUP.md
+              </p>
+            </div>
+          )}
+
           {/* Utilidades: indicador claro de si el sistema está generando ganancias */}
           {metrics != null && (
             <div className="mt-6 p-4 rounded-xl border-2 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10">
