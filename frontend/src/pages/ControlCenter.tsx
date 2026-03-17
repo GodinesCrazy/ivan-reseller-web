@@ -57,9 +57,25 @@ interface ReadinessReport {
   timestamp?: string;
 }
 
+interface AutopilotMetrics {
+  profitToday: number;
+  profitMonth: number;
+  dailySales: number;
+  activeListings: number;
+}
+
+interface AutopilotStatus {
+  running: boolean;
+  status: string;
+  lastRun: string | null;
+  config?: { enabled?: boolean; cycleIntervalMinutes?: number };
+}
+
 export default function ControlCenter() {
   const [funnel, setFunnel] = useState<ControlCenterFunnel | null>(null);
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
+  const [metrics, setMetrics] = useState<AutopilotMetrics | null>(null);
+  const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,11 +86,25 @@ export default function ControlCenter() {
     Promise.all([
       api.get('/api/analytics/control-center-funnel').then((r) => r.data),
       api.get('/api/system/readiness-report').then((r) => r.data),
+      api.get('/api/dashboard/autopilot-metrics').then((r) => r.data),
+      api.get('/api/autopilot/status').then((r) => r.data).catch(() => ({ running: false, status: 'unknown', lastRun: null })),
     ])
-      .then(([funnelData, readinessData]) => {
+      .then(([funnelData, readinessData, metricsData, autopilotData]) => {
         if (!cancelled) {
           setFunnel(funnelData);
           setReadiness(readinessData);
+          setMetrics({
+            profitToday: metricsData.profitToday ?? 0,
+            profitMonth: metricsData.profitMonth ?? 0,
+            dailySales: metricsData.dailySales ?? 0,
+            activeListings: metricsData.activeListings ?? 0,
+          });
+          setAutopilotStatus({
+            running: autopilotData.running === true,
+            status: autopilotData.status ?? 'unknown',
+            lastRun: autopilotData.lastRun ?? null,
+            config: autopilotData.config,
+          });
         }
       })
       .catch((err) => {
@@ -173,7 +203,71 @@ export default function ControlCenter() {
                 </p>
               </div>
             </div>
+            {autopilotStatus != null && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 sm:col-span-2 lg:col-span-1">
+                {statusIcon(autopilotStatus.running ? 'running' : 'disabled')}
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-900 dark:text-gray-100">Ciclos de dropshipping</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {autopilotStatus.running
+                      ? 'En ejecución (Autopilot activo)'
+                      : autopilotStatus.config?.enabled
+                        ? 'Parados (revisar logs o iniciar en Autopilot)'
+                        : 'Parados (activar en Autopilot)'}
+                    {autopilotStatus.lastRun && (
+                      <> · Último ciclo: {new Date(autopilotStatus.lastRun).toLocaleString()}</>
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Utilidades: indicador claro de si el sistema está generando ganancias */}
+          {metrics != null && (
+            <div className="mt-6 p-4 rounded-xl border-2 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                Utilidades
+              </h3>
+              <div className="mt-3 flex flex-wrap items-baseline gap-6">
+                <div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Hoy: </span>
+                  <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                    ${metrics.profitToday.toFixed(2)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Este mes: </span>
+                  <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                    ${metrics.profitMonth.toFixed(2)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Ventas hoy: </span>
+                  <span className="font-semibold text-gray-900 dark:text-gray-100">{metrics.dailySales}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {(metrics.profitMonth > 0 || metrics.profitToday > 0) ? (
+                    <>
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <span className="font-semibold text-green-700 dark:text-green-400">
+                        Generando utilidades: Sí
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="h-5 w-5 text-amber-500" />
+                      <span className="font-medium text-amber-700 dark:text-amber-400">
+                        Generando utilidades: No (aún no hay ventas con ganancia registradas)
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {readiness.health.alerts && readiness.health.alerts.length > 0 && (
             <div className="mt-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
               <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Alerts</p>

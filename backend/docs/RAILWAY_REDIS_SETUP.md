@@ -15,6 +15,26 @@ Si en Railway ya tienes un servicio **Redis** pero el Control Center sigue mostr
 
 **Pasos para corregirlo:**
 
+**Opción A – Railway CLI (recomendado)**
+
+Con el proyecto enlazado (`railway link` en el repo del backend) y CLI instalado:
+
+1. **Reiniciar Redis:**  
+   `railway service restart -s Redis -y`
+
+2. **Enlazar REDIS_URL al backend:**  
+   `railway variable set -s ivan-reseller-backend 'REDIS_URL=${{Redis.REDIS_URL}}'`  
+   (Railway resuelve la referencia; el backend obtiene la URL interna de Redis.)
+
+3. **Redeploy del backend** (suele dispararse solo al cambiar variables). Si quieres forzarlo:  
+   `railway service redeploy -s ivan-reseller-backend -y`
+
+4. Comprobar estado:  
+   `railway service status --all`  
+   (Redis en SUCCESS y backend en SUCCESS o DEPLOYING.)
+
+**Opción B – Dashboard**
+
 1. **Reiniciar Redis**
    - En Railway, abre el servicio **Redis DB** (o el nombre que tenga tu Redis).
    - Ve a la pestaña **Deployments** o **Settings**.
