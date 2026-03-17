@@ -15,6 +15,32 @@ O desde la raiz del repo puedes ejecutar el script:
 
 En el Dashboard de Railway tambien puedes: servicio **Redis** > Deployments o Database > **Restart** (o Redeploy); y servicio **ivan-reseller-backend** > **Redeploy**. Luego comprueba en Control Center que Redis y Workers pasen a "ok".
 
+## Backend no arranca: P1001 (Postgres no alcanzable)
+
+Si en los logs del backend ves **`P1001: Can't reach database server at postgres.railway.internal:5432`** y el deployment falla, suele ser que el servicio **Postgres** esta parado. Desde el directorio backend con Railway CLI:
+
+1. **Reiniciar Postgres:**  
+   `railway service restart -s Postgres -y`
+
+2. **Redeploy del backend:**  
+   `railway service redeploy -s ivan-reseller-backend -y`
+
+En el Dashboard: servicio **Postgres** (o PostgreSQL) > Restart; luego **ivan-reseller-backend** > Redeploy.
+
+## ivan-reseller-web falla con P1001 (Prisma/Postgres en el log)
+
+Si **ivan-reseller-web** falla al desplegar y en los logs ves Prisma y `P1001: Can't reach database server`, es porque ese servicio esta construyendo/ejecutando el **backend** en lugar del frontend (Root Directory incorrecto). El frontend (Vite/React) no usa Postgres.
+
+**Opcion A – Railway CLI (desplegar el frontend desde frontend/):**
+
+```bash
+cd frontend
+railway service link ivan-reseller-web
+railway up --detach
+```
+
+**Opcion B – Dashboard:** En Railway, servicio **ivan-reseller-web** > **Settings** > **Root Directory** = `frontend` (o `frontend/`). Guarda y redeploya. Asi los proximos deploys por Git usaran solo el frontend.
+
 ## Por que Redis y Workers salen "degraded"
 
 En el Control Center, **Redis** y **Workers** aparecen en estado "degraded" cuando en el backend de Railway **no esta configurada la variable `REDIS_URL`** (o esta vacia). El sistema de salud comprueba:
