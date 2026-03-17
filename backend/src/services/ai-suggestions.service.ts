@@ -1393,9 +1393,16 @@ REGLAS ESTRICTAS:
   }
 
   /**
-   * Parsear respuesta de IA a formato AISuggestion
+   * Parsear respuesta de IA a formato AISuggestion.
+   * Sanitiza valores numéricos (revenue, time, confidence, metrics) para evitar extremos o no finitos.
    */
   private parseAISuggestions(aiResponse: any, businessData: UserBusinessData): AISuggestion[] {
+    const clamp = (v: any, min: number, max: number): number => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return min;
+      return Math.min(max, Math.max(min, n));
+    };
+
     const suggestions: AISuggestion[] = [];
     const aiSuggestions = aiResponse.suggestions || [];
 
@@ -1409,11 +1416,11 @@ REGLAS ESTRICTAS:
           title: sug.title || 'Sugerencia sin t├¡tulo',
           description: sug.description || '',
           impact: {
-            revenue: sug.impactRevenue || 0,
-            time: sug.impactTime || 0,
+            revenue: clamp(sug.impactRevenue, 0, 1_000_000),
+            time: clamp(sug.impactTime, 0, 1000),
             difficulty: sug.difficulty || 'medium'
           },
-          confidence: Math.min(100, Math.max(0, sug.confidence || 75)),
+          confidence: Math.min(100, Math.max(0, Number(sug.confidence) || 75)),
           actionable: true,
           implemented: false,
           estimatedTime: sug.estimatedTime || '30 minutos',
@@ -1421,8 +1428,8 @@ REGLAS ESTRICTAS:
           steps: Array.isArray(sug.steps) ? sug.steps : [],
           relatedProducts: Array.isArray(sug.relatedProducts) ? sug.relatedProducts : undefined,
           metrics: sug.metrics ? {
-            currentValue: sug.metrics.currentValue || 0,
-            targetValue: sug.metrics.targetValue || 0,
+            currentValue: clamp(sug.metrics.currentValue, 0, 1_000_000),
+            targetValue: clamp(sug.metrics.targetValue, 0, 1_000_000),
             unit: sug.metrics.unit || 'USD'
           } : undefined,
           createdAt: new Date().toISOString()

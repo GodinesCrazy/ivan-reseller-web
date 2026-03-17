@@ -1,4 +1,5 @@
 // ✅ E6: Tests unitarios para ProductService
+import { AppError } from '../../middleware/error.middleware';
 import { ProductService } from '../../services/product.service';
 
 jest.mock('../../config/database', () => ({

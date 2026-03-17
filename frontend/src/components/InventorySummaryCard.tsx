@@ -23,6 +23,7 @@ interface InventorySummary {
   products: { total: number; pending: number; approved: number; published: number };
   listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
   listingsTotal?: number;
+  listingsSource?: 'api' | 'database';
   mercadolibreActiveCount?: number;
   ordersByStatus: { CREATED: number; PAID: number; PURCHASING: number; PURCHASED: number; FAILED: number };
   pendingPurchasesCount: number;
@@ -153,6 +154,11 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
                 Amazon: {summary.listingsByMarketplace.amazon}
               </button>
             </div>
+            {summary.listingsSource === 'database' && (
+              <div className="text-xs text-amber-600 dark:text-amber-400 mt-1" title="El número puede no coincidir con el marketplace si los listados se crearon fuera del sistema o las APIs no están disponibles.">
+                Solo registrados en el sistema. Verificación por API no disponible.
+              </div>
+            )}
           </div>
 
           <div

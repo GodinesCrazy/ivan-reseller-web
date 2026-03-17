@@ -89,6 +89,7 @@ interface InventorySummary {
   products: { total: number; pending: number; approved: number; published: number };
   listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
   listingsTotal?: number;
+  listingsSource?: 'api' | 'database';
   mercadolibreActiveCount?: number;
   ordersByStatus?: { CREATED: number; PAID: number; PURCHASING: number; PURCHASED: number; FAILED: number };
   pendingPurchasesCount?: number;

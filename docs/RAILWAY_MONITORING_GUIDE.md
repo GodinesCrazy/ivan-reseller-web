@@ -183,6 +183,12 @@ curl -s https://ivan-reseller-web-production.up.railway.app/api/aliexpress/token
 
 ---
 
+## Capacidad del volumen de Postgres
+
+Si el volumen de PostgreSQL en Railway (p. ej. `postgres-volume-kWVb`) muestra aviso de capacidad o el disco está lleno, consulta la guía dedicada: [RAILWAY_POSTGRES_CAPACITY.md](RAILWAY_POSTGRES_CAPACITY.md). Incluye pasos para **Live resize** en el Dashboard, buenas prácticas y cómo ejecutar el script de mantenimiento `VACUUM ANALYZE` desde el backend.
+
+---
+
 ## ✅ CHECKLIST DE VERIFICACIÓN
 
 ### Pre-Deployment

@@ -98,6 +98,7 @@ export default function Dashboard() {
     products: { total: number; pending: number; approved: number; published: number };
     listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
     listingsTotal?: number;
+    listingsSource?: 'api' | 'database';
     ordersByStatus: { CREATED: number; PAID: number; PURCHASING: number; PURCHASED: number; FAILED: number };
     pendingPurchasesCount: number;
   } | null>(null);
@@ -378,6 +379,7 @@ export default function Dashboard() {
           products: inv.products ?? { total: 0, pending: 0, approved: 0, published: 0 },
           listingsByMarketplace: inv.listingsByMarketplace ?? { ebay: 0, mercadolibre: 0, amazon: 0 },
           listingsTotal: listTotal,
+          listingsSource: inv.listingsSource,
           ordersByStatus: inv.ordersByStatus ?? { CREATED: 0, PAID: 0, PURCHASING: 0, PURCHASED: 0, FAILED: 0 },
           pendingPurchasesCount: inv.pendingPurchasesCount ?? 0,
         });

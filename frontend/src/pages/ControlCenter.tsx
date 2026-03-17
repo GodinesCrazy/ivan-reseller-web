@@ -279,13 +279,14 @@ export default function ControlCenter() {
                       <CheckCircle className="h-5 w-5 text-green-500" />
                       <span className="font-semibold text-green-700 dark:text-green-400">
                         Generando utilidades: Sí
+                        {metrics.profitMonth > 0 && metrics.profitToday === 0 ? ' (este mes)' : ''}
                       </span>
                     </>
                   ) : (
                     <>
                       <AlertCircle className="h-5 w-5 text-amber-500" />
                       <span className="font-medium text-amber-700 dark:text-amber-400">
-                        Generando utilidades: No (aún no hay ventas con ganancia registradas)
+                        Generando utilidades: No (aún no hay ventas con ganancia registradas este mes)
                       </span>
                     </>
                   )}

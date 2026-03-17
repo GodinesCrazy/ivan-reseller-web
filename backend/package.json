@@ -77,6 +77,7 @@
     "generate:payoneer-cert": "tsx scripts/generate-payoneer-cert-pem.ts",
     "verify:paypal-balance": "tsx scripts/verify-paypal-balance.ts",
     "verify:paypal": "tsx scripts/paypal-verification-report.ts",
+    "vacuum:postgres": "tsx scripts/vacuum-postgres.ts",
     "kill-port": "powershell -ExecutionPolicy Bypass -File scripts/kill-port.ps1",
     "dev:clean": "npm run kill-port && npm run dev"
   },

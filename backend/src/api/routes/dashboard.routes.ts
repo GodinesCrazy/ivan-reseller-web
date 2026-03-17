@@ -428,25 +428,41 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       published: productCounts.find(p => p.status === 'PUBLISHED')?._count.id ?? 0,
     };
 
-    const listingsByMarketplace = {
+    const listingsByMarketplaceFromDb = {
       ebay: listingsByMp.find(l => l.marketplace.toLowerCase() === 'ebay')?._count.id ?? 0,
       mercadolibre: listingsByMp.find(l => l.marketplace.toLowerCase() === 'mercadolibre' || l.marketplace.toLowerCase() === 'ml')?._count.id ?? 0,
       amazon: listingsByMp.find(l => l.marketplace.toLowerCase() === 'amazon')?._count.id ?? 0,
     };
 
-    const listingsTotal =
-      listingsByMarketplace.ebay + listingsByMarketplace.mercadolibre + listingsByMarketplace.amazon;
-
     let mercadolibreActiveCount: number | null = null;
-    if (userId) {
+    let ebayActiveCount: number | null = null;
+    const userIdForApi = req.user?.userId;
+    if (userIdForApi != null) {
       try {
         const { MarketplaceService } = await import('../../services/marketplace.service');
         const ms = new MarketplaceService();
-        mercadolibreActiveCount = await ms.getMlActiveCount(userId);
+        const [mlCount, ebayCount] = await Promise.all([
+          ms.getMlActiveCount(userIdForApi),
+          ms.getEbayActiveCount(userIdForApi),
+        ]);
+        mercadolibreActiveCount = mlCount;
+        ebayActiveCount = ebayCount;
       } catch {
-        // Ignore - ML API may be unavailable
+        // Ignore - APIs may be unavailable
       }
     }
+
+    const listingsByMarketplace = {
+      ebay: ebayActiveCount !== null ? ebayActiveCount : listingsByMarketplaceFromDb.ebay,
+      mercadolibre: mercadolibreActiveCount !== null ? mercadolibreActiveCount : listingsByMarketplaceFromDb.mercadolibre,
+      amazon: listingsByMarketplaceFromDb.amazon,
+    };
+
+    const listingsTotal =
+      listingsByMarketplace.ebay + listingsByMarketplace.mercadolibre + listingsByMarketplace.amazon;
+
+    const listingsSource =
+      ebayActiveCount !== null || mercadolibreActiveCount !== null ? 'api' : 'database';
 
     const ordersByStatusMap = {
       CREATED: ordersByStatus.find(o => o.status === 'CREATED')?._count.id ?? 0,
@@ -460,6 +476,7 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       products,
       listingsByMarketplace,
       listingsTotal,
+      listingsSource,
       mercadolibreActiveCount: mercadolibreActiveCount ?? undefined,
       ordersByStatus: ordersByStatusMap,
       pendingPurchasesCount,
