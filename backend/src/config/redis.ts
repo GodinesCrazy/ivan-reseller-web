@@ -47,6 +47,7 @@ function getRedisInstance(): Redis | MockRedis {
   
   redisInstance = new Redis(REDIS_URL, {
     maxRetriesPerRequest: 3,
+    family: 0, // Railway private network: dual-stack (IPv4 + IPv6) to avoid ETIMEDOUT
     retryStrategy: (times) => {
       const delay = Math.min(times * 50, 2000);
       return delay;
@@ -92,6 +93,7 @@ export const getBullMQRedisConnection = () => {
   }
   return new Redis(REDIS_URL, {
     maxRetriesPerRequest: null, // BullMQ requiere null para operaciones bloqueantes
+    family: 0, // Railway private network: dual-stack (IPv4 + IPv6) to avoid ETIMEDOUT
     retryStrategy: (times) => {
       const delay = Math.min(times * 50, 2000);
       return delay;

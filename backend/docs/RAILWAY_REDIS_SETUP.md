@@ -9,6 +9,19 @@ En el Control Center, **Redis** y **Workers** aparecen en estado "degraded" cuan
 
 Sin Redis configurado la app sigue funcionando (cache y colas en memoria o deshabilitadas), pero el panel mostrara esos estados en amarillo hasta que configures Redis en produccion.
 
+## Impacto en el Dashboard (acciones que no se activan)
+
+Si **Redis** o **Workers** estan en "degraded", los jobs en background no se ejecutan. Las secciones del **Dashboard** que dependen de esos jobs mostraran siempre "No hay acciones/decisiones/señales recientes":
+
+- **Demand Radar** (señales de tendencia)
+- **Auto Listing Strategy** (decisiones de publicacion)
+- **Listing Optimization** (acciones de optimizacion)
+- **Strategy Brain** (decisiones estrategicas)
+- **Autonomous Scaling** (acciones de escalado)
+- **Conversion Optimization** (acciones CRO)
+
+Causa: el backend solo inicia workers y cron jobs cuando `REDIS_URL` esta configurada y Redis responde. Sin Redis, no se programan ni ejecutan esos jobs y las tablas que alimentan el Dashboard quedan vacias. Solucion: configurar `REDIS_URL` en el backend y asegurar que Redis este en marcha (ver pasos mas abajo). Tras el redeploy, en los logs del backend no debe aparecer "Scheduled Tasks: Redis not available - scheduled tasks disabled".
+
 ## Redis ya existe pero esta parado
 
 Si en Railway ya tienes un servicio **Redis** pero el Control Center sigue mostrando Redis y Workers en "degraded", es posible que el despliegue de Redis este parado. El mensaje **"The database deployment has stopped running"** en el panel de Redis DB indica que la instancia no esta en ejecucion.
@@ -77,3 +90,13 @@ Con el proyecto enlazado (`railway link` en el repo del backend) y CLI instalado
 3. En **System Readiness**, **Redis** y **Workers** deberian mostrarse en verde ("ok") si `REDIS_URL` esta definida y Redis responde al ping.
 
 Si siguen en "degraded", revisa en Railway que el servicio backend tenga la variable `REDIS_URL` y que el valor sea una URL valida (p. ej. `redis://...`). Revisa los logs del backend por mensajes de conexion a Redis.
+
+## Error "connect ETIMEDOUT" en los logs
+
+Si en los logs del backend ves **`Error: connect ETIMEDOUT`** o **`❌ Redis error: Error: connect ETIMEDOUT`** al conectar a `redis.railway.internal`, la causa suele ser que la red privada de Railway usa IPv6 y el cliente Redis (ioredis) por defecto solo hace lookup IPv4.
+
+**Solucion (ya aplicada en este proyecto):** el backend usa `family: 0` en las opciones de conexion a Redis (dual-stack IPv4 + IPv6). Si aun ves ETIMEDOUT:
+
+1. Asegurate de que Redis y el backend estan en el **mismo proyecto** y mismo environment en Railway (la red privada es por proyecto/entorno).
+2. Si el entorno es anterior a octubre 2025, Railway puede usar solo IPv6; `family: 0` debe resolverlo. Tras un redeploy, los logs no deberian mostrar ETIMEDOUT y si deberia aparecer "✅ Redis connected".
+3. Como alternativa temporal puedes usar la URL publica de Redis: en Railway, servicio Redis > Variables, copia `REDIS_PUBLIC_URL` (si existe) y en el backend define `REDIS_URL` con ese valor (solo para probar; la red privada es preferible).
