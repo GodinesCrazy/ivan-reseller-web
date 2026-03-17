@@ -569,7 +569,11 @@ router.get('/control-center-funnel', async (req: Request, res: Response) => {
     since.setDate(since.getDate() - 30);
     const salesByMarketplace = await prisma.sale.groupBy({
       by: ['marketplace'],
-      where: { ...(isAdmin ? {} : { userId }), createdAt: { gte: since } },
+      where: {
+        ...(isAdmin ? {} : { userId }),
+        createdAt: { gte: since },
+        status: { in: ['DELIVERED', 'COMPLETED'] },
+      },
       _sum: { netProfit: true },
       _count: { id: true },
     });

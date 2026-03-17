@@ -509,6 +509,7 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
     const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
 
     const whereUser = userId ? { userId } : undefined;
+    const completedSaleStatusFilter = { status: { in: ['DELIVERED', 'COMPLETED'] as const } };
 
     const [activeListings, salesToday, salesMonth, productsWithSales] = await Promise.all([
       prisma.marketplaceListing.count({ where: { ...whereUser, status: 'active' } }),
@@ -517,7 +518,7 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
           ...whereUser,
           ...saleEnvFilter,
           createdAt: { gte: todayStart },
-          status: { not: 'CANCELLED' },
+          ...completedSaleStatusFilter,
         },
       }),
       prisma.sale.findMany({
@@ -525,13 +526,13 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
           ...whereUser,
           ...saleEnvFilter,
           createdAt: { gte: monthStart },
-          status: { not: 'CANCELLED' },
+          ...completedSaleStatusFilter,
         },
         select: { netProfit: true },
       }),
       prisma.sale.groupBy({
         by: ['productId'],
-        where: { ...whereUser, ...saleEnvFilter, status: { not: 'CANCELLED' } },
+        where: { ...whereUser, ...saleEnvFilter, ...completedSaleStatusFilter },
         _count: { productId: true },
       }),
     ]);
@@ -542,7 +543,7 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
         ...whereUser,
         ...saleEnvFilter,
         createdAt: { gte: todayStart },
-        status: { not: 'CANCELLED' },
+        ...completedSaleStatusFilter,
       },
       _sum: { netProfit: true },
     });
