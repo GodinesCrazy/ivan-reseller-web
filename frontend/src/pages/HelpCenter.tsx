@@ -2,8 +2,8 @@
  * Centro de Ayuda - render público, sin auth.
  * NO usar: useAuthStore, authStore, hooks de sesión, redirects condicionales.
  */
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { 
   BookOpen, 
   HelpCircle, 
@@ -24,15 +24,25 @@ import {
   Info,
   Video,
   FileText,
-  MessageCircle
+  MessageCircle,
+  Bell
 } from 'lucide-react';
 export default function HelpCenter() {
-  const [activeSection, setActiveSection] = useState('inicio');
+  const [searchParams] = useSearchParams();
+  const sectionParam = searchParams.get('section') || '';
+  const [activeSection, setActiveSection] = useState(sectionParam && ['inicio', 'configuracion', 'apis', 'productos', 'autopilot', 'oportunidades', 'finanzas', 'regional', 'usuarios', 'reportes', 'faq', 'webhooks'].includes(sectionParam) ? sectionParam : 'inicio');
+
+  useEffect(() => {
+    if (sectionParam && sectionParam !== activeSection && ['inicio', 'configuracion', 'apis', 'productos', 'autopilot', 'oportunidades', 'finanzas', 'regional', 'usuarios', 'reportes', 'faq', 'webhooks'].includes(sectionParam)) {
+      setActiveSection(sectionParam);
+    }
+  }, [sectionParam]);
 
   const sections = [
     { id: 'inicio', label: 'Inicio Rápido', icon: Rocket },
     { id: 'configuracion', label: 'Configuración', icon: Settings },
     { id: 'apis', label: 'APIs y Credenciales', icon: Shield },
+    { id: 'webhooks', label: 'Notificaciones de ventas', icon: Bell },
     { id: 'productos', label: 'Gestión de Productos', icon: Package },
     { id: 'autopilot', label: 'Sistema Autopilot', icon: Zap },
     { id: 'oportunidades', label: 'Oportunidades', icon: Target },
@@ -124,6 +134,7 @@ export default function HelpCenter() {
               {activeSection === 'usuarios' && <UsuariosRoles />}
               {activeSection === 'reportes' && <ReportesAnalytics />}
               {activeSection === 'faq' && <FAQ />}
+              {activeSection === 'webhooks' && <NotificacionesVentas />}
             </div>
           </div>
         </div>
@@ -1738,6 +1749,54 @@ function ReportesAnalytics() {
       <div className="bg-purple-50 border border-purple-200 rounded-xl p-6">
         <p className="text-gray-700">
           Genera reportes en PDF, Excel y visualiza analytics con gráficas interactivas.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function NotificacionesVentas() {
+  return (
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-3xl font-bold text-gray-900 mb-4">Notificaciones de ventas (webhooks)</h2>
+        <p className="text-gray-600 text-lg">
+          Para que las ventas realizadas en eBay o Mercado Libre aparezcan en Ivan Reseller, el marketplace debe enviar una notificación a nuestro servidor cuando se concrete una venta. Esa configuración se hace en la cuenta de desarrollador de cada plataforma.
+        </p>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">URL a registrar</h3>
+        <p className="text-gray-700 mb-2">
+          El administrador del sistema debe proporcionarte la URL base del backend (por ejemplo <code className="bg-amber-100 px-2 py-1 rounded">https://tu-backend.ejemplo.com</code>). Las rutas que deben recibir notificaciones son:
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li><strong>eBay:</strong> <code className="bg-gray-100 px-2 py-0.5 rounded">{'{URL_BASE}'}/api/webhooks/ebay</code></li>
+          <li><strong>Mercado Libre:</strong> <code className="bg-gray-100 px-2 py-0.5 rounded">{'{URL_BASE}'}/api/webhooks/mercadolibre</code></li>
+        </ul>
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold text-gray-900">Mercado Libre</h3>
+        <ol className="list-decimal list-inside space-y-2 text-gray-700">
+          <li>Entra a <a href="https://developers.mercadolibre.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">developers.mercadolibre.com</a> → Tu aplicación → Notificaciones.</li>
+          <li>Añade la URL: <code className="bg-gray-100 px-2 py-0.5 rounded">{'{URL_BASE}'}/api/webhooks/mercadolibre</code> para notificaciones de órdenes.</li>
+          <li>Copia el <strong>secret</strong> que Mercado Libre muestra. El administrador debe configurarlo en el servidor como <code className="bg-gray-100 px-2 py-0.5 rounded">WEBHOOK_SECRET_MERCADOLIBRE</code>.</li>
+        </ol>
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold text-gray-900">eBay</h3>
+        <ol className="list-decimal list-inside space-y-2 text-gray-700">
+          <li>Entra a <a href="https://developer.ebay.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">developer.ebay.com</a> → My Account → Application Keys → tu app → Notifications.</li>
+          <li>Configura el Endpoint URL: <code className="bg-gray-100 px-2 py-0.5 rounded">{'{URL_BASE}'}/api/webhooks/ebay</code>.</li>
+          <li>Copia el <strong>signing key</strong>. El administrador debe configurarlo en el servidor como <code className="bg-gray-100 px-2 py-0.5 rounded">WEBHOOK_SECRET_EBAY</code>.</li>
+        </ol>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+        <p className="text-gray-700">
+          En la página de <strong>Ventas</strong> o en el <strong>Dashboard</strong> verás el panel &quot;Listo para recibir ventas&quot;, que indica si las notificaciones están configuradas (eBay y Mercado Libre). Si aparece &quot;No configuradas&quot;, las ventas reales en el marketplace no se registrarán en Ivan Reseller hasta que se complete la configuración anterior.
         </p>
       </div>
     </div>

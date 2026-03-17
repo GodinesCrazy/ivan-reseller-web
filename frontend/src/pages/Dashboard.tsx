@@ -37,6 +37,7 @@ import AIOpportunityFinder from '../components/AIOpportunityFinder';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
 import WorkflowSummaryWidget from '@/components/WorkflowSummaryWidget';
 import InventorySummaryCard from '@/components/InventorySummaryCard';
+import SalesReadinessPanel from '@/components/SalesReadinessPanel';
 import AutopilotLiveWidget from '@/components/AutopilotLiveWidget';
 import BalanceSummaryWidget from '@/components/BalanceSummaryWidget';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
@@ -477,6 +478,7 @@ export default function Dashboard() {
 
   const renderOverview = () => (
     <div className="space-y-6">
+      <SalesReadinessPanel />
       {/* Métricas principales */}
       {loading ? (
         <CardSkeleton count={6} />

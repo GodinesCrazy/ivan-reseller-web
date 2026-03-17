@@ -38,6 +38,7 @@ import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
+import SalesReadinessPanel from '@/components/SalesReadinessPanel';
 
 interface Sale {
   id: string;
@@ -237,6 +238,8 @@ export default function Sales() {
           Exportar CSV
         </Button>
       </div>
+
+      <SalesReadinessPanel />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

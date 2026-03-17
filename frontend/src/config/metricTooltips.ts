@@ -180,7 +180,7 @@ export const metricTooltips = {
   /** Anuncios publicados: listados activos en marketplaces */
   publicados: {
     title: 'Publicados',
-    body: 'Anuncios publicados: número de listados activos en eBay, Mercado Libre y Amazon.'
+    body: 'Anuncios publicados: número de listados activos en eBay, Mercado Libre y Amazon. Cuando las APIs de eBay y Mercado Libre están disponibles, los números se verifican con el marketplace; en caso contrario se muestra el conteo registrado en el sistema.'
   },
 
   /** Productos pendientes de aprobación */

@@ -50,9 +50,15 @@ router.get('/', async (req: Request, res: Response) => {
       });
       // Si falla obtener estados, asumir que setup está completo
       // (mejor mostrar dashboard con errores que bloquear completamente)
+      const webhookStatusError = {
+        ebay: { configured: !!(process.env.WEBHOOK_SECRET_EBAY?.trim()) },
+        mercadolibre: { configured: !!(process.env.WEBHOOK_SECRET_MERCADOLIBRE?.trim()) },
+        amazon: { configured: !!(process.env.WEBHOOK_SECRET_AMAZON?.trim()) },
+      };
       return res.json({
         success: true,
         setupRequired: false,
+        webhookStatus: webhookStatusError,
         reason: 'error_checking_apis',
         message: 'No se pudo verificar el estado de las APIs'
       });
@@ -104,6 +110,13 @@ router.get('/', async (req: Request, res: Response) => {
     // Setup requerido si no hay marketplace O no hay API de búsqueda
     const setupRequired = !hasMarketplace || !hasSearchAPI;
 
+    // Estado de webhooks (notificaciones de ventas): mismo criterio que GET /api/webhooks/status, sin exponer secrets
+    const webhookStatus = {
+      ebay: { configured: !!(process.env.WEBHOOK_SECRET_EBAY?.trim()) },
+      mercadolibre: { configured: !!(process.env.WEBHOOK_SECRET_MERCADOLIBRE?.trim()) },
+      amazon: { configured: !!(process.env.WEBHOOK_SECRET_AMAZON?.trim()) },
+    };
+
     return res.json({
       success: true,
       setupRequired,
@@ -111,6 +124,7 @@ router.get('/', async (req: Request, res: Response) => {
       totalCount: totalAPIs,
       hasMarketplace,
       hasSearchAPI,
+      webhookStatus,
       missingRequirements: {
         marketplace: !hasMarketplace,
         searchAPI: !hasSearchAPI
@@ -135,6 +149,11 @@ router.get('/', async (req: Request, res: Response) => {
     
     // ✅ FIX: Siempre retornar 200 OK con success:true, nunca 500
     // El endpoint debe ser resiliente y retornar defaults seguros
+    const webhookStatusFallback = {
+      ebay: { configured: !!(process.env.WEBHOOK_SECRET_EBAY?.trim()) },
+      mercadolibre: { configured: !!(process.env.WEBHOOK_SECRET_MERCADOLIBRE?.trim()) },
+      amazon: { configured: !!(process.env.WEBHOOK_SECRET_AMAZON?.trim()) },
+    };
     return res.status(200).json({
       success: true,
       setupRequired: false,
@@ -142,6 +161,7 @@ router.get('/', async (req: Request, res: Response) => {
       totalCount: 0,
       hasMarketplace: false,
       hasSearchAPI: false,
+      webhookStatus: webhookStatusFallback,
       missingRequirements: {
         marketplace: true,
         searchAPI: true
