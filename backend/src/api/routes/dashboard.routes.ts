@@ -509,7 +509,7 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
     const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
 
     const whereUser = userId ? { userId } : undefined;
-    const completedSaleStatusFilter = { status: { in: ['DELIVERED', 'COMPLETED'] as const } };
+    const completedSaleStatusFilter = { status: { in: ['DELIVERED', 'COMPLETED'] } };
 
     const [activeListings, salesToday, salesMonth, productsWithSales] = await Promise.all([
       prisma.marketplaceListing.count({ where: { ...whereUser, status: 'active' } }),
