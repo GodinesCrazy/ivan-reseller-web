@@ -12,6 +12,9 @@ import { toNumber } from '../utils/decimal.utils';
 import { getEffectiveShippingCost } from '../utils/shipping.utils';
 import type { AutomatedOrder } from './automation.service';
 
+/** Statuses that count as "completed" for sales stats (ingresos, beneficio, total ventas). Aligns with delivered flow and inventory-summary. */
+const COMPLETED_SALE_STATUSES = ['DELIVERED', 'COMPLETED'] as const;
+
 export interface CreateSaleDto {
   orderId: string;
   productId: number; // ✅ Cambiado a number
@@ -981,18 +984,19 @@ export class SaleService {
     const envFilter = environment !== 'all' ? { environment } : {};
     const realFilter = SaleService.realSalesFilter(environment);
     const where = { ...baseWhere, ...dateFilter, ...envFilter, ...realFilter };
+    const whereCompleted = { ...where, status: { in: [...COMPLETED_SALE_STATUSES] } };
 
     const queriesPromise = Promise.all([
-      prisma.sale.count({ where: { ...where, status: 'COMPLETED' } }),
+      prisma.sale.count({ where: whereCompleted }),
       prisma.sale.count({ where: { ...where, status: 'PENDING' } }),
-      prisma.sale.count({ where: { ...where, status: 'COMPLETED' } }),
+      prisma.sale.count({ where: whereCompleted }),
       prisma.sale.count({ where: { ...where, status: 'CANCELLED' } }),
       prisma.sale.aggregate({
-        where: { ...where, status: 'COMPLETED' },
+        where: whereCompleted,
         _sum: { salePrice: true },
       }),
       prisma.sale.aggregate({
-        where: { ...where, status: 'COMPLETED' },
+        where: whereCompleted,
         _sum: { commissionAmount: true },
       }),
     ]);
@@ -1008,7 +1012,7 @@ export class SaleService {
     ] = await queryWithTimeout(queriesPromise, 20000);
 
     const netProfitAgg = await prisma.sale.aggregate({
-      where: { ...where, status: 'COMPLETED' },
+      where: whereCompleted,
       _sum: { netProfit: true },
     });
     const totalProfit = netProfitAgg._sum.netProfit ?? 0;

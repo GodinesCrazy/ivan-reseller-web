@@ -356,7 +356,7 @@ router.get('/business-diagnostics', authenticate, async (req: Request, res: Resp
         result.listings = { status: 'FAIL', message: 'Count failed' };
       }
 
-      // Sales count (per-user, per-environment, COMPLETED only - real sales)
+      // Sales count (per-user, per-environment, DELIVERED/COMPLETED - real sales)
       try {
         const saleService = (await import('../../services/sale.service')).saleService;
         const stats = await saleService.getSalesStats(userId, undefined, environment);

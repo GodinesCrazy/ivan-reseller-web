@@ -233,7 +233,7 @@ router.get('/charts/sales', async (req: Request, res: Response, next) => {
     const salesWhere: Record<string, unknown> = {
       ...(userId ? { userId } : {}),
       createdAt: { gte: startDate },
-      status: 'COMPLETED',
+      status: { in: ['DELIVERED', 'COMPLETED'] },
     };
     if (environment !== 'all') {
       salesWhere.environment = environment;

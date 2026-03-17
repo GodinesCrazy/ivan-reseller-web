@@ -94,7 +94,7 @@ router.get('/stats', async (req: Request, res: Response, next) => {
     const totalProfitNum = toNumber(stats.totalProfit ?? 0);
     const avgOrderValue = stats.totalSales > 0 ? totalRevenueNum / stats.totalSales : 0;
     
-    // ✅ Mapear estadísticas al formato esperado por el frontend (mismo período y definición: COMPLETED)
+    // ✅ Mapear estadísticas al formato esperado por el frontend (mismo período y definición: DELIVERED o COMPLETED)
     const mappedStats = {
       totalRevenue: totalRevenueNum,
       totalProfit: totalProfitNum,

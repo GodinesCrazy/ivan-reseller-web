@@ -103,6 +103,8 @@ Según `sale.service.ts`:
 - `backend/src/services/autopilot.service.ts` - sync ML orders, crea Order con paypalOrderId
 - `backend/src/services/order-fulfillment.service.ts` - fulfillOrder → createSaleFromOrder
 
+**Estadísticas de ventas (página Ventas):** Los KPIs (ingresos, beneficio, total ventas) y el gráfico por día consideran ventas con estado **DELIVERED** o **COMPLETED** en la tabla Sale (`getSalesStats` y `/api/dashboard/charts/sales`). Así se alinean con el flujo real (entregado = DELIVERED) y con "Entregado" en inventory-summary.
+
 ---
 
 ## 7. Resultado verificación (script verify-sales-origin)
