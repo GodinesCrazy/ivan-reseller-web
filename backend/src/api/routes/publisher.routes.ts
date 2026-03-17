@@ -455,6 +455,43 @@ router.post('/listings/run-reconciliation-audit', async (req: Request, res: Resp
   }
 });
 
+// POST /api/publisher/listings/run-full-recovery — Phase 26: Full Listing Audit + Classification + Recovery
+router.post('/listings/run-full-recovery', async (req: Request, res: Response) => {
+  try {
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? req.body?.userId : req.user!.userId;
+    const verifyWithApi = Boolean(req.body?.verifyWithApi);
+    const limit = typeof req.body?.limit === 'number' && req.body.limit > 0
+      ? Math.min(req.body.limit, 2000)
+      : 500;
+
+    const { fullListingAuditService } = await import('../../services/full-listing-audit.service');
+    const { listingClassificationEngine } = await import('../../services/listing-classification-engine.service');
+    const { listingRecoveryEngine } = await import('../../services/listing-recovery-engine.service');
+
+    const records = await fullListingAuditService.runFullAudit({
+      userId,
+      limit,
+      verifyWithApi,
+      verifyBatchSize: verifyWithApi ? 30 : 0,
+    });
+    const classified = listingClassificationEngine.classifyBatch(records);
+    const result = await listingRecoveryEngine.runRecovery(classified);
+
+    return res.json({
+      success: true,
+      auditCount: records.length,
+      ...result,
+      message: `Full recovery: ${result.processed} processed, ${result.removedFromDb} removed, ${result.republishEnqueued} republish enqueued, ${result.optimized} optimized.`,
+    });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Full recovery failed';
+    logger.error('[PUBLISHER] run-full-recovery failed', { error: errorMessage });
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
 // POST /api/publisher/listings/repair-ml — Repair Mercado Libre listings (VIP67: title, description, attributes)
 router.post('/listings/repair-ml', async (req: Request, res: Response) => {
   try {

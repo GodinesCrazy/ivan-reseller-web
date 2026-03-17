@@ -961,15 +961,18 @@ export class SaleService {
   }
 
   /**
-   * Phase 23: For production, exclude test/mock/demo order IDs so dashboard shows only real marketplace sales.
+   * Phase 23/27: For production, exclude test/mock/demo order IDs so dashboard shows only real marketplace sales.
+   * DEMO (uppercase) excludes seed-demo-sale DEMO-UTIL-* entries.
    */
   private static realSalesFilter(environment: string): Record<string, unknown> {
     if (environment !== 'production') return {};
     return {
       AND: [
         { orderId: { not: { startsWith: 'test' } } },
+        { orderId: { not: { startsWith: 'TEST' } } },
         { orderId: { not: { startsWith: 'mock' } } },
         { orderId: { not: { startsWith: 'demo' } } },
+        { orderId: { not: { startsWith: 'DEMO' } } },
       ],
     };
   }

@@ -56,11 +56,23 @@ async function getRevenueSnapshot(days: number): Promise<RevenueSnapshot> {
   since.setDate(since.getDate() - days);
   since.setHours(0, 0, 0, 0);
 
+  // Phase 27: Real data only — exclude test/mock/demo order IDs
+  const realOrderFilter = {
+    AND: [
+      { orderId: { not: { startsWith: 'test' } } },
+      { orderId: { not: { startsWith: 'TEST' } } },
+      { orderId: { not: { startsWith: 'mock' } } },
+      { orderId: { not: { startsWith: 'demo' } } },
+      { orderId: { not: { startsWith: 'DEMO' } } },
+    ],
+  };
+
   const sales = await prisma.sale.findMany({
     where: {
       createdAt: { gte: since, lte: until },
       environment: 'production',
       status: { notIn: ['CANCELLED', 'RETURNED'] },
+      ...realOrderFilter,
     },
     select: {
       salePrice: true,

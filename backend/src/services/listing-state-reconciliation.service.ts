@@ -13,6 +13,8 @@ import type { MercadoLibreCredentials } from './mercadolibre.service';
 import { EbayService } from './ebay.service';
 import type { EbayCredentials } from './ebay.service';
 import { MarketplaceService } from './marketplace.service';
+import { apiHealthTracking } from './api-health-tracking.service';
+import { retryMarketplaceOperation } from '../utils/retry.util';
 
 export type ReconciliationResult = 'ACTIVE' | 'PAUSED' | 'NOT_FOUND' | 'ERROR';
 export type PublishErrorType = 'marketplace_rejection' | 'validation_error' | 'api_error' | 'rate_limit';
@@ -56,17 +58,41 @@ export class ListingStateReconciliationService {
     if (mp === 'ebay') {
       return this.verifyEbay(listing);
     }
+    if (mp === 'amazon') {
+      return this.verifyAmazon(listing);
+    }
     return { result: 'ERROR', errorType: 'api_error', errorMessage: `Unsupported marketplace: ${listing.marketplace}` };
   }
 
-  private async verifyMercadoLibre(listing: { listingId: string; userId: number }): Promise<VerifyOutcome> {
+  /** Phase 28/30: Amazon verify; track health, never throw. */
+  private async verifyAmazon(listing: { listingId: string; userId: number }): Promise<VerifyOutcome> {
     try {
-      const ms = new MarketplaceService();
-      const credentials = await ms.getCredentials(listing.userId, 'mercadolibre', 'production');
+      const { AmazonService } = await import('./amazon.service');
+      const amazonService = new AmazonService();
+      const credentials = await new MarketplaceService().getCredentials(listing.userId, 'amazon', 'production');
       if (!credentials?.credentials) {
-        return { result: 'ERROR', errorType: 'api_error', errorMessage: 'No MercadoLibre credentials' };
+        apiHealthTracking.set('amazon', 'DEGRADED', { userId: listing.userId, errorMessage: 'No credentials' });
+        return { result: 'ERROR', errorType: 'api_error', errorMessage: 'No Amazon credentials' };
       }
-      const creds = credentials.credentials as MercadoLibreCredentials;
+      await amazonService.setCredentials(credentials.credentials as any);
+      const item = await amazonService.getListingBySku(listing.listingId);
+      if (item) {
+        apiHealthTracking.set('amazon', 'OK', { userId: listing.userId });
+        return { result: 'ACTIVE' };
+      }
+      return { result: 'NOT_FOUND', errorType: 'marketplace_rejection', errorMessage: 'Amazon listing not found' };
+    } catch (err: any) {
+      const errorType = classifyError(err);
+      const errorMessage = err?.response?.data?.message || err?.message || String(err);
+      logger.warn('[Reconciliation] Amazon verify failed', { listingId: listing.listingId, errorType, errorMessage });
+      apiHealthTracking.set('amazon', 'DEGRADED', { userId: listing.userId, errorMessage });
+      return { result: 'ERROR', errorType, errorMessage };
+    }
+  }
+
+  /** Phase 30: ML verify with auto token refresh and retry; never throws, updates API health. */
+  private async verifyMercadoLibre(listing: { listingId: string; userId: number }): Promise<VerifyOutcome> {
+    const tryVerify = async (creds: MercadoLibreCredentials): Promise<VerifyOutcome> => {
       const mlService = new MercadoLibreService({
         ...creds,
         siteId: creds.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
@@ -79,34 +105,92 @@ export class ListingStateReconciliationService {
       if (status === 'active') return { result: 'ACTIVE' };
       if (status === 'paused' || status === 'closed') return { result: 'PAUSED' };
       return { result: 'NOT_FOUND', errorType: 'marketplace_rejection', errorMessage: `ML status: ${status}` };
+    };
+
+    try {
+      const ms = new MarketplaceService();
+      let credentials = await ms.getCredentials(listing.userId, 'mercadolibre', 'production');
+      if (!credentials?.credentials) {
+        apiHealthTracking.set('mercadolibre', 'DEGRADED', { userId: listing.userId, errorMessage: 'No credentials' });
+        return { result: 'ERROR', errorType: 'api_error', errorMessage: 'No MercadoLibre credentials' };
+      }
+      let creds = credentials.credentials as MercadoLibreCredentials;
+      let outcome = await tryVerify(creds);
+
+      if (outcome.result === 'ERROR' && outcome.errorMessage && /invalid access token|401|unauthorized/i.test(outcome.errorMessage)) {
+        try {
+          const mlService = new MercadoLibreService({
+            ...creds,
+            siteId: creds.siteId || process.env.MERCADOLIBRE_SITE_ID || 'MLC',
+          });
+          const refreshed = await mlService.refreshAccessToken();
+          const newCreds = { ...creds, accessToken: refreshed.accessToken };
+          await ms.saveCredentials(listing.userId, 'mercadolibre', newCreds, 'production');
+          outcome = await tryVerify(newCreds);
+          if (outcome.result === 'ACTIVE' || outcome.result === 'PAUSED') {
+            apiHealthTracking.set('mercadolibre', 'OK', { userId: listing.userId });
+          }
+        } catch (refreshErr: any) {
+          apiHealthTracking.set('mercadolibre', 'DEGRADED', {
+            userId: listing.userId,
+            errorMessage: refreshErr?.message || 'Token refresh failed',
+          });
+        }
+      }
+
+      if (outcome.result === 'ERROR') {
+        apiHealthTracking.set('mercadolibre', 'DEGRADED', { userId: listing.userId, errorMessage: outcome.errorMessage ?? undefined });
+      } else {
+        apiHealthTracking.set('mercadolibre', 'OK', { userId: listing.userId });
+      }
+      return outcome;
     } catch (err: any) {
       const errorType = classifyError(err);
       const errorMessage = err?.response?.data?.message || err?.message || String(err);
       logger.warn('[Reconciliation] ML verify failed', { listingId: listing.listingId, errorType, errorMessage });
+      apiHealthTracking.set('mercadolibre', 'DEGRADED', { userId: listing.userId, errorMessage });
       return { result: 'ERROR', errorType, errorMessage };
     }
   }
 
+  /** Phase 30: eBay verify with retry (503/5xx) and health tracking; never throws. */
   private async verifyEbay(listing: { listingId: string; userId: number }): Promise<VerifyOutcome> {
     try {
       const ms = new MarketplaceService();
       const credentials = await ms.getCredentials(listing.userId, 'ebay', 'production');
       if (!credentials?.credentials) {
+        apiHealthTracking.set('ebay', 'DEGRADED', { userId: listing.userId, errorMessage: 'No credentials' });
         return { result: 'ERROR', errorType: 'api_error', errorMessage: 'No eBay credentials' };
       }
-      const ebayService = new EbayService({
-        ...(credentials.credentials as EbayCredentials),
-        sandbox: credentials.environment === 'sandbox',
+      const creds = credentials.credentials as EbayCredentials;
+      const sandbox = credentials.environment === 'sandbox';
+      const runCheck = async () => {
+        const ebayService = new EbayService({ ...creds, sandbox });
+        return ebayService.checkProductAvailability(listing.listingId);
+      };
+      const result = await retryMarketplaceOperation(runCheck, 'ebay', {
+        maxRetries: 4,
+        initialDelay: 2000,
+        retryCondition: (e: any) => {
+          const status = e?.response?.status;
+          const msg = String(e?.message || '').toLowerCase();
+          return status === 503 || status >= 500 || /503|unavailable|timeout/i.test(msg);
+        },
       });
-      const availability = await ebayService.checkProductAvailability(listing.listingId);
-      // checkProductAvailability returns available: false on any error; we cannot distinguish 404 from 5xx here
-      if (availability && availability.available) return { result: 'ACTIVE' };
-      // Consider not-found vs error: without HTTP status we treat as NOT_FOUND for reconciliation
+      if (result.success && result.data && result.data.available) {
+        apiHealthTracking.set('ebay', 'OK', { userId: listing.userId });
+        return { result: 'ACTIVE' };
+      }
+      apiHealthTracking.set('ebay', 'DEGRADED', {
+        userId: listing.userId,
+        errorMessage: result.error?.message || 'eBay item not available',
+      });
       return { result: 'NOT_FOUND', errorType: 'marketplace_rejection', errorMessage: 'eBay item not available or not found' };
     } catch (err: any) {
       const errorType = classifyError(err);
       const errorMessage = err?.response?.data?.message || err?.message || String(err);
       logger.warn('[Reconciliation] eBay verify failed', { listingId: listing.listingId, errorType, errorMessage });
+      apiHealthTracking.set('ebay', 'DEGRADED', { userId: listing.userId, errorMessage });
       return { result: 'ERROR', errorType, errorMessage };
     }
   }

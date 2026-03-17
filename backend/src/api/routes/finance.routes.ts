@@ -4,6 +4,7 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../middleware/error.middleware';
 import { toNumber } from '../../utils/decimal.utils';
 import { getSalesLedger } from '../../services/sales-ledger.service';
+import { RealProfitEngine } from '../../services/real-profit-engine.service';
 import { getWorkingCapitalDetail } from '../../services/working-capital-detail.service';
 import { getPayPalBalance } from '../../services/balance-verification.service';
 import { calculateMaxNewListingsAllowed } from '../../services/capital-allocation.engine';
@@ -38,6 +39,32 @@ router.get('/sales-ledger', async (req: Request, res: Response, next) => {
     const env = getEnvironment(req);
     const entries = await getSalesLedger(userId, range as any, env);
     res.json({ success: true, sales: entries });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/finance/real-profit
+ * Phase 27: Real Profit Engine — money_in, money_out, profit per order/product, ROI (real data only).
+ * Query: days=30, environment=production|sandbox|all, type=summary|orders|products (default summary).
+ */
+router.get('/real-profit', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user!.userId;
+    const days = Math.min(365, Math.max(1, parseInt(String(req.query.days || 30), 10) || 30));
+    const env = getEnvironment(req);
+    const type = (req.query.type as string) || 'summary';
+    if (type === 'orders') {
+      const orders = await RealProfitEngine.getRealProfitPerOrder({ userId, days, environment: env });
+      return res.json({ success: true, type: 'orders', data: orders });
+    }
+    if (type === 'products') {
+      const products = await RealProfitEngine.getRealProfitPerProduct({ userId, days, environment: env });
+      return res.json({ success: true, type: 'products', data: products });
+    }
+    const summary = await RealProfitEngine.getRealProfitSummary({ userId, days, environment: env });
+    res.json({ success: true, type: 'summary', data: summary });
   } catch (error) {
     next(error);
   }

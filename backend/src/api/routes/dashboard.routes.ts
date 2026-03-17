@@ -238,12 +238,14 @@ router.get('/charts/sales', async (req: Request, res: Response, next) => {
     if (environment !== 'all') {
       salesWhere.environment = environment;
     }
-    // Phase 23: Exclude test/mock/demo order IDs for production so chart shows only real sales
+    // Phase 23/27: Exclude test/mock/demo order IDs for production so chart shows only real sales (incl. DEMO-UTIL-*)
     if (environment === 'production') {
       salesWhere.AND = [
         { orderId: { not: { startsWith: 'test' } } },
+        { orderId: { not: { startsWith: 'TEST' } } },
         { orderId: { not: { startsWith: 'mock' } } },
         { orderId: { not: { startsWith: 'demo' } } },
+        { orderId: { not: { startsWith: 'DEMO' } } },
       ];
     }
     const sales = await prisma.sale.findMany({

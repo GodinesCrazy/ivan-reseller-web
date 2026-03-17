@@ -602,4 +602,247 @@ router.post('/run-revenue-monitor', authenticate, async (req: Request, res: Resp
   }
 });
 
+/**
+ * Phase 28 — System Stabilization and Real Operation Activation
+ */
+
+/** TASK 1: POST /api/system/phase28/full-sync — Force full marketplace sync (ML, eBay, Amazon). */
+router.post('/phase28/full-sync', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.role === 'ADMIN' ? req.body?.userId : req.user!.userId;
+    const { runFullMarketplaceSync } = await import('../../services/phase28-stabilization.service');
+    const result = await runFullMarketplaceSync({ userId });
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE28-FULL-SYNC] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Full sync failed' });
+  }
+});
+
+/** TASK 2: POST /api/system/phase28/run-recovery — Run ListingRecoveryEngine on all listings. */
+router.post('/phase28/run-recovery', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.role === 'ADMIN' ? req.body?.userId : req.user!.userId;
+    const limit = typeof req.body?.limit === 'number' ? Math.min(req.body.limit, 2000) : 2000;
+    const verifyWithApi = Boolean(req.body?.verifyWithApi);
+    const { runListingRecoveryOnAll } = await import('../../services/phase28-stabilization.service');
+    const result = await runListingRecoveryOnAll({ userId, limit, verifyWithApi });
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE28-RUN-RECOVERY] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Recovery failed' });
+  }
+});
+
+/** TASK 3: GET /api/system/phase28/workers-health — Redis and BullMQ workers health. */
+router.get('/phase28/workers-health', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const { checkRedisAndWorkers } = await import('../../services/phase28-stabilization.service');
+    const result = await checkRedisAndWorkers();
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE28-WORKERS-HEALTH] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Workers health check failed' });
+  }
+});
+
+/** TASK 4: GET /api/system/phase28/metrics-status — Real metrics activation (impressions, clicks, sales). */
+router.get('/phase28/metrics-status', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { checkMetricsActivation } = await import('../../services/phase28-stabilization.service');
+    const result = await checkMetricsActivation({ userId });
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE28-METRICS-STATUS] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Metrics status failed' });
+  }
+});
+
+/** TASK 5: GET /api/system/phase28/profit-validation — Real profit validation. */
+router.get('/phase28/profit-validation', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const days = typeof req.query.days === 'string' ? parseInt(req.query.days, 10) || 30 : 30;
+    const { validateRealProfit } = await import('../../services/phase28-stabilization.service');
+    const result = await validateRealProfit({ userId, days });
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE28-PROFIT-VALIDATION] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Profit validation failed' });
+  }
+});
+
+/** TASK 6: GET /api/system/phase28/autopilot-status — Autopilot validation. */
+router.get('/phase28/autopilot-status', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const { validateAutopilot } = await import('../../services/phase28-stabilization.service');
+    const result = await validateAutopilot();
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE28-AUTOPILOT-STATUS] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Autopilot validation failed' });
+  }
+});
+
+/** TASK 8: GET /api/system/phase28/ready — System ready check (listings match, workers stable, metrics flowing, profit real). */
+router.get('/phase28/ready', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const runFullSync = req.query.runFullSync === 'true';
+    const { runSystemReadyCheck } = await import('../../services/phase28-stabilization.service');
+    const result = await runSystemReadyCheck({ userId, runFullSync });
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE28-READY] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'System ready check failed' });
+  }
+});
+
+/**
+ * Phase 29 — Full Autonomous Stabilization and Profit Activation
+ */
+
+/** POST /api/system/phase29/run — Run full Phase 29 stabilization (sync, recovery, workers, metrics, profit, autopilot, test, ready). */
+router.post('/phase29/run', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const { runPhase29Stabilization } = await import('../../services/phase29-autonomous-stabilization.service');
+    const { prisma } = await import('../../config/database');
+    const result = await runPhase29Stabilization();
+    await prisma.systemConfig.upsert({
+      where: { key: 'phase29_last_run' },
+      create: { key: 'phase29_last_run', value: JSON.stringify(result) },
+      update: { value: JSON.stringify(result) },
+    });
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE29-RUN] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Phase 29 run failed' });
+  }
+});
+
+/** GET /api/system/phase29/status — Last Phase 29 run result. */
+router.get('/phase29/status', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const { prisma } = await import('../../config/database');
+    const rec = await prisma.systemConfig.findUnique({ where: { key: 'phase29_last_run' } });
+    if (!rec?.value) {
+      return res.status(200).json({ success: true, lastRun: null });
+    }
+    const lastRun = JSON.parse(rec.value as string);
+    return res.status(200).json({ success: true, lastRun });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE29-STATUS] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Phase 29 status failed' });
+  }
+});
+
+/**
+ * Phase 30 — External API Resilience and Self-Healing
+ */
+
+/** GET /api/system/phase30/api-health — Per-marketplace status (OK | DEGRADED | FAILED) for Control Center. */
+router.get('/phase30/api-health', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const { getApiHealth } = await import('../../services/api-health-tracking.service');
+    const health = getApiHealth() as any[];
+    return res.status(200).json({ success: true, health: health || [] });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE30-API-HEALTH] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'API health failed' });
+  }
+});
+
+/** POST /api/system/phase30/self-heal — Run one self-healing pass (reconcile batch, retry/recover). */
+router.post('/phase30/self-heal', authenticate, async (req: Request, res: Response) => {
+  try {
+    const batchSize = typeof req.body?.batchSize === 'number' ? Math.min(req.body.batchSize, 100) : 50;
+    const { runSelfHealingPass } = await import('../../services/phase30-self-healing.service');
+    const result = await runSelfHealingPass({ batchSize });
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE30-SELF-HEAL] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Self-heal failed' });
+  }
+});
+
+/** Phase 31 — Sales Generation and Market Dominance */
+/** POST /api/system/phase31/run — Run one sales generation cycle (winners, visibility, CRO, repricing, scaling). */
+router.post('/phase31/run', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const { runSalesGenerationCycle } = await import('../../services/phase31-sales-generation-engine.service');
+    const result = await runSalesGenerationCycle();
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE31] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Phase 31 cycle failed' });
+  }
+});
+
+/** GET /api/system/phase31/marketplace-priority — Get marketplace priority order (TASK 6). */
+router.get('/phase31/marketplace-priority', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const { getMarketplacePriorityConfig } = await import('../../services/phase31-sales-generation-engine.service');
+    const result = await getMarketplacePriorityConfig();
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE31] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Get priority failed' });
+  }
+});
+
+/** PUT /api/system/phase31/marketplace-priority — Set marketplace priority (e.g. ["ebay","mercadolibre","amazon"]). */
+router.put('/phase31/marketplace-priority', authenticate, async (req: Request, res: Response) => {
+  try {
+    const order = Array.isArray(req.body?.priority) ? req.body.priority : req.body?.order;
+    if (!Array.isArray(order) || order.length === 0) {
+      return res.status(400).json({ success: false, error: 'priority (array) required' });
+    }
+    const { setMarketplacePriority } = await import('../../services/phase31-sales-generation-engine.service');
+    await setMarketplacePriority(order);
+    return res.status(200).json({ success: true, message: 'Marketplace priority updated' });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE31] Error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Set priority failed' });
+  }
+});
+
+/** Phase 32 — Autonomous Execution and Real Sales Validation */
+/** POST /api/system/phase32/activate — TASK 1+3+4: Run Phase 31 once, set priority, set max 15/day. */
+router.post('/phase32/activate', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const { runPhase32Activation } = await import('../../services/phase32-autonomous-execution.service');
+    const result = await runPhase32Activation();
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE32] Activate error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Phase 32 activation failed' });
+  }
+});
+
+/** POST /api/system/phase32/run-validation-cycle — TASK 5–9: Metrics, profit, marketplace reality, then Phase 31. */
+router.post('/phase32/run-validation-cycle', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const { runPhase32ValidationCycle } = await import('../../services/phase32-autonomous-execution.service');
+    const result = await runPhase32ValidationCycle({ userId });
+    return res.status(200).json({ success: true, ...result });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE32] Validation cycle error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Validation cycle failed' });
+  }
+});
+
+/** GET /api/system/phase32/status — Last activation, last validation cycle, scheduler cron, max new listings/day. */
+router.get('/phase32/status', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const { getPhase32Status } = await import('../../services/phase32-autonomous-execution.service');
+    const status = await getPhase32Status();
+    return res.status(200).json({ success: true, ...status });
+  } catch (err: any) {
+    logger.error('[SYSTEM/PHASE32] Status error', { error: err?.message });
+    return res.status(500).json({ success: false, error: err?.message || 'Phase 32 status failed' });
+  }
+});
+
 export default router;

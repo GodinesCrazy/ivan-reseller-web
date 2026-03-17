@@ -90,11 +90,26 @@ export async function getSalesLedger(
   });
   const excludeOrderIds = simulatedOrders.map((o) => o.id);
 
+  // Phase 27: Production = real data only; exclude test/mock/demo orderId prefixes
+  const realOrderIdFilter =
+    environment === 'production'
+      ? {
+          AND: [
+            { orderId: { not: { startsWith: 'test' } } },
+            { orderId: { not: { startsWith: 'TEST' } } },
+            { orderId: { not: { startsWith: 'mock' } } },
+            { orderId: { not: { startsWith: 'demo' } } },
+            { orderId: { not: { startsWith: 'DEMO' } } },
+          ],
+        }
+      : {};
+
   const sales = await prisma.sale.findMany({
     where: {
       userId,
       createdAt: { gte: startDate },
       ...envWhere,
+      ...realOrderIdFilter,
       ...(excludeOrderIds.length > 0 ? { orderId: { notIn: excludeOrderIds } } : {}),
     },
     include: {

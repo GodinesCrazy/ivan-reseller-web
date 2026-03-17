@@ -47,9 +47,11 @@ export class ScheduledTasksService {
     private autonomousScalingQueue: Queue | null = null;
     private conversionRateOptimizationQueue: Queue | null = null;
     private listingStateReconciliationQueue: Queue | null = null;
+    private fullListingRecoveryQueue: Queue | null = null;
     private competitorIntelligenceQueue: Queue | null = null;
     private autonomousRevenueMonitorQueue: Queue | null = null;
     private salesAccelerationQueue: Queue | null = null;
+    private phase31SalesGenerationQueue: Queue | null = null;
     private financialAlertsWorker: Worker | null = null;
   private commissionProcessingWorker: Worker | null = null;
   private authHealthWorker: Worker | null = null;
@@ -74,9 +76,11 @@ export class ScheduledTasksService {
     private autonomousScalingWorker: Worker | null = null;
     private conversionRateOptimizationWorker: Worker | null = null;
     private listingStateReconciliationWorker: Worker | null = null;
+    private fullListingRecoveryWorker: Worker | null = null;
     private competitorIntelligenceWorker: Worker | null = null;
     private autonomousRevenueMonitorWorker: Worker | null = null;
     private salesAccelerationWorker: Worker | null = null;
+    private phase31SalesGenerationWorker: Worker | null = null;
 
   private bullMQRedis: ReturnType<typeof getBullMQRedisConnection>;
 
@@ -218,6 +222,11 @@ export class ScheduledTasksService {
       connection: this.bullMQRedis as any
     });
 
+    // Phase 26: Full Listing Recovery — audit + classification + recovery (every few hours)
+    this.fullListingRecoveryQueue = new Queue('full-listing-recovery', {
+      connection: this.bullMQRedis as any
+    });
+
     // Phase 18: Competitor Intelligence — daily
     this.competitorIntelligenceQueue = new Queue('competitor-intelligence', {
       connection: this.bullMQRedis as any
@@ -230,6 +239,11 @@ export class ScheduledTasksService {
 
     // Phase 23: Sales Acceleration Mode — every 3 hours
     this.salesAccelerationQueue = new Queue('sales-acceleration', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 32: Phase 31 Sales Generation — every 4–6 hours (default 5)
+    this.phase31SalesGenerationQueue = new Queue('phase31-sales-generation', {
       connection: this.bullMQRedis as any
     });
   }
@@ -758,6 +772,52 @@ export class ScheduledTasksService {
       });
     }
 
+    // Phase 26: Full Listing Recovery — audit + classification + recovery (Task 6: continuous reality sync)
+    if (this.fullListingRecoveryQueue) {
+      this.fullListingRecoveryWorker = new Worker(
+        'full-listing-recovery',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running Phase 26 full listing recovery', { jobId: job.id });
+          const { fullListingAuditService } = await import('./full-listing-audit.service');
+          const { listingClassificationEngine } = await import('./listing-classification-engine.service');
+          const { listingRecoveryEngine } = await import('./listing-recovery-engine.service');
+          const records = await fullListingAuditService.runFullAudit({
+            limit: 1000,
+            verifyWithApi: false,
+            metricsDays: 30,
+          });
+          const classified = listingClassificationEngine.classifyBatch(records);
+          const result = await listingRecoveryEngine.runRecovery(classified);
+          return {
+            auditCount: records.length,
+            processed: result.processed,
+            removedFromDb: result.removedFromDb,
+            republishEnqueued: result.republishEnqueued,
+            optimized: result.optimized,
+            errors: result.errors,
+          };
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.fullListingRecoveryWorker.on('completed', (job, result) => {
+        logger.info('Scheduled Tasks: Full listing recovery completed', {
+          jobId: job?.id,
+          processed: result?.processed,
+          removedFromDb: result?.removedFromDb,
+          republishEnqueued: result?.republishEnqueued,
+        });
+      });
+      this.fullListingRecoveryWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Full listing recovery failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
+
     if (this.competitorIntelligenceQueue) {
       this.competitorIntelligenceWorker = new Worker(
         'competitor-intelligence',
@@ -858,6 +918,35 @@ export class ScheduledTasksService {
       });
       this.salesAccelerationWorker.on('failed', (job, err) => {
         logger.error('Scheduled Tasks: Sales acceleration failed', {
+          jobId: job?.id,
+          error: err?.message,
+        });
+      });
+    }
+
+    // Phase 32: Phase 31 Sales Generation — run every 4–6 hours
+    if (this.phase31SalesGenerationQueue) {
+      this.phase31SalesGenerationWorker = new Worker(
+        'phase31-sales-generation',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running Phase 31 sales generation', { jobId: job.id });
+          const { runSalesGenerationCycle } = await import('./phase31-sales-generation-engine.service');
+          return await runSalesGenerationCycle();
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+      this.phase31SalesGenerationWorker.on('completed', (job, result) => {
+        logger.info('Scheduled Tasks: Phase 31 sales generation completed', {
+          jobId: job?.id,
+          winnersDetected: result?.winnersDetected,
+          durationMs: result?.durationMs,
+        });
+      });
+      this.phase31SalesGenerationWorker.on('failed', (job, err) => {
+        logger.error('Scheduled Tasks: Phase 31 sales generation failed', {
           jobId: job?.id,
           error: err?.message,
         });
@@ -1220,6 +1309,23 @@ export class ScheduledTasksService {
       );
     }
 
+    // Phase 26: Full Listing Recovery — every 6 hours (Task 6: continuous reality sync)
+    const fullListingRecoveryCron = process.env.FULL_LISTING_RECOVERY_CRON || '0 */6 * * *';
+    if (this.fullListingRecoveryQueue) {
+      this.fullListingRecoveryQueue.add(
+        'full-listing-recovery-run',
+        {},
+        {
+          repeat: { pattern: fullListingRecoveryCron },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+          attempts: 2,
+          backoff: { type: 'exponential', delay: 120000 },
+        }
+      );
+      logger.info('Scheduled Tasks: Full listing recovery (Phase 26) scheduled', { cron: fullListingRecoveryCron });
+    }
+
     // Phase 18: Competitor Intelligence — daily at 5:30 AM (after market intelligence)
     if (this.competitorIntelligenceQueue) {
       this.competitorIntelligenceQueue.add(
@@ -1263,6 +1369,22 @@ export class ScheduledTasksService {
         }
       );
       logger.info('Scheduled Tasks: Sales acceleration scheduled', { cron: salesAccelerationCron });
+    }
+
+    // Phase 32: Phase 31 every 4–6 hours (env PHASE31_SALES_GENERATION_CRON, default every 5h)
+    const phase31SalesGenerationCron = process.env.PHASE31_SALES_GENERATION_CRON || '0 */5 * * *';
+    if (this.phase31SalesGenerationQueue) {
+      this.phase31SalesGenerationQueue.add(
+        'phase31-sales-generation-run',
+        {},
+        {
+          repeat: { pattern: phase31SalesGenerationCron },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+          attempts: 2,
+        }
+      );
+      logger.info('Scheduled Tasks: Phase 31 sales generation (Phase 32) scheduled', { cron: phase31SalesGenerationCron });
     }
 
     logger.info('Scheduled Tasks: Tasks scheduled successfully');
@@ -2061,6 +2183,18 @@ export class ScheduledTasksService {
     }
     if (this.salesAccelerationQueue) {
       await this.salesAccelerationQueue.close();
+    }
+    if (this.phase31SalesGenerationWorker) {
+      await this.phase31SalesGenerationWorker.close();
+    }
+    if (this.phase31SalesGenerationQueue) {
+      await this.phase31SalesGenerationQueue.close();
+    }
+    if (this.fullListingRecoveryWorker) {
+      await this.fullListingRecoveryWorker.close();
+    }
+    if (this.fullListingRecoveryQueue) {
+      await this.fullListingRecoveryQueue.close();
     }
   }
 

@@ -13,6 +13,8 @@ import {
   AlertCircle,
   DollarSign,
   Target,
+  Zap,
+  Loader2,
 } from 'lucide-react';
 import api from '@services/api';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -72,14 +74,51 @@ interface AutopilotStatus {
   config?: { enabled?: boolean; cycleIntervalMinutes?: number };
 }
 
+interface Phase32ActivationResult {
+  success: boolean;
+  phase31Run: { success: boolean; winnersDetected: number; durationMs: number; errors: string[] };
+  marketplacePrioritySet: string[];
+  maxNewListingsPerDaySet: number;
+  errors: string[];
+}
+
+interface Phase32ValidationCycleResult {
+  success: boolean;
+  metricsOk: boolean;
+  profitOk: boolean;
+  profitTotal: number;
+  phase31Run: boolean;
+  durationMs: number;
+  errors: string[];
+}
+
+interface Phase32Status {
+  lastActivation: Phase32ActivationResult | null;
+  lastValidationCycle: Phase32ValidationCycleResult | null;
+  schedulerCron: string;
+  maxNewListingsPerDay: number;
+}
+
 export default function ControlCenter() {
   const { environment } = useEnvironment();
   const [funnel, setFunnel] = useState<ControlCenterFunnel | null>(null);
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
   const [metrics, setMetrics] = useState<AutopilotMetrics | null>(null);
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus | null>(null);
+  const [phase32Status, setPhase32Status] = useState<Phase32Status | null>(null);
+  const [phase32Activating, setPhase32Activating] = useState(false);
+  const [phase32Validating, setPhase32Validating] = useState(false);
+  const [phase32Message, setPhase32Message] = useState<string | null>(null);
+  const [phase32MessageType, setPhase32MessageType] = useState<'success' | 'error' | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchPhase32Status = () => {
+    api
+      .get('/api/system/phase32/status')
+      .then((r) => r.data && setPhase32Status({ ...r.data }))
+      .catch(() => setPhase32Status(null));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -90,8 +129,9 @@ export default function ControlCenter() {
       api.get('/api/system/readiness-report').then((r) => r.data),
       api.get('/api/dashboard/autopilot-metrics', { params: { environment } }).then((r) => r.data),
       api.get('/api/autopilot/status').then((r) => r.data).catch(() => ({ running: false, status: 'unknown', lastRun: null })),
+      api.get('/api/system/phase32/status').then((r) => r.data).catch(() => null),
     ])
-      .then(([funnelData, readinessData, metricsData, autopilotData]) => {
+      .then(([funnelData, readinessData, metricsData, autopilotData, phase32Data]) => {
         if (!cancelled) {
           setFunnel(funnelData);
           setReadiness(readinessData);
@@ -107,6 +147,7 @@ export default function ControlCenter() {
             lastRun: autopilotData.lastRun ?? null,
             config: autopilotData.config,
           });
+          setPhase32Status(phase32Data ?? null);
         }
       })
       .catch((err) => {
@@ -339,6 +380,124 @@ export default function ControlCenter() {
           )}
         </div>
       )}
+
+      {/* Phase 32 — Modo autónomo de ventas */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+          <Zap className="h-5 w-5 text-amber-500" />
+          Phase 32 — Modo autónomo de ventas
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Activación inicial ejecuta Phase 31 una vez, fija prioridad de marketplaces y límite de 15 nuevos listados/día. El scheduler ejecuta Phase 31 cada 4–6 h automáticamente.
+        </p>
+        {phase32Status != null ? (
+          <div className="space-y-3 mb-4">
+            <div className="flex flex-wrap gap-4 text-sm">
+              <span className="text-gray-600 dark:text-gray-300">
+                Última activación:{' '}
+                {phase32Status.lastActivation ? (
+                  phase32Status.lastActivation.success ? (
+                    <strong className="text-green-600 dark:text-green-400">OK</strong>
+                  ) : (
+                    <strong className="text-amber-600 dark:text-amber-400">Con errores</strong>
+                  )
+                ) : (
+                  <span className="text-gray-500 dark:text-gray-400">Nunca</span>
+                )}
+              </span>
+              <span className="text-gray-600 dark:text-gray-300">
+                Scheduler: <strong>{phase32Status.schedulerCron}</strong> (ej. cada 5 h)
+              </span>
+              <span className="text-gray-600 dark:text-gray-300">
+                Máx. nuevos listados/día: <strong>{phase32Status.maxNewListingsPerDay}</strong>
+              </span>
+            </div>
+            {phase32Status.lastValidationCycle && (
+              <div className="text-sm text-gray-600 dark:text-gray-300">
+                Último ciclo de validación: {phase32Status.lastValidationCycle.success ? 'OK' : 'Con errores'}
+                {phase32Status.lastValidationCycle.durationMs != null && (
+                  <> · {phase32Status.lastValidationCycle.durationMs} ms</>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Inicia sesión para ver el estado y activar Phase 32.
+          </p>
+        )}
+        {phase32Message && (
+          <div
+            className={`mb-4 p-3 rounded-lg text-sm ${
+              phase32MessageType === 'error'
+                ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+                : 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800'
+            }`}
+          >
+            {phase32Message}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setPhase32Message(null);
+              setPhase32Activating(true);
+              api
+                .post('/api/system/phase32/activate')
+                .then((res) => {
+                  setPhase32Message(
+                    res.data?.success ? 'Activación completada.' : res.data?.errors?.join(' ') || 'Activación finalizada con avisos.'
+                  );
+                  setPhase32MessageType(res.data?.success ? 'success' : 'error');
+                  fetchPhase32Status();
+                })
+                .catch((err) => {
+                  setPhase32Message(err.response?.data?.error || err.message || 'Error al activar');
+                  setPhase32MessageType('error');
+                  fetchPhase32Status();
+                })
+                .finally(() => setPhase32Activating(false));
+            }}
+            disabled={phase32Activating}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-sm"
+          >
+            {phase32Activating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : null}
+            Activar Phase 32
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPhase32Message(null);
+              setPhase32Validating(true);
+              api
+                .post('/api/system/phase32/run-validation-cycle')
+                .then((res) => {
+                  setPhase32Message(
+                    res.data?.success
+                      ? 'Ciclo de validación completado.'
+                      : res.data?.errors?.join(' ') || 'Ciclo finalizado con avisos.'
+                  );
+                  setPhase32MessageType(res.data?.success ? 'success' : 'error');
+                  fetchPhase32Status();
+                })
+                .catch((err) => {
+                  setPhase32Message(err.response?.data?.error || err.message || 'Error en ciclo de validación');
+                  setPhase32MessageType('error');
+                  fetchPhase32Status();
+                })
+                .finally(() => setPhase32Validating(false));
+            }}
+            disabled={phase32Validating}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-600 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-sm"
+          >
+            {phase32Validating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Ejecutar ciclo de validación
+          </button>
+        </div>
+      </div>
 
       {/* Platform Funnel */}
       {funnel && (
