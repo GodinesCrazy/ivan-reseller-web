@@ -483,10 +483,14 @@ router.get('/autopilot-metrics', async (req: Request, res: Response, next) => {
 
     let environment = (req.query.environment as string)?.toLowerCase();
     if (environment !== 'sandbox' && environment !== 'production') {
-      const { workflowConfigService } = await import('../../services/workflow-config.service');
-      environment = (await workflowConfigService.getUserEnvironment(userId!)) ?? 'production';
+      if (userId != null) {
+        const { workflowConfigService } = await import('../../services/workflow-config.service');
+        environment = (await workflowConfigService.getUserEnvironment(userId)) ?? 'production';
+      } else {
+        environment = 'production';
+      }
     }
-    const saleEnvFilter = { environment };
+    const saleEnvFilter = environment === 'all' ? {} : { environment };
 
     if (env.SAFE_DASHBOARD_MODE) {
       return res.json({
