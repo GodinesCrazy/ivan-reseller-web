@@ -653,7 +653,7 @@ export default function FinanceDashboard() {
         <>
       {/* Main Stats Cards — Phase 34: Net Profit first, then Gross Profit, Revenue, Expenses */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-gray-800 border-2 border-emerald-500/50 dark:border-emerald-500/50 rounded-lg p-6">
+        <div className="bg-emerald-50 dark:bg-gray-800 border-2 border-emerald-300 dark:border-emerald-500/50 rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="text-sm text-gray-600 dark:text-gray-400">Net Profit</div>
             <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">

@@ -1,3 +1,21 @@
+// Apply theme before first paint to avoid flash (localStorage + prefers-color-scheme)
+(function applyThemeInit() {
+  let theme: 'light' | 'dark' = 'light';
+  try {
+    const saved = localStorage.getItem('userSettings');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.theme === 'dark') theme = 'dark';
+      else if (parsed.theme === 'auto')
+        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+  } catch {
+    // ignore
+  }
+  if (theme === 'dark') document.documentElement.classList.add('dark');
+  else document.documentElement.classList.remove('dark');
+})();
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';

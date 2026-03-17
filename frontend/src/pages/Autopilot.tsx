@@ -990,12 +990,12 @@ export default function Autopilot() {
         </div>
       )}
 
-      {/* Estado del ciclo actual - Panel mejorado */}
+      {/* Estado del ciclo — Ciclo del Autopilot (1-4) separado de post-venta (5-7) */}
       <div className="rounded-xl border-2 overflow-hidden">
         <div className={`px-4 py-3 font-semibold text-sm uppercase tracking-wide ${
           autopilotRunning ? 'bg-green-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
         }`}>
-          Estado del ciclo actual
+          Estado del ciclo
         </div>
         <div className={`border-t p-4 flex items-start gap-4 transition-colors ${
           autopilotRunning ? 'bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
@@ -1012,25 +1012,41 @@ export default function Autopilot() {
               <div className="font-semibold text-lg text-gray-900 dark:text-gray-100">
                 {autopilotRunning ? 'En ejecución' : 'Detenido'}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400 mt-0.5 space-y-1">
+              {autopilotRunning && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Ciclo del Autopilot (buscar → publicar)</p>
+              )}
+              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1 space-y-1">
                 {autopilotRunning ? (
                   <>
                     {(() => {
                       const phase = autopilotStatus?.currentPhase;
+                      const phaseNames: Record<string, { num: number; name: string }> = {
+                        idle: { num: 0, name: 'Entre ciclos' },
+                        searching: { num: 1, name: 'Buscar' },
+                        filtering: { num: 2, name: 'Filtrar' },
+                        analyzing: { num: 3, name: 'Analizar' },
+                        publishing: { num: 4, name: 'Publicar' },
+                      };
+                      const phaseInfo = phase ? phaseNames[phase] ?? { num: 0, name: '—' } : { num: 0, name: '—' };
                       const prog = autopilotStatus?.currentCycleProgress;
-                      let msg = '';
-                      if (phase === 'searching') msg = 'Fase 1/7: Buscando oportunidades en AliExpress…';
-                      else if (phase === 'filtering') msg = 'Fase 2/7: Filtrando por criterios de precio y calidad…';
-                      else if (phase === 'analyzing') msg = 'Fase 3/7: Analizando rentabilidad y ROI…';
+                      let detail = '';
+                      if (phase === 'searching') detail = 'Buscando oportunidades en AliExpress…';
+                      else if (phase === 'filtering') detail = 'Filtrando por criterios de precio y calidad…';
+                      else if (phase === 'analyzing') detail = 'Analizando rentabilidad y ROI…';
                       else if (phase === 'publishing') {
                         const curr = prog?.publishingCurrent;
                         const tot = prog?.publishingTotal;
-                        msg = (curr != null && tot != null && tot > 0)
-                          ? `Fase 4/7: Publicando en marketplace(s) destino… (producto ${curr} de ${tot})`
-                          : 'Fase 4/7: Publicando en marketplace(s) destino…';
-                      } else if (phase === 'idle') msg = 'Entre ciclos. Siguiente ciclo según intervalo configurado.';
-                      else msg = 'Ciclo activo: buscar → filtrar → analizar → publicar.';
-                      return <span>{msg}</span>;
+                        detail = (curr != null && tot != null && tot > 0) ? `Publicando… producto ${curr} de ${tot}` : 'Publicando en marketplace(s)…';
+                      } else if (phase === 'idle') detail = 'Siguiente ciclo según intervalo configurado.';
+                      else detail = 'buscar → filtrar → analizar → publicar.';
+                      return (
+                        <>
+                          <div className="font-medium text-base text-gray-900 dark:text-gray-100">
+                            Ahora: Fase {phaseInfo.num || '—'} — {phaseInfo.name}
+                          </div>
+                          {detail && <span className="text-sm">{detail}</span>}
+                        </>
+                      );
                     })()}
                     {(() => {
                       const mins = getMinutesAgo(autopilotStatus?.cycleStartedAt);
@@ -1057,63 +1073,73 @@ export default function Autopilot() {
             </div>
             {(() => {
               const cyclePhases = ['idle', 'searching', 'filtering', 'analyzing', 'publishing'];
-              const allPhaseLabels = ['1.Buscar', '2.Filtrar', '3.Analizar', '4.Publicar', '5.Compra', '6.Envío', '7.Entregado'];
+              const cyclePhaseLabels = ['Buscar', 'Filtrar', 'Analizar', 'Publicar'];
               const currentIdx = cyclePhases.indexOf(autopilotStatus?.currentPhase || 'idle');
-              const cycleProgress = currentIdx >= 0 ? Math.round((currentIdx / (cyclePhases.length - 1)) * 100) : 0;
+              const cycleProgress = currentIdx >= 0 ? Math.round((currentIdx / Math.max(1, cyclePhases.length - 1)) * 100) : 0;
               const orders = inventoryListings?.ordersByStatus ?? {};
               const compraCount = (orders.PAID ?? 0) + (orders.PURCHASING ?? 0) + (inventoryListings?.pendingPurchasesCount ?? 0);
               const envioCount = orders.PURCHASED ?? 0;
               const entregadoCount = inventoryListings?.salesDeliveredCount ?? 0;
+              const currentPhase = autopilotStatus?.currentPhase;
               return (
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                    <span>Progreso del ciclo (1-4) y post-venta (5-7)</span>
-                    {autopilotRunning && <span>{cycleProgress}%</span>}
+                <div className="space-y-4">
+                  {/* Bloque 1: Ciclo del Autopilot (solo fases 1-4) */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                      <span>Progreso de este ciclo</span>
+                      {autopilotRunning && <span>{cycleProgress}%</span>}
+                    </div>
+                    <div className="flex gap-0.5">
+                      {cyclePhaseLabels.map((label, i) => {
+                        const phaseKey = cyclePhases[i + 1];
+                        const isActive = currentIdx >= i + 1 && autopilotRunning;
+                        const isCurrent = currentPhase === phaseKey && autopilotRunning;
+                        return (
+                          <div
+                            key={label}
+                            className={`flex-1 h-2 rounded first:rounded-l last:rounded-r ${
+                              isActive ? 'bg-green-500 dark:bg-green-600' : 'bg-gray-200 dark:bg-gray-700'
+                            }`}
+                            title={label}
+                          />
+                        );
+                      })}
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {cyclePhaseLabels.map((label, i) => {
+                        const phaseKey = cyclePhases[i + 1];
+                        const isCurrent = currentPhase === phaseKey && autopilotRunning;
+                        const titles = ['Query a AliExpress / tendencias', 'Precio, capital, duplicados', 'Rentabilidad, ROI, compliance', 'Crear listados en eBay/ML/Amazon'];
+                        return (
+                          <span
+                            key={label}
+                            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium ${
+                              isCurrent
+                                ? 'ring-2 ring-green-500 dark:ring-green-400 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200'
+                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                            }`}
+                            title={titles[i]}
+                          >
+                            {i + 1}. {label}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="flex gap-0.5">
-                    {allPhaseLabels.map((label, i) => {
-                      const isCyclePhase = i < 4;
-                      const isActive = isCyclePhase && currentIdx >= i && autopilotRunning;
-                      const hasData = !isCyclePhase && (
-                        (i === 4 && compraCount > 0) || (i === 5 && envioCount > 0) || (i === 6 && entregadoCount > 0)
-                      );
-                      const phase5Tooltip = 'Pagadas + Comprando en AliExpress + Pendientes de compra';
-                      const phase6Tooltip = 'Órdenes compradas en proveedor, esperando envío';
-                      const phase7Tooltip = 'Ventas marcadas como entregadas';
-                      const tooltip = !isCyclePhase ? (i === 4 ? `${phase5Tooltip} — ${compraCount} en proceso` : i === 5 ? `${phase6Tooltip} — ${envioCount}` : `${phase7Tooltip} — ${entregadoCount}`) : label;
-                      return (
-                        <div
-                          key={label}
-                          className={`flex-1 h-2 rounded first:rounded-l last:rounded-r ${
-                            isActive ? 'bg-green-500 dark:bg-green-600' : hasData ? 'bg-blue-400 dark:bg-blue-500' : 'bg-gray-200 dark:bg-gray-700'
-                          }`}
-                          title={tooltip}
-                        />
-                      );
-                    })}
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300" title="Query a AliExpress / tendencias">
-                      1. Buscar
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300" title="Precio, capital, duplicados">
-                      2. Filtrar
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300" title="Rentabilidad, ROI, compliance">
-                      3. Analizar
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300" title="Crear listados en eBay/ML/Amazon">
-                      4. Publicar
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200" title="Pagadas + Comprando en AliExpress + Pendientes de compra">
-                      5. Compra: {compraCount}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200" title="Órdenes compradas en proveedor, esperando envío">
-                      6. Envío: {envioCount}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200" title="Ventas marcadas como entregadas">
-                      7. Entregado: {entregadoCount}
-                    </span>
+                  {/* Bloque 2: Pipeline post-venta (ventas y envíos) */}
+                  <div className="space-y-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Ventas y envíos en proceso</div>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200" title="Pagadas + Comprando en AliExpress + Pendientes de compra">
+                        5. Compra: {compraCount}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200" title="Órdenes compradas en proveedor, esperando envío">
+                        6. Envío: {envioCount}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200" title="Ventas marcadas como entregadas">
+                        7. Entregado: {entregadoCount}
+                      </span>
+                    </div>
                   </div>
                   <button
                     type="button"

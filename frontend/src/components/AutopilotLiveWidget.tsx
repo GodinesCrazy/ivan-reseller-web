@@ -32,6 +32,14 @@ const PHASE_LABELS: Record<string, string> = {
   idle: 'Entre ciclos',
 };
 
+const PHASE_SHORT: Record<string, string> = {
+  idle: 'Entre ciclos',
+  searching: 'Fase 1: Buscar',
+  filtering: 'Fase 2: Filtrar',
+  analyzing: 'Fase 3: Analizar',
+  publishing: 'Fase 4: Publicar',
+};
+
 export default function AutopilotLiveWidget() {
   const [status, setStatus] = useState<AutopilotStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,9 +91,14 @@ export default function AutopilotLiveWidget() {
             <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Autopilot</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               {status.running
-                ? (phase ? PHASE_LABELS[phase] ?? 'En ejecución' : 'Ciclo activo')
+                ? (phase ? PHASE_SHORT[phase] ?? PHASE_LABELS[phase] ?? 'Ciclo activo' : 'Ciclo activo')
                 : 'Detenido'}
             </p>
+            {status.running && phase && PHASE_LABELS[phase] && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate max-w-[200px]" title={PHASE_LABELS[phase]}>
+                {PHASE_LABELS[phase]}
+              </p>
+            )}
           </div>
         </div>
         <Link

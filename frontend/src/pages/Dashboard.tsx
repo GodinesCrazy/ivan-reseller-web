@@ -487,7 +487,7 @@ export default function Dashboard() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
           {/* Profit-first: main metric (Phase 34 — Conversion UX) */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border-2 border-emerald-200 dark:border-emerald-700/60 transition-colors md:col-span-1" title="Utilidad real después de costos, comisiones, PayPal y comisión de plataforma.">
+          <div className="bg-emerald-50 dark:bg-gray-800 p-6 rounded-xl shadow-lg border-2 border-emerald-300 dark:border-emerald-700/60 transition-colors md:col-span-1" title="Utilidad real después de costos, comisiones, PayPal y comisión de plataforma.">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Ganancia neta</p>

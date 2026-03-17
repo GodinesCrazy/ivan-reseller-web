@@ -1,10 +1,18 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, RefreshCcw, ShieldCheck, ShieldAlert, Loader2, User, Menu } from 'lucide-react';
+import { LogOut, RefreshCcw, ShieldCheck, ShieldAlert, Loader2, User, Menu, Sun, Moon, Monitor } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@stores/authStore';
 import { useAuthStatusStore } from '@stores/authStatusStore';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { useTheme } from '@/hooks/useTheme';
+
+type ThemeOption = 'light' | 'dark' | 'auto';
+const THEME_OPTIONS: { value: ThemeOption; label: string; icon: typeof Sun }[] = [
+  { value: 'light', label: 'Claro', icon: Sun },
+  { value: 'dark', label: 'Oscuro', icon: Moon },
+  { value: 'auto', label: 'Sistema', icon: Monitor },
+];
 
 const statusStyles: Record<string, { className: string; label: string; icon: JSX.Element }> = {
   healthy: {
@@ -43,11 +51,25 @@ export default function Navbar() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { toggle } = useSidebar();
+  const { theme, updateTheme } = useTheme();
+  const [themeOpen, setThemeOpen] = useState(false);
+  const themeButtonRef = useRef<HTMLButtonElement>(null);
+  const themeMenuRef = useRef<HTMLDivElement>(null);
   const statuses = useAuthStatusStore((state) => state.statuses);
   const loadingStatus = useAuthStatusStore((state) => state.loading);
   const fetchStatuses = useAuthStatusStore((state) => state.fetchStatuses);
   const pendingManualSession = useAuthStatusStore((state) => state.pendingManualSession);
   const requestRefresh = useAuthStatusStore((state) => state.requestRefresh);
+
+  useEffect(() => {
+    if (!themeOpen) return;
+    const close = (e: MouseEvent) => {
+      if (themeMenuRef.current?.contains(e.target as Node) || themeButtonRef.current?.contains(e.target as Node)) return;
+      setThemeOpen(false);
+    };
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [themeOpen]);
 
   useEffect(() => {
     fetchStatuses();
@@ -155,6 +177,50 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center space-x-4">
+          <div className="relative">
+            <button
+              ref={themeButtonRef}
+              type="button"
+              onClick={() => setThemeOpen((o) => !o)}
+              className="p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              aria-label="Tema"
+              title="Tema"
+            >
+              {theme === 'dark' ? (
+                <Moon className="w-5 h-5" />
+              ) : theme === 'auto' ? (
+                <Monitor className="w-5 h-5" />
+              ) : (
+                <Sun className="w-5 h-5" />
+              )}
+            </button>
+            {themeOpen && (
+              <div
+                ref={themeMenuRef}
+                className="absolute right-0 top-full mt-1 py-1 w-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50"
+              >
+                {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      updateTheme(value);
+                      setThemeOpen(false);
+                    }}
+                    className={`flex items-center gap-2 w-full px-3 py-2 text-left text-sm transition-colors ${
+                      theme === value
+                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button
             onClick={handleForceRefresh}
             disabled={loadingStatus || statusKey === 'refreshing'}
