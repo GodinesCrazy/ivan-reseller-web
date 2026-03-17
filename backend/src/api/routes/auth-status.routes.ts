@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
+import { prisma } from '../../config/database';
 import { marketplaceAuthStatusService } from '../../services/marketplace-auth-status.service';
 import ManualAuthService from '../../services/manual-auth.service';
 // ✅ FASE 3: Dynamic import para evitar SIGSEGV - NO importar aliExpressAuthMonitor al nivel superior
@@ -156,6 +157,30 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
       };
     });
 
+    if (!payload.aliexpress && userId) {
+      // Si no hay fila en marketplace_auth_statuses pero el usuario tiene credenciales AliExpress, mostrar configurado
+      try {
+        const hasAliCred = await prisma.apiCredential.findFirst({
+          where: {
+            userId,
+            isActive: true,
+            OR: [
+              { apiName: { in: ['aliexpress', 'aliexpress-affiliate', 'aliexpress-dropshipping'] } },
+              { apiName: { contains: 'aliexpress', mode: 'insensitive' } },
+            ],
+          },
+        });
+        if (hasAliCred) {
+          payload.aliexpress = {
+            status: 'configured',
+            message: 'Configurado (sesión no verificada)',
+            requiresManual: false,
+          };
+        }
+      } catch (_) {
+        // Ignorar error de DB para no romper auth-status
+      }
+    }
     if (!payload.aliexpress) {
       payload.aliexpress = {
         status: 'unknown',

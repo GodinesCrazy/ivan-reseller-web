@@ -27,6 +27,11 @@ const statusStyles: Record<string, { className: string; label: string; icon: JSX
     label: 'Error al renovar',
     icon: <ShieldAlert className="w-4 h-4" />,
   },
+  configured: {
+    className: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700',
+    label: 'Configurado',
+    icon: <ShieldCheck className="w-4 h-4" />,
+  },
   unknown: {
     className: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600',
     label: 'Estado desconocido',

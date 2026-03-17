@@ -25,6 +25,7 @@ import {
   Package,
   ChevronDown,
   ChevronUp,
+  HelpCircle,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
@@ -1422,13 +1423,13 @@ export default function Autopilot() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-colors">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-colors" title="Número de ciclos del Autopilot ejecutados.">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-purple-100 rounded-lg">
               <BarChart3 className="w-6 h-6 text-purple-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">Total Runs</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400">Ciclos completados</div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {stats?.totalRuns || 0}
               </div>
@@ -1436,16 +1437,17 @@ export default function Autopilot() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-colors" title="Porcentaje de ejecuciones de workflows que terminaron correctamente (sin error).">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 transition-colors" title="Media de publicaciones y aprobaciones por ciclo (no % de ciclos exitosos).">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-green-100 rounded-lg">
               <CheckCircle className="w-6 h-6 text-green-600" />
             </div>
             <div>
-              <div className="text-sm text-gray-600 dark:text-gray-400" title="Porcentaje de ejecuciones de workflows que terminaron correctamente (sin error).">Tasa de éxito</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400" title="Media de publicaciones y aprobaciones por ciclo (no % de ciclos exitosos).">Grado de éxito</div>
               <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {stats?.successRate?.toFixed(1) || 0}%
               </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Media de publicaciones/aprobaciones por ciclo</div>
             </div>
           </div>
         </div>
@@ -1485,7 +1487,12 @@ export default function Autopilot() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Run</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Next Run</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Run Count</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Success Rate</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <span className="inline-flex items-center gap-1" title="Media de publicaciones y aprobaciones por ciclo (no % de ciclos exitosos).">
+                    Success Rate
+                    <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                  </span>
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
