@@ -92,9 +92,17 @@ interface Phase32ValidationCycleResult {
   errors: string[];
 }
 
+interface Phase31LastScheduledRun {
+  at: string;
+  success: boolean;
+  winnersDetected: number;
+  durationMs: number;
+}
+
 interface Phase32Status {
   lastActivation: Phase32ActivationResult | null;
   lastValidationCycle: Phase32ValidationCycleResult | null;
+  lastScheduledRun: Phase31LastScheduledRun | null;
   schedulerCron: string;
   maxNewListingsPerDay: number;
 }
@@ -199,7 +207,7 @@ export default function ControlCenter() {
           Strategic Control Center
         </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Visión unificada del funnel, salud del sistema y modo autónomo.
+          Visión unificada del funnel, salud del sistema y modo autónomo. Datos en tiempo real desde el servidor.
         </p>
       </div>
 
@@ -381,14 +389,14 @@ export default function ControlCenter() {
         </div>
       )}
 
-      {/* Phase 32 — Modo autónomo de ventas */}
+      {/* Modo autónomo de ventas */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow border border-gray-200 dark:border-gray-700 p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
           <Zap className="h-5 w-5 text-amber-500" />
-          Phase 32 — Modo autónomo de ventas
+          Modo autónomo de ventas
         </h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Activación inicial ejecuta Phase 31 una vez, fija prioridad de marketplaces y límite de 15 nuevos listados/día. El scheduler ejecuta Phase 31 cada 4–6 h automáticamente.
+          La activación inicial ejecuta un ciclo de ventas (prioridad de marketplaces y límite de 15 nuevos listados/día). El programador ejecuta el mismo ciclo cada 4–6 h automáticamente.
         </p>
         {phase32Status != null ? (
           <div className="space-y-3 mb-4">
@@ -412,6 +420,22 @@ export default function ControlCenter() {
                 Máx. nuevos listados/día: <strong>{phase32Status.maxNewListingsPerDay}</strong>
               </span>
             </div>
+            {phase32Status.lastScheduledRun && (
+              <div className="text-sm text-gray-600 dark:text-gray-300">
+                Última ejecución automática: {new Date(phase32Status.lastScheduledRun.at).toLocaleString()}
+                {phase32Status.lastScheduledRun.success ? (
+                  <strong className="text-green-600 dark:text-green-400"> · OK</strong>
+                ) : (
+                  <strong className="text-amber-600 dark:text-amber-400"> · Con errores</strong>
+                )}
+                {phase32Status.lastScheduledRun.winnersDetected != null && (
+                  <> · {phase32Status.lastScheduledRun.winnersDetected} winners</>
+                )}
+                {phase32Status.lastScheduledRun.durationMs != null && phase32Status.lastScheduledRun.durationMs > 0 && (
+                  <> · {phase32Status.lastScheduledRun.durationMs} ms</>
+                )}
+              </div>
+            )}
             {phase32Status.lastValidationCycle && (
               <div className="text-sm text-gray-600 dark:text-gray-300">
                 Último ciclo de validación: {phase32Status.lastValidationCycle.success ? 'OK' : 'Con errores'}
@@ -423,7 +447,7 @@ export default function ControlCenter() {
           </div>
         ) : (
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-            Inicia sesión para ver el estado y activar Phase 32.
+            Inicia sesión para ver el estado y activar el modo autónomo.
           </p>
         )}
         {phase32Message && (
@@ -465,7 +489,7 @@ export default function ControlCenter() {
             {phase32Activating ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : null}
-            Activar Phase 32
+            Activar modo autónomo
           </button>
           <button
             type="button"

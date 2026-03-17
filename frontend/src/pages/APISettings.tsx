@@ -3970,7 +3970,7 @@ export default function APISettings() {
             <div
               key={apiDef.name}
               data-api-name={apiDef.name}
-              className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow"
             >
               {/* Card Header */}
               <div className="p-4 flex items-center justify-between">
@@ -4279,7 +4279,7 @@ export default function APISettings() {
                                   ? env === 'sandbox'
                                     ? 'bg-yellow-50 border-yellow-400 text-yellow-800 shadow-sm'
                                     : 'bg-green-50 border-green-400 text-green-800 shadow-sm'
-                                  : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50'
+                                  : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50'
                               }`}
                             >
                               {env === 'sandbox' ? '🧪' : '🚀'} {env === 'sandbox' ? 'Sandbox' : 'Producción'}
@@ -4449,7 +4449,7 @@ export default function APISettings() {
                                   ? env === 'sandbox'
                                     ? 'bg-yellow-50 border-yellow-400 text-yellow-800 shadow-md'
                                     : 'bg-green-50 border-green-400 text-green-800 shadow-md'
-                                  : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50'
+                                  : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50'
                               }`}
                             >
                               {env === 'sandbox' ? '🧪' : '🚀'}

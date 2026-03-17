@@ -278,7 +278,7 @@ export default function OtherCredentials() {
           const supportsCookies = (apiDef.categories || [apiDef.category]).includes('automation');
 
           return (
-            <div key={apiDef.apiName} className="border rounded-lg p-5 bg-white shadow-sm">
+            <div key={apiDef.apiName} className="border rounded-lg p-5 bg-white dark:bg-gray-800 shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">{apiDef.name}</h2>

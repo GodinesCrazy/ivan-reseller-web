@@ -244,7 +244,7 @@ export default function APIConfigurationPage() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="bg-white rounded-xl shadow-sm border p-6 mb-8">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-6 mb-8">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
@@ -265,12 +265,12 @@ export default function APIConfigurationPage() {
         {/* APIs Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {apis.map((api) => (
-            <div key={api.id} className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div key={api.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border overflow-hidden">
               {/* API Header */}
               <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 border-b">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                    <div className="w-12 h-12 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-center shadow-sm">
                       {api.name.includes('eBay') && <Globe className="w-6 h-6 text-blue-600" />}
                       {api.name.includes('Amazon') && <Database className="w-6 h-6 text-orange-600" />}
                       {api.name.includes('MercadoLibre') && <Zap className="w-6 h-6 text-yellow-600" />}

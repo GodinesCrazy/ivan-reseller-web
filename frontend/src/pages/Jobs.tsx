@@ -329,14 +329,15 @@ export default function Jobs() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Job Queue</h1>
-          <p className="text-gray-600">Monitor and manage background jobs</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Job Queue</h1>
+          <p className="text-gray-600 dark:text-gray-400">Monitor and manage background jobs</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos desde API. Actualización automática si está activada.</p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
             className={`px-4 py-2 border rounded-lg flex items-center gap-2 ${
-              autoRefresh ? 'bg-green-50 border-green-300' : 'hover:bg-gray-50'
+              autoRefresh ? 'bg-green-50 border-green-300' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
             }`}
           >
             {autoRefresh ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
@@ -344,7 +345,7 @@ export default function Jobs() {
           </button>
           <button
             onClick={() => { loadJobs(); loadStats(); }}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center gap-2"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh Now
@@ -361,39 +362,39 @@ export default function Jobs() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="text-sm text-gray-600 mb-1">Total</div>
           <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
         </div>
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 text-sm text-blue-600 mb-1">
             <RefreshCw className="w-4 h-4" />
             Active
           </div>
           <div className="text-2xl font-bold text-blue-900">{stats.active}</div>
         </div>
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 text-sm text-yellow-600 mb-1">
             <Clock className="w-4 h-4" />
             Pending
           </div>
           <div className="text-2xl font-bold text-yellow-900">{stats.pending}</div>
         </div>
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 text-sm text-green-600 mb-1">
             <CheckCircle className="w-4 h-4" />
             Completed
           </div>
           <div className="text-2xl font-bold text-green-900">{stats.completed}</div>
         </div>
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 text-sm text-red-600 mb-1">
             <XCircle className="w-4 h-4" />
             Failed
           </div>
           <div className="text-2xl font-bold text-red-900">{stats.failed}</div>
         </div>
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 text-sm text-orange-600 mb-1">
             <AlertCircle className="w-4 h-4" />
             Delayed
@@ -433,7 +434,7 @@ export default function Jobs() {
               </button>
               <button
                 onClick={() => setSelectedJobs(new Set())}
-                className="px-3 py-1 border border-gray-300 text-sm rounded hover:bg-gray-50"
+                className="px-3 py-1 border border-gray-300 text-sm rounded hover:bg-gray-50 dark:hover:bg-gray-700/50"
               >
                 Clear Selection
               </button>
@@ -443,7 +444,7 @@ export default function Jobs() {
       )}
 
       {/* Filters */}
-      <div className="bg-white border rounded-lg p-4">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -499,9 +500,9 @@ export default function Jobs() {
       </div>
 
       {/* Jobs Table */}
-      <div className="bg-white border rounded-lg overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 dark:bg-gray-700/50">
             <tr>
               <th className="px-6 py-3 text-left">
                 <input
@@ -532,7 +533,7 @@ export default function Jobs() {
               </tr>
             )}
             {paginatedJobs.map((job) => (
-              <tr key={job.id} className="hover:bg-gray-50">
+              <tr key={job.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                 <td className="px-6 py-4">
                   <input
                     type="checkbox"
@@ -627,7 +628,7 @@ export default function Jobs() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white border rounded-lg px-4 py-3">
+        <div className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3">
           <div className="text-sm text-gray-700">
             Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredJobs.length)} of {filteredJobs.length} jobs
           </div>
@@ -635,14 +636,14 @@ export default function Jobs() {
             <button
               onClick={() => setCurrentPage(1)}
               disabled={currentPage === 1}
-              className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
             >
               First
             </button>
             <button
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1}
-              className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
             >
               Previous
             </button>
@@ -652,14 +653,14 @@ export default function Jobs() {
             <button
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
             >
               Next
             </button>
             <button
               onClick={() => setCurrentPage(totalPages)}
               disabled={currentPage === totalPages}
-              className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
             >
               Last
             </button>

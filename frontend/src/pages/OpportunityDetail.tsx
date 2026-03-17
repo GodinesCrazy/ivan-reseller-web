@@ -66,7 +66,7 @@ export default function OpportunityDetail() {
   return (
     <div className="p-6 space-y-4">
       <h1 className="text-2xl font-semibold">Opportunity #{item.id}</h1>
-      <div className="bg-white border rounded p-4">
+      <div className="bg-white dark:bg-gray-800 border rounded p-4">
         <div className="font-medium text-lg">{item.title}</div>
         <div className="text-sm text-gray-600">Source: {item.sourceMarketplace}</div>
         
@@ -179,7 +179,7 @@ export default function OpportunityDetail() {
           </Link>
         )}
       </div>
-      <div className="bg-white border rounded p-4">
+      <div className="bg-white dark:bg-gray-800 border rounded p-4">
         <div className="font-medium mb-2">Competition Snapshots</div>
         <div className="overflow-auto">
           <table className="min-w-full text-sm">

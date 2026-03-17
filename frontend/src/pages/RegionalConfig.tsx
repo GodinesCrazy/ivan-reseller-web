@@ -232,7 +232,7 @@ export default function RegionalConfig() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-blue-100 rounded-lg">
               <Globe className="w-6 h-6 text-blue-600" />
@@ -244,7 +244,7 @@ export default function RegionalConfig() {
           </div>
         </div>
 
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-green-100 rounded-lg">
               <CheckCircle className="w-6 h-6 text-green-600" />
@@ -258,7 +258,7 @@ export default function RegionalConfig() {
           </div>
         </div>
 
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-purple-100 rounded-lg">
               <DollarSign className="w-6 h-6 text-purple-600" />
@@ -272,7 +272,7 @@ export default function RegionalConfig() {
           </div>
         </div>
 
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-yellow-100 rounded-lg">
               <Languages className="w-6 h-6 text-yellow-600" />
@@ -289,7 +289,7 @@ export default function RegionalConfig() {
 
       {/* Configs by Marketplace */}
       {Object.keys(configsByMarketplace).length === 0 ? (
-        <div className="bg-white border rounded-lg p-12 text-center">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-12 text-center">
           <Globe className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">No regional configurations yet</h3>
           <p className="text-gray-600 mb-4">Create your first regional config to get started</p>
@@ -302,7 +302,7 @@ export default function RegionalConfig() {
         </div>
       ) : (
         Object.entries(configsByMarketplace).map(([marketplace, marketplaceConfigs]) => (
-          <div key={marketplace} className="bg-white border rounded-lg overflow-hidden">
+          <div key={marketplace} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
             <div className="bg-gray-50 px-6 py-4 border-b">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                 <Package className="w-5 h-5" />

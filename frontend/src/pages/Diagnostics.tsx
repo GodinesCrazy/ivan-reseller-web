@@ -265,7 +265,7 @@ export default function Diagnostics() {
         {results.map((result, index) => (
           <div
             key={index}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 border border-gray-200 dark:border-gray-700"
+            className="bg-white dark:bg-gray-800 dark:bg-gray-800 rounded-lg shadow p-4 border border-gray-200 dark:border-gray-700"
           >
             <div className="flex items-start gap-3">
               {getStatusIcon(result.status)}

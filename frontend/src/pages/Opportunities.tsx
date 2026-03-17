@@ -600,20 +600,21 @@ export default function Opportunities() {
   return (
     <div className="p-6 space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">Oportunidades</h1>
-        <p className="text-sm text-gray-600 mt-0.5">Busca oportunidades de negocio desde tendencias o términos libres</p>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Oportunidades</h1>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">Busca oportunidades de negocio desde tendencias o términos libres</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos desde API. Resultados actualizados en cada búsqueda.</p>
         <div className="mt-3">
           <CycleStepsBreadcrumb currentStep={2} />
         </div>
       </div>
-      <div className="bg-white border rounded p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Buscar oportunidades (ej: auriculares, luces solares, organizador cocina)"
-          className="border rounded px-3 py-2"
+          className="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
         />
-        <select value={region} onChange={e => setRegion(e.target.value)} className="border rounded px-3 py-2">
+        <select value={region} onChange={e => setRegion(e.target.value)} className="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
           <option value="us">US</option>
           <option value="uk">UK</option>
           <option value="mx">MX</option>
@@ -627,7 +628,7 @@ export default function Opportunities() {
           max={10}
           value={maxItems}
           onChange={e => setMaxItems(Math.max(1, Math.min(10, Number(e.target.value))))}
-          className="border rounded px-3 py-2"
+          className="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
         />
         <button onClick={search} disabled={loading} className="bg-primary-600 text-white rounded px-4 py-2">
           {loading ? 'Searching…' : 'Search'}
@@ -640,18 +641,18 @@ export default function Opportunities() {
       </div>
 
       {aliStatus?.status === 'refreshing' && (
-        <div className="px-4 py-3 bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded flex flex-col gap-1">
+        <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-sm rounded flex flex-col gap-1">
           <span>Estamos renovando tu sesión de AliExpress automáticamente. Puedes continuar; reintentaremos las búsquedas en unos segundos.</span>
-          {aliStatus.message ? <span className="text-xs text-blue-600">{aliStatus.message}</span> : null}
+          {aliStatus.message ? <span className="text-xs text-blue-600 dark:text-blue-400">{aliStatus.message}</span> : null}
         </div>
       )}
 
       {/* ✅ SOLO mostrar banner si realmente hay sesión manual pendiente (por CAPTCHA/bloqueo), NO si solo faltan cookies */}
       {aliStatus?.status === 'manual_required' && aliStatus?.manualSession?.token && aliStatus?.requiresManual && (
-        <div className="px-4 py-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm rounded flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <span className="font-semibold">Necesitamos que confirmes tu sesión de AliExpress</span>
-            <p className="text-xs text-red-600">
+            <p className="text-xs text-red-600 dark:text-red-400">
               Ya abrimos una ventana con instrucciones. Si no la ves, usa los botones para abrirla nuevamente o reintentar el inicio automático.
             </p>
           </div>
@@ -683,7 +684,7 @@ export default function Opportunities() {
       )}
 
       {aliStatus?.status === 'error' && (
-        <div className="px-4 py-3 bg-orange-50 border border-orange-200 text-orange-700 text-sm rounded flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="px-4 py-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300 text-sm rounded flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <span>
             No pudimos renovar la sesión automáticamente. Puedes reintentar ahora; si persiste, el sistema te pedirá confirmar sesión manualmente.
           </span>
@@ -705,14 +706,14 @@ export default function Opportunities() {
       {/* ✅ P0.3: Modal explicativo antes de abrir ventana de login AliExpress */}
       {showAliExpressModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
-            <h2 className="text-xl font-bold text-gray-900">Inicio de sesión requerido en AliExpress</h2>
-            <p className="text-gray-600">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 space-y-4 border border-gray-200 dark:border-gray-700">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Inicio de sesión requerido en AliExpress</h2>
+            <p className="text-gray-600 dark:text-gray-400">
               Para buscar oportunidades en AliExpress, necesitamos que inicies sesión en tu cuenta de AliExpress.
             </p>
-            <div className="bg-blue-50 border border-blue-200 rounded p-4 space-y-2">
-              <p className="font-semibold text-blue-900">Pasos a seguir:</p>
-              <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-4 space-y-2">
+              <p className="font-semibold text-blue-900 dark:text-blue-200">Pasos a seguir:</p>
+              <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800 dark:text-blue-200">
                 <li>Se abrirá una ventana nueva con instrucciones</li>
                 <li>Inicia sesión en AliExpress en esa ventana</li>
                 <li>Guarda tu sesión siguiendo las instrucciones</li>
@@ -731,7 +732,7 @@ export default function Opportunities() {
                   setShowAliExpressModal(false);
                   setPendingSearchUrl(null);
                 }}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition"
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 transition"
               >
                 Cancelar
               </button>
@@ -740,36 +741,36 @@ export default function Opportunities() {
         </div>
       )}
 
-      {error && <div className="text-red-600 text-sm">{error}</div>}
+      {error && <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>}
 
-      <div className="overflow-auto bg-white border rounded">
+      <div className="overflow-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded">
         {loading ? (
           <div className="p-4">
             <TableSkeleton rows={5} columns={9} />
           </div>
         ) : (
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
-                <th className="text-center p-3">Imagen</th>
-                <th className="text-left p-3">Título</th>
-                <th className="text-right p-3">
+                <th className="text-center p-3 text-gray-600 dark:text-gray-300">Imagen</th>
+                <th className="text-left p-3 text-gray-600 dark:text-gray-300">Título</th>
+                <th className="text-right p-3 text-gray-600 dark:text-gray-300">
                   <div className="flex items-center justify-end gap-1">
                     <span>Costo</span>
-                    <Info className="w-3 h-3 text-gray-400 cursor-help" title="Incluye: producto + envío + impuestos (si disponible)" />
+                    <Info className="w-3 h-3 text-gray-400 dark:text-gray-500 cursor-help" title="Incluye: producto + envío + impuestos (si disponible)" />
                   </div>
                 </th>
-                <th className="text-right p-3">Precio sugerido</th>
-                <th className="text-right p-3">Margen %</th>
-                <th className="text-right p-3">ROI %</th>
-                <th className="text-center p-3">Competencia</th>
-                <th className="text-center p-3">Marketplaces</th>
-                <th className="text-center p-3">Acciones</th>
+                <th className="text-right p-3 text-gray-600 dark:text-gray-300">Precio sugerido</th>
+                <th className="text-right p-3 text-gray-600 dark:text-gray-300">Margen %</th>
+                <th className="text-right p-3 text-gray-600 dark:text-gray-300">ROI %</th>
+                <th className="text-center p-3 text-gray-600 dark:text-gray-300">Competencia</th>
+                <th className="text-center p-3 text-gray-600 dark:text-gray-300">Marketplaces</th>
+                <th className="text-center p-3 text-gray-600 dark:text-gray-300">Acciones</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {items.map((it, idx) => (
-              <tr key={idx} className="border-t hover:bg-gray-50">
+              <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                 <td className="p-3 text-center">
                   {(it.image || it.imageUrl) ? (
                     <a
@@ -781,19 +782,19 @@ export default function Opportunities() {
                       <img
                         src={it.image || it.imageUrl}
                         alt={it.title}
-                        className="w-16 h-16 object-cover rounded border border-gray-200 hover:opacity-90 transition"
+                        className="w-16 h-16 object-cover rounded border border-gray-200 dark:border-gray-600 hover:opacity-90 transition"
                         onError={(e) => {
                           (e.target as HTMLImageElement).src = 'https://via.placeholder.com/64x64?text=No+Image';
                         }}
                       />
                     </a>
                   ) : (
-                    <div className="w-16 h-16 bg-gray-100 rounded border border-gray-200 flex items-center justify-center text-xs text-gray-400">
+                    <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 flex items-center justify-center text-xs text-gray-400 dark:text-gray-500">
                       Sin imagen
                     </div>
                   )}
                 </td>
-                <td className="p-3">
+                <td className="p-3 text-gray-900 dark:text-gray-100">
                   <a
                     href={it.aliexpressUrl || it.productUrl}
                     target="_blank"

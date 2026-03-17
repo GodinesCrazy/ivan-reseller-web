@@ -591,7 +591,7 @@ export default function ProductPreview() {
             <ArrowLeft className="w-4 h-4" />
             Volver a Productos
           </button>
-          <div className="bg-white rounded-lg shadow p-6 text-center">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 text-center">
             <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h2 className="text-xl font-semibold mb-2">Error al cargar vista previa</h2>
             <p className="text-gray-600">{error || 'No se pudo generar la vista previa del producto'}</p>
@@ -632,7 +632,7 @@ export default function ProductPreview() {
           {/* Main Preview - Left Column (2/3) */}
           <div className="lg:col-span-2 space-y-6">
             {/* Images Gallery with Navigation */}
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <ImageIcon className="w-5 h-5" />
                 Imágenes ({preview.images?.length || 0})
@@ -656,7 +656,7 @@ export default function ProductPreview() {
             </div>
 
             {/* Title & Description */}
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
               <div className="mb-4">
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">{preview.title}</h2>
                 <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -699,7 +699,7 @@ export default function ProductPreview() {
           {/* Sidebar - Right Column (1/3) */}
           <div className="space-y-6">
             {/* Price Card */}
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <DollarSign className="w-5 h-5" />
                 Precio
@@ -714,7 +714,7 @@ export default function ProductPreview() {
 
             {/* Ganador / Info del agente */}
             {preview.product?.winnerDetectedAt && (
-              <div className="bg-white rounded-lg shadow p-6 border-l-4 border-emerald-500">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-emerald-500">
                 <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
                   <Award className="w-5 h-5 text-emerald-600" />
                   Ganador
@@ -729,7 +729,7 @@ export default function ProductPreview() {
 
             {/* ✅ Optimización de Tiempo de Publicación */}
             {lifetimeDecision && !loadingLifetime && (
-              <div className="bg-white rounded-lg shadow p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
                 <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <Clock className="w-5 h-5" />
                   Optimización IA de Tiempo de Publicación
@@ -785,7 +785,7 @@ export default function ProductPreview() {
             )}
 
             {/* Actions */}
-            <div className="bg-white rounded-lg shadow p-6 space-y-3">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-3">
               <button
                 onClick={handlePublish}
                 disabled={publishing}
@@ -836,7 +836,7 @@ export default function ProductPreview() {
       {/* Financial Information Modal */}
       {showFinancialModal && preview && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b flex items-center justify-between">
               <h2 className="text-2xl font-bold flex items-center gap-2">
                 <Calculator className="w-6 h-6 text-purple-600" />
@@ -900,7 +900,7 @@ export default function ProductPreview() {
 
               {/* Desglose de Costos */}
               {preview.fees && (
-                <div className="bg-white rounded-lg border-2 border-gray-200 p-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg border-2 border-gray-200 p-6">
                   <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                     <DollarSign className="w-5 h-5 text-gray-600" />
                     Desglose de Costos
@@ -993,7 +993,7 @@ export default function ProductPreview() {
       {/* Edit Product Modal */}
       {showEditModal && preview && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b flex items-center justify-between">
               <h2 className="text-2xl font-bold">Editar Producto</h2>
               <button
@@ -1165,7 +1165,7 @@ export default function ProductPreview() {
                     <div className="w-full border-t border-gray-300"></div>
                   </div>
                   <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-gray-500">O</span>
+                    <span className="px-2 bg-white dark:bg-gray-800 text-gray-500">O</span>
                   </div>
                 </div>
 

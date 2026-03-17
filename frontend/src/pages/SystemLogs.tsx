@@ -138,7 +138,7 @@ export default function SystemLogs() {
         <div className="flex items-center gap-2">
           <button
             onClick={toggleStream}
-            className={`px-4 py-2 border rounded-lg flex items-center gap-2 ${paused ? 'bg-yellow-50 border-yellow-300' : 'hover:bg-gray-50'}`}
+            className={`px-4 py-2 border rounded-lg flex items-center gap-2 ${paused ? 'bg-yellow-50 border-yellow-300' : 'hover:bg-gray-50 dark:bg-gray-700/50'}`}
             title={paused ? 'Resume stream' : 'Pause stream'}
           >
             {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
@@ -146,7 +146,7 @@ export default function SystemLogs() {
           </button>
           <button
             onClick={clearLogs}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700/50 flex items-center gap-2"
           >
             <Trash2 className="w-4 h-4" />
             Clear
@@ -171,7 +171,7 @@ export default function SystemLogs() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white border rounded-lg p-4">
+      <div className="bg-white dark:bg-gray-800 border rounded-lg p-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -214,12 +214,12 @@ export default function SystemLogs() {
       </div>
 
       {/* Logs list (most recent first) */}
-      <div ref={boxRef} className="h-96 overflow-auto border rounded bg-white p-0">
+      <div ref={boxRef} className="h-96 overflow-auto border rounded bg-white dark:bg-gray-800 p-0">
         {pageItems.length === 0 ? (
           <div className="h-full flex items-center justify-center text-gray-500">No logs</div>
         ) : (
           <table className="min-w-full text-sm">
-            <thead className="sticky top-0 bg-gray-50 border-b">
+            <thead className="sticky top-0 bg-gray-50 dark:bg-gray-700/50 border-b">
               <tr>
                 <th className="px-3 py-2 text-left">Timestamp</th>
                 <th className="px-3 py-2 text-left">Level</th>
@@ -229,7 +229,7 @@ export default function SystemLogs() {
             </thead>
             <tbody>
               {pageItems.map((l, idx) => (
-                <tr key={idx} className="border-b last:border-b-0 hover:bg-gray-50">
+                <tr key={idx} className="border-b last:border-b-0 hover:bg-gray-50 dark:bg-gray-700/50">
                   <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{new Date(l.timestamp).toLocaleString()}</td>
                   <td className="px-3 py-2">
                     <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
@@ -253,7 +253,7 @@ export default function SystemLogs() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white border rounded-lg px-4 py-3">
+        <div className="flex items-center justify-between bg-white dark:bg-gray-800 border rounded-lg px-4 py-3">
           <div className="text-sm text-gray-700">
             Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} logs
           </div>

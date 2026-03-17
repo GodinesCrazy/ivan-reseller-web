@@ -110,10 +110,10 @@ export default function APIKeys() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {MARKETPLACES.map((m) => (
-          <div key={m.key} className="bg-white rounded-xl border shadow-sm">
+          <div key={m.key} className="bg-white dark:bg-gray-800 rounded-xl border shadow-sm">
             <div className="px-6 py-4 bg-gray-50 border-b flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-center shadow-sm">
                   <m.icon className="w-6 h-6 text-primary-600" />
                 </div>
                 <div>

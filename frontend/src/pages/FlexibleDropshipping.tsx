@@ -331,13 +331,13 @@ export default function FlexibleDropshipping() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Flexible Dropshipping</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Flexible Dropshipping</h1>
           <p className="text-gray-600">Multi-supplier, multi-marketplace strategy controls</p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => openSupplierModal()}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center gap-2"
           >
             <Settings className="w-4 h-4" />
             Manage Suppliers
@@ -354,7 +354,7 @@ export default function FlexibleDropshipping() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-green-100 rounded-lg">
               <CheckCircle className="w-6 h-6 text-green-600" />
@@ -368,7 +368,7 @@ export default function FlexibleDropshipping() {
           </div>
         </div>
 
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-blue-100 rounded-lg">
               <Package className="w-6 h-6 text-blue-600" />
@@ -380,7 +380,7 @@ export default function FlexibleDropshipping() {
           </div>
         </div>
 
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-purple-100 rounded-lg">
               <ShoppingCart className="w-6 h-6 text-purple-600" />
@@ -394,7 +394,7 @@ export default function FlexibleDropshipping() {
           </div>
         </div>
 
-        <div className="bg-white border rounded-lg p-4">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-yellow-100 rounded-lg">
               <TrendingUp className="w-6 h-6 text-yellow-600" />
@@ -412,7 +412,7 @@ export default function FlexibleDropshipping() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white border rounded-lg p-4">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -450,9 +450,9 @@ export default function FlexibleDropshipping() {
       </div>
 
       {/* Rules Table */}
-      <div className="bg-white border rounded-lg overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 dark:bg-gray-700/50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rule Name</th>
@@ -465,7 +465,7 @@ export default function FlexibleDropshipping() {
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {paginatedRules.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
@@ -474,7 +474,7 @@ export default function FlexibleDropshipping() {
               </tr>
             )}
             {paginatedRules.map((rule) => (
-              <tr key={rule.id} className="hover:bg-gray-50">
+              <tr key={rule.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="px-3 py-1 bg-gray-100 rounded-full text-sm font-medium">
                     #{rule.priority}
@@ -571,7 +571,7 @@ export default function FlexibleDropshipping() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white border rounded-lg px-4 py-3">
+        <div className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3">
           <div className="text-sm text-gray-700">
             Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredRules.length)} of {filteredRules.length} rules
           </div>
@@ -579,7 +579,7 @@ export default function FlexibleDropshipping() {
             <button
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1}
-              className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
             >
               Previous
             </button>
@@ -589,7 +589,7 @@ export default function FlexibleDropshipping() {
             <button
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50"
             >
               Next
             </button>
@@ -600,7 +600,7 @@ export default function FlexibleDropshipping() {
       {/* Modal: Create/Edit Rule */}
       {showRuleModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b flex items-center justify-between">
               <h3 className="text-xl font-semibold">
                 {selectedRule ? 'Edit Rule' : 'Create New Rule'}
@@ -756,7 +756,7 @@ export default function FlexibleDropshipping() {
             <div className="p-6 border-t flex justify-end gap-3">
               <button
                 onClick={() => setShowRuleModal(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50"
               >
                 Cancel
               </button>
@@ -775,7 +775,7 @@ export default function FlexibleDropshipping() {
       {/* Modal: Manage Suppliers */}
       {showSupplierModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b flex items-center justify-between">
               <h3 className="text-xl font-semibold">Manage Suppliers</h3>
               <button onClick={() => setShowSupplierModal(false)} className="text-gray-400 hover:text-gray-600">
@@ -784,7 +784,7 @@ export default function FlexibleDropshipping() {
             </div>
             <div className="p-6">
               {/* Supplier Form */}
-              <div className="bg-gray-50 border rounded-lg p-4 mb-6">
+              <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-6">
                 <h4 className="font-semibold text-gray-900 mb-4">
                   {selectedSupplier ? 'Edit Supplier' : 'Add New Supplier'}
                 </h4>
@@ -866,7 +866,7 @@ export default function FlexibleDropshipping() {
                           active: true
                         });
                       }}
-                      className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                      className="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50"
                     >
                       Cancel Edit
                     </button>
@@ -886,7 +886,7 @@ export default function FlexibleDropshipping() {
                 <h4 className="font-semibold text-gray-900 mb-4">Current Suppliers ({suppliers.length})</h4>
                 <div className="space-y-2">
                   {suppliers.map(supplier => (
-                    <div key={supplier.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
+                    <div key={supplier.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50">
                       <div className="flex-1">
                         <div className="font-medium text-gray-900">{supplier.name}</div>
                         <div className="text-sm text-gray-500">
@@ -912,7 +912,7 @@ export default function FlexibleDropshipping() {
                         </button>
                         <button
                           onClick={() => toggleSupplierStatus(supplier.id, supplier.active)}
-                          className="p-2 text-gray-600 hover:bg-gray-50 rounded"
+                          className="p-2 text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded"
                         >
                           {supplier.active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
                         </button>

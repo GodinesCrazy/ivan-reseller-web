@@ -231,12 +231,13 @@ export default function Commissions() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Commissions Dashboard</h1>
-          <p className="text-gray-600 mt-1">Track your earnings and manage payouts</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Commissions Dashboard</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">Track your earnings and manage payouts</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos actualizados en cada carga.</p>
         </div>
         <div className="flex gap-3">
           <Button variant="outline" onClick={exportToCSV} className="flex items-center gap-2">
@@ -254,61 +255,61 @@ export default function Commissions() {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards — Phase 34: dark mode */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200">
+        <Card className="bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border-yellow-200 dark:border-yellow-800">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Pending Commissions</p>
-                <p className="text-3xl font-bold text-yellow-700">${stats.totalPending.toFixed(2)}</p>
-                <p className="text-xs text-gray-600 mt-1">Available for payout</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Pending Commissions</p>
+                <p className="text-3xl font-bold text-yellow-700 dark:text-yellow-400">${stats.totalPending.toFixed(2)}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Available for payout</p>
               </div>
-              <Clock className="w-10 h-10 text-yellow-600" />
+              <Clock className="w-10 h-10 text-yellow-600 dark:text-yellow-400" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
+        <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Total Paid</p>
-                <p className="text-3xl font-bold text-green-700">${safeStats.totalPaid.toFixed(2)}</p>
-                <p className="text-xs text-gray-600 mt-1">All time earnings</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Total Paid</p>
+                <p className="text-3xl font-bold text-green-700 dark:text-green-400">${safeStats.totalPaid.toFixed(2)}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">All time earnings</p>
               </div>
-              <CheckCircle className="w-10 h-10 text-green-600" />
+              <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+        <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Monthly Earnings</p>
-                <p className="text-3xl font-bold text-blue-700">${safeStats.monthlyEarnings.toFixed(2)}</p>
-                <p className={`text-xs flex items-center gap-1 mt-1 ${safeStats.earningsChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Monthly Earnings</p>
+                <p className="text-3xl font-bold text-blue-700 dark:text-blue-400">${safeStats.monthlyEarnings.toFixed(2)}</p>
+                <p className={`text-xs flex items-center gap-1 mt-1 ${safeStats.earningsChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                   <TrendingUp className="w-3 h-3" />
                   {safeStats.earningsChange >= 0 ? '+' : ''}{safeStats.earningsChange.toFixed(1)}% vs last month
                 </p>
               </div>
-              <TrendingUp className="w-10 h-10 text-blue-600" />
+              <TrendingUp className="w-10 h-10 text-blue-600 dark:text-blue-400" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200">
+        <Card className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-800">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Next Payout</p>
-                <p className="text-lg font-bold text-purple-700">
+                <p className="text-sm text-gray-600 dark:text-gray-400">Next Payout</p>
+                <p className="text-lg font-bold text-purple-700 dark:text-purple-400">
                   {stats.nextPayoutDate ? new Date(stats.nextPayoutDate).toLocaleDateString() : 'N/A'}
                 </p>
-                <p className="text-xs text-gray-600 mt-1">Scheduled payment</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Scheduled payment</p>
               </div>
-              <Calendar className="w-10 h-10 text-purple-600" />
+              <Calendar className="w-10 h-10 text-purple-600 dark:text-purple-400" />
             </div>
           </CardContent>
         </Card>
@@ -316,11 +317,11 @@ export default function Commissions() {
 
       {/* Info Banner */}
       {safeStats.totalPending < 50 && safeStats.totalPending > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
           <div>
-            <p className="font-medium text-blue-900">Minimum Payout Amount</p>
-            <p className="text-sm text-blue-700">
+            <p className="font-medium text-blue-900 dark:text-blue-200">Minimum Payout Amount</p>
+            <p className="text-sm text-blue-700 dark:text-blue-300">
               You need ${(50 - safeStats.totalPending).toFixed(2)} more to reach the minimum payout amount of $50.00
             </p>
           </div>
@@ -338,9 +339,9 @@ export default function Commissions() {
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
+            <Card className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
               <CardHeader>
-                <CardTitle>Earnings Trend</CardTitle>
+                <CardTitle className="text-gray-900 dark:text-gray-100">Earnings Trend</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -362,9 +363,9 @@ export default function Commissions() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
               <CardHeader>
-                <CardTitle>Pending vs Paid (Monthly)</CardTitle>
+                <CardTitle className="text-gray-900 dark:text-gray-100">Pending vs Paid (Monthly)</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -383,31 +384,31 @@ export default function Commissions() {
           </div>
 
           {/* Recent Commissions */}
-          <Card>
+          <Card className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
             <CardHeader>
-              <CardTitle>Recent Commissions</CardTitle>
+              <CardTitle className="text-gray-900 dark:text-gray-100">Recent Commissions</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 {commissions.slice(0, 5).map((commission) => (
-                  <div key={commission.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div key={commission.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                        <DollarSign className="w-5 h-5 text-green-600" />
+                      <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                        <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400" />
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900">{commission.productTitle}</p>
-                        <p className="text-sm text-gray-600">
+                        <p className="font-medium text-gray-900 dark:text-gray-100">{commission.productTitle}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
                           {commission.marketplace} • {new Date(commission.createdAt).toLocaleDateString()}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="text-right">
-                        <p className="font-bold text-green-600">${commission.amount.toFixed(2)}</p>
+                        <p className="font-bold text-green-600 dark:text-green-400">${commission.amount.toFixed(2)}</p>
                         {getStatusBadge(commission.status)}
                       </div>
-                      <ArrowUpRight className="w-5 h-5 text-gray-400" />
+                      <ArrowUpRight className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                     </div>
                   </div>
                 ))}
@@ -418,9 +419,9 @@ export default function Commissions() {
 
         {/* Payout Schedule Tab */}
         <TabsContent value="schedule" className="space-y-4">
-          <Card>
+          <Card className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-gray-100">
                 <Calendar className="w-5 h-5" />
                 Upcoming Payouts
               </CardTitle>
@@ -428,29 +429,29 @@ export default function Commissions() {
             <CardContent>
               {payoutSchedule.length === 0 ? (
                 <div className="text-center py-8">
-                  <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No scheduled payouts</p>
+                  <Calendar className="w-16 h-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+                  <p className="text-gray-600 dark:text-gray-400">No scheduled payouts</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {payoutSchedule.map((payout, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
+                    <div key={index} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50">
                       <div className="flex items-center gap-4">
                         <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                          payout.status === 'completed' ? 'bg-green-100' :
-                          payout.status === 'processing' ? 'bg-blue-100' :
-                          'bg-gray-100'
+                          payout.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30' :
+                          payout.status === 'processing' ? 'bg-blue-100 dark:bg-blue-900/30' :
+                          'bg-gray-100 dark:bg-gray-700'
                         }`}>
                           {payout.status === 'completed' ? (
-                            <CheckCircle className="w-6 h-6 text-green-600" />
+                            <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
                           ) : payout.status === 'processing' ? (
-                            <TrendingUp className="w-6 h-6 text-blue-600" />
+                            <TrendingUp className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                           ) : (
-                            <Clock className="w-6 h-6 text-gray-600" />
+                            <Clock className="w-6 h-6 text-gray-600 dark:text-gray-400" />
                           )}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">
+                          <p className="font-medium text-gray-900 dark:text-gray-100">
                             {new Date(payout.date).toLocaleDateString('es', { 
                               weekday: 'long', 
                               year: 'numeric', 
@@ -458,11 +459,11 @@ export default function Commissions() {
                               day: 'numeric' 
                             })}
                           </p>
-                          <p className="text-sm text-gray-600">{payout.count} commissions</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">{payout.count} commissions</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-2xl font-bold text-green-600">${payout.amount.toFixed(2)}</p>
+                        <p className="text-2xl font-bold text-green-600 dark:text-green-400">${payout.amount.toFixed(2)}</p>
                         <Badge variant={
                           payout.status === 'completed' ? 'success' :
                           payout.status === 'processing' ? 'default' :
@@ -482,9 +483,9 @@ export default function Commissions() {
         {/* History Tab */}
         <TabsContent value="history" className="space-y-4">
           {/* Filters */}
-          <Card>
+          <Card className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-gray-100">
                 <Filter className="w-5 h-5" />
                 Filters
               </CardTitle>
@@ -492,18 +493,18 @@ export default function Commissions() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                   <Input
                     placeholder="Search by product or sale ID..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                   />
                 </div>
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-gray-100"
                 >
                   <option value="ALL">All Status</option>
                   <option value="PENDING">Pending</option>
@@ -516,53 +517,53 @@ export default function Commissions() {
           </Card>
 
           {/* Commissions Table */}
-          <Card>
+          <Card className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
             <CardHeader>
-              <CardTitle>Commission History ({filteredCommissions.length})</CardTitle>
+              <CardTitle className="text-gray-900 dark:text-gray-100">Commission History ({filteredCommissions.length})</CardTitle>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="text-center py-8">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-                  <p className="mt-4 text-gray-600">Loading commissions...</p>
+                  <p className="mt-4 text-gray-600 dark:text-gray-400">Loading commissions...</p>
                 </div>
               ) : paginatedCommissions.length === 0 ? (
                 <div className="text-center py-8">
-                  <DollarSign className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No commissions found</p>
+                  <DollarSign className="w-16 h-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+                  <p className="text-gray-600 dark:text-gray-400">No commissions found</p>
                 </div>
               ) : (
                 <>
                   <div className="overflow-x-auto">
                     <table className="w-full">
-                      <thead className="bg-gray-50 border-b">
+                      <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sale ID</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Marketplace</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment Date</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Sale ID</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Product</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Marketplace</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Payment Date</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Created</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200">
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {paginatedCommissions.map((commission) => (
-                          <tr key={commission.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm font-medium text-blue-600">{commission.saleId}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">{commission.productTitle}</td>
+                          <tr key={commission.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td className="px-4 py-3 text-sm font-medium text-blue-600 dark:text-blue-400">{commission.saleId}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate">{commission.productTitle}</td>
                             <td className="px-4 py-3">
                               <Badge variant="outline">{commission.marketplace}</Badge>
                             </td>
-                            <td className="px-4 py-3 text-sm font-bold text-green-600">${commission.amount.toFixed(2)}</td>
+                            <td className="px-4 py-3 text-sm font-bold text-green-600 dark:text-green-400">${commission.amount.toFixed(2)}</td>
                             <td className="px-4 py-3">{getStatusBadge(commission.status)}</td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
+                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                               {commission.paymentDate 
                                 ? new Date(commission.paymentDate).toLocaleDateString()
                                 : '-'
                               }
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
+                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                               {new Date(commission.createdAt).toLocaleDateString()}
                             </td>
                           </tr>
@@ -573,8 +574,8 @@ export default function Commissions() {
 
                   {/* Pagination */}
                   {totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                      <p className="text-sm text-gray-600">
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
                         Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredCommissions.length)} of {filteredCommissions.length} commissions
                       </p>
                       <div className="flex gap-2">

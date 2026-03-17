@@ -103,6 +103,18 @@ interface ListingMetricRow {
   viewCount: number;
 }
 
+/** Phase 34: Listing health score 0-100 from visibility, conversion, sales */
+function listingHealthScore(r: ListingMetricRow): number {
+  let score = 0;
+  const imp = r.impressions ?? 0;
+  const conv = r.conversionRate != null ? Number(r.conversionRate) * 100 : 0;
+  const sales = r.sales ?? 0;
+  if (imp > 0) score += Math.min(40, Math.floor(imp / 25));
+  score += Math.min(40, Math.floor(conv * 10));
+  if (sales > 0) score += 20;
+  return Math.min(100, score);
+}
+
 interface ExecutiveReport {
   summary: ReportSummary;
   marketplaceBreakdown: MarketplaceAnalytics[];
@@ -1007,32 +1019,44 @@ export default function Reports() {
                   )}
 
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Listing / Producto</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Marketplace</th>
-                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Impresiones</th>
-                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Clics</th>
-                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ventas</th>
-                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Conv.%</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Listing / Producto</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Marketplace</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Impresiones</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Clics</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">CTR</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Ventas</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Conv.%</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Salud</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {listingAnalytics.listings.slice(0, 50).map((r) => (
-                          <tr key={`${r.listingId}-${r.marketplace}`}>
-                            <td className="px-3 py-2 text-sm text-gray-900 truncate max-w-[200px]" title={r.productTitle ?? ''}>
-                              {r.productTitle ?? r.marketplaceListingId}
-                            </td>
-                            <td className="px-3 py-2 text-sm text-gray-600">{r.marketplace}</td>
-                            <td className="px-3 py-2 text-sm text-right">{r.impressions.toLocaleString()}</td>
-                            <td className="px-3 py-2 text-sm text-right">{r.clicks.toLocaleString()}</td>
-                            <td className="px-3 py-2 text-sm text-right">{r.sales.toLocaleString()}</td>
-                            <td className="px-3 py-2 text-sm text-right">
-                              {r.conversionRate != null ? `${(Number(r.conversionRate) * 100).toFixed(2)}%` : '—'}
-                            </td>
-                          </tr>
-                        ))}
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        {listingAnalytics.listings.slice(0, 50).map((r) => {
+                          const ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : null;
+                          const health = listingHealthScore(r);
+                          return (
+                            <tr key={`${r.listingId}-${r.marketplace}`}>
+                              <td className="px-3 py-2 text-sm text-gray-900 dark:text-gray-100 truncate max-w-[200px]" title={r.productTitle ?? ''}>
+                                {r.productTitle ?? r.marketplaceListingId}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">{r.marketplace}</td>
+                              <td className="px-3 py-2 text-sm text-right">{r.impressions.toLocaleString()}</td>
+                              <td className="px-3 py-2 text-sm text-right">{r.clicks.toLocaleString()}</td>
+                              <td className="px-3 py-2 text-sm text-right">{ctr != null ? `${ctr.toFixed(2)}%` : '—'}</td>
+                              <td className="px-3 py-2 text-sm text-right">{r.sales.toLocaleString()}</td>
+                              <td className="px-3 py-2 text-sm text-right">
+                                {r.conversionRate != null ? `${(Number(r.conversionRate) * 100).toFixed(2)}%` : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-right">
+                                <span className={`font-medium ${health >= 60 ? 'text-green-600 dark:text-green-400' : health >= 30 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}`} title="Visibilidad, conversión y ventas">
+                                  {health}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                     {listingAnalytics.listings.length > 50 && (

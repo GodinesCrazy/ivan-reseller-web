@@ -944,6 +944,19 @@ export class ScheduledTasksService {
           winnersDetected: result?.winnersDetected,
           durationMs: result?.durationMs,
         });
+        const payload = {
+          at: new Date().toISOString(),
+          success: result?.success ?? true,
+          winnersDetected: result?.winnersDetected ?? 0,
+          durationMs: result?.durationMs ?? 0,
+        };
+        void prisma.systemConfig
+          .upsert({
+            where: { key: 'phase31_last_scheduled_run' },
+            create: { key: 'phase31_last_scheduled_run', value: JSON.stringify(payload) },
+            update: { value: JSON.stringify(payload) },
+          })
+          .catch((err) => logger.error('Scheduled Tasks: failed to persist phase31_last_scheduled_run', { error: err?.message }));
       });
       this.phase31SalesGenerationWorker.on('failed', (job, err) => {
         logger.error('Scheduled Tasks: Phase 31 sales generation failed', {

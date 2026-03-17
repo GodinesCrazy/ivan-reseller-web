@@ -486,26 +486,28 @@ export default function Dashboard() {
         <CardSkeleton count={6} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+          {/* Profit-first: main metric (Phase 34 — Conversion UX) */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border-2 border-emerald-200 dark:border-emerald-700/60 transition-colors md:col-span-1" title="Utilidad real después de costos, comisiones, PayPal y comisión de plataforma.">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Ganancia neta</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${dashboardData.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <Link to="/finance" className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline mt-1 inline-block">Ver finanzas →</Link>
+              </div>
+              <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/40 rounded-xl flex items-center justify-center">
+                <TrendingUp className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+            </div>
+          </div>
+
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors" title="Suma de los precios de venta de todas las ventas confirmadas.">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Ingresos totales</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${dashboardData.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               </div>
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <DollarSign className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors" title="Utilidad real después de costos, comisiones, PayPal y comisión de plataforma.">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Ganancia neta</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${dashboardData.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-blue-600" />
+              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/40 rounded-xl flex items-center justify-center">
+                <DollarSign className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
             </div>
           </div>
@@ -516,8 +518,8 @@ export default function Dashboard() {
                 <p className="text-sm text-gray-600 dark:text-gray-400">Comisión plataforma pagada</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${(dashboardData.platformCommissionPaid ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               </div>
-              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
-                <DollarSign className="h-6 w-6 text-amber-600" />
+              <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/40 rounded-xl flex items-center justify-center">
+                <DollarSign className="h-6 w-6 text-amber-600 dark:text-amber-400" />
               </div>
             </div>
           </div>
@@ -528,8 +530,8 @@ export default function Dashboard() {
                 <p className="text-sm text-gray-600 dark:text-gray-400">Nº de ventas</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{dashboardData.salesCount}</p>
               </div>
-              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-                <BarChart3 className="h-6 w-6 text-emerald-600" />
+              <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/40 rounded-xl flex items-center justify-center">
+                <BarChart3 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
               </div>
             </div>
           </div>
@@ -540,13 +542,13 @@ export default function Dashboard() {
                 <p className="text-sm text-gray-600 dark:text-gray-400">Productos publicados</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{dashboardData.activeProducts}</p>
               </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                <ShoppingBag className="h-6 w-6 text-purple-600" />
+              <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/40 rounded-xl flex items-center justify-center">
+                <ShoppingBag className="h-6 w-6 text-purple-600 dark:text-purple-400" />
               </div>
             </div>
           </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Oportunidades IA</p>
@@ -558,7 +560,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Sugerencias IA</p>
@@ -570,7 +572,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Automatización</p>
@@ -582,6 +584,32 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* Data freshness (Phase 34 — Trust) */}
+      {!loading && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Datos actualizados en cada carga. Recarga cada ~15 s en esta pestaña.
+        </p>
+      )}
+
+      {/* Alerts panel (Phase 34 — centralizar problemas) */}
+      {businessDiagnostics && Object.values(businessDiagnostics).some((v) => v?.status === 'FAIL') && (
+        <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4">
+          <h3 className="text-sm font-semibold text-red-800 dark:text-red-200 mb-2 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            Alertas del sistema
+          </h3>
+          <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">
+            {Object.entries(businessDiagnostics)
+              .filter(([, v]) => v?.status === 'FAIL')
+              .map(([key, v]) => (
+                <li key={key}>
+                  <strong className="capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}:</strong> {v?.message ?? 'Revisar configuración'}
+                </li>
+              ))}
+          </ul>
+        </div>
       )}
 
       {/* Balance resumido - capital disponible, comprometido, puede publicar */}
@@ -622,6 +650,103 @@ export default function Dashboard() {
           </ul>
         </div>
       )}
+
+      {/* Qué hacer ahora (Phase 34 — Action-oriented UI) */}
+      {(scalingActions.filter((a) => !a.executed).length > 0 || conversionOptimizationActions.filter((a) => !a.executed).length > 0 || strategyDecisions.filter((d) => !d.executed).length > 0) && (
+        <div className="rounded-xl border border-primary-200 dark:border-primary-700/60 bg-primary-50/50 dark:bg-primary-900/10 p-4">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+            <Target className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+            Qué hacer ahora
+          </h3>
+          <div className="flex flex-wrap gap-4 text-sm">
+            {scalingActions.filter((a) => !a.executed).length > 0 && (
+              <span className="text-gray-700 dark:text-gray-300">
+                <strong className="text-emerald-700 dark:text-emerald-400">Escalar:</strong> {scalingActions.filter((a) => !a.executed).length} producto(s) listos para replicar en más marketplaces.
+              </span>
+            )}
+            {conversionOptimizationActions.filter((a) => !a.executed).length > 0 && (
+              <span className="text-gray-700 dark:text-gray-300">
+                <strong className="text-amber-700 dark:text-amber-400">Optimizar:</strong> {conversionOptimizationActions.filter((a) => !a.executed).length} listado(s) con acciones de conversión pendientes.
+              </span>
+            )}
+            {strategyDecisions.filter((d) => !d.executed).length > 0 && (
+              <span className="text-gray-700 dark:text-gray-300">
+                <strong className="text-blue-700 dark:text-blue-400">Estrategia:</strong> {strategyDecisions.filter((d) => !d.executed).length} decisión(es) pendiente(s).
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Decision blocks (Phase 34 — Scale Now / Optimize Now / Remove Now) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-xl border border-emerald-200 dark:border-emerald-700/60 bg-emerald-50/50 dark:bg-emerald-900/10 p-4">
+          <h3 className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 mb-2 flex items-center gap-2">
+            <Zap className="h-4 w-4" />
+            Escalar ahora
+          </h3>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Productos ganadores listos para más marketplaces.</p>
+          {scalingActions.filter((a) => !a.executed).length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-500">Ninguno pendiente.</p>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {scalingActions.filter((a) => !a.executed).slice(0, 3).map((a) => (
+                <li key={a.id}>
+                  <button type="button" onClick={() => navigate(`/products${a.productId ? `?highlight=${a.productId}` : ''}`)} className="text-left text-emerald-700 dark:text-emerald-300 hover:underline truncate block max-w-full">
+                    {a.productTitle ?? `Producto #${a.productId}`}
+                  </button>
+                </li>
+              ))}
+              {scalingActions.filter((a) => !a.executed).length > 3 && (
+                <li className="text-gray-500 dark:text-gray-400">+{scalingActions.filter((a) => !a.executed).length - 3} más</li>
+              )}
+            </ul>
+          )}
+        </div>
+        <div className="rounded-xl border border-amber-200 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-900/10 p-4">
+          <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-2 flex items-center gap-2">
+            <Target className="h-4 w-4" />
+            Optimizar ahora
+          </h3>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Listados con mejora de conversión pendiente.</p>
+          {conversionOptimizationActions.filter((a) => !a.executed).length === 0 && listingOptimizationActions.filter((a) => !a.executed).length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-500">Ninguno pendiente.</p>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {[...conversionOptimizationActions.filter((a) => !a.executed), ...listingOptimizationActions.filter((a) => !a.executed)].slice(0, 3).map((a, i) => (
+                <li key={(a as any).id ?? i}>
+                  <button type="button" onClick={() => navigate(`/products${(a as any).productId ? `?highlight=${(a as any).productId}` : ''}`)} className="text-left text-amber-700 dark:text-amber-300 hover:underline truncate block max-w-full">
+                    {(a as any).productTitle ?? `Listado #${(a as any).listingId ?? (a as any).productId}`}
+                  </button>
+                </li>
+              ))}
+              {[...conversionOptimizationActions.filter((a) => !a.executed), ...listingOptimizationActions.filter((a) => !a.executed)].length > 3 && (
+                <li className="text-gray-500 dark:text-gray-400">+{[...conversionOptimizationActions.filter((a) => !a.executed), ...listingOptimizationActions.filter((a) => !a.executed)].length - 3} más</li>
+              )}
+            </ul>
+          )}
+        </div>
+        <div className="rounded-xl border border-red-200 dark:border-red-700/60 bg-red-50/50 dark:bg-red-900/10 p-4">
+          <h3 className="text-sm font-semibold text-red-800 dark:text-red-200 mb-2 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            Revisar / pausar
+          </h3>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Decisiones de pausa por bajo rendimiento.</p>
+          {strategyDecisions.filter((d) => !d.executed && (d.decisionType === 'pause_listing' || d.decisionType === 'pause')).length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-500">Ninguno pendiente.</p>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {strategyDecisions.filter((d) => !d.executed && (d.decisionType === 'pause_listing' || d.decisionType === 'pause')).slice(0, 3).map((d) => (
+                <li key={d.id}>
+                  <button type="button" onClick={() => navigate(`/products${d.productId ? `?highlight=${d.productId}` : ''}`)} className="text-left text-red-700 dark:text-red-300 hover:underline truncate block max-w-full">
+                    {d.productTitle ?? `Producto #${d.productId}`}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
 
       {/* Autopilot en vivo - estado, fase y progreso del ciclo */}
       <AutopilotLiveWidget />

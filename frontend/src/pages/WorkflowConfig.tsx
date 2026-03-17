@@ -214,7 +214,7 @@ export default function WorkflowConfig() {
       </div>
 
       {/* Capital de Trabajo */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 p-6">
         <div className="flex items-center space-x-3 mb-4">
           <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
             <DollarSign className="h-6 w-6 text-blue-600" />
@@ -279,7 +279,7 @@ export default function WorkflowConfig() {
       </div>
 
       {/* Ambiente */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 p-6">
         <div className="flex items-center space-x-3 mb-4">
           <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
             <Settings className="h-6 w-6 text-green-600" />
@@ -326,7 +326,7 @@ export default function WorkflowConfig() {
       </div>
 
       {/* Modo de Workflow */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 p-6">
         <div className="flex items-center space-x-3 mb-4">
           <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
             <Settings className="h-6 w-6 text-purple-600" />
@@ -417,7 +417,7 @@ export default function WorkflowConfig() {
       </div>
 
       {/* Configuración por Etapa */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 p-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Configuración por Etapa</h2>
         <p className="text-sm text-gray-600 mb-6">
           Configura cada etapa del proceso de dropshipping individualmente
@@ -504,7 +504,7 @@ export default function WorkflowConfig() {
       </div>
 
       {/* Umbrales de Automatización */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 p-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Umbrales de Automatización</h2>
 
         <div className="space-y-4">

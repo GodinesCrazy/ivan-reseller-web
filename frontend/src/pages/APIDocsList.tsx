@@ -91,7 +91,7 @@ export default function APIDocsList() {
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 selectedCategory === null
                   ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                  : 'bg-white dark:bg-gray-800 text-gray-700 border border-gray-300 hover:bg-gray-50'
               }`}
             >
               Todas
@@ -106,7 +106,7 @@ export default function APIDocsList() {
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                     selectedCategory === category
                       ? 'bg-blue-600 text-white'
-                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                      : 'bg-white dark:bg-gray-800 text-gray-700 border border-gray-300 hover:bg-gray-50'
                   }`}
                 >
                   <Icon className="w-4 h-4" />

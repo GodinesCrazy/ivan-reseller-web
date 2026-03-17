@@ -54,12 +54,12 @@ export default function HelpCenter() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg p-8 mb-8 text-white">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center">
+            <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex items-center justify-center">
               <BookOpen className="w-8 h-8 text-blue-600" />
             </div>
             <div>
@@ -94,9 +94,9 @@ export default function HelpCenter() {
         <div className="grid grid-cols-12 gap-8">
           {/* Sidebar */}
           <div className="col-span-3">
-            <div className="bg-white rounded-xl shadow-sm border sticky top-8">
-              <div className="p-4 border-b">
-                <h3 className="font-semibold text-gray-900">Navegación</h3>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 sticky top-8">
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Navegación</h3>
               </div>
               <nav className="p-2">
                 {sections.map((section) => {
@@ -122,7 +122,7 @@ export default function HelpCenter() {
 
           {/* Content */}
           <div className="col-span-9">
-            <div className="bg-white rounded-xl shadow-sm border p-8">
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm border p-8">
               {activeSection === 'inicio' && <InicioRapido />}
               {activeSection === 'configuracion' && <Configuracion />}
               {activeSection === 'apis' && <APIsCredenciales />}

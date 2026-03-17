@@ -112,6 +112,13 @@ interface AutopilotMetrics {
   topWinningProducts?: Array<{ productId: number; productTitle: string; winningScore: number }>;
 }
 
+/** Start readiness from GET /api/autopilot/start-readiness */
+interface StartReadiness {
+  canStart: boolean;
+  reason?: string;
+  checks: { scraping: boolean; ebay: boolean; onboarding: boolean };
+}
+
 interface InventorySummaryListings {
   listingsByMarketplace?: { ebay?: number; mercadolibre?: number; amazon?: number };
   ordersByStatus?: { CREATED?: number; PAID?: number; PURCHASING?: number; PURCHASED?: number; FAILED?: number };
@@ -138,6 +145,10 @@ export default function Autopilot() {
   // eBay OAuth: detectar si falta conectar y ofrecer hacerlo desde aquí (sin ir a Settings)
   const [ebayNeedsOAuth, setEbayNeedsOAuth] = useState(false);
   const [ebayOAuthing, setEbayOAuthing] = useState(false);
+
+  // Start readiness (Scraping, eBay, onboarding) y error al intentar Start
+  const [startReadiness, setStartReadiness] = useState<StartReadiness | null>(null);
+  const [startError, setStartError] = useState<{ message: string; code?: string } | null>(null);
 
   // Autopilot config: marketplaces destino
   const [targetMarketplaces, setTargetMarketplaces] = useState<string[]>(['ebay']);
@@ -332,10 +343,24 @@ export default function Autopilot() {
   // Ref para polling periódico (evita closure obsoleta)
   const loadDataRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
+  const fetchStartReadiness = useCallback(async () => {
+    try {
+      const { data } = await api.get<{ success: boolean; canStart: boolean; reason?: string; checks: StartReadiness['checks'] }>('/api/autopilot/start-readiness');
+      if (data && typeof data.canStart === 'boolean' && data.checks) {
+        setStartReadiness({ canStart: data.canStart, reason: data.reason, checks: data.checks });
+      } else {
+        setStartReadiness(null);
+      }
+    } catch {
+      setStartReadiness(null);
+    }
+  }, []);
+
   useEffect(() => {
     loadData();
     checkAutopilotStatus();
-  }, [environment]);
+    fetchStartReadiness();
+  }, [environment, fetchStartReadiness]);
 
   useEffect(() => {
     const ms = autopilotRunning ? 4000 : 10000;
@@ -640,6 +665,7 @@ export default function Autopilot() {
   };
 
   const toggleAutopilot = async () => {
+    setStartError(null);
     try {
       if (autopilotRunning) {
         await api.post('/api/autopilot/stop');
@@ -650,9 +676,9 @@ export default function Autopilot() {
         await api.post('/api/autopilot/start');
         toast.success('Autopilot started. First cycle running…');
         setAutopilotRunning(true);
-        // Refetch status and stats so "Last run" and cycle results appear when first cycle finishes
         checkAutopilotStatus();
         loadData();
+        fetchStartReadiness();
         const refresh = () => {
           checkAutopilotStatus();
           loadData();
@@ -662,7 +688,10 @@ export default function Autopilot() {
         setTimeout(refresh, 12000);
       }
     } catch (error: any) {
-      toast.error('Error toggling autopilot: ' + (error.response?.data?.error || error.message));
+      const errMsg = error.response?.data?.error || error.message;
+      const code = error.response?.data?.code;
+      setStartError({ message: errMsg, code });
+      toast.error('Error al iniciar Autopilot: ' + errMsg);
     }
   };
 
@@ -895,35 +924,71 @@ export default function Autopilot() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Autopilot</h1>
           <p className="text-gray-600 dark:text-gray-400">Configure and run automated workflows</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos en tiempo real desde el servidor.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => loadLogs()}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-gray-100"
-          >
-            <Activity className="w-4 h-4" />
-            View All Logs
-          </button>
-          <button
-            onClick={toggleAutopilot}
-            className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
-              autopilotRunning 
-                ? 'bg-red-600 text-white hover:bg-red-700' 
-                : 'bg-green-600 text-white hover:bg-green-700'
-            }`}
-          >
-            {autopilotRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            {autopilotRunning ? 'Stop Autopilot' : 'Start Autopilot'}
-          </button>
-          <button
-            onClick={() => openWorkflowModal()}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            New Workflow
-          </button>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => loadLogs()}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-900 dark:text-gray-100"
+            >
+              <Activity className="w-4 h-4" />
+              View All Logs
+            </button>
+            <button
+              onClick={toggleAutopilot}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                autopilotRunning 
+                  ? 'bg-red-600 text-white hover:bg-red-700' 
+                  : 'bg-green-600 text-white hover:bg-green-700'
+              }`}
+            >
+              {autopilotRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+              {autopilotRunning ? 'Stop Autopilot' : 'Start Autopilot'}
+            </button>
+            <button
+              onClick={() => openWorkflowModal()}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              New Workflow
+            </button>
+          </div>
+          {startReadiness && !startReadiness.canStart && !autopilotRunning && (
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              Para iniciar: {startReadiness.reason ?? 'Revisa la configuración.'}
+              {(startReadiness.checks.scraping === false || startReadiness.checks.ebay === false) && (
+                <a href="/api-settings" className="ml-1 underline font-medium">Ir a Configuración de APIs</a>
+              )}
+            </p>
+          )}
         </div>
       </div>
+
+      {startError && (
+        <div className="mb-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-red-800 dark:text-red-200">No se pudo iniciar el Autopilot</p>
+            <p className="text-sm text-red-700 dark:text-red-300 mt-0.5">{startError.message}</p>
+            {(startError.code === 'SCRAPING_MISSING' || startError.code === 'EBAY_MISSING') && (
+              <a href="/api-settings" className="inline-block mt-2 text-sm font-medium text-red-600 dark:text-red-400 underline">
+                Ir a Configuración de APIs
+              </a>
+            )}
+            {startError.code === 'ONBOARDING_INCOMPLETE' && (
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400">Completa el wizard de onboarding antes de iniciar.</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setStartError(null)}
+            className="shrink-0 p-1 rounded hover:bg-red-100 dark:hover:bg-red-800/50 text-red-600 dark:text-red-400"
+            aria-label="Cerrar"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Estado del ciclo actual - Panel mejorado */}
       <div className="rounded-xl border-2 overflow-hidden">

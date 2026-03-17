@@ -143,124 +143,66 @@ export default function Checkout() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[300px]">
         <LoadingSpinner />
-        <p className="mt-4 text-gray-600">
+        <p className="mt-4 text-gray-600 dark:text-gray-400">
           {step === 'redirect' ? 'Redirecting to PayPal...' : 'Processing payment...'}
         </p>
       </div>
     );
   }
 
+  const inputClass = "block w-full mt-1 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100";
   return (
-    <div className="max-w-md mx-auto">
+    <div className="max-w-md mx-auto p-6">
       <button
         onClick={() => navigate(-1)}
-        className="flex items-center gap-2 mb-6 text-gray-600 hover:text-gray-900"
+        className="flex items-center gap-2 mb-6 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
       >
         <ArrowLeft className="w-4 h-4" />
         Back
       </button>
 
-      <div className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
-        <h1 className="text-xl font-bold mb-6">Checkout</h1>
+      <div className="p-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
+        <h1 className="text-xl font-bold mb-6 text-gray-900 dark:text-gray-100">Checkout</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Product URL *</label>
-            <input
-              type="url"
-              required
-              value={form.productUrl}
-              onChange={(e) => setForm((f) => ({ ...f, productUrl: e.target.value }))}
-              className="block w-full mt-1 border border-gray-300 rounded-md shadow-sm"
-              placeholder="https://www.aliexpress.com/item/..."
-            />
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Product URL *</label>
+            <input type="url" required value={form.productUrl} onChange={(e) => setForm((f) => ({ ...f, productUrl: e.target.value }))} className={inputClass} placeholder="https://www.aliexpress.com/item/..." />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Product Title</label>
-            <input
-              type="text"
-              value={form.productTitle}
-              onChange={(e) => setForm((f) => ({ ...f, productTitle: e.target.value }))}
-              className="block w-full mt-1 border border-gray-300 rounded-md shadow-sm"
-            />
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Product Title</label>
+            <input type="text" value={form.productTitle} onChange={(e) => setForm((f) => ({ ...f, productTitle: e.target.value }))} className={inputClass} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Price (USD) *</label>
-            <input
-              type="number"
-              step="0.01"
-              required
-              value={form.price}
-              onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-              className="block w-full mt-1 border border-gray-300 rounded-md shadow-sm"
-            />
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Price (USD) *</label>
+            <input type="number" step="0.01" required value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} className={inputClass} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Your Name *</label>
-            <input
-              type="text"
-              required
-              value={form.customerName}
-              onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))}
-              className="block w-full mt-1 border border-gray-300 rounded-md shadow-sm"
-              placeholder="John Doe"
-            />
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Your Name *</label>
+            <input type="text" required value={form.customerName} onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))} className={inputClass} placeholder="John Doe" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Email *</label>
-            <input
-              type="email"
-              required
-              value={form.customerEmail}
-              onChange={(e) => setForm((f) => ({ ...f, customerEmail: e.target.value }))}
-              className="block w-full mt-1 border border-gray-300 rounded-md shadow-sm"
-              placeholder="john@example.com"
-            />
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email *</label>
+            <input type="email" required value={form.customerEmail} onChange={(e) => setForm((f) => ({ ...f, customerEmail: e.target.value }))} className={inputClass} placeholder="john@example.com" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Address *</label>
-            <input
-              type="text"
-              required
-              value={form.address}
-              onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-              className="block w-full mt-1 border border-gray-300 rounded-md shadow-sm"
-              placeholder="123 Main St"
-            />
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Address *</label>
+            <input type="text" required value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} className={inputClass} placeholder="123 Main St" />
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">City</label>
-              <input
-                type="text"
-                value={form.city}
-                onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-                className="block w-full mt-1 border border-gray-300 rounded-md shadow-sm"
-              />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">City</label>
+              <input type="text" value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} className={inputClass} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">State</label>
-              <input
-                type="text"
-                value={form.state}
-                onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
-                className="block w-full mt-1 border border-gray-300 rounded-md shadow-sm"
-              />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">State</label>
+              <input type="text" value={form.state} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))} className={inputClass} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">ZIP</label>
-              <input
-                type="text"
-                value={form.zip}
-                onChange={(e) => setForm((f) => ({ ...f, zip: e.target.value }))}
-                className="block w-full mt-1 border border-gray-300 rounded-md shadow-sm"
-              />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">ZIP</label>
+              <input type="text" value={form.zip} onChange={(e) => setForm((f) => ({ ...f, zip: e.target.value }))} className={inputClass} />
             </div>
           </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex items-center justify-center w-full gap-2 px-4 py-3 font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
+          <button type="submit" disabled={loading} className="flex items-center justify-center w-full gap-2 px-4 py-3 font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
             <CreditCard className="w-5 h-5" />
             Pay with PayPal
           </button>

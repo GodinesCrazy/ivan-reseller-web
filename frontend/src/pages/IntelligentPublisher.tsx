@@ -265,7 +265,7 @@ export default function IntelligentPublisher() {
       <h1 className="text-2xl font-semibold mb-2">Publicador inteligente</h1>
       <p className="text-gray-600 mb-4">Prepara, aprueba y publica anuncios en los marketplaces.</p>
       {/* Bulk publish toolbar */}
-      <div className="bg-white p-4 rounded border mb-4 flex flex-col gap-3">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded mb-4 flex flex-col gap-3">
         <div className="text-sm font-medium">Publicación masiva seleccionada (encolar trabajos)</div>
         <div className="flex items-center gap-4 text-sm">
           <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.ebay} onChange={(e)=>setBulkMk(v=>({...v, ebay: e.target.checked}))}/> eBay</label>
@@ -314,7 +314,7 @@ export default function IntelligentPublisher() {
         </div>
         <div className="text-xs text-gray-600">En cola: {bulkStatus.queued}/{bulkStatus.total} • Errores: {bulkStatus.errors}</div>
       </div>
-      <div className="bg-white p-4 rounded border mb-4">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded mb-4">
         <div className="text-sm font-medium mb-2">Añadir producto para aprobación (URL de AliExpress)</div>
         <div className="flex gap-2">
           <input className="flex-1 px-3 py-2 border rounded" placeholder="https://www.aliexpress.com/item/..." value={url} onChange={(e)=>setUrl(e.target.value)} />
@@ -354,7 +354,7 @@ export default function IntelligentPublisher() {
           </div>
         </div>
       )}
-      <div className="p-4 border rounded bg-white text-gray-700 mb-3 flex items-center justify-between">
+      <div className="p-4 border rounded bg-white text-gray-700 dark:text-gray-300 mb-3 flex items-center justify-between">
         <div>
           Aprobaciones pendientes: <span className="font-semibold">{pending.length}</span>
           {pending.length > 0 && (
@@ -381,7 +381,7 @@ export default function IntelligentPublisher() {
           Actualizar
         </button>
       </div>
-      <div className="bg-white border rounded">
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded">
         {displayedPending.map((p: any) => (
           <PendingProductCard
             key={p.id}
@@ -393,11 +393,11 @@ export default function IntelligentPublisher() {
         ))}
         {pending.length === 0 && <div className="p-4 text-sm text-gray-600">No hay productos pendientes.</div>}
         {pending.length > 0 && pendingTotalPages > 1 && (
-          <div className="flex items-center justify-center gap-3 py-3 px-4 border-t bg-gray-50 rounded-b text-sm">
+          <div className="flex items-center justify-center gap-3 py-3 px-4 border-t bg-gray-50 dark:bg-gray-700/50 rounded-b text-sm">
             <button
               disabled={pendingPage <= 1}
               onClick={() => setPendingPage((prev) => Math.max(1, prev - 1))}
-              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white font-medium"
+              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white dark:hover:bg-gray-600 font-medium"
             >
               <ChevronLeft className="w-4 h-4 inline" /> Anterior
             </button>
@@ -407,7 +407,7 @@ export default function IntelligentPublisher() {
             <button
               disabled={pendingPage >= pendingTotalPages}
               onClick={() => setPendingPage((prev) => Math.min(pendingTotalPages, prev + 1))}
-              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white font-medium"
+              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white dark:hover:bg-gray-600 font-medium"
             >
               Siguiente <ChevronRight className="w-4 h-4 inline" />
             </button>
@@ -449,7 +449,7 @@ export default function IntelligentPublisher() {
             {repairingMl ? 'Reparando…' : 'Reparar todos los listados ML'}
           </button>
         </div>
-        <div className="bg-white border rounded">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded">
           {listings.map((l:any)=>(
             <div key={l.id} className="p-3 border-b flex items-center gap-3">
               {l.productImage && (
@@ -467,11 +467,11 @@ export default function IntelligentPublisher() {
           {listings.length===0 && <div className="p-3 text-sm text-gray-600">Aún no hay anuncios.</div>}
         </div>
         {listingsTotalPages > 1 && (
-          <div className="flex items-center justify-center gap-3 mt-3 py-3 border-t bg-gray-50 rounded-b text-sm">
+          <div className="flex items-center justify-center gap-3 mt-3 py-3 border-t bg-gray-50 dark:bg-gray-700/50 rounded-b text-sm">
             <button
               disabled={listingsPage <= 1}
               onClick={() => goToListingsPage(Math.max(1, listingsPage - 1))}
-              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white font-medium"
+              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white dark:hover:bg-gray-600 font-medium"
             >
               <ChevronLeft className="w-4 h-4 inline" /> Anterior
             </button>
@@ -479,7 +479,7 @@ export default function IntelligentPublisher() {
             <button
               disabled={listingsPage >= listingsTotalPages}
               onClick={() => goToListingsPage(Math.min(listingsTotalPages, listingsPage + 1))}
-              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white font-medium"
+              className="px-4 py-2 border rounded-lg disabled:opacity-40 hover:bg-white dark:hover:bg-gray-600 font-medium"
             >
               Siguiente <ChevronRight className="w-4 h-4 inline" />
             </button>

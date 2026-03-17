@@ -198,18 +198,28 @@ export async function runPhase32ValidationCycle(options?: { userId?: number }): 
   return result;
 }
 
+/** Last run of the scheduled Phase 31 job (cron). */
+export interface Phase31LastScheduledRun {
+  at: string;
+  success: boolean;
+  winnersDetected: number;
+  durationMs: number;
+}
+
 /**
- * Get Phase 32 status: last activation, last validation cycle, scheduler info.
+ * Get Phase 32 status: last activation, last validation cycle, last scheduled Phase 31 run, scheduler info.
  */
 export async function getPhase32Status(): Promise<{
   lastActivation: Phase32ActivationResult | null;
   lastValidationCycle: Phase32ValidationCycleResult | null;
+  lastScheduledRun: Phase31LastScheduledRun | null;
   schedulerCron: string;
   maxNewListingsPerDay: number;
 }> {
-  const [activationRec, validationRec, maxRec] = await Promise.all([
+  const [activationRec, validationRec, scheduledRunRec, maxRec] = await Promise.all([
     prisma.systemConfig.findUnique({ where: { key: 'phase32_last_activation' } }),
     prisma.systemConfig.findUnique({ where: { key: 'phase32_last_validation_cycle' } }),
+    prisma.systemConfig.findUnique({ where: { key: 'phase31_last_scheduled_run' } }),
     prisma.systemConfig.findUnique({ where: { key: 'phase31_max_new_listings_per_day' } }),
   ]);
 
@@ -230,12 +240,22 @@ export async function getPhase32Status(): Promise<{
     }
   }
 
+  let lastScheduledRun: Phase31LastScheduledRun | null = null;
+  if (scheduledRunRec?.value) {
+    try {
+      lastScheduledRun = JSON.parse(scheduledRunRec.value as string) as Phase31LastScheduledRun;
+    } catch {
+      /* ignore */
+    }
+  }
+
   const maxNewListingsPerDay = maxRec?.value ? Number(maxRec.value) || 15 : 15;
   const schedulerCron = process.env.PHASE31_SALES_GENERATION_CRON || '0 */5 * * *'; // every 5 hours
 
   return {
     lastActivation,
     lastValidationCycle,
+    lastScheduledRun,
     schedulerCron,
     maxNewListingsPerDay,
   };

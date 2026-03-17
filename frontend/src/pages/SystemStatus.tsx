@@ -70,7 +70,7 @@ export default function SystemStatus() {
     const tooltip = message || (connected ? undefined : 'Completa la configuración en API Settings');
     return (
       <div
-        className={`flex items-center justify-between py-3 px-4 rounded-lg border bg-white dark:bg-gray-800 ${
+        className={`flex items-center justify-between py-3 px-4 rounded-lg border bg-white dark:bg-gray-800 dark:bg-gray-800 ${
           !connected && showConnectLink
             ? 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10'
             : 'border-gray-200 dark:border-gray-700'

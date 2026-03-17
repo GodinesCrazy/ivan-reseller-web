@@ -412,14 +412,38 @@ export class AutopilotSystem extends EventEmitter {
 
     this.currentUserId = userId;
 
-    // ✅ PRODUCTION: Only block on core env credentials. eBay Trading API is NOT required (REST APIs used).
-    const hasScraping =
+    // ✅ PRODUCTION: Consider env vars AND credentials in API Settings (DB). eBay Trading API is NOT required (REST APIs used).
+    let hasScraping =
       Boolean((process.env.SCRAPER_API_KEY || '').trim()) ||
       Boolean((process.env.SCRAPERAPI_KEY || '').trim()) ||
       Boolean((process.env.ZENROWS_API_KEY || '').trim());
-    const hasEbayCore =
+    if (!hasScraping) {
+      try {
+        const { CredentialsManager } = await import('./credentials-manager.service');
+        const scraperCreds = await CredentialsManager.getCredentials(userId, 'scraperapi', 'production');
+        const zenrowsCreds = await CredentialsManager.getCredentials(userId, 'zenrows', 'production');
+        const scraperKey = (scraperCreds?.apiKey || scraperCreds?.SCRAPERAPI_KEY || '').toString().trim();
+        const zenrowsKey = (zenrowsCreds?.apiKey || zenrowsCreds?.ZENROWS_API_KEY || '').toString().trim();
+        hasScraping = (Boolean(scraperKey) && scraperKey !== 'REPLACE_ME') || (Boolean(zenrowsKey) && zenrowsKey !== 'REPLACE_ME');
+      } catch {
+        // keep false
+      }
+    }
+
+    let hasEbayCore =
       (Boolean((process.env.EBAY_CLIENT_ID || '').trim()) || Boolean((process.env.EBAY_APP_ID || '').trim())) &&
       (Boolean((process.env.EBAY_CLIENT_SECRET || '').trim()) || Boolean((process.env.EBAY_CERT_ID || '').trim()));
+    if (!hasEbayCore) {
+      try {
+        const ebayCreds = await this.marketplaceService.getCredentials(userId, 'ebay', 'production');
+        const creds = ebayCreds?.credentials;
+        const appId = (creds?.appId || creds?.clientId || creds?.EBAY_APP_ID || creds?.EBAY_CLIENT_ID || '').toString().trim();
+        const certId = (creds?.certId || creds?.clientSecret || creds?.EBAY_CERT_ID || creds?.EBAY_CLIENT_SECRET || '').toString().trim();
+        hasEbayCore = Boolean(appId && certId);
+      } catch {
+        // keep false
+      }
+    }
 
     console.log('[AUTOPILOT DEBUG] Scraping configured:', hasScraping);
     console.log('[AUTOPILOT DEBUG] eBay core configured:', hasEbayCore);

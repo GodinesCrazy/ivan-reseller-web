@@ -61,7 +61,7 @@ export default function SetupRequired() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
           <div className="h-12 w-12 mx-auto mb-4 rounded-full border-4 border-gray-300 border-t-blue-600 animate-spin" />
           <p className="text-gray-600">Verificando configuración...</p>
@@ -76,7 +76,7 @@ export default function SetupRequired() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="max-w-2xl w-full bg-white rounded-xl shadow-xl p-8">
+      <div className="max-w-2xl w-full bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-8">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-100 rounded-full mb-4">
             <svg

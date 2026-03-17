@@ -41,7 +41,7 @@ export default function OpportunitiesHistory() {
         <h1 className="text-2xl font-semibold">Opportunities History</h1>
         <div className="text-sm text-gray-600">{count} total</div>
       </div>
-      <div className="overflow-auto bg-white border rounded">
+      <div className="overflow-auto bg-white dark:bg-gray-800 border rounded">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
             <tr>

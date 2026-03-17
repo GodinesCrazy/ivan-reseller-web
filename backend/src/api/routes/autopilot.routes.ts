@@ -3,6 +3,7 @@ import { authenticate, authorize } from '../../middleware/auth.middleware';
 import { autopilotSystem } from '../../services/autopilot.service';
 import { workflowConfigService } from '../../services/workflow-config.service';
 import { workflowService } from '../../services/workflow.service';
+import { prisma } from '../../config/database';
 import logger from '../../config/logger';
 import { z } from 'zod';
 
@@ -248,7 +249,83 @@ router.get('/status', async (req: Request, res: Response, next) => {
 });
 
 /**
+ * GET /api/autopilot/start-readiness - Requisitos para poder iniciar Autopilot (eBay, Scraping, onboarding).
+ * Considera variables de entorno Y credenciales guardadas en API Settings (BD).
+ */
+router.get('/start-readiness', async (req: Request, res: Response, next) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const hasScrapingEnv =
+      Boolean((process.env.SCRAPER_API_KEY || '').trim()) ||
+      Boolean((process.env.SCRAPERAPI_KEY || '').trim()) ||
+      Boolean((process.env.ZENROWS_API_KEY || '').trim());
+    let hasScraping = hasScrapingEnv;
+    if (!hasScraping) {
+      try {
+        const { CredentialsManager } = await import('../../services/credentials-manager.service');
+        const scraperCreds = await CredentialsManager.getCredentials(userId, 'scraperapi', 'production');
+        const zenrowsCreds = await CredentialsManager.getCredentials(userId, 'zenrows', 'production');
+        const scraperKey = (scraperCreds?.apiKey || scraperCreds?.SCRAPERAPI_KEY || '').toString().trim();
+        const zenrowsKey = (zenrowsCreds?.apiKey || zenrowsCreds?.ZENROWS_API_KEY || '').toString().trim();
+        hasScraping = Boolean(scraperKey && scraperKey !== 'REPLACE_ME') || Boolean(zenrowsKey && zenrowsKey !== 'REPLACE_ME');
+      } catch {
+        // keep hasScraping false
+      }
+    }
+
+    const hasEbayEnv =
+      (Boolean((process.env.EBAY_CLIENT_ID || '').trim()) || Boolean((process.env.EBAY_APP_ID || '').trim())) &&
+      (Boolean((process.env.EBAY_CLIENT_SECRET || '').trim()) || Boolean((process.env.EBAY_CERT_ID || '').trim()));
+    let hasEbayCore = hasEbayEnv;
+    if (!hasEbayCore) {
+      try {
+        const MarketplaceService = (await import('../../services/marketplace.service')).default;
+        const ms = new MarketplaceService();
+        const ebayCreds = await ms.getCredentials(userId, 'ebay', 'production');
+        const creds = ebayCreds?.credentials;
+        const appId = (creds?.appId || creds?.clientId || creds?.EBAY_APP_ID || creds?.EBAY_CLIENT_ID || '').toString().trim();
+        const certId = (creds?.certId || creds?.clientSecret || creds?.EBAY_CERT_ID || creds?.EBAY_CLIENT_SECRET || '').toString().trim();
+        hasEbayCore = Boolean(appId && certId);
+      } catch {
+        // keep hasEbayCore false
+      }
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { onboardingCompleted: true, role: true },
+    });
+    const onboarding =
+      !user || user.role?.toUpperCase() !== 'USER' || user.onboardingCompleted === true;
+
+    const checks = { scraping: hasScraping, ebay: hasEbayCore, onboarding };
+    const canStart = hasScraping && hasEbayCore && onboarding;
+
+    let reason: string | undefined;
+    if (!canStart) {
+      if (!hasScraping) reason = 'Configura una API de Scraping (Scraper API, ZenRows) en Configuración → APIs.';
+      else if (!hasEbayCore) reason = 'Configura credenciales de eBay en variables de entorno o Configuración.';
+      else if (!onboarding) reason = 'Completa el wizard de onboarding antes de iniciar el Autopilot.';
+    }
+
+    res.json({
+      success: true,
+      canStart,
+      reason,
+      checks,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * ✅ POST /api/autopilot/start - Iniciar autopilot
+ * Errores de negocio conocidos se devuelven como 400/403 para que la UI muestre el mensaje, no "Error del servidor (500)".
  */
 router.post('/start', async (req: Request, res: Response, next) => {
   try {
@@ -257,20 +334,39 @@ router.post('/start', async (req: Request, res: Response, next) => {
       return res.status(401).json({ success: false, error: 'Authentication required' });
     }
 
-    // ✅ Pasar userId al método start() (ahora es obligatorio)
     await autopilotSystem.start(userId);
-    
+
     res.json({
       success: true,
       message: 'Autopilot started successfully'
     });
   } catch (error: any) {
+    const msg = error?.message || 'Failed to start autopilot';
     console.error('[AUTOPILOT ROUTE ERROR]', error);
     logger.error('Error starting autopilot', { error, userId: req.user?.userId });
-    res.status(500).json({
-      success: false,
-      error: error?.message || 'Failed to start autopilot'
-    });
+
+    // Errores de negocio → 4xx con code para que el frontend muestre mensaje y CTA
+    if (msg.includes('ONBOARDING_INCOMPLETE') || msg.includes('onboarding')) {
+      return res.status(403).json({ success: false, error: msg, code: 'ONBOARDING_INCOMPLETE' });
+    }
+    if (msg.includes('Missing required APIs') && msg.includes('Scraping')) {
+      return res.status(400).json({ success: false, error: msg, code: 'SCRAPING_MISSING' });
+    }
+    if (msg.includes('Missing required APIs') && msg.includes('eBay')) {
+      return res.status(400).json({ success: false, error: msg, code: 'EBAY_MISSING' });
+    }
+    if (msg.includes('not configured')) {
+      return res.status(400).json({
+        success: false,
+        error: msg,
+        code: msg.includes('Scraping') ? 'SCRAPING_MISSING' : msg.includes('eBay') ? 'EBAY_MISSING' : 'CONFIG_MISSING',
+      });
+    }
+    if (msg.includes('Already running') || msg.includes('Stop it first')) {
+      return res.status(409).json({ success: false, error: msg, code: 'ALREADY_RUNNING' });
+    }
+
+    res.status(500).json({ success: false, error: msg });
   }
 });
 

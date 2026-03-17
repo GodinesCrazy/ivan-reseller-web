@@ -189,23 +189,23 @@ export default function ManualLogin() {
   const providerLabel = providerLabels[session.provider] || session.provider || 'AliExpress';
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-3xl mx-auto px-4 py-10">
-        <div className="bg-white shadow border border-gray-200 rounded-lg p-6 space-y-6">
+        <div className="bg-white dark:bg-gray-800 shadow border border-gray-200 dark:border-gray-700 rounded-lg p-6 space-y-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Autenticación manual en {providerLabel}</h1>
-            <p className="text-gray-600">Sigue los pasos para iniciar sesión manualmente. La sesión expira {expiresLabel ? `el ${expiresLabel}` : 'en unos minutos'}.</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Autenticación manual en {providerLabel}</h1>
+            <p className="text-gray-600 dark:text-gray-400">Sigue los pasos para iniciar sesión manualmente. La sesión expira {expiresLabel ? `el ${expiresLabel}` : 'en unos minutos'}.</p>
           </div>
 
           {session.status === 'completed' ? (
-            <div className="p-4 bg-green-50 border border-green-200 text-green-700 rounded">
+            <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 rounded">
               ✅ Sesión guardada correctamente. Puedes cerrar esta ventana.
             </div>
           ) : (
             <div className="space-y-6">
               <section className="space-y-2">
-                <h2 className="text-lg font-semibold text-gray-800">1. Abrir la página de login</h2>
-                <p className="text-gray-600 text-sm">
+                <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">1. Abrir la página de login</h2>
+                <p className="text-gray-600 dark:text-gray-400 text-sm">
                   Haz clic en el siguiente botón para abrir la página oficial de AliExpress en una nueva pestaña y completa el inicio de sesión.
                 </p>
                 <button
@@ -217,8 +217,8 @@ export default function ManualLogin() {
               </section>
 
               <section className="space-y-2">
-                <h2 className="text-lg font-semibold text-gray-800">2. Copiar las cookies de la sesión</h2>
-                <p className="text-gray-600 text-sm">
+                <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">2. Copiar las cookies de la sesión</h2>
+                <p className="text-gray-600 dark:text-gray-400 text-sm">
                   Una vez iniciada la sesión, abre la consola del navegador (F12 → Console) y pega el siguiente snippet:
                 </p>
                 <pre className="bg-gray-900 text-green-200 text-xs rounded-md p-3 overflow-x-auto">
@@ -229,16 +229,16 @@ export default function ManualLogin() {
   })
 ))`}
                 </pre>
-                <p className="text-gray-600 text-sm">
+                <p className="text-gray-600 dark:text-gray-400 text-sm">
                   Esto copiará las cookies al portapapeles en formato JSON. Pégalas en el cuadro de abajo.
                 </p>
               </section>
 
               <section className="space-y-2">
-                <h2 className="text-lg font-semibold text-gray-800">3. Pegar y guardar</h2>
+                <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">3. Pegar y guardar</h2>
                 <textarea
                   rows={8}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono"
+                  className="w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm font-mono bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                   placeholder="Pega aquí el JSON de cookies o el resultado de document.cookie"
                   value={cookiesText}
                   onChange={(e) => setCookiesText(e.target.value)}

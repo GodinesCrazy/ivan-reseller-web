@@ -602,7 +602,7 @@ export default function Users() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/admin')}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700/50 flex items-center gap-2"
           >
             <Shield className="w-4 h-4" />
             Admin Panel
@@ -618,7 +618,7 @@ export default function Users() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white border rounded-lg p-4">
+      <div className="bg-white dark:bg-gray-800 border rounded-lg p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Search */}
           <div className="relative">
@@ -668,9 +668,9 @@ export default function Users() {
       </div>
 
       {/* Users Table */}
-      <div className="bg-white border rounded-lg overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 border rounded-lg overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 dark:bg-gray-700/50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
@@ -681,7 +681,7 @@ export default function Users() {
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200">
             {paginatedUsers.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
@@ -690,7 +690,7 @@ export default function Users() {
               </tr>
             )}
             {paginatedUsers.map((user) => (
-              <tr key={user.id} className="hover:bg-gray-50">
+              <tr key={user.id} className="hover:bg-gray-50 dark:bg-gray-700/50">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
                     <div className="flex-shrink-0 h-10 w-10">
@@ -782,7 +782,7 @@ export default function Users() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white border rounded-lg px-4 py-3">
+        <div className="flex items-center justify-between bg-white dark:bg-gray-800 border rounded-lg px-4 py-3">
           <div className="text-sm text-gray-700">
             Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredUsers.length)} of {filteredUsers.length} users
           </div>
@@ -790,14 +790,14 @@ export default function Users() {
             <button
               onClick={() => setCurrentPage(1)}
               disabled={currentPage === 1}
-              className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1 border rounded hover:bg-gray-50 dark:bg-gray-700/50 disabled:opacity-50"
             >
               First
             </button>
             <button
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1}
-              className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1 border rounded hover:bg-gray-50 dark:bg-gray-700/50 disabled:opacity-50"
             >
               Previous
             </button>
@@ -807,14 +807,14 @@ export default function Users() {
             <button
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1 border rounded hover:bg-gray-50 dark:bg-gray-700/50 disabled:opacity-50"
             >
               Next
             </button>
             <button
               onClick={() => setCurrentPage(totalPages)}
               disabled={currentPage === totalPages}
-              className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+              className="px-3 py-1 border rounded hover:bg-gray-50 dark:bg-gray-700/50 disabled:opacity-50"
             >
               Last
             </button>
@@ -825,7 +825,7 @@ export default function Users() {
       {/* Modal: User Details */}
       {showDetailsModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b flex items-center justify-between">
               <h3 className="text-xl font-semibold">User Details</h3>
               <button onClick={() => setShowDetailsModal(false)} className="text-gray-400 hover:text-gray-600">
@@ -914,7 +914,7 @@ export default function Users() {
                   <h4 className="font-semibold text-gray-900 mb-3">API Credentials</h4>
                   <div className="space-y-2">
                     {userProfile.apiCredentials.map((cred: any) => (
-                      <div key={cred.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <div key={cred.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700/50 rounded">
                         <div>
                           <span className="font-medium">{cred.apiName}</span>
                           <span className="text-sm text-gray-500 ml-2">({cred.environment})</span>
@@ -952,7 +952,7 @@ export default function Users() {
             <div className="p-6 border-t flex justify-end gap-3">
               <button
                 onClick={() => setShowDetailsModal(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:bg-gray-700/50"
               >
                 Close
               </button>
@@ -970,7 +970,7 @@ export default function Users() {
       {/* Modal: Edit User */}
       {showEditModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="p-6 border-b flex items-center justify-between">
               <h3 className="text-xl font-semibold">Edit User</h3>
               <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600">
@@ -1066,7 +1066,7 @@ export default function Users() {
             <div className="p-6 border-t flex justify-end gap-3">
               <button
                 onClick={() => setShowEditModal(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:bg-gray-700/50"
               >
                 Cancel
               </button>
@@ -1085,7 +1085,7 @@ export default function Users() {
       {/* Modal: New User */}
       {showNewUserModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="p-6 border-b flex items-center justify-between">
               <h3 className="text-xl font-semibold">Create New User</h3>
               <button onClick={() => setShowNewUserModal(false)} className="text-gray-400 hover:text-gray-600">
@@ -1171,7 +1171,7 @@ export default function Users() {
             <div className="p-6 border-t flex justify-end gap-3">
               <button
                 onClick={() => setShowNewUserModal(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:bg-gray-700/50"
               >
                 Cancel
               </button>

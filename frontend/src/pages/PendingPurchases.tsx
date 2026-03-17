@@ -108,8 +108,9 @@ export default function PendingPurchases() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Compras Pendientes</h1>
-          <p className="text-gray-600 mt-1">Ventas que requieren compra manual en AliExpress. Haz clic en el producto para ver detalles. Tras comprar, el seguimiento continúa en Órdenes.</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Compras Pendientes</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">Ventas que requieren compra manual en AliExpress. Haz clic en el producto para ver detalles. Tras comprar, el seguimiento continúa en Órdenes.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos actualizados en cada carga.</p>
           <div className="mt-3">
             <CycleStepsBreadcrumb currentStep={5} />
           </div>
@@ -121,16 +122,16 @@ export default function PendingPurchases() {
 
       {/* Capital Info Card */}
       {pendingSales.length > 0 && (
-        <Card className="bg-blue-50 border-blue-200">
+        <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-blue-600 font-medium">Capital de Trabajo Disponible</p>
-                <p className="text-2xl font-bold text-blue-900">
+                <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Capital de Trabajo Disponible</p>
+                <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                   {formatCurrencySimple(pendingSales[0]?.availableCapital || 0, 'USD')}
                 </p>
               </div>
-              <DollarSign className="w-12 h-12 text-blue-600" />
+              <DollarSign className="w-12 h-12 text-blue-600 dark:text-blue-400" />
             </div>
           </CardContent>
         </Card>
@@ -138,31 +139,31 @@ export default function PendingPurchases() {
 
       {/* Pending Sales List */}
       {pendingSales.length === 0 ? (
-        <Card>
+        <Card className="dark:bg-gray-800 dark:border-gray-700">
           <CardContent className="pt-6">
             <div className="text-center py-12">
-              <ShoppingCart className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 text-lg">No hay compras pendientes</p>
-              <p className="text-gray-500 text-sm mt-2">Todas las ventas están siendo procesadas automáticamente o ya fueron completadas</p>
+              <ShoppingCart className="w-16 h-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+              <p className="text-gray-600 dark:text-gray-400 text-lg">No hay compras pendientes</p>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">Todas las ventas están siendo procesadas automáticamente o ya fueron completadas</p>
             </div>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4">
           {pendingSales.map((sale) => (
-            <Card key={sale.id} className="hover:shadow-lg transition-shadow">
+            <Card key={sale.id} className="hover:shadow-lg transition-shadow dark:bg-gray-800 dark:border-gray-700">
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <CardTitle className="text-lg flex items-center gap-2">
+                    <CardTitle className="text-lg flex items-center gap-2 text-gray-900 dark:text-gray-100">
                       <Package className="w-5 h-5 flex-shrink-0" />
                       {sale.productId ? (
                         <button
                           onClick={() => navigate(`/products/${sale.productId}/preview`)}
-                          className="text-left hover:text-blue-600 hover:underline flex items-center gap-1"
+                          className="text-left hover:text-blue-600 dark:hover:text-blue-400 hover:underline flex items-center gap-1"
                         >
                           {sale.productTitle}
-                          <ExternalLink className="w-4 h-4 text-gray-400" />
+                          <ExternalLink className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                         </button>
                       ) : (
                         sale.productTitle
@@ -175,8 +176,8 @@ export default function PendingPurchases() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm text-gray-600">Precio de Venta</p>
-                    <p className="text-xl font-bold text-green-600">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Precio de Venta</p>
+                    <p className="text-xl font-bold text-green-600 dark:text-green-400">
                       {formatCurrencySimple(sale.salePrice, 'USD')}
                     </p>
                   </div>
@@ -186,30 +187,30 @@ export default function PendingPurchases() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   {/* Información Financiera */}
                   <div className="space-y-2">
-                    <h3 className="font-semibold text-sm text-gray-700 flex items-center gap-2">
+                    <h3 className="font-semibold text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
                       <TrendingUp className="w-4 h-4" />
                       Información Financiera
                     </h3>
-                    <div className="bg-gray-50 p-3 rounded space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Costo AliExpress:</span>
+                    <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded space-y-1">
+                      <div className="flex justify-between text-sm text-gray-900 dark:text-gray-100">
+                        <span className="text-gray-600 dark:text-gray-400">Costo AliExpress:</span>
                         <span className="font-medium">{formatCurrencySimple(sale.aliexpressCost, 'USD')}</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Capital Requerido:</span>
-                        <span className={`font-medium ${sale.canPurchase ? 'text-green-600' : 'text-red-600'}`}>
+                        <span className="text-gray-600 dark:text-gray-400">Capital Requerido:</span>
+                        <span className={`font-medium ${sale.canPurchase ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                           {formatCurrencySimple(sale.requiredCapital, 'USD')}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Capital Disponible:</span>
-                        <span className={`font-medium ${sale.canPurchase ? 'text-green-600' : 'text-red-600'}`}>
+                        <span className="text-gray-600 dark:text-gray-400">Capital Disponible:</span>
+                        <span className={`font-medium ${sale.canPurchase ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                           {formatCurrencySimple(sale.availableCapital, 'USD')}
                         </span>
                       </div>
-                      <div className="flex justify-between text-sm font-semibold pt-2 border-t">
-                        <span className="text-gray-700">Ganancia Estimada:</span>
-                        <span className="text-green-600">
+                      <div className="flex justify-between text-sm font-semibold pt-2 border-t border-gray-200 dark:border-gray-600">
+                        <span className="text-gray-700 dark:text-gray-300">Ganancia Estimada:</span>
+                        <span className="text-green-600 dark:text-green-400">
                           {formatCurrencySimple(sale.salePrice - sale.aliexpressCost, 'USD')}
                         </span>
                       </div>
@@ -218,34 +219,34 @@ export default function PendingPurchases() {
 
                   {/* Información del Comprador */}
                   <div className="space-y-2">
-                    <h3 className="font-semibold text-sm text-gray-700 flex items-center gap-2">
+                    <h3 className="font-semibold text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
                       <User className="w-4 h-4" />
                       Información del Comprador
                     </h3>
-                    <div className="bg-gray-50 p-3 rounded space-y-2">
+                    <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded space-y-2">
                       {sale.buyerName && (
-                        <div className="flex items-start gap-2 text-sm">
-                          <User className="w-4 h-4 text-gray-400 mt-0.5" />
+                        <div className="flex items-start gap-2 text-sm text-gray-900 dark:text-gray-100">
+                          <User className="w-4 h-4 text-gray-400 dark:text-gray-500 mt-0.5" />
                           <div>
-                            <span className="text-gray-600">Nombre: </span>
+                            <span className="text-gray-600 dark:text-gray-400">Nombre: </span>
                             <span className="font-medium">{sale.buyerName}</span>
                           </div>
                         </div>
                       )}
                       {sale.buyerEmail && (
-                        <div className="flex items-start gap-2 text-sm">
-                          <Mail className="w-4 h-4 text-gray-400 mt-0.5" />
+                        <div className="flex items-start gap-2 text-sm text-gray-900 dark:text-gray-100">
+                          <Mail className="w-4 h-4 text-gray-400 dark:text-gray-500 mt-0.5" />
                           <div>
-                            <span className="text-gray-600">Email: </span>
+                            <span className="text-gray-600 dark:text-gray-400">Email: </span>
                             <span className="font-medium">{sale.buyerEmail}</span>
                           </div>
                         </div>
                       )}
                       {sale.shippingAddress && (
-                        <div className="flex items-start gap-2 text-sm">
-                          <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
+                        <div className="flex items-start gap-2 text-sm text-gray-900 dark:text-gray-100">
+                          <MapPin className="w-4 h-4 text-gray-400 dark:text-gray-500 mt-0.5" />
                           <div className="flex-1">
-                            <span className="text-gray-600">Dirección: </span>
+                            <span className="text-gray-600 dark:text-gray-400">Dirección: </span>
                             <span className="font-medium break-words">
                               {typeof sale.shippingAddress === 'string' 
                                 ? sale.shippingAddress 
@@ -255,15 +256,15 @@ export default function PendingPurchases() {
                         </div>
                       )}
                       {!sale.buyerName && !sale.buyerEmail && !sale.shippingAddress && (
-                        <p className="text-sm text-gray-500 italic">Información del comprador no disponible</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 italic">Información del comprador no disponible</p>
                       )}
                     </div>
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                     <Clock className="w-4 h-4" />
                     <span>Venta realizada: {new Date(sale.createdAt).toLocaleString()}</span>
                   </div>
@@ -311,11 +312,11 @@ export default function PendingPurchases() {
 
                 {/* Warning if capital insufficient */}
                 {!sale.canPurchase && (
-                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded flex items-start gap-2">
-                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-red-800">Capital Insuficiente</p>
-                      <p className="text-sm text-red-700 mt-1">
+                      <p className="text-sm font-medium text-red-800 dark:text-red-200">Capital Insuficiente</p>
+                      <p className="text-sm text-red-700 dark:text-red-300 mt-1">
                         Necesitas {formatCurrencySimple(sale.requiredCapital - sale.availableCapital, 'USD')} adicionales 
                         para realizar esta compra. Actualiza tu capital de trabajo en Configuración.
                       </p>
