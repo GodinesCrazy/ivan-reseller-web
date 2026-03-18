@@ -1591,6 +1591,126 @@ export class EbayService {
 
     return mapped;
   }
+
+  /**
+   * List orders from eBay Sell Fulfillment API (Phase 40 — real sales sync).
+   * Fetches orders NOT_STARTED or IN_PROGRESS (PAID / AWAITING_SHIPMENT) created in the last 90 days.
+   */
+  async getOrders(params?: { limit?: number; offset?: number; creationDateFrom?: string }): Promise<{
+    orders: Array<{
+      orderId: string;
+      buyerName?: string;
+      buyerUsername?: string;
+      buyerEmail?: string;
+      shippingAddress?: Record<string, string>;
+      lineItems: Array<{ lineItemId: string; sku?: string; itemId?: string; title?: string; quantity: number; price?: number }>;
+      total?: number;
+      orderDate?: string;
+      fulfillmentStatus?: string;
+    }>;
+    total?: number;
+    next?: string;
+  }> {
+    await this.ensureAccessToken();
+    const limit = params?.limit ?? 50;
+    const offset = params?.offset ?? 0;
+    const from = params?.creationDateFrom ?? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, '.000Z');
+    const filterParts = [
+      `creationdate:[${from}..]`,
+      'orderfulfillmentstatus:{NOT_STARTED|IN_PROGRESS}',
+    ];
+    const filter = filterParts.join(',');
+    const res = await this.apiClient.get('/sell/fulfillment/v1/order', {
+      params: { filter, limit, offset },
+    });
+    const orders = (res.data?.orders || []).map((o: any) => {
+      const shipTo = o.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo;
+      const contactAddr = shipTo?.contactAddress || shipTo?.contactAddress;
+      const shippingAddress = contactAddr ? {
+        fullName: shipTo?.fullName || '',
+        addressLine1: contactAddr?.addressLine1 || contactAddr?.addressLine || '',
+        addressLine2: contactAddr?.addressLine2 || '',
+        city: contactAddr?.city || '',
+        state: contactAddr?.stateOrProvince || contactAddr?.state || '',
+        zipCode: contactAddr?.postalCode || contactAddr?.zipCode || '',
+        country: contactAddr?.countryCode || contactAddr?.country || '',
+        phoneNumber: shipTo?.primaryPhone?.phoneNumber || '',
+      } : undefined;
+      const pricing = o.pricingSummary || o.totalFeeBasisAmount;
+      const total = pricing?.value != null ? parseFloat(pricing.value) : undefined;
+      return {
+        orderId: o.orderId || o.order_id || '',
+        buyerName: o.buyer?.fullName || shipTo?.fullName,
+        buyerUsername: o.buyer?.username,
+        buyerEmail: o.buyer?.email,
+        shippingAddress,
+        lineItems: (o.lineItems || []).map((li: any) => ({
+          lineItemId: li.lineItemId || li.lineItemId,
+          sku: li.sku,
+          itemId: li.itemId,
+          title: li.title,
+          quantity: parseInt(li.quantity || '1', 10) || 1,
+          price: li.unitPrice?.value != null ? parseFloat(li.unitPrice.value) : undefined,
+        })),
+        total,
+        orderDate: o.creationDate || o.createdAt,
+        fulfillmentStatus: o.orderFulfillmentStatus,
+      };
+    });
+    return {
+      orders,
+      total: res.data?.total,
+      next: res.data?.next,
+    };
+  }
+
+  /**
+   * Get order details from Sell Fulfillment API (for line items needed by createShippingFulfillment).
+   */
+  async getOrderForFulfillment(orderId: string): Promise<{ lineItems: { lineItemId: string; quantity: number }[] }> {
+    await this.ensureAccessToken();
+    const res = await this.apiClient.get(`/sell/fulfillment/v1/order/${encodeURIComponent(orderId)}`);
+    const lineItems = (res.data?.lineItems || []).map((li: any) => ({
+      lineItemId: String(li.lineItemId || li.lineItemId || ''),
+      quantity: Math.max(1, parseInt(li.quantity || '1', 10) || 1),
+    })).filter((li: { lineItemId: string }) => li.lineItemId);
+    if (lineItems.length === 0) {
+      throw new AppError(`Order ${orderId} has no line items`, 400);
+    }
+    return { lineItems };
+  }
+
+  /**
+   * Mark order as shipped with external tracking (Sell Fulfillment API).
+   * Use when shipping from supplier (e.g. AliExpress) so eBay shows tracking without buying an eBay label.
+   */
+  async createShippingFulfillment(
+    orderId: string,
+    params: {
+      lineItems: { lineItemId: string; quantity: number }[];
+      trackingNumber: string;
+      shippingCarrierCode?: string;
+      shippedDate?: string;
+    }
+  ): Promise<void> {
+    await this.ensureAccessToken();
+    const trackingNumber = String(params.trackingNumber || '').replace(/\W/g, '');
+    if (!trackingNumber) {
+      throw new AppError('trackingNumber is required', 400);
+    }
+    const shippingCarrierCode = params.shippingCarrierCode || 'OTHER';
+    const body = {
+      lineItems: params.lineItems.map((li) => ({ lineItemId: li.lineItemId, quantity: li.quantity })),
+      trackingNumber,
+      shippingCarrierCode,
+      ...(params.shippedDate && { shippedDate: params.shippedDate }),
+    };
+    await this.apiClient.post(
+      `/sell/fulfillment/v1/order/${encodeURIComponent(orderId)}/shipping_fulfillment`,
+      body
+    );
+    logger.info('[EBAY] createShippingFulfillment success', { orderId, trackingNumber: trackingNumber.slice(0, 6) + '***' });
+  }
 }
 
 export default EbayService;

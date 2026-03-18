@@ -43,6 +43,7 @@ import InventorySummaryCard from '@/components/InventorySummaryCard';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
+import type { InventorySummary } from '@/types/dashboard';
 
 interface MarketplaceListing {
   id: number;
@@ -83,16 +84,6 @@ interface Aggregations {
   totalAll: number;
   byStatus: Record<string, number>;
   categories: string[];
-}
-
-interface InventorySummary {
-  products: { total: number; pending: number; approved: number; published: number };
-  listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
-  listingsTotal?: number;
-  listingsSource?: 'api' | 'database';
-  mercadolibreActiveCount?: number;
-  ordersByStatus?: { CREATED: number; PAID: number; PURCHASING: number; PURCHASED: number; FAILED: number };
-  pendingPurchasesCount?: number;
 }
 
 interface ProductFilters {
@@ -479,6 +470,7 @@ export default function Products() {
           </div>
         </div>
         <p className="text-gray-600 dark:text-gray-400 mt-0.5">Productos aprobados y publicados en marketplaces</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Datos reales desde API · Estado por marketplace desde BD</p>
         <div className="mt-3">
           <CycleStepsBreadcrumb currentStep={3} />
         </div>

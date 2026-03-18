@@ -43,12 +43,14 @@ import SalesReadinessPanel from '@/components/SalesReadinessPanel';
 interface Sale {
   id: string;
   orderId: string;
-  productId?: number; // ✅ Para mostrar workflow status del producto relacionado
+  productId?: number;
   productTitle: string;
+  productImage?: string; // Phase 40: product image URL
   marketplace: string;
+  source?: string; // Phase 40: eBay / ML / Amazon
   buyerName: string;
-  buyerEmail?: string; // ✅ MEJORADO: Email del comprador
-  shippingAddress?: string; // ✅ MEJORADO: Dirección de envío
+  buyerEmail?: string;
+  shippingAddress?: string;
   salePrice: number;
   cost: number;
   profit: number;
@@ -99,16 +101,19 @@ export default function Sales() {
   const [showModal, setShowModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
   const fetchSalesData = useCallback(async () => {
     try {
       setLoading(true);
-      const [salesResponse, statsResponse] = await Promise.all([
+      const [salesResponse, statsResponse, syncResponse] = await Promise.all([
         api.get('/api/sales', { params: { environment } }),
-        api.get('/api/sales/stats', { params: { days: dateRange, environment } })
+        api.get('/api/sales/stats', { params: { days: dateRange, environment } }),
+        api.get('/api/sales/sync-status').catch(() => ({ data: {} })),
       ]);
       setSales(salesResponse.data?.sales || salesResponse.data || []);
       setStats(statsResponse.data || {});
+      setLastSyncAt(syncResponse?.data?.lastSyncAt ?? null);
     } catch (error: any) {
       console.error('Error fetching sales:', error);
       const status = error?.response?.status;
@@ -227,8 +232,19 @@ export default function Sales() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Ventas</h1>
-          <p className="text-gray-600 mt-1">Ventas de productos publicados en marketplaces</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Ventas</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">Ventas de productos publicados en marketplaces</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Datos reales desde API · Entorno: {environment === 'production' ? 'producción' : environment === 'sandbox' ? 'sandbox' : 'todos'}
+            {lastSyncAt && (
+              <span className="ml-2 text-amber-600 dark:text-amber-400">
+                · Última sincronización: {(() => {
+                  const mins = Math.round((Date.now() - new Date(lastSyncAt).getTime()) / 60000);
+                  return mins < 1 ? 'ahora mismo' : `${mins} min`;
+                })()}
+              </span>
+            )}
+          </p>
           <div className="mt-3">
             <CycleStepsBreadcrumb currentStep={4} />
           </div>
@@ -398,11 +414,22 @@ export default function Sales() {
                 </div>
                 <div>
                   <div className="flex justify-between mb-2">
-                    <span className="text-sm text-gray-600">Fulfillment Rate</span>
-                    <span className="text-sm font-medium">92%</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Fulfillment</span>
+                    <span className="text-sm font-medium">
+                      {salesInPeriod.length > 0
+                        ? `${Math.round((salesInPeriod.filter((s) => s.status === 'SHIPPED' || s.status === 'DELIVERED').length / salesInPeriod.length) * 100)}%`
+                        : '—'}
+                    </span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-purple-600 h-2 rounded-full" style={{ width: '92%' }}></div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                    <div
+                      className="bg-purple-600 h-2 rounded-full"
+                      style={{
+                        width: salesInPeriod.length > 0
+                          ? `${(salesInPeriod.filter((s) => s.status === 'SHIPPED' || s.status === 'DELIVERED').length / salesInPeriod.length) * 100}%`
+                          : '0%',
+                      }}
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -490,10 +517,11 @@ export default function Sales() {
                     <table className="w-full">
                       <thead className="bg-gray-50 border-b">
                         <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Imagen</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Buyer</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Marketplace</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Comprador</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Origen</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -504,12 +532,21 @@ export default function Sales() {
                       </thead>
                       <tbody className="divide-y divide-gray-200">
                         {paginatedSales.map((sale) => (
-                          <tr key={sale.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm font-medium text-blue-600">{sale.orderId}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate">{sale.productTitle}</td>
-                            <td className="px-4 py-3 text-sm text-gray-600">{sale.buyerName}</td>
+                          <tr key={sale.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                             <td className="px-4 py-3">
-                              <Badge variant="outline">{sale.marketplace}</Badge>
+                              {sale.productImage ? (
+                                <img src={sale.productImage} alt="" className="w-10 h-10 object-cover rounded" />
+                              ) : (
+                                <div className="w-10 h-10 rounded bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
+                                  <Package className="w-5 h-5 text-gray-400" />
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-medium text-blue-600 dark:text-blue-400">{sale.orderId}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate">{sale.productTitle}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{sale.buyerName}</td>
+                            <td className="px-4 py-3">
+                              <Badge variant="outline">{sale.source || sale.marketplace}</Badge>
                             </td>
                             <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatCurrencySimple(sale.salePrice, 'USD')}</td>
                             <td className="px-4 py-3 text-sm font-medium text-green-600">+{formatCurrencySimple(sale.profit, 'USD')}</td>
@@ -576,36 +613,41 @@ export default function Sales() {
         </TabsContent>
       </Tabs>
 
-      {/* Sale Detail Modal */}
+      {/* Sale Detail Modal — Phase 40: full detail */}
       {showModal && selectedSale && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Sale Details</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b dark:border-gray-700 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Detalle de venta</h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-2 hover:bg-gray-100 rounded"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
               >
                 ×
               </button>
             </div>
             <div className="p-6 space-y-4">
+              {selectedSale.productImage && (
+                <div className="flex justify-center">
+                  <img src={selectedSale.productImage} alt={selectedSale.productTitle} className="max-h-32 object-contain rounded" />
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-gray-600">Order ID</p>
-                  <p className="font-medium text-blue-600">{selectedSale.orderId}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Order ID</p>
+                  <p className="font-medium text-blue-600 dark:text-blue-400">{selectedSale.orderId}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Status</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Estado</p>
                   {getStatusBadge(selectedSale.status)}
                 </div>
                 <div className="col-span-2">
-                  <p className="text-sm text-gray-600">Product</p>
-                  <p className="font-medium">{selectedSale.productTitle}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Producto</p>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{selectedSale.productTitle}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Marketplace</p>
-                  <Badge variant="outline">{selectedSale.marketplace}</Badge>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Origen</p>
+                  <Badge variant="outline">{selectedSale.source || selectedSale.marketplace}</Badge>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Buyer</p>

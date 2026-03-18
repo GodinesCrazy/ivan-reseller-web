@@ -105,7 +105,7 @@ router.get('/stats', wrapAsync(async (req: Request, res: Response, next) => {
     );
 
     const duration = Date.now() - startTime;
-    res.json(payload);
+    res.json({ ...payload, _lastUpdated: new Date().toISOString() });
   } catch (error: any) {
     const duration = Date.now() - startTime;
     
@@ -487,6 +487,7 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       listingsByMarketplace,
       listingsTotal,
       listingsSource,
+      lastSyncAt: new Date().toISOString(),
       ebayActiveCount: ebayActiveCount ?? undefined,
       mercadolibreActiveCount: mercadolibreActiveCount ?? undefined,
       ordersByStatus: ordersByStatusMap,

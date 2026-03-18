@@ -305,24 +305,47 @@ router.post('/ebay', createWebhookSignatureValidator('ebay'), async (req: Reques
   });
   try {
     const body: any = req.body || {};
-    const listingId = body.listingId || body.itemId || body?.transaction?.itemId;
-    const amount = Number(body.amount || body.total || body?.transaction?.amountPaid || body?.transaction?.transactionPrice?.value);
-    const orderId = String(body.orderId || body.id || body?.transaction?.orderId || '');
+    // Robust parsing: accept multiple payload shapes (Sell Fulfillment, Trading, notifications)
+    const listingId =
+      body.listingId ||
+      body.itemId ||
+      body?.transaction?.itemId ||
+      body?.lineItems?.[0]?.itemId ||
+      body?.orderLineItems?.[0]?.itemId ||
+      body?.listing?.listingId ||
+      body?.item?.itemId;
+    const amount = Number(
+      body.amount ||
+        body.total ||
+        body?.transaction?.amountPaid ||
+        body?.transaction?.transactionPrice?.value ||
+        body?.pricingSummary?.total?.value ||
+        body?.orderTotal?.value ||
+        body?.lineItems?.[0]?.unitPrice?.value
+    );
+    const orderId = String(
+      body.orderId ||
+        body.id ||
+        body?.transaction?.orderId ||
+        body?.orderId ||
+        body?.order?.orderId ||
+        ''
+    ).trim();
 
-    const shipTo = body?.fulfillmentStartInstructions?.shippingStep?.shipTo;
-    const contactAddr = shipTo?.contactAddress;
+    const shipTo = body?.fulfillmentStartInstructions?.shippingStep?.shipTo || body?.shippingFulfillment?.shipTo;
+    const contactAddr = shipTo?.contactAddress || shipTo?.contactAddress;
     const shippingAddress = (body?.shippingAddress || body?.transaction?.shippingAddress || shipTo) ? {
-      fullName: shipTo?.fullName || '',
-      addressLine1: contactAddr?.addressLine1 || '',
+      fullName: shipTo?.fullName || body?.buyer?.username || body?.buyer?.name || '',
+      addressLine1: contactAddr?.addressLine1 || contactAddr?.addressLine || '',
       addressLine2: contactAddr?.addressLine2 || '',
       city: contactAddr?.city || '',
-      state: contactAddr?.stateOrProvince || '',
-      zipCode: contactAddr?.postalCode || '',
-      country: contactAddr?.countryCode || '',
-      phoneNumber: shipTo?.primaryPhone?.phoneNumber || '',
+      state: contactAddr?.stateOrProvince || contactAddr?.state || '',
+      zipCode: contactAddr?.postalCode || contactAddr?.zipCode || '',
+      country: contactAddr?.countryCode || contactAddr?.country || '',
+      phoneNumber: shipTo?.primaryPhone?.phoneNumber || shipTo?.phoneNumber || '',
     } : null;
 
-    const buyer = body?.buyer?.username || body?.buyer?.name || body?.transaction?.buyer?.username;
+    const buyer = body?.buyer?.username || body?.buyer?.name || body?.transaction?.buyer?.username || body?.buyer?.fullName;
     const buyerEmail = body?.buyer?.email || body?.transaction?.buyer?.email || null;
 
     if (!listingId) return res.status(400).json({ success: false, error: 'listingId missing' });

@@ -1137,7 +1137,7 @@ model Order {
   aliexpressOrderId String?
   productUrl        String?
   errorMessage      String?  // Stored on FAILED
-  fulfillRetryCount Int      @default(0) // Number of retry attempts for re-fulfill (cap at 3)
+  fulfillRetryCount Int      @default(0) // Retry attempts for re-fulfill; cap 5 (Phase 41), then NEEDS_MANUAL_INTERVENTION
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

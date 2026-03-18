@@ -1,6 +1,11 @@
 /**
  * Order Fulfillment Service - Payment confirmed ? Create Order ? Execute AliExpress purchase
  * Pipeline: PAID ? PURCHASING ? PURCHASED | FAILED
+ *
+ * SHIPPING ORIGIN (Phase 39): Dropshipping only — supplier ships directly to buyer.
+ * Do NOT use Chile (or any non-US address) as ship-from when updating eBay. If eBay
+ * returns "ship from address must be in the United States", do NOT use eBay label;
+ * mark as shipped externally using AliExpress tracking.
  */
 
 import { prisma } from '../config/database';
@@ -29,6 +34,16 @@ export class OrderFulfillmentService {
       logger.error('[ORDER-FULFILLMENT] Order not found', { orderId });
       return { success: false, orderId, status: 'FAILED', error: 'Order not found' };
     }
+    // Phase 39: Avoid duplicate purchase — only PAID orders proceed
+    if (order.status === 'PURCHASED' || order.status === 'PURCHASING') {
+      logger.warn('[ORDER-FULFILLMENT] Order already processed or in progress', { orderId, status: order.status });
+      return {
+        success: false,
+        orderId,
+        status: order.status as OrderStatus,
+        error: `Order already ${order.status}; skip duplicate purchase`,
+      };
+    }
     if (order.status !== 'PAID') {
       logger.warn('[ORDER-FULFILLMENT] Order not in PAID status', { orderId, status: order.status });
       return {
@@ -55,17 +70,17 @@ export class OrderFulfillmentService {
       data: { status: 'PURCHASING' },
     });
     const ts = new Date().toISOString();
-    logger.info('[FULFILLMENT] START', { orderId, timestamp: ts });
+    logger.info('[FULFILLMENT] START', { orderId, timestamp: ts, action: 'fulfill_order', status: 'PURCHASING' });
 
     const shippingObj = this.parseShippingAddress(order.shippingAddress);
     if (!shippingObj) {
-      await this.markFailed(orderId, 'Invalid shipping address');
+      await this.markFailed(orderId, 'Invalid shipping address', order.userId ?? undefined);
       return { success: false, orderId, status: 'FAILED', error: 'Invalid shipping address' };
     }
 
     const productUrl = order.productUrl || '';
     if (!productUrl) {
-      await this.markFailed(orderId, 'Product URL missing');
+      await this.markFailed(orderId, 'Product URL missing', order.userId ?? undefined);
       return { success: false, orderId, status: 'FAILED', error: 'Product URL missing' };
     }
 
@@ -87,7 +102,7 @@ export class OrderFulfillmentService {
       const capitalCheck = await hasSufficientFreeCapital(purchaseCost);
       if (!capitalCheck.sufficient) {
         const errMsg = `FAILED_INSUFFICIENT_FUNDS: ${capitalCheck.error || 'Insufficient free working capital'}`;
-        await this.markFailed(orderId, errMsg);
+        await this.markFailed(orderId, errMsg, order.userId ?? undefined);
         logger.warn('[ORDER-FULFILLMENT] Purchase blocked: insufficient free working capital', {
           orderId,
           required: capitalCheck.required,
@@ -152,7 +167,7 @@ export class OrderFulfillmentService {
         };
       }
 
-      await this.markFailed(orderId, result.error || 'Purchase retry exhausted');
+      await this.markFailed(orderId, result.error || 'Purchase retry exhausted', order.userId ?? undefined);
       return {
         success: false,
         orderId,
@@ -161,22 +176,38 @@ export class OrderFulfillmentService {
       };
     } catch (err: any) {
       const msg = err?.message || String(err);
-      logger.error('[ORDER-FULFILLMENT] Exception', { orderId, error: msg });
-      await this.markFailed(orderId, msg);
+      logger.error('[ORDER-FULFILLMENT] Exception', { orderId, error: msg, timestamp: new Date().toISOString() });
+      await this.markFailed(orderId, msg, order.userId ?? undefined);
       return { success: false, orderId, status: 'FAILED', error: msg };
     }
   }
 
-  private async markFailed(orderId: string, errorMessage: string): Promise<void> {
+  private async markFailed(orderId: string, errorMessage: string, userId?: number | null): Promise<void> {
     await prisma.order.update({
       where: { id: orderId },
       data: { status: 'FAILED', errorMessage },
     });
+    const timestamp = new Date().toISOString();
     logger.error('[FULFILLMENT] FAILED', {
       orderId,
       errorMessage,
-      timestamp: new Date().toISOString(),
+      timestamp,
+      action: 'manual_fallback',
     });
+    if (userId) {
+      try {
+        const { notificationService } = await import('./notification.service');
+        await notificationService.sendToUser(userId, {
+          type: 'SYSTEM_ALERT',
+          title: 'Action required: order pending fulfillment',
+          message: `Order ${orderId} could not be fulfilled automatically. ${errorMessage}. Please complete it manually in Compras pendientes.`,
+          data: { orderId, errorMessage },
+          priority: 'HIGH',
+        });
+      } catch (notifErr: any) {
+        logger.warn('[FULFILLMENT] Failed to send notification', { orderId, error: notifErr?.message });
+      }
+    }
   }
 
   private parseShippingAddress(str: string): Record<string, string> | null {

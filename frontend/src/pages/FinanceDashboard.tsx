@@ -353,7 +353,7 @@ export default function FinanceDashboard() {
             <Info className="w-3.5 h-3.5 shrink-0" />
             Los datos de Summary, Ledger, Cashflow y Tax provienen de ventas y comisiones registradas. La proyección de beneficio es una estimación. El capital disponible puede venir de la API de PayPal o de tu configuración.
           </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos actualizados en cada carga.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos actualizados en cada carga · Entorno: {environment === 'production' ? 'producción' : environment === 'sandbox' ? 'sandbox' : 'todos'}</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">

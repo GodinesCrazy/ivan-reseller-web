@@ -26,9 +26,9 @@ import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
 
 interface PendingSale {
-  id: number;
+  id: number | string;
   orderId: string;
-  productId: number;
+  productId?: number;
   productTitle: string;
   productUrl: string;
   aliexpressUrl: string;
@@ -42,6 +42,9 @@ interface PendingSale {
   availableCapital: number;
   requiredCapital: number;
   canPurchase: boolean;
+  /** Phase 39: true when this row is a FAILED order (manual fulfillment / ship-from fallback) */
+  isFailedOrder?: boolean;
+  errorMessage?: string;
 }
 
 export default function PendingPurchases() {
@@ -50,6 +53,8 @@ export default function PendingPurchases() {
   const [pendingSales, setPendingSales] = useState<PendingSale[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<Record<number, boolean>>({});
+  const [trackingInput, setTrackingInput] = useState<Record<string, string>>({});
+  const [submittingTracking, setSubmittingTracking] = useState<Record<string, boolean>>({});
 
   const fetchPendingPurchases = useCallback(async () => {
     try {
@@ -92,6 +97,27 @@ export default function PendingPurchases() {
     }
   };
 
+  const handleSubmitTracking = async (sale: PendingSale) => {
+    const orderId = sale.orderId;
+    const tracking = (trackingInput[orderId] || '').trim();
+    if (!tracking) {
+      toast.error('Escribe el número de seguimiento');
+      return;
+    }
+    try {
+      setSubmittingTracking(prev => ({ ...prev, [orderId]: true }));
+      await api.post(`/api/orders/${orderId}/submit-tracking`, { trackingNumber: tracking });
+      toast.success('Tracking enviado. La orden y la venta se actualizaron.');
+      setTrackingInput(prev => ({ ...prev, [orderId]: '' }));
+      await fetchPendingPurchases();
+    } catch (error: any) {
+      const msg = error?.response?.data?.error || error?.message || 'Error al enviar tracking';
+      toast.error(msg);
+    } finally {
+      setSubmittingTracking(prev => ({ ...prev, [orderId]: false }));
+    }
+  };
+
   const getStatusBadge = (canPurchase: boolean) => {
     if (canPurchase) {
       return <Badge variant="default" className="bg-green-100 text-green-800">Capital Disponible</Badge>;
@@ -108,9 +134,21 @@ export default function PendingPurchases() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Compras Pendientes</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">Ventas que requieren compra manual en AliExpress. Haz clic en el producto para ver detalles. Tras comprar, el seguimiento continúa en Órdenes.</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Orders to Fulfill</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Compras pendientes: ventas que requieren compra en AliExpress (o acción manual si el envío/etiqueta falló). Usa el enlace del proveedor y la dirección del comprador. Tras comprar, el seguimiento continúa en Órdenes.
+          </p>
+          {pendingSales.length > 0 && (
+            <p className="text-amber-700 dark:text-amber-400 text-sm font-medium mt-1 flex items-center gap-1">
+              <AlertCircle className="w-4 h-4" />
+              Action required: {pendingSales.length} order{pendingSales.length !== 1 ? 's' : ''} pending fulfillment
+            </p>
+          )}
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos actualizados en cada carga.</p>
+          <p className="text-xs mt-1">
+            <a href="/orders?import=ebay" className="text-amber-600 dark:text-amber-400 hover:underline">Importar orden eBay</a>
+            {' '}si la venta no llegó por webhook.
+          </p>
           <div className="mt-3">
             <CycleStepsBreadcrumb currentStep={5} />
           </div>
@@ -169,11 +207,20 @@ export default function PendingPurchases() {
                         sale.productTitle
                       )}
                     </CardTitle>
-                    <div className="mt-2 flex items-center gap-2">
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
                       <Badge variant="outline">{sale.marketplace.toUpperCase()}</Badge>
                       <Badge variant="secondary">Orden: {sale.orderId}</Badge>
+                      <Badge variant="destructive" className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">Required action</Badge>
+                      {sale.isFailedOrder && (
+                        <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-300">Order failed — fulfill manually</Badge>
+                      )}
                       {getStatusBadge(sale.canPurchase)}
                     </div>
+                    {sale.isFailedOrder && sale.errorMessage && (
+                      <p className="mt-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">
+                        ⚠ {sale.errorMessage}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-gray-600 dark:text-gray-400">Precio de Venta</p>
@@ -262,6 +309,29 @@ export default function PendingPurchases() {
                   </div>
                 </div>
 
+                {/* Phase 41: Manual tracking — compré manualmente, enviar tracking */}
+                {sale.orderId && (
+                  <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded border border-gray-200 dark:border-gray-600">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Compré manualmente — enviar tracking</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Número de seguimiento"
+                        value={trackingInput[sale.orderId] ?? ''}
+                        onChange={(e) => setTrackingInput(prev => ({ ...prev, [sale.orderId]: e.target.value }))}
+                        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 min-w-[180px]"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => handleSubmitTracking(sale)}
+                        disabled={submittingTracking[sale.orderId]}
+                      >
+                        {submittingTracking[sale.orderId] ? 'Enviando...' : 'Enviar tracking'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Actions */}
                 <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
                   <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
@@ -284,9 +354,10 @@ export default function PendingPurchases() {
                         variant="outline"
                         onClick={() => window.open(sale.aliexpressUrl, '_blank')}
                         className="flex items-center gap-2"
+                        title="Supplier link (clickable) — open in new tab"
                       >
                         <ExternalLink className="w-4 h-4" />
-                        Ver en AliExpress
+                        Supplier link: AliExpress
                       </Button>
                     )}
                     <Button

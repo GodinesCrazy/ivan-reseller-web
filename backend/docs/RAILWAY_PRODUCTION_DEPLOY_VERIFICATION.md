@@ -24,6 +24,18 @@ Do **not** use `ts-node` or `src/server.ts`. Production must run `node dist/serv
 - `PORT=4000` (or Railway-assigned PORT)
 - All required API keys (DATABASE_URL, JWT_SECRET, ENCRYPTION_KEY, etc.)
 
+### Variables recomendadas en producción (checklist por servicio)
+
+Cualquier servicio Node que use la misma base Postgres (mismo `DATABASE_URL`) debe limitar su pool para no saturar `max_connections`:
+
+| Servicio                 | Variable                    | Valor típico | Notas |
+|--------------------------|-----------------------------|--------------|-------|
+| ivan-reseller-backend   | `PRISMA_CONNECTION_LIMIT`   | `8` o `10`   | API principal. Ver [backend/src/config/database.ts](backend/src/config/database.ts). |
+| Workers / scrapers       | `PRISMA_CONNECTION_LIMIT`   | `6`–`8`      | Si comparten la misma Postgres, definir en cada uno. |
+
+- Sin esta variable, cada proceso abre un pool por defecto (p. ej. ~10 conexiones); la suma de todos los servicios puede superar el límite de Postgres y provocar "too many clients already".
+- No aplica a URLs de Prisma Accelerate (se ignoran en el código). Ver también la sección **Deploy fails: too many clients** más abajo.
+
 ## Post-deploy verification
 
 ### 1. Boot log

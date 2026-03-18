@@ -18,16 +18,7 @@ import api from '@/services/api';
 import MetricLabelWithTooltip from '@/components/MetricLabelWithTooltip';
 import { metricTooltips } from '@/config/metricTooltips';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
-
-interface InventorySummary {
-  products: { total: number; pending: number; approved: number; published: number };
-  listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
-  listingsTotal?: number;
-  listingsSource?: 'api' | 'database';
-  mercadolibreActiveCount?: number;
-  ordersByStatus: { CREATED: number; PAID: number; PURCHASING: number; PURCHASED: number; FAILED: number };
-  pendingPurchasesCount: number;
-}
+import { type InventorySummary, normalizeInventorySummary } from '@/types/dashboard';
 
 const ORDER_LABELS: Record<string, string> = {
   CREATED: 'Creadas',
@@ -66,7 +57,8 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
     return () => { mounted = false; };
   }, [summaryProp, environment]);
 
-  const summary = summaryProp ?? internalSummary;
+  const rawSummary = summaryProp ?? internalSummary;
+  const summary = normalizeInventorySummary(rawSummary);
 
   if (loading || !summary) return null;
 
@@ -154,11 +146,17 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
                 Amazon: {summary.listingsByMarketplace.amazon}
               </button>
             </div>
-            {summary.listingsSource === 'database' && (
-              <div className="text-xs text-amber-600 dark:text-amber-400 mt-1" title="El número puede no coincidir con el marketplace si los listados se crearon fuera del sistema o las APIs no están disponibles.">
-                Solo registrados en el sistema. Verificación por API no disponible.
-              </div>
-            )}
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {summary.listingsSource === 'api' && 'eBay/ML verificados por API'}
+              {summary.listingsSource === 'database' && (
+                <span className="text-amber-600 dark:text-amber-400" title="El número puede no coincidir con el marketplace si los listados se crearon fuera del sistema o las APIs no están disponibles.">
+                  Solo BD · Verificación por API no disponible
+                </span>
+              )}
+              {summary.lastSyncAt && (
+                <span className="ml-1">· Sync: {new Date(summary.lastSyncAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</span>
+              )}
+            </div>
           </div>
 
           <div

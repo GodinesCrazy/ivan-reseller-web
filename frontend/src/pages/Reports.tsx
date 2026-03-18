@@ -101,6 +101,8 @@ interface ListingMetricRow {
   price: number | null;
   competitorPrice: number | null;
   viewCount: number;
+  /** Phase 37: health score 0-100 from backend (visibility, conversion, sales) */
+  healthScore?: number;
 }
 
 /** Phase 34: Listing health score 0-100 from visibility, conversion, sales */
@@ -1035,7 +1037,7 @@ export default function Reports() {
                       <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {listingAnalytics.listings.slice(0, 50).map((r) => {
                           const ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : null;
-                          const health = listingHealthScore(r);
+                          const health = r.healthScore ?? listingHealthScore(r);
                           return (
                             <tr key={`${r.listingId}-${r.marketplace}`}>
                               <td className="px-3 py-2 text-sm text-gray-900 dark:text-gray-100 truncate max-w-[200px]" title={r.productTitle ?? ''}>

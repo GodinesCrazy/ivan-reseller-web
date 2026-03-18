@@ -2,18 +2,23 @@
  * My Orders - Post-sale dropshipping orders
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Package, RefreshCw, ArrowRight, ExternalLink } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Package, RefreshCw, ArrowRight, ExternalLink, Upload, X } from 'lucide-react';
 import api from '@/services/api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { formatCurrencySimple } from '@/utils/currency';
-import { retryOrderFulfill, type Order } from '@/services/orders.api';
+import { retryOrderFulfill, importEbayOrder, type Order } from '@/services/orders.api';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
+import toast from 'react-hot-toast';
 
 export default function Orders() {
   const { environment } = useEnvironment();
@@ -21,7 +26,27 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [showImportEbay, setShowImportEbay] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importForm, setImportForm] = useState({
+    ebayOrderId: '',
+    listingId: '',
+    amount: '',
+    buyerName: '',
+    buyerEmail: '',
+    addressLine1: '',
+    addressLine2: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    country: 'US',
+    productId: '',
+  });
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('import') === 'ebay') setShowImportEbay(true);
+  }, [searchParams]);
 
   const canRetryFulfill = (order: Order) =>
     order.status === 'FAILED' &&
@@ -54,6 +79,54 @@ export default function Orders() {
     }
   }, [environment]);
 
+  const handleImportEbay = async () => {
+    const amount = parseFloat(importForm.amount);
+    if (!importForm.ebayOrderId.trim()) {
+      toast.error('eBay Order ID es obligatorio');
+      return;
+    }
+    if (!isFinite(amount) || amount <= 0) {
+      toast.error('Importe debe ser un número positivo');
+      return;
+    }
+    const listingId = importForm.listingId.trim() || undefined;
+    const productId = importForm.productId ? parseInt(importForm.productId, 10) : undefined;
+    if (!listingId && !productId) {
+      toast.error('Indica Listing ID / Item ID de eBay o Product ID interno');
+      return;
+    }
+    setImporting(true);
+    try {
+      const result = await importEbayOrder({
+        ebayOrderId: importForm.ebayOrderId.trim(),
+        listingId: listingId || undefined,
+        itemId: listingId || undefined,
+        amount,
+        buyerName: importForm.buyerName.trim() || undefined,
+        buyerEmail: importForm.buyerEmail.trim() || undefined,
+        shippingAddress: {
+          fullName: importForm.buyerName.trim() || undefined,
+          addressLine1: importForm.addressLine1.trim() || undefined,
+          addressLine2: importForm.addressLine2.trim() || undefined,
+          city: importForm.city.trim() || undefined,
+          state: importForm.state.trim() || undefined,
+          zipCode: importForm.zipCode.trim() || undefined,
+          country: importForm.country.trim() || 'US',
+        },
+        productId: Number.isNaN(productId) ? undefined : productId,
+      });
+      toast.success(result.created ? 'Orden eBay importada. Aparecerá en Compras pendientes o se cumplirá automáticamente.' : 'La orden ya existía.');
+      setShowImportEbay(false);
+      setImportForm({ ebayOrderId: '', listingId: '', amount: '', buyerName: '', buyerEmail: '', addressLine1: '', addressLine2: '', city: '', state: '', zipCode: '', country: 'US', productId: '' });
+      await fetchOrders();
+      if (result.order?.id) navigate(`/orders/${result.order.id}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.message || 'Error al importar');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   useLiveData({ fetchFn: fetchOrders, intervalMs: 15000, enabled: true });
   useNotificationRefetch({
     handlers: { SALE_CREATED: fetchOrders },
@@ -75,13 +148,19 @@ export default function Orders() {
       <div>
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Órdenes / Envíos</h1>
-          <button
-            onClick={fetchOrders}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Actualizar
-          </button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowImportEbay((v) => !v)}>
+              <Upload className="w-4 h-4 mr-1" />
+              Importar orden eBay
+            </Button>
+            <button
+              onClick={fetchOrders}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Actualizar
+            </button>
+          </div>
         </div>
         <p className="text-gray-600 dark:text-gray-400 mt-0.5">Órdenes de compra al proveedor y seguimiento de envíos. Tras una venta, compra en AliExpress desde <span className="font-medium">Compras pendientes</span> y el estado se actualiza aquí.</p>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos actualizados en cada carga.</p>
@@ -94,6 +173,118 @@ export default function Orders() {
           <CycleStepsBreadcrumb currentStep={6} />
         </div>
       </div>
+
+      {showImportEbay && (
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
+          <CardHeader className="pb-2">
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-lg">Importar orden eBay</CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setShowImportEbay(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Si el webhook no creó la orden, impórtala aquí. Luego aparecerá en Compras pendientes o se cumplirá automáticamente.</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>eBay Order ID *</Label>
+                <Input
+                  placeholder="ej. 17-14370-63716"
+                  value={importForm.ebayOrderId}
+                  onChange={(e) => setImportForm((f) => ({ ...f, ebayOrderId: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Listing ID / Item ID (eBay)</Label>
+                <Input
+                  placeholder="ID del ítem en eBay"
+                  value={importForm.listingId}
+                  onChange={(e) => setImportForm((f) => ({ ...f, listingId: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Product ID (interno, si no hay listing)</Label>
+                <Input
+                  type="number"
+                  placeholder="ID del producto en la app"
+                  value={importForm.productId}
+                  onChange={(e) => setImportForm((f) => ({ ...f, productId: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Importe (USD) *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="56.42"
+                  value={importForm.amount}
+                  onChange={(e) => setImportForm((f) => ({ ...f, amount: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Comprador (nombre)</Label>
+                <Input
+                  placeholder="Jenuin Santana Navarro"
+                  value={importForm.buyerName}
+                  onChange={(e) => setImportForm((f) => ({ ...f, buyerName: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Email comprador</Label>
+                <Input
+                  type="email"
+                  placeholder="buyer@example.com"
+                  value={importForm.buyerEmail}
+                  onChange={(e) => setImportForm((f) => ({ ...f, buyerEmail: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Dirección de envío</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <Input
+                  placeholder="Calle y número"
+                  value={importForm.addressLine1}
+                  onChange={(e) => setImportForm((f) => ({ ...f, addressLine1: e.target.value }))}
+                />
+                <Input
+                  placeholder="Ciudad"
+                  value={importForm.city}
+                  onChange={(e) => setImportForm((f) => ({ ...f, city: e.target.value }))}
+                />
+                <Input
+                  placeholder="Estado / PR"
+                  value={importForm.state}
+                  onChange={(e) => setImportForm((f) => ({ ...f, state: e.target.value }))}
+                />
+                <Input
+                  placeholder="Código postal"
+                  value={importForm.zipCode}
+                  onChange={(e) => setImportForm((f) => ({ ...f, zipCode: e.target.value }))}
+                />
+                <Input
+                  placeholder="País (US)"
+                  value={importForm.country}
+                  onChange={(e) => setImportForm((f) => ({ ...f, country: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button onClick={handleImportEbay} disabled={importing}>
+                {importing ? 'Importando...' : 'Importar orden'}
+              </Button>
+              <Button variant="outline" onClick={() => setShowImportEbay(false)}>Cancelar</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {error && (
         <div className="p-4 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">{error}</div>

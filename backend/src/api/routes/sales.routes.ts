@@ -26,6 +26,20 @@ const getSalesQuerySchema = z.object({
   environment: z.enum(['production', 'sandbox', 'all']).optional().default('production'),
 });
 
+// GET /api/sales/sync-status — Phase 40: last marketplace order sync time
+router.get('/sync-status', async (_req: Request, res: Response, next) => {
+  try {
+    const { getLastMarketplaceSyncAt } = await import('../../services/marketplace-order-sync.service');
+    const lastSyncAt = getLastMarketplaceSyncAt();
+    res.json({
+      lastSyncAt: lastSyncAt?.toISOString() ?? null,
+      source: 'marketplace-order-sync',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/sales - Listar ventas
 router.get('/', async (req: Request, res: Response, next) => {
   try {
@@ -40,28 +54,49 @@ router.get('/', async (req: Request, res: Response, next) => {
     const environment = validatedQuery.environment;
     const sales = await saleService.getSales(userId, status as any, environment);
     
-    // ✅ Mapear datos del backend al formato esperado por el frontend
+    // ✅ Phase 40: Exclude test/demo/simulated sales in production (real data only)
+    const excludeFakeOrderIds = /^(DEMO|TEST|SIM_|ORD-TEST|mock-|MOCK)/i;
+    let filteredSales = sales;
+    if (environment === 'production') {
+      filteredSales = sales.filter((s: any) => !excludeFakeOrderIds.test(String(s.orderId || '')));
+    }
+
+    // ✅ Mapear datos del backend al formato esperado por el frontend (Phase 40: full detail)
     const { toNumber } = await import('../../utils/decimal.utils');
-    const mappedSales = sales.map((sale: any) => ({
-      id: String(sale.id),
-      orderId: sale.orderId,
-      productId: sale.productId || sale.product?.id, // ✅ Para workflow status
-      productTitle: sale.product?.title || 'Unknown Product',
-      marketplace: sale.marketplace,
-      buyerName: sale.buyerName || sale.user?.username || sale.buyerEmail || 'Unknown Buyer',
-      buyerEmail: sale.buyerEmail || undefined, // ✅ MEJORADO: Incluir email del comprador
-      shippingAddress: sale.shippingAddress || undefined, // ✅ MEJORADO: Incluir dirección de envío
-      salePrice: toNumber(sale.salePrice),
-      cost: toNumber(sale.aliexpressCost || sale.costPrice || 0),
-      profit: toNumber(sale.netProfit || sale.grossProfit || 0),
-      commission: toNumber(sale.commissionAmount || sale.userCommission || 0),
-      marketplaceFee: toNumber(sale.marketplaceFee ?? 0),
-      grossProfit: toNumber(sale.grossProfit ?? 0),
-      status: sale.status,
-      trackingNumber: sale.trackingNumber || undefined,
-      createdAt: sale.createdAt?.toISOString() || new Date().toISOString()
-    }));
-    
+    const mappedSales = filteredSales.map((sale: any) => {
+      let productImage: string | undefined;
+      try {
+        const img = sale.product?.images;
+        if (typeof img === 'string') {
+          const arr = JSON.parse(img);
+          productImage = Array.isArray(arr) && arr.length > 0 ? arr[0] : undefined;
+        }
+      } catch {
+        productImage = undefined;
+      }
+      return {
+        id: String(sale.id),
+        orderId: sale.orderId,
+        productId: sale.productId || sale.product?.id,
+        productTitle: sale.product?.title || 'Unknown Product',
+        productImage,
+        marketplace: sale.marketplace,
+        source: sale.marketplace || 'checkout', // Phase 40: source tag eBay / ML / Amazon
+        buyerName: sale.buyerName || sale.user?.username || sale.buyerEmail || 'Unknown Buyer',
+        buyerEmail: sale.buyerEmail || undefined,
+        shippingAddress: sale.shippingAddress || undefined,
+        salePrice: toNumber(sale.salePrice),
+        cost: toNumber(sale.aliexpressCost || sale.costPrice || 0),
+        profit: toNumber(sale.netProfit || sale.grossProfit || 0),
+        commission: toNumber(sale.commissionAmount || sale.userCommission || 0),
+        marketplaceFee: toNumber(sale.marketplaceFee ?? 0),
+        grossProfit: toNumber(sale.grossProfit ?? 0),
+        status: sale.status,
+        trackingNumber: sale.trackingNumber || undefined,
+        createdAt: sale.createdAt?.toISOString() || new Date().toISOString(),
+      };
+    });
+
     res.json({ sales: mappedSales });
   } catch (error) {
     next(error);
@@ -212,6 +247,13 @@ router.get('/pending-purchases', async (req: Request, res: Response, next) => {
 
     const availableCapital = totalCapital - pendingCost - approvedCost;
 
+    // Phase 39: Include FAILED orders so they appear in "Orders to Fulfill" with ⚠ Required action
+    const failedOrders = await prisma.order.findMany({
+      where: { userId, status: 'FAILED' },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
     // Mapear ventas con información de capital
     const mappedSales = pendingSales.map(sale => {
       const requiredCapital = toNumber(sale.aliexpressCost || 0);
@@ -233,11 +275,38 @@ router.get('/pending-purchases', async (req: Request, res: Response, next) => {
         createdAt: sale.createdAt.toISOString(),
         availableCapital: availableCapital,
         requiredCapital: requiredCapital,
-        canPurchase: canPurchase
+        canPurchase: canPurchase,
+        isFailedOrder: false,
       };
     });
 
-    res.json({ sales: mappedSales });
+    // Append failed orders as items requiring manual fulfillment (e.g. ship-from-US error on eBay)
+    const failedItems = failedOrders.map(order => {
+      const cost = toNumber(order.price) || 0;
+      const canPurchase = availableCapital >= cost;
+      return {
+        id: `order-${order.id}`,
+        orderId: order.id,
+        productId: order.productId ?? undefined,
+        productTitle: order.title || 'Order',
+        productUrl: order.productUrl || '',
+        aliexpressUrl: order.productUrl || '',
+        marketplace: 'ebay',
+        salePrice: cost,
+        aliexpressCost: cost,
+        buyerName: order.customerName || undefined,
+        buyerEmail: order.customerEmail || undefined,
+        shippingAddress: order.shippingAddress || undefined,
+        createdAt: order.createdAt.toISOString(),
+        availableCapital: availableCapital,
+        requiredCapital: cost,
+        canPurchase: canPurchase,
+        isFailedOrder: true,
+        errorMessage: order.errorMessage || undefined,
+      };
+    });
+
+    res.json({ sales: [...mappedSales, ...failedItems], failedOrdersCount: failedOrders.length });
   } catch (error) {
     next(error);
   }

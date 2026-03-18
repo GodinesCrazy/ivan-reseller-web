@@ -11,10 +11,13 @@ import { orderFulfillmentService } from './order-fulfillment.service';
 import { toNumber } from '../utils/decimal.utils';
 
 const FAILED_INSUFFICIENT_FUNDS = 'FAILED_INSUFFICIENT_FUNDS';
+const NEEDS_MANUAL_INTERVENTION = 'NEEDS_MANUAL_INTERVENTION';
 
 export interface RetryFailedOrdersOptions {
   maxAgeHours?: number;
   maxRetriesPerOrder?: number;
+  /** If true, retry any FAILED order; if false, only those with FAILED_INSUFFICIENT_FUNDS (default false) */
+  anyFailure?: boolean;
 }
 
 export interface RetryFailedOrdersResult {
@@ -32,16 +35,21 @@ export async function retryFailedOrdersDueToFunds(
   options: RetryFailedOrdersOptions = {}
 ): Promise<RetryFailedOrdersResult> {
   const maxAgeHours = options.maxAgeHours ?? 72;
-  const maxRetriesPerOrder = options.maxRetriesPerOrder ?? 3;
+  const maxRetriesPerOrder = options.maxRetriesPerOrder ?? 5;
+  const anyFailure = options.anyFailure ?? false;
   const since = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
 
+  const where: any = {
+    status: 'FAILED',
+    fulfillRetryCount: { lt: maxRetriesPerOrder },
+    createdAt: { gte: since },
+  };
+  if (!anyFailure) {
+    where.errorMessage = { contains: FAILED_INSUFFICIENT_FUNDS };
+  }
+
   const orders = await prisma.order.findMany({
-    where: {
-      status: 'FAILED',
-      errorMessage: { contains: FAILED_INSUFFICIENT_FUNDS },
-      fulfillRetryCount: { lt: maxRetriesPerOrder },
-      createdAt: { gte: since },
-    },
+    where,
     orderBy: { createdAt: 'asc' },
     take: 50,
   });
@@ -87,18 +95,30 @@ export async function retryFailedOrdersDueToFunds(
 
       if (fulfillResult.status === 'PURCHASED') {
         result.succeeded++;
-        logger.info('[RETRY-FAILED-ORDERS] Order fulfilled after retry', { orderId });
+        logger.info('[RETRY-FAILED-ORDERS] Order fulfilled after retry', { orderId, attempt: order.fulfillRetryCount + 1 });
       } else {
         result.failed++;
         result.errors.push({
           orderId,
           error: fulfillResult.error || fulfillResult.status || 'Fulfill failed',
         });
+        const newRetryCount = order.fulfillRetryCount + 1;
         logger.warn('[RETRY-FAILED-ORDERS] Retry fulfill did not reach PURCHASED', {
           orderId,
           status: fulfillResult.status,
           error: fulfillResult.error,
+          attempt: newRetryCount,
+          maxRetries: maxRetriesPerOrder,
         });
+        if (newRetryCount >= maxRetriesPerOrder) {
+          const current = await prisma.order.findUnique({ where: { id: orderId }, select: { errorMessage: true } });
+          const newMsg = [current?.errorMessage || '', NEEDS_MANUAL_INTERVENTION].filter(Boolean).join(' ').trim();
+          await prisma.order.update({
+            where: { id: orderId },
+            data: { errorMessage: newMsg },
+          });
+          logger.warn('[RETRY-FAILED-ORDERS] Max retries reached, marked NEEDS_MANUAL_INTERVENTION', { orderId });
+        }
       }
     } catch (err: any) {
       result.processed++;

@@ -136,7 +136,7 @@ export default function ControlCenter() {
     setLoadWarnings([]);
 
     const isDbLimit = (reason: unknown): boolean => {
-      const ax = reason as { response?: { status?: number; data?: { code?: string; error?: string } } };
+      const ax = reason as { response?: { status?: number; data?: { code?: string; error?: string } }; message?: string };
       if (ax?.response?.data?.code === 'DB_CONNECTION_LIMIT') return true;
       const msg = String(ax?.response?.data?.error ?? ax?.message ?? '').toLowerCase();
       return (
@@ -262,7 +262,10 @@ export default function ControlCenter() {
           Strategic Control Center
         </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Visión unificada del funnel, salud del sistema y modo autónomo. Datos en tiempo real desde el servidor.
+          Visión unificada del funnel, salud del sistema y modo autónomo.
+        </p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Datos reales desde API · Entorno: {environment === 'production' ? 'producción' : environment === 'sandbox' ? 'sandbox' : 'todos'}
         </p>
       </div>
 

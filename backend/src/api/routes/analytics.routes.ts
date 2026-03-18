@@ -71,6 +71,14 @@ router.get('/listings', async (req: Request, res: Response) => {
       orderBy: { updatedAt: 'desc' },
     });
 
+    /** Health score 0-100: visibility 40%, conversion 30%, sales 30% */
+    const healthScoreFromMetrics = (imp: number, convRate: number | null, clicksVal: number, salesVal: number): number => {
+      const visibilityScore = imp <= 0 ? 0 : Math.min(40, Math.log10(imp + 1) * 12);
+      const conversionScore = convRate != null && convRate >= 0 ? Math.min(30, convRate * 30) : (imp > 0 ? Math.min(30, (clicksVal / imp) * 30) : 0);
+      const salesScore = Math.min(30, salesVal * 10);
+      return Math.round(Math.min(100, visibilityScore + conversionScore + salesScore));
+    };
+
     const results = listings.map((l) => {
       const metrics = l.listingMetrics || [];
       const impressions = metrics.reduce((s, m) => s + (m.impressions || 0), 0) || (l.viewCount ?? 0);
@@ -80,6 +88,7 @@ router.get('/listings', async (req: Request, res: Response) => {
       const conversionRate = lastMetric?.conversionRate != null ? toNumber(lastMetric.conversionRate) : null;
       const price = lastMetric?.price != null ? toNumber(lastMetric.price) : (l.product ? toNumber((l.product as any).suggestedPrice) : null);
       const competitorPrice = lastMetric?.competitorPrice != null ? toNumber(lastMetric.competitorPrice) : null;
+      const healthScore = healthScoreFromMetrics(impressions, conversionRate, clicks, sales);
 
       return {
         listingId: l.id,
@@ -99,6 +108,7 @@ router.get('/listings', async (req: Request, res: Response) => {
         price,
         competitorPrice,
         viewCount: l.viewCount ?? 0,
+        healthScore,
       };
     });
 

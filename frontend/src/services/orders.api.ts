@@ -102,3 +102,42 @@ export async function capturePayPalOrder(params: CapturePayPalOrderParams): Prom
   const res = await api.post<CapturePayPalOrderResponse>('/api/paypal/capture-order', params);
   return res.data;
 }
+
+export interface ImportEbayOrderParams {
+  ebayOrderId: string;
+  listingId?: string;
+  itemId?: string;
+  amount: number;
+  buyerName?: string;
+  buyerEmail?: string;
+  shippingAddress?: {
+    fullName?: string;
+    addressLine1?: string;
+    addressLine2?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
+    phoneNumber?: string;
+  };
+  productId?: number;
+}
+
+export interface ImportEbayOrderResponse {
+  order: Order;
+  created: boolean;
+}
+
+export async function importEbayOrder(params: ImportEbayOrderParams): Promise<ImportEbayOrderResponse> {
+  const res = await api.post<ImportEbayOrderResponse>('/api/orders/import-ebay-order', {
+    ebayOrderId: params.ebayOrderId,
+    listingId: params.listingId ?? params.itemId,
+    itemId: params.itemId ?? params.listingId,
+    amount: params.amount,
+    buyerName: params.buyerName,
+    buyerEmail: params.buyerEmail,
+    shippingAddress: params.shippingAddress,
+    productId: params.productId,
+  });
+  return res.data;
+}

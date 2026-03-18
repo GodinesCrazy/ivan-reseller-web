@@ -32,7 +32,9 @@ export class ScheduledTasksService {
   private dynamicPricingQueue: Queue | null = null;
   private aliExpressTokenRefreshQueue: Queue | null = null;
   private retryFailedOrdersQueue: Queue | null = null;
+  private fulfillmentRetryEngineQueue: Queue | null = null;
   private processPaidOrdersQueue: Queue | null = null;
+  private marketplaceOrderSyncQueue: Queue | null = null;
   private ebayTrafficSyncQueue: Queue | null = null;
     private listingOptimization48hQueue: Queue | null = null;
     private winnerDetectionQueue: Queue | null = null;
@@ -61,7 +63,9 @@ export class ScheduledTasksService {
   private dynamicPricingWorker: Worker | null = null;
   private aliExpressTokenRefreshWorker: Worker | null = null;
   private retryFailedOrdersWorker: Worker | null = null;
+  private fulfillmentRetryEngineWorker: Worker | null = null;
   private processPaidOrdersWorker: Worker | null = null;
+  private marketplaceOrderSyncWorker: Worker | null = null;
   private ebayTrafficSyncWorker: Worker | null = null;
     private listingOptimization48hWorker: Worker | null = null;
     private winnerDetectionWorker: Worker | null = null;
@@ -147,8 +151,18 @@ export class ScheduledTasksService {
       connection: this.bullMQRedis as any
     });
 
+    // Phase 41: Fulfillment retry engine — every 24h, max 5 retries, marks NEEDS_MANUAL_INTERVENTION
+    this.fulfillmentRetryEngineQueue = new Queue('fulfillment-retry-engine', {
+      connection: this.bullMQRedis as any
+    });
+
     // Process all PAID orders (pending purchases): cada 5 min
     this.processPaidOrdersQueue = new Queue('process-paid-orders', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Phase 40: Marketplace order sync (eBay/ML/Amazon) — fetch real orders every 5–10 min
+    this.marketplaceOrderSyncQueue = new Queue('marketplace-order-sync', {
       connection: this.bullMQRedis as any
     });
 
@@ -442,13 +456,31 @@ export class ScheduledTasksService {
       );
     }
 
-    // Retry failed orders (insufficient funds) worker
+    // Retry failed orders (insufficient funds) worker — every 30 min, max 3 retries
     if (this.retryFailedOrdersQueue) {
       this.retryFailedOrdersWorker = new Worker(
         'retry-failed-orders',
         async (job) => {
           logger.info('Scheduled Tasks: Running retry failed orders', { jobId: job.id });
           return await retryFailedOrdersDueToFunds({ maxAgeHours: 72, maxRetriesPerOrder: 3 });
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+    }
+
+    // Phase 41: Fulfillment retry engine — every 24h, max 5 retries, oldest first
+    if (this.fulfillmentRetryEngineQueue) {
+      this.fulfillmentRetryEngineWorker = new Worker(
+        'fulfillment-retry-engine',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running fulfillment retry engine', { jobId: job.id });
+          return await retryFailedOrdersDueToFunds({
+            maxAgeHours: 168,
+            maxRetriesPerOrder: 5,
+          });
         },
         {
           connection: this.bullMQRedis as any,
@@ -464,6 +496,22 @@ export class ScheduledTasksService {
         async (job) => {
           logger.info('Scheduled Tasks: Running process paid orders', { jobId: job.id });
           return await processPaidOrders({ batchSize: 30 });
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+    }
+
+    // Phase 40: Marketplace order sync worker (eBay real orders → Order table)
+    if (this.marketplaceOrderSyncQueue) {
+      this.marketplaceOrderSyncWorker = new Worker(
+        'marketplace-order-sync',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running marketplace order sync', { jobId: job.id });
+          const { runMarketplaceOrderSync } = await import('./marketplace-order-sync.service');
+          return await runMarketplaceOrderSync('production');
         },
         {
           connection: this.bullMQRedis as any,
@@ -1133,6 +1181,21 @@ export class ScheduledTasksService {
       );
     }
 
+    // Phase 41: Fulfillment retry engine — every 24 hours (2:00 AM)
+    if (this.fulfillmentRetryEngineQueue) {
+      this.fulfillmentRetryEngineQueue.add(
+        'fulfillment-retry-engine-job',
+        {},
+        {
+          repeat: {
+            pattern: '0 2 * * *' // Every day at 2:00 AM
+          },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
     // Process paid orders (pending purchases): every 5 minutes
     if (this.processPaidOrdersQueue) {
       this.processPaidOrdersQueue.add(
@@ -1142,6 +1205,19 @@ export class ScheduledTasksService {
           repeat: {
             pattern: '*/5 * * * *' // Every 5 minutes
           },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Phase 40: Marketplace order sync (eBay real orders) every 10 minutes
+    if (this.marketplaceOrderSyncQueue) {
+      this.marketplaceOrderSyncQueue.add(
+        'marketplace-order-sync-job',
+        {},
+        {
+          repeat: { pattern: process.env.MARKETPLACE_ORDER_SYNC_CRON || '*/10 * * * *' },
           removeOnComplete: 5,
           removeOnFail: 5,
         }

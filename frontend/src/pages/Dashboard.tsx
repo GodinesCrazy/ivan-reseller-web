@@ -47,6 +47,7 @@ import { useAuthStore } from '@stores/authStore';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
+import type { InventorySummary } from '@/types/dashboard';
 
 export default function Dashboard() {
   const { user } = useAuthStore();
@@ -75,6 +76,7 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [dataLoadError, setDataLoadError] = useState(false);
+  const [lastDataUpdated, setLastDataUpdated] = useState<string | null>(null);
 
   const [recentActivity, setRecentActivity] = useState<Array<{
     id: string;
@@ -94,14 +96,7 @@ export default function Dashboard() {
 
   const [businessDiagnostics, setBusinessDiagnostics] = useState<Record<string, { status: string; message?: string; count?: number }> | null>(null);
 
-  const [inventorySummary, setInventorySummary] = useState<{
-    products: { total: number; pending: number; approved: number; published: number };
-    listingsByMarketplace: { ebay: number; mercadolibre: number; amazon: number };
-    listingsTotal?: number;
-    listingsSource?: 'api' | 'database';
-    ordersByStatus: { CREATED: number; PAID: number; PURCHASING: number; PURCHASED: number; FAILED: number };
-    pendingPurchasesCount: number;
-  } | null>(null);
+  const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null);
 
   const [autoListingDecisions, setAutoListingDecisions] = useState<Array<{
     id: number;
@@ -301,6 +296,7 @@ export default function Dashboard() {
       setDataLoadError(hasErrors && !hasRealData);
 
       const stats = statsRes.data || {};
+      if (stats._lastUpdated) setLastDataUpdated(stats._lastUpdated);
       const activities = activityRes.data?.activities || [];
       const opportunitiesCount = opportunitiesRes.data?.count || 0;
       const aiSuggestionsCount = aiSuggestionsRes.data?.count || aiSuggestionsRes.data?.suggestions?.length || 0;
@@ -380,6 +376,7 @@ export default function Dashboard() {
           listingsByMarketplace: inv.listingsByMarketplace ?? { ebay: 0, mercadolibre: 0, amazon: 0 },
           listingsTotal: listTotal,
           listingsSource: inv.listingsSource,
+          lastSyncAt: inv.lastSyncAt,
           ordersByStatus: inv.ordersByStatus ?? { CREATED: 0, PAID: 0, PURCHASING: 0, PURCHASED: 0, FAILED: 0 },
           pendingPurchasesCount: inv.pendingPurchasesCount ?? 0,
         });
@@ -480,6 +477,18 @@ export default function Dashboard() {
 
   const renderOverview = () => (
     <div className="space-y-6">
+      {/* 5-second test (Phase 37): what is happening, what to do, where money is */}
+      {!loading && (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/80 p-4">
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            <strong>Resumen:</strong> Ganancia neta <strong>${dashboardData.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+            {dashboardData.salesCount > 0 && ` · ${dashboardData.salesCount} ventas`}
+            {dashboardData.activeProducts > 0 && ` · ${dashboardData.activeProducts} publicados`}.
+            {dashboardData.totalProfit > 0 && ' Dinero en Finanzas y Ventas.'}
+            {(inventorySummary?.pendingPurchasesCount ?? 0) > 0 && ' Acción: revisar Compras pendientes.'}
+          </p>
+        </div>
+      )}
       <SalesReadinessPanel />
       {/* Métricas principales */}
       {loading ? (
@@ -586,11 +595,15 @@ export default function Dashboard() {
       </div>
       )}
 
-      {/* Data freshness (Phase 34 — Trust) */}
+      {/* Data transparency (Phase 37 — Business Truth UX) */}
       {!loading && (
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          Datos actualizados en cada carga. Recarga cada ~15 s en esta pestaña.
-        </p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+          <span>Fuente: API · Datos reales (ventas, inventario, comisiones)</span>
+          {lastDataUpdated && (
+            <span>Última actualización: {new Date(lastDataUpdated).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+          )}
+          <span>Actualización automática ~15 s</span>
+        </div>
       )}
 
       {/* Alerts panel (Phase 34 — centralizar problemas) */}
@@ -677,6 +690,36 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Performance feedback (Phase 37 — what is working / what is failing) */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-900/80 p-4">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+          <Activity className="h-4 w-4 text-primary-600 dark:text-primary-400" />
+          Estado del negocio
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+          <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+            <p className="text-emerald-800 dark:text-emerald-200 font-medium">Funcionando</p>
+            <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">{dashboardData.salesCount} ventas</p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">{dashboardData.activeProducts} publicados</p>
+          </div>
+          <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+            <p className="text-blue-800 dark:text-blue-200 font-medium">Para escalar</p>
+            <p className="text-lg font-bold text-blue-700 dark:text-blue-300 tabular-nums">{scalingActions.filter((a) => !a.executed).length}</p>
+            <p className="text-xs text-blue-600 dark:text-blue-400">productos ganadores</p>
+          </div>
+          <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+            <p className="text-amber-800 dark:text-amber-200 font-medium">Por optimizar</p>
+            <p className="text-lg font-bold text-amber-700 dark:text-amber-300 tabular-nums">{conversionOptimizationActions.filter((a) => !a.executed).length + listingOptimizationActions.filter((a) => !a.executed).length}</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">listados</p>
+          </div>
+          <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+            <p className="text-red-800 dark:text-red-200 font-medium">Revisar / pausar</p>
+            <p className="text-lg font-bold text-red-700 dark:text-red-300 tabular-nums">{strategyDecisions.filter((d) => !d.executed && (d.decisionType === 'pause_listing' || d.decisionType === 'pause')).length}</p>
+            <p className="text-xs text-red-600 dark:text-red-400">bajo rendimiento</p>
+          </div>
+        </div>
+      </div>
 
       {/* Decision blocks (Phase 34 — Scale Now / Optimize Now / Remove Now) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -1092,6 +1092,34 @@ ${opportunity.aiAnalysis.strengths.map(s => `• ${s}`).join('\n')}
           });
         }
       }
+
+      // Phase 2.2: If order originated from eBay, submit tracking to eBay (mark as shipped externally)
+      const paypalOrderId = order?.paypalOrderId?.trim() || '';
+      if (paypalOrderId.startsWith('ebay:') && order?.userId && tracking) {
+        const ebayOrderId = paypalOrderId.slice(5).trim();
+        if (ebayOrderId) {
+          try {
+            const { submitTrackingToEbay } = await import('./ebay-fulfillment.service');
+            const result = await submitTrackingToEbay({
+              userId: order.userId,
+              ebayOrderId,
+              trackingNumber: tracking,
+            });
+            if (!result.success) {
+              logger.warn('[AUTOMATED-BUSINESS] eBay tracking submit failed (non-fatal)', {
+                orderId,
+                ebayOrderId,
+                error: result.error,
+              });
+            }
+          } catch (e: any) {
+            logger.warn('[AUTOMATED-BUSINESS] eBay tracking submit error (non-fatal)', {
+              orderId,
+              error: e?.message,
+            });
+          }
+        }
+      }
     } catch (err) {
       logger.warn('updateOrderTracking failed', { orderId: order?.id, error: (err as Error)?.message });
     }
