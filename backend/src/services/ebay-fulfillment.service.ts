@@ -35,7 +35,8 @@ export async function submitTrackingToEbay(params: SubmitTrackingToEbayParams): 
   }
 
   try {
-    const { marketplaceService } = await import('./marketplace.service');
+    const MarketplaceService = (await import('./marketplace.service')).default;
+    const marketplaceService = new MarketplaceService();
     const { resolveEnvironment } = await import('../utils/environment-resolver');
     const env = await resolveEnvironment({ userId, default: 'production' });
     const credsResult = await marketplaceService.getCredentials(userId, 'ebay', env);

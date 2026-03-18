@@ -6,8 +6,10 @@
 
 import { prisma } from '../config/database';
 import logger from '../config/logger';
-import { marketplaceService } from './marketplace.service';
+import MarketplaceService from './marketplace.service';
 import { EbayService, EbayCredentials } from './ebay.service';
+
+const marketplaceService = new MarketplaceService();
 
 const EBAY_PAYPAL_PREFIX = 'ebay:';
 

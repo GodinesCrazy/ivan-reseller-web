@@ -203,6 +203,7 @@ export class OrderFulfillmentService {
           message: `Order ${orderId} could not be fulfilled automatically. ${errorMessage}. Please complete it manually in Compras pendientes.`,
           data: { orderId, errorMessage },
           priority: 'HIGH',
+          category: 'SYSTEM',
         });
       } catch (notifErr: any) {
         logger.warn('[FULFILLMENT] Failed to send notification', { orderId, error: notifErr?.message });
