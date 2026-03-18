@@ -204,6 +204,12 @@ router.post('/test-fulfillment-only', validateInternalSecret, async (req: Reques
 
   logger.info('[INTERNAL] POST /api/internal/test-fulfillment-only', { productUrl, price, userId: userId ?? null, productId: productId ?? null });
 
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({
+      error: 'Test order creation is disabled in production (Phase 43). Use real marketplace orders only.',
+    });
+  }
+
   try {
     const { prisma } = await import('../../config/database');
     const { orderFulfillmentService } = await import('../../services/order-fulfillment.service');

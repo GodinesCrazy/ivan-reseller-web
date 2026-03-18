@@ -25,6 +25,7 @@ export default function Orders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [showImportEbay, setShowImportEbay] = useState(false);
   const [showFetchEbay, setShowFetchEbay] = useState(false);
@@ -73,8 +74,12 @@ export default function Orders() {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.get<Order[]>('/api/orders', { params: { environment } });
-      setOrders(res.data || []);
+      const [ordersRes, syncRes] = await Promise.all([
+        api.get<Order[]>('/api/orders', { params: { environment } }),
+        api.get<{ lastSyncAt?: string | null }>('/api/orders/sync-status').catch(() => ({ data: {} })),
+      ]);
+      setOrders(ordersRes.data || []);
+      setLastSyncAt(syncRes?.data?.lastSyncAt ?? null);
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'Error al cargar órdenes');
     } finally {
@@ -193,8 +198,18 @@ export default function Orders() {
             </button>
           </div>
         </div>
-        <p className="text-gray-600 dark:text-gray-400 mt-0.5">Órdenes de compra al proveedor y seguimiento de envíos. Tras una venta, compra en AliExpress desde <span className="font-medium">Compras pendientes</span> y el estado se actualiza aquí.</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Datos actualizados en cada carga.</p>
+        <p className="text-gray-600 dark:text-gray-400 mt-0.5">Órdenes de compra al proveedor y seguimiento de envíos. Las nuevas compras de eBay, Mercado Libre o Amazon se muestran aquí automáticamente (por webhook o sincronización periódica). Tras una venta, compra en AliExpress desde <span className="font-medium">Compras pendientes</span> y el estado se actualiza aquí.</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          Solo se muestran órdenes reales (eBay, Mercado Libre, Amazon). Datos actualizados en cada carga.
+          {lastSyncAt && (
+            <> · Última sincronización: {(() => {
+              const mins = Math.round((Date.now() - new Date(lastSyncAt).getTime()) / 60000);
+              if (mins < 1) return 'ahora mismo';
+              if (mins === 1) return 'hace 1 min';
+              return `hace ${mins} min`;
+            })()}</>
+          )}
+        </p>
         {hasFailed && (
           <p className="text-xs mt-1">
             <a href="/dashboard" className="text-amber-600 dark:text-amber-400 hover:underline">Ver alertas en Panel</a>
@@ -363,7 +378,9 @@ export default function Orders() {
             <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Orden</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Marketplace</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Título</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Comprador</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Estado</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Importe</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Fecha</th>
@@ -380,6 +397,9 @@ export default function Orders() {
                         ? order.paypalOrderId.slice(13).split('-')[0]
                         : order.id.slice(0, 8) + '…'}
                   </td>
+                  <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">
+                    {order.paypalOrderId?.startsWith('ebay:') ? 'eBay' : order.paypalOrderId?.startsWith('mercadolibre:') ? 'Mercado Libre' : order.paypalOrderId?.startsWith('amazon:') ? 'Amazon' : 'Checkout'}
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                     {order.productId ? (
                       <button
@@ -393,6 +413,7 @@ export default function Orders() {
                       order.title
                     )}
                   </td>
+                  <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{order.customerName || '—'}</td>
                   <td className="px-6 py-4">
                     <OrderStatusBadge status={order.status} />
                   </td>

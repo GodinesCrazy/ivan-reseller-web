@@ -25,7 +25,24 @@ const router = Router();
 const FAILED_INSUFFICIENT_FUNDS = 'FAILED_INSUFFICIENT_FUNDS';
 const MAX_RETRIES = 3;
 
+/** Phase 43: Exclude test/demo/mock orders — only real marketplace/checkout orders appear. */
+const REAL_ORDERS_EXCLUDE_PAYPAL_PREFIXES = ['TEST', 'test', 'DEMO', 'demo', 'MOCK', 'mock', 'SIM_', 'ORD-TEST'];
+
 router.use(authenticate);
+
+/** GET /api/orders/sync-status — Last marketplace order sync time (eBay/ML/Amazon). */
+router.get('/sync-status', async (_req: Request, res: Response) => {
+  try {
+    const lastSyncAt = getLastMarketplaceSyncAt();
+    res.json({
+      lastSyncAt: lastSyncAt?.toISOString() ?? null,
+      source: 'marketplace-order-sync',
+    });
+  } catch (err: any) {
+    logger.error('[ORDERS] sync-status failed', { error: err?.message });
+    res.status(500).json({ error: err?.message ?? 'Failed' });
+  }
+});
 
 /**
  * Normalize shipping address to Order format (matches webhooks.routes.ts shape).
@@ -247,9 +264,8 @@ router.post('/sync-marketplace', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/orders — List all post-sale orders (single source of truth for "something sold").
- * Returns ALL orders for the user (PAID, PURCHASING, PURCHASED, FAILED) so no sale is hidden.
- * Order has no environment field; optional query "environment" is ignored so counts stay consistent.
+ * GET /api/orders — List REAL post-sale orders only (Phase 43: no test/demo/mock).
+ * Source of truth: marketplace (eBay/ML/Amazon) or checkout; test orders are excluded.
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -259,10 +275,19 @@ router.get('/', async (req: Request, res: Response) => {
     const effectiveTake =
       limitParam != null ? Math.min(100, Math.max(1, parseInt(String(limitParam), 10) || 100)) : 100;
 
-    const whereClause = isAdmin ? {} : { userId: userId! };
+    const baseWhere = isAdmin ? {} : { userId: userId! };
+    const realOnlyWhere = {
+      ...baseWhere,
+      AND: REAL_ORDERS_EXCLUDE_PAYPAL_PREFIXES.map((prefix) => ({
+        OR: [
+          { paypalOrderId: null },
+          { paypalOrderId: { not: { startsWith: prefix } } },
+        ],
+      })),
+    } as const;
 
     const orders = await prisma.order.findMany({
-      where: whereClause,
+      where: realOnlyWhere,
       orderBy: { createdAt: 'desc' },
       take: effectiveTake,
     });
@@ -305,6 +330,12 @@ router.get('/by-ebay-id/:ebayOrderId', async (req: Request, res: Response) => {
   }
 });
 
+function isTestOrderPaypalId(paypalOrderId: string | null): boolean {
+  if (!paypalOrderId || !paypalOrderId.trim()) return false;
+  const p = paypalOrderId.trim();
+  return REAL_ORDERS_EXCLUDE_PAYPAL_PREFIXES.some((prefix) => p.startsWith(prefix));
+}
+
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
@@ -313,6 +344,9 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
     const order = await prisma.order.findUnique({ where: { id } });
     if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    if (process.env.NODE_ENV === 'production' && isTestOrderPaypalId(order.paypalOrderId)) {
       return res.status(404).json({ error: 'Order not found' });
     }
     const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
