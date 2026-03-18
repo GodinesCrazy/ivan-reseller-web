@@ -454,9 +454,10 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       }
     }
 
+    // Use API count only when > 0 so we don't replace DB count with 0 (e.g. API returns 0 but DB has listings)
     const listingsByMarketplace = {
-      ebay: ebayActiveCount !== null ? ebayActiveCount : listingsByMarketplaceFromDb.ebay,
-      mercadolibre: mercadolibreActiveCount !== null ? mercadolibreActiveCount : listingsByMarketplaceFromDb.mercadolibre,
+      ebay: (ebayActiveCount != null && ebayActiveCount > 0) ? ebayActiveCount : listingsByMarketplaceFromDb.ebay,
+      mercadolibre: (mercadolibreActiveCount != null && mercadolibreActiveCount > 0) ? mercadolibreActiveCount : listingsByMarketplaceFromDb.mercadolibre,
       amazon: listingsByMarketplaceFromDb.amazon,
     };
 

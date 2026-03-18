@@ -155,6 +155,29 @@ export class ProductService {
     const { pendingProductsLimitService } = await import('./pending-products-limit.service');
     await pendingProductsLimitService.ensurePendingLimitNotExceeded(userId, isAdmin);
 
+    // ✅ PREVENCIÓN DE DUPLICADOS: Rechazar si ya existe un producto con la misma URL de AliExpress (mismo usuario)
+    if (rest.aliexpressUrl && typeof rest.aliexpressUrl === 'string') {
+      const normalizedUrl = rest.aliexpressUrl.trim().toLowerCase().replace(/\/+$/, '');
+      if (normalizedUrl.length > 0) {
+        const existing = await prisma.product.findFirst({
+          where: {
+            userId,
+            OR: [
+              { aliexpressUrl: { equals: normalizedUrl, mode: 'insensitive' } },
+              { aliexpressUrl: { equals: rest.aliexpressUrl.trim(), mode: 'insensitive' } },
+            ],
+          },
+          select: { id: true, title: true, status: true },
+        });
+        if (existing) {
+          throw new AppError(
+            `Ya existe un producto con la misma URL de AliExpress (ID: ${existing.id}, título: ${(existing.title || '').slice(0, 40)}...). Evita duplicados usando el producto existente.`,
+            409
+          );
+        }
+      }
+    }
+
     // ✅ VALIDACIÓN DE IMÁGENES: Validar calidad antes de crear producto
     const allImageUrls: string[] = [];
     if (finalImageUrl) allImageUrls.push(finalImageUrl);
@@ -503,7 +526,7 @@ export class ProductService {
       const mp = String(filters.marketplace).toLowerCase();
       const mpNorm = mp === 'ml' ? 'mercadolibre' : mp;
       where.marketplaceListings = {
-        some: { marketplace: { equals: mpNorm, mode: 'insensitive' } },
+        some: { marketplace: { equals: mpNorm, mode: 'insensitive' }, status: 'active' },
       };
     }
 
@@ -558,8 +581,26 @@ export class ProductService {
     }
     const totalAll = Object.values(byStatus).reduce((s, n) => s + n, 0);
 
+    // Mark products that share aliexpressUrl (possible duplicates) for UI
+    let duplicateIds = new Set<number>();
+    if (userId && products.length > 0) {
+      const counts = await prisma.product.groupBy({
+        by: ['aliexpressUrl'],
+        where: { userId, aliexpressUrl: { not: null } },
+        _count: { id: true },
+      });
+      const duplicateUrls = counts.filter(c => (c._count.id ?? 0) > 1).map(c => c.aliexpressUrl).filter(Boolean) as string[];
+      if (duplicateUrls.length > 0) {
+        const dupProducts = await prisma.product.findMany({
+          where: { userId, aliexpressUrl: { in: duplicateUrls } },
+          select: { id: true },
+        });
+        duplicateIds = new Set(dupProducts.map(p => p.id));
+      }
+    }
+
     return {
-      products,
+      products: products.map(p => ({ ...p, isPossibleDuplicate: duplicateIds.has(p.id) })),
       pagination: {
         page,
         limit,

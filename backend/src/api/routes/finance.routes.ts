@@ -5,6 +5,7 @@ import { AppError } from '../../middleware/error.middleware';
 import { toNumber } from '../../utils/decimal.utils';
 import { getSalesLedger } from '../../services/sales-ledger.service';
 import { RealProfitEngine } from '../../services/real-profit-engine.service';
+import { SaleService } from '../../services/sale.service';
 import { getWorkingCapitalDetail } from '../../services/working-capital-detail.service';
 import { getPayPalBalance } from '../../services/balance-verification.service';
 import { calculateMaxNewListingsAllowed } from '../../services/capital-allocation.engine';
@@ -227,12 +228,15 @@ router.get('/summary', async (req: Request, res: Response, next) => {
     const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
     // Obtener datos consolidados (sales con product para shipping/import de productos vendidos)
+    // Phase 35: exclude test/mock/demo orders in production so finance shows only real data
+    const realFilter = SaleService.realSalesFilter(environment);
     const [sales, commissions, products] = await Promise.all([
       prisma.sale.findMany({
         where: {
           userId,
           createdAt: { gte: startDate },
-          ...envWhere
+          ...envWhere,
+          ...realFilter
         },
         include: {
           product: { select: { shippingCost: true, importTax: true } }
@@ -273,12 +277,13 @@ router.get('/summary', async (req: Request, res: Response, next) => {
     const grossMargin = totalSales > 0 ? ((grossProfit / totalSales) * 100) : 0;
     const netMargin = totalSales > 0 ? ((totalProfit / totalSales) * 100) : 0;
 
-    // ✅ Obtener ventas pendientes
+    // ✅ Obtener ventas pendientes (Phase 35: real sales only in production)
     const pendingSales = await prisma.sale.findMany({
       where: {
         userId,
         status: { in: ['PENDING', 'PROCESSING'] },
-        ...envWhere
+        ...envWhere,
+        ...realFilter
       },
       include: {
         product: true
@@ -404,7 +409,9 @@ router.get('/breakdown', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const range = (req.query.range as string) || 'month';
-    const envWhere = envFilter(getEnvironment(req));
+    const environment = getEnvironment(req);
+    const envWhere = envFilter(environment);
+    const realFilter = SaleService.realSalesFilter(environment);
 
     const now = new Date();
     const daysMapBreakdown: Record<string, number> = { week: 7, month: 30, quarter: 90, year: 365 };
@@ -415,7 +422,8 @@ router.get('/breakdown', async (req: Request, res: Response, next) => {
       where: {
         userId,
         createdAt: { gte: startDateBreakdown },
-        ...envWhere
+        ...envWhere,
+        ...realFilter
       },
       include: {
         product: true
@@ -455,7 +463,9 @@ router.get('/cashflow', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const range = (req.query.range as string) || 'month';
-    const envWhere = envFilter(getEnvironment(req));
+    const environment = getEnvironment(req);
+    const envWhere = envFilter(environment);
+    const realFilter = SaleService.realSalesFilter(environment);
 
     const now = new Date();
     const daysMapCashflow: Record<string, number> = { week: 7, month: 30, quarter: 90, year: 365 };
@@ -467,7 +477,8 @@ router.get('/cashflow', async (req: Request, res: Response, next) => {
         where: {
           userId,
           createdAt: { gte: startDateCashflow },
-          ...envWhere
+          ...envWhere,
+          ...realFilter
         },
         orderBy: { createdAt: 'asc' }
       }),
@@ -523,7 +534,9 @@ router.get('/tax-summary', async (req: Request, res: Response, next) => {
   try {
     const userId = req.user!.userId;
     const range = (req.query.range as string) || 'year';
-    const envWhere = envFilter(getEnvironment(req));
+    const environment = getEnvironment(req);
+    const envWhere = envFilter(environment);
+    const realFilter = SaleService.realSalesFilter(environment);
 
     const now = new Date();
     let startDate = new Date();
@@ -547,7 +560,8 @@ router.get('/tax-summary', async (req: Request, res: Response, next) => {
         where: {
           userId,
           createdAt: { gte: startDate },
-          ...envWhere
+          ...envWhere,
+          ...realFilter
         }
       }),
       prisma.commission.findMany({
@@ -593,7 +607,9 @@ router.get('/export/:format', async (req: Request, res: Response, next) => {
     const userId = req.user!.userId;
     const format = req.params.format as 'pdf' | 'excel' | 'csv';
     const range = (req.query.range as string) || 'month';
-    const envWhere = envFilter(getEnvironment(req));
+    const environment = getEnvironment(req);
+    const envWhere = envFilter(environment);
+    const realFilter = SaleService.realSalesFilter(environment);
 
     if (!['pdf', 'excel', 'csv'].includes(format)) {
       return res.status(400).json({ success: false, error: 'Invalid format. Use pdf, excel, or csv' });
@@ -620,13 +636,14 @@ router.get('/export/:format', async (req: Request, res: Response, next) => {
         startDate.setMonth(now.getMonth() - 1);
     }
 
-    // Obtener datos directamente
+    // Obtener datos directamente (Phase 35: real sales only in production)
     const [sales, commissions] = await Promise.all([
       prisma.sale.findMany({
         where: {
           userId,
           createdAt: { gte: startDate },
-          ...envWhere
+          ...envWhere,
+          ...realFilter
         }
       }),
       prisma.commission.findMany({
