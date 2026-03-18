@@ -5,7 +5,6 @@ import { AppError } from '../../middleware/error.middleware';
 import { toNumber } from '../../utils/decimal.utils';
 import { getSalesLedger } from '../../services/sales-ledger.service';
 import { RealProfitEngine } from '../../services/real-profit-engine.service';
-import { SaleService } from '../../services/sale.service';
 import { getWorkingCapitalDetail } from '../../services/working-capital-detail.service';
 import { getPayPalBalance } from '../../services/balance-verification.service';
 import { calculateMaxNewListingsAllowed } from '../../services/capital-allocation.engine';
@@ -229,7 +228,7 @@ router.get('/summary', async (req: Request, res: Response, next) => {
 
     // Obtener datos consolidados (sales con product para shipping/import de productos vendidos)
     // Phase 35: exclude test/mock/demo orders in production so finance shows only real data
-    const realFilter = SaleService.realSalesFilter(environment);
+    const realFilter = RealProfitEngine.realSalesFilter(environment);
     const [sales, commissions, products] = await Promise.all([
       prisma.sale.findMany({
         where: {
@@ -411,7 +410,7 @@ router.get('/breakdown', async (req: Request, res: Response, next) => {
     const range = (req.query.range as string) || 'month';
     const environment = getEnvironment(req);
     const envWhere = envFilter(environment);
-    const realFilter = SaleService.realSalesFilter(environment);
+    const realFilter = RealProfitEngine.realSalesFilter(environment);
 
     const now = new Date();
     const daysMapBreakdown: Record<string, number> = { week: 7, month: 30, quarter: 90, year: 365 };
@@ -465,7 +464,7 @@ router.get('/cashflow', async (req: Request, res: Response, next) => {
     const range = (req.query.range as string) || 'month';
     const environment = getEnvironment(req);
     const envWhere = envFilter(environment);
-    const realFilter = SaleService.realSalesFilter(environment);
+    const realFilter = RealProfitEngine.realSalesFilter(environment);
 
     const now = new Date();
     const daysMapCashflow: Record<string, number> = { week: 7, month: 30, quarter: 90, year: 365 };
@@ -536,7 +535,7 @@ router.get('/tax-summary', async (req: Request, res: Response, next) => {
     const range = (req.query.range as string) || 'year';
     const environment = getEnvironment(req);
     const envWhere = envFilter(environment);
-    const realFilter = SaleService.realSalesFilter(environment);
+    const realFilter = RealProfitEngine.realSalesFilter(environment);
 
     const now = new Date();
     let startDate = new Date();
@@ -609,7 +608,7 @@ router.get('/export/:format', async (req: Request, res: Response, next) => {
     const range = (req.query.range as string) || 'month';
     const environment = getEnvironment(req);
     const envWhere = envFilter(environment);
-    const realFilter = SaleService.realSalesFilter(environment);
+    const realFilter = RealProfitEngine.realSalesFilter(environment);
 
     if (!['pdf', 'excel', 'csv'].includes(format)) {
       return res.status(400).json({ success: false, error: 'Invalid format. Use pdf, excel, or csv' });
