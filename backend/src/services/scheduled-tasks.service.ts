@@ -35,6 +35,8 @@ export class ScheduledTasksService {
   private fulfillmentRetryEngineQueue: Queue | null = null;
   private processPaidOrdersQueue: Queue | null = null;
   private marketplaceOrderSyncQueue: Queue | null = null;
+  private mercadolibreOrderSyncQueue: Queue | null = null;
+  private amazonOrderSyncQueue: Queue | null = null;
   private ebayTrafficSyncQueue: Queue | null = null;
     private listingOptimization48hQueue: Queue | null = null;
     private winnerDetectionQueue: Queue | null = null;
@@ -66,6 +68,8 @@ export class ScheduledTasksService {
   private fulfillmentRetryEngineWorker: Worker | null = null;
   private processPaidOrdersWorker: Worker | null = null;
   private marketplaceOrderSyncWorker: Worker | null = null;
+  private mercadolibreOrderSyncWorker: Worker | null = null;
+  private amazonOrderSyncWorker: Worker | null = null;
   private ebayTrafficSyncWorker: Worker | null = null;
     private listingOptimization48hWorker: Worker | null = null;
     private winnerDetectionWorker: Worker | null = null;
@@ -163,6 +167,16 @@ export class ScheduledTasksService {
 
     // Phase 40: Marketplace order sync (eBay/ML/Amazon) — fetch real orders every 5–10 min
     this.marketplaceOrderSyncQueue = new Queue('marketplace-order-sync', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Mercado Libre order sync — fetch ML orders every ~10 min
+    this.mercadolibreOrderSyncQueue = new Queue('mercadolibre-order-sync', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Amazon order sync — fetch Amazon orders every ~10 min
+    this.amazonOrderSyncQueue = new Queue('amazon-order-sync', {
       connection: this.bullMQRedis as any
     });
 
@@ -512,6 +526,38 @@ export class ScheduledTasksService {
           logger.info('Scheduled Tasks: Running marketplace order sync', { jobId: job.id });
           const { runMarketplaceOrderSync } = await import('./marketplace-order-sync.service');
           return await runMarketplaceOrderSync('production');
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+    }
+
+    // Mercado Libre order sync worker
+    if (this.mercadolibreOrderSyncQueue) {
+      this.mercadolibreOrderSyncWorker = new Worker(
+        'mercadolibre-order-sync',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running Mercado Libre order sync', { jobId: job.id });
+          const { runMercadoLibreOrderSync } = await import('./mercadolibre-order-sync.service');
+          return await runMercadoLibreOrderSync('production');
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+    }
+
+    // Amazon order sync worker
+    if (this.amazonOrderSyncQueue) {
+      this.amazonOrderSyncWorker = new Worker(
+        'amazon-order-sync',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running Amazon order sync', { jobId: job.id });
+          const { runAmazonOrderSync } = await import('./amazon-order-sync.service');
+          return await runAmazonOrderSync('production');
         },
         {
           connection: this.bullMQRedis as any,
@@ -1218,6 +1264,32 @@ export class ScheduledTasksService {
         {},
         {
           repeat: { pattern: process.env.MARKETPLACE_ORDER_SYNC_CRON || '*/10 * * * *' },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Mercado Libre order sync every 10 minutes
+    if (this.mercadolibreOrderSyncQueue) {
+      this.mercadolibreOrderSyncQueue.add(
+        'mercadolibre-order-sync-job',
+        {},
+        {
+          repeat: { pattern: process.env.MERCADOLIBRE_ORDER_SYNC_CRON || '*/10 * * * *' },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Amazon order sync every 10 minutes
+    if (this.amazonOrderSyncQueue) {
+      this.amazonOrderSyncQueue.add(
+        'amazon-order-sync-job',
+        {},
+        {
+          repeat: { pattern: process.env.AMAZON_ORDER_SYNC_CRON || '*/10 * * * *' },
           removeOnComplete: 5,
           removeOnFail: 5,
         }
