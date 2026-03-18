@@ -63,6 +63,18 @@ router.get('/', async (req: Request, res: Response, next) => {
 
     // ✅ Mapear datos del backend al formato esperado por el frontend (Phase 40: full detail)
     const { toNumber } = await import('../../utils/decimal.utils');
+
+    function fulfillmentAutomationFromOrder(order: { status?: string; errorMessage?: string | null } | null): { status: string; errorReason?: string } {
+      if (!order) return { status: 'unknown' };
+      const s = (order.status || '').toUpperCase();
+      const err = (order.errorMessage || '').trim();
+      if (s === 'PURCHASED') return { status: 'completed' };
+      if (s === 'PAID' || s === 'PURCHASING') return { status: 'pending_purchase' };
+      if (err.includes('EBAY_SYNC_AWAITING_PRODUCT_MAP') || err.includes('no_listing') || err.includes('no_aliexpress_url')) return { status: 'needs_mapping', errorReason: err || undefined };
+      if (s === 'FAILED') return { status: 'failed', errorReason: err || undefined };
+      return { status: 'unknown' };
+    }
+
     const mappedSales = filteredSales.map((sale: any) => {
       let productImage: string | undefined;
       try {
@@ -94,16 +106,44 @@ router.get('/', async (req: Request, res: Response, next) => {
         status: sale.status,
         trackingNumber: sale.trackingNumber || undefined,
         createdAt: sale.createdAt?.toISOString() || new Date().toISOString(),
+        ebayOrderId: undefined as string | undefined,
+        mercadolibreOrderId: undefined as string | undefined,
+        amazonOrderId: undefined as string | undefined,
+        fulfillmentAutomationStatus: undefined as string | undefined,
+        fulfillmentErrorReason: undefined as string | undefined,
       };
     });
 
+    // Enrich with Order data for eBay ID and automation status
+    const orderIds = [...new Set(mappedSales.map((s: any) => s.orderId).filter(Boolean))];
+    if (orderIds.length > 0) {
+      const { prisma } = await import('../../config/database');
+      const orders = await prisma.order.findMany({
+        where: { id: { in: orderIds } },
+        select: { id: true, paypalOrderId: true, status: true, errorMessage: true },
+      });
+      const orderMap = new Map(orders.map((o) => [o.id, o]));
+      for (const row of mappedSales) {
+        const order = orderMap.get(row.orderId);
+        if (!order) continue;
+        const pp = (order.paypalOrderId || '').trim();
+        if (pp.startsWith('ebay:')) row.ebayOrderId = pp.slice(5);
+        if (pp.startsWith('mercadolibre:')) row.mercadolibreOrderId = pp.slice(13).replace(/-[\w-]+$/, '');
+        if (pp.startsWith('amazon:')) row.amazonOrderId = pp.slice(7).replace(/-[\w-]+$/, '');
+        const auto = fulfillmentAutomationFromOrder(order);
+        row.fulfillmentAutomationStatus = auto.status;
+        row.fulfillmentErrorReason = auto.errorReason;
+      }
+    }
+
     // eBay orders en BD sin fila Sale (p. ej. sin mapeo de listing): siguen siendo "ventas" visibles
     let mergedSales = mappedSales;
-    if (!isAdmin && req.user?.userId != null) {
+    const shouldMergeOrphans = (!isAdmin && req.user?.userId != null) || isAdmin;
+    if (shouldMergeOrphans) {
       const { prisma } = await import('../../config/database');
-      const uid = req.user.userId;
+      const uid = isAdmin ? undefined : req.user!.userId;
       const ebayOrders = await prisma.order.findMany({
-        where: { userId: uid, paypalOrderId: { startsWith: 'ebay:' } },
+        where: uid != null ? { userId: uid, paypalOrderId: { startsWith: 'ebay:' } } : { paypalOrderId: { startsWith: 'ebay:' } },
         orderBy: { createdAt: 'desc' },
         take: 100,
         select: {
@@ -112,6 +152,7 @@ router.get('/', async (req: Request, res: Response, next) => {
           price: true,
           status: true,
           errorMessage: true,
+          paypalOrderId: true,
           createdAt: true,
           customerName: true,
           customerEmail: true,
@@ -130,6 +171,8 @@ router.get('/', async (req: Request, res: Response, next) => {
             const st =
               o.status === 'PURCHASED' ? 'SHIPPED' : o.status === 'FAILED' ? 'PROCESSING' : 'PENDING';
             const awaiting = (o.errorMessage || '').includes('EBAY_SYNC_AWAITING_PRODUCT_MAP');
+            const auto = fulfillmentAutomationFromOrder(o);
+            const pp = (o.paypalOrderId || '').trim();
             return {
               id: `ebay-order-${o.id}`,
               orderId: o.id,
@@ -152,9 +195,136 @@ router.get('/', async (req: Request, res: Response, next) => {
               trackingNumber: undefined as string | undefined,
               createdAt: o.createdAt.toISOString(),
               syncNote: awaiting ? o.errorMessage || 'Mapea el producto (listing/item en la app)' : o.errorMessage || undefined,
+              ebayOrderId: pp.startsWith('ebay:') ? pp.slice(5) : undefined,
+              fulfillmentAutomationStatus: auto.status,
+              fulfillmentErrorReason: auto.errorReason,
             };
           });
         mergedSales = [...virtual, ...mappedSales];
+      }
+
+      // Mercado Libre orders in DB without Sale row: show as virtual sales
+      const mlOrders = await prisma.order.findMany({
+        where: uid != null ? { userId: uid, paypalOrderId: { startsWith: 'mercadolibre:' } } : { paypalOrderId: { startsWith: 'mercadolibre:' } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          title: true,
+          price: true,
+          status: true,
+          errorMessage: true,
+          paypalOrderId: true,
+          createdAt: true,
+          customerName: true,
+          customerEmail: true,
+          shippingAddress: true,
+        },
+      });
+      if (mlOrders.length) {
+        const withSaleMl = await prisma.sale.findMany({
+          where: { orderId: { in: mlOrders.map((o) => o.id) } },
+          select: { orderId: true },
+        });
+        const hasSaleMl = new Set(withSaleMl.map((s) => s.orderId));
+        const mlVirtual = mlOrders
+          .filter((o) => !hasSaleMl.has(o.id))
+          .map((o) => {
+            const st =
+              o.status === 'PURCHASED' ? 'SHIPPED' : o.status === 'FAILED' ? 'PROCESSING' : 'PENDING';
+            const auto = fulfillmentAutomationFromOrder(o);
+            const pp = (o.paypalOrderId || '').trim();
+            const mlId = pp.startsWith('mercadolibre:') ? pp.slice(13).replace(/-[\w-]+$/, '') : undefined;
+            return {
+              id: `mercadolibre-order-${o.id}`,
+              orderId: o.id,
+              productId: undefined as number | undefined,
+              productTitle: o.title,
+              productImage: undefined as string | undefined,
+              marketplace: 'mercadolibre',
+              source: 'mercadolibre-sync',
+              needsProductMapping: false,
+              buyerName: o.customerName,
+              buyerEmail: o.customerEmail || undefined,
+              shippingAddress: o.shippingAddress || undefined,
+              salePrice: toNumber(o.price as any),
+              cost: 0,
+              profit: 0,
+              commission: 0,
+              marketplaceFee: 0,
+              grossProfit: 0,
+              status: st,
+              trackingNumber: undefined as string | undefined,
+              createdAt: o.createdAt.toISOString(),
+              syncNote: o.errorMessage || undefined,
+              mercadolibreOrderId: mlId,
+              fulfillmentAutomationStatus: auto.status,
+              fulfillmentErrorReason: auto.errorReason,
+            };
+          });
+        mergedSales = [...mlVirtual, ...mergedSales];
+      }
+
+      // Amazon orders in DB without Sale row: show as virtual sales
+      const amazonOrders = await prisma.order.findMany({
+        where: uid != null ? { userId: uid, paypalOrderId: { startsWith: 'amazon:' } } : { paypalOrderId: { startsWith: 'amazon:' } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          title: true,
+          price: true,
+          status: true,
+          errorMessage: true,
+          paypalOrderId: true,
+          createdAt: true,
+          customerName: true,
+          customerEmail: true,
+          shippingAddress: true,
+        },
+      });
+      if (amazonOrders.length) {
+        const withSaleAmz = await prisma.sale.findMany({
+          where: { orderId: { in: amazonOrders.map((o) => o.id) } },
+          select: { orderId: true },
+        });
+        const hasSaleAmz = new Set(withSaleAmz.map((s) => s.orderId));
+        const amazonVirtual = amazonOrders
+          .filter((o) => !hasSaleAmz.has(o.id))
+          .map((o) => {
+            const st =
+              o.status === 'PURCHASED' ? 'SHIPPED' : o.status === 'FAILED' ? 'PROCESSING' : 'PENDING';
+            const auto = fulfillmentAutomationFromOrder(o);
+            const pp = (o.paypalOrderId || '').trim();
+            const amzId = pp.startsWith('amazon:') ? pp.slice(7).replace(/-[\w-]+$/, '') : undefined;
+            return {
+              id: `amazon-order-${o.id}`,
+              orderId: o.id,
+              productId: undefined as number | undefined,
+              productTitle: o.title,
+              productImage: undefined as string | undefined,
+              marketplace: 'amazon',
+              source: 'amazon-sync',
+              needsProductMapping: false,
+              buyerName: o.customerName,
+              buyerEmail: o.customerEmail || undefined,
+              shippingAddress: o.shippingAddress || undefined,
+              salePrice: toNumber(o.price as any),
+              cost: 0,
+              profit: 0,
+              commission: 0,
+              marketplaceFee: 0,
+              grossProfit: 0,
+              status: st,
+              trackingNumber: undefined as string | undefined,
+              createdAt: o.createdAt.toISOString(),
+              syncNote: o.errorMessage || undefined,
+              amazonOrderId: amzId,
+              fulfillmentAutomationStatus: auto.status,
+              fulfillmentErrorReason: auto.errorReason,
+            };
+          });
+        mergedSales = [...amazonVirtual, ...mergedSales];
       }
     }
 
@@ -184,22 +354,24 @@ router.get('/stats', async (req: Request, res: Response, next) => {
     const environment = validatedQuery.environment;
     const stats = await saleService.getSalesStats(userId, days, environment);
     
-    // Calcular promedio de orden y cambios
     const { toNumber } = await import('../../utils/decimal.utils');
-    const totalRevenueNum = toNumber(stats.totalRevenue || 0);
-    const totalProfitNum = toNumber(stats.totalProfit ?? 0);
-    const avgOrderValue = stats.totalSales > 0 ? totalRevenueNum / stats.totalSales : 0;
-    
-    // ✅ Mapear estadísticas al formato esperado por el frontend (mismo período y definición: DELIVERED o COMPLETED)
+    const totalSalesAll = stats.totalSalesAll ?? stats.totalSales ?? 0;
+    const totalRevenueAll = toNumber(stats.totalRevenueAll ?? stats.totalRevenue ?? 0);
+    const totalProfitAll = toNumber(stats.totalProfitAll ?? stats.totalProfit ?? 0);
+    const avgOrderValue = totalSalesAll > 0 ? totalRevenueAll / totalSalesAll : 0;
+
     const mappedStats = {
-      totalRevenue: totalRevenueNum,
-      totalProfit: totalProfitNum,
-      totalSales: stats.totalSales || 0,
-      avgOrderValue: avgOrderValue,
-      revenueChange: 0, // TODO: Calcular cambio de ingresos comparando con período anterior
-      profitChange: 0  // TODO: Calcular cambio de ganancias comparando con período anterior
+      totalRevenue: totalRevenueAll,
+      totalProfit: totalProfitAll,
+      totalSales: totalSalesAll,
+      avgOrderValue,
+      revenueChange: 0,
+      profitChange: 0,
+      completedSales: stats.totalSales ?? 0,
+      completedRevenue: toNumber(stats.totalRevenue ?? 0),
+      completedProfit: toNumber(stats.totalProfit ?? 0),
     };
-    
+
     res.json(mappedStats);
   } catch (error) {
     next(error);

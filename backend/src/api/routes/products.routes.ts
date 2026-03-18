@@ -227,6 +227,109 @@ router.get('/workflow-status-batch', wrapAsync(async (req: Request, res: Respons
   return res.json({ success: true, data });
 }));
 
+// GET /api/products/post-sale-overview - Estado post-venta por producto/listing (última Order por producto)
+router.get('/post-sale-overview', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? undefined : req.user?.userId;
+    const environment = (req.query.environment as string)?.toLowerCase() === 'sandbox' ? 'sandbox' : 'production';
+
+    const listings = await prisma.marketplaceListing.findMany({
+      where: {
+        status: 'active',
+        ...(userId != null ? { userId } : {}),
+      },
+      select: {
+        id: true,
+        productId: true,
+        marketplace: true,
+        listingId: true,
+        sku: true,
+        product: { select: { id: true, title: true } },
+      },
+    });
+
+    const productIds = [...new Set(listings.map((l) => l.productId))];
+    const orders = await prisma.order.findMany({
+      where: {
+        productId: { in: productIds },
+        paypalOrderId: { not: null },
+        OR: [
+          { paypalOrderId: { startsWith: 'ebay:' } },
+          { paypalOrderId: { startsWith: 'mercadolibre:' } },
+          { paypalOrderId: { startsWith: 'amazon:' } },
+        ],
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        id: true,
+        productId: true,
+        status: true,
+        paypalOrderId: true,
+        errorMessage: true,
+        updatedAt: true,
+      },
+    });
+
+    const lastOrderByProduct = new Map<number, typeof orders[0]>();
+    for (const o of orders) {
+      if (o.productId != null && !lastOrderByProduct.has(o.productId)) {
+        lastOrderByProduct.set(o.productId, o);
+      }
+    }
+
+    function fulfillmentStatus(order: { status?: string; errorMessage?: string | null } | null): string {
+      if (!order) return 'unknown';
+      const s = (order.status || '').toUpperCase();
+      const err = (order.errorMessage || '').trim();
+      if (s === 'PURCHASED') return 'completed';
+      if (s === 'PAID' || s === 'PURCHASING') return 'pending_purchase';
+      if (err.includes('AWAITING_PRODUCT_MAP') || err.includes('no_listing') || err.includes('no_aliexpress_url')) return 'needs_mapping';
+      if (s === 'FAILED') return 'failed';
+      return 'unknown';
+    }
+
+    const byProduct = new Map<number, { productId: number; productTitle: string; listings: Array<{ marketplace: string; listingId: string; sku: string | null }>; lastOrder: { orderId: string; orderStatus: string; marketplaceOrderId: string; fulfillmentAutomationStatus: string; updatedAt: string } | null }>();
+
+    for (const l of listings) {
+      if (!l.product) continue;
+      const pid = l.product.id;
+      if (!byProduct.has(pid)) {
+        const lastOrder = lastOrderByProduct.get(pid);
+        const pp = (lastOrder?.paypalOrderId || '').trim();
+        const prefix = pp.startsWith('ebay:') ? 'ebay:' : pp.startsWith('mercadolibre:') ? 'mercadolibre:' : pp.startsWith('amazon:') ? 'amazon:' : '';
+        const marketplaceOrderId = prefix ? pp.slice(prefix.length).replace(/-[\w-]+$/, '') : '';
+        byProduct.set(pid, {
+          productId: pid,
+          productTitle: l.product.title,
+          listings: [],
+          lastOrder: lastOrder
+            ? {
+                orderId: lastOrder.id,
+                orderStatus: lastOrder.status,
+                marketplaceOrderId,
+                fulfillmentAutomationStatus: fulfillmentStatus(lastOrder),
+                updatedAt: lastOrder.updatedAt.toISOString(),
+              }
+            : null,
+        });
+      }
+      const rec = byProduct.get(pid)!;
+      rec.listings.push({
+        marketplace: l.marketplace,
+        listingId: l.listingId,
+        sku: l.sku,
+      });
+    }
+
+    const overview = Array.from(byProduct.values());
+    res.json({ overview, environment });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/products/stats - Estadísticas
 router.get('/stats', async (req: Request, res: Response, next: NextFunction) => {
   try {
