@@ -12,7 +12,11 @@ import { hasSufficientFreeCapital } from '../../services/working-capital.service
 import { toNumber } from '../../utils/decimal.utils';
 import MarketplaceService from '../../services/marketplace.service';
 import { EbayService, EbayCredentials } from '../../services/ebay.service';
-import { upsertOrderFromEbayPayload } from '../../services/marketplace-order-sync.service';
+import {
+  upsertOrderFromEbayPayload,
+  runMarketplaceOrderSync,
+  getLastMarketplaceSyncAt,
+} from '../../services/marketplace-order-sync.service';
 
 const marketplaceService = new MarketplaceService();
 
@@ -211,6 +215,34 @@ router.post('/fetch-ebay-order', async (req: Request, res: Response) => {
     const code = err?.statusCode === 404 || err?.message?.includes('not found') ? 404 : 500;
     logger.error('[ORDERS] fetch-ebay-order failed', { error: err?.message });
     return res.status(code).json({ error: err?.message || 'Fetch failed' });
+  }
+});
+
+/**
+ * POST /api/orders/sync-marketplace
+ * Trigger marketplace order sync once (eBay, and ML/Amazon when applicable). Authenticated.
+ * Use when Redis is unavailable (sync runs on interval) or to refresh without waiting.
+ */
+router.post('/sync-marketplace', async (req: Request, res: Response) => {
+  try {
+    const results = await runMarketplaceOrderSync('production');
+    const lastSyncAt = getLastMarketplaceSyncAt();
+    return res.json({
+      ok: true,
+      lastSyncAt: lastSyncAt?.toISOString() ?? null,
+      results: results.map((r) => ({
+        marketplace: r.marketplace,
+        userId: r.userId,
+        fetched: r.fetched,
+        created: r.created,
+        skipped: r.skipped,
+        createdUnmapped: r.createdUnmapped,
+        errors: r.errors,
+      })),
+    });
+  } catch (err: any) {
+    logger.error('[ORDERS] sync-marketplace failed', { error: err?.message });
+    return res.status(500).json({ error: err?.message || 'Sync failed' });
   }
 });
 

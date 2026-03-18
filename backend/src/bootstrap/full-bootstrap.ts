@@ -313,12 +313,14 @@ export async function fullBootstrap(startTime: number): Promise<void> {
       if (!isRedisAvailable) {
         console.log('[BOOT] Redis not available - skipping scheduled tasks');
         logMilestone('[BOOT] Scheduled tasks skipped (Redis unavailable)');
-        // Fallback: run process-paid-orders every 5 min and fulfillment-tracking-sync every 30 min
+        // Fallback: run process-paid-orders every 5 min, fulfillment-tracking-sync every 30 min, marketplace-order-sync every 10 min
         const PROCESS_PAID_INTERVAL_MS = 5 * 60 * 1000;
         const FULFILLMENT_TRACKING_INTERVAL_MS = 30 * 60 * 1000;
+        const MARKETPLACE_ORDER_SYNC_INTERVAL_MS = 10 * 60 * 1000;
         (async () => {
           const { processPaidOrders } = await import('../services/process-paid-orders.service');
           const { syncTrackingForEligibleOrders } = await import('../services/fulfillment-tracking-sync.service');
+          const { runMarketplaceOrderSync } = await import('../services/marketplace-order-sync.service');
           const { logger } = await import('../config/logger');
           setInterval(async () => {
             try {
@@ -334,9 +336,25 @@ export async function fullBootstrap(startTime: number): Promise<void> {
               logger.warn('[BOOT] fulfillment-tracking-sync fallback run failed', { error: err?.message });
             }
           }, FULFILLMENT_TRACKING_INTERVAL_MS);
+          setInterval(async () => {
+            try {
+              await runMarketplaceOrderSync('production');
+            } catch (err: any) {
+              logger.warn('[BOOT] marketplace-order-sync fallback run failed', { error: err?.message });
+            }
+          }, MARKETPLACE_ORDER_SYNC_INTERVAL_MS);
+          // Run marketplace sync once shortly after boot so eBay orders appear without waiting 10 min
+          setTimeout(async () => {
+            try {
+              await runMarketplaceOrderSync('production');
+            } catch (err: any) {
+              logger.warn('[BOOT] marketplace-order-sync initial run failed', { error: err?.message });
+            }
+          }, 30 * 1000);
           console.log('[BOOT] ✅ process-paid-orders fallback interval started (every 5 min)');
           console.log('[BOOT] ✅ fulfillment-tracking-sync fallback interval started (every 30 min)');
-          logMilestone('[BOOT] process-paid-orders + fulfillment-tracking-sync fallback active (no Redis)');
+          console.log('[BOOT] ✅ marketplace-order-sync fallback interval started (every 10 min)');
+          logMilestone('[BOOT] process-paid-orders + fulfillment-tracking-sync + marketplace-order-sync fallback active (no Redis)');
         })();
       } else {
         const scheduledTasksService = getScheduledTasksService();

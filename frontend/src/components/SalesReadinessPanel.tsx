@@ -5,9 +5,11 @@
 
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Bell, CheckCircle, XCircle, HelpCircle } from 'lucide-react';
+import { Bell, CheckCircle, XCircle, HelpCircle, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import api from '@/services/api';
+import toast from 'react-hot-toast';
 
 interface WebhookStatus {
   ebay?: { configured: boolean };
@@ -15,9 +17,15 @@ interface WebhookStatus {
   amazon?: { configured: boolean };
 }
 
-export default function SalesReadinessPanel() {
+interface SalesReadinessPanelProps {
+  /** Called after a successful manual sync so the parent can refetch sales and sync-status */
+  onSyncComplete?: () => void;
+}
+
+export default function SalesReadinessPanel({ onSyncComplete }: SalesReadinessPanelProps) {
   const [webhookStatus, setWebhookStatus] = useState<WebhookStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -65,8 +73,33 @@ export default function SalesReadinessPanel() {
         <p className="text-sm text-gray-600 dark:text-gray-400">
           Las ventas aparecen aquí cuando eBay o Mercado Libre envían la notificación a nuestro servidor.
           También pueden aparecer por sincronización automática con eBay (cada unos minutos), aunque no tengas la URL de notificaciones configurada; configurar webhooks mejora la inmediatez.
-          Si no tienes ventas, comprueba que hayas registrado la URL de notificaciones en tu cuenta de desarrollador.
+          Si no ves tu venta, usa &quot;Sincronizar ahora&quot; o comprueba las credenciales eBay y espera unos minutos.
         </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={syncing}
+            onClick={async () => {
+              setSyncing(true);
+              try {
+                const res = await api.post<{ ok: boolean; lastSyncAt: string | null }>('/api/orders/sync-marketplace');
+                if (res.data?.ok) {
+                  toast.success('Sincronización completada');
+                  onSyncComplete?.();
+                }
+              } catch (e: any) {
+                toast.error(e?.response?.data?.error || 'Error al sincronizar');
+              } finally {
+                setSyncing(false);
+              }
+            }}
+          >
+            <RefreshCw className={`w-4 h-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
+            Sincronizar ahora
+          </Button>
+        </div>
         <div className="flex flex-wrap gap-4 text-sm">
           <span className="flex items-center gap-2">
             {ebayOk ? <CheckCircle className="w-4 h-4 text-green-600" /> : <XCircle className="w-4 h-4 text-gray-400" />}

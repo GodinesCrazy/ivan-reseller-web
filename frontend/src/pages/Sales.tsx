@@ -279,7 +279,7 @@ export default function Sales() {
         </Button>
       </div>
 
-      <SalesReadinessPanel />
+      <SalesReadinessPanel onSyncComplete={fetchSalesData} />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -572,7 +572,7 @@ export default function Sales() {
                               )}
                             </td>
                             <td className="px-4 py-3 text-sm font-medium text-blue-600 dark:text-blue-400">{sale.orderId}</td>
-                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{sale.ebayOrderId || sale.mercadolibreOrderId || sale.amazonOrderId ?? '—'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{sale.ebayOrderId || sale.mercadolibreOrderId || sale.amazonOrderId || '—'}</td>
                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate">{sale.productTitle}</td>
                             <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{sale.buyerName}</td>
                             <td className="px-4 py-3">
