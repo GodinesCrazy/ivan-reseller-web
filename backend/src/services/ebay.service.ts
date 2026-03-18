@@ -1640,7 +1640,10 @@ export class EbayService {
         phoneNumber: shipTo?.primaryPhone?.phoneNumber || '',
       } : undefined;
       const pricing = o.pricingSummary || o.totalFeeBasisAmount;
-      const total = pricing?.value != null ? parseFloat(pricing.value) : undefined;
+      const totalRaw =
+        (pricing?.total?.value != null && pricing.total.value) ? parseFloat(pricing.total.value)
+        : (pricing?.value != null ? parseFloat(pricing.value) : undefined);
+      const total = typeof totalRaw === 'number' && isFinite(totalRaw) ? totalRaw : undefined;
       return {
         orderId: o.orderId || o.order_id || '',
         buyerName: o.buyer?.fullName || shipTo?.fullName,
@@ -1707,7 +1710,10 @@ export class EbayService {
           }
         : undefined;
       const pricing = o.pricingSummary || o.totalFeeBasisAmount;
-      const total = pricing?.value != null ? parseFloat(pricing.value) : undefined;
+      const totalRaw =
+        (pricing?.total?.value != null && pricing.total.value) ? parseFloat(pricing.total.value)
+        : (pricing?.value != null ? parseFloat(pricing.value) : undefined);
+      const total = typeof totalRaw === 'number' && isFinite(totalRaw) ? totalRaw : undefined;
       return {
         orderId: o.orderId || o.order_id || '',
         buyerName: o.buyer?.fullName || shipTo?.fullName,
@@ -1766,7 +1772,10 @@ export class EbayService {
         }
       : undefined;
     const pricing = o.pricingSummary || o.totalFeeBasisAmount;
-    const total = pricing?.value != null ? parseFloat(pricing.value) : undefined;
+    const totalRaw =
+      (pricing?.total?.value != null && pricing.total.value) ? parseFloat(pricing.total.value)
+      : (pricing?.value != null ? parseFloat(pricing.value) : undefined);
+    const total = typeof totalRaw === 'number' && isFinite(totalRaw) ? totalRaw : undefined;
     return {
       orderId: o.orderId || o.order_id || String(ebayOrderId),
       buyerName: o.buyer?.fullName || shipTo?.fullName,

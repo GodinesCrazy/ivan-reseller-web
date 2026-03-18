@@ -136,9 +136,10 @@ export async function upsertOrderFromEbayPayload(
     }
   }
 
-  const amount = ebayOrder.total ?? (firstLine?.price ?? 0) * (firstLine?.quantity ?? 1);
-  if (!isFinite(amount) || amount <= 0) {
-    throw new Error(`Order ${orderId}: invalid amount`);
+  let amount = ebayOrder.total ?? (firstLine?.price ?? 0) * (firstLine?.quantity ?? 1);
+  if (typeof amount !== 'number' || !isFinite(amount) || amount <= 0) {
+    logger.warn('[MARKETPLACE-SYNC] eBay order missing total/price, using fallback', { orderId, total: ebayOrder.total, linePrice: firstLine?.price });
+    amount = 0.01;
   }
 
   const shippingStr = normalizeShippingAddress(ebayOrder.shippingAddress, ebayOrder.buyerName);
