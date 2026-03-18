@@ -14,9 +14,12 @@ import MarketplaceService from '../../services/marketplace.service';
 import { EbayService, EbayCredentials } from '../../services/ebay.service';
 import {
   upsertOrderFromEbayPayload,
-  runMarketplaceOrderSync,
+  runMarketplaceOrderSyncForUser,
   getLastMarketplaceSyncAt,
+  setLastMarketplaceSyncAt,
 } from '../../services/marketplace-order-sync.service';
+import { syncMercadoLibreOrdersForUser } from '../../services/mercadolibre-order-sync.service';
+import { syncAmazonOrdersForUser } from '../../services/amazon-order-sync.service';
 import { buildRealOrdersWhere, REAL_ORDERS_EXCLUDE_PAYPAL_PREFIXES } from '../../utils/orders-real-filter';
 
 const marketplaceService = new MarketplaceService();
@@ -192,7 +195,10 @@ router.post('/fetch-ebay-order', async (req: Request, res: Response) => {
 
     const credsResult = await marketplaceService.getCredentials(userId, 'ebay', 'production');
     if (!credsResult?.isActive || !credsResult?.credentials) {
-      return res.status(400).json({ error: 'eBay production credentials not found or inactive' });
+      return res.status(400).json({
+        error:
+          'eBay production credentials not found or inactive. Connect your eBay account in Ajustes → APIs to sync and fetch orders.',
+      });
     }
 
     const ebayService = new EbayService({
@@ -227,21 +233,55 @@ router.post('/fetch-ebay-order', async (req: Request, res: Response) => {
       fulfilled,
     });
   } catch (err: any) {
-    const code = err?.statusCode === 404 || err?.message?.includes('not found') ? 404 : 500;
+    const is404 = err?.statusCode === 404 || err?.message?.includes('not found');
+    const code = is404 ? 404 : 500;
     logger.error('[ORDERS] fetch-ebay-order failed', { error: err?.message });
-    return res.status(code).json({ error: err?.message || 'Fetch failed' });
+    const message = is404
+      ? 'Pedido no encontrado en eBay. Comprueba el ID (debe ser exactamente el del Centro de ventas de eBay, p. ej. 17-11370-63716).'
+      : (err?.message || 'Fetch failed');
+    return res.status(code).json({ error: message });
   }
 });
 
 /**
- * POST /api/orders/sync-marketplace — Phase 44: Force eBay (and ML/Amazon) order sync.
- * Fetches NOT_STARTED/IN_PROGRESS/FULFILLED orders (last 90 days), upserts into Order table.
- * Optional body: { ebayOrderId?: "17-14370-63716" } to verify that order exists after sync.
+ * POST /api/orders/sync-marketplace — Phase 44: Force order sync for the current user (eBay, Mercado Libre, Amazon).
+ * Fetches orders from each connected marketplace, upserts into Order table.
+ * Optional body: { ebayOrderId?: "17-11370-63716" } to verify that order exists after sync.
  */
 router.post('/sync-marketplace', async (req: Request, res: Response) => {
   try {
-    const results = await runMarketplaceOrderSync('production');
+    const userId = req.user!.userId;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const ebayResults = await runMarketplaceOrderSyncForUser(userId, 'production');
+    const mlResult = await syncMercadoLibreOrdersForUser(userId, 'production');
+    const amazonResult = await syncAmazonOrdersForUser(userId, 'production');
+
+    setLastMarketplaceSyncAt();
     const lastSyncAt = getLastMarketplaceSyncAt();
+
+    const results = [
+      ...ebayResults.map((r) => ({ ...r, createdUnmapped: r.createdUnmapped ?? 0 })),
+      {
+        marketplace: mlResult.marketplace,
+        userId: mlResult.userId,
+        fetched: mlResult.fetched,
+        created: mlResult.created,
+        skipped: mlResult.skipped,
+        createdUnmapped: 0,
+        errors: mlResult.errors ?? [],
+      },
+      {
+        marketplace: amazonResult.marketplace,
+        userId: amazonResult.userId,
+        fetched: amazonResult.fetched,
+        created: amazonResult.created,
+        skipped: amazonResult.skipped,
+        createdUnmapped: 0,
+        errors: amazonResult.errors ?? [],
+      },
+    ];
+
     const ebayOrderIdToVerify = (req.body as any)?.ebayOrderId ?? (req.query as any).ebayOrderId;
     let verifiedOrder: { orderId: string; status: string; exists: boolean } | null = null;
     if (ebayOrderIdToVerify && typeof ebayOrderIdToVerify === 'string') {
@@ -255,9 +295,29 @@ router.post('/sync-marketplace', async (req: Request, res: Response) => {
         logger.info('[ORDERS] sync-marketplace verify', { ebayOrderId: id, exists: !!order, orderId: order?.id });
       }
     }
+
+    const totalFetched = results.reduce((s, r) => s + (r.fetched ?? 0), 0);
+    const totalCreated = results.reduce((s, r) => s + (r.created ?? 0) + (r.createdUnmapped ?? 0), 0);
+    const syncErrors: string[] = [];
+    for (const r of results) {
+      if (r.errors?.length) syncErrors.push(...r.errors.slice(0, 3));
+    }
+
+    const credsError = (e: string) => /credentials not found|not found or inactive/i.test(String(e));
+    const noEbayCredentials =
+      ebayResults.length === 0 || ebayResults.some((r) => r.errors?.some(credsError));
+    const noMercadoLibreCredentials = mlResult.errors?.some(credsError) ?? false;
+    const noAmazonCredentials = amazonResult.errors?.some(credsError) ?? false;
+
     const payload = {
       ok: true,
       lastSyncAt: lastSyncAt?.toISOString() ?? null,
+      totalFetched,
+      totalCreated,
+      noEbayCredentials,
+      noMercadoLibreCredentials,
+      noAmazonCredentials,
+      syncErrors: syncErrors.length ? syncErrors : undefined,
       results: results.map((r) => ({
         marketplace: r.marketplace,
         userId: r.userId,

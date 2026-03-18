@@ -169,14 +169,38 @@ export default function Orders() {
     }
   };
 
-  /** Phase 44: Force sync with eBay (and ML/Amazon) — fetch real orders now. */
+  /** Phase 44: Force sync with eBay, Mercado Libre and Amazon — fetch real orders now. */
   const handleSyncMarketplace = async () => {
     setSyncingMarketplace(true);
     try {
-      const res = await api.post<{ ok: boolean; results?: Array<{ fetched: number; created: number; errors: string[] }> }>('/api/orders/sync-marketplace');
+      const res = await api.post<{
+        ok: boolean;
+        totalFetched?: number;
+        totalCreated?: number;
+        noEbayCredentials?: boolean;
+        noMercadoLibreCredentials?: boolean;
+        noAmazonCredentials?: boolean;
+        syncErrors?: string[];
+        results?: Array<{ marketplace?: string; fetched?: number; created?: number; createdUnmapped?: number; errors?: string[] }>;
+      }>('/api/orders/sync-marketplace');
       if (res.data?.ok) {
-        const created = res.data.results?.reduce((s, r) => s + (r.created ?? 0), 0) ?? 0;
-        toast.success(created > 0 ? `Sincronizado. ${created} orden(es) nueva(s) traída(s).` : 'Sincronizado con eBay.');
+        const totalCreated = res.data.totalCreated ?? res.data.results?.reduce((s, r) => s + (r.created ?? 0) + (r.createdUnmapped ?? 0), 0) ?? 0;
+        const noEbay = res.data.noEbayCredentials;
+        const noML = res.data.noMercadoLibreCredentials;
+        const noAmazon = res.data.noAmazonCredentials;
+        const anyNoCreds = noEbay || noML || noAmazon;
+
+        if (totalCreated > 0) {
+          toast.success(`Sincronizado. ${totalCreated} orden(es) nueva(s) traída(s).`);
+        } else if (anyNoCreds) {
+          const parts: string[] = [];
+          if (noEbay) parts.push('eBay');
+          if (noML) parts.push('Mercado Libre');
+          if (noAmazon) parts.push('Amazon');
+          toast.success(`Sincronización completada. Para traer pedidos de ${parts.join(', ')}, conecta las cuentas en Ajustes → APIs.`);
+        } else {
+          toast.success('Sincronizado. No había órdenes nuevas.');
+        }
       }
       await fetchOrders();
     } catch (err: any) {
@@ -218,7 +242,7 @@ export default function Orders() {
             </Button>
             <Button variant="outline" size="sm" onClick={handleSyncMarketplace} disabled={syncingMarketplace}>
               <RefreshCw className={`w-4 h-4 mr-1 ${syncingMarketplace ? 'animate-spin' : ''}`} />
-              Sincronizar con eBay
+              Sincronizar pedidos
             </Button>
             <button
               onClick={fetchOrders}
@@ -267,11 +291,12 @@ export default function Orders() {
               <div className="min-w-[200px]">
                 <Label>ID del pedido eBay</Label>
                 <Input
-                  placeholder="ej. 12-11320-43716"
+                  placeholder="ej. 17-11370-63716"
                   value={fetchEbayOrderId}
                   onChange={(e) => setFetchEbayOrderId(e.target.value)}
                   className="mt-1"
                 />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Usa el ID exacto del Centro de ventas de eBay (Administrar pedidos).</p>
               </div>
               <Button onClick={handleFetchEbayOrder} disabled={fetchingEbay || !fetchEbayOrderId.trim()}>
                 {fetchingEbay ? 'Buscando...' : 'Traer pedido'}

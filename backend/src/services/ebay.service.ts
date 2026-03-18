@@ -1596,7 +1596,7 @@ export class EbayService {
    * List orders from eBay Sell Fulfillment API (Phase 40 — real sales sync).
    * Fetches active + recently fulfilled orders (last 90 days) so nothing is missed if sync was down.
    */
-  async getOrders(params?: { limit?: number; offset?: number; creationDateFrom?: string }): Promise<{
+  async getOrders(params?: { limit?: number; offset?: number; creationDateFrom?: string; noFilter?: boolean }): Promise<{
     orders: Array<{
       orderId: string;
       buyerName?: string;
@@ -1614,14 +1614,17 @@ export class EbayService {
     await this.ensureAccessToken();
     const limit = params?.limit ?? 50;
     const offset = params?.offset ?? 0;
-    const from = params?.creationDateFrom ?? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, '.000Z');
-    const filterParts = [
-      `creationdate:[${from}..]`,
-      'orderfulfillmentstatus:{NOT_STARTED|IN_PROGRESS|FULFILLED}',
-    ];
-    const filter = filterParts.join(',');
+    const requestParams: Record<string, string | number> = { limit, offset };
+    if (!params?.noFilter) {
+      const from = params?.creationDateFrom ?? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, '.000Z');
+      const filterParts = [
+        `creationdate:[${from}..]`,
+        'orderfulfillmentstatus:{NOT_STARTED|IN_PROGRESS|FULFILLED}',
+      ];
+      requestParams.filter = filterParts.join(',');
+    }
     const res = await this.apiClient.get('/sell/fulfillment/v1/order', {
-      params: { filter, limit, offset },
+      params: requestParams,
     });
     const orders = (res.data?.orders || []).map((o: any) => {
       const shipTo = o.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo;
@@ -1662,6 +1665,69 @@ export class EbayService {
       total: res.data?.total,
       next: res.data?.next,
     };
+  }
+
+  /**
+   * Get orders by exact order IDs using the orderIds query parameter.
+   * Use this when getOrderById returns "Invalid Order Id" (e.g. Seller Hub display format).
+   * API: GET /sell/fulfillment/v1/order?orderIds=id1,id2 (max 50).
+   */
+  async getOrdersByOrderIds(orderIds: string[]): Promise<{
+    orders: Array<{
+      orderId: string;
+      buyerName?: string;
+      buyerUsername?: string;
+      buyerEmail?: string;
+      shippingAddress?: Record<string, string>;
+      lineItems: Array<{ lineItemId: string; sku?: string; itemId?: string; title?: string; quantity: number; price?: number }>;
+      total?: number;
+      orderDate?: string;
+      fulfillmentStatus?: string;
+    }>;
+  }> {
+    if (!orderIds?.length) return { orders: [] };
+    await this.ensureAccessToken();
+    const ids = orderIds.slice(0, 50).join(',');
+    const res = await this.apiClient.get('/sell/fulfillment/v1/order', {
+      params: { orderIds: ids },
+    });
+    const orders = (res.data?.orders || []).map((o: any) => {
+      const shipTo = o.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo;
+      const contactAddr = shipTo?.contactAddress || shipTo?.contactAddress;
+      const shippingAddress = contactAddr
+        ? {
+            fullName: shipTo?.fullName || '',
+            addressLine1: contactAddr?.addressLine1 || contactAddr?.addressLine || '',
+            addressLine2: contactAddr?.addressLine2 || '',
+            city: contactAddr?.city || '',
+            state: contactAddr?.stateOrProvince || contactAddr?.state || '',
+            zipCode: contactAddr?.postalCode || contactAddr?.zipCode || '',
+            country: contactAddr?.countryCode || contactAddr?.country || '',
+            phoneNumber: shipTo?.primaryPhone?.phoneNumber || '',
+          }
+        : undefined;
+      const pricing = o.pricingSummary || o.totalFeeBasisAmount;
+      const total = pricing?.value != null ? parseFloat(pricing.value) : undefined;
+      return {
+        orderId: o.orderId || o.order_id || '',
+        buyerName: o.buyer?.fullName || shipTo?.fullName,
+        buyerUsername: o.buyer?.username,
+        buyerEmail: o.buyer?.email,
+        shippingAddress,
+        lineItems: (o.lineItems || []).map((li: any) => ({
+          lineItemId: li.lineItemId || li.lineItemId,
+          sku: li.sku,
+          itemId: li.itemId,
+          title: li.title,
+          quantity: parseInt(li.quantity || '1', 10) || 1,
+          price: li.unitPrice?.value != null ? parseFloat(li.unitPrice.value) : undefined,
+        })),
+        total,
+        orderDate: o.creationDate || o.createdAt,
+        fulfillmentStatus: o.orderFulfillmentStatus,
+      };
+    });
+    return { orders };
   }
 
   /**

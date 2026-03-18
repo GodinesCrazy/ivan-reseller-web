@@ -231,7 +231,7 @@ export async function syncEbayOrdersForUser(userId: number, environment: 'sandbo
     const ordersById = new Map<string, EbayOrderPayload>();
     let offset = 0;
     for (let page = 0; page < MAX_PAGES; page++) {
-      const pageResult = await ebayService.getOrders({ limit: PAGE_SIZE, offset });
+      const pageResult = await ebayService.getOrders({ limit: PAGE_SIZE, offset, noFilter: true });
       for (const o of pageResult.orders) {
         const id = String(o.orderId || '').trim();
         if (id) ordersById.set(id, o);
@@ -274,6 +274,20 @@ export async function syncEbayOrdersForUser(userId: number, environment: 'sandbo
 let lastSyncAt: Date | null = null;
 
 /**
+ * Run sync for a single user (e.g. current user when they click "Sincronizar con eBay").
+ * Updates lastSyncAt so the UI shows "Última sincronización: ahora mismo".
+ * Use this so the logged-in user's eBay sales are fetched and appear in the list.
+ */
+export async function runMarketplaceOrderSyncForUser(
+  userId: number,
+  environment: 'sandbox' | 'production' = 'production'
+): Promise<SyncResult[]> {
+  const r = await syncEbayOrdersForUser(userId, environment);
+  lastSyncAt = new Date();
+  return [r];
+}
+
+/**
  * Run sync for all users with active eBay credentials (production).
  */
 export async function runMarketplaceOrderSync(environment: 'sandbox' | 'production' = 'production'): Promise<SyncResult[]> {
@@ -294,4 +308,9 @@ export async function runMarketplaceOrderSync(environment: 'sandbox' | 'producti
 /** Phase 40: Last sync time for "Last synced X min ago" in frontend. */
 export function getLastMarketplaceSyncAt(): Date | null {
   return lastSyncAt;
+}
+
+/** Set last sync time (e.g. after running eBay + ML + Amazon sync). */
+export function setLastMarketplaceSyncAt(date?: Date): void {
+  lastSyncAt = date ?? new Date();
 }
