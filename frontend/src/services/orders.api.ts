@@ -46,6 +46,22 @@ export async function retryOrderFulfill(orderId: string): Promise<RetryFulfillRe
   return res.data;
 }
 
+/** Phase 44: Force fulfillment by eBay order ID (e.g. 17-14370-63716). */
+export interface ForceFulfillResponse {
+  success: boolean;
+  orderId: string;
+  ebayOrderId: string;
+  status: string;
+  aliexpressOrderId?: string;
+  error?: string;
+  message?: string;
+}
+
+export async function forceFulfillByEbayOrderId(ebayOrderId: string): Promise<ForceFulfillResponse> {
+  const res = await api.post<ForceFulfillResponse>(`/api/orders/by-ebay-id/${encodeURIComponent(ebayOrderId)}/force-fulfill`);
+  return res.data;
+}
+
 export async function getOrder(id: string): Promise<Order> {
   const res = await api.get<Order>(`/api/orders/${id}`);
   return res.data;

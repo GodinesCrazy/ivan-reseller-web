@@ -236,15 +236,28 @@ router.post('/fetch-ebay-order', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/orders/sync-marketplace
- * Trigger marketplace order sync once (eBay, and ML/Amazon when applicable). Authenticated.
- * Use when Redis is unavailable (sync runs on interval) or to refresh without waiting.
+ * POST /api/orders/sync-marketplace — Phase 44: Force eBay (and ML/Amazon) order sync.
+ * Fetches NOT_STARTED/IN_PROGRESS/FULFILLED orders (last 90 days), upserts into Order table.
+ * Optional body: { ebayOrderId?: "17-14370-63716" } to verify that order exists after sync.
  */
 router.post('/sync-marketplace', async (req: Request, res: Response) => {
   try {
     const results = await runMarketplaceOrderSync('production');
     const lastSyncAt = getLastMarketplaceSyncAt();
-    return res.json({
+    const ebayOrderIdToVerify = (req.body as any)?.ebayOrderId ?? (req.query as any).ebayOrderId;
+    let verifiedOrder: { orderId: string; status: string; exists: boolean } | null = null;
+    if (ebayOrderIdToVerify && typeof ebayOrderIdToVerify === 'string') {
+      const id = ebayOrderIdToVerify.trim();
+      if (id) {
+        const order = await prisma.order.findFirst({
+          where: { paypalOrderId: `ebay:${id}` },
+          select: { id: true, status: true },
+        });
+        verifiedOrder = order ? { orderId: order.id, status: order.status, exists: true } : { orderId: id, status: '', exists: false };
+        logger.info('[ORDERS] sync-marketplace verify', { ebayOrderId: id, exists: !!order, orderId: order?.id });
+      }
+    }
+    const payload = {
       ok: true,
       lastSyncAt: lastSyncAt?.toISOString() ?? null,
       results: results.map((r) => ({
@@ -256,7 +269,9 @@ router.post('/sync-marketplace', async (req: Request, res: Response) => {
         createdUnmapped: r.createdUnmapped,
         errors: r.errors,
       })),
-    });
+      ...(verifiedOrder ? { verifiedOrder } : {}),
+    };
+    return res.json(payload);
   } catch (err: any) {
     logger.error('[ORDERS] sync-marketplace failed', { error: err?.message });
     return res.status(500).json({ error: err?.message || 'Sync failed' });
@@ -327,6 +342,68 @@ router.get('/by-ebay-id/:ebayOrderId', async (req: Request, res: Response) => {
   } catch (err: any) {
     logger.error('[ORDERS] Get by eBay ID failed', { error: err?.message });
     return res.status(500).json({ error: err?.message || 'Failed' });
+  }
+});
+
+/**
+ * POST /api/orders/by-ebay-id/:ebayOrderId/force-fulfill — Phase 44: Trigger fulfillment for one order by eBay ID.
+ * Finds order by paypalOrderId = ebay:{ebayOrderId}, then calls orderFulfillmentService.fulfillOrder(order.id).
+ */
+router.post('/by-ebay-id/:ebayOrderId/force-fulfill', async (req: Request, res: Response) => {
+  try {
+    const ebayOrderId = (req.params.ebayOrderId || '').trim();
+    if (!ebayOrderId) return res.status(400).json({ error: 'ebayOrderId required' });
+    const userId = req.user!.userId;
+    const paypalOrderId = `ebay:${ebayOrderId}`;
+    const order = await prisma.order.findFirst({
+      where: { paypalOrderId },
+      select: { id: true, status: true, userId: true, productUrl: true },
+    });
+    if (!order) {
+      logger.warn('[ORDERS] force-fulfill: order not found', { ebayOrderId });
+      return res.status(404).json({
+        error: 'Order not found. Run sync first: POST /api/orders/sync-marketplace or use "Traer pedido desde eBay" with this ID.',
+        ebayOrderId,
+      });
+    }
+    if (order.userId != null && order.userId !== userId && req.user!.role?.toUpperCase() !== 'ADMIN') {
+      return res.status(403).json({ error: 'Not authorized to fulfill this order' });
+    }
+    if (order.status === 'PURCHASED') {
+      return res.status(200).json({
+        success: true,
+        orderId: order.id,
+        ebayOrderId,
+        status: 'PURCHASED',
+        message: 'Order already fulfilled',
+      });
+    }
+    if (order.status !== 'PAID') {
+      return res.status(400).json({
+        error: `Order status is ${order.status}. Only PAID orders can be fulfilled.`,
+        orderId: order.id,
+        status: order.status,
+      });
+    }
+    const fulfill = await orderFulfillmentService.fulfillOrder(order.id);
+    logger.info('[ORDERS] force-fulfill executed', {
+      ebayOrderId,
+      orderId: order.id,
+      status: fulfill.status,
+      success: fulfill.success,
+      error: fulfill.error,
+    });
+    return res.status(200).json({
+      success: fulfill.success,
+      orderId: order.id,
+      ebayOrderId,
+      status: fulfill.status,
+      aliexpressOrderId: fulfill.aliexpressOrderId,
+      error: fulfill.error,
+    });
+  } catch (err: any) {
+    logger.error('[ORDERS] force-fulfill failed', { error: err?.message });
+    return res.status(500).json({ error: err?.message || 'Fulfillment failed' });
   }
 });
 

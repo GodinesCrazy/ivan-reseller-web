@@ -31,6 +31,7 @@ export default function Orders() {
   const [showFetchEbay, setShowFetchEbay] = useState(false);
   const [fetchEbayOrderId, setFetchEbayOrderId] = useState('');
   const [fetchingEbay, setFetchingEbay] = useState(false);
+  const [syncingMarketplace, setSyncingMarketplace] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importForm, setImportForm] = useState({
     ebayOrderId: '',
@@ -70,6 +71,14 @@ export default function Orders() {
     }
   };
 
+  /** Phase 44: Client-side safety — never render test/demo/mock orders. */
+  const isRealOrder = (o: Order) => {
+    const pid = (o.paypalOrderId || '').trim();
+    if (!pid) return true;
+    const fake = /^(TEST|DEMO|MOCK|SIM_|ORD-TEST|test|demo|mock)/i;
+    return !fake.test(pid);
+  };
+
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
@@ -78,7 +87,8 @@ export default function Orders() {
         api.get<Order[]>('/api/orders', { params: { environment } }),
         api.get<{ lastSyncAt?: string | null }>('/api/orders/sync-status').catch(() => ({ data: {} })),
       ]);
-      setOrders(ordersRes.data || []);
+      const raw = ordersRes.data || [];
+      setOrders(raw.filter(isRealOrder));
       setLastSyncAt(syncRes?.data?.lastSyncAt ?? null);
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'Error al cargar órdenes');
@@ -159,6 +169,23 @@ export default function Orders() {
     }
   };
 
+  /** Phase 44: Force sync with eBay (and ML/Amazon) — fetch real orders now. */
+  const handleSyncMarketplace = async () => {
+    setSyncingMarketplace(true);
+    try {
+      const res = await api.post<{ ok: boolean; results?: Array<{ fetched: number; created: number; errors: string[] }> }>('/api/orders/sync-marketplace');
+      if (res.data?.ok) {
+        const created = res.data.results?.reduce((s, r) => s + (r.created ?? 0), 0) ?? 0;
+        toast.success(created > 0 ? `Sincronizado. ${created} orden(es) nueva(s) traída(s).` : 'Sincronizado con eBay.');
+      }
+      await fetchOrders();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.message || 'Error al sincronizar');
+    } finally {
+      setSyncingMarketplace(false);
+    }
+  };
+
   useLiveData({ fetchFn: fetchOrders, intervalMs: 15000, enabled: true });
   useNotificationRefetch({
     handlers: { SALE_CREATED: fetchOrders },
@@ -188,6 +215,10 @@ export default function Orders() {
             <Button variant="outline" size="sm" onClick={() => setShowImportEbay((v) => !v)}>
               <Upload className="w-4 h-4 mr-1" />
               Importar orden eBay
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleSyncMarketplace} disabled={syncingMarketplace}>
+              <RefreshCw className={`w-4 h-4 mr-1 ${syncingMarketplace ? 'animate-spin' : ''}`} />
+              Sincronizar con eBay
             </Button>
             <button
               onClick={fetchOrders}

@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Package, CheckCircle, XCircle, RefreshCw, MapPin, Truck } from 'lucide-react';
-import { getOrder, retryOrderFulfill, type Order } from '@/services/orders.api';
+import { getOrder, retryOrderFulfill, forceFulfillByEbayOrderId, type Order } from '@/services/orders.api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -19,6 +19,8 @@ export default function OrderDetail() {
   const [error, setError] = useState<string | null>(null);
   const [retryLoading, setRetryLoading] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [forceFulfillLoading, setForceFulfillLoading] = useState(false);
+  const [forceFulfillError, setForceFulfillError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const canRetryFulfill =
@@ -41,6 +43,26 @@ export default function OrderDetail() {
       setRetryError(err?.response?.data?.error || err?.message || 'Error al reintentar');
     } finally {
       setRetryLoading(false);
+    }
+  };
+
+  /** Phase 44: Force fulfillment when order is PAID and has eBay ID. */
+  const canForceFulfill = order?.status === 'PAID' && order?.marketplaceOrderId && (order.paypalOrderId || '').startsWith('ebay:');
+  const handleForceFulfill = async () => {
+    if (!order?.marketplaceOrderId || !canForceFulfill) return;
+    setForceFulfillLoading(true);
+    setForceFulfillError(null);
+    try {
+      const result = await forceFulfillByEbayOrderId(order.marketplaceOrderId);
+      if (result.success || result.status === 'PURCHASED') {
+        await fetchOrder();
+      } else {
+        setForceFulfillError(result.error || result.message || 'Fulfillment failed');
+      }
+    } catch (err: any) {
+      setForceFulfillError(err?.response?.data?.error || err?.message || 'Error al forzar compra');
+    } finally {
+      setForceFulfillLoading(false);
     }
   };
 
@@ -141,6 +163,22 @@ export default function OrderDetail() {
           <div className="flex items-center gap-2 p-4 text-green-800 dark:text-green-200 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
             <CheckCircle className="w-5 h-5 flex-shrink-0" />
             <span>Compra cumplida. AliExpress: {order.aliexpressOrderId || 'N/A'}</span>
+          </div>
+        )}
+
+        {canForceFulfill && (
+          <div className="p-4 mb-4 text-blue-800 dark:text-blue-200 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-2">
+            <p className="text-sm font-medium">Orden pagada en eBay — pendiente de compra en AliExpress.</p>
+            <button
+              type="button"
+              onClick={handleForceFulfill}
+              disabled={forceFulfillLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${forceFulfillLoading ? 'animate-spin' : ''}`} />
+              {forceFulfillLoading ? 'Ejecutando...' : 'Forzar compra en AliExpress'}
+            </button>
+            {forceFulfillError && <p className="text-sm text-red-700 dark:text-red-300">{forceFulfillError}</p>}
           </div>
         )}
 
