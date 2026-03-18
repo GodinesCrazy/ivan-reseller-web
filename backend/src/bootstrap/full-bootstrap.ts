@@ -313,10 +313,12 @@ export async function fullBootstrap(startTime: number): Promise<void> {
       if (!isRedisAvailable) {
         console.log('[BOOT] Redis not available - skipping scheduled tasks');
         logMilestone('[BOOT] Scheduled tasks skipped (Redis unavailable)');
-        // Fallback: run process-paid-orders every 5 min so PAID orders are still fulfilled
+        // Fallback: run process-paid-orders every 5 min and fulfillment-tracking-sync every 30 min
         const PROCESS_PAID_INTERVAL_MS = 5 * 60 * 1000;
+        const FULFILLMENT_TRACKING_INTERVAL_MS = 30 * 60 * 1000;
         (async () => {
           const { processPaidOrders } = await import('../services/process-paid-orders.service');
+          const { syncTrackingForEligibleOrders } = await import('../services/fulfillment-tracking-sync.service');
           const { logger } = await import('../config/logger');
           setInterval(async () => {
             try {
@@ -325,8 +327,16 @@ export async function fullBootstrap(startTime: number): Promise<void> {
               logger.warn('[BOOT] process-paid-orders fallback run failed', { error: err?.message });
             }
           }, PROCESS_PAID_INTERVAL_MS);
+          setInterval(async () => {
+            try {
+              await syncTrackingForEligibleOrders({ batchSize: 50, environment: 'production' });
+            } catch (err: any) {
+              logger.warn('[BOOT] fulfillment-tracking-sync fallback run failed', { error: err?.message });
+            }
+          }, FULFILLMENT_TRACKING_INTERVAL_MS);
           console.log('[BOOT] ✅ process-paid-orders fallback interval started (every 5 min)');
-          logMilestone('[BOOT] process-paid-orders fallback active (no Redis)');
+          console.log('[BOOT] ✅ fulfillment-tracking-sync fallback interval started (every 30 min)');
+          logMilestone('[BOOT] process-paid-orders + fulfillment-tracking-sync fallback active (no Redis)');
         })();
       } else {
         const scheduledTasksService = getScheduledTasksService();

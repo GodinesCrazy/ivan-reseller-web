@@ -64,6 +64,7 @@ export default function SalesReadinessPanel() {
       <CardContent className="space-y-3">
         <p className="text-sm text-gray-600 dark:text-gray-400">
           Las ventas aparecen aquí cuando eBay o Mercado Libre envían la notificación a nuestro servidor.
+          También pueden aparecer por sincronización automática con eBay (cada unos minutos), aunque no tengas la URL de notificaciones configurada; configurar webhooks mejora la inmediatez.
           Si no tienes ventas, comprueba que hayas registrado la URL de notificaciones en tu cuenta de desarrollador.
         </p>
         <div className="flex flex-wrap gap-4 text-sm">

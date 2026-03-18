@@ -141,3 +141,15 @@ export async function importEbayOrder(params: ImportEbayOrderParams): Promise<Im
   });
   return res.data;
 }
+
+export interface FetchEbayOrderResponse {
+  order: Order;
+  created: boolean;
+  fulfilled: boolean;
+}
+
+/** Fetch a single eBay order by ID from eBay API and upsert; triggers fulfillment if new and mapeada. */
+export async function fetchEbayOrder(ebayOrderId: string): Promise<FetchEbayOrderResponse> {
+  const res = await api.post<FetchEbayOrderResponse>('/api/orders/fetch-ebay-order', { ebayOrderId: ebayOrderId.trim() });
+  return res.data;
+}

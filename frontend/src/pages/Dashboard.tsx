@@ -98,6 +98,16 @@ export default function Dashboard() {
 
   const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null);
 
+  /** Última orden (venta real) para card "Estado de la única venta real" */
+  const [latestOrder, setLatestOrder] = useState<{
+    id: string;
+    status: string;
+    errorMessage?: string | null;
+    paypalOrderId?: string | null;
+    createdAt: string;
+    title?: string | null;
+  } | null>(null);
+
   const [autoListingDecisions, setAutoListingDecisions] = useState<Array<{
     id: number;
     productId: number;
@@ -282,6 +292,8 @@ export default function Dashboard() {
         api.get('/api/analytics/scaling-actions', { params: { limit: 20 } }).catch(() => ({ data: null })),
         // Phase 11: Conversion Rate Optimization
         api.get('/api/analytics/conversion-optimization-actions', { params: { limit: 20 } }).catch(() => ({ data: null })),
+        // Última orden (para card "Estado de la única venta real")
+        api.get('/api/orders', { params: { limit: 1, environment } }).catch(() => ({ data: [] })),
       ]);
       const [statsRes, activityRes, opportunitiesRes, aiSuggestionsRes, automationRes, inventoryRes, businessDiagRes, healthRes, platformRevRes] = allResponses;
       const autoListingRes = allResponses[9] as any;
@@ -290,6 +302,7 @@ export default function Dashboard() {
       const strategyRes = allResponses[12] as any;
       const scalingRes = allResponses[13] as any;
       const conversionOptimizationRes = allResponses[14] as any;
+      const ordersRes = allResponses[15] as { data?: Array<{ id: string; status: string; errorMessage?: string | null; paypalOrderId?: string | null; createdAt: string; title?: string | null }> };
 
       // ✅ FIX-002: Si hay errores y no hay datos reales, mostrar mensaje informativo
       const hasRealData = statsRes.data && Object.keys(statsRes.data).length > 0;
@@ -383,6 +396,22 @@ export default function Dashboard() {
       } else {
         setInventorySummary(null);
       }
+
+      // Última orden para card "Estado de la única venta real"
+      const ordersList = Array.isArray(ordersRes?.data) ? ordersRes.data : [];
+      const lastOrder = ordersList[0];
+      setLatestOrder(
+        lastOrder
+          ? {
+              id: lastOrder.id,
+              status: lastOrder.status,
+              errorMessage: lastOrder.errorMessage ?? null,
+              paypalOrderId: lastOrder.paypalOrderId ?? null,
+              createdAt: lastOrder.createdAt,
+              title: (lastOrder as { title?: string | null }).title ?? null,
+            }
+          : null
+      );
 
       // Estado del sistema (business diagnostics) - en vivo
       if (businessDiagRes?.data && typeof businessDiagRes.data === 'object' && !(businessDiagRes.data as any).error) {
@@ -795,6 +824,49 @@ export default function Dashboard() {
       <AutopilotLiveWidget />
 
       <InventorySummaryCard summary={inventorySummary} />
+
+      {/* Estado de la única venta real / última orden */}
+      <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+          <ShoppingBag className="h-5 w-5 text-amber-500" />
+          Última venta / orden
+        </h3>
+        {latestOrder ? (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                  latestOrder.status === 'PURCHASED'
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+                    : latestOrder.status === 'PAID' || latestOrder.status === 'PURCHASING'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                      : latestOrder.status === 'FAILED'
+                        ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                }`}
+              >
+                {latestOrder.status}
+              </span>
+              {latestOrder.paypalOrderId && (
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  ID: {String(latestOrder.paypalOrderId).replace(/^ebay:/, 'eBay ').replace(/^mercadolibre:/, 'ML ').replace(/^amazon:/, 'Amazon ')}
+                </span>
+              )}
+            </div>
+            {latestOrder.status === 'FAILED' && latestOrder.errorMessage && (
+              <p className="text-sm text-red-600 dark:text-red-400">{latestOrder.errorMessage}</p>
+            )}
+            <Link
+              to={`/orders/${latestOrder.id}`}
+              className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              Ver orden <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500 dark:text-gray-400">Sin órdenes recientes.</p>
+        )}
+      </div>
 
       {/* Admin: ingresos plataforma y comisiones por usuario */}
       {user?.role?.toUpperCase() === 'ADMIN' && platformRevenue && (

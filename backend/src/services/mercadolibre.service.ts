@@ -817,6 +817,32 @@ export class MercadoLibreService {
   }
 
   /**
+   * Notify Mercado Libre that a shipment has been shipped (seller_notifications).
+   * Used when order is fulfilled by supplier (e.g. AliExpress) so buyer sees tracking.
+   * Requires shipment_id from order (GET /orders/{id} returns shipping.id).
+   */
+  async notifyShipmentShipped(shipmentId: number | string, trackingNumber: string): Promise<void> {
+    if (!this.credentials.accessToken) {
+      throw new AppError('MercadoLibre access token required', 401);
+    }
+    const tracking = String(trackingNumber || '').trim();
+    if (!tracking) {
+      throw new AppError('trackingNumber is required', 400);
+    }
+    try {
+      await this.apiClient.post(`/shipments/${shipmentId}/seller_notifications`, {
+        tracking_number: tracking,
+        status: 'shipped',
+        substatus: null,
+      });
+      logger.info('[MercadoLibre] Shipment notification sent', { shipmentId, trackingPrefix: tracking.slice(0, 8) + '***' });
+    } catch (error: any) {
+      const msg = error.response?.data?.message || error.message;
+      throw new AppError(`MercadoLibre notifyShipmentShipped error: ${msg}`, error.response?.status || 400);
+    }
+  }
+
+  /**
    * Update listing quantity
    */
   async updateListingQuantity(itemId: string, quantity: number): Promise<void> {

@@ -1002,6 +1002,11 @@ export class SaleService {
         where: whereCompleted,
         _sum: { commissionAmount: true },
       }),
+      prisma.sale.count({ where }),
+      prisma.sale.aggregate({
+        where,
+        _sum: { salePrice: true, netProfit: true },
+      }),
     ]);
 
     // ✅ FIX: Agregar timeout de 20 segundos a las queries
@@ -1012,6 +1017,8 @@ export class SaleService {
       cancelledSales,
       totalRevenue,
       totalCommissions,
+      totalSalesAll,
+      aggAll,
     ] = await queryWithTimeout(queriesPromise, 20000);
 
     const netProfitAgg = await prisma.sale.aggregate({
@@ -1019,6 +1026,8 @@ export class SaleService {
       _sum: { netProfit: true },
     });
     const totalProfit = netProfitAgg._sum.netProfit ?? 0;
+    const totalRevenueAll = Number(aggAll._sum.salePrice ?? 0);
+    const totalProfitAll = Number(aggAll._sum.netProfit ?? 0);
 
     return {
       totalSales,
@@ -1029,6 +1038,9 @@ export class SaleService {
       totalCommissions: totalCommissions._sum.commissionAmount || 0,
       totalProfit: typeof totalProfit === 'object' ? Number((totalProfit as any) ?? 0) : Number(totalProfit),
       platformCommissionPaid: totalCommissions._sum.commissionAmount || 0,
+      totalSalesAll,
+      totalRevenueAll,
+      totalProfitAll,
     };
   }
 

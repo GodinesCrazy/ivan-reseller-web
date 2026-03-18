@@ -10,6 +10,11 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { orderFulfillmentService } from '../../services/order-fulfillment.service';
 import { hasSufficientFreeCapital } from '../../services/working-capital.service';
 import { toNumber } from '../../utils/decimal.utils';
+import MarketplaceService from '../../services/marketplace.service';
+import { EbayService, EbayCredentials } from '../../services/ebay.service';
+import { upsertOrderFromEbayPayload } from '../../services/marketplace-order-sync.service';
+
+const marketplaceService = new MarketplaceService();
 
 const router = Router();
 
@@ -152,12 +157,72 @@ router.post('/import-ebay-order', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/orders/fetch-ebay-order
+ * Fetch a single eBay order by ID from the API and upsert into DB; if new and mapeada, trigger fulfillment.
+ * Body: { ebayOrderId: "12-11320-43716" }. Idempotent by paypalOrderId.
+ */
+router.post('/fetch-ebay-order', async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const body = req.body as { ebayOrderId?: string };
+    const ebayOrderId = typeof body?.ebayOrderId === 'string' ? body.ebayOrderId.trim() : '';
+    if (!ebayOrderId) return res.status(400).json({ error: 'ebayOrderId is required' });
+
+    const credsResult = await marketplaceService.getCredentials(userId, 'ebay', 'production');
+    if (!credsResult?.isActive || !credsResult?.credentials) {
+      return res.status(400).json({ error: 'eBay production credentials not found or inactive' });
+    }
+
+    const ebayService = new EbayService({
+      ...(credsResult.credentials as EbayCredentials),
+      sandbox: false,
+    });
+    const ebayOrder = await ebayService.getOrderById(ebayOrderId);
+
+    const upserted = await upsertOrderFromEbayPayload(userId, ebayOrder, 'production');
+    const fullOrder = await prisma.order.findUnique({
+      where: { id: upserted.order.id },
+    });
+    if (!fullOrder) {
+      return res.status(500).json({ error: 'Order created but not found' });
+    }
+
+    let fulfilled = false;
+    if (upserted.created && upserted.hasProductUrl && fullOrder.status === 'PAID') {
+      const fulfillResult = await orderFulfillmentService.fulfillOrder(fullOrder.id);
+      fulfilled = fulfillResult.success;
+      logger.info('[ORDERS] fetch-ebay-order triggered fulfill', {
+        orderId: fullOrder.id,
+        ebayOrderId,
+        success: fulfillResult.success,
+        error: fulfillResult.error,
+      });
+    }
+
+    return res.status(upserted.created ? 201 : 200).json({
+      order: fullOrder,
+      created: upserted.created,
+      fulfilled,
+    });
+  } catch (err: any) {
+    const code = err?.statusCode === 404 || err?.message?.includes('not found') ? 404 : 500;
+    logger.error('[ORDERS] fetch-ebay-order failed', { error: err?.message });
+    return res.status(code).json({ error: err?.message || 'Fetch failed' });
+  }
+});
+
 router.get('/', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
     const envParam = (req.query.environment as string)?.toLowerCase();
     const environment = envParam === 'sandbox' ? 'sandbox' : envParam === 'production' ? 'production' : undefined;
+    const limitParam = req.query.limit;
+    const effectiveTake =
+      limitParam != null ? Math.min(100, Math.max(1, parseInt(String(limitParam), 10) || 100)) : 100;
 
     let whereClause: { userId?: number; id?: { in: string[] } } = isAdmin ? {} : { userId: userId! };
 
@@ -180,7 +245,7 @@ router.get('/', async (req: Request, res: Response) => {
     const orders = await prisma.order.findMany({
       where: whereClause,
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      take: effectiveTake,
     });
     return res.status(200).json(orders);
   } catch (err: any) {
@@ -324,17 +389,45 @@ router.post('/:id/submit-tracking', async (req: Request, res: Response) => {
     }
 
     const paypalOrderId = (order.paypalOrderId || '').trim();
-    if (paypalOrderId.startsWith('ebay:') && order.userId) {
-      const ebayOrderId = paypalOrderId.slice(5).trim();
-      if (ebayOrderId) {
-        const { submitTrackingToEbay } = await import('../../services/ebay-fulfillment.service');
-        const result = await submitTrackingToEbay({
-          userId: order.userId,
-          ebayOrderId,
-          trackingNumber,
-        });
-        if (!result.success) {
-          logger.warn('[ORDERS] submit-tracking: eBay update failed', { orderId, error: result.error });
+    if (order.userId) {
+      if (paypalOrderId.startsWith('ebay:')) {
+        const ebayOrderId = paypalOrderId.slice(5).trim();
+        if (ebayOrderId) {
+          const { submitTrackingToEbay } = await import('../../services/ebay-fulfillment.service');
+          const result = await submitTrackingToEbay({
+            userId: order.userId,
+            ebayOrderId,
+            trackingNumber,
+          });
+          if (!result.success) {
+            logger.warn('[ORDERS] submit-tracking: eBay update failed', { orderId, error: result.error });
+          }
+        }
+      } else if (paypalOrderId.startsWith('mercadolibre:')) {
+        const mlOrderId = paypalOrderId.slice(13).trim();
+        if (mlOrderId) {
+          const { submitTrackingToMercadoLibre } = await import('../../services/mercadolibre-fulfillment.service');
+          const result = await submitTrackingToMercadoLibre({
+            userId: order.userId,
+            mlOrderId,
+            trackingNumber,
+          });
+          if (!result.success) {
+            logger.warn('[ORDERS] submit-tracking: Mercado Libre update failed', { orderId, error: result.error });
+          }
+        }
+      } else if (paypalOrderId.startsWith('amazon:')) {
+        const amazonOrderId = paypalOrderId.slice(7).trim();
+        if (amazonOrderId) {
+          const { submitTrackingToAmazon } = await import('../../services/amazon-fulfillment.service');
+          const result = await submitTrackingToAmazon({
+            userId: order.userId,
+            amazonOrderId,
+            trackingNumber,
+          });
+          if (!result.success) {
+            logger.warn('[ORDERS] submit-tracking: Amazon update failed', { orderId, error: result.error });
+          }
         }
       }
     }

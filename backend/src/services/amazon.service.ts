@@ -1206,6 +1206,73 @@ class AmazonService {
   }
 
   /**
+   * Confirm shipment with tracking number (Orders API v0 — seller-fulfilled).
+   * Used when order is fulfilled by supplier (e.g. AliExpress) so buyer sees tracking on Amazon.
+   */
+  async confirmShipment(params: {
+    orderId: string;
+    trackingNumber: string;
+    carrierCode?: string;
+    carrierName?: string;
+    shippingMethod?: string;
+  }): Promise<boolean> {
+    if (!this.credentials?.accessToken) {
+      await this.authenticate();
+    }
+
+    const orderId = String(params.orderId || '').trim();
+    const tracking = String(params.trackingNumber || '').trim();
+    if (!orderId || !tracking) {
+      throw new Error('orderId and trackingNumber are required');
+    }
+
+    try {
+      const items = await this.getOrderItems(orderId);
+      if (!items || items.length === 0) {
+        logger.warn('[AMAZON-FULFILLMENT] No order items for confirmShipment', { orderId });
+        return false;
+      }
+
+      const marketplaceId = this.credentials!.marketplace;
+      const carrierCode = params.carrierCode || 'Other';
+      const carrierName = params.carrierName || 'Other';
+      const shippingMethod = params.shippingMethod || 'Standard';
+      const shipDate = new Date().toISOString().replace(/\.\d{3}Z$/, '.000Z');
+
+      const body = {
+        marketplaceId,
+        codCollectionMethod: '',
+        packageDetail: {
+          packageReferenceId: 1,
+          carrierCode,
+          carrierName,
+          shippingMethod,
+          trackingNumber: tracking,
+          shipDate,
+          orderItems: items.map((it: any) => ({
+            orderItemId: it.OrderItemId || it.orderItemId,
+            quantity: parseInt(it.QuantityOrdered || it.quantityOrdered || '1', 10) || 1,
+          })),
+        },
+      };
+
+      const path = `/orders/v0/orders/${encodeURIComponent(orderId)}/shipmentConfirmation`;
+      const queryParams = { marketplaceIds: marketplaceId };
+      const headers = this.signHeaders('POST', path, queryParams);
+      await this.httpClient.post(`${path}?marketplaceIds=${encodeURIComponent(marketplaceId)}`, body, { headers });
+      logger.info('[AMAZON-FULFILLMENT] Shipment confirmed', { orderId, trackingPrefix: tracking.slice(0, 8) + '***' });
+      return true;
+    } catch (error: any) {
+      logger.error('[AMAZON-FULFILLMENT] confirmShipment failed', {
+        orderId,
+        error: error?.message,
+        response: error?.response?.data,
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Get marketplace-specific configuration
    */
   public static getMarketplaceConfig(marketplace: string) {

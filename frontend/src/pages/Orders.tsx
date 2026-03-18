@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Package, RefreshCw, ArrowRight, ExternalLink, Upload, X } from 'lucide-react';
+import { Package, RefreshCw, ArrowRight, ExternalLink, Upload, X, Download } from 'lucide-react';
 import api from '@/services/api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatCurrencySimple } from '@/utils/currency';
-import { retryOrderFulfill, importEbayOrder, type Order } from '@/services/orders.api';
+import { retryOrderFulfill, importEbayOrder, fetchEbayOrder, type Order } from '@/services/orders.api';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
@@ -27,6 +27,9 @@ export default function Orders() {
   const [error, setError] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [showImportEbay, setShowImportEbay] = useState(false);
+  const [showFetchEbay, setShowFetchEbay] = useState(false);
+  const [fetchEbayOrderId, setFetchEbayOrderId] = useState('');
+  const [fetchingEbay, setFetchingEbay] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importForm, setImportForm] = useState({
     ebayOrderId: '',
@@ -127,6 +130,30 @@ export default function Orders() {
     }
   };
 
+  const handleFetchEbayOrder = async () => {
+    const id = fetchEbayOrderId.trim();
+    if (!id) {
+      toast.error('Indica el ID del pedido eBay');
+      return;
+    }
+    setFetchingEbay(true);
+    try {
+      const result = await fetchEbayOrder(id);
+      if (result.created) {
+        toast.success(result.fulfilled ? 'Pedido traído y compra en AliExpress iniciada.' : 'Pedido traído; revisa Compras pendientes si requiere mapeo.');
+      } else {
+        toast.success('El pedido ya estaba en el sistema.');
+      }
+      setShowFetchEbay(false);
+      setFetchEbayOrderId('');
+      await fetchOrders();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.message || 'Error al traer pedido desde eBay');
+    } finally {
+      setFetchingEbay(false);
+    }
+  };
+
   useLiveData({ fetchFn: fetchOrders, intervalMs: 15000, enabled: true });
   useNotificationRefetch({
     handlers: { SALE_CREATED: fetchOrders },
@@ -149,6 +176,10 @@ export default function Orders() {
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Órdenes / Envíos</h1>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowFetchEbay((v) => !v)}>
+              <Download className="w-4 h-4 mr-1" />
+              Traer pedido desde eBay
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setShowImportEbay((v) => !v)}>
               <Upload className="w-4 h-4 mr-1" />
               Importar orden eBay
@@ -173,6 +204,36 @@ export default function Orders() {
           <CycleStepsBreadcrumb currentStep={6} />
         </div>
       </div>
+
+      {showFetchEbay && (
+        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
+          <CardHeader className="pb-2">
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-lg">Traer pedido desde eBay</CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setShowFetchEbay(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Obtiene el pedido desde la API de eBay por ID y lo crea aquí; si está mapeado, se dispara la compra en AliExpress.</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-[200px]">
+                <Label>ID del pedido eBay</Label>
+                <Input
+                  placeholder="ej. 12-11320-43716"
+                  value={fetchEbayOrderId}
+                  onChange={(e) => setFetchEbayOrderId(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              <Button onClick={handleFetchEbayOrder} disabled={fetchingEbay || !fetchEbayOrderId.trim()}>
+                {fetchingEbay ? 'Buscando...' : 'Traer pedido'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {showImportEbay && (
         <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">

@@ -1665,6 +1665,63 @@ export class EbayService {
   }
 
   /**
+   * Get a single order by ID from Sell Fulfillment API (full payload, same shape as getOrders items).
+   * Used by fetch-ebay-order to pull one order without depending on list pagination.
+   */
+  async getOrderById(ebayOrderId: string): Promise<{
+    orderId: string;
+    buyerName?: string;
+    buyerUsername?: string;
+    buyerEmail?: string;
+    shippingAddress?: Record<string, string>;
+    lineItems: Array<{ lineItemId: string; sku?: string; itemId?: string; title?: string; quantity: number; price?: number }>;
+    total?: number;
+    orderDate?: string;
+    fulfillmentStatus?: string;
+  }> {
+    await this.ensureAccessToken();
+    const res = await this.apiClient.get(`/sell/fulfillment/v1/order/${encodeURIComponent(ebayOrderId)}`);
+    const o = res.data;
+    if (!o) {
+      throw new AppError(`Order ${ebayOrderId} not found`, 404);
+    }
+    const shipTo = o.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo;
+    const contactAddr = shipTo?.contactAddress || shipTo?.contactAddress;
+    const shippingAddress = contactAddr
+      ? {
+          fullName: shipTo?.fullName || '',
+          addressLine1: contactAddr?.addressLine1 || contactAddr?.addressLine || '',
+          addressLine2: contactAddr?.addressLine2 || '',
+          city: contactAddr?.city || '',
+          state: contactAddr?.stateOrProvince || contactAddr?.state || '',
+          zipCode: contactAddr?.postalCode || contactAddr?.zipCode || '',
+          country: contactAddr?.countryCode || contactAddr?.country || '',
+          phoneNumber: shipTo?.primaryPhone?.phoneNumber || '',
+        }
+      : undefined;
+    const pricing = o.pricingSummary || o.totalFeeBasisAmount;
+    const total = pricing?.value != null ? parseFloat(pricing.value) : undefined;
+    return {
+      orderId: o.orderId || o.order_id || String(ebayOrderId),
+      buyerName: o.buyer?.fullName || shipTo?.fullName,
+      buyerUsername: o.buyer?.username,
+      buyerEmail: o.buyer?.email,
+      shippingAddress,
+      lineItems: (o.lineItems || []).map((li: any) => ({
+        lineItemId: li.lineItemId || li.lineItemId,
+        sku: li.sku,
+        itemId: li.itemId,
+        title: li.title,
+        quantity: parseInt(li.quantity || '1', 10) || 1,
+        price: li.unitPrice?.value != null ? parseFloat(li.unitPrice.value) : undefined,
+      })),
+      total,
+      orderDate: o.creationDate || o.createdAt,
+      fulfillmentStatus: o.orderFulfillmentStatus,
+    };
+  }
+
+  /**
    * Get order details from Sell Fulfillment API (for line items needed by createShippingFulfillment).
    */
   async getOrderForFulfillment(orderId: string): Promise<{ lineItems: { lineItemId: string; quantity: number }[] }> {

@@ -16,6 +16,7 @@ import fxService from './fx.service';
 import { toNumber } from '../utils/decimal.utils';
 import { retryFailedOrdersDueToFunds } from './retry-failed-orders.service';
 import { processPaidOrders } from './process-paid-orders.service';
+import { syncTrackingForEligibleOrders } from './fulfillment-tracking-sync.service';
 import { listingStateReconciliationService } from './listing-state-reconciliation.service';
 
 /**
@@ -34,6 +35,7 @@ export class ScheduledTasksService {
   private retryFailedOrdersQueue: Queue | null = null;
   private fulfillmentRetryEngineQueue: Queue | null = null;
   private processPaidOrdersQueue: Queue | null = null;
+  private fulfillmentTrackingSyncQueue: Queue | null = null;
   private marketplaceOrderSyncQueue: Queue | null = null;
   private mercadolibreOrderSyncQueue: Queue | null = null;
   private amazonOrderSyncQueue: Queue | null = null;
@@ -67,6 +69,7 @@ export class ScheduledTasksService {
   private retryFailedOrdersWorker: Worker | null = null;
   private fulfillmentRetryEngineWorker: Worker | null = null;
   private processPaidOrdersWorker: Worker | null = null;
+  private fulfillmentTrackingSyncWorker: Worker | null = null;
   private marketplaceOrderSyncWorker: Worker | null = null;
   private mercadolibreOrderSyncWorker: Worker | null = null;
   private amazonOrderSyncWorker: Worker | null = null;
@@ -162,6 +165,11 @@ export class ScheduledTasksService {
 
     // Process all PAID orders (pending purchases): cada 5 min
     this.processPaidOrdersQueue = new Queue('process-paid-orders', {
+      connection: this.bullMQRedis as any
+    });
+
+    // Fulfillment tracking sync: fetch AliExpress tracking, submit to eBay/ML/Amazon every 30 min
+    this.fulfillmentTrackingSyncQueue = new Queue('fulfillment-tracking-sync', {
       connection: this.bullMQRedis as any
     });
 
@@ -510,6 +518,24 @@ export class ScheduledTasksService {
         async (job) => {
           logger.info('Scheduled Tasks: Running process paid orders', { jobId: job.id });
           return await processPaidOrders({ batchSize: 30 });
+        },
+        {
+          connection: this.bullMQRedis as any,
+          concurrency: 1,
+        }
+      );
+    }
+
+    // Fulfillment tracking sync worker (AliExpress tracking → Sale + eBay/ML/Amazon)
+    if (this.fulfillmentTrackingSyncQueue) {
+      this.fulfillmentTrackingSyncWorker = new Worker(
+        'fulfillment-tracking-sync',
+        async (job) => {
+          logger.info('Scheduled Tasks: Running fulfillment tracking sync', { jobId: job.id });
+          return await syncTrackingForEligibleOrders({
+            batchSize: 50,
+            environment: 'production',
+          });
         },
         {
           connection: this.bullMQRedis as any,
@@ -1250,6 +1276,21 @@ export class ScheduledTasksService {
         {
           repeat: {
             pattern: '*/5 * * * *' // Every 5 minutes
+          },
+          removeOnComplete: 5,
+          removeOnFail: 5,
+        }
+      );
+    }
+
+    // Fulfillment tracking sync: every 30 minutes (fetch AliExpress tracking, submit to marketplaces)
+    if (this.fulfillmentTrackingSyncQueue) {
+      this.fulfillmentTrackingSyncQueue.add(
+        'fulfillment-tracking-sync-job',
+        {},
+        {
+          repeat: {
+            pattern: process.env.FULFILLMENT_TRACKING_SYNC_CRON || '*/30 * * * *',
           },
           removeOnComplete: 5,
           removeOnFail: 5,
