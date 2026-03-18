@@ -9,6 +9,17 @@ import { z } from 'zod';
 
 const router = Router();
 
+/** Tras mutar workflows, sincronizar cron en memoria (no bloquea la respuesta si falla). */
+async function reloadWorkflowSchedulerAfterMutation(): Promise<void> {
+  try {
+    const { workflowSchedulerService } = await import('../../services/workflow-scheduler.service');
+    const r = await workflowSchedulerService.reloadScheduledWorkflows();
+    if (r.ok) workflowSchedulerService.markInitializedAfterReload();
+  } catch {
+    // non-fatal
+  }
+}
+
 // Require authentication for all endpoints
 router.use(authenticate);
 
@@ -34,6 +45,33 @@ router.get('/workflows', async (req: Request, res: Response, next) => {
     res.json({
       success: true,
       workflows
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/autopilot/workflows/reload-scheduler — Recarga cron de workflows (admin).
+ * Útil si el programador arrancó sin BD y no hay tareas en memoria.
+ */
+router.post('/workflows/reload-scheduler', authorize('ADMIN'), async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { workflowSchedulerService } = await import('../../services/workflow-scheduler.service');
+    const result = await workflowSchedulerService.reloadScheduledWorkflows();
+    if (!result.ok) {
+      return res.status(503).json({
+        success: false,
+        error: 'No se pudo recargar workflows desde la base de datos',
+        details: result.message,
+      });
+    }
+    workflowSchedulerService.markInitializedAfterReload();
+    res.json({
+      success: true,
+      message: 'Programador de workflows recargado',
+      scheduledCount: result.scheduledCount,
+      dbWorkflowCount: result.dbWorkflowCount,
     });
   } catch (error) {
     next(error);
@@ -210,16 +248,34 @@ router.get('/status', async (req: Request, res: Response, next) => {
     const lastCycle = status.lastCycle;
     const workflowMode = await workflowConfigService.getWorkflowMode(userId);
 
-    let workflowScheduler: { initialized: boolean; scheduledCount: number } = {
+    let workflowScheduler: {
+      initialized: boolean;
+      scheduledCount: number;
+      eligibleWorkflowsForUser: number;
+    } = {
       initialized: false,
       scheduledCount: 0,
+      eligibleWorkflowsForUser: 0,
     };
     try {
       const { workflowSchedulerService } = await import('../../services/workflow-scheduler.service');
       const wsStatus = workflowSchedulerService.getStatus();
+      let eligibleWorkflowsForUser = 0;
+      try {
+        eligibleWorkflowsForUser = await prisma.autopilotWorkflow.count({
+          where: {
+            userId,
+            enabled: true,
+            AND: [{ schedule: { not: null } }, { NOT: { schedule: 'manual' } }],
+          },
+        });
+      } catch {
+        // ignore
+      }
       workflowScheduler = {
         initialized: wsStatus.initialized,
         scheduledCount: wsStatus.scheduledWorkflows,
+        eligibleWorkflowsForUser,
       };
     } catch {
       // non-fatal
@@ -612,6 +668,7 @@ router.post('/workflows', async (req: Request, res: Response, next) => {
     const validatedData = createWorkflowSchema.parse(req.body);
     // ✅ FIX: Asegurar que validatedData cumple con CreateWorkflowDto
     const workflow = await workflowService.createWorkflow(userId, validatedData as any);
+    void reloadWorkflowSchedulerAfterMutation();
 
     res.status(201).json({
       success: true,
@@ -650,6 +707,7 @@ router.put('/workflows/:id', async (req: Request, res: Response, next) => {
 
     const validatedData = updateWorkflowSchema.parse(req.body);
     const workflow = await workflowService.updateWorkflow(workflowId, userId, validatedData);
+    void reloadWorkflowSchedulerAfterMutation();
 
     res.json({
       success: true,
@@ -682,6 +740,7 @@ router.put('/workflows/:id/enabled', async (req: Request, res: Response, next) =
 
     const { enabled } = toggleWorkflowSchema.parse(req.body);
     const workflow = await workflowService.toggleWorkflow(workflowId, userId, enabled);
+    void reloadWorkflowSchedulerAfterMutation();
 
     res.json({
       success: true,
@@ -709,6 +768,7 @@ router.delete('/workflows/:id', async (req: Request, res: Response, next) => {
     }
 
     const result = await workflowService.deleteWorkflow(workflowId, userId);
+    void reloadWorkflowSchedulerAfterMutation();
 
     res.json({
       success: true,

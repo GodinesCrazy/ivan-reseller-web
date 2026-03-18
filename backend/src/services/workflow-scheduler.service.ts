@@ -28,9 +28,19 @@ interface ScheduledTask {
  * - Ambos sistemas son independientes y no comparten recursos ni conflictos
  * - Cada workflow personalizado puede ejecutarse independientemente según su schedule
  */
+export interface WorkflowSchedulerReloadResult {
+  ok: boolean;
+  dbWorkflowCount: number;
+  scheduledCount: number;
+  message?: string;
+}
+
+const WORKFLOW_SCHEDULER_RETRY_MS = 45_000;
+
 export class WorkflowSchedulerService {
   private scheduledTasks: Map<number, ScheduledTask> = new Map();
   private isInitialized: boolean = false;
+  private loadRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * ✅ Q2: Inicializar scheduler con manejo robusto de errores
@@ -45,32 +55,62 @@ export class WorkflowSchedulerService {
     try {
       logger.info('WorkflowScheduler: Inicializando scheduler de workflows personalizados...');
 
-      // ✅ Q2: Cargar workflows habilitados con schedule desde BD
-      await this.reloadScheduledWorkflows();
-
-      this.isInitialized = true;
-      logger.info('WorkflowScheduler: Inicializado correctamente', {
-        scheduledWorkflows: this.scheduledTasks.size,
-        initialized: true
-      });
+      const first = await this.reloadScheduledWorkflows();
+      if (first.ok) {
+        this.isInitialized = true;
+        logger.info('WorkflowScheduler: Inicializado correctamente', {
+          scheduledWorkflows: this.scheduledTasks.size,
+          initialized: true,
+        });
+      } else {
+        this.isInitialized = false;
+        logger.warn('WorkflowScheduler: Carga inicial falló; reintento en 45s', {
+          message: first.message,
+        });
+        this.scheduleLoadRetry();
+      }
     } catch (error: any) {
-      // ✅ Q2: No lanzar error para no bloquear el servidor
-      // El scheduler puede inicializarse más tarde si es necesario
       logger.error('WorkflowScheduler: Error al inicializar (continuando sin scheduler)', {
         error: error.message || String(error),
-        stack: error.stack
+        stack: error.stack,
       });
-      
-      // Marcar como no inicializado pero continuar
       this.isInitialized = false;
-      // No lanzar error - el servidor puede funcionar sin el scheduler
+      this.scheduleLoadRetry();
     }
   }
 
   /**
-   * ✅ Q2: Recargar workflows programados desde BD con manejo robusto de errores
+   * Un segundo intento si la BD no estaba lista en el arranque (cold start).
    */
-  async reloadScheduledWorkflows(): Promise<void> {
+  private scheduleLoadRetry(): void {
+    if (this.loadRetryTimer != null) return;
+    this.loadRetryTimer = setTimeout(() => {
+      this.loadRetryTimer = null;
+      void (async () => {
+        try {
+          const second = await this.reloadScheduledWorkflows();
+          if (second.ok) {
+            this.isInitialized = true;
+            logger.info('WorkflowScheduler: Reintento OK; workflows programados', {
+              scheduledWorkflows: second.scheduledCount,
+            });
+          } else {
+            logger.warn('WorkflowScheduler: Reintento falló; usa POST .../reload-scheduler (admin) o reinicia', {
+              message: second.message,
+            });
+          }
+        } catch (e: any) {
+          logger.error('WorkflowScheduler: Error en reintento', { error: e?.message });
+        }
+      })();
+    }, WORKFLOW_SCHEDULER_RETRY_MS);
+  }
+
+  /**
+   * ✅ Q2: Recargar workflows programados desde BD con manejo robusto de errores
+   * @returns ok false si falla lectura BD (p. ej. servidor DB no disponible).
+   */
+  async reloadScheduledWorkflows(): Promise<WorkflowSchedulerReloadResult> {
     try {
       // Detener todas las tareas actuales
       this.stopAll();
@@ -79,7 +119,7 @@ export class WorkflowSchedulerService {
       const workflows = await workflowService.getScheduledWorkflows();
 
       logger.info('WorkflowScheduler: Cargando workflows programados', {
-        count: workflows.length
+        count: workflows.length,
       });
 
       let scheduledCount = 0;
@@ -132,15 +172,25 @@ export class WorkflowSchedulerService {
         total: this.scheduledTasks.size,
         scheduled: scheduledCount,
         errors: errorCount,
-        totalWorkflows: workflows.length
+        totalWorkflows: workflows.length,
       });
+
+      return {
+        ok: true,
+        dbWorkflowCount: workflows.length,
+        scheduledCount: this.scheduledTasks.size,
+      };
     } catch (error: any) {
-      // Error crítico al recargar - loggear pero no lanzar para no bloquear el servidor
       logger.error('WorkflowScheduler: Error crítico al recargar workflows', {
         error: error.message || String(error),
-        stack: error.stack
+        stack: error.stack,
       });
-      // No lanzar error para que el servidor pueda continuar
+      return {
+        ok: false,
+        dbWorkflowCount: 0,
+        scheduledCount: 0,
+        message: error.message || String(error),
+      };
     }
   }
 
@@ -449,6 +499,13 @@ export class WorkflowSchedulerService {
   }
 
   /**
+   * Tras POST reload-scheduler (admin) con éxito, marcar inicializado.
+   */
+  markInitializedAfterReload(): void {
+    this.isInitialized = true;
+  }
+
+  /**
    * ✅ Obtener estado del scheduler
    */
   getStatus() {
@@ -468,6 +525,10 @@ export class WorkflowSchedulerService {
    */
   async shutdown(): Promise<void> {
     try {
+      if (this.loadRetryTimer != null) {
+        clearTimeout(this.loadRetryTimer);
+        this.loadRetryTimer = null;
+      }
       logger.info('WorkflowScheduler: Deteniendo scheduler...');
       this.stopAll();
       this.isInitialized = false;

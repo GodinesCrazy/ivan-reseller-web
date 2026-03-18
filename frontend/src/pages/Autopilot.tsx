@@ -31,6 +31,7 @@ import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
 import { formatLastRun } from '@/utils/date';
+import { useAuthStore } from '@stores/authStore';
 
 interface Workflow {
   id: number;
@@ -100,6 +101,11 @@ interface AutopilotStatusResponse {
     publishingCurrent?: number;
     publishingTotal?: number;
   };
+  workflowScheduler?: {
+    initialized: boolean;
+    scheduledCount: number;
+    eligibleWorkflowsForUser: number;
+  };
 }
 
 /** Autopilot business metrics from GET /api/dashboard/autopilot-metrics */
@@ -128,6 +134,8 @@ interface InventorySummaryListings {
 
 export default function Autopilot() {
   const { environment } = useEnvironment();
+  const userRole = useAuthStore((s) => s.user?.role?.toUpperCase() || '');
+  const isAdmin = userRole === 'ADMIN';
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [logs, setLogs] = useState<WorkflowLog[]>([]);
   const [stats, setStats] = useState<AutopilotStats | null>(null);
@@ -158,6 +166,7 @@ export default function Autopilot() {
 
   // Phase summary (colapsable)
   const [showPhaseSummary, setShowPhaseSummary] = useState(false);
+  const [reloadingScheduler, setReloadingScheduler] = useState(false);
 
   // Autopilot Settings (extended config)
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
@@ -573,6 +582,7 @@ export default function Autopilot() {
         currentPhase: data.currentPhase,
         cycleStartedAt: data.cycleStartedAt ?? undefined,
         currentCycleProgress: data.currentCycleProgress,
+        workflowScheduler: data.workflowScheduler,
       } : null);
       // Sincronizar marketplaces destino desde config
       const cfg = data?.config;
@@ -583,6 +593,20 @@ export default function Autopilot() {
       }
     } catch (error: any) {
       // Silent fail
+    }
+  };
+
+  const reloadWorkflowScheduler = async () => {
+    setReloadingScheduler(true);
+    try {
+      await api.post('/api/autopilot/workflows/reload-scheduler');
+      toast.success('Programador de workflows recargado');
+      await checkAutopilotStatus();
+    } catch (error: any) {
+      const msg = error?.response?.data?.error || error?.response?.data?.details || error?.message || 'Error';
+      toast.error(typeof msg === 'string' ? msg : 'No se pudo recargar el programador');
+    } finally {
+      setReloadingScheduler(false);
     }
   };
 
@@ -1576,8 +1600,60 @@ export default function Autopilot() {
             Workflows ({displayWorkflows.length})
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Los workflows personalizados automatizan tareas adicionales (ej. búsqueda de oportunidades). El &quot;Resumen del último ciclo&quot; mostrado arriba corresponde al <strong>ciclo principal del Autopilot</strong> (Start Autopilot). Los workflows tipo &quot;search&quot; ejecutan ciclos independientes y solo buscan oportunidades; para publicar en eBay o Mercado Libre usa <strong>Start Autopilot</strong>.
+            <strong>Start Autopilot (arriba)</strong> ejecuta el <strong>ciclo completo</strong> cada unos minutos: buscar oportunidades → filtrar → analizar → publicar. La fila <strong>Ciclo principal Autopilot</strong> en esta tabla es un workflow programado (cron) que solo ejecuta la fase de <strong>publicar</strong> productos ya aprobados; no sustituye al ciclo completo. Para automatismo de punta a punta, mantén Start Autopilot encendido.
           </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+            Los workflows tipo &quot;search&quot; solo buscan oportunidades. El resumen de métricas de la tarjeta superior corresponde al Smart Autopilot (Start/Stop arriba).
+          </p>
+          {autopilotStatus?.workflowScheduler && (
+            <div
+              className={`mt-3 rounded-lg border px-3 py-2.5 text-sm ${
+                !autopilotStatus.workflowScheduler.initialized ||
+                (autopilotStatus.workflowScheduler.eligibleWorkflowsForUser > 0 &&
+                  autopilotStatus.workflowScheduler.scheduledCount === 0)
+                  ? 'border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 text-amber-900 dark:text-amber-100'
+                  : 'border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-900/50 text-gray-700 dark:text-slate-200'
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="space-y-1">
+                  {!autopilotStatus.workflowScheduler.initialized && (
+                    <p>
+                      <strong>Programador de workflows:</strong> no inicializado (p. ej. la base de datos no estaba lista al arrancar). Los cron de la tabla no se ejecutarán hasta recargar el programador o reiniciar el servidor.
+                    </p>
+                  )}
+                  {autopilotStatus.workflowScheduler.initialized && autopilotStatus.workflowScheduler.scheduledCount > 0 && (
+                    <p>
+                      <strong>Programador activo:</strong> {autopilotStatus.workflowScheduler.scheduledCount} workflow(s) con cron cargado(s) en el servidor.
+                    </p>
+                  )}
+                  {autopilotStatus.workflowScheduler.initialized && autopilotStatus.workflowScheduler.scheduledCount === 0 && (
+                    <p>
+                      <strong>Programador activo</strong> pero sin tareas cron en memoria. Si no tienes workflows con horario, es normal. Si sí los tienes y Next Run no se actualiza, prueba recargar (admin).
+                    </p>
+                  )}
+                  {autopilotStatus.workflowScheduler.initialized &&
+                    autopilotStatus.workflowScheduler.eligibleWorkflowsForUser > 0 &&
+                    autopilotStatus.workflowScheduler.scheduledCount === 0 && (
+                      <p className="font-medium">
+                        Tienes {autopilotStatus.workflowScheduler.eligibleWorkflowsForUser} workflow(s) con horario, pero el servidor no tiene ninguno en el programador. Pulsa &quot;Recargar programador&quot; (admin) o reinicia el backend.
+                      </p>
+                    )}
+                </div>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => void reloadWorkflowScheduler()}
+                    disabled={reloadingScheduler}
+                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${reloadingScheduler ? 'animate-spin' : ''}`} />
+                    Recargar programador
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
