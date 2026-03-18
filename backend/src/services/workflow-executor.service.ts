@@ -1,9 +1,9 @@
 import { trace } from '../utils/boot-trace';
 trace('loading workflow-executor.service');
 
-import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 import logger from '../config/logger';
+import { prisma } from '../config/database';
 import { workflowService } from './workflow.service';
 import { workflowConfigService } from './workflow-config.service';
 import { autopilotSystem } from './autopilot.service';
@@ -13,8 +13,6 @@ import { productService } from './product.service';
 import { trendSuggestionsService } from './trend-suggestions.service';
 import { trendsService } from './trends.service';
 import { toNumber } from '../utils/decimal.utils';
-
-const prisma = new PrismaClient();
 
 export interface WorkflowExecutionResult {
   success: boolean;

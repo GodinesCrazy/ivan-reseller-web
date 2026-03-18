@@ -1,18 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { authenticate, authorize } from '../../middleware/auth.middleware';
-import { PrismaClient, CredentialScope } from '@prisma/client';
+import { CredentialScope } from '@prisma/client';
 import { AppError, ErrorCode } from '../../middleware/error.middleware';
 import { apiAvailability } from '../../services/api-availability.service';
 import { CredentialsManager } from '../../services/credentials-manager.service';
 import { supportsEnvironments } from '../../config/api-keys.config';
 import { logger } from '../../config/logger';
+import { prisma } from '../../config/database';
 import type { ApiName, ApiEnvironment } from '../../types/api-credentials.types';
 import { normalizeAPIName, resolveToFrontend } from '../../utils/api-name-resolver';
 import { apiHealthCheckQueueService } from '../../services/api-health-check-queue.service';
 import { notificationService } from '../../services/notification.service';
 
 const router = Router();
-const prisma = new PrismaClient();
 router.use(authenticate);
 
 function resolveTargetUserId(req: Request, provided: any): number {

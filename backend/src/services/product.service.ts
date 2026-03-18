@@ -1,11 +1,9 @@
 import { trace } from '../utils/boot-trace';
 trace('loading product.service');
 
-import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 import logger from '../config/logger';
-
-const prisma = new PrismaClient();
+import { prisma } from '../config/database';
 
 // ✅ Definir ProductStatus localmente si no está en Prisma
 type ProductStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PUBLISHED' | 'INACTIVE';

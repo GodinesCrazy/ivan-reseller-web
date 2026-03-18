@@ -3,9 +3,7 @@ import { proxyManager } from './services/proxy-manager.service';
 import { selectorAdapter } from './services/selector-adapter.service';
 import { logger } from './config/logger';
 import axios from 'axios';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from './config/database';
 
 /**
  * Initialize Auto Recovery System with all services

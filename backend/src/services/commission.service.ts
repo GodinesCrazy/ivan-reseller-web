@@ -1,11 +1,9 @@
 import { trace } from '../utils/boot-trace';
 trace('loading commission.service');
 
-import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 import { toNumber } from '../utils/decimal.utils';
-
-const prisma = new PrismaClient();
+import { prisma } from '../config/database';
 
 export class CommissionService {
   async getCommissions(userId?: number, status?: string, environment?: 'sandbox' | 'production') {

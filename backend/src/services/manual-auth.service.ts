@@ -1,11 +1,10 @@
 import { trace } from '../utils/boot-trace';
 trace('loading manual-auth.service');
 
-import { PrismaClient, ManualAuthSession } from '@prisma/client';
+import { ManualAuthSession } from '@prisma/client';
 import crypto from 'crypto';
 import { marketplaceAuthStatusService } from './marketplace-auth-status.service';
-
-const prisma = new PrismaClient();
+import { prisma } from '../config/database';
 
 const DEFAULT_EXPIRATION_MINUTES = parseInt(process.env.MANUAL_AUTH_EXPIRATION_MINUTES || '20', 10);
 

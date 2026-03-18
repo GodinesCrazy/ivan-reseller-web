@@ -1,5 +1,20 @@
 import { PrismaClient } from '@prisma/client';
 
+/**
+ * Optional pool cap for direct PostgreSQL URLs (avoids "too many clients" on shared DBs).
+ * Set PRISMA_CONNECTION_LIMIT=10 in production if needed. Ignored for Prisma Accelerate URLs.
+ */
+function getEffectiveDatabaseUrl(): string | undefined {
+  const url = process.env.DATABASE_URL;
+  if (!url) return undefined;
+  const limit = process.env.PRISMA_CONNECTION_LIMIT?.trim();
+  if (!limit) return url;
+  if (/connection_limit=/i.test(url)) return url;
+  if (url.startsWith('prisma+') || url.toLowerCase().includes('accelerate')) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}connection_limit=${encodeURIComponent(limit)}`;
+}
+
 // Singleton Prisma Client
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
@@ -10,7 +25,7 @@ export const prisma =
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
     datasources: {
       db: {
-        url: process.env.DATABASE_URL,
+        url: getEffectiveDatabaseUrl(),
       },
     },
     errorFormat: 'pretty',

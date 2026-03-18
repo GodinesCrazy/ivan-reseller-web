@@ -614,8 +614,21 @@ router.get('/control-center-funnel', async (req: Request, res: Response) => {
       },
     });
   } catch (e: any) {
-    logger.error('[analytics/control-center-funnel] Error', { error: e?.message });
-    return res.status(500).json({ error: e?.message || 'Internal server error' });
+    const msg = e?.message ?? '';
+    const isConnectionLimit =
+      typeof msg === 'string' &&
+      (msg.toLowerCase().includes('too many clients') ||
+        msg.toLowerCase().includes('too many connections') ||
+        msg.toLowerCase().includes('too many database connections'));
+    if (isConnectionLimit) {
+      logger.error('[analytics/control-center-funnel] DB connection limit', { error: msg });
+      return res.status(503).json({
+        error: 'El servicio no pudo conectar con la base de datos. Intenta de nuevo en unos segundos.',
+        code: 'DB_CONNECTION_LIMIT',
+      });
+    }
+    logger.error('[analytics/control-center-funnel] Error', { error: msg });
+    return res.status(500).json({ error: msg || 'Internal server error' });
   }
 });
 

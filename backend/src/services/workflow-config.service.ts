@@ -1,11 +1,9 @@
 import { trace } from '../utils/boot-trace';
 trace('loading workflow-config.service');
 
-import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 import { toNumber } from '../utils/decimal.utils';
-
-const prisma = new PrismaClient();
+import { prisma } from '../config/database';
 
 export interface WorkflowStageConfig {
   stage: 'scrape' | 'analyze' | 'publish' | 'purchase' | 'fulfillment' | 'customerService';

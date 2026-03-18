@@ -120,6 +120,7 @@ export default function ControlCenter() {
   const [phase32MessageType, setPhase32MessageType] = useState<'success' | 'error' | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadWarnings, setLoadWarnings] = useState<string[]>([]);
 
   const fetchPhase32Status = () => {
     api
@@ -132,40 +133,94 @@ export default function ControlCenter() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([
+    setLoadWarnings([]);
+
+    const isDbLimit = (reason: unknown): boolean => {
+      const ax = reason as { response?: { status?: number; data?: { code?: string; error?: string } } };
+      if (ax?.response?.data?.code === 'DB_CONNECTION_LIMIT') return true;
+      const msg = String(ax?.response?.data?.error ?? ax?.message ?? '').toLowerCase();
+      return (
+        ax?.response?.status === 503 &&
+        (msg.includes('base de datos') || msg.includes('too many clients') || msg.includes('database'))
+      );
+    };
+
+    const friendlyDbMsg =
+      'El servicio no pudo conectar con la base de datos (muchas conexiones). Intenta de nuevo en unos segundos.';
+
+    Promise.allSettled([
       api.get('/api/analytics/control-center-funnel', { params: { environment } }).then((r) => r.data),
       api.get('/api/system/readiness-report').then((r) => r.data),
       api.get('/api/dashboard/autopilot-metrics', { params: { environment } }).then((r) => r.data),
-      api.get('/api/autopilot/status').then((r) => r.data).catch(() => ({ running: false, status: 'unknown', lastRun: null })),
-      api.get('/api/system/phase32/status').then((r) => r.data).catch(() => null),
-    ])
-      .then(([funnelData, readinessData, metricsData, autopilotData, phase32Data]) => {
-        if (!cancelled) {
-          setFunnel(funnelData);
-          setReadiness(readinessData);
-          setMetrics({
-            profitToday: metricsData.profitToday ?? 0,
-            profitMonth: metricsData.profitMonth ?? 0,
-            dailySales: metricsData.dailySales ?? 0,
-            activeListings: metricsData.activeListings ?? 0,
-          });
-          setAutopilotStatus({
-            running: autopilotData.running === true,
-            status: autopilotData.status ?? 'unknown',
-            lastRun: autopilotData.lastRun ?? null,
-            config: autopilotData.config,
-          });
-          setPhase32Status(phase32Data ?? null);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err.response?.data?.error || err.message || 'Error loading control center');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      api.get('/api/autopilot/status').then((r) => r.data),
+      api.get('/api/system/phase32/status').then((r) => r.data),
+    ]).then((results) => {
+      if (cancelled) return;
+
+      const warnings: string[] = [];
+      let anyOk = false;
+
+      if (results[0].status === 'fulfilled') {
+        setFunnel(results[0].value);
+        anyOk = true;
+      } else {
+        setFunnel(null);
+        const r = results[0].reason;
+        warnings.push(isDbLimit(r) ? friendlyDbMsg : 'No se pudo cargar el embudo (funnel) del Control Center.');
+      }
+
+      if (results[1].status === 'fulfilled') {
+        setReadiness(results[1].value);
+        anyOk = true;
+      } else {
+        setReadiness(null);
+        if (isDbLimit(results[1].reason)) warnings.push(friendlyDbMsg);
+      }
+
+      if (results[2].status === 'fulfilled') {
+        const metricsData = results[2].value;
+        setMetrics({
+          profitToday: metricsData.profitToday ?? 0,
+          profitMonth: metricsData.profitMonth ?? 0,
+          dailySales: metricsData.dailySales ?? 0,
+          activeListings: metricsData.activeListings ?? 0,
+        });
+        anyOk = true;
+      } else {
+        setMetrics(null);
+        if (isDbLimit(results[2].reason)) warnings.push(friendlyDbMsg);
+      }
+
+      if (results[3].status === 'fulfilled') {
+        const autopilotData = results[3].value;
+        setAutopilotStatus({
+          running: autopilotData.running === true,
+          status: autopilotData.status ?? 'unknown',
+          lastRun: autopilotData.lastRun ?? null,
+          config: autopilotData.config,
+        });
+        anyOk = true;
+      } else {
+        setAutopilotStatus({ running: false, status: 'unknown', lastRun: null });
+      }
+
+      if (results[4].status === 'fulfilled') {
+        setPhase32Status(results[4].value ?? null);
+        anyOk = true;
+      } else {
+        setPhase32Status(null);
+      }
+
+      const uniqueWarnings = [...new Set(warnings)];
+      setLoadWarnings(uniqueWarnings);
+      if (!anyOk) {
+        const db = results.some((res) => res.status === 'rejected' && isDbLimit(res.reason));
+        setError(db ? friendlyDbMsg : 'No se pudo cargar el Control Center. Revisa la conexión e intenta de nuevo.');
+      }
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+
     return () => {
       cancelled = true;
     };
@@ -210,6 +265,19 @@ export default function ControlCenter() {
           Visión unificada del funnel, salud del sistema y modo autónomo. Datos en tiempo real desde el servidor.
         </p>
       </div>
+
+      {loadWarnings.length > 0 && (
+        <div
+          className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 text-amber-900 dark:text-amber-200"
+          role="alert"
+        >
+          {loadWarnings.map((w, i) => (
+            <p key={i} className={i > 0 ? 'mt-2' : ''}>
+              {w}
+            </p>
+          ))}
+        </div>
+      )}
 
       {/* System Readiness */}
       {readiness && (

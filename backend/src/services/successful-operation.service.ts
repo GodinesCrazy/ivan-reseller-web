@@ -1,11 +1,9 @@
 import { trace } from '../utils/boot-trace';
 trace('loading successful-operation.service');
 
-import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 import logger from '../config/logger';
-
-const prisma = new PrismaClient();
+import { prisma } from '../config/database';
 
 export interface CreateSuccessfulOperationDto {
   userId: number;

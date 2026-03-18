@@ -1,14 +1,12 @@
 import { trace } from '../utils/boot-trace';
 trace('loading scheduled-reports.service');
 
-import { PrismaClient } from '@prisma/client';
 import { logger } from '../config/logger';
+import { prisma } from '../config/database';
 import reportsService from './reports.service';
 import { ReportFilters } from './reports.service';
 import { Queue, Worker, Job } from 'bullmq';
 import { getBullMQRedisConnection, isRedisAvailable } from '../config/redis';
-
-const prisma = new PrismaClient();
 
 export interface CreateScheduledReportDto {
   userId: number;

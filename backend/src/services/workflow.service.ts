@@ -1,13 +1,11 @@
 import { trace } from '../utils/boot-trace';
 trace('loading workflow.service');
 
-import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 import logger from '../config/logger';
+import { prisma } from '../config/database';
 import { workflowConfigService } from './workflow-config.service';
 import * as cron from 'node-cron';
-
-const prisma = new PrismaClient();
 
 export interface CreateWorkflowDto {
   name: string;

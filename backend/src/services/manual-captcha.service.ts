@@ -8,11 +8,11 @@
 import { trace } from '../utils/boot-trace';
 trace('loading manual-captcha.service');
 
-import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { getChromiumLaunchConfig } from '../utils/chromium';
 import { logger } from '../config/logger';
 import { notificationService } from './notification.service';
+import { prisma } from '../config/database';
 
 // Lazy load puppeteer to avoid SIGSEGV/crash during Railway startup
 let puppeteerModule: any = null;
@@ -25,8 +25,6 @@ async function loadPuppeteer() {
   puppeteerModule = puppeteer;
   return puppeteer;
 }
-
-const prisma = new PrismaClient();
 
 export interface ManualCaptchaSession {
   id: number;

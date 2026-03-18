@@ -10,9 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as https from 'https';
 import { logger } from '../config/logger';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../config/database';
 
 function getPayoneerSecurityDir(): string {
   const baseDir = path.resolve(__dirname, '../../');

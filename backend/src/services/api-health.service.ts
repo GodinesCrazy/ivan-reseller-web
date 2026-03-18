@@ -9,11 +9,9 @@ import { trace } from '../utils/boot-trace';
 trace('loading api-health.service');
 
 import { CredentialsManager } from './credentials-manager.service';
-import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import logger from '../config/logger';
-
-const prisma = new PrismaClient();
+import { prisma } from '../config/database';
 
 export type ApiTestStatus = 'OK' | 'ERROR' | 'SKIP';
 

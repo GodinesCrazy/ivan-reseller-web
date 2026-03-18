@@ -1,15 +1,14 @@
 import { trace } from '../utils/boot-trace';
 trace('loading access-request.service');
 
-import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middleware/error.middleware';
 import { z } from 'zod';
 import logger from '../config/logger';
+import { prisma } from '../config/database';
 import { authService } from './auth.service';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
 const SALT_ROUNDS = 10;
 
 export interface CreateAccessRequestDto {

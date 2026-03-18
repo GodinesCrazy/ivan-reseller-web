@@ -7,10 +7,8 @@ import { AdvancedScrapingService } from '../services/scraping.service';
 import { MarketplaceService } from '../services/marketplace.service';
 import { ProductService } from '../services/product.service';
 import { notificationService } from './notification.service';
-import { PrismaClient } from '@prisma/client';
 import logger from '../config/logger';
-
-const prisma = new PrismaClient();
+import { prisma } from '../config/database';
 
 // Get BullMQ Redis connection (with maxRetriesPerRequest: null)
 const bullMQRedis = getBullMQRedisConnection();

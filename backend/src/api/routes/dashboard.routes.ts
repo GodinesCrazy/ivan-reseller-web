@@ -3,9 +3,9 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { productService } from '../../services/product.service';
 import { saleService } from '../../services/sale.service';
 import { commissionService } from '../../services/commission.service';
-import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { logger } from '../../config/logger';
+import { prisma } from '../../config/database';
 import { queryWithTimeout } from '../../utils/queryWithTimeout';
 import { handleSetupCheck } from '../../utils/setup-check';
 import { env } from '../../config/env';
@@ -15,7 +15,6 @@ import { cacheService } from '../../services/cache.service';
 
 const router = Router();
 const DASHBOARD_STATS_CACHE_TTL = Number(process.env.DASHBOARD_STATS_CACHE_TTL_SECONDS) || 50;
-const prisma = new PrismaClient();
 router.use(authenticate);
 
 // ✅ A7: Validation schemas para query parameters

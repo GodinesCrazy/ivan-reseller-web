@@ -1,8 +1,8 @@
 import { trace } from '../utils/boot-trace';
 trace('loading product-workflow-status.service');
 
-import { PrismaClient } from '@prisma/client';
 import { logger } from '../config/logger';
+import { prisma } from '../config/database';
 import type {
   ProductWorkflowStatus,
   WorkflowStage,
@@ -11,8 +11,6 @@ import type {
   StageStatus,
 } from '../types/product-workflow.types';
 import { workflowConfigService } from './workflow-config.service';
-
-const prisma = new PrismaClient();
 
 export class ProductWorkflowStatusService {
   /**
