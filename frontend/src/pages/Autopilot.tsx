@@ -1086,24 +1086,35 @@ export default function Autopilot() {
                   {/* Bloque 1: Ciclo del Autopilot (solo fases 1-4) */}
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                      <span>Progreso de este ciclo</span>
-                      {autopilotRunning && <span>{cycleProgress}%</span>}
+                      {!autopilotRunning && <span>Autopilot detenido</span>}
+                      {autopilotRunning && currentPhase === 'idle' && (
+                        <span>Entre ciclos — próximo ciclo según intervalo configurado</span>
+                      )}
+                      {autopilotRunning && currentPhase !== 'idle' && (
+                        <>
+                          <span>Progreso de este ciclo</span>
+                          <span>{cycleProgress}%</span>
+                        </>
+                      )}
                     </div>
-                    <div className="flex gap-0.5">
-                      {cyclePhaseLabels.map((label, i) => {
-                        const phaseKey = cyclePhases[i + 1];
-                        const isActive = currentIdx >= i + 1 && autopilotRunning;
-                        const isCurrent = currentPhase === phaseKey && autopilotRunning;
-                        return (
-                          <div
-                            key={label}
-                            className={`flex-1 h-2 rounded first:rounded-l last:rounded-r ${
-                              isActive ? 'bg-green-500 dark:bg-green-600' : 'bg-gray-200 dark:bg-gray-700'
-                            }`}
-                            title={label}
-                          />
-                        );
-                      })}
+                    {/* Barra: indeterminada entre ciclos, continua con fill cuando hay ciclo, gris vacía si parado */}
+                    <div className="h-2.5 w-full rounded overflow-hidden bg-gray-200 dark:bg-gray-700">
+                      {autopilotRunning && currentPhase === 'idle' && (
+                        <div
+                          className="h-full w-full animate-pulse bg-gray-300 dark:bg-gray-600 rounded"
+                          aria-hidden
+                        />
+                      )}
+                      {autopilotRunning && currentPhase !== 'idle' && (
+                        <div
+                          className={`h-full bg-green-500 dark:bg-green-600 transition-all duration-300 ${cycleProgress >= 100 ? 'rounded' : 'rounded-l'}`}
+                          style={{ width: `${cycleProgress}%` }}
+                          role="progressbar"
+                          aria-valuenow={cycleProgress}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                        />
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs">
                       {cyclePhaseLabels.map((label, i) => {
