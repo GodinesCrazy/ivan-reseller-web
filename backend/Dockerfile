@@ -1,6 +1,8 @@
 FROM node:20
 WORKDIR /app
-RUN apt-get update && apt-get install -y \
+
+# Dependencias del sistema (Puppeteer/Chromium) — capa en caché si no cambia
+RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   fonts-liberation \
   libasound2 \
@@ -36,8 +38,13 @@ RUN apt-get update && apt-get install -y \
   xdg-utils \
   wget \
   && rm -rf /var/lib/apt/lists/*
+
+# Solo package*.json primero → npm ci en capa en caché (mientras no cambien deps)
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Código y build (esta capa se invalida al cambiar solo el código)
 COPY . .
-RUN npm install
 RUN npm run build
 # Must listen on PORT (Railway injects it) and 0.0.0.0
 ENV NODE_ENV=production

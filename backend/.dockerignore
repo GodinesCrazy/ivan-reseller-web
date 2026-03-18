@@ -14,3 +14,11 @@ coverage
 *.swp
 *.swo
 *~
+.git
+.gitignore
+*.md
+__tests__
+**/*.test.ts
+**/*.spec.ts
+**/*.test.js
+**/*.spec.js
