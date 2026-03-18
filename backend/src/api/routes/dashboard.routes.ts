@@ -430,10 +430,17 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       published: productCounts.find(p => p.status === 'PUBLISHED')?._count.id ?? 0,
     };
 
+    // Sum all groupBy rows per normalized marketplace (handles casing variants: ebay, EBAY, etc.)
     const listingsByMarketplaceFromDb = {
-      ebay: listingsByMp.find(l => l.marketplace.toLowerCase() === 'ebay')?._count.id ?? 0,
-      mercadolibre: listingsByMp.find(l => l.marketplace.toLowerCase() === 'mercadolibre' || l.marketplace.toLowerCase() === 'ml')?._count.id ?? 0,
-      amazon: listingsByMp.find(l => l.marketplace.toLowerCase() === 'amazon')?._count.id ?? 0,
+      ebay: listingsByMp
+        .filter(l => l.marketplace.toLowerCase() === 'ebay')
+        .reduce((s, l) => s + (l._count?.id ?? 0), 0),
+      mercadolibre: listingsByMp
+        .filter(l => { const m = l.marketplace.toLowerCase(); return m === 'mercadolibre' || m === 'ml'; })
+        .reduce((s, l) => s + (l._count?.id ?? 0), 0),
+      amazon: listingsByMp
+        .filter(l => l.marketplace.toLowerCase() === 'amazon')
+        .reduce((s, l) => s + (l._count?.id ?? 0), 0),
     };
 
     let mercadolibreActiveCount: number | null = null;
@@ -454,12 +461,8 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       }
     }
 
-    // Use API count only when > 0 so we don't replace DB count with 0 (e.g. API returns 0 but DB has listings)
-    const listingsByMarketplace = {
-      ebay: (ebayActiveCount != null && ebayActiveCount > 0) ? ebayActiveCount : listingsByMarketplaceFromDb.ebay,
-      mercadolibre: (mercadolibreActiveCount != null && mercadolibreActiveCount > 0) ? mercadolibreActiveCount : listingsByMarketplaceFromDb.mercadolibre,
-      amazon: listingsByMarketplaceFromDb.amazon,
-    };
+    // Always use DB counts for displayed breakdown (matches product list filter: listings in system with status=active)
+    const listingsByMarketplace = { ...listingsByMarketplaceFromDb };
 
     const listingsTotal =
       listingsByMarketplace.ebay + listingsByMarketplace.mercadolibre + listingsByMarketplace.amazon;
@@ -475,11 +478,13 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       FAILED: ordersByStatus.find(o => o.status === 'FAILED')?._count.id ?? 0,
     };
 
+    res.setHeader('Cache-Control', 'no-store');
     return res.json({
       products,
       listingsByMarketplace,
       listingsTotal,
       listingsSource,
+      ebayActiveCount: ebayActiveCount ?? undefined,
       mercadolibreActiveCount: mercadolibreActiveCount ?? undefined,
       ordersByStatus: ordersByStatusMap,
       pendingPurchasesCount,
