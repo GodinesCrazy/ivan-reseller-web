@@ -39,11 +39,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   wget \
   && rm -rf /var/lib/apt/lists/*
 
-# Solo package*.json primero → npm ci en capa en caché (mientras no cambien deps)
+# Solo package*.json primero → npm ci en capa en caché (postinstall prisma generate se hace en build)
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 
-# Código y build (esta capa se invalida al cambiar solo el código)
+# Código y build (prisma generate + tsc; invalida al cambiar código)
 COPY . .
 RUN npm run build
 # Must listen on PORT (Railway injects it) and 0.0.0.0
