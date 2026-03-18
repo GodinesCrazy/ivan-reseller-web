@@ -373,7 +373,13 @@ export default function Orders() {
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {orders.map((order) => (
                 <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <td className="px-6 py-4 text-sm font-mono text-gray-900 dark:text-gray-100">{order.id.slice(0, 8)}...</td>
+                  <td className="px-6 py-4 text-sm font-mono text-gray-900 dark:text-gray-100">
+                    {order.paypalOrderId?.startsWith('ebay:')
+                      ? order.paypalOrderId.slice(5)
+                      : order.paypalOrderId?.startsWith('mercadolibre:')
+                        ? order.paypalOrderId.slice(13).split('-')[0]
+                        : order.id.slice(0, 8) + '…'}
+                  </td>
                   <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                     {order.productId ? (
                       <button

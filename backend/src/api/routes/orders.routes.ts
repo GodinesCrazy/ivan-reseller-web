@@ -246,33 +246,20 @@ router.post('/sync-marketplace', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/orders — List all post-sale orders (single source of truth for "something sold").
+ * Returns ALL orders for the user (PAID, PURCHASING, PURCHASED, FAILED) so no sale is hidden.
+ * Order has no environment field; optional query "environment" is ignored so counts stay consistent.
+ */
 router.get('/', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
-    const envParam = (req.query.environment as string)?.toLowerCase();
-    const environment = envParam === 'sandbox' ? 'sandbox' : envParam === 'production' ? 'production' : undefined;
     const limitParam = req.query.limit;
     const effectiveTake =
       limitParam != null ? Math.min(100, Math.max(1, parseInt(String(limitParam), 10) || 100)) : 100;
 
-    let whereClause: { userId?: number; id?: { in: string[] } } = isAdmin ? {} : { userId: userId! };
-
-    if (environment) {
-      const saleWhere: { environment: string; userId?: number } = { environment };
-      if (!isAdmin && userId != null) {
-        saleWhere.userId = userId;
-      }
-      const sales = await prisma.sale.findMany({
-        where: saleWhere,
-        select: { orderId: true },
-      });
-      const orderIds = sales.map((s) => s.orderId).filter(Boolean) as string[];
-      if (orderIds.length === 0) {
-        return res.status(200).json([]);
-      }
-      whereClause = { ...whereClause, id: { in: orderIds } };
-    }
+    const whereClause = isAdmin ? {} : { userId: userId! };
 
     const orders = await prisma.order.findMany({
       where: whereClause,
@@ -283,6 +270,38 @@ router.get('/', async (req: Request, res: Response) => {
   } catch (err: any) {
     logger.error('[ORDERS] List failed', { error: err?.message });
     return res.status(500).json({ error: err?.message || 'Failed to list orders' });
+  }
+});
+
+/**
+ * GET /api/orders/by-ebay-id/:ebayOrderId — Find order by marketplace (eBay) order ID.
+ * Used to validate visibility of a specific sale (e.g. 17-14370-63716).
+ */
+router.get('/by-ebay-id/:ebayOrderId', async (req: Request, res: Response) => {
+  try {
+    const ebayOrderId = (req.params.ebayOrderId || '').trim();
+    if (!ebayOrderId) return res.status(400).json({ error: 'ebayOrderId required' });
+    const paypalOrderId = `ebay:${ebayOrderId}`;
+    const order = await prisma.order.findFirst({
+      where: { paypalOrderId },
+      include: {
+        user: { select: { id: true, username: true, email: true } },
+      },
+    });
+    if (!order) return res.status(404).json({ error: 'Order not found', ebayOrderId });
+    const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
+    if (!isAdmin && order.userId != null && order.userId !== req.user!.userId) {
+      return res.status(403).json({ error: 'Not authorized to view this order' });
+    }
+    const sale = await prisma.sale.findUnique({ where: { orderId: order.id }, select: { id: true, status: true, trackingNumber: true } });
+    return res.status(200).json({
+      ...order,
+      marketplaceOrderId: ebayOrderId,
+      sale: sale ? { id: sale.id, status: sale.status, trackingNumber: sale.trackingNumber } : null,
+    });
+  } catch (err: any) {
+    logger.error('[ORDERS] Get by eBay ID failed', { error: err?.message });
+    return res.status(500).json({ error: err?.message || 'Failed' });
   }
 });
 
@@ -300,7 +319,14 @@ router.get('/:id', async (req: Request, res: Response) => {
     if (!isAdmin && order.userId != null && order.userId !== req.user!.userId) {
       return res.status(403).json({ error: 'Not authorized to view this order' });
     }
-    return res.status(200).json(order);
+    const pp = (order.paypalOrderId || '').trim();
+    const marketplaceOrderId = pp.startsWith('ebay:') ? pp.slice(5) : pp.startsWith('mercadolibre:') ? pp.slice(13) : pp.startsWith('amazon:') ? pp.slice(7) : null;
+    const sale = await prisma.sale.findUnique({ where: { orderId: order.id }, select: { id: true, status: true, trackingNumber: true } });
+    return res.status(200).json({
+      ...order,
+      marketplaceOrderId,
+      sale: sale ? { id: sale.id, status: sale.status, trackingNumber: sale.trackingNumber } : null,
+    });
   } catch (err: any) {
     logger.error('[ORDERS] Get failed', { error: err?.message, id: req.params.id });
     return res.status(500).json({ error: err?.message || 'Failed to get order' });

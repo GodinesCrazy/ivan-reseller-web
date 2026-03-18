@@ -4,6 +4,12 @@
 
 import api from './api';
 
+export interface OrderSaleInfo {
+  id: number;
+  status: string;
+  trackingNumber: string | null;
+}
+
 export interface Order {
   id: string;
   productId?: number;
@@ -15,6 +21,10 @@ export interface Order {
   shippingAddress: string;
   status: 'CREATED' | 'PAID' | 'PURCHASING' | 'PURCHASED' | 'FAILED';
   paypalOrderId?: string;
+  /** Marketplace order ID (e.g. eBay 17-14370-63716) when present */
+  marketplaceOrderId?: string | null;
+  /** Sale record when order was fulfilled (has tracking, payout state) */
+  sale?: OrderSaleInfo | null;
   aliexpressOrderId?: string;
   productUrl?: string;
   errorMessage?: string;
