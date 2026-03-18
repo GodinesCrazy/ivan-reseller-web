@@ -146,6 +146,13 @@ export default function Products() {
   const [approvingPending, setApprovingPending] = useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
   const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null);
+  const [postSaleOverview, setPostSaleOverview] = useState<Array<{
+    productId: number;
+    productTitle: string;
+    listings: Array<{ marketplace: string; listingId: string; sku: string | null }>;
+    lastOrder: { orderId: string; orderStatus: string; marketplaceOrderId: string; fulfillmentAutomationStatus: string; updatedAt: string } | null;
+  }> | null>(null);
+  const [showPostSaleOverview, setShowPostSaleOverview] = useState(false);
   const { formatMoney } = useCurrency();
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -251,6 +258,16 @@ export default function Products() {
     }
   }, [environment]);
 
+  const fetchPostSaleOverview = useCallback(async () => {
+    try {
+      const res = await api.get<{ overview: typeof postSaleOverview; environment: string }>('/api/products/post-sale-overview', { params: { environment } });
+      if (Array.isArray(res.data?.overview)) setPostSaleOverview(res.data.overview);
+      else setPostSaleOverview(null);
+    } catch {
+      setPostSaleOverview(null);
+    }
+  }, [environment]);
+
   useEffect(() => {
     const timer = setTimeout(() => { fetchProducts(); }, 100);
     return () => clearTimeout(timer);
@@ -260,10 +277,15 @@ export default function Products() {
     fetchInventorySummary();
   }, [fetchInventorySummary]);
 
+  useEffect(() => {
+    fetchPostSaleOverview();
+  }, [fetchPostSaleOverview]);
+
   useLiveData({
     fetchFn: () => {
       fetchProducts(true).catch(() => {});
       fetchInventorySummary();
+      fetchPostSaleOverview();
     },
     intervalMs: 15000,
     enabled: true,
@@ -501,6 +523,69 @@ export default function Products() {
       )}
 
       {!setupRequired && <InventorySummaryCard summary={inventorySummary} />}
+
+      {!setupRequired && postSaleOverview && postSaleOverview.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Package className="w-5 h-5" />
+                Estado post-venta por producto
+              </CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setShowPostSaleOverview((v) => !v)}>
+                {showPostSaleOverview ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </Button>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Última venta/orden por producto publicado (eBay, Mercado Libre, Amazon)</p>
+          </CardHeader>
+          {showPostSaleOverview && (
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 font-medium">Producto</th>
+                      <th className="text-left py-2 font-medium">Listings</th>
+                      <th className="text-left py-2 font-medium">Última orden</th>
+                      <th className="text-left py-2 font-medium">Estado</th>
+                      <th className="text-right py-2 font-medium">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {postSaleOverview.map((row) => (
+                      <tr key={row.productId} className="border-b last:border-0">
+                        <td className="py-2 font-medium text-gray-900 dark:text-gray-100 max-w-[200px] truncate" title={row.productTitle}>{row.productTitle}</td>
+                        <td className="py-2 text-gray-600 dark:text-gray-400">
+                          {row.listings.map((l) => (
+                            <Badge key={`${l.marketplace}-${l.listingId}`} variant="outline" className="mr-1 text-xs">
+                              {l.marketplace === 'ebay' ? 'eBay' : l.marketplace === 'mercadolibre' ? 'ML' : l.marketplace}
+                            </Badge>
+                          ))}
+                        </td>
+                        <td className="py-2 text-gray-600 dark:text-gray-400">{row.lastOrder?.marketplaceOrderId ?? '—'}</td>
+                        <td className="py-2">
+                          {row.lastOrder ? (
+                            <Badge variant={row.lastOrder.fulfillmentAutomationStatus === 'completed' ? 'default' : row.lastOrder.fulfillmentAutomationStatus === 'failed' ? 'destructive' : 'secondary'}>
+                              {row.lastOrder.orderStatus} / {row.lastOrder.fulfillmentAutomationStatus}
+                            </Badge>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 text-right">
+                          {row.lastOrder && (
+                            <a href="/orders" className="text-blue-600 dark:text-blue-400 hover:underline text-xs">Ver órdenes</a>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

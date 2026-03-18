@@ -60,6 +60,17 @@ interface Sale {
   status: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
   trackingNumber?: string;
   createdAt: string;
+  /** eBay Order ID when sale is from eBay (paypalOrderId ebay:xxx) */
+  ebayOrderId?: string;
+  /** Mercado Libre order ID when sale is from ML (paypalOrderId mercadolibre:xxx) */
+  mercadolibreOrderId?: string;
+  /** Amazon order ID when sale is from Amazon (paypalOrderId amazon:xxx) */
+  amazonOrderId?: string;
+  /** completed | pending_purchase | needs_mapping | failed | unknown */
+  fulfillmentAutomationStatus?: string;
+  fulfillmentErrorReason?: string;
+  needsProductMapping?: boolean;
+  syncNote?: string;
 }
 
 interface SalesStats {
@@ -69,6 +80,9 @@ interface SalesStats {
   avgOrderValue: number;
   revenueChange: number;
   profitChange: number;
+  completedSales?: number;
+  completedRevenue?: number;
+  completedProfit?: number;
 }
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
@@ -79,6 +93,16 @@ const MARKETPLACES = [
   { id: 'mercadolibre', label: 'Mercado Libre' },
   { id: 'checkout', label: 'Checkout' },
 ] as const;
+
+function AutomationBadge({ sale }: { sale: Sale }) {
+  const status = sale.fulfillmentAutomationStatus || (sale.needsProductMapping ? 'needs_mapping' : undefined);
+  if (!status || status === 'unknown') return <span className="text-xs text-gray-400">—</span>;
+  if (status === 'completed') return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">Automatización: Completada (AliExpress)</Badge>;
+  if (status === 'pending_purchase') return <Badge variant="outline" className="text-amber-600 dark:text-amber-400">Pendiente compra</Badge>;
+  if (status === 'needs_mapping') return <Badge variant="outline" className="text-blue-600 dark:text-blue-400">Requiere mapeo producto</Badge>;
+  if (status === 'failed') return <Badge variant="destructive" title={sale.fulfillmentErrorReason || sale.syncNote}>Fallida{sale.fulfillmentErrorReason ? `: ${sale.fulfillmentErrorReason.slice(0, 40)}…` : ''}</Badge>;
+  return <span className="text-xs text-gray-500">{status}</span>;
+}
 
 export default function Sales() {
   const navigate = useNavigate();
@@ -295,7 +319,10 @@ export default function Sales() {
               <div>
                 <p className="text-sm text-gray-600">Total Sales ({periodLabel})</p>
                 <p className="text-2xl font-bold">{stats.totalSales}</p>
-                <p className="text-xs text-gray-500 mt-1">pedidos completados</p>
+                <p className="text-xs text-gray-500 mt-1">pedidos en el período</p>
+                {typeof stats.completedSales === 'number' && stats.completedSales !== stats.totalSales && (
+                  <p className="text-xs text-gray-500 mt-0.5">Completadas: {stats.completedSales}</p>
+                )}
               </div>
               <ShoppingCart className="w-8 h-8 text-purple-600" />
             </div>
@@ -519,9 +546,11 @@ export default function Sales() {
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Imagen</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID pedido</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Comprador</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Origen</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Automatización</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -543,10 +572,14 @@ export default function Sales() {
                               )}
                             </td>
                             <td className="px-4 py-3 text-sm font-medium text-blue-600 dark:text-blue-400">{sale.orderId}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{sale.ebayOrderId || sale.mercadolibreOrderId || sale.amazonOrderId ?? '—'}</td>
                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate">{sale.productTitle}</td>
                             <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{sale.buyerName}</td>
                             <td className="px-4 py-3">
                               <Badge variant="outline">{sale.source || sale.marketplace}</Badge>
+                            </td>
+                            <td className="px-4 py-3">
+                              <AutomationBadge sale={sale} />
                             </td>
                             <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatCurrencySimple(sale.salePrice, 'USD')}</td>
                             <td className="px-4 py-3 text-sm font-medium text-green-600">+{formatCurrencySimple(sale.profit, 'USD')}</td>
@@ -637,10 +670,31 @@ export default function Sales() {
                   <p className="text-sm text-gray-600 dark:text-gray-400">Order ID</p>
                   <p className="font-medium text-blue-600 dark:text-blue-400">{selectedSale.orderId}</p>
                 </div>
+                {(selectedSale.ebayOrderId || selectedSale.mercadolibreOrderId || selectedSale.amazonOrderId) && (
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">ID pedido {selectedSale.ebayOrderId ? 'eBay' : selectedSale.mercadolibreOrderId ? 'Mercado Libre' : 'Amazon'}</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{selectedSale.ebayOrderId || selectedSale.mercadolibreOrderId || selectedSale.amazonOrderId}</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Estado</p>
                   {getStatusBadge(selectedSale.status)}
                 </div>
+                <div className="col-span-2">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Automatización</p>
+                  <AutomationBadge sale={selectedSale} />
+                  {(selectedSale.fulfillmentErrorReason || selectedSale.syncNote) && (
+                    <p className="text-xs text-gray-500 mt-1 truncate" title={selectedSale.fulfillmentErrorReason || selectedSale.syncNote}>
+                      {selectedSale.fulfillmentErrorReason || selectedSale.syncNote}
+                    </p>
+                  )}
+                </div>
+                {['pending_purchase', 'needs_mapping', 'failed'].includes(selectedSale.fulfillmentAutomationStatus || '') && (
+                  <div className="col-span-2 flex flex-wrap gap-2">
+                    <a href="/orders" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">Ver Órdenes</a>
+                    <a href="/pending-purchases" className="text-sm text-amber-600 dark:text-amber-400 hover:underline">Compras pendientes</a>
+                  </div>
+                )}
                 <div className="col-span-2">
                   <p className="text-sm text-gray-600 dark:text-gray-400">Producto</p>
                   <p className="font-medium text-gray-900 dark:text-gray-100">{selectedSale.productTitle}</p>
