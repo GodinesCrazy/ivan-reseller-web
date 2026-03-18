@@ -1320,6 +1320,18 @@ export class ScheduledTasksService {
           backoff: { type: 'exponential', delay: 60000 },
         }
       );
+      // Optional: one reconciliation pass on startup (env RUN_LISTING_RECONCILIATION_ON_STARTUP=true)
+      if (process.env.RUN_LISTING_RECONCILIATION_ON_STARTUP === 'true') {
+        this.listingStateReconciliationQueue.add(
+          'startup-reconciliation',
+          {},
+          { jobId: 'startup-reconciliation', removeOnComplete: 3, removeOnFail: 3 }
+        ).then(() => {
+          logger.info('Scheduled Tasks: Startup reconciliation job enqueued (RUN_LISTING_RECONCILIATION_ON_STARTUP=true)');
+        }).catch((err: any) => {
+          logger.warn('Scheduled Tasks: Failed to enqueue startup reconciliation', { error: err?.message });
+        });
+      }
     }
 
     // Phase 26: Full Listing Recovery — every 6 hours (Task 6: continuous reality sync)

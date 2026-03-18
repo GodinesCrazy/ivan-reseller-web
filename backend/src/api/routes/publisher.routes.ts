@@ -5,6 +5,7 @@ import { productService, CreateProductDto } from '../../services/product.service
 import { MarketplaceService } from '../../services/marketplace.service';
 import { getAliExpressProductCascaded } from '../../services/aliexpress-acquisition.service';
 import { prisma } from '../../config/database';
+import { isRedisAvailable } from '../../config/redis';
 import { logger } from '../../config/logger';
 import { toNumber } from '../../utils/decimal.utils';
 import { getEffectiveShippingCost } from '../../utils/shipping.utils';
@@ -427,6 +428,41 @@ router.get('/listings', async (req: Request, res: Response) => {
     });
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Failed to list listings';
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
+// GET /api/publisher/listings/sync-status — Listing sync state vs marketplaces (workers, reconciled counts)
+router.get('/listings/sync-status', async (req: Request, res: Response) => {
+  try {
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = isAdmin ? undefined : req.user!.userId;
+    const whereUser = userId != null ? { userId } : {};
+
+    const now = new Date();
+    const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    const [listingsActive, listingsReconciledLast24h, listingsNeverReconciled] = await Promise.all([
+      prisma.marketplaceListing.count({ where: { ...whereUser, status: 'active' } }),
+      prisma.marketplaceListing.count({
+        where: { ...whereUser, lastReconciledAt: { gte: last24h } },
+      }),
+      prisma.marketplaceListing.count({
+        where: { ...whereUser, lastReconciledAt: null },
+      }),
+    ]);
+
+    return res.json({
+      workersActive: isRedisAvailable,
+      listingsActive,
+      listingsReconciledLast24h,
+      listingsNeverReconciled,
+      lastReconciliationCronRun: null,
+    });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Sync status failed';
+    logger.error('[PUBLISHER] listings/sync-status failed', { error: errorMessage });
     return res.status(500).json({ success: false, error: errorMessage });
   }
 });
