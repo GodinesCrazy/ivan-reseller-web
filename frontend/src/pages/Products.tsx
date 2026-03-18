@@ -812,25 +812,25 @@ export default function Products() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
+              <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-600">
+                <table className="w-full min-w-[900px]">
+                  <thead className="bg-gray-100 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-600">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Producto</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">SKU</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Marketplace</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Enlaces</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Precio</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Estado</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Ganador</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Workflow</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Beneficio</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Acciones</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Producto</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">SKU</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Marketplace</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Enlaces</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Precio</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Estado</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Ganador</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Workflow</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Beneficio</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {products.map((product) => (
-                      <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                  <tbody className="divide-y divide-gray-200 dark:divide-slate-600 bg-white dark:bg-slate-900">
+                    {products.map((product, idx) => (
+                      <tr key={product.id} className={`hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors ${idx % 2 === 1 ? 'bg-gray-50/50 dark:bg-slate-900/80' : ''}`}>
                         <td className="px-4 py-3">
                           <div
                             className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 -m-2 p-2 rounded"

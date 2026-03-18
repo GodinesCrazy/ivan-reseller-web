@@ -6,7 +6,7 @@ const Card = React.forwardRef<
 >(({ className = "", ...props }, ref) => (
   <div
     ref={ref}
-    className={`rounded-lg border border-gray-200 bg-white text-gray-950 shadow-sm dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100 ${className}`}
+    className={`rounded-xl border border-gray-200 bg-white text-gray-950 shadow-card dark:bg-slate-900 dark:border-slate-600 dark:text-slate-50 dark:shadow-card-dark ${className}`}
     {...props}
   />
 ))
@@ -18,7 +18,7 @@ const CardHeader = React.forwardRef<
 >(({ className = "", ...props }, ref) => (
   <div
     ref={ref}
-    className={`flex flex-col space-y-1.5 p-6 ${className}`}
+    className={`flex flex-col space-y-1.5 p-5 md:p-6 ${className}`}
     {...props}
   />
 ))
@@ -30,7 +30,7 @@ const CardTitle = React.forwardRef<
 >(({ className = "", ...props }, ref) => (
   <h3
     ref={ref}
-    className={`text-2xl font-semibold leading-none tracking-tight dark:text-gray-100 ${className}`}
+    className={`text-lg md:text-xl font-semibold leading-tight tracking-tight text-gray-900 dark:text-slate-50 ${className}`}
     {...props}
   />
 ))
@@ -42,7 +42,7 @@ const CardDescription = React.forwardRef<
 >(({ className = "", ...props }, ref) => (
   <p
     ref={ref}
-    className={`text-sm text-gray-500 dark:text-gray-400 ${className}`}
+    className={`text-sm leading-relaxed text-gray-600 dark:text-slate-300 ${className}`}
     {...props}
   />
 ))
@@ -52,7 +52,7 @@ const CardContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className = "", ...props }, ref) => (
-  <div ref={ref} className={`p-6 pt-0 ${className}`} {...props} />
+  <div ref={ref} className={`p-5 pt-0 md:p-6 md:pt-0 ${className}`} {...props} />
 ))
 CardContent.displayName = "CardContent"
 
@@ -62,7 +62,7 @@ const CardFooter = React.forwardRef<
 >(({ className = "", ...props }, ref) => (
   <div
     ref={ref}
-    className={`flex items-center p-6 pt-0 ${className}`}
+    className={`flex items-center p-5 pt-0 md:p-6 md:pt-0 ${className}`}
     {...props}
   />
 ))

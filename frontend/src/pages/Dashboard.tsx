@@ -485,104 +485,104 @@ export default function Dashboard() {
       {loading ? (
         <CardSkeleton count={6} />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
-          {/* Profit-first: main metric (Phase 34 — Conversion UX) */}
-          <div className="bg-emerald-50 dark:bg-gray-800 p-6 rounded-xl shadow-lg border-2 border-emerald-300 dark:border-emerald-700/60 transition-colors md:col-span-1" title="Utilidad real después de costos, comisiones, PayPal y comisión de plataforma.">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Ganancia neta</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${dashboardData.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                <Link to="/finance" className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline mt-1 inline-block">Ver finanzas →</Link>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          {/* Profit-first: main metric */}
+          <div className="p-4 rounded-xl border-2 border-emerald-300 dark:border-emerald-700/60 bg-emerald-50/80 dark:bg-emerald-950/30 shadow-card dark:shadow-card-dark transition-colors md:col-span-1" title="Utilidad real después de costos, comisiones, PayPal y comisión de plataforma.">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Ganancia neta</p>
+                <p className="mt-1 text-metric tabular-nums text-gray-900 dark:text-white">${dashboardData.totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <Link to="/finance" className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline mt-1 inline-block font-medium">Ver finanzas →</Link>
               </div>
-              <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/40 rounded-xl flex items-center justify-center">
+              <div className="w-11 h-11 shrink-0 bg-emerald-200/80 dark:bg-emerald-900/50 rounded-xl flex items-center justify-center">
                 <TrendingUp className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors" title="Suma de los precios de venta de todas las ventas confirmadas.">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Ingresos totales</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${dashboardData.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors" title="Suma de los precios de venta de todas las ventas confirmadas.">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Ingresos totales</p>
+                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">${dashboardData.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               </div>
-              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/40 rounded-xl flex items-center justify-center">
+              <div className="w-11 h-11 shrink-0 bg-green-100 dark:bg-green-900/40 rounded-xl flex items-center justify-center">
                 <DollarSign className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Comisión plataforma pagada</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${(dashboardData.platformCommissionPaid ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Comisión plataforma</p>
+                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">${(dashboardData.platformCommissionPaid ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               </div>
-              <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/40 rounded-xl flex items-center justify-center">
+              <div className="w-11 h-11 shrink-0 bg-amber-100 dark:bg-amber-900/40 rounded-xl flex items-center justify-center">
                 <DollarSign className="h-6 w-6 text-amber-600 dark:text-amber-400" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors" title="Número de ventas registradas.">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Nº de ventas</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{dashboardData.salesCount}</p>
+          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors" title="Número de ventas registradas.">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Nº de ventas</p>
+                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{dashboardData.salesCount}</p>
               </div>
-              <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/40 rounded-xl flex items-center justify-center">
+              <div className="w-11 h-11 shrink-0 bg-emerald-100 dark:bg-emerald-900/40 rounded-xl flex items-center justify-center">
                 <BarChart3 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors" title="Productos publicados en el marketplace.">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Productos publicados</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{dashboardData.activeProducts}</p>
+          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors" title="Productos publicados en el marketplace.">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Publicados</p>
+                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{dashboardData.activeProducts}</p>
               </div>
-              <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/40 rounded-xl flex items-center justify-center">
+              <div className="w-11 h-11 shrink-0 bg-purple-100 dark:bg-purple-900/40 rounded-xl flex items-center justify-center">
                 <ShoppingBag className="h-6 w-6 text-purple-600 dark:text-purple-400" />
               </div>
             </div>
           </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Oportunidades IA</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{dashboardData.totalOpportunities}</p>
-            </div>
-            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <Brain className="h-6 w-6 text-white" />
+          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Oportunidades IA</p>
+                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{dashboardData.totalOpportunities}</p>
+              </div>
+              <div className="w-11 h-11 shrink-0 bg-primary-100 dark:bg-primary-900/50 rounded-xl flex items-center justify-center">
+                <Brain className="h-6 w-6 text-primary-600 dark:text-primary-400" />
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Sugerencias IA</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{dashboardData.aiSuggestions}</p>
-            </div>
-            <div className="w-12 h-12 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center">
-              <Lightbulb className="h-6 w-6 text-white" />
+          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Sugerencias IA</p>
+                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{dashboardData.aiSuggestions}</p>
+              </div>
+              <div className="w-11 h-11 shrink-0 bg-amber-100 dark:bg-amber-900/40 rounded-xl flex items-center justify-center">
+                <Lightbulb className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 transition-colors">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Automatización</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{dashboardData.automationRules}</p>
-            </div>
-            <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-teal-600 rounded-xl flex items-center justify-center">
-              <Settings className="h-6 w-6 text-white" />
+          <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Automatización</p>
+                <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{dashboardData.automationRules}</p>
+              </div>
+              <div className="w-11 h-11 shrink-0 bg-teal-100 dark:bg-teal-900/40 rounded-xl flex items-center justify-center">
+                <Settings className="h-6 w-6 text-teal-600 dark:text-teal-400" />
+              </div>
             </div>
           </div>
-        </div>
       </div>
       )}
 

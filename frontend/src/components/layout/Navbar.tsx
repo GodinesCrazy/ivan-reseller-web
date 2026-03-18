@@ -118,8 +118,11 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors">
-      <div className="px-4 md:px-8 py-4 flex justify-between items-center">
+    <nav
+      className="bg-white dark:bg-slate-900 shadow-md border-b border-gray-200 dark:border-slate-700 transition-colors sticky top-0 z-30"
+      style={{ minHeight: 'var(--navbar-height)' }}
+    >
+      <div className="px-4 md:px-8 py-4 flex justify-between items-center h-[var(--navbar-height)]">
         <div className="flex items-center space-x-4 md:space-x-6">
           <button
             type="button"
@@ -140,7 +143,7 @@ export default function Navbar() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-primary-600 dark:text-primary-400 leading-tight">Ivan Reseller</h1>
-              <span className="text-sm text-gray-500 dark:text-gray-400">Inteligencia para oportunidades</span>
+              <span className="text-sm text-gray-600 dark:text-slate-300">Inteligencia para oportunidades</span>
             </div>
           </div>
 

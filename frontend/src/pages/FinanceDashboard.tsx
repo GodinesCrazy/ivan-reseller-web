@@ -651,74 +651,64 @@ export default function FinanceDashboard() {
 
       {activeTab === 'overview' && !isLoadingTab && (
         <>
-      {/* Main Stats Cards — Phase 34: Net Profit first, then Gross Profit, Revenue, Expenses */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-emerald-50 dark:bg-gray-800 border-2 border-emerald-300 dark:border-emerald-500/50 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-sm text-gray-600 dark:text-gray-400">Net Profit</div>
-            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
-              <Wallet className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+      {/* Main Stats Cards — same pattern as Dashboard */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-4 rounded-xl border-2 border-emerald-300 dark:border-emerald-700/60 bg-emerald-50/80 dark:bg-emerald-950/30 shadow-card dark:shadow-card-dark transition-colors">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Net Profit</p>
+              <p className="mt-1 text-metric tabular-nums text-gray-900 dark:text-white">{formatCurrency(financialData.netProfit)}</p>
+              <p className="text-xs text-gray-600 dark:text-slate-400 mt-1">After taxes & fees</p>
             </div>
-          </div>
-          <div className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            {formatCurrency(financialData.netProfit)}
-          </div>
-          <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-            <span>After taxes & fees</span>
+            <div className="w-11 h-11 shrink-0 bg-emerald-200/80 dark:bg-emerald-900/50 rounded-xl flex items-center justify-center">
+              <Wallet className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-sm text-gray-600 dark:text-gray-400">Gross Profit</div>
-            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-              <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
+        <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Gross Profit</p>
+              <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{formatCurrency(financialData.profit)}</p>
+              <p className="text-xs text-gray-600 dark:text-slate-400 mt-1">Margin: {formatPercentage(financialData.margin)}</p>
             </div>
-          </div>
-          <div className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            {formatCurrency(financialData.profit)}
-          </div>
-          <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-            <span>Margin: {formatPercentage(financialData.margin)}</span>
+            <div className="w-11 h-11 shrink-0 bg-green-100 dark:bg-green-900/40 rounded-xl flex items-center justify-center">
+              <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
+            </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-sm text-gray-600 dark:text-gray-400">Total Revenue</div>
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+        <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Total Revenue</p>
+              <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{formatCurrency(financialData.revenue)}</p>
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">Revenue from all sources</p>
             </div>
-          </div>
-          <div className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            {formatCurrency(financialData.revenue)}
-          </div>
-          <div className="flex items-center text-sm text-green-600 dark:text-green-400">
-            <ArrowUpRight className="w-4 h-4 mr-1" />
-            <span>Revenue from all sources</span>
+            <div className="w-11 h-11 shrink-0 bg-blue-100 dark:bg-blue-900/40 rounded-xl flex items-center justify-center">
+              <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-sm text-gray-600 dark:text-gray-400">Total Expenses</div>
-            <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
-              <CreditCard className="w-5 h-5 text-red-600 dark:text-red-400" />
+        <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Total Expenses</p>
+              <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{formatCurrency(financialData.expenses)}</p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1">All operational costs</p>
             </div>
-          </div>
-          <div className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-            {formatCurrency(financialData.expenses)}
-          </div>
-          <div className="flex items-center text-sm text-red-600 dark:text-red-400">
-            <ArrowDownRight className="w-4 h-4 mr-1" />
-            <span>All operational costs</span>
+            <div className="w-11 h-11 shrink-0 bg-red-100 dark:bg-red-900/40 rounded-xl flex items-center justify-center">
+              <CreditCard className="h-6 w-6 text-red-600 dark:text-red-400" />
+            </div>
           </div>
         </div>
       </div>
 
       {/* Monthly Profit Projection */}
       {profitProjection && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+        <div className="rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark p-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
             <Target className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             Proyección mensual estimada
@@ -759,30 +749,30 @@ export default function FinanceDashboard() {
       )}
 
       {/* Secondary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Commissions Paid</div>
-            <Receipt className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-          </div>
-          <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            {formatCurrency(financialData.commissions)}
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-            To affiliates and partners
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Commissions Paid</p>
+              <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{formatCurrency(financialData.commissions)}</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">To affiliates and partners</p>
+            </div>
+            <div className="w-11 h-11 shrink-0 bg-gray-100 dark:bg-slate-700 rounded-xl flex items-center justify-center">
+              <Receipt className="h-6 w-6 text-gray-600 dark:text-slate-300" />
+            </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Taxes Paid</div>
-            <Receipt className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-          </div>
-          <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            {formatCurrency(financialData.taxes)}
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-            Total tax obligations
+        <div className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark transition-colors">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">Taxes Paid</p>
+              <p className="mt-1 text-metric-sm tabular-nums text-gray-900 dark:text-white">{formatCurrency(financialData.taxes)}</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">Total tax obligations</p>
+            </div>
+            <div className="w-11 h-11 shrink-0 bg-gray-100 dark:bg-slate-700 rounded-xl flex items-center justify-center">
+              <Receipt className="h-6 w-6 text-gray-600 dark:text-slate-300" />
+            </div>
           </div>
         </div>
       </div>
@@ -791,7 +781,7 @@ export default function FinanceDashboard() {
       {financialData.workingCapital && financialData.capitalMetrics && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Working Capital Card */}
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+          <div className="rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark p-6">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               Working Capital
@@ -841,7 +831,7 @@ export default function FinanceDashboard() {
           </div>
 
           {/* Capital Performance Card */}
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+          <div className="rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark p-6">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
               <RefreshCw className="w-5 h-5 text-purple-600 dark:text-purple-400" />
               Capital Performance

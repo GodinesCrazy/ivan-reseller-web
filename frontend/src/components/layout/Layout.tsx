@@ -21,7 +21,7 @@ export default function Layout() {
   return (
     <EnvironmentProvider>
     <SidebarProvider>
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+    <div className="min-h-screen bg-gray-100 dark:bg-slate-950 transition-colors">
       <AliexpressOverlayGate />
       <CommandPalette />
       <Navbar />
@@ -51,9 +51,11 @@ export default function Layout() {
       )}
       <div className="flex">
         <Sidebar />
-        <main className="flex-1 p-8 bg-gray-50 dark:bg-gray-900 transition-colors">
-          <PageBreadcrumb />
-          <Outlet />
+        <main className="flex-1 min-w-0 p-4 sm:p-6 md:p-8 bg-gray-100 dark:bg-slate-950 transition-colors">
+          <div className="max-w-[1600px] mx-auto space-y-6">
+            <PageBreadcrumb />
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

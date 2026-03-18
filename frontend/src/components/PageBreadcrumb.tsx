@@ -9,7 +9,7 @@ const ROUTE_LABELS: Record<string, string> = {
   products: 'Productos',
   preview: 'Vista previa',
   sales: 'Ventas',
-  orders: '”rdenes',
+  orders: 'ùrdenes',
   order: 'Detalle',
   checkout: 'Checkout',
   'pending-purchases': 'Compras pendientes',
@@ -20,19 +20,19 @@ const ROUTE_LABELS: Record<string, string> = {
   jobs: 'Trabajos',
   reports: 'Reportes',
   users: 'Usuarios',
-  regional: 'ConfiguraciÛn regional',
+  regional: 'Configuraciùn regional',
   logs: 'Registros del sistema',
   'system-status': 'Estado del sistema',
-  settings: 'ConfiguraciÛn',
+  settings: 'Configuraciùn',
   'api-settings': 'API Settings',
   'workflow-config': 'Config. workflows',
   help: 'Centro de ayuda',
   'meeting-room': 'Sala de reuniones',
-  onboarding: 'Asistente de configuraciÛn',
+  onboarding: 'Asistente de configuraciùn',
 };
 
 const TAB_LABELS: Record<string, string> = {
-  search: 'B˙squeda Universal',
+  search: 'Bùsqueda Universal',
   trends: 'Tendencias',
   summary: 'Resumen',
 };
@@ -46,12 +46,12 @@ export default function PageBreadcrumb() {
     const tab = params.get('tab');
     if (tab && TAB_LABELS[tab]) {
       return (
-        <nav className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mb-4">
-          <Link to="/dashboard" className="hover:text-primary-600 dark:hover:text-primary-400">
+        <nav className="flex items-center gap-1 text-sm text-gray-600 dark:text-slate-400 mb-2" aria-label="Migas de pan">
+          <Link to="/dashboard" className="hover:text-primary-600 dark:hover:text-primary-300 font-medium">
             Panel
           </Link>
-          <ChevronRight className="w-4 h-4" />
-          <span className="text-gray-900 dark:text-gray-100">{TAB_LABELS[tab]}</span>
+          <ChevronRight className="w-4 h-4 shrink-0 opacity-60" />
+          <span className="text-gray-900 dark:text-slate-50 font-semibold">{TAB_LABELS[tab]}</span>
         </nav>
       );
     }
@@ -60,8 +60,8 @@ export default function PageBreadcrumb() {
   const segments = pathname.split('/').filter(Boolean);
   if (segments.length === 0) {
     return (
-      <nav className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mb-4">
-        <span className="text-gray-900 dark:text-gray-100">Panel</span>
+      <nav className="flex items-center gap-1 text-sm text-gray-600 dark:text-slate-400 mb-2" aria-label="Migas de pan">
+        <span className="text-gray-900 dark:text-slate-50 font-semibold">Panel</span>
       </nav>
     );
   }
@@ -82,19 +82,19 @@ export default function PageBreadcrumb() {
   }
 
   return (
-    <nav className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mb-4 flex-wrap">
-      <Link to="/dashboard" className="hover:text-primary-600 dark:hover:text-primary-400">
+    <nav className="flex items-center gap-1 text-sm text-gray-600 dark:text-slate-400 mb-2 flex-wrap" aria-label="Migas de pan">
+      <Link to="/dashboard" className="hover:text-primary-600 dark:hover:text-primary-300 font-medium">
         Inicio
       </Link>
       {crumbs.map((crumb, i) => (
         <span key={crumb.path} className="flex items-center gap-1">
-          <ChevronRight className="w-4 h-4 flex-shrink-0" />
+          <ChevronRight className="w-4 h-4 flex-shrink-0 opacity-60" />
           {i === crumbs.length - 1 ? (
-            <span className="text-gray-900 dark:text-gray-100">{crumb.label}</span>
+            <span className="text-gray-900 dark:text-slate-50 font-semibold">{crumb.label}</span>
           ) : (
             <Link
               to={crumb.path}
-              className="hover:text-primary-600 dark:hover:text-primary-400"
+              className="hover:text-primary-600 dark:hover:text-primary-300 font-medium"
             >
               {crumb.label}
             </Link>

@@ -100,31 +100,31 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-sm">
           <div
-            className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900/80 cursor-pointer hover:border-primary-300 dark:hover:border-primary-700 hover:shadow-md transition-all"
             onClick={() => navigate('/products')}
           >
-            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-              <Package className="w-4 h-4" />
+            <div className="flex items-center gap-2 text-gray-600 dark:text-slate-300 text-xs font-semibold uppercase tracking-wide">
+              <Package className="w-4 h-4 text-primary-600 dark:text-primary-400" />
               <MetricLabelWithTooltip label="Productos" tooltipBody={metricTooltips.pendientes.body} />
             </div>
-            <div className="mt-1 font-semibold text-lg">{summary.products.total}</div>
-            <div className="text-xs text-gray-500 mt-0.5">
+            <div className="mt-2 text-metric-sm tabular-nums text-gray-900 dark:text-white">{summary.products.total.toLocaleString()}</div>
+            <div className="text-xs text-gray-600 dark:text-slate-400 mt-1">
               {summary.products.pending} pendientes · {totalListings} anuncios
             </div>
           </div>
 
           <div
-            className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="p-4 rounded-xl border-2 border-primary-200 dark:border-primary-800/60 bg-primary-50/50 dark:bg-primary-900/15 cursor-pointer hover:border-primary-400 dark:hover:border-primary-600 transition-all shadow-sm"
             onClick={() => navigate('/publisher')}
           >
-            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-              <Store className="w-4 h-4" />
+            <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200 text-xs font-semibold uppercase tracking-wide">
+              <Store className="w-4 h-4 text-primary-600 dark:text-primary-400" />
               <MetricLabelWithTooltip label="Publicados" tooltipBody={metricTooltips.publicados.body} />
             </div>
-            <div className="mt-1 font-semibold text-lg">{totalListings}</div>
-            <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
+            <div className="mt-2 text-metric tabular-nums text-primary-700 dark:text-primary-300">{totalListings}</div>
+            <div className="text-xs text-gray-700 dark:text-slate-300 mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); navigate('/products?marketplace=ebay'); }}
@@ -162,15 +162,15 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
           </div>
 
           <div
-            className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900/80 cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-700 transition-all"
             onClick={() => navigate('/orders')}
           >
-            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-              <Truck className="w-4 h-4" />
+            <div className="flex items-center gap-2 text-gray-600 dark:text-slate-300 text-xs font-semibold uppercase tracking-wide">
+              <Truck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               Órdenes
             </div>
-            <div className="mt-1 font-semibold text-lg">{totalOrders}</div>
-            <div className="text-xs text-gray-500 mt-0.5">
+            <div className="mt-2 text-metric-sm tabular-nums text-gray-900 dark:text-white">{totalOrders}</div>
+            <div className="text-xs text-gray-600 dark:text-slate-400 mt-1">
               {summary.ordersByStatus.PAID > 0 && `${ORDER_LABELS.PAID}: ${summary.ordersByStatus.PAID} · `}
               {summary.ordersByStatus.PURCHASING > 0 && `${ORDER_LABELS.PURCHASING}: ${summary.ordersByStatus.PURCHASING} · `}
               {summary.ordersByStatus.PURCHASED > 0 && `${ORDER_LABELS.PURCHASED}: ${summary.ordersByStatus.PURCHASED}`}
@@ -178,15 +178,15 @@ export default function InventorySummaryCard({ summary: summaryProp }: Inventory
           </div>
 
           <div
-            className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="p-4 rounded-xl border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900/80 cursor-pointer hover:border-amber-400 dark:hover:border-amber-600 transition-all"
             onClick={() => navigate('/pending-purchases')}
           >
-            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-              <ShoppingCart className="w-4 h-4" />
+            <div className="flex items-center gap-2 text-gray-600 dark:text-slate-300 text-xs font-semibold uppercase tracking-wide">
+              <ShoppingCart className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <MetricLabelWithTooltip label="Por comprar" tooltipBody={metricTooltips.porComprar.body} />
             </div>
-            <div className="mt-1 font-semibold text-lg">{summary.pendingPurchasesCount}</div>
-            <div className="text-xs text-gray-500 mt-0.5">Compras pendientes</div>
+            <div className="mt-2 text-metric-sm tabular-nums text-gray-900 dark:text-white">{summary.pendingPurchasesCount}</div>
+            <div className="text-xs text-gray-600 dark:text-slate-400 mt-1">Compras pendientes</div>
           </div>
         </div>
 

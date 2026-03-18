@@ -2,21 +2,81 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Evitar pantalla negra al cargar: fondo explícito en light y dark */
+/*
+ * Ivan Reseller — design tokens (contrast-first, SaaS-grade)
+ * Spacing scale: 4 / 8 / 12 / 16 / 24 / 32
+ */
 @layer base {
+  :root {
+    --navbar-height: 4.5rem; /* 72px — sync with Sidebar mobile top offset */
+    --ir-radius: 0.5rem;
+    --ir-radius-lg: 0.75rem;
+    --ir-text-primary: 17 24 39;
+    --ir-text-secondary: 75 85 99;
+    --ir-text-muted: 107 114 128;
+    --ir-surface: 249 250 251;
+    --ir-surface-elevated: 255 255 255;
+    --ir-border: 229 231 235;
+    --ir-focus-ring: 37 99 235;
+  }
+
+  html.dark {
+    --ir-text-primary: 248 250 252;
+    --ir-text-secondary: 226 232 240;
+    --ir-text-muted: 148 163 184;
+    --ir-surface: 15 23 42;
+    --ir-surface-elevated: 30 41 59;
+    --ir-border: 71 85 105;
+    --ir-focus-ring: 96 165 250;
+  }
+
   html {
     @apply bg-gray-50;
+    scroll-behavior: smooth;
   }
   html.dark {
-    @apply bg-gray-900;
+    @apply bg-slate-950;
   }
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply antialiased;
+    background-color: rgb(var(--ir-surface));
+    color: rgb(var(--ir-text-primary));
+    font-feature-settings: "kern" 1, "liga" 1;
+    line-height: 1.5;
   }
   html.dark body {
-    @apply bg-gray-900 text-gray-100;
+    color: rgb(var(--ir-text-primary));
   }
   #root {
     @apply min-h-screen;
+  }
+
+  /* Typography hierarchy */
+  h1 {
+    @apply text-2xl md:text-3xl font-bold tracking-tight text-gray-900 dark:text-slate-50;
+  }
+  h2 {
+    @apply text-xl md:text-2xl font-semibold tracking-tight text-gray-900 dark:text-slate-50;
+  }
+  h3 {
+    @apply text-lg font-semibold text-gray-900 dark:text-slate-100;
+  }
+
+  /* Accessible focus (keyboard) */
+  :where(a, button, input, select, textarea):focus-visible {
+    outline: 2px solid rgb(var(--ir-focus-ring));
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .ir-surface-card {
+    @apply bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-600;
+  }
+  .ir-text-muted {
+    color: rgb(var(--ir-text-muted));
+  }
+  .ir-text-secondary {
+    color: rgb(var(--ir-text-secondary));
   }
 }
