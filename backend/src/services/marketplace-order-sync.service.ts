@@ -40,6 +40,8 @@ export interface SyncResult {
   fetched: number;
   created: number;
   skipped: number;
+  /** Orders ingested without full product mapping (still in BD for visibility) */
+  createdUnmapped: number;
   errors: string[];
 }
 
@@ -47,7 +49,15 @@ export interface SyncResult {
  * Sync eBay orders for one user: fetch from API, create Order if not exists (dedup by paypalOrderId).
  */
 export async function syncEbayOrdersForUser(userId: number, environment: 'sandbox' | 'production'): Promise<SyncResult> {
-  const result: SyncResult = { marketplace: 'ebay', userId, fetched: 0, created: 0, skipped: 0, errors: [] };
+  const result: SyncResult = {
+    marketplace: 'ebay',
+    userId,
+    fetched: 0,
+    created: 0,
+    skipped: 0,
+    createdUnmapped: 0,
+    errors: [],
+  };
   try {
     const credsResult = await marketplaceService.getCredentials(userId, 'ebay', environment);
     if (!credsResult?.isActive || !credsResult?.credentials) {
@@ -97,59 +107,97 @@ export async function syncEbayOrdersForUser(userId: number, environment: 'sandbo
           select: { productId: true, userId: true },
         });
       }
-      if (!listing || listing.userId !== userId) {
-        result.errors.push(`Order ${orderId}: no listing for SKU/itemId ${listingId || 'n/a'}`);
-        result.skipped++;
-        continue;
-      }
+      const lineTitle = (firstLine?.title || '').trim() || `eBay order ${orderId}`;
+      const itemIdStr = itemId != null ? String(itemId) : '';
+      const skuStr = sku != null ? String(sku) : '';
 
-      const product = await prisma.product.findUnique({
-        where: { id: listing.productId },
-        select: { id: true, title: true, aliexpressUrl: true },
-      });
-      if (!product) {
-        result.skipped++;
-        continue;
-      }
-      let productUrl = (product.aliexpressUrl || '').trim();
-      if (!productUrl) {
-        const ref = await prisma.product.findUnique({
+      let product: { id: number; title: string; aliexpressUrl: string | null } | null = null;
+      let productUrl = '';
+
+      if (listing && listing.userId === userId) {
+        product = await prisma.product.findUnique({
           where: { id: listing.productId },
-          select: { aliexpressUrl: true },
+          select: { id: true, title: true, aliexpressUrl: true },
         });
-        productUrl = (ref?.aliexpressUrl || '').trim();
-      }
-      if (!productUrl) {
-        result.errors.push(`Order ${orderId}: product ${listing.productId} has no AliExpress URL`);
-        result.skipped++;
-        continue;
+        if (product) {
+          productUrl = (product.aliexpressUrl || '').trim();
+          if (!productUrl) {
+            const ref = await prisma.product.findUnique({
+              where: { id: listing.productId },
+              select: { aliexpressUrl: true },
+            });
+            productUrl = (ref?.aliexpressUrl || '').trim();
+          }
+        }
       }
 
       const amount = ebayOrder.total ?? (firstLine?.price ?? 0) * (firstLine?.quantity ?? 1);
       if (!isFinite(amount) || amount <= 0) {
+        result.errors.push(`Order ${orderId}: invalid amount`);
         result.skipped++;
         continue;
       }
 
       const shippingStr = normalizeShippingAddress(ebayOrder.shippingAddress, ebayOrder.buyerName);
 
-      await prisma.order.create({
+      const unmappedParts = [
+        !listing || listing.userId !== userId ? 'no_listing' : null,
+        !product ? 'no_product' : null,
+        !productUrl ? 'no_aliexpress_url' : null,
+      ].filter(Boolean);
+      const ebayFulfilled = String(ebayOrder.fulfillmentStatus || '').toUpperCase() === 'FULFILLED';
+      const errorMessage =
+        unmappedParts.length > 0
+          ? `EBAY_SYNC_AWAITING_PRODUCT_MAP ${itemIdStr ? `itemId=${itemIdStr}` : ''} ${skuStr ? `sku=${skuStr}` : ''}`.trim()
+          : null;
+
+      /** Ya enviada en eBay: no disparar compra en AliExpress */
+      const orderStatus = ebayFulfilled ? 'PURCHASED' : 'PAID';
+      const aliexpressOrderId = ebayFulfilled ? 'ebay-fulfilled' : undefined;
+
+      const newOrder = await prisma.order.create({
         data: {
           userId,
-          productId: product.id,
-          title: product.title,
+          productId: product?.id ?? null,
+          title: product?.title ?? lineTitle,
           price: amount,
           currency: 'USD',
           customerName: ebayOrder.buyerName || 'Buyer',
           customerEmail: ebayOrder.buyerEmail || 'buyer@unknown.com',
           shippingAddress: shippingStr,
-          status: 'PAID',
+          status: orderStatus,
           paypalOrderId,
-          productUrl,
+          productUrl: productUrl || '',
+          errorMessage: ebayFulfilled && errorMessage ? `${errorMessage} (eBay ya fulfilled)` : errorMessage,
+          ...(aliexpressOrderId ? { aliexpressOrderId } : {}),
         },
       });
-      result.created++;
-      logger.info('[MARKETPLACE-SYNC] Order created from eBay', { orderId, userId, paypalOrderId });
+
+      if (unmappedParts.length > 0) {
+        result.createdUnmapped++;
+        logger.info('[MARKETPLACE-SYNC] Order created from eBay (map product in app)', {
+          orderId: newOrder.id,
+          ebayOrderId: orderId,
+          userId,
+          unmappedParts,
+        });
+      } else {
+        result.created++;
+        logger.info('[MARKETPLACE-SYNC] Order created from eBay', { orderId, userId, paypalOrderId });
+      }
+
+      // Ventas: crear Sale en cuanto hay producto y coste válido (incl. órdenes ya fulfilled en eBay)
+      if (product && productUrl) {
+        try {
+          const { saleService } = await import('./sale.service');
+          await saleService.createSaleFromOrder(newOrder.id);
+        } catch (e: any) {
+          logger.warn('[MARKETPLACE-SYNC] createSaleFromOrder after sync (non-fatal)', {
+            orderId: newOrder.id,
+            error: e?.message,
+          });
+        }
+      }
     }
 
     return result;

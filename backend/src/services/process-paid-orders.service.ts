@@ -47,6 +47,11 @@ export async function processPaidOrders(
 
   for (const order of orders) {
     const orderId = order.id;
+    // eBay-ingested orders sin URL de AliExpress: no intentar fulfill hasta que el usuario mapee el producto
+    if (!(order.productUrl || '').trim()) {
+      logger.debug('[PROCESS-PAID-ORDERS] Skip fulfill — no productUrl (map product or import)', { orderId });
+      continue;
+    }
     try {
       const fulfillResult = await orderFulfillmentService.fulfillOrder(orderId);
       result.processed++;

@@ -97,7 +97,68 @@ router.get('/', async (req: Request, res: Response, next) => {
       };
     });
 
-    res.json({ sales: mappedSales });
+    // eBay orders en BD sin fila Sale (p. ej. sin mapeo de listing): siguen siendo "ventas" visibles
+    let mergedSales = mappedSales;
+    if (!isAdmin && req.user?.userId != null) {
+      const { prisma } = await import('../../config/database');
+      const uid = req.user.userId;
+      const ebayOrders = await prisma.order.findMany({
+        where: { userId: uid, paypalOrderId: { startsWith: 'ebay:' } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          title: true,
+          price: true,
+          status: true,
+          errorMessage: true,
+          createdAt: true,
+          customerName: true,
+          customerEmail: true,
+          shippingAddress: true,
+        },
+      });
+      if (ebayOrders.length) {
+        const withSale = await prisma.sale.findMany({
+          where: { orderId: { in: ebayOrders.map((o) => o.id) } },
+          select: { orderId: true },
+        });
+        const hasSale = new Set(withSale.map((s) => s.orderId));
+        const virtual = ebayOrders
+          .filter((o) => !hasSale.has(o.id))
+          .map((o) => {
+            const st =
+              o.status === 'PURCHASED' ? 'SHIPPED' : o.status === 'FAILED' ? 'PROCESSING' : 'PENDING';
+            const awaiting = (o.errorMessage || '').includes('EBAY_SYNC_AWAITING_PRODUCT_MAP');
+            return {
+              id: `ebay-order-${o.id}`,
+              orderId: o.id,
+              productId: undefined as number | undefined,
+              productTitle: o.title,
+              productImage: undefined as string | undefined,
+              marketplace: 'ebay',
+              source: 'ebay-sync',
+              needsProductMapping: awaiting,
+              buyerName: o.customerName,
+              buyerEmail: o.customerEmail || undefined,
+              shippingAddress: o.shippingAddress || undefined,
+              salePrice: toNumber(o.price as any),
+              cost: 0,
+              profit: 0,
+              commission: 0,
+              marketplaceFee: 0,
+              grossProfit: 0,
+              status: st,
+              trackingNumber: undefined as string | undefined,
+              createdAt: o.createdAt.toISOString(),
+              syncNote: awaiting ? o.errorMessage || 'Mapea el producto (listing/item en la app)' : o.errorMessage || undefined,
+            };
+          });
+        mergedSales = [...virtual, ...mappedSales];
+      }
+    }
+
+    res.json({ sales: mergedSales });
   } catch (error) {
     next(error);
   }

@@ -6,8 +6,9 @@ Implementation of the Real Sales Sync and Frontend Reflection Engine so the syst
 
 ### Phase 1 — eBay sales ingestion
 
-- **eBay getOrders** ([ebay.service.ts](../src/services/ebay.service.ts)): `getOrders(params?)` calls Sell Fulfillment API `GET /sell/fulfillment/v1/order` with filter `creationdate:[last 90 days]`, `orderfulfillmentstatus:{NOT_STARTED|IN_PROGRESS}`. Returns normalized list with orderId, buyerName, buyerUsername, buyerEmail, shippingAddress, lineItems (sku, itemId, title, quantity, price), total, orderDate.
-- **Store in DB** ([marketplace-order-sync.service.ts](../src/services/marketplace-order-sync.service.ts)): For each user with eBay credentials, fetches orders and creates `Order` (status PAID, paypalOrderId = `ebay:{orderId}`) when no Order with that paypalOrderId exists. Resolves product via MarketplaceListing (by itemId or sku). Requires product to have aliexpressUrl.
+- **eBay getOrders** ([ebay.service.ts](../src/services/ebay.service.ts)): filter incluye `FULFILLED` además de `NOT_STARTED|IN_PROGRESS` (últimos 90 días), para no perder ventas si el sync falló antes.
+- **Store in DB** ([marketplace-order-sync.service.ts](../src/services/marketplace-order-sync.service.ts)): **Toda** venta eBay devuelta por la API genera un `Order` (`paypalOrderId = ebay:{orderId}`) si no existía. Si hay listing + producto + URL AliExpress → `PAID` y se intenta `createSaleFromOrder` para que aparezca en Ventas de inmediato. Si falta mapeo o URL → igual se crea la Order (`productUrl` vacío, `errorMessage` con `EBAY_SYNC_AWAITING_PRODUCT_MAP` + itemId/sku). Si eBay ya está **FULFILLED** → Order en `PURCHASED` con `aliexpressOrderId = ebay-fulfilled` (no se reintenta compra). `process-paid-orders` **no** llama fulfill si `productUrl` está vacío.
+- **Ventas sin fila Sale**: `GET /api/sales` mezcla órdenes eBay huérfanas (sin Sale) como filas virtuales con `needsProductMapping` / `syncNote`.
 - **Deduplication**: Idempotent by `paypalOrderId`; existing order skips create.
 
 ### Phase 3 — Sync worker

@@ -1594,7 +1594,7 @@ export class EbayService {
 
   /**
    * List orders from eBay Sell Fulfillment API (Phase 40 — real sales sync).
-   * Fetches orders NOT_STARTED or IN_PROGRESS (PAID / AWAITING_SHIPMENT) created in the last 90 days.
+   * Fetches active + recently fulfilled orders (last 90 days) so nothing is missed if sync was down.
    */
   async getOrders(params?: { limit?: number; offset?: number; creationDateFrom?: string }): Promise<{
     orders: Array<{
@@ -1617,7 +1617,7 @@ export class EbayService {
     const from = params?.creationDateFrom ?? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, '.000Z');
     const filterParts = [
       `creationdate:[${from}..]`,
-      'orderfulfillmentstatus:{NOT_STARTED|IN_PROGRESS}',
+      'orderfulfillmentstatus:{NOT_STARTED|IN_PROGRESS|FULFILLED}',
     ];
     const filter = filterParts.join(',');
     const res = await this.apiClient.get('/sell/fulfillment/v1/order', {
