@@ -66,6 +66,7 @@
     "check:ml-compliance": "tsx scripts/check-ml-compliance.ts",
     "diagnose:ml-publish": "tsx scripts/diagnose-mercadolibre-publish.ts",
     "verify:sales-origin": "tsx scripts/verify-sales-origin.ts",
+    "verify:orders-filter": "node scripts/verify-orders-filter-standalone.mjs",
     "retry:payout": "tsx scripts/retry-payout.ts",
     "test-real-placeOrder": "tsx scripts/test-real-placeOrder.ts",
     "bootstrap-env": "node scripts/ensure-env-local.js",

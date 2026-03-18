@@ -17,6 +17,7 @@ import {
   runMarketplaceOrderSync,
   getLastMarketplaceSyncAt,
 } from '../../services/marketplace-order-sync.service';
+import { buildRealOrdersWhere, REAL_ORDERS_EXCLUDE_PAYPAL_PREFIXES } from '../../utils/orders-real-filter';
 
 const marketplaceService = new MarketplaceService();
 
@@ -24,9 +25,6 @@ const router = Router();
 
 const FAILED_INSUFFICIENT_FUNDS = 'FAILED_INSUFFICIENT_FUNDS';
 const MAX_RETRIES = 3;
-
-/** Phase 43: Exclude test/demo/mock orders — only real marketplace/checkout orders appear. */
-const REAL_ORDERS_EXCLUDE_PAYPAL_PREFIXES = ['TEST', 'test', 'DEMO', 'demo', 'MOCK', 'mock', 'SIM_', 'ORD-TEST'];
 
 router.use(authenticate);
 
@@ -279,8 +277,8 @@ router.post('/sync-marketplace', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/orders — List REAL post-sale orders only (Phase 43: no test/demo/mock).
- * Source of truth: marketplace (eBay/ML/Amazon) or checkout; test orders are excluded.
+ * GET /api/orders — List only REAL marketplace orders (Phase 44: eBay, Mercado Libre, Amazon).
+ * Excludes test/demo/mock and checkout; only paypalOrderId starting with ebay:, mercadolibre:, or amazon:.
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -291,15 +289,7 @@ router.get('/', async (req: Request, res: Response) => {
       limitParam != null ? Math.min(100, Math.max(1, parseInt(String(limitParam), 10) || 100)) : 100;
 
     const baseWhere = isAdmin ? {} : { userId: userId! };
-    const realOnlyWhere = {
-      ...baseWhere,
-      AND: REAL_ORDERS_EXCLUDE_PAYPAL_PREFIXES.map((prefix) => ({
-        OR: [
-          { paypalOrderId: null },
-          { paypalOrderId: { not: { startsWith: prefix } } },
-        ],
-      })),
-    } as const;
+    const realOnlyWhere = buildRealOrdersWhere(baseWhere);
 
     const orders = await prisma.order.findMany({
       where: realOnlyWhere,
