@@ -3,9 +3,8 @@
     "buildCommand": "npm install && npm run build"
   },
   "deploy": {
-    "preDeployCommand": ["node", "scripts/railway-migrate-deploy.js"],
-    "startCommand": "npm run start",
+    "startCommand": "node scripts/railway-start-production.js",
     "healthcheckPath": "/health",
-    "healthcheckTimeout": 120
+    "healthcheckTimeout": 720
   }
 }

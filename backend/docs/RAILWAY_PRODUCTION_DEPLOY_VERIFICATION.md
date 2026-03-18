@@ -54,7 +54,7 @@ Railway logs should show:
 
 PostgreSQL has a fixed `max_connections`. During a Railway deploy, **preDeploy** runs migrations while the **previous** container may still be running and holding pool slots — migrate can fail until those connections drop.
 
-**In-repo fix:** `backend/railway.json` uses `node scripts/railway-migrate-deploy.js`, which retries `prisma migrate deploy` (with `connection_limit=1` on the migrate URL) when logs show “too many clients”. Waits ~20s between attempts (tune with `MIGRATE_RETRY_DELAY_SEC`, `MIGRATE_MAX_ATTEMPTS`).
+**In-repo fix:** Migrations run at **container start** via `node scripts/railway-start-production.js` (not preDeploy), so `prisma migrate deploy` uses the same private network as the app. The migrate step retries on “too many clients” (`scripts/railway-migrate-deploy.js`). Healthcheck timeout is 720s to allow long retry windows. Tune with `MIGRATE_RETRY_DELAY_SEC`, `MIGRATE_MAX_ATTEMPTS`.
 
 **If it still fails after several minutes:**
 
