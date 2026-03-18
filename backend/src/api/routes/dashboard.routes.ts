@@ -461,8 +461,12 @@ router.get('/inventory-summary', async (req: Request, res: Response, next) => {
       }
     }
 
-    // Always use DB counts for displayed breakdown (matches product list filter: listings in system with status=active)
-    const listingsByMarketplace = { ...listingsByMarketplaceFromDb };
+    // Show real publications: use max(DB, API) so we never show 0 when either source has listings (e.g. DB synced later or API has count)
+    const listingsByMarketplace = {
+      ebay: Math.max(listingsByMarketplaceFromDb.ebay, ebayActiveCount ?? 0),
+      mercadolibre: Math.max(listingsByMarketplaceFromDb.mercadolibre, mercadolibreActiveCount ?? 0),
+      amazon: listingsByMarketplaceFromDb.amazon,
+    };
 
     const listingsTotal =
       listingsByMarketplace.ebay + listingsByMarketplace.mercadolibre + listingsByMarketplace.amazon;
