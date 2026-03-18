@@ -3,7 +3,7 @@
     "buildCommand": "npm install && npm run build"
   },
   "deploy": {
-    "preDeployCommand": ["npx prisma migrate deploy"],
+    "preDeployCommand": ["node", "scripts/railway-migrate-deploy.js"],
     "startCommand": "npm run start",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 120
