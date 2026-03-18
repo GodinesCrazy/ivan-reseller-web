@@ -10,7 +10,7 @@ If Root Directory is empty or wrong, the build runs in repo root and will fail o
 - **Build command:** `npm install && npm run build`
 - **Start command:** `npm run start` (or `npm run start:with-migrations` if you use backend/railway.json)
 
-Do **not** use `ts-node` or `src/server.ts`. Production must run `node dist/server.js`.
+Do **not** use `ts-node` or `src/server.ts`. Production must run `node dist/server-bootstrap.js` (or use `railway-start-production.js` which runs migrations then server-bootstrap).
 
 ## If deploy "still the same" (cache)
 
