@@ -629,6 +629,10 @@ router.patch('/:id/supplier-url', async (req: Request, res: Response) => {
 
 const PURCHASING_STALE_MS = 5 * 60 * 1000; // 5 min — auto-recover stuck PURCHASING
 
+const ORDER_DETAIL_INCLUDE = {
+  product: { select: { id: true, title: true, images: true, aliexpressPrice: true, aliexpressUrl: true } },
+} as const;
+
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
@@ -637,9 +641,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
     let order = await prisma.order.findUnique({
       where: { id },
-      include: {
-        product: { select: { id: true, title: true, images: true, aliexpressPrice: true, aliexpressUrl: true } },
-      },
+      include: ORDER_DETAIL_INCLUDE,
     });
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
@@ -660,7 +662,10 @@ router.get('/:id', async (req: Request, res: Response) => {
         logger.info('[ORDERS] Auto-recovered stale PURCHASING order', { orderId: id, updatedAt: order.updatedAt });
         const { maybeEscalateFailedOrderToManual } = await import('../../services/manual-fulfillment.service');
         await maybeEscalateFailedOrderToManual(id, errMsg, order.userId ?? undefined);
-        const refreshed = await prisma.order.findUnique({ where: { id } });
+        const refreshed = await prisma.order.findUnique({
+          where: { id },
+          include: ORDER_DETAIL_INCLUDE,
+        });
         if (refreshed) order = refreshed;
       }
     }
