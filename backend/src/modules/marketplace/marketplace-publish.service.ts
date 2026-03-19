@@ -291,6 +291,11 @@ export class MarketplacePublishService {
     }
 
     try {
+      const productWithUrl = await prisma.product.findUnique({
+        where: { id: product.id },
+        select: { aliexpressUrl: true },
+      });
+      const supplierUrl = (productWithUrl?.aliexpressUrl || '').trim() || null;
       const created = await prisma.marketplaceListing.create({
         data: {
           productId: product.id,
@@ -298,6 +303,7 @@ export class MarketplacePublishService {
           marketplace,
           listingId: result.listingId,
           listingUrl: result.listingUrl,
+          supplierUrl,
           publishedAt: new Date(),
         },
       });

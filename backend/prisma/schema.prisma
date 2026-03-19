@@ -457,6 +457,7 @@ model MarketplaceListing {
   marketplace String // ebay, mercadolibre, amazon
   listingId   String // ID del listing en el marketplace
   listingUrl  String?
+  supplierUrl String? // URL del proveedor (AliExpress) en el momento de publicar; para rescate en fulfillment
   sku         String?
   viewCount   Int?      @default(0) // Synced from eBay Analytics (traffic report)
   publishedAt DateTime?

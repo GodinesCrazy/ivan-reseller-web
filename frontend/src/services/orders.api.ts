@@ -67,6 +67,12 @@ export async function getOrder(id: string): Promise<Order> {
   return res.data;
 }
 
+/** Set supplier (AliExpress) URL for an order so "Forzar compra" can run. Returns updated order. */
+export async function setOrderSupplierUrl(orderId: string, url: string): Promise<Order> {
+  const res = await api.patch<Order>(`/api/orders/${orderId}/supplier-url`, { url: url.trim() });
+  return res.data;
+}
+
 export async function listOrders(): Promise<Order[]> {
   const res = await api.get<Order[]>('/api/orders');
   return res.data;

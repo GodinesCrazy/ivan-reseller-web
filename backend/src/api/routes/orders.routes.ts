@@ -463,6 +463,78 @@ function isTestOrderPaypalId(paypalOrderId: string | null): boolean {
   return REAL_ORDERS_EXCLUDE_PAYPAL_PREFIXES.some((prefix) => p.startsWith(prefix));
 }
 
+/** Normalize AliExpress URL to base form (optional). */
+function normalizeAliExpressUrl(url: string): string {
+  const u = url.trim();
+  const m = u.match(/^(https?:\/\/(?:[a-z0-9-]+\.)?aliexpress\.com\/item\/(\d+)\.html)/i);
+  if (m) return m[1];
+  return u;
+}
+
+/**
+ * PATCH /api/orders/:id/supplier-url
+ * Set the supplier (AliExpress) URL for an order so "Forzar compra" can run.
+ * When order has productId, also updates Product.aliexpressUrl and MarketplaceListing.supplierUrl.
+ */
+router.patch('/:id/supplier-url', async (req: Request, res: Response) => {
+  try {
+    const orderId = (req.params.id || '').trim();
+    if (!orderId) return res.status(400).json({ error: 'Order id required' });
+    const body = req.body as { url?: string };
+    const rawUrl = typeof body?.url === 'string' ? body.url.trim() : '';
+    if (!rawUrl) return res.status(400).json({ error: 'url is required' });
+    if (!/aliexpress\.com\/item\//i.test(rawUrl)) {
+      return res.status(400).json({ error: 'URL must be an AliExpress product page (aliexpress.com/item/...)' });
+    }
+    const url = normalizeAliExpressUrl(rawUrl);
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, userId: true, productId: true, status: true },
+    });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
+    if (!isAdmin && order.userId != null && order.userId !== req.user!.userId) {
+      return res.status(403).json({ error: 'Not authorized to update this order' });
+    }
+
+    const wasFailedMissingUrl = order.status === 'FAILED';
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        productUrl: url,
+        errorMessage: null,
+        ...(wasFailedMissingUrl ? { status: 'PAID' } : {}),
+      },
+    });
+
+    if (order.productId != null) {
+      await prisma.product.updateMany({
+        where: { id: order.productId },
+        data: { aliexpressUrl: url },
+      });
+      await prisma.marketplaceListing.updateMany({
+        where: { productId: order.productId, marketplace: 'ebay' },
+        data: { supplierUrl: url },
+      });
+    }
+
+    logger.info('[ORDERS] supplier-url set', { orderId, productId: order.productId });
+    const updated = await prisma.order.findUnique({ where: { id: orderId } });
+    const pp = (updated?.paypalOrderId || '').trim();
+    const marketplaceOrderId = pp.startsWith('ebay:') ? pp.slice(5) : pp.startsWith('mercadolibre:') ? pp.slice(13) : pp.startsWith('amazon:') ? pp.slice(7) : null;
+    const sale = await prisma.sale.findUnique({ where: { orderId }, select: { id: true, status: true, trackingNumber: true } });
+    return res.status(200).json({
+      ...updated,
+      marketplaceOrderId,
+      sale: sale ? { id: sale.id, status: sale.status, trackingNumber: sale.trackingNumber } : null,
+    });
+  } catch (err: any) {
+    logger.error('[ORDERS] supplier-url failed', { error: err?.message });
+    return res.status(500).json({ error: err?.message || 'Failed to set supplier URL' });
+  }
+});
+
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;

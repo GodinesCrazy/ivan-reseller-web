@@ -2020,9 +2020,10 @@ export class MarketplaceService {
     info: { listingId: string; listingUrl: string; publishedAt: Date; mlStatus?: string }
   ): Promise<void> {
     try {
-      const product = await prisma.product.findUnique({ where: { id: productId } });
+      const product = await prisma.product.findUnique({ where: { id: productId }, select: { userId: true, aliexpressUrl: true } });
       if (!product) return;
-      const data: any = { listingUrl: info.listingUrl, publishedAt: info.publishedAt };
+      const supplierUrl = (product.aliexpressUrl || '').trim() || null;
+      const data: any = { listingUrl: info.listingUrl, publishedAt: info.publishedAt, supplierUrl };
       if (info.mlStatus) data.sku = `status:${info.mlStatus}`;
       const existing = await prisma.marketplaceListing.findFirst({ where: { marketplace, listingId: info.listingId } });
       if (existing) {

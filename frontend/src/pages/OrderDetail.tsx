@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Package, CheckCircle, XCircle, RefreshCw, MapPin, Truck } from 'lucide-react';
-import { getOrder, retryOrderFulfill, forceFulfillByEbayOrderId, type Order } from '@/services/orders.api';
+import { getOrder, retryOrderFulfill, forceFulfillByEbayOrderId, setOrderSupplierUrl, type Order } from '@/services/orders.api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -21,6 +21,9 @@ export default function OrderDetail() {
   const [retryError, setRetryError] = useState<string | null>(null);
   const [forceFulfillLoading, setForceFulfillLoading] = useState(false);
   const [forceFulfillError, setForceFulfillError] = useState<string | null>(null);
+  const [supplierUrlInput, setSupplierUrlInput] = useState('');
+  const [supplierUrlLoading, setSupplierUrlLoading] = useState(false);
+  const [supplierUrlError, setSupplierUrlError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const canRetryFulfill =
@@ -63,6 +66,25 @@ export default function OrderDetail() {
       setForceFulfillError(err?.response?.data?.error || err?.message || 'Error al forzar compra');
     } finally {
       setForceFulfillLoading(false);
+    }
+  };
+
+  const needsSupplierUrl = (order?.status === 'PAID' || order?.status === 'FAILED') && !(order?.productUrl?.trim());
+  const handleSetSupplierUrl = async () => {
+    if (!id || !supplierUrlInput.trim()) return;
+    setSupplierUrlLoading(true);
+    setSupplierUrlError(null);
+    try {
+      const updated = await setOrderSupplierUrl(id, supplierUrlInput.trim());
+      setOrder(updated);
+      setSupplierUrlInput('');
+      if (updated.status === 'PAID' && updated.productUrl) {
+        setForceFulfillError(null);
+      }
+    } catch (err: any) {
+      setSupplierUrlError(err?.response?.data?.error || err?.message || 'Error al guardar URL');
+    } finally {
+      setSupplierUrlLoading(false);
     }
   };
 
@@ -163,6 +185,31 @@ export default function OrderDetail() {
           <div className="flex items-center gap-2 p-4 text-green-800 dark:text-green-200 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
             <CheckCircle className="w-5 h-5 flex-shrink-0" />
             <span>Compra cumplida. AliExpress: {order.aliexpressOrderId || 'N/A'}</span>
+          </div>
+        )}
+
+        {needsSupplierUrl && (
+          <div className="p-4 text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 space-y-3">
+            <p className="text-sm font-medium">Falta la URL de AliExpress para realizar la compra al proveedor.</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">Pega la URL del artículo en AliExpress que encontraste (debe ser el mismo producto). Al guardarla, podrás usar &quot;Forzar compra en AliExpress&quot;.</p>
+            <div className="flex flex-wrap items-end gap-2">
+              <input
+                type="url"
+                placeholder="https://es.aliexpress.com/item/1005010738822789.html"
+                value={supplierUrlInput}
+                onChange={(e) => setSupplierUrlInput(e.target.value)}
+                className="flex-1 min-w-[200px] px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+              <button
+                type="button"
+                onClick={handleSetSupplierUrl}
+                disabled={supplierUrlLoading || !supplierUrlInput.trim()}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {supplierUrlLoading ? 'Guardando...' : 'Usar esta URL'}
+              </button>
+            </div>
+            {supplierUrlError && <p className="text-sm text-red-700 dark:text-red-300">{supplierUrlError}</p>}
           </div>
         )}
 

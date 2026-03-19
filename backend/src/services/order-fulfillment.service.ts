@@ -78,10 +78,52 @@ export class OrderFulfillmentService {
       return { success: false, orderId, status: 'FAILED', error: 'Invalid shipping address' };
     }
 
-    const productUrl = order.productUrl || '';
+    let productUrl = (order.productUrl || '').trim();
+    if (!productUrl && order.productId) {
+      const product = await prisma.product.findUnique({
+        where: { id: order.productId },
+        select: { aliexpressUrl: true },
+      });
+      const url = (product?.aliexpressUrl || '').trim();
+      if (url) {
+        productUrl = url;
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { productUrl: url },
+        });
+        logger.info('[ORDER-FULFILLMENT] Resolved productUrl from Product.aliexpressUrl', { orderId, productId: order.productId });
+      }
+    }
+    if (!productUrl && order.productId) {
+      const listing = await prisma.marketplaceListing.findFirst({
+        where: {
+          productId: order.productId,
+          marketplace: 'ebay',
+          ...(order.userId != null ? { userId: order.userId } : {}),
+        },
+        select: { supplierUrl: true },
+      });
+      const url = (listing?.supplierUrl || '').trim();
+      if (url) {
+        productUrl = url;
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { productUrl: url },
+        });
+        logger.info('[ORDER-FULFILLMENT] Resolved productUrl from MarketplaceListing.supplierUrl', { orderId, productId: order.productId });
+      }
+    }
     if (!productUrl) {
-      await this.markFailed(orderId, 'Product URL missing', order.userId ?? undefined);
-      return { success: false, orderId, status: 'FAILED', error: 'Product URL missing' };
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { status: 'PAID', errorMessage: 'Falta la URL de AliExpress. Añádela en el producto vinculado o en Compras pendientes.' },
+      });
+      return {
+        success: false,
+        orderId,
+        status: 'PAID',
+        error: 'Falta la URL de AliExpress. Añádela en el producto vinculado a esta orden o en Compras pendientes y vuelve a forzar la compra.',
+      };
     }
 
     const fullName = order.customerName || shippingObj.fullName || 'Customer';

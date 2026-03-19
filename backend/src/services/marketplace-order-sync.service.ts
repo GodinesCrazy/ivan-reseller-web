@@ -93,23 +93,23 @@ export async function upsertOrderFromEbayPayload(
   const firstLine = ebayOrder.lineItems?.[0];
   const sku = firstLine?.sku;
   const itemId = (firstLine as any)?.itemId;
-  let listing: { productId: number; userId: number } | null = null;
+  let listing: { productId: number; userId: number; supplierUrl: string | null } | null = null;
   if (itemId) {
     listing = await prisma.marketplaceListing.findFirst({
       where: { marketplace: 'ebay', listingId: String(itemId) },
-      select: { productId: true, userId: true },
+      select: { productId: true, userId: true, supplierUrl: true },
     });
   }
   if (!listing && sku) {
     listing = await prisma.marketplaceListing.findFirst({
       where: { marketplace: 'ebay', listingId: String(sku) },
-      select: { productId: true, userId: true },
+      select: { productId: true, userId: true, supplierUrl: true },
     });
   }
   if (!listing && sku) {
     listing = await prisma.marketplaceListing.findFirst({
       where: { marketplace: 'ebay', sku: String(sku) },
-      select: { productId: true, userId: true },
+      select: { productId: true, userId: true, supplierUrl: true },
     });
   }
   const lineTitle = (firstLine?.title || '').trim() || `eBay order ${orderId}`;
@@ -133,6 +133,9 @@ export async function upsertOrderFromEbayPayload(
         });
         productUrl = (ref?.aliexpressUrl || '').trim();
       }
+    }
+    if (!productUrl && listing.supplierUrl) {
+      productUrl = (listing.supplierUrl || '').trim();
     }
   }
 

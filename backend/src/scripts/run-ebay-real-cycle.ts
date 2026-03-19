@@ -771,6 +771,7 @@ export async function runEbayRealCycle(): Promise<{
           });
 
           if (publishResult.status === 'published' && publishResult.listingId) {
+            const supplierUrl = (selectedProduct.aliexpressUrl || '').trim() || null;
             await prisma.marketplaceListing.create({
               data: {
                 productId: selectedProduct.id,
@@ -778,6 +779,7 @@ export async function runEbayRealCycle(): Promise<{
                 marketplace: 'ebay',
                 listingId: publishResult.listingId,
                 listingUrl: publishResult.listingUrl,
+                supplierUrl,
                 publishedAt: new Date(),
               },
             });
@@ -936,6 +938,7 @@ export async function runEbayRealCycle(): Promise<{
     });
 
     if (publishResult.status === 'published' && publishResult.listingId) {
+      const supplierUrl = (selectedProduct.aliexpressUrl || '').trim() || null;
       await prisma.marketplaceListing.create({
         data: {
           productId: selectedProduct.id,
@@ -943,6 +946,7 @@ export async function runEbayRealCycle(): Promise<{
           marketplace: 'ebay',
           listingId: publishResult.listingId,
           listingUrl: publishResult.listingUrl,
+          supplierUrl,
           publishedAt: new Date(),
         },
       });
