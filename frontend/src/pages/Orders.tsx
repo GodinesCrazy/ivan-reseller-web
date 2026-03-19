@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Package, RefreshCw, ArrowRight, ExternalLink, Upload, X, Download } from 'lucide-react';
+import { Package, RefreshCw, ArrowRight, ExternalLink, Upload, X, Download, ClipboardCopy, ShoppingCart } from 'lucide-react';
 import api from '@/services/api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import CycleStepsBreadcrumb from '@/components/CycleStepsBreadcrumb';
@@ -14,7 +14,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatCurrencySimple } from '@/utils/currency';
-import { retryOrderFulfill, importEbayOrder, fetchEbayOrder, type Order } from '@/services/orders.api';
+import {
+  retryOrderFulfill,
+  importEbayOrder,
+  fetchEbayOrder,
+  markManualPurchased,
+  retryAutomaticFulfillment,
+  type Order,
+} from '@/services/orders.api';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
@@ -32,6 +39,7 @@ export default function Orders() {
   const [fetchEbayOrderId, setFetchEbayOrderId] = useState('');
   const [fetchingEbay, setFetchingEbay] = useState(false);
   const [syncingMarketplace, setSyncingMarketplace] = useState(false);
+  const [manualActionId, setManualActionId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importForm, setImportForm] = useState({
     ebayOrderId: '',
@@ -52,6 +60,76 @@ export default function Orders() {
   useEffect(() => {
     if (searchParams.get('import') === 'ebay') setShowImportEbay(true);
   }, [searchParams]);
+
+  function getFirstProductImageUrl(order: Order): string | null {
+    try {
+      const raw = order.product?.images;
+      if (!raw) return null;
+      const arr = JSON.parse(raw) as unknown;
+      if (Array.isArray(arr) && typeof arr[0] === 'string') return arr[0];
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+
+  function formatOrderAddress(order: Order): string {
+    try {
+      const parsed = JSON.parse(order.shippingAddress || '{}') as Record<string, string>;
+      if (parsed && typeof parsed === 'object') {
+        return [
+          parsed.fullName || order.customerName,
+          [parsed.addressLine1, parsed.addressLine2].filter(Boolean).join(', '),
+          [parsed.city, parsed.state, parsed.zipCode].filter(Boolean).join(', '),
+          parsed.country || '',
+        ]
+          .filter(Boolean)
+          .join('\n');
+      }
+    } catch {
+      /* ignore */
+    }
+    return order.shippingAddress || '';
+  }
+
+  const manualQueueOrders = orders.filter(
+    (o) => o.status === 'MANUAL_ACTION_REQUIRED' || o.status === 'FULFILLMENT_BLOCKED' || o.manualFulfillmentRequired
+  );
+
+  const handleCopyOrderAddress = async (order: Order) => {
+    try {
+      await navigator.clipboard.writeText(formatOrderAddress(order));
+      toast.success('Dirección copiada');
+    } catch {
+      toast.error('No se pudo copiar');
+    }
+  };
+
+  const handleMarkManualQuick = async (orderId: string) => {
+    setManualActionId(orderId);
+    try {
+      await markManualPurchased(orderId, {});
+      toast.success('Marcado como comprado');
+      await fetchOrders();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || e?.message || 'Error');
+    } finally {
+      setManualActionId(null);
+    }
+  };
+
+  const handleRetryAutoFromList = async (orderId: string) => {
+    setManualActionId(orderId);
+    try {
+      await retryAutomaticFulfillment(orderId);
+      toast.success('Reintento lanzado; actualiza si no ves cambios.');
+      await fetchOrders();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || e?.message || 'Error');
+    } finally {
+      setManualActionId(null);
+    }
+  };
 
   const canRetryFulfill = (order: Order) =>
     order.status === 'FAILED' &&
@@ -225,6 +303,7 @@ export default function Orders() {
   }
 
   const hasFailed = orders.some((o) => o.status === 'FAILED');
+  const hasManual = manualQueueOrders.length > 0;
 
   return (
     <div className="space-y-6 p-6">
@@ -265,9 +344,13 @@ export default function Orders() {
             })()}</>
           )}
         </p>
-        {hasFailed && (
+        {(hasFailed || hasManual) && (
           <p className="text-xs mt-1">
-            <a href="/dashboard" className="text-amber-600 dark:text-amber-400 hover:underline">Ver alertas en Panel</a>
+            {hasFailed && (
+              <a href="/dashboard" className="text-amber-600 dark:text-amber-400 hover:underline">Ver alertas en Panel</a>
+            )}
+            {hasFailed && hasManual && ' · '}
+            {hasManual && <span className="text-orange-600 dark:text-orange-400 font-medium">Hay pedidos que requieren compra manual en AliExpress.</span>}
           </p>
         )}
         <div className="mt-3">
@@ -420,6 +503,128 @@ export default function Orders() {
 
       {error && (
         <div className="p-4 text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">{error}</div>
+      )}
+
+      {manualQueueOrders.length > 0 && (
+        <Card className="border-orange-400 dark:border-orange-600 bg-orange-50/80 dark:bg-orange-950/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg text-orange-900 dark:text-orange-100">
+              Pedidos para cumplir manualmente (AliExpress)
+            </CardTitle>
+            <p className="text-sm text-orange-800 dark:text-orange-200">
+              La API no pudo comprar automáticamente (p. ej. SKU_NOT_EXIST). Completa la compra en AliExpress y marca el estado.
+            </p>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left border-b border-orange-200 dark:border-orange-800">
+                  <th className="py-2 pr-3">Imagen</th>
+                  <th className="py-2 pr-3">Marketplace</th>
+                  <th className="py-2 pr-3">Comprador / dirección</th>
+                  <th className="py-2 pr-3">Importe</th>
+                  <th className="py-2 pr-3">Proveedor</th>
+                  <th className="py-2">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {manualQueueOrders.map((order) => {
+                  const img = getFirstProductImageUrl(order);
+                  const busy = manualActionId === order.id;
+                  return (
+                    <tr key={order.id} className="border-b border-orange-100 dark:border-orange-900/50">
+                      <td className="py-2 pr-3 w-16">
+                        {img ? (
+                          <img src={img} alt="" className="w-14 h-14 object-cover rounded border border-orange-200 dark:border-orange-800" />
+                        ) : (
+                          <div className="w-14 h-14 bg-orange-100 dark:bg-orange-900/40 rounded flex items-center justify-center">
+                            <Package className="w-6 h-6 text-orange-600" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2 pr-3 align-top">
+                        <span className="font-medium">
+                          {order.paypalOrderId?.startsWith('ebay:')
+                            ? 'eBay'
+                            : order.paypalOrderId?.startsWith('mercadolibre:')
+                              ? 'Mercado Libre'
+                              : order.paypalOrderId?.startsWith('amazon:')
+                                ? 'Amazon'
+                                : '—'}
+                        </span>
+                        <div className="text-xs font-mono text-gray-600 dark:text-gray-400 mt-0.5">
+                          {order.paypalOrderId?.startsWith('ebay:')
+                            ? order.paypalOrderId.slice(5)
+                            : order.id.slice(0, 10) + '…'}
+                        </div>
+                      </td>
+                      <td className="py-2 pr-3 align-top max-w-[220px]">
+                        <div className="font-medium text-gray-900 dark:text-gray-100">{order.customerName || '—'}</div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap mt-1">{formatOrderAddress(order)}</div>
+                      </td>
+                      <td className="py-2 pr-3 align-top whitespace-nowrap">{formatCurrencySimple(order.price, order.currency)}</td>
+                      <td className="py-2 pr-3 align-top">
+                        {(order.productUrl || '').trim() ? (
+                          <a
+                            href={order.productUrl!.trim()}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
+                          >
+                            AliExpress <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <span className="text-xs text-amber-700">Sin URL</span>
+                        )}
+                      </td>
+                      <td className="py-2 align-top">
+                        <div className="flex flex-col gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="justify-start"
+                            disabled={!(order.productUrl || '').trim()}
+                            onClick={() => (order.productUrl || '').trim() && window.open(order.productUrl!.trim(), '_blank', 'noopener,noreferrer')}
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 mr-1" />
+                            Abrir proveedor
+                          </Button>
+                          <Button variant="outline" size="sm" className="justify-start" onClick={() => handleCopyOrderAddress(order)}>
+                            <ClipboardCopy className="w-3.5 h-3.5 mr-1" />
+                            Copiar dirección
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="justify-start bg-green-600 hover:bg-green-700"
+                            disabled={busy}
+                            onClick={() => handleMarkManualQuick(order.id)}
+                          >
+                            <ShoppingCart className="w-3.5 h-3.5 mr-1" />
+                            Marcar comprado
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="justify-start"
+                            disabled={busy || !(order.productUrl || '').trim()}
+                            onClick={() => handleRetryAutoFromList(order.id)}
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 mr-1 ${busy ? 'animate-spin' : ''}`} />
+                            Reintentar auto
+                          </Button>
+                          <Button variant="ghost" size="sm" className="justify-start h-7" onClick={() => navigate(`/orders/${order.id}`)}>
+                            Detalle <ArrowRight className="w-3 h-3 ml-1" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
       )}
 
       {orders.length === 0 ? (

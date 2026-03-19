@@ -15,6 +15,8 @@ import { aliexpressAffiliateAPIService } from './aliexpress-affiliate-api.servic
 import fxService from './fx.service';
 import { toNumber } from '../utils/decimal.utils';
 import { retryFailedOrdersDueToFunds } from './retry-failed-orders.service';
+import { retryAutomaticPurchaseForManualOrders } from './manual-fulfillment.service';
+import { orderFulfillmentService } from './order-fulfillment.service';
 import { processPaidOrders } from './process-paid-orders.service';
 import { syncTrackingForEligibleOrders } from './fulfillment-tracking-sync.service';
 import { listingStateReconciliationService } from './listing-state-reconciliation.service';
@@ -499,10 +501,12 @@ export class ScheduledTasksService {
         'fulfillment-retry-engine',
         async (job) => {
           logger.info('Scheduled Tasks: Running fulfillment retry engine', { jobId: job.id });
-          return await retryFailedOrdersDueToFunds({
+          const fundsRetry = await retryFailedOrdersDueToFunds({
             maxAgeHours: 168,
             maxRetriesPerOrder: 5,
           });
+          const manualAuto = await retryAutomaticPurchaseForManualOrders(orderFulfillmentService);
+          return { fundsRetry, manualAutoRetry: manualAuto };
         },
         {
           connection: this.bullMQRedis as any,

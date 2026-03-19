@@ -10,6 +10,14 @@ export interface OrderSaleInfo {
   trackingNumber: string | null;
 }
 
+export interface OrderProductPreview {
+  id: number;
+  title: string;
+  images: string;
+  aliexpressUrl?: string | null;
+  aliexpressPrice?: number | string | null;
+}
+
 export interface Order {
   id: string;
   productId?: number;
@@ -19,7 +27,15 @@ export interface Order {
   customerName: string;
   customerEmail: string;
   shippingAddress: string;
-  status: 'CREATED' | 'PAID' | 'PURCHASING' | 'PURCHASED' | 'FAILED';
+  status:
+    | 'CREATED'
+    | 'PAID'
+    | 'PURCHASING'
+    | 'PURCHASED'
+    | 'FAILED'
+    | 'MANUAL_ACTION_REQUIRED'
+    | 'FULFILLMENT_BLOCKED'
+    | 'SIMULATED';
   paypalOrderId?: string;
   /** Marketplace order ID (e.g. eBay 17-14370-63716) when present */
   marketplaceOrderId?: string | null;
@@ -29,6 +45,13 @@ export interface Order {
   productUrl?: string;
   errorMessage?: string;
   fulfillRetryCount?: number;
+  /** Phase 47B manual fallback */
+  manualFulfillmentRequired?: boolean;
+  failureReason?: string | null;
+  lastAttemptAt?: string | null;
+  manualPurchaseDate?: string | null;
+  quantity?: number;
+  product?: OrderProductPreview | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -191,5 +214,35 @@ export interface FetchEbayOrderResponse {
 /** Fetch a single eBay order by ID from eBay API and upsert; triggers fulfillment if new and mapeada. */
 export async function fetchEbayOrder(ebayOrderId: string): Promise<FetchEbayOrderResponse> {
   const res = await api.post<FetchEbayOrderResponse>('/api/orders/fetch-ebay-order', { ebayOrderId: ebayOrderId.trim() });
+  return res.data;
+}
+
+export async function promoteManualFulfillmentByEbayOrderId(
+  ebayOrderId: string,
+  reason?: string
+): Promise<{ ok: boolean; skipped?: string; order: Order | null }> {
+  const res = await api.post<{ ok: boolean; skipped?: string; order: Order | null }>(
+    `/api/orders/by-ebay-id/${encodeURIComponent(ebayOrderId.trim())}/promote-manual-fulfillment`,
+    reason ? { reason } : {}
+  );
+  return res.data;
+}
+
+export async function markManualPurchased(
+  orderId: string,
+  body?: { supplierOrderId?: string; purchaseDate?: string }
+): Promise<{ success: boolean; order: Order | null; alreadyPurchased?: boolean }> {
+  const res = await api.post(`/api/orders/${orderId}/mark-manual-purchased`, body ?? {});
+  return res.data;
+}
+
+export async function retryAutomaticFulfillment(orderId: string): Promise<{
+  success: boolean;
+  status: string;
+  error?: string;
+  aliexpressOrderId?: string;
+  order: Order | null;
+}> {
+  const res = await api.post(`/api/orders/${orderId}/retry-automatic-fulfillment`, {}, { timeout: FULFILLMENT_REQUEST_TIMEOUT_MS });
   return res.data;
 }

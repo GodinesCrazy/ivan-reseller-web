@@ -27,6 +27,8 @@ export interface PurchaseRetryResult {
   orderId?: string;
   attempts: PurchaseAttempt[];
   error?: string;
+  /** When purchase used an alternative product (same product with stock), URL to update order.productUrl. */
+  usedProductUrl?: string;
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -41,7 +43,8 @@ export class PurchaseRetryService {
     shippingAddress: Record<string, string>,
     alternatives?: string[],
     orderId?: string,
-    userId?: number
+    userId?: number,
+    preferredSkuId?: string
   ): Promise<PurchaseRetryResult> {
     const attempts: PurchaseAttempt[] = [];
     const urlsToTry = [productUrl, ...(alternatives || []).filter(Boolean)];
@@ -70,6 +73,7 @@ export class PurchaseRetryService {
             productUrl: url,
             quantity,
             maxPrice,
+            preferredSkuId,
             shippingAddress: {
               fullName: shippingAddress.fullName || '',
               addressLine1: shippingAddress.addressLine1 || '',
@@ -109,12 +113,21 @@ export class PurchaseRetryService {
         }
 
         if (result.success && result.orderId && result.orderId !== 'SIMULATED_ORDER_ID') {
-          console.log('[PURCHASE-RETRY] SUCCESS', { attemptNum, orderId: result.orderId });
-          logger.info('[PURCHASE-RETRY] SUCCESS', { attempt: attemptNum, orderId: result.orderId });
+          console.log('[PURCHASE-RETRY] SUCCESS', {
+            attemptNum,
+            orderId: result.orderId,
+            usedProductUrl: result.usedProductUrl ?? undefined,
+          });
+          logger.info('[PURCHASE-RETRY] SUCCESS', {
+            attempt: attemptNum,
+            orderId: result.orderId,
+            usedProductUrl: result.usedProductUrl ?? undefined,
+          });
           return {
             success: true,
             orderId: result.orderId,
             attempts,
+            usedProductUrl: result.usedProductUrl,
           };
         }
 

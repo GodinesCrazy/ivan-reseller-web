@@ -393,12 +393,45 @@ export class AliExpressDropshippingAPIService {
           productId,
         });
         result = await this.makeRequest('aliexpress.ds.product.get', apiParams);
-        product = result.product || result;
+        const resAny = result as any;
+        product = resAny?.result ?? resAny?.product ?? result;
+        const stillNoFields = !(product as any)?.product_id && !(product as any)?.product_title && !(product as any)?.sale_price;
+        if (stillNoFields && typeof resAny === 'object') {
+          const rr = resAny?.result;
+          const aeSkus = rr?.ae_item_sku_info_dtos;
+          logger.info('[ALIEXPRESS-DROPSHIPPING-API] ds.product.get result shape', {
+            resultResultKeys: rr && typeof rr === 'object' ? Object.keys(rr).slice(0, 25) : null,
+            ae_item_sku_info_dtosType: aeSkus == null ? null : Array.isArray(aeSkus) ? 'array' : typeof aeSkus,
+            ae_item_sku_info_dtosKeys: aeSkus && typeof aeSkus === 'object' && !Array.isArray(aeSkus) ? Object.keys(aeSkus) : null,
+          });
+        }
       }
       const rawAny = product as any;
       const rawSkus: any = rawAny?.skus;
       const rawSku: any = rawAny?.sku;
       const rawSkuList: any = rawAny?.sku_list ?? rawAny?.skuList ?? rawAny?.skuListResponse;
+      const aeSkuDtos: any = rawAny?.ae_item_sku_info_dtos;
+      let aeSkuArray: any[] | undefined;
+      if (Array.isArray(aeSkuDtos)) {
+        aeSkuArray = aeSkuDtos;
+      } else if (aeSkuDtos && typeof aeSkuDtos === 'object') {
+        const inner =
+          aeSkuDtos.ae_item_sku_info_d_t_o ??
+          aeSkuDtos.ae_item_sku_info_dto ??
+          aeSkuDtos.ae_item_sku_info_dtos ??
+          aeSkuDtos.sku ??
+          aeSkuDtos.data;
+        aeSkuArray = Array.isArray(inner) ? inner : undefined;
+        if (!aeSkuArray && typeof inner === 'object' && inner !== null) {
+          const keys = Object.keys(inner);
+          if (keys.length > 0) {
+            const first = (inner as any)[keys[0]];
+            aeSkuArray = Array.isArray(first) ? first : [inner];
+          }
+        }
+      } else {
+        aeSkuArray = undefined;
+      }
 
       const skuArray: any[] | undefined = Array.isArray(rawSkus?.sku)
         ? rawSkus.sku
@@ -408,21 +441,26 @@ export class AliExpressDropshippingAPIService {
         ? rawSkus
         : Array.isArray(rawSkuList)
         ? rawSkuList
+        : aeSkuArray?.length
+        ? aeSkuArray
         : undefined;
+
+      const baseInfo = rawAny?.ae_item_base_info_dto;
+      if (baseInfo && typeof baseInfo === 'object') {
+        (product as any).product_id = (product as any).product_id ?? baseInfo.product_id ?? baseInfo.productId;
+        (product as any).product_title = (product as any).product_title ?? baseInfo.subject ?? baseInfo.product_title ?? baseInfo.title;
+      }
 
       logger.info('[ALIEXPRESS-DROPSHIPPING-API] getProductInfo product shape (skus)', {
         productKeys: Object.keys(rawAny || {}).slice(0, 20),
         hasSkus: !!rawSkus,
-        rawSkusType: rawSkus ? typeof rawSkus : null,
-        rawSkusKeys: rawSkus && typeof rawSkus === 'object' ? Object.keys(rawSkus).slice(0, 10) : [],
-        skuType: rawSku ? typeof rawSku : null,
-        hasSkuList: !!rawSkuList,
+        hasAeSkuDtos: !!aeSkuArray?.length,
         skuArrayLength: skuArray?.length ?? null,
       });
-      
+
       return {
-        productId: String(product.product_id || productId),
-        productTitle: product.product_title || '',
+        productId: String((product as any).product_id || productId),
+        productTitle: String((product as any).product_title || ''),
         productImages: Array.isArray(product.product_images?.string) 
           ? product.product_images.string 
           : (product.product_images ? [product.product_images] : []),

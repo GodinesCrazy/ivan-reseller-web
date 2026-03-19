@@ -13,8 +13,17 @@ import logger from '../config/logger';
 import { purchaseRetryService } from './purchase-retry.service';
 import { checkDailyLimits } from './daily-limits.service';
 import { hasSufficientFreeCapital } from './working-capital.service';
+import { maybeEscalateFailedOrderToManual } from './manual-fulfillment.service';
 
-export type OrderStatus = 'CREATED' | 'PAID' | 'PURCHASING' | 'PURCHASED' | 'FAILED' | 'SIMULATED';
+export type OrderStatus =
+  | 'CREATED'
+  | 'PAID'
+  | 'PURCHASING'
+  | 'PURCHASED'
+  | 'FAILED'
+  | 'SIMULATED'
+  | 'MANUAL_ACTION_REQUIRED'
+  | 'FULFILLMENT_BLOCKED';
 
 export interface FulfillOrderResult {
   success: boolean;
@@ -28,7 +37,7 @@ export class OrderFulfillmentService {
   /**
    * Fulfill an order: set PURCHASING, call AliExpress checkout, update status.
    */
-  async fulfillOrder(orderId: string): Promise<FulfillOrderResult> {
+  async fulfillOrder(orderId: string, options?: { preferredSkuId?: string }): Promise<FulfillOrderResult> {
     const order = await prisma.order.findUnique({ where: { id: orderId } });
     if (!order) {
       logger.error('[ORDER-FULFILLMENT] Order not found', { orderId });
@@ -44,14 +53,27 @@ export class OrderFulfillmentService {
         error: `Order already ${order.status}; skip duplicate purchase`,
       };
     }
-    if (order.status !== 'PAID') {
-      logger.warn('[ORDER-FULFILLMENT] Order not in PAID status', { orderId, status: order.status });
+    // Phase 47B: allow automatic retry from manual queue (user or daily job sets PAID first; also accept direct call)
+    const canFulfillFromManual =
+      order.status === 'MANUAL_ACTION_REQUIRED' || order.status === 'FULFILLMENT_BLOCKED';
+    if (order.status !== 'PAID' && !canFulfillFromManual) {
+      logger.warn('[ORDER-FULFILLMENT] Order not in PAID / manual-queue status', { orderId, status: order.status });
       return {
         success: false,
         orderId,
         status: order.status as OrderStatus,
-        error: `Order must be PAID, got ${order.status}`,
+        error: `Order must be PAID or MANUAL_ACTION_REQUIRED, got ${order.status}`,
       };
+    }
+    if (canFulfillFromManual) {
+      await prisma.order.update({
+        where: { id: orderId },
+        data: {
+          status: 'PAID',
+          errorMessage: null,
+        },
+      });
+      logger.info('[ORDER-FULFILLMENT] Phase 47B: resumed from manual queue to PAID for purchase attempt', { orderId });
     }
     if (order.userId == null) {
       logger.warn('[ORDER-FULFILLMENT] Order has no userId; Dropshipping API will not be used', { orderId });
@@ -196,10 +218,26 @@ export class OrderFulfillmentService {
       setTimeout(() => reject(new Error(timeoutMessage)), FULFILLMENT_TIMEOUT_MS);
     });
 
+    let preferredSkuId: string | undefined = options?.preferredSkuId?.trim();
+    if (!preferredSkuId && order.productId) {
+      const product = await prisma.product.findUnique({
+        where: { id: order.productId },
+        select: { aliexpressSku: true },
+      });
+      if (product?.aliexpressSku?.trim()) {
+        preferredSkuId = product.aliexpressSku.trim();
+        logger.info('[ORDER-FULFILLMENT] Using Product.aliexpressSku for placeOrder', { orderId, preferredSkuId });
+      }
+    }
+    if (preferredSkuId && options?.preferredSkuId) {
+      logger.info('[ORDER-FULFILLMENT] Using rescued preferredSkuId for placeOrder', { orderId, preferredSkuId });
+    }
+
     logger.info('[ORDER-FULFILLMENT] Calling attemptPurchase', {
       orderId,
       userId: order.userId ?? null,
       productUrlPrefix: productUrl.substring(0, 80),
+      hasPreferredSkuId: !!preferredSkuId,
     });
 
     try {
@@ -211,23 +249,53 @@ export class OrderFulfillmentService {
           shippingAddr,
           undefined,
           orderId,
-          order.userId ?? undefined
+          order.userId ?? undefined,
+          preferredSkuId
         ),
         timeoutPromise,
       ]);
 
       if (result.success && result.orderId && result.orderId !== 'SIMULATED_ORDER_ID') {
+        const updateData: Record<string, any> = {
+          status: 'PURCHASED',
+          aliexpressOrderId: result.orderId,
+          errorMessage: null,
+          manualFulfillmentRequired: false,
+          failureReason: null,
+        };
+        if (result.usedProductUrl?.trim()) {
+          updateData.productUrl = result.usedProductUrl.trim();
+          logger.info('[FULFILLMENT] Updating order.productUrl to alternative product used for purchase', {
+            orderId,
+            usedProductUrl: result.usedProductUrl.substring(0, 80),
+          });
+          if (order.productId) {
+            try {
+              await prisma.product.update({
+                where: { id: order.productId },
+                data: { aliexpressUrl: result.usedProductUrl.trim() },
+              });
+              logger.info('[FULFILLMENT] Updated Product.aliexpressUrl to alternative', {
+                orderId,
+                productId: order.productId,
+              });
+            } catch (productErr: any) {
+              logger.warn('[FULFILLMENT] Failed to update Product.aliexpressUrl (non-fatal)', {
+                orderId,
+                productId: order.productId,
+                error: productErr?.message,
+              });
+            }
+          }
+        }
         await prisma.order.update({
           where: { id: orderId },
-          data: {
-            status: 'PURCHASED',
-            aliexpressOrderId: result.orderId,
-            errorMessage: null,
-          },
+          data: updateData,
         });
         logger.info('[FULFILLMENT] PURCHASED', {
           orderId,
           aliexpressOrderId: result.orderId,
+          usedProductUrl: result.usedProductUrl ?? undefined,
           timestamp: new Date().toISOString(),
         });
         // Crear Sale automática (comisión + payout) si el Order tiene userId
@@ -247,10 +315,14 @@ export class OrderFulfillmentService {
       }
 
       await this.markFailed(orderId, result.error || 'Purchase retry exhausted', order.userId ?? undefined);
+      const st = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { status: true },
+      });
       return {
         success: false,
         orderId,
-        status: 'FAILED',
+        status: (st?.status as OrderStatus) || 'FAILED',
         error: result.error,
       };
     } catch (err: any) {
@@ -263,22 +335,44 @@ export class OrderFulfillmentService {
         isTimeout,
       });
       await this.markFailed(orderId, msg, order.userId ?? undefined);
-      return { success: false, orderId, status: 'FAILED', error: msg };
+      const st = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { status: true },
+      });
+      return {
+        success: false,
+        orderId,
+        status: (st?.status as OrderStatus) || 'FAILED',
+        error: msg,
+      };
     }
   }
 
   private async markFailed(orderId: string, errorMessage: string, userId?: number | null): Promise<void> {
+    const now = new Date();
     await prisma.order.update({
       where: { id: orderId },
-      data: { status: 'FAILED', errorMessage },
+      data: { status: 'FAILED', errorMessage, lastAttemptAt: now },
     });
-    const timestamp = new Date().toISOString();
+    const timestamp = now.toISOString();
     logger.error('[FULFILLMENT] FAILED', {
       orderId,
       errorMessage,
       timestamp,
       action: 'manual_fallback',
     });
+
+    await maybeEscalateFailedOrderToManual(orderId, errorMessage, userId);
+
+    const after = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { status: true },
+    });
+    if (after?.status === 'MANUAL_ACTION_REQUIRED') {
+      logger.warn('[PHASE47B] order_moved_to_manual_queue', { orderId });
+      return;
+    }
+
     if (userId) {
       try {
         const { notificationService } = await import('./notification.service');

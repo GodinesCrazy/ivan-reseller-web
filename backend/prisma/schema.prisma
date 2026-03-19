@@ -147,6 +147,7 @@ model Product {
   // Phase 1: Inventory sync — supplier stock from AliExpress, last check time
   supplierStock         Int?      // Last known stock from supplier (AliExpress)
   supplierStockCheckedAt DateTime? // When supplier stock was last checked
+  aliexpressSku         String?   // AliExpress sku_id from getProductInfo (for placeOrder when product has variants/stock)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -163,6 +164,7 @@ model Product {
   strategyDecisions    StrategyDecision[]
   scalingActions       ScalingAction[]
   unprofitableListingFlags UnprofitableListingFlag[]
+  orders                   Order[] // Post-sale checkout orders linked to this product
 
   @@index([userId, status])
   @@index([status, isPublished])
@@ -1133,21 +1135,31 @@ model Order {
   customerName      String
   customerEmail     String
   shippingAddress   String   // JSON string
-  status            String   @default("CREATED") // CREATED | PAID | PURCHASING | PURCHASED | FAILED
+  status            String   @default("CREATED") // CREATED | PAID | PURCHASING | PURCHASED | FAILED | MANUAL_ACTION_REQUIRED | FULFILLMENT_BLOCKED
   paypalOrderId     String?
   aliexpressOrderId String?
   productUrl        String?
   errorMessage      String?  // Stored on FAILED
   fulfillRetryCount Int      @default(0) // Retry attempts for re-fulfill; cap 5 (Phase 41), then NEEDS_MANUAL_INTERVENTION
+  // Phase 47B: guaranteed fulfillment — manual fallback when automation fails (SKU_NOT_EXIST / PRODUCT_NOT_EXIST threshold)
+  manualFulfillmentRequired Boolean  @default(false)
+  failureReason              String?  // Last structured failure reason for manual queue
+  lastAttemptAt              DateTime? // Last automatic fulfillment attempt
+  manualPurchaseDate         DateTime? // When user marked purchased manually
+  quantity                   Int      @default(1)
+  fulfillmentNotes           String?
+  lastAutoRetryAt            DateTime? // Last daily (or user) automatic retry — cooldown 24h for cron
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([paypalOrderId])
   @@index([createdAt])
   @@index([userId])
+  @@index([manualFulfillmentRequired])
   @@map("orders")
 }
 

@@ -12,6 +12,7 @@ export interface AliExpressCheckoutRequest {
   productUrl: string;
   quantity?: number;
   maxPrice: number;
+  preferredSkuId?: string; // AliExpress sku_id from Product.aliexpressSku (rescue from listing flow)
   shippingAddress: {
     fullName: string;
     addressLine1: string;
@@ -29,6 +30,8 @@ export interface AliExpressCheckoutResult {
   orderId?: string;
   orderNumber?: string;
   error?: string;
+  /** When purchase used an alternative product (same product with stock), URL to update order.productUrl. */
+  usedProductUrl?: string;
 }
 
 export class AliExpressCheckoutService {
@@ -69,6 +72,7 @@ export class AliExpressCheckoutService {
             productUrl: request.productUrl,
             quantity: request.quantity ?? 1,
             maxPrice: request.maxPrice,
+            preferredSkuId: request.preferredSkuId,
             shippingAddress: {
               fullName: request.shippingAddress.fullName,
               addressLine1: request.shippingAddress.addressLine1,
@@ -83,12 +87,19 @@ export class AliExpressCheckoutService {
           userId
         );
         if (result.success && result.orderId) {
-          console.log('[ALIEXPRESS-CHECKOUT] ORDER PLACED (Dropshipping API)', { orderId: result.orderId });
-          logger.info('[ALIEXPRESS-CHECKOUT] Order placed via Dropshipping API', { orderId: result.orderId });
+          console.log('[ALIEXPRESS-CHECKOUT] ORDER PLACED (Dropshipping API)', {
+            orderId: result.orderId,
+            usedProductUrl: result.usedProductUrl ?? undefined,
+          });
+          logger.info('[ALIEXPRESS-CHECKOUT] Order placed via Dropshipping API', {
+            orderId: result.orderId,
+            usedProductUrl: result.usedProductUrl ?? undefined,
+          });
           return {
             success: true,
             orderId: result.orderId,
             orderNumber: result.orderNumber || result.orderId,
+            usedProductUrl: result.usedProductUrl,
           };
         }
         const strictError = result.error || 'AliExpress Dropshipping API purchase failed';
@@ -124,6 +135,7 @@ export class AliExpressCheckoutService {
             productUrl: request.productUrl,
             quantity: request.quantity ?? 1,
             maxPrice: request.maxPrice,
+            preferredSkuId: request.preferredSkuId,
             shippingAddress: {
               fullName: request.shippingAddress.fullName,
               addressLine1: request.shippingAddress.addressLine1,
@@ -180,6 +192,7 @@ export class AliExpressCheckoutService {
         productUrl: request.productUrl,
         quantity: request.quantity ?? 1,
         maxPrice: request.maxPrice,
+        preferredSkuId: request.preferredSkuId,
         shippingAddress: {
           fullName: request.shippingAddress.fullName,
           addressLine1: request.shippingAddress.addressLine1,

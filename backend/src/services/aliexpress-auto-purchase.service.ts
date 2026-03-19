@@ -30,6 +30,7 @@ export interface PurchaseRequest {
   productUrl: string;
   quantity: number;
   maxPrice: number;
+  preferredSkuId?: string; // When set, use this AliExpress sku_id for placeOrder (e.g. from Product.aliexpressSku)
   shippingAddress: {
     fullName: string;
     addressLine1: string;
@@ -52,6 +53,8 @@ export interface PurchaseResult {
   estimatedDelivery?: string;
   error?: string;
   screenshots?: string[]; // For debugging
+  /** When purchase used an alternative product (same product, with stock), URL to update order.productUrl. */
+  usedProductUrl?: string;
 }
 
 export class AliExpressAutoPurchaseService {
@@ -308,22 +311,28 @@ export class AliExpressAutoPurchaseService {
                 };
               }
               
-              // Determinar SKU si hay variantes (simplificado - usar el primero disponible)
-              let selectedSkuId: string | undefined;
-              if (productInfo.skus && productInfo.skus.length > 0) {
+              // Prefer SKU from Product.aliexpressSku (rescue from listing) when provided.
+              let selectedSkuId: string | undefined = request.preferredSkuId?.trim() || undefined;
+              if (!selectedSkuId && productInfo.skus && productInfo.skus.length > 0) {
                 const availableSku = productInfo.skus.find((sku) => sku.stock > 0);
                 const firstSku = productInfo.skus[0];
-                selectedSkuId = (availableSku?.skuId || firstSku?.skuId) || undefined;
+                const allOutOfStock = productInfo.skus.every((s) => s.stock <= 0);
+                if (availableSku?.skuId) {
+                  selectedSkuId = availableSku.skuId;
+                } else if (!allOutOfStock && firstSku?.skuId) {
+                  selectedSkuId = firstSku.skuId;
+                }
                 logger.info('[ALIEXPRESS-AUTO-PURCHASE] SKU selection', {
                   selectedSkuId: selectedSkuId ?? null,
                   skusCount: productInfo.skus.length,
+                  allOutOfStock,
                   sampleSkus: productInfo.skus.slice(0, 5).map((s) => ({ skuId: s.skuId, stock: s.stock })),
                 });
               }
 
-              // If product info didn't include SKU list, try using productId as a SKU fallback.
-              // This helps progress past SKU_NOT_EXIST for products represented without variants.
-              if (!selectedSkuId) {
+              // If no in-stock SKU: leave selectedSkuId undefined so placeOrder is called without sku_id (API may accept default SKU).
+              // Only use productId as skuId when product has no SKU list at all.
+              if (!selectedSkuId && (!productInfo.skus || productInfo.skus.length === 0)) {
                 selectedSkuId = String(productId);
                 logger.warn('[ALIEXPRESS-AUTO-PURCHASE] No SKUs from getProductInfo; using productId as skuId fallback', {
                   productId,
@@ -347,40 +356,84 @@ export class AliExpressAutoPurchaseService {
               });
               // Crear orden usando la API
               let placeOrderResult: any;
+              let usedProductUrl: string | undefined;
               try {
-                placeOrderResult = await aliexpressDropshippingAPIService.placeOrder({
-                  productId,
-                  skuId: selectedSkuId,
-                  quantity: request.quantity,
-                  shippingAddress: request.shippingAddress,
-                  shippingMethodId,
-                  buyerMessage: request.notes,
-                });
-              } catch (placeOrderErr: any) {
-                const msg = placeOrderErr?.message || String(placeOrderErr);
-                const retryWithoutSku =
-                  selectedSkuId &&
-                  (msg.includes('SKU_NOT_EXIST') || msg.includes('PRODUCT_NOT_EXIST') || msg.includes('Invalid sku'));
-                if (retryWithoutSku) {
-                  logger.warn('[ALIEXPRESS-AUTO-PURCHASE] placeOrder failed; retrying without skuId', {
-                    productId,
-                    userId,
-                    skuId: selectedSkuId,
-                    error: msg,
-                  });
+                try {
                   placeOrderResult = await aliexpressDropshippingAPIService.placeOrder({
                     productId,
-                    skuId: undefined,
+                    skuId: selectedSkuId,
                     quantity: request.quantity,
                     shippingAddress: request.shippingAddress,
                     shippingMethodId,
                     buyerMessage: request.notes,
                   });
+                } catch (placeOrderErr: any) {
+                  const msg = placeOrderErr?.message || String(placeOrderErr);
+                  const retryWithoutSku =
+                    selectedSkuId &&
+                    (msg.includes('SKU_NOT_EXIST') || msg.includes('PRODUCT_NOT_EXIST') || msg.includes('Invalid sku'));
+                  if (retryWithoutSku) {
+                    logger.warn('[ALIEXPRESS-AUTO-PURCHASE] placeOrder failed; retrying without skuId', {
+                      productId,
+                      userId,
+                      skuId: selectedSkuId,
+                      error: msg,
+                    });
+                    placeOrderResult = await aliexpressDropshippingAPIService.placeOrder({
+                      productId,
+                      skuId: undefined,
+                      quantity: request.quantity,
+                      shippingAddress: request.shippingAddress,
+                      shippingMethodId,
+                      buyerMessage: request.notes,
+                    });
+                  } else {
+                    throw placeOrderErr;
+                  }
+                }
+              } catch (placeOrderFinalErr: any) {
+                const errMsg = placeOrderFinalErr?.message || String(placeOrderFinalErr);
+                const tryAlternative =
+                  userId &&
+                  (errMsg.includes('SKU_NOT_EXIST') ||
+                    errMsg.includes('missing order_id') ||
+                    errMsg.includes('PRODUCT_NOT_EXIST'));
+                if (tryAlternative) {
+                  const { findAlternativeWithStock } = await import('./aliexpress-alternative-product.service');
+                  const alternative = await findAlternativeWithStock({
+                    userId,
+                    originalProductId: productId,
+                    originalTitle: productInfo.productTitle || '',
+                    maxPriceUsd: request.maxPrice,
+                    shipToCountry: request.shippingAddress.country || 'US',
+                  });
+                  if (alternative) {
+                    logger.info('[ALIEXPRESS-AUTO-PURCHASE] Using alternative product with stock', {
+                      originalProductId: productId,
+                      alternativeProductId: alternative.productId,
+                      alternativeSkuId: alternative.skuId,
+                    });
+                    placeOrderResult = await aliexpressDropshippingAPIService.placeOrder({
+                      productId: alternative.productId,
+                      skuId: alternative.skuId,
+                      quantity: request.quantity,
+                      shippingAddress: request.shippingAddress,
+                      shippingMethodId: undefined,
+                      buyerMessage: request.notes,
+                    });
+                    usedProductUrl = alternative.productUrl;
+                  } else {
+                    throw placeOrderFinalErr;
+                  }
                 } else {
-                  throw placeOrderErr;
+                  throw placeOrderFinalErr;
                 }
               }
-              
+
+              if (!placeOrderResult?.orderId) {
+                throw new Error('AliExpress placeOrder response missing order_id.');
+              }
+
               logger.info('[ALIEXPRESS-AUTO-PURCHASE] Orden creada exitosamente usando Dropshipping API', {
                 orderId: placeOrderResult.orderId,
                 orderNumber: placeOrderResult.orderNumber,
@@ -388,7 +441,8 @@ export class AliExpressAutoPurchaseService {
                 userId
               });
               
-              // Guardar orden en base de datos
+              // Guardar orden en base de datos (supplierUrl = URL realmente comprada)
+              const supplierUrlForLog = usedProductUrl || request.productUrl;
               try {
                 await prisma.purchaseLog.create({
                   data: {
@@ -399,7 +453,7 @@ export class AliExpressAutoPurchaseService {
                     totalAmount: placeOrderResult.totalAmount,
                     currency: placeOrderResult.currency,
                     status: placeOrderResult.status,
-                    supplierUrl: request.productUrl,
+                    supplierUrl: supplierUrlForLog,
                     shippingAddress: JSON.stringify(request.shippingAddress),
                   },
                 });
@@ -410,13 +464,14 @@ export class AliExpressAutoPurchaseService {
                 });
                 // No fallar si no se puede guardar en DB
               }
-              
+
               return {
                 success: true,
                 orderId: placeOrderResult.orderId,
                 orderNumber: placeOrderResult.orderNumber,
                 totalAmount: placeOrderResult.totalAmount,
                 estimatedDelivery: placeOrderResult.estimatedDelivery,
+                usedProductUrl,
               };
             }
           } catch (apiError: any) {

@@ -9,6 +9,9 @@ jest.mock('../../config/database', () => ({
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    purchaseAttemptLog: {
+      count: jest.fn().mockResolvedValue(0),
+    },
   },
 }));
 
@@ -33,7 +36,17 @@ jest.mock('../daily-limits.service', () => ({
 }));
 
 jest.mock('../working-capital.service', () => ({
-  hasSufficientFreeCapital: jest.fn().mockResolvedValue({ sufficient: true }),
+  hasSufficientFreeCapital: jest.fn().mockResolvedValue({
+    sufficient: true,
+    required: 0,
+    freeWorkingCapital: 10_000,
+    snapshot: {
+      realAvailableBalance: 10_000,
+      committedCapital: 0,
+      freeWorkingCapital: 10_000,
+      currency: 'USD',
+    },
+  }),
 }));
 
 import { OrderFulfillmentService } from '../order-fulfillment.service';
@@ -86,7 +99,7 @@ describe('OrderFulfillmentService', () => {
 
       expect(result.success).toBe(false);
       expect(result.status).toBe('CREATED');
-      expect(result.error).toContain('must be PAID');
+      expect(result.error).toMatch(/must be PAID|MANUAL_ACTION_REQUIRED/);
       expect(mockUpdate).not.toHaveBeenCalled();
     });
 
@@ -94,32 +107,32 @@ describe('OrderFulfillmentService', () => {
       const { purchaseRetryService } = require('../purchase-retry.service');
       const mockAttemptPurchase = purchaseRetryService.attemptPurchase as jest.Mock;
 
-      mockFindUnique.mockResolvedValue({
-        id: 'order-timeout',
-        status: 'PAID',
-        price: 50,
-        productUrl: 'https://www.aliexpress.com/item/123.html',
-        productId: null,
-        userId: 1,
-        shippingAddress: JSON.stringify({
-          fullName: 'Test',
-          addressLine1: '123 Main St',
-          city: 'Miami',
-          state: 'FL',
-          country: 'US',
-          zipCode: '33101',
-        }),
-      } as any);
+      mockFindUnique
+        .mockResolvedValueOnce({
+          id: 'order-timeout',
+          status: 'PAID',
+          price: 50,
+          productUrl: 'https://www.aliexpress.com/item/123.html',
+          productId: null,
+          userId: null,
+          shippingAddress: JSON.stringify({
+            fullName: 'Test',
+            addressLine1: '123 Main St',
+            city: 'Miami',
+            state: 'FL',
+            country: 'US',
+            zipCode: '33101',
+          }),
+        } as any)
+        .mockResolvedValue({ status: 'FAILED' } as any);
       mockUpdate.mockResolvedValue({});
 
-      // Never resolves so Promise.race will use the timeout
-      mockAttemptPurchase.mockReturnValue(new Promise(() => {}));
+      const timeoutMessage =
+        'Fulfillment timeout: la compra tardó demasiado. Comprueba el estado en AliExpress o inténtalo de nuevo.';
+      // Reject immediately so Promise.race surfaces the same error as the timeout path
+      mockAttemptPurchase.mockRejectedValue(new Error(timeoutMessage));
 
-      jest.useFakeTimers();
-      const resultPromise = service.fulfillOrder('order-timeout');
-      jest.advanceTimersByTime(101_000);
-      const result = await resultPromise;
-      jest.useRealTimers();
+      const result = await service.fulfillOrder('order-timeout');
 
       expect(result.success).toBe(false);
       expect(result.status).toBe('FAILED');

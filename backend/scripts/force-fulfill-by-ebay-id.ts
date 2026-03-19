@@ -38,8 +38,11 @@ async function main(): Promise<number> {
   }
 
   if (order.status === 'PURCHASING') {
-    console.error('Order is already PURCHASING. Wait or reset it first.');
-    return 1;
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { status: 'PAID', errorMessage: null },
+    });
+    console.log('Reset order from PURCHASING to PAID, then fulfilling:', order.id);
   }
 
   if (order.status === 'FAILED') {

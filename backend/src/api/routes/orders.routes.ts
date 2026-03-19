@@ -21,6 +21,7 @@ import {
 import { syncMercadoLibreOrdersForUser } from '../../services/mercadolibre-order-sync.service';
 import { syncAmazonOrdersForUser } from '../../services/amazon-order-sync.service';
 import { buildRealOrdersWhere, REAL_ORDERS_EXCLUDE_PAYPAL_PREFIXES } from '../../utils/orders-real-filter';
+import { promoteOrderToManualQueue } from '../../services/manual-fulfillment.service';
 
 const marketplaceService = new MarketplaceService();
 
@@ -355,6 +356,9 @@ router.get('/', async (req: Request, res: Response) => {
       where: realOnlyWhere,
       orderBy: { createdAt: 'desc' },
       take: effectiveTake,
+      include: {
+        product: { select: { id: true, title: true, images: true, aliexpressPrice: true, aliexpressUrl: true } },
+      },
     });
     return res.status(200).json(orders);
   } catch (err: any) {
@@ -399,6 +403,45 @@ router.get('/by-ebay-id/:ebayOrderId', async (req: Request, res: Response) => {
  * POST /api/orders/by-ebay-id/:ebayOrderId/force-fulfill — Phase 44: Trigger fulfillment for one order by eBay ID.
  * Finds order by paypalOrderId = ebay:{ebayOrderId}, then calls orderFulfillmentService.fulfillOrder(order.id).
  */
+/**
+ * POST /api/orders/by-ebay-id/:ebayOrderId/promote-manual-fulfillment
+ * Phase 47B: Move a stuck order into MANUAL_ACTION_REQUIRED (e.g. real order 17-14370-63716).
+ */
+router.post('/by-ebay-id/:ebayOrderId/promote-manual-fulfillment', async (req: Request, res: Response) => {
+  try {
+    const ebayOrderId = (req.params.ebayOrderId || '').trim();
+    if (!ebayOrderId) return res.status(400).json({ error: 'ebayOrderId required' });
+    const userId = req.user!.userId;
+    const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
+    const paypalOrderId = `ebay:${ebayOrderId}`;
+    const order = await prisma.order.findFirst({
+      where: { paypalOrderId },
+      select: { id: true, userId: true, status: true },
+    });
+    if (!order) {
+      return res.status(404).json({
+        error: 'Order not found. Sync or import the eBay order first.',
+        ebayOrderId,
+      });
+    }
+    if (order.userId != null && order.userId !== userId && !isAdmin) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    const body = req.body as { reason?: string };
+    const reason =
+      typeof body?.reason === 'string' && body.reason.trim()
+        ? body.reason.trim()
+        : 'Phase 47B: promoted to manual fulfillment queue (automation could not complete purchase).';
+    const pr = await promoteOrderToManualQueue(order.id, reason, order.userId ?? userId);
+    const full = await prisma.order.findUnique({ where: { id: order.id } });
+    logger.info('[ORDERS] promote-manual-fulfillment', { ebayOrderId, orderId: order.id, pr });
+    return res.status(200).json({ ok: pr.ok, skipped: pr.skipped, order: full });
+  } catch (err: any) {
+    logger.error('[ORDERS] promote-manual-fulfillment failed', { error: err?.message });
+    return res.status(500).json({ error: err?.message || 'Failed' });
+  }
+});
+
 router.post('/by-ebay-id/:ebayOrderId/force-fulfill', async (req: Request, res: Response) => {
   try {
     const ebayOrderId = (req.params.ebayOrderId || '').trim();
@@ -438,24 +481,34 @@ router.post('/by-ebay-id/:ebayOrderId/force-fulfill', async (req: Request, res: 
         status: 'PURCHASING',
       });
     }
-    if (order.status === 'FAILED') {
+    if (order.status === 'FAILED' || order.status === 'MANUAL_ACTION_REQUIRED' || order.status === 'FULFILLMENT_BLOCKED') {
       const hasProductUrl = (order.productUrl || '').trim().length > 0;
       if (hasProductUrl) {
         await prisma.order.update({
           where: { id: order.id },
-          data: { status: 'PAID', errorMessage: null },
+          data: {
+            status: 'PAID',
+            errorMessage: null,
+            ...(order.status === 'MANUAL_ACTION_REQUIRED' || order.status === 'FULFILLMENT_BLOCKED'
+              ? { manualFulfillmentRequired: false, failureReason: null }
+              : {}),
+          },
         });
-        logger.info('[ORDERS] force-fulfill: retry from FAILED, set to PAID', { orderId: order.id, ebayOrderId });
+        logger.info('[ORDERS] force-fulfill: retry from FAILED/MANUAL, set to PAID', {
+          orderId: order.id,
+          ebayOrderId,
+          priorStatus: order.status,
+        });
       } else {
         return res.status(400).json({
-          error: 'Order is FAILED and has no product URL. Set supplier URL first to retry.',
+          error: 'Order has no product URL. Set supplier URL first to retry.',
           orderId: order.id,
           status: order.status,
         });
       }
     } else if (order.status !== 'PAID') {
       return res.status(400).json({
-        error: `Order status is ${order.status}. Only PAID or FAILED (with product URL) orders can be fulfilled.`,
+        error: `Order status is ${order.status}. Only PAID, FAILED, or MANUAL_ACTION_REQUIRED (with product URL) orders can be fulfilled.`,
         orderId: order.id,
         status: order.status,
       });
@@ -530,13 +583,20 @@ router.patch('/:id/supplier-url', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Not authorized to update this order' });
     }
 
-    const wasFailedMissingUrl = order.status === 'FAILED';
+    const wasFailedMissingUrl =
+      order.status === 'FAILED' || order.status === 'MANUAL_ACTION_REQUIRED' || order.status === 'FULFILLMENT_BLOCKED';
     await prisma.order.update({
       where: { id: orderId },
       data: {
         productUrl: url,
         errorMessage: null,
-        ...(wasFailedMissingUrl ? { status: 'PAID' } : {}),
+        ...(wasFailedMissingUrl
+          ? {
+              status: 'PAID',
+              manualFulfillmentRequired: false,
+              failureReason: null,
+            }
+          : {}),
       },
     });
 
@@ -575,7 +635,12 @@ router.get('/:id', async (req: Request, res: Response) => {
     if (!id || typeof id !== 'string' || id.trim() === '') {
       return res.status(400).json({ error: 'Invalid order id' });
     }
-    let order = await prisma.order.findUnique({ where: { id } });
+    let order = await prisma.order.findUnique({
+      where: { id },
+      include: {
+        product: { select: { id: true, title: true, images: true, aliexpressPrice: true, aliexpressUrl: true } },
+      },
+    });
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
@@ -590,9 +655,11 @@ router.get('/:id', async (req: Request, res: Response) => {
           'Compra en curso expirada (timeout). Usa "Forzar compra en AliExpress" para reintentar.';
         await prisma.order.update({
           where: { id },
-          data: { status: 'FAILED', errorMessage: errMsg },
+          data: { status: 'FAILED', errorMessage: errMsg, lastAttemptAt: new Date() },
         });
         logger.info('[ORDERS] Auto-recovered stale PURCHASING order', { orderId: id, updatedAt: order.updatedAt });
+        const { maybeEscalateFailedOrderToManual } = await import('../../services/manual-fulfillment.service');
+        await maybeEscalateFailedOrderToManual(id, errMsg, order.userId ?? undefined);
         const refreshed = await prisma.order.findUnique({ where: { id } });
         if (refreshed) order = refreshed;
       }
@@ -816,6 +883,132 @@ router.post('/:id/submit-tracking', async (req: Request, res: Response) => {
   } catch (err: any) {
     logger.error('[ORDERS] submit-tracking failed', { error: err?.message, id: req.params.id });
     return res.status(500).json({ error: err?.message || 'Submit tracking failed' });
+  }
+});
+
+/**
+ * POST /api/orders/:id/mark-manual-purchased
+ * Phase 47B: User completed purchase on AliExpress manually — continue lifecycle (PURCHASED → tracking / Sale).
+ */
+router.post('/:id/mark-manual-purchased', async (req: Request, res: Response) => {
+  try {
+    const orderId = (req.params.id || '').trim();
+    const userId = req.user!.userId;
+    const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
+    const body = req.body as { supplierOrderId?: string; purchaseDate?: string };
+    if (!orderId) return res.status(400).json({ error: 'Order ID required' });
+
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!isAdmin && order.userId != null && order.userId !== userId) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    if (order.status === 'PURCHASED') {
+      const full = await prisma.order.findUnique({ where: { id: orderId } });
+      return res.status(200).json({ order: full, alreadyPurchased: true });
+    }
+
+    const supplierOrderId =
+      typeof body?.supplierOrderId === 'string' && body.supplierOrderId.trim()
+        ? body.supplierOrderId.trim()
+        : null;
+    let purchaseDate: Date | null = null;
+    if (typeof body?.purchaseDate === 'string' && body.purchaseDate.trim()) {
+      const d = new Date(body.purchaseDate);
+      if (!Number.isNaN(d.getTime())) purchaseDate = d;
+    }
+    if (!purchaseDate) purchaseDate = new Date();
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: 'PURCHASED',
+        aliexpressOrderId: supplierOrderId || order.aliexpressOrderId || 'manual',
+        manualPurchaseDate: purchaseDate,
+        manualFulfillmentRequired: false,
+        failureReason: null,
+        errorMessage: null,
+      },
+    });
+
+    logger.info('[PHASE47B] manual_purchase_marked', {
+      orderId,
+      supplierOrderId: supplierOrderId ?? undefined,
+      purchaseDate: purchaseDate.toISOString(),
+    });
+
+    try {
+      const { saleService } = await import('../../services/sale.service');
+      await saleService.createSaleFromOrder(orderId);
+    } catch (e: any) {
+      logger.warn('[PHASE47B] createSaleFromOrder after manual purchase (non-fatal)', {
+        orderId,
+        error: e?.message,
+      });
+    }
+
+    const full = await prisma.order.findUnique({ where: { id: orderId } });
+    return res.status(200).json({ success: true, order: full });
+  } catch (err: any) {
+    logger.error('[ORDERS] mark-manual-purchased failed', { error: err?.message, id: req.params.id });
+    return res.status(500).json({ error: err?.message || 'Failed' });
+  }
+});
+
+/**
+ * POST /api/orders/:id/retry-automatic-fulfillment
+ * Phase 47B: From manual queue, trigger one automatic purchase attempt (updates lastAutoRetryAt).
+ */
+router.post('/:id/retry-automatic-fulfillment', async (req: Request, res: Response) => {
+  try {
+    const orderId = (req.params.id || '').trim();
+    const userId = req.user!.userId;
+    const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
+    if (!orderId) return res.status(400).json({ error: 'Order ID required' });
+
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!isAdmin && order.userId != null && order.userId !== userId) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    if (order.status !== 'MANUAL_ACTION_REQUIRED' && order.status !== 'FULFILLMENT_BLOCKED' && order.status !== 'FAILED') {
+      return res.status(400).json({
+        error: `Retry from manual queue only (got status ${order.status})`,
+        status: order.status,
+      });
+    }
+    if (!(order.productUrl || '').trim()) {
+      return res.status(400).json({ error: 'Set supplier (AliExpress) URL before retrying automatic purchase' });
+    }
+
+    const fromManualQueue =
+      order.status === 'MANUAL_ACTION_REQUIRED' || order.status === 'FULFILLMENT_BLOCKED';
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: 'PAID',
+        errorMessage: null,
+        lastAutoRetryAt: new Date(),
+        // Keep manualFulfillmentRequired when retrying from manual queue until purchase succeeds
+        ...(fromManualQueue
+          ? {}
+          : { manualFulfillmentRequired: false, failureReason: null }),
+      },
+    });
+
+    logger.info('[PHASE47B] user_retry_automatic_fulfillment', { orderId, fromManualQueue });
+    const fulfillResult = await orderFulfillmentService.fulfillOrder(orderId);
+    const full = await prisma.order.findUnique({ where: { id: orderId } });
+    return res.status(200).json({
+      success: fulfillResult.success,
+      status: fulfillResult.status,
+      error: fulfillResult.error,
+      aliexpressOrderId: fulfillResult.aliexpressOrderId,
+      order: full,
+    });
+  } catch (err: any) {
+    logger.error('[ORDERS] retry-automatic-fulfillment failed', { error: err?.message, id: req.params.id });
+    return res.status(500).json({ error: err?.message || 'Failed' });
   }
 });
 

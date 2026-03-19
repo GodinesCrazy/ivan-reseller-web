@@ -5,8 +5,28 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Package, CheckCircle, XCircle, RefreshCw, MapPin, Truck, Settings } from 'lucide-react';
-import { getOrder, retryOrderFulfill, forceFulfillByEbayOrderId, setOrderSupplierUrl, resetOrderPurchasing, type Order } from '@/services/orders.api';
+import {
+  ArrowLeft,
+  Package,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
+  MapPin,
+  Truck,
+  Settings,
+  ExternalLink,
+  ClipboardCopy,
+} from 'lucide-react';
+import {
+  getOrder,
+  retryOrderFulfill,
+  forceFulfillByEbayOrderId,
+  setOrderSupplierUrl,
+  resetOrderPurchasing,
+  markManualPurchased,
+  retryAutomaticFulfillment,
+  type Order,
+} from '@/services/orders.api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -27,10 +47,15 @@ export default function OrderDetail() {
   const [supplierUrlError, setSupplierUrlError] = useState<string | null>(null);
   const [resetPurchasingLoading, setResetPurchasingLoading] = useState(false);
   const [resetPurchasingError, setResetPurchasingError] = useState<string | null>(null);
+  const [manualSupplierOrderId, setManualSupplierOrderId] = useState('');
+  const [manualMarkLoading, setManualMarkLoading] = useState(false);
+  const [manualRetryLoading, setManualRetryLoading] = useState(false);
+  const [manualActionError, setManualActionError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statuses = useAuthStatusStore((state) => state.statuses);
   const aliStatusUnknown = statuses?.aliexpress?.status === 'unknown';
-  const orderPendingPurchase = order?.status === 'PAID' || order?.status === 'PURCHASING';
+  const orderPendingPurchase =
+    order?.status === 'PAID' || order?.status === 'PURCHASING' || order?.status === 'MANUAL_ACTION_REQUIRED';
   const failedWithTimeout =
     order?.status === 'FAILED' &&
     order?.errorMessage &&
@@ -66,9 +91,11 @@ export default function OrderDetail() {
     }
   };
 
-  /** Force fulfillment when order is PAID or FAILED (retry), has eBay ID and (if FAILED) product URL. */
+  /** Force fulfillment when PAID or FAILED (retry), has eBay ID and product URL. MANUAL_ACTION_REQUIRED uses Phase 47B panel instead. */
   const canForceFulfill =
     (order?.status === 'PAID' || (order?.status === 'FAILED' && (order?.productUrl || '').trim().length > 0)) &&
+    order?.status !== 'MANUAL_ACTION_REQUIRED' &&
+    order?.status !== 'FULFILLMENT_BLOCKED' &&
     order?.marketplaceOrderId &&
     (order.paypalOrderId || '').startsWith('ebay:');
   const handleForceFulfill = async () => {
@@ -150,7 +177,11 @@ export default function OrderDetail() {
 
   useEffect(() => {
     if (!id || !order) return;
-    const isTerminal = order.status === 'PURCHASED' || order.status === 'FAILED';
+    const isTerminal =
+      order.status === 'PURCHASED' ||
+      order.status === 'FAILED' ||
+      order.status === 'MANUAL_ACTION_REQUIRED' ||
+      order.status === 'FULFILLMENT_BLOCKED';
     if (isTerminal) return;
     pollRef.current = setInterval(fetchOrder, 2000);
     return () => {
@@ -197,6 +228,68 @@ export default function OrderDetail() {
       : order.paypalOrderId?.startsWith('amazon:')
         ? 'Amazon'
         : 'Checkout';
+
+  const addressText = shippingObj
+    ? [
+        shippingObj.fullName || order.customerName,
+        [shippingObj.addressLine1, shippingObj.addressLine2].filter(Boolean).join(', '),
+        [shippingObj.city, shippingObj.state, shippingObj.zipCode].filter(Boolean).join(', '),
+        shippingObj.country || '',
+        shippingObj.phoneNumber || '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : order.shippingAddress || '';
+
+  const showManualFulfillmentPanel =
+    order.status === 'MANUAL_ACTION_REQUIRED' ||
+    order.status === 'FULFILLMENT_BLOCKED' ||
+    !!order.manualFulfillmentRequired;
+
+  const handleCopyAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(addressText);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleMarkManualPurchased = async () => {
+    if (!id) return;
+    setManualMarkLoading(true);
+    setManualActionError(null);
+    try {
+      await markManualPurchased(id, {
+        supplierOrderId: manualSupplierOrderId.trim() || undefined,
+      });
+      setManualSupplierOrderId('');
+      await fetchOrder();
+    } catch (e: any) {
+      setManualActionError(e?.response?.data?.error || e?.message || 'Error al marcar comprado');
+    } finally {
+      setManualMarkLoading(false);
+    }
+  };
+
+  const handleRetryAutomaticFromManual = async () => {
+    if (!id) return;
+    setManualRetryLoading(true);
+    setManualActionError(null);
+    try {
+      await retryAutomaticFulfillment(id);
+      await fetchOrder();
+    } catch (e: any) {
+      const isTimeout =
+        e?.code === 'ECONNABORTED' || (e?.message && String(e.message).toLowerCase().includes('timeout'));
+      setManualActionError(
+        isTimeout
+          ? 'La solicitud tardó demasiado. Actualiza la página para ver el estado.'
+          : e?.response?.data?.error || e?.message || 'Error al reintentar compra automática'
+      );
+    } finally {
+      setManualRetryLoading(false);
+    }
+  };
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 p-6">
@@ -327,6 +420,76 @@ export default function OrderDetail() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {showManualFulfillmentPanel && (
+          <div className="p-4 text-orange-950 dark:text-orange-100 bg-orange-50 dark:bg-orange-950/30 rounded-lg border-2 border-orange-400 dark:border-orange-600 space-y-3">
+            <p className="text-sm font-bold flex items-center gap-2">
+              <Package className="w-5 h-5" />
+              Acción requerida: pedido pendiente de fulfillment (Phase 47B)
+            </p>
+            {(order.failureReason || order.errorMessage) && (
+              <p className="text-xs text-orange-900/90 dark:text-orange-200/90 whitespace-pre-wrap">
+                {order.failureReason || order.errorMessage}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {(order.productUrl || '').trim() ? (
+                <a
+                  href={order.productUrl!.trim()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-orange-600 text-white hover:bg-orange-700"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Abrir proveedor (AliExpress)
+                </a>
+              ) : (
+                <span className="text-xs text-orange-800 dark:text-orange-200">Añade URL de proveedor arriba para abrir AliExpress.</span>
+              )}
+              <button
+                type="button"
+                onClick={handleCopyAddress}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border border-orange-600 text-orange-900 dark:text-orange-100 hover:bg-orange-100 dark:hover:bg-orange-900/40"
+              >
+                <ClipboardCopy className="w-4 h-4" />
+                Copiar dirección
+              </button>
+              <button
+                type="button"
+                onClick={handleRetryAutomaticFromManual}
+                disabled={manualRetryLoading || !(order.productUrl || '').trim()}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-slate-800 text-white hover:bg-slate-900 disabled:opacity-50 dark:bg-slate-600"
+              >
+                <RefreshCw className={`w-4 h-4 ${manualRetryLoading ? 'animate-spin' : ''}`} />
+                Reintentar compra automática
+              </button>
+            </div>
+            <div className="pt-2 border-t border-orange-200 dark:border-orange-800 space-y-2">
+              <label className="text-xs font-medium text-orange-900 dark:text-orange-200">ID pedido AliExpress (opcional)</label>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  type="text"
+                  placeholder="ej. 8123456789012345"
+                  value={manualSupplierOrderId}
+                  onChange={(e) => setManualSupplierOrderId(e.target.value)}
+                  className="flex-1 min-w-[200px] px-3 py-2 text-sm border border-orange-300 dark:border-orange-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                />
+                <button
+                  type="button"
+                  onClick={handleMarkManualPurchased}
+                  disabled={manualMarkLoading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {manualMarkLoading ? 'Guardando...' : 'Marcar como comprado'}
+                </button>
+              </div>
+              <p className="text-xs text-orange-800/80 dark:text-orange-200/80">
+                Después de comprar manualmente en AliExpress, marca aquí para continuar el flujo (venta / tracking).
+              </p>
+            </div>
+            {manualActionError && <p className="text-sm text-red-700 dark:text-red-300">{manualActionError}</p>}
           </div>
         )}
 
