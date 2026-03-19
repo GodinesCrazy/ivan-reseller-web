@@ -301,7 +301,7 @@ const envSchema = z.object({
   WEBHOOK_ALLOW_INVALID_SIGNATURE: z.enum(['true', 'false']).default('false').transform(val => val === 'true'), // Solo dev
   
   // Allow purchase when PayPal balance is low but user has linked card (PayPal will use card as backup)
-  ALLOW_PURCHASE_WHEN_LOW_BALANCE: z.enum(['true', 'false']).default('false').transform(val => val === 'true'),
+  ALLOW_PURCHASE_WHEN_LOW_BALANCE: z.enum(['true', 'false']).default('true').transform(val => val === 'true'),
   PURCHASE_LOW_BALANCE_MAX_ORDER_USD: z.string().optional().transform(val => val ? parseFloat(val) : 500),
   
   // ✅ FASE 4: Auto-Purchase Guardrails
