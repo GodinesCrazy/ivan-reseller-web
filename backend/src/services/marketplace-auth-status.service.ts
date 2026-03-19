@@ -4,7 +4,7 @@ trace('loading marketplace-auth-status.service');
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database';
 
-export type MarketplaceAuthState = 'unknown' | 'healthy' | 'refreshing' | 'manual_required' | 'error';
+export type MarketplaceAuthState = 'unknown' | 'healthy' | 'refreshing' | 'manual_required' | 'error' | 'configured';
 
 interface StatusOptions {
   message?: string | null;

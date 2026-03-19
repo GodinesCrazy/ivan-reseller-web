@@ -41,8 +41,10 @@ export interface RetryFulfillResponse {
   aliexpressOrderId?: string;
 }
 
+const FULFILLMENT_REQUEST_TIMEOUT_MS = 120000; // 2 min — backend may call PayPal + AliExpress
+
 export async function retryOrderFulfill(orderId: string): Promise<RetryFulfillResponse> {
-  const res = await api.post<RetryFulfillResponse>(`/api/orders/${orderId}/retry-fulfill`);
+  const res = await api.post<RetryFulfillResponse>(`/api/orders/${orderId}/retry-fulfill`, {}, { timeout: FULFILLMENT_REQUEST_TIMEOUT_MS });
   return res.data;
 }
 
@@ -58,7 +60,7 @@ export interface ForceFulfillResponse {
 }
 
 export async function forceFulfillByEbayOrderId(ebayOrderId: string): Promise<ForceFulfillResponse> {
-  const res = await api.post<ForceFulfillResponse>(`/api/orders/by-ebay-id/${encodeURIComponent(ebayOrderId)}/force-fulfill`);
+  const res = await api.post<ForceFulfillResponse>(`/api/orders/by-ebay-id/${encodeURIComponent(ebayOrderId)}/force-fulfill`, {}, { timeout: FULFILLMENT_REQUEST_TIMEOUT_MS });
   return res.data;
 }
 
@@ -70,6 +72,12 @@ export async function getOrder(id: string): Promise<Order> {
 /** Set supplier (AliExpress) URL for an order so "Forzar compra" can run. Returns updated order. */
 export async function setOrderSupplierUrl(orderId: string, url: string): Promise<Order> {
   const res = await api.patch<Order>(`/api/orders/${orderId}/supplier-url`, { url: url.trim() });
+  return res.data;
+}
+
+/** Reset an order stuck in PURCHASING back to PAID so the user can use "Forzar compra en AliExpress" again. */
+export async function resetOrderPurchasing(orderId: string): Promise<Order> {
+  const res = await api.patch<Order>(`/api/orders/${orderId}/reset-purchasing`);
   return res.data;
 }
 

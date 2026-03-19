@@ -842,6 +842,20 @@ router.get('/callback', async (req: Request, res: Response) => {
         });
       }
 
+      // Actualizar estado de AliExpress para que el Navbar muestre "Configurado" en lugar de "Estado desconocido"
+      try {
+        const { marketplaceAuthStatusService } = await import('../../services/marketplace-auth-status.service');
+        await marketplaceAuthStatusService.setStatus(userId, 'aliexpress', 'configured', {
+          message: 'OAuth AliExpress Dropshipping renovado correctamente',
+        });
+      } catch (statusErr: any) {
+        logger.warn('[OAuth Callback] Failed to update marketplace auth status (non-critical)', {
+          correlationId,
+          userId,
+          error: statusErr?.message || String(statusErr),
+        });
+      }
+
       // ✅ Redirect a frontend (una sola ventana; postMessage + redirect para volver a la app)
       const successUrl = `${webBaseUrlForRedirect}/api-settings?oauth=success&provider=aliexpress-dropshipping&correlationId=${correlationId}`;
       const errorUrl = `${webBaseUrlForRedirect}/api-settings?oauth=error&provider=aliexpress-dropshipping&correlationId=${correlationId}`;

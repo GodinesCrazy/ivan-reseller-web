@@ -53,6 +53,9 @@ export class OrderFulfillmentService {
         error: `Order must be PAID, got ${order.status}`,
       };
     }
+    if (order.userId == null) {
+      logger.warn('[ORDER-FULFILLMENT] Order has no userId; Dropshipping API will not be used', { orderId });
+    }
 
     const limitCheck = await checkDailyLimits(undefined, Number(order.price));
     if (!limitCheck.ok) {
@@ -64,13 +67,6 @@ export class OrderFulfillmentService {
         error: limitCheck.error || 'MAX_DAILY_ORDERS or MAX_DAILY_SPEND_USD exceeded',
       };
     }
-
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { status: 'PURCHASING' },
-    });
-    const ts = new Date().toISOString();
-    logger.info('[FULFILLMENT] START', { orderId, timestamp: ts, action: 'fulfill_order', status: 'PURCHASING' });
 
     const shippingObj = this.parseShippingAddress(order.shippingAddress);
     if (!shippingObj) {
@@ -126,6 +122,30 @@ export class OrderFulfillmentService {
       };
     }
 
+    // Validación temprana para Dropshipping API: la URL debe permitir extraer productId (ej: .../item/1234567890.html)
+    if (order.userId != null && !/[\/_](\d+)\.html/.test(productUrl)) {
+      const errMsg =
+        'La URL de AliExpress no es válida para compra automática. Debe ser un enlace de producto (ej: .../item/1234567890.html).';
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { status: 'FAILED', errorMessage: errMsg },
+      });
+      logger.warn('[ORDER-FULFILLMENT] Invalid productUrl for Dropshipping API', { orderId, productUrlPrefix: productUrl.substring(0, 60) });
+      return {
+        success: false,
+        orderId,
+        status: 'FAILED',
+        error: errMsg,
+      };
+    }
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'PURCHASING' },
+    });
+    const ts = new Date().toISOString();
+    logger.info('[FULFILLMENT] START', { orderId, timestamp: ts, action: 'fulfill_order', status: 'PURCHASING' });
+
     const fullName = order.customerName || shippingObj.fullName || 'Customer';
     const shippingAddr = {
       fullName,
@@ -168,16 +188,25 @@ export class OrderFulfillmentService {
       });
     }
 
+    /** Timeout so the HTTP request does not hang indefinitely (e.g. AliExpress API/browser stuck). */
+    const FULFILLMENT_TIMEOUT_MS = 100_000; // 100s — slightly under frontend 120s so backend responds first
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Fulfillment timeout: la compra tardó demasiado. Comprueba el estado en AliExpress o inténtalo de nuevo.')), FULFILLMENT_TIMEOUT_MS);
+    });
+
     try {
-      const result = await purchaseRetryService.attemptPurchase(
-        productUrl,
-        1,
-        Number(order.price) * 1.5,
-        shippingAddr,
-        undefined,
-        orderId,
-        order.userId ?? undefined
-      );
+      const result = await Promise.race([
+        purchaseRetryService.attemptPurchase(
+          productUrl,
+          1,
+          Number(order.price) * 1.5,
+          shippingAddr,
+          undefined,
+          orderId,
+          order.userId ?? undefined
+        ),
+        timeoutPromise,
+      ]);
 
       if (result.success && result.orderId && result.orderId !== 'SIMULATED_ORDER_ID') {
         await prisma.order.update({

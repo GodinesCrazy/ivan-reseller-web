@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Package, CheckCircle, XCircle, RefreshCw, MapPin, Truck } from 'lucide-react';
-import { getOrder, retryOrderFulfill, forceFulfillByEbayOrderId, setOrderSupplierUrl, type Order } from '@/services/orders.api';
+import { getOrder, retryOrderFulfill, forceFulfillByEbayOrderId, setOrderSupplierUrl, resetOrderPurchasing, type Order } from '@/services/orders.api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -24,6 +24,8 @@ export default function OrderDetail() {
   const [supplierUrlInput, setSupplierUrlInput] = useState('');
   const [supplierUrlLoading, setSupplierUrlLoading] = useState(false);
   const [supplierUrlError, setSupplierUrlError] = useState<string | null>(null);
+  const [resetPurchasingLoading, setResetPurchasingLoading] = useState(false);
+  const [resetPurchasingError, setResetPurchasingError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const canRetryFulfill =
@@ -43,9 +45,15 @@ export default function OrderDetail() {
         setRetryError(result.error || 'Retry failed');
       }
     } catch (err: any) {
-      setRetryError(err?.response?.data?.error || err?.message || 'Error al reintentar');
+      const isTimeout = err?.code === 'ECONNABORTED' || (err?.message && String(err.message).toLowerCase().includes('timeout'));
+      setRetryError(
+        isTimeout
+          ? 'La solicitud tardó demasiado. Actualiza la página para ver si la orden pasó a Completada o Fallida.'
+          : err?.response?.data?.error || err?.message || 'Error al reintentar'
+      );
     } finally {
       setRetryLoading(false);
+      await fetchOrder();
     }
   };
 
@@ -63,9 +71,30 @@ export default function OrderDetail() {
         setForceFulfillError(result.error || result.message || 'Fulfillment failed');
       }
     } catch (err: any) {
-      setForceFulfillError(err?.response?.data?.error || err?.message || 'Error al forzar compra');
+      const isTimeout = err?.code === 'ECONNABORTED' || (err?.message && String(err.message).toLowerCase().includes('timeout'));
+      setForceFulfillError(
+        isTimeout
+          ? 'La solicitud tardó demasiado. Actualiza la página para ver si la orden pasó a Completada o Fallida.'
+          : err?.response?.data?.error || err?.message || 'Error al forzar compra'
+      );
     } finally {
       setForceFulfillLoading(false);
+      await fetchOrder();
+    }
+  };
+
+  const handleResetPurchasing = async () => {
+    if (!id || order?.status !== 'PURCHASING') return;
+    setResetPurchasingLoading(true);
+    setResetPurchasingError(null);
+    try {
+      const updated = await resetOrderPurchasing(id);
+      setOrder(updated);
+      await fetchOrder();
+    } catch (err: any) {
+      setResetPurchasingError(err?.response?.data?.error || err?.message || 'Error al cancelar');
+    } finally {
+      setResetPurchasingLoading(false);
     }
   };
 
@@ -210,6 +239,22 @@ export default function OrderDetail() {
               </button>
             </div>
             {supplierUrlError && <p className="text-sm text-red-700 dark:text-red-300">{supplierUrlError}</p>}
+          </div>
+        )}
+
+        {order.status === 'PURCHASING' && (
+          <div className="p-4 mb-4 text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 space-y-2">
+            <p className="text-sm font-medium">La compra está en curso. Si tarda demasiado, puedes cancelar y volver a intentar con &quot;Forzar compra en AliExpress&quot;.</p>
+            <button
+              type="button"
+              onClick={handleResetPurchasing}
+              disabled={resetPurchasingLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50"
+            >
+              <XCircle className={`w-4 h-4 ${resetPurchasingLoading ? 'animate-spin' : ''}`} />
+              {resetPurchasingLoading ? 'Cancelando...' : 'Cancelar compra en curso'}
+            </button>
+            {resetPurchasingError && <p className="text-sm text-red-700 dark:text-red-300">{resetPurchasingError}</p>}
           </div>
         )}
 

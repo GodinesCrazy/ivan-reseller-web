@@ -428,12 +428,29 @@ router.post('/by-ebay-id/:ebayOrderId/force-fulfill', async (req: Request, res: 
         message: 'Order already fulfilled',
       });
     }
+    if (order.status === 'PURCHASING') {
+      return res.status(409).json({
+        success: false,
+        error:
+          "La compra ya está en curso. Espera unos minutos y actualiza la página, o usa 'Cancelar compra en curso' para volver a intentar.",
+        orderId: order.id,
+        ebayOrderId,
+        status: 'PURCHASING',
+      });
+    }
     if (order.status !== 'PAID') {
       return res.status(400).json({
         error: `Order status is ${order.status}. Only PAID orders can be fulfilled.`,
         orderId: order.id,
         status: order.status,
       });
+    }
+    if (order.userId == null) {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { userId },
+      });
+      logger.info('[ORDERS] force-fulfill: set order userId', { orderId: order.id, userId });
     }
     const fulfill = await orderFulfillmentService.fulfillOrder(order.id);
     logger.info('[ORDERS] force-fulfill executed', {
@@ -633,6 +650,40 @@ router.post('/:id/retry-fulfill', async (req: Request, res: Response) => {
   } catch (err: any) {
     logger.error('[ORDERS] Retry fulfill failed', { error: err?.message, id: req.params.id });
     return res.status(500).json({ error: err?.message || 'Retry fulfill failed' });
+  }
+});
+
+/**
+ * PATCH /api/orders/:id/reset-purchasing
+ * Reset an order stuck in PURCHASING back to PAID so the user can use "Forzar compra en AliExpress" again.
+ * Requires auth; user must be order owner or admin.
+ */
+router.patch('/:id/reset-purchasing', async (req: Request, res: Response) => {
+  try {
+    const orderId = (req.params.id || '').trim();
+    const userId = req.user!.userId;
+    const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
+    if (!orderId) return res.status(400).json({ error: 'Order ID required' });
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.status !== 'PURCHASING') {
+      return res.status(400).json({
+        error: 'Order is not in PURCHASING status',
+        status: order.status,
+      });
+    }
+    if (order.userId != null && order.userId !== userId && !isAdmin) {
+      return res.status(403).json({ error: 'Not authorized to reset this order' });
+    }
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'PAID', errorMessage: null },
+    });
+    logger.info('[ORDERS] reset-purchasing', { orderId, userId });
+    return res.status(200).json(updated);
+  } catch (err: any) {
+    logger.error('[ORDERS] reset-purchasing failed', { error: err?.message, id: req.params.id });
+    return res.status(500).json({ error: err?.message || 'Reset purchasing failed' });
   }
 });
 
