@@ -552,18 +552,35 @@ router.patch('/:id/supplier-url', async (req: Request, res: Response) => {
   }
 });
 
+const PURCHASING_STALE_MS = 5 * 60 * 1000; // 5 min — auto-recover stuck PURCHASING
+
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
     if (!id || typeof id !== 'string' || id.trim() === '') {
       return res.status(400).json({ error: 'Invalid order id' });
     }
-    const order = await prisma.order.findUnique({ where: { id } });
+    let order = await prisma.order.findUnique({ where: { id } });
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
     if (process.env.NODE_ENV === 'production' && isTestOrderPaypalId(order.paypalOrderId)) {
       return res.status(404).json({ error: 'Order not found' });
+    }
+    // Auto-recover orders stuck in PURCHASING for too long (e.g. process crashed before timeout)
+    if (order.status === 'PURCHASING') {
+      const updatedAtMs = order.updatedAt?.getTime() ?? 0;
+      if (Date.now() - updatedAtMs > PURCHASING_STALE_MS) {
+        const errMsg =
+          'Compra en curso expirada (timeout). Usa "Forzar compra en AliExpress" para reintentar.';
+        await prisma.order.update({
+          where: { id },
+          data: { status: 'FAILED', errorMessage: errMsg },
+        });
+        logger.info('[ORDERS] Auto-recovered stale PURCHASING order', { orderId: id, updatedAt: order.updatedAt });
+        const refreshed = await prisma.order.findUnique({ where: { id } });
+        if (refreshed) order = refreshed;
+      }
     }
     const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
     if (!isAdmin && order.userId != null && order.userId !== req.user!.userId) {

@@ -286,6 +286,11 @@ export class AliExpressAutoPurchaseService {
               };
             } else {
               // Obtener información del producto desde la API
+              logger.info('[ALIEXPRESS-AUTO-PURCHASE] Calling Dropshipping API getProductInfo', {
+                productId,
+                userId,
+                productUrlPrefix: request.productUrl.substring(0, 60),
+              });
               const productInfo = await aliexpressDropshippingAPIService.getProductInfo(productId, {
                 localCountry: request.shippingAddress.country,
                 localLanguage: 'es',
@@ -320,7 +325,12 @@ export class AliExpressAutoPurchaseService {
                   .sort((a, b) => a.cost - b.cost)[0];
                 shippingMethodId = cheapestMethod.methodId;
               }
-              
+
+              logger.info('[ALIEXPRESS-AUTO-PURCHASE] Calling Dropshipping API placeOrder', {
+                productId,
+                userId,
+                quantity: request.quantity,
+              });
               // Crear orden usando la API
               const placeOrderResult = await aliexpressDropshippingAPIService.placeOrder({
                 productId,

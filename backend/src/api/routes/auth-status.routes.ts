@@ -158,7 +158,7 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
     });
 
     if (!payload.aliexpress && userId) {
-      // Si no hay fila en marketplace_auth_statuses pero el usuario tiene credenciales AliExpress, mostrar configurado
+      // Si no hay fila en marketplace_auth_status pero el usuario tiene credenciales AliExpress (OAuth Dropshipping, etc.), mostrar configurado
       try {
         const hasAliCred = await prisma.apiCredential.findFirst({
           where: {

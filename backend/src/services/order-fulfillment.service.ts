@@ -190,8 +190,16 @@ export class OrderFulfillmentService {
 
     /** Timeout so the HTTP request does not hang indefinitely (e.g. AliExpress API/browser stuck). */
     const FULFILLMENT_TIMEOUT_MS = 100_000; // 100s — slightly under frontend 120s so backend responds first
+    const timeoutMessage =
+      'Fulfillment timeout: la compra tardó demasiado. Comprueba el estado en AliExpress o inténtalo de nuevo.';
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Fulfillment timeout: la compra tardó demasiado. Comprueba el estado en AliExpress o inténtalo de nuevo.')), FULFILLMENT_TIMEOUT_MS);
+      setTimeout(() => reject(new Error(timeoutMessage)), FULFILLMENT_TIMEOUT_MS);
+    });
+
+    logger.info('[ORDER-FULFILLMENT] Calling attemptPurchase', {
+      orderId,
+      userId: order.userId ?? null,
+      productUrlPrefix: productUrl.substring(0, 80),
     });
 
     try {
@@ -247,7 +255,13 @@ export class OrderFulfillmentService {
       };
     } catch (err: any) {
       const msg = err?.message || String(err);
-      logger.error('[ORDER-FULFILLMENT] Exception', { orderId, error: msg, timestamp: new Date().toISOString() });
+      const isTimeout = msg === timeoutMessage;
+      logger.error('[ORDER-FULFILLMENT] Exception', {
+        orderId,
+        error: msg,
+        timestamp: new Date().toISOString(),
+        isTimeout,
+      });
       await this.markFailed(orderId, msg, order.userId ?? undefined);
       return { success: false, orderId, status: 'FAILED', error: msg };
     }

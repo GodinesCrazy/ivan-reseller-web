@@ -4,12 +4,13 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Package, CheckCircle, XCircle, RefreshCw, MapPin, Truck } from 'lucide-react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft, Package, CheckCircle, XCircle, RefreshCw, MapPin, Truck, Settings } from 'lucide-react';
 import { getOrder, retryOrderFulfill, forceFulfillByEbayOrderId, setOrderSupplierUrl, resetOrderPurchasing, type Order } from '@/services/orders.api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { formatCurrencySimple } from '@/utils/currency';
+import { useAuthStatusStore } from '@/stores/authStatusStore';
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +28,9 @@ export default function OrderDetail() {
   const [resetPurchasingLoading, setResetPurchasingLoading] = useState(false);
   const [resetPurchasingError, setResetPurchasingError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const statuses = useAuthStatusStore((state) => state.statuses);
+  const aliStatusUnknown = statuses?.aliexpress?.status === 'unknown';
+  const orderPendingPurchase = order?.status === 'PAID' || order?.status === 'PURCHASING';
 
   const canRetryFulfill =
     order?.status === 'FAILED' &&
@@ -217,6 +221,20 @@ export default function OrderDetail() {
           </div>
         )}
 
+        {aliStatusUnknown && orderPendingPurchase && (
+          <div className="p-4 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+            <p className="text-sm font-medium">Para compras automáticas en AliExpress, conecta tu cuenta.</p>
+            <p className="text-sm mt-1">Ve a Ajustes → APIs → AliExpress Dropshipping y completa la autorización.</p>
+            <Link
+              to="/api-settings"
+              className="inline-flex items-center gap-1.5 mt-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              <Settings className="w-4 h-4" />
+              Ir a Configuración de APIs
+            </Link>
+          </div>
+        )}
+
         {needsSupplierUrl && (
           <div className="p-4 text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 space-y-3">
             <p className="text-sm font-medium">Falta la URL de AliExpress para realizar la compra al proveedor.</p>
@@ -244,7 +262,8 @@ export default function OrderDetail() {
 
         {order.status === 'PURCHASING' && (
           <div className="p-4 mb-4 text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 space-y-2">
-            <p className="text-sm font-medium">La compra está en curso. Si tarda demasiado, puedes cancelar y volver a intentar con &quot;Forzar compra en AliExpress&quot;.</p>
+            <p className="text-sm font-medium">La compra está en curso.</p>
+            <p className="text-sm">Si lleva más de 2–3 minutos sin avanzar, usa &quot;Cancelar compra en curso&quot; y luego &quot;Forzar compra en AliExpress&quot; para reintentar.</p>
             <button
               type="button"
               onClick={handleResetPurchasing}
