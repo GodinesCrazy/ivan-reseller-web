@@ -108,12 +108,12 @@ export class AliExpressDropshippingAPIService {
   // Endpoints base de la API
   private readonly ENDPOINT_LEGACY = 'https://gw.api.taobao.com/router/rest';
   private readonly ENDPOINT_NEW = 'https://api-sg.aliexpress.com/sync';
-  
-  private endpoint: string = this.ENDPOINT_LEGACY;
+  // Prefer api-sg: legacy often ETIMEDOUT from many networks; api-sg is the same API and more reachable.
+  private endpoint: string = (process.env.ALIEXPRESS_DROPSHIPPING_USE_LEGACY_ENDPOINT === 'true' ? this.ENDPOINT_LEGACY : this.ENDPOINT_NEW);
 
   constructor() {
-    // Timeout 60s to allow for slow networks / high latency to AliExpress (api-sg.aliexpress.com / gw.api.taobao.com)
-    const requestTimeoutMs = Number(process.env.ALIEXPRESS_DROPSHIPPING_API_TIMEOUT_MS) || 60_000;
+    // Timeout 90s per request to allow for slow AliExpress API (getProductInfo + placeOrder with retries need headroom)
+    const requestTimeoutMs = Number(process.env.ALIEXPRESS_DROPSHIPPING_API_TIMEOUT_MS) || 90_000;
     this.client = axios.create({
       timeout: requestTimeoutMs,
       headers: {
@@ -127,8 +127,10 @@ export class AliExpressDropshippingAPIService {
    */
   setCredentials(credentials: AliExpressDropshippingCredentials): void {
     this.credentials = credentials;
-    if (credentials.sandbox) {
+    if (credentials.sandbox || process.env.ALIEXPRESS_DROPSHIPPING_USE_LEGACY_ENDPOINT !== 'true') {
       this.endpoint = this.ENDPOINT_NEW;
+    } else {
+      this.endpoint = this.ENDPOINT_LEGACY;
     }
   }
 
@@ -213,11 +215,11 @@ export class AliExpressDropshippingAPIService {
           if (v === undefined || v === null) continue;
           formBody.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
         }
+        const shipToCountryTop = allParams.ship_to_country || allParams.shipToCountry || 'US';
+        if (shipToCountryTop && String(shipToCountryTop).trim()) {
+          formBody.set('ship_to_country', String(shipToCountryTop).trim());
+        }
         if (method.toLowerCase().includes('placeorder')) {
-          const shipToCountryTop = allParams.ship_to_country || allParams.shipToCountry || 'US';
-          if (shipToCountryTop && String(shipToCountryTop).trim()) {
-            formBody.set('ship_to_country', String(shipToCountryTop).trim());
-          }
           const dto = (allParams as any).param_place_order_request4_open_api_d_t_o;
           const hasShipToCountry = Object.prototype.hasOwnProperty.call(allParams, 'ship_to_country');
           const dtoIncludesShipToCountry = typeof dto === 'string' ? dto.includes('ship_to_country') : null;
@@ -233,6 +235,13 @@ export class AliExpressDropshippingAPIService {
 
         if (response.data.error_response) {
           const error = response.data.error_response;
+          logger.warn('[ALIEXPRESS-DROPSHIPPING-API] API error_response', {
+            method,
+            code: error.code,
+            sub_code: error.sub_code,
+            msg: error.msg,
+            sub_msg: error.sub_msg,
+          });
 
           // Manejar token expirado
           if (error.code === '41' || error.code === '40001' || error.msg?.includes('Invalid session')) {
@@ -548,12 +557,17 @@ export class AliExpressDropshippingAPIService {
 
         // Required by the API (MissingParameter: product_items)
         product_items: [
-          {
-            product_id: apiParams.product_id,
-            sku_id: apiParams.sku_id,
-            quantity: apiParams.quantity,
-            product_count: apiParams.quantity,
-          },
+          (() => {
+            const item: Record<string, any> = {
+              product_id: apiParams.product_id,
+              quantity: apiParams.quantity,
+              product_count: apiParams.quantity,
+            };
+            if (apiParams.sku_id != null && String(apiParams.sku_id).trim() !== '') {
+              item.sku_id = apiParams.sku_id;
+            }
+            return item;
+          })(),
         ],
       };
       for (const [k, v] of Object.entries(openApiDto)) {

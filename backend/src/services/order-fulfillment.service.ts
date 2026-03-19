@@ -189,7 +189,7 @@ export class OrderFulfillmentService {
     }
 
     /** Timeout so the HTTP request does not hang indefinitely (e.g. AliExpress API/browser stuck). */
-    const FULFILLMENT_TIMEOUT_MS = 200_000; // 200s — room for refresh + getProductInfo + placeOrder with retries (Dropshipping API can retry on network errors)
+    const FULFILLMENT_TIMEOUT_MS = 300_000; // 300s — getProductInfo (retries + failover) + placeOrder with retries; AliExpress API can be slow
     const timeoutMessage =
       'Fulfillment timeout: la compra tardó demasiado. Comprueba el estado en AliExpress o inténtalo de nuevo.';
     const timeoutPromise = new Promise<never>((_, reject) => {

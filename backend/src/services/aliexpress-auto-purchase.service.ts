@@ -358,9 +358,11 @@ export class AliExpressAutoPurchaseService {
                 });
               } catch (placeOrderErr: any) {
                 const msg = placeOrderErr?.message || String(placeOrderErr);
-                // Some products require omitting sku_id entirely (or our chosen SKU doesn't exist).
-                if (selectedSkuId && msg.includes('SKU_NOT_EXIST')) {
-                  logger.warn('[ALIEXPRESS-AUTO-PURCHASE] placeOrder failed with SKU_NOT_EXIST; retrying without skuId', {
+                const retryWithoutSku =
+                  selectedSkuId &&
+                  (msg.includes('SKU_NOT_EXIST') || msg.includes('PRODUCT_NOT_EXIST') || msg.includes('Invalid sku'));
+                if (retryWithoutSku) {
+                  logger.warn('[ALIEXPRESS-AUTO-PURCHASE] placeOrder failed; retrying without skuId', {
                     productId,
                     userId,
                     skuId: selectedSkuId,
