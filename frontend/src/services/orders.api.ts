@@ -41,7 +41,7 @@ export interface RetryFulfillResponse {
   aliexpressOrderId?: string;
 }
 
-const FULFILLMENT_REQUEST_TIMEOUT_MS = 120000; // 2 min — backend may call PayPal + AliExpress
+const FULFILLMENT_REQUEST_TIMEOUT_MS = 220000; // 220s — backend fulfillment timeout is 200s so backend responds first
 
 export async function retryOrderFulfill(orderId: string): Promise<RetryFulfillResponse> {
   const res = await api.post<RetryFulfillResponse>(`/api/orders/${orderId}/retry-fulfill`, {}, { timeout: FULFILLMENT_REQUEST_TIMEOUT_MS });

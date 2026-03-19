@@ -202,7 +202,14 @@ router.post('/test-fulfillment-only', validateInternalSecret, async (req: Reques
   const email = customer.email || 'john@test.com';
   const address = customer.address || '123 Main St, Miami, FL, US';
 
-  logger.info('[INTERNAL] POST /api/internal/test-fulfillment-only', { productUrl, price, userId: userId ?? null, productId: productId ?? null });
+  const dropshippingApiOnly = body.dropshippingApiOnly === true || body.dropshippingApiOnly === 'true';
+  logger.info('[INTERNAL] POST /api/internal/test-fulfillment-only', {
+    productUrl,
+    price,
+    userId: userId ?? null,
+    productId: productId ?? null,
+    dropshippingApiOnly,
+  });
 
   if (process.env.NODE_ENV === 'production') {
     return res.status(403).json({
@@ -240,20 +247,31 @@ router.post('/test-fulfillment-only', validateInternalSecret, async (req: Reques
       },
     });
 
-    const fulfill = await orderFulfillmentService.fulfillOrder(order.id);
+    const prevApiOnly = process.env.ALIEXPRESS_DROPSHIPPING_API_ONLY;
+    if (dropshippingApiOnly) {
+      process.env.ALIEXPRESS_DROPSHIPPING_API_ONLY = 'true';
+    }
+    try {
+      const fulfill = await orderFulfillmentService.fulfillOrder(order.id);
 
-    const duration = Date.now() - startTime;
-    const finalStatus = fulfill.status;
-    const success = finalStatus === 'PURCHASED' || (finalStatus as string) === 'SIMULATED' || fulfill.aliexpressOrderId === 'SIMULATED_ORDER_ID';
+      const duration = Date.now() - startTime;
+      const finalStatus = fulfill.status;
+      const success = finalStatus === 'PURCHASED' || (finalStatus as string) === 'SIMULATED' || fulfill.aliexpressOrderId === 'SIMULATED_ORDER_ID';
 
-    return res.status(200).json({
-      success,
-      orderId: order.id,
-      aliexpressOrderId: fulfill.aliexpressOrderId,
-      finalStatus,
-      error: fulfill.error,
-      duration: `${duration}ms`,
-    });
+      return res.status(200).json({
+        success,
+        orderId: order.id,
+        aliexpressOrderId: fulfill.aliexpressOrderId,
+        finalStatus,
+        error: fulfill.error,
+        duration: `${duration}ms`,
+      });
+    } finally {
+      if (dropshippingApiOnly) {
+        if (prevApiOnly !== undefined) process.env.ALIEXPRESS_DROPSHIPPING_API_ONLY = prevApiOnly;
+        else delete process.env.ALIEXPRESS_DROPSHIPPING_API_ONLY;
+      }
+    }
   } catch (err: any) {
     const duration = Date.now() - startTime;
     logger.error('[INTERNAL] test-fulfillment-only failed', { error: err?.message, duration });

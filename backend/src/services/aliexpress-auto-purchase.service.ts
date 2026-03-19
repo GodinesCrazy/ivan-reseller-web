@@ -293,7 +293,7 @@ export class AliExpressAutoPurchaseService {
               });
               const productInfo = await aliexpressDropshippingAPIService.getProductInfo(productId, {
                 localCountry: request.shippingAddress.country,
-                localLanguage: 'es',
+                localLanguage: 'en',
               });
               
               // Validar precio
@@ -311,10 +311,23 @@ export class AliExpressAutoPurchaseService {
               // Determinar SKU si hay variantes (simplificado - usar el primero disponible)
               let selectedSkuId: string | undefined;
               if (productInfo.skus && productInfo.skus.length > 0) {
-                const availableSku = productInfo.skus.find(sku => sku.stock > 0);
-                if (availableSku) {
-                  selectedSkuId = availableSku.skuId;
-                }
+                const availableSku = productInfo.skus.find((sku) => sku.stock > 0);
+                const firstSku = productInfo.skus[0];
+                selectedSkuId = (availableSku?.skuId || firstSku?.skuId) || undefined;
+                logger.info('[ALIEXPRESS-AUTO-PURCHASE] SKU selection', {
+                  selectedSkuId: selectedSkuId ?? null,
+                  skusCount: productInfo.skus.length,
+                  sampleSkus: productInfo.skus.slice(0, 5).map((s) => ({ skuId: s.skuId, stock: s.stock })),
+                });
+              }
+
+              // If product info didn't include SKU list, try using productId as a SKU fallback.
+              // This helps progress past SKU_NOT_EXIST for products represented without variants.
+              if (!selectedSkuId) {
+                selectedSkuId = String(productId);
+                logger.warn('[ALIEXPRESS-AUTO-PURCHASE] No SKUs from getProductInfo; using productId as skuId fallback', {
+                  productId,
+                });
               }
               
               // Seleccionar método de envío
@@ -330,16 +343,41 @@ export class AliExpressAutoPurchaseService {
                 productId,
                 userId,
                 quantity: request.quantity,
+                skuId: selectedSkuId ?? null,
               });
               // Crear orden usando la API
-              const placeOrderResult = await aliexpressDropshippingAPIService.placeOrder({
-                productId,
-                skuId: selectedSkuId,
-                quantity: request.quantity,
-                shippingAddress: request.shippingAddress,
-                shippingMethodId,
-                buyerMessage: request.notes,
-              });
+              let placeOrderResult: any;
+              try {
+                placeOrderResult = await aliexpressDropshippingAPIService.placeOrder({
+                  productId,
+                  skuId: selectedSkuId,
+                  quantity: request.quantity,
+                  shippingAddress: request.shippingAddress,
+                  shippingMethodId,
+                  buyerMessage: request.notes,
+                });
+              } catch (placeOrderErr: any) {
+                const msg = placeOrderErr?.message || String(placeOrderErr);
+                // Some products require omitting sku_id entirely (or our chosen SKU doesn't exist).
+                if (selectedSkuId && msg.includes('SKU_NOT_EXIST')) {
+                  logger.warn('[ALIEXPRESS-AUTO-PURCHASE] placeOrder failed with SKU_NOT_EXIST; retrying without skuId', {
+                    productId,
+                    userId,
+                    skuId: selectedSkuId,
+                    error: msg,
+                  });
+                  placeOrderResult = await aliexpressDropshippingAPIService.placeOrder({
+                    productId,
+                    skuId: undefined,
+                    quantity: request.quantity,
+                    shippingAddress: request.shippingAddress,
+                    shippingMethodId,
+                    buyerMessage: request.notes,
+                  });
+                } else {
+                  throw placeOrderErr;
+                }
+              }
               
               logger.info('[ALIEXPRESS-AUTO-PURCHASE] Orden creada exitosamente usando Dropshipping API', {
                 orderId: placeOrderResult.orderId,
@@ -395,9 +433,15 @@ export class AliExpressAutoPurchaseService {
               };
             }
             
+            const rawMsg = apiError?.message || String(apiError);
+            const isNetworkTimeout =
+              rawMsg.includes('ETIMEDOUT') || rawMsg.includes('timeout') || rawMsg.includes('ECONNREFUSED');
+            const userMessage = isNetworkTimeout
+              ? 'La conexión con AliExpress tardó demasiado o no fue posible. Comprueba tu red o inténtalo más tarde.'
+              : `AliExpress Dropshipping API failed: ${rawMsg}`;
             return {
               success: false,
-              error: `AliExpress Dropshipping API failed: ${apiError?.message || String(apiError)}`,
+              error: userMessage,
             };
           }
         } else {

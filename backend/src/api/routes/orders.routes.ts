@@ -438,9 +438,24 @@ router.post('/by-ebay-id/:ebayOrderId/force-fulfill', async (req: Request, res: 
         status: 'PURCHASING',
       });
     }
-    if (order.status !== 'PAID') {
+    if (order.status === 'FAILED') {
+      const hasProductUrl = (order.productUrl || '').trim().length > 0;
+      if (hasProductUrl) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { status: 'PAID', errorMessage: null },
+        });
+        logger.info('[ORDERS] force-fulfill: retry from FAILED, set to PAID', { orderId: order.id, ebayOrderId });
+      } else {
+        return res.status(400).json({
+          error: 'Order is FAILED and has no product URL. Set supplier URL first to retry.',
+          orderId: order.id,
+          status: order.status,
+        });
+      }
+    } else if (order.status !== 'PAID') {
       return res.status(400).json({
-        error: `Order status is ${order.status}. Only PAID orders can be fulfilled.`,
+        error: `Order status is ${order.status}. Only PAID or FAILED (with product URL) orders can be fulfilled.`,
         orderId: order.id,
         status: order.status,
       });

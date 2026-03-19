@@ -112,9 +112,10 @@ export class AliExpressDropshippingAPIService {
   private endpoint: string = this.ENDPOINT_LEGACY;
 
   constructor() {
-    // ✅ FIX: Usar axios directamente (ya importado)
+    // Timeout 60s to allow for slow networks / high latency to AliExpress (api-sg.aliexpress.com / gw.api.taobao.com)
+    const requestTimeoutMs = Number(process.env.ALIEXPRESS_DROPSHIPPING_API_TIMEOUT_MS) || 60_000;
     this.client = axios.create({
-      timeout: 30000,
+      timeout: requestTimeoutMs,
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
@@ -149,6 +150,23 @@ export class AliExpressDropshippingAPIService {
     }
   }
 
+  /** Retry on network errors (ETIMEDOUT, ECONNREFUSED, timeout). Max 3 attempts with 3s backoff.
+   *  Additionally, failover endpoint legacy -> new when legacy host is unreachable.
+   */
+  private static isNetworkError(error: any): boolean {
+    const msg = (error?.message || String(error)).toLowerCase();
+    const code = (error?.code || '').toLowerCase();
+    return (
+      msg.includes('etimedout') ||
+      msg.includes('econnrefused') ||
+      msg.includes('timeout') ||
+      msg.includes('network') ||
+      code === 'etimedout' ||
+      code === 'econnrefused' ||
+      code === 'econnreset'
+    );
+  }
+
   /**
    * Realizar petición a la API con autenticación OAuth
    */
@@ -175,60 +193,138 @@ export class AliExpressDropshippingAPIService {
     const sign = this.calculateSign(allParams, this.credentials.appSecret, commonParams.sign_method as 'md5' | 'sha256');
     allParams.sign = sign;
 
-    try {
-      logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Making request', {
-        method,
-        endpoint: this.endpoint,
-        hasAccessToken: !!this.credentials.accessToken,
-      });
+    const maxAttempts = 3;
+    const backoffMs = 3000;
+    let lastError: any = null;
 
-      const response = await this.client.post(this.endpoint, allParams, {
-        params: allParams,
-      });
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        logger.debug('[ALIEXPRESS-DROPSHIPPING-API] Making request', {
+          method,
+          attempt,
+          maxAttempts,
+          endpoint: this.endpoint,
+          hasAccessToken: !!this.credentials.accessToken,
+        });
 
-      if (response.data.error_response) {
-        const error = response.data.error_response;
-        
-        // Manejar token expirado
-        if (error.code === '41' || error.code === '40001' || error.msg?.includes('Invalid session')) {
-          logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Access token expired or invalid', {
-            errorCode: error.code,
-            errorMsg: error.msg,
-          });
-          throw new Error('ACCESS_TOKEN_EXPIRED');
+        // AliExpress TOP expects urlencoded form body.
+        const formBody = new URLSearchParams();
+        for (const [k, v] of Object.entries(allParams)) {
+          if (v === undefined || v === null) continue;
+          formBody.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
         }
-        
-        throw new Error(`AliExpress Dropshipping API Error: ${error.msg || error.sub_msg || 'Unknown error'} (Code: ${error.code || 'UNKNOWN'})`);
+        if (method.toLowerCase().includes('placeorder')) {
+          const shipToCountryTop = allParams.ship_to_country || allParams.shipToCountry || 'US';
+          if (shipToCountryTop && String(shipToCountryTop).trim()) {
+            formBody.set('ship_to_country', String(shipToCountryTop).trim());
+          }
+          const dto = (allParams as any).param_place_order_request4_open_api_d_t_o;
+          const hasShipToCountry = Object.prototype.hasOwnProperty.call(allParams, 'ship_to_country');
+          const dtoIncludesShipToCountry = typeof dto === 'string' ? dto.includes('ship_to_country') : null;
+          logger.info('[ALIEXPRESS-DROPSHIPPING-API] placeOrder payload debug', {
+            hasShipToCountry,
+            ship_to_country_value: shipToCountryTop,
+            dtoIncludesShipToCountry,
+            dtoType: typeof dto,
+          });
+        }
+
+        const response = await this.client.post(this.endpoint, formBody.toString());
+
+        if (response.data.error_response) {
+          const error = response.data.error_response;
+
+          // Manejar token expirado
+          if (error.code === '41' || error.code === '40001' || error.msg?.includes('Invalid session')) {
+            logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Access token expired or invalid', {
+              errorCode: error.code,
+              errorMsg: error.msg,
+            });
+            throw new Error('ACCESS_TOKEN_EXPIRED');
+          }
+
+          throw new Error(`AliExpress Dropshipping API Error: ${error.msg || error.sub_msg || 'Unknown error'} (Code: ${error.code || 'UNKNOWN'})`);
+        }
+
+        const result = response.data[`${method.replace(/\./g, '_')}_response`] || response.data.response?.result;
+
+        if (!result) {
+          logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Unexpected response format', {
+            method,
+            responseData: response.data,
+          });
+          throw new Error('Unexpected response format from AliExpress Dropshipping API');
+        }
+
+      // Debug extraction correctness for product info methods.
+      if (
+        method.includes('offer.ds.product.simplequery') ||
+        method.includes('dropshipping.product.info.get')
+      ) {
+        const resultAny = result as any;
+        logger.info('[ALIEXPRESS-DROPSHIPPING-API] makeRequest product-info extraction debug', {
+          method,
+          responseTopKeys: response.data ? Object.keys(response.data).slice(0, 20) : [],
+          resultTopKeys: resultAny && typeof resultAny === 'object' ? Object.keys(resultAny).slice(0, 20) : [],
+          hasResultProduct: !!resultAny?.product,
+          resultProductKeys:
+            resultAny?.product && typeof resultAny.product === 'object'
+              ? Object.keys(resultAny.product).slice(0, 20)
+              : [],
+          resultPreview:
+            resultAny && typeof resultAny === 'object'
+              ? JSON.stringify(resultAny).slice(0, 1200)
+              : String(resultAny).slice(0, 1200),
+        });
       }
 
-      const result = response.data[`${method.replace(/\./g, '_')}_response`] || response.data.response?.result;
-      
-      if (!result) {
-        logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Unexpected response format', {
-          method,
-          responseData: response.data,
-        });
-        throw new Error('Unexpected response format from AliExpress Dropshipping API');
-      }
+        return result;
+      } catch (error: any) {
+        lastError = error;
+        if (error.message === 'ACCESS_TOKEN_EXPIRED') {
+          throw error;
+        }
 
-      return result;
-    } catch (error: any) {
-      if (error.message === 'ACCESS_TOKEN_EXPIRED') {
-        throw error; // Re-lanzar error de token expirado
+        const isNetworkErr =
+          axios.isAxiosError(error) && AliExpressDropshippingAPIService.isNetworkError(error);
+        if (isNetworkErr && attempt < maxAttempts) {
+          // Failover: tu entorno falla TCP contra gw.api.taobao.com (legacy) pero api-sg funciona.
+          if (this.endpoint === this.ENDPOINT_LEGACY) {
+            logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Network error on legacy endpoint, switching to api-sg endpoint', {
+              method,
+              attempt,
+              from: this.ENDPOINT_LEGACY,
+              to: this.ENDPOINT_NEW,
+              error: error?.message || String(error),
+            });
+            this.endpoint = this.ENDPOINT_NEW;
+          }
+          logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Network error, retrying', {
+            method,
+            attempt,
+            nextAttempt: attempt + 1,
+            error: error.message,
+          });
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
+
+        if (axios.isAxiosError(error)) {
+          logger.error('[ALIEXPRESS-DROPSHIPPING-API] Request failed', {
+            method,
+            attempt,
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+            message: error.message,
+          });
+          throw new Error(`AliExpress Dropshipping API request failed: ${error.message}`);
+        }
+        throw error;
       }
-      
-      if (axios.isAxiosError(error)) {
-        logger.error('[ALIEXPRESS-DROPSHIPPING-API] Request failed', {
-          method,
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          data: error.response?.data,
-          message: error.message,
-        });
-        throw new Error(`AliExpress Dropshipping API request failed: ${error.message}`);
-      }
-      throw error;
     }
+
+    throw lastError || new Error('AliExpress Dropshipping API request failed after retries');
   }
 
   /**
@@ -245,8 +341,11 @@ export class AliExpressDropshippingAPIService {
         localCountry: params?.localCountry,
       });
 
+      const shipToCountry = (params?.localCountry || 'US').trim().toUpperCase() || 'US';
       const apiParams: Record<string, any> = {
         product_id: productId,
+        ship_to_country: shipToCountry,
+        shipToCountry: shipToCountry,
       };
 
       if (params?.localCountry) apiParams.local_country = params.localCountry;
@@ -270,7 +369,47 @@ export class AliExpressDropshippingAPIService {
       }
 
       // Procesar respuesta
-      const product = result.product || result;
+      let product = result.product || result;
+      // Some API versions return an incomplete object (only request_id/_trace_id) for the primary method.
+      // In that case, fallback to the alternative product-info method.
+      const hasProductFields = Boolean(
+        (product as any)?.product_id ||
+          (product as any)?.product_title ||
+          (product as any)?.sale_price ||
+          (product as any)?.stock ||
+          (product as any)?.shipping_info
+      );
+      if (!hasProductFields) {
+        logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Primary getProductInfo returned no product fields; trying aliexpress.ds.product.get', {
+          productId,
+        });
+        result = await this.makeRequest('aliexpress.ds.product.get', apiParams);
+        product = result.product || result;
+      }
+      const rawAny = product as any;
+      const rawSkus: any = rawAny?.skus;
+      const rawSku: any = rawAny?.sku;
+      const rawSkuList: any = rawAny?.sku_list ?? rawAny?.skuList ?? rawAny?.skuListResponse;
+
+      const skuArray: any[] | undefined = Array.isArray(rawSkus?.sku)
+        ? rawSkus.sku
+        : Array.isArray(rawSkus?.skus)
+        ? rawSkus.skus
+        : Array.isArray(rawSkus)
+        ? rawSkus
+        : Array.isArray(rawSkuList)
+        ? rawSkuList
+        : undefined;
+
+      logger.info('[ALIEXPRESS-DROPSHIPPING-API] getProductInfo product shape (skus)', {
+        productKeys: Object.keys(rawAny || {}).slice(0, 20),
+        hasSkus: !!rawSkus,
+        rawSkusType: rawSkus ? typeof rawSkus : null,
+        rawSkusKeys: rawSkus && typeof rawSkus === 'object' ? Object.keys(rawSkus).slice(0, 10) : [],
+        skuType: rawSku ? typeof rawSku : null,
+        hasSkuList: !!rawSkuList,
+        skuArrayLength: skuArray?.length ?? null,
+      });
       
       return {
         productId: String(product.product_id || productId),
@@ -282,13 +421,26 @@ export class AliExpressDropshippingAPIService {
         originalPrice: parseFloat(product.original_price || product.list_price || '0'),
         currency: product.currency || 'USD',
         stock: parseInt(product.stock || product.available_stock || '0', 10),
-        skus: product.skus?.sku ? product.skus.sku.map((s: any) => ({
-          skuId: String(s.sku_id || ''),
-          attributes: s.attributes || {},
-          salePrice: parseFloat(s.sale_price || s.price || '0'),
-          stock: parseInt(s.stock || '0', 10),
-          imageUrl: s.image_url,
-        })) : undefined,
+        skus: skuArray
+          ? skuArray.map((s: any) => {
+              const skuIdRaw = s.sku_id ?? s.skuId ?? s.sku ?? s.id ?? '';
+              const skuId = String(skuIdRaw).trim();
+
+              const stockRaw = s.stock ?? s.available_stock ?? s.inventory ?? s.stock_quantity ?? '0';
+              const stock = parseInt(String(stockRaw), 10);
+
+              const salePriceRaw = s.sale_price ?? s.salePrice ?? s.price ?? '0';
+              const salePrice = parseFloat(String(salePriceRaw));
+
+              return {
+                skuId,
+                attributes: s.attributes || s.attr || {},
+                salePrice: Number.isNaN(salePrice) ? 0 : salePrice,
+                stock: Number.isNaN(stock) ? 0 : stock,
+                imageUrl: s.image_url ?? s.imageUrl,
+              };
+            })
+          : undefined,
         shippingInfo: product.shipping_info ? {
           availableShippingMethods: product.shipping_info.methods?.method?.map((m: any) => ({
             methodId: String(m.method_id || ''),
@@ -322,9 +474,19 @@ export class AliExpressDropshippingAPIService {
         country: request.shippingAddress.country,
       });
 
+      const quantity = Number(request.quantity);
+      if (Number.isNaN(quantity) || quantity < 1) {
+        throw new Error(`Invalid quantity for placeOrder: ${String(request.quantity)}`);
+      }
+
+      const shipToCountry = (request.shippingAddress.country || 'US').trim().toUpperCase() || 'US';
       const apiParams: Record<string, any> = {
         product_id: request.productId,
-        quantity: request.quantity,
+        quantity,
+        product_count: quantity,
+        productCount: quantity,
+        ship_to_country: shipToCountry,
+        shipToCountry: shipToCountry,
       };
 
       if (request.skuId) apiParams.sku_id = request.skuId;
@@ -342,18 +504,83 @@ export class AliExpressDropshippingAPIService {
         apiParams.receiver_state = request.shippingAddress.state;
       }
       apiParams.receiver_zip = request.shippingAddress.zipCode;
-      apiParams.receiver_country = request.shippingAddress.country;
+      apiParams.receiver_country = shipToCountry;
       apiParams.receiver_phone = request.shippingAddress.phoneNumber;
       if (request.shippingAddress.email) {
         apiParams.receiver_email = request.shippingAddress.email;
       }
+
+      // AliExpress requires a nested DTO parameter for the placeorder request.
+      // Without this, AliExpress returns:
+      // "The input parameter “param_place_order_request4_open_api_d_t_o” ... is not supplied (Code: MissingParameter)".
+      const fullAddress = [
+        apiParams.receiver_address,
+        apiParams.receiver_address2,
+      ]
+        .filter((v) => v !== undefined && v !== null && String(v).trim().length > 0)
+        .join(' ');
+
+      const openApiDto: Record<string, any> = {
+        product_id: apiParams.product_id,
+        sku_id: apiParams.sku_id,
+        quantity: apiParams.quantity,
+        product_count: apiParams.quantity,
+        productCount: apiParams.quantity,
+        ship_to_country: apiParams.ship_to_country,
+        shipToCountry: apiParams.ship_to_country,
+        shipping_method_id: apiParams.shipping_method_id,
+        buyer_message: apiParams.buyer_message,
+
+        // Required by the API (MissingParameter: null#logistics_address)
+        logistics_address: {
+          address: fullAddress, // required
+          city: apiParams.receiver_city,
+          province: apiParams.receiver_state,
+          postal_code: apiParams.receiver_zip,
+          country: apiParams.receiver_country,
+
+          full_name: apiParams.receiver_name,
+          name: apiParams.receiver_name,
+          phone: apiParams.receiver_phone,
+          phone_number: apiParams.receiver_phone,
+          email: apiParams.receiver_email,
+        },
+
+        // Required by the API (MissingParameter: product_items)
+        product_items: [
+          {
+            product_id: apiParams.product_id,
+            sku_id: apiParams.sku_id,
+            quantity: apiParams.quantity,
+            product_count: apiParams.quantity,
+          },
+        ],
+      };
+      for (const [k, v] of Object.entries(openApiDto)) {
+        if (v === undefined || v === null) delete openApiDto[k];
+      }
+      apiParams.param_place_order_request4_open_api_d_t_o = JSON.stringify(openApiDto);
+
+      logger.info('[ALIEXPRESS-DROPSHIPPING-API] Calling trade.buy.placeorder', {
+        ship_to_country: apiParams.ship_to_country,
+        hasDto: typeof apiParams.param_place_order_request4_open_api_d_t_o === 'string',
+        dtoIncludesShipToCountry:
+          typeof apiParams.param_place_order_request4_open_api_d_t_o === 'string'
+            ? apiParams.param_place_order_request4_open_api_d_t_o.includes('ship_to_country')
+            : null,
+      });
 
       // El método puede variar según versión
       let result;
       try {
         result = await this.makeRequest('aliexpress.trade.buy.placeorder', apiParams);
       } catch (error: any) {
-        if (error.message?.includes('method not found') || error.message?.includes('invalid method')) {
+        const msg = error?.message || String(error);
+        const shouldFallbackToAlternative =
+          msg.includes('method not found') ||
+          msg.includes('invalid method');
+
+        if (shouldFallbackToAlternative) {
           logger.warn('[ALIEXPRESS-DROPSHIPPING-API] Primary place order method failed, trying alternative');
           result = await this.makeRequest('aliexpress.dropshipping.order.create', apiParams);
         } else {
@@ -362,9 +589,18 @@ export class AliExpressDropshippingAPIService {
       }
 
       const order = result.order || result;
+      const orderIdRaw = order.order_id ?? order.orderId ?? order.order_id;
+      const orderId = String(orderIdRaw || '');
+      if (!orderId) {
+        // If AliExpress rejected the payload, it may not return error_response,
+        // so we must validate response structure ourselves.
+        const safePreview =
+          typeof order === 'object' ? JSON.stringify(order).slice(0, 800) : String(order).slice(0, 800);
+        throw new Error(`AliExpress placeOrder response missing order_id. Preview: ${safePreview}`);
+      }
 
       return {
-        orderId: String(order.order_id || ''),
+        orderId,
         orderNumber: String(order.order_number || order.order_sn || order.order_id || ''),
         totalAmount: parseFloat(order.total_amount || order.total_price || '0'),
         currency: order.currency || 'USD',

@@ -31,6 +31,11 @@ export default function OrderDetail() {
   const statuses = useAuthStatusStore((state) => state.statuses);
   const aliStatusUnknown = statuses?.aliexpress?.status === 'unknown';
   const orderPendingPurchase = order?.status === 'PAID' || order?.status === 'PURCHASING';
+  const failedWithTimeout =
+    order?.status === 'FAILED' &&
+    order?.errorMessage &&
+    /timeout|tardó demasiado/i.test(order.errorMessage);
+  const showConnectAliNotice = aliStatusUnknown && (orderPendingPurchase || failedWithTimeout);
 
   const canRetryFulfill =
     order?.status === 'FAILED' &&
@@ -61,8 +66,11 @@ export default function OrderDetail() {
     }
   };
 
-  /** Phase 44: Force fulfillment when order is PAID and has eBay ID. */
-  const canForceFulfill = order?.status === 'PAID' && order?.marketplaceOrderId && (order.paypalOrderId || '').startsWith('ebay:');
+  /** Force fulfillment when order is PAID or FAILED (retry), has eBay ID and (if FAILED) product URL. */
+  const canForceFulfill =
+    (order?.status === 'PAID' || (order?.status === 'FAILED' && (order?.productUrl || '').trim().length > 0)) &&
+    order?.marketplaceOrderId &&
+    (order.paypalOrderId || '').startsWith('ebay:');
   const handleForceFulfill = async () => {
     if (!order?.marketplaceOrderId || !canForceFulfill) return;
     setForceFulfillLoading(true);
@@ -221,7 +229,7 @@ export default function OrderDetail() {
           </div>
         )}
 
-        {aliStatusUnknown && orderPendingPurchase && (
+        {showConnectAliNotice && (
           <div className="p-4 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
             <p className="text-sm font-medium">Para compras automáticas en AliExpress, conecta tu cuenta.</p>
             <p className="text-sm mt-1">Ve a Ajustes → APIs → AliExpress Dropshipping y completa la autorización.</p>
@@ -279,7 +287,11 @@ export default function OrderDetail() {
 
         {canForceFulfill && (
           <div className="p-4 mb-4 text-blue-800 dark:text-blue-200 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-2">
-            <p className="text-sm font-medium">Orden pagada en eBay — pendiente de compra en AliExpress.</p>
+            <p className="text-sm font-medium">
+              {order?.status === 'FAILED'
+                ? 'La compra falló. Puedes reintentarla en AliExpress.'
+                : 'Orden pagada en eBay — pendiente de compra en AliExpress.'}
+            </p>
             <button
               type="button"
               onClick={handleForceFulfill}
@@ -287,7 +299,7 @@ export default function OrderDetail() {
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${forceFulfillLoading ? 'animate-spin' : ''}`} />
-              {forceFulfillLoading ? 'Ejecutando...' : 'Forzar compra en AliExpress'}
+              {forceFulfillLoading ? 'Ejecutando...' : order?.status === 'FAILED' ? 'Reintentar compra en AliExpress' : 'Forzar compra en AliExpress'}
             </button>
             {forceFulfillError && <p className="text-sm text-red-700 dark:text-red-300">{forceFulfillError}</p>}
           </div>

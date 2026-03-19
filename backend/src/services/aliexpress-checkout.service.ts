@@ -92,6 +92,15 @@ export class AliExpressCheckoutService {
           };
         }
         const strictError = result.error || 'AliExpress Dropshipping API purchase failed';
+        const apiOnly = process.env.ALIEXPRESS_DROPSHIPPING_API_ONLY === 'true' || process.env.ALIEXPRESS_DROPSHIPPING_API_ONLY === '1';
+        if (apiOnly) {
+          logger.warn('[ALIEXPRESS-CHECKOUT] Dropshipping API failed (API-only mode, no browser fallback)', {
+            userId,
+            error: strictError,
+          });
+          return { success: false, error: strictError };
+        }
+        const sep = strictError.trim().endsWith('.') ? ' ' : '. ';
         logger.warn('[ALIEXPRESS-CHECKOUT] Dropshipping API failed, attempting browser fallback', {
           userId,
           error: strictError,
@@ -102,13 +111,13 @@ export class AliExpressCheckoutService {
         if (!aliUser || !aliPass) {
           return {
             success: false,
-            error: `${strictError}. Missing ALIEXPRESS_USER/ALIEXPRESS_PASS for browser fallback.`,
+            error: `${strictError}${sep}Missing ALIEXPRESS_USER/ALIEXPRESS_PASS for browser fallback.`,
           };
         }
         service.setCredentials({ email: aliUser, password: aliPass });
         const loginOk = await service.login();
         if (!loginOk) {
-          return { success: false, error: `${strictError}. AliExpress browser login failed.` };
+          return { success: false, error: `${strictError}${sep}AliExpress browser login failed.` };
         }
         const browserResult = await (service as any).executePurchase(
           {
