@@ -47,6 +47,10 @@ router.get('/health', (_req: Request, res: Response) => {
     success: true,
     message: 'Internal routes endpoint is active',
     hasSecret: !!INTERNAL_SECRET,
+    capabilities: {
+      /** POST /api/internal/test-full-cycle-search-to-publish body.marketplace=mercadolibre */
+      mlcSearchToPublish: true,
+    },
     routes: [
       'POST /api/internal/run-ebay-cycle',
       'POST /api/internal/test-post-sale-flow',

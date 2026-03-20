@@ -41,6 +41,8 @@
     "phase54:cleanup": "node scripts/phase54-platform-cleanup.mjs",
     "phase54:cleanup:execute": "node scripts/phase54-platform-cleanup.mjs --execute",
     "real-dropshipping:preflight": "node scripts/real-dropshipping-mlc-preflight.mjs",
+    "internal:mlc-search-publish": "node scripts/run-mlc-internal-search-to-publish.mjs",
+    "internal:mlc-search-publish:dry": "node scripts/run-mlc-internal-search-to-publish.mjs --dry-run",
     "run:remote-cycle": "node scripts/run-remote-cycle-only.js",
     "ebay:oauth-url": "node scripts/get-ebay-oauth-url.js",
     "ebay:oauth-then-publish": "node scripts/ebay-oauth-then-publish.js",

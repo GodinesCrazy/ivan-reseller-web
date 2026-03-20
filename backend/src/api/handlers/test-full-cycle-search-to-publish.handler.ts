@@ -38,6 +38,8 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
   const maxPriceUsdRaw = Number(req.body?.maxPriceUsd);
   // Default max $12 for economical test cycles (user preference: artículos económicos ≤$12)
   const maxPriceUsd = Number.isFinite(maxPriceUsdRaw) && maxPriceUsdRaw > 0 ? maxPriceUsdRaw : 12;
+  const marketplace: 'ebay' | 'mercadolibre' =
+    String(req.body?.marketplace || 'ebay').toLowerCase() === 'mercadolibre' ? 'mercadolibre' : 'ebay';
 
   try {
     const user = Number.isFinite(requestedUserId) && requestedUserId > 0
@@ -135,6 +137,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
         dryRun: true,
         productId: product.id,
         keyword,
+        marketplace,
         stages: { trends: true, search: true, product: true, approved: true, publish: 'skipped' },
         durationMs: Date.now() - startTime,
       });
@@ -186,6 +189,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
         listingId: publishResult.listingId,
         listingUrl: publishResult.listingUrl,
         keyword,
+        marketplace,
         maxPriceUsdApplied: maxPriceUsd,
         stages: { trends: true, search: true, product: true, approved: true, publish: true },
         verified: verified ? { status: verified.status, isPublished: verified.isPublished } : undefined,
@@ -195,7 +199,10 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
     }
 
     // Degradación: si falla por token eBay, retornar éxito con producto creado/aprobado (pendiente OAuth)
-    const tokenErr = publishResult.error && /token|refresh|invalid_grant|401|expired|oauth/.test(String(publishResult.error).toLowerCase());
+    const tokenErr =
+      marketplace === 'ebay' &&
+      publishResult.error &&
+      /token|refresh|invalid_grant|401|expired|oauth/.test(String(publishResult.error).toLowerCase());
     if (tokenErr) {
       logger.warn('[INTERNAL] eBay publish failed (token). Returning success with product ready.', { productId: product.id });
       res.status(200).json({
@@ -211,10 +218,33 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
       return;
     }
 
+    const mlTokenErr =
+      marketplace === 'mercadolibre' &&
+      publishResult.error &&
+      /token|refresh|invalid_grant|401|expired|oauth|unauthor/i.test(String(publishResult.error).toLowerCase());
+    if (mlTokenErr) {
+      logger.warn('[INTERNAL] ML publish failed (token). Returning success with product ready.', {
+        productId: product.id,
+      });
+      res.status(200).json({
+        success: true,
+        productId: product.id,
+        keyword,
+        marketplace,
+        stages: { trends: true, search: true, product: true, approved: true, publish: 'pending_oauth' },
+        mercadolibrePendingOAuth: true,
+        publishError: publishResult.error,
+        message: 'Producto creado y aprobado. Renueva token Mercado Libre en Configuración / credenciales.',
+        durationMs: Date.now() - startTime,
+      });
+      return;
+    }
+
     res.status(500).json({
       success: false,
       error: publishResult.error,
       productId: product.id,
+      marketplace,
       stages: { trends: true, search: true, product: true, approved: true, publish: false },
       durationMs: Date.now() - startTime,
     });

@@ -17,6 +17,13 @@ JWT=<optional_bearer_for_stage_2> \
 npm run real-dropshipping:preflight
 ```
 
+**Publicar en ML Chile vía internal (tras deploy con `capabilities.mlcSearchToPublish`):**
+
+```bash
+INTERNAL_RUN_SECRET=<secret> npm run internal:mlc-search-publish:dry   # solo crea + aprueba
+INTERNAL_RUN_SECRET=<secret> npm run internal:mlc-search-publish        # publica en ML (real)
+```
+
 **Last run (agent, UTC ~2026-03-20T01:30Z, production URL):**
 
 | Check | Result |
