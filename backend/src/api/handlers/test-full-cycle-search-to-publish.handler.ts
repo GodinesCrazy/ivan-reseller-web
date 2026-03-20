@@ -131,6 +131,12 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
       select: { status: true, title: true, aliexpressPrice: true, suggestedPrice: true },
     });
 
+    let env: 'sandbox' | 'production' = await workflowConfigService.getUserEnvironment(userId);
+    const credEnvBody = String(req.body?.credentialEnvironment ?? '').toLowerCase();
+    if (credEnvBody === 'production' || credEnvBody === 'sandbox') {
+      env = credEnvBody;
+    }
+
     if (dryRun) {
       res.status(200).json({
         success: true,
@@ -140,13 +146,13 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
         keyword,
         marketplace,
         stages: { trends: true, search: true, product: true, approved: true, publish: 'skipped' },
+        credentialEnvironment: env,
         durationMs: Date.now() - startTime,
       });
       return;
     }
 
     const marketplaceService = new MarketplaceService();
-    let env = await workflowConfigService.getUserEnvironment(userId);
 
     let publishResult: { success: boolean; error?: string; listingId?: string; listingUrl?: string };
     try {
@@ -208,6 +214,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
         maxPriceUsdApplied: maxPriceUsd,
         stages: { trends: true, search: true, product: true, approved: true, publish: true },
         verified: verified ? { status: verified.status, isPublished: verified.isPublished } : undefined,
+        credentialEnvironment: env,
         durationMs: Date.now() - startTime,
       });
       return;
@@ -270,6 +277,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
       userId,
       productId: product.id,
       marketplace,
+      credentialEnvironment: env,
       hint: dsHint,
       stages: { trends: true, search: true, product: true, approved: true, publish: false },
       durationMs: Date.now() - startTime,

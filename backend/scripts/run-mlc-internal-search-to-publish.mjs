@@ -3,6 +3,7 @@
  * POST /api/internal/test-full-cycle-search-to-publish with MercadoLibre Chile.
  *
  * Env: BASE_URL, INTERNAL_RUN_SECRET
+ * Optional: MLC_CREDENTIAL_ENV=production|sandbox (default production — evita fallo si el workflow del usuario está en sandbox)
  * Args: --dry-run  → body.dryRun true (no publish)
  *
  * Example:
@@ -23,11 +24,13 @@ if (!SECRET) {
 }
 
 const userId = parseInt(process.env.MLC_USER_ID || process.env.USER_ID || '', 10);
+const credEnv = String(process.env.MLC_CREDENTIAL_ENV || 'production').toLowerCase();
 const body = {
   marketplace: 'mercadolibre',
   maxPriceUsd: 10,
   dryRun,
   keyword: process.env.MLC_KEYWORD || 'phone case',
+  ...(credEnv === 'production' || credEnv === 'sandbox' ? { credentialEnvironment: credEnv } : {}),
   ...(Number.isFinite(userId) && userId > 0 ? { userId } : {}),
 };
 
