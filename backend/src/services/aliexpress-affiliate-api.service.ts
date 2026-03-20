@@ -377,7 +377,7 @@ export class AliExpressAffiliateAPIService {
         target_language: 'EN',
         ship_to_country: 'US',
         fields:
-          'product_id,product_title,product_main_image_url,product_small_image_urls,sale_price,original_price,target_sale_price,target_sale_price_currency,product_detail_url,promotion_link,commission_rate,currency',
+          'product_id,product_title,product_main_image_url,product_small_image_urls,sale_price,original_price,target_sale_price,target_sale_price_currency,product_detail_url,promotion_link,commission_rate,currency,evaluate_score,evaluate_rate,volume',
       };
       if (params.targetCurrency) requestParams.target_currency = params.targetCurrency;
       if (params.targetLanguage) requestParams.target_language = params.targetLanguage;
@@ -429,6 +429,9 @@ export class AliExpressAffiliateAPIService {
           salePrice: price,
           originalPrice: parseFloat(p.original_price || '0'),
           discount: parseFloat(p.discount || '0'),
+          evaluateScore: p.evaluate_score != null ? parseFloat(String(p.evaluate_score)) : undefined,
+          evaluateRate: p.evaluate_rate != null ? parseFloat(String(p.evaluate_rate)) : undefined,
+          volume: p.volume != null ? parseInt(String(p.volume), 10) : undefined,
           productDetailUrl: p.product_detail_url,
           promotionLink: p.promotion_link,
           currency,

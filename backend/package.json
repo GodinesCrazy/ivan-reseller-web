@@ -38,6 +38,8 @@
     "test:full-dropshipping-e2e": "tsx scripts/test-full-dropshipping-cycle.ts",
     "test:search-to-publish": "tsx scripts/test-full-cycle-search-to-publish.ts",
     "test:cycle-coherence": "tsx scripts/test-cycle-coherence-with-published.ts",
+    "phase54:cleanup": "node scripts/phase54-platform-cleanup.mjs",
+    "phase54:cleanup:execute": "node scripts/phase54-platform-cleanup.mjs --execute",
     "run:remote-cycle": "node scripts/run-remote-cycle-only.js",
     "ebay:oauth-url": "node scripts/get-ebay-oauth-url.js",
     "ebay:oauth-then-publish": "node scripts/ebay-oauth-then-publish.js",

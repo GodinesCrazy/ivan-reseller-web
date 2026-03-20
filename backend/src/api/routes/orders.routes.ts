@@ -4,6 +4,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import logger from '../../config/logger';
 import { authenticate } from '../../middleware/auth.middleware';
@@ -22,6 +23,7 @@ import { syncMercadoLibreOrdersForUser } from '../../services/mercadolibre-order
 import { syncAmazonOrdersForUser } from '../../services/amazon-order-sync.service';
 import { buildRealOrdersWhere, REAL_ORDERS_EXCLUDE_PAYPAL_PREFIXES } from '../../utils/orders-real-filter';
 import { promoteOrderToManualQueue } from '../../services/manual-fulfillment.service';
+import { findBestSupplierForManualOrder } from '../../services/smart-supplier-selector.service';
 
 const marketplaceService = new MarketplaceService();
 
@@ -632,6 +634,159 @@ const PURCHASING_STALE_MS = 5 * 60 * 1000; // 5 min — auto-recover stuck PURCH
 const ORDER_DETAIL_INCLUDE = {
   product: { select: { id: true, title: true, images: true, aliexpressPrice: true, aliexpressUrl: true } },
 } as const;
+
+function extractAliexpressProductIdFromUrl(url: string | null | undefined): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const m = url.match(/(?:item\/|\/i\/)(\d{6,})\.html/i) || url.match(/(\d{10,})/);
+  return m ? String(m[1]) : null;
+}
+
+function parseShippingCountry(shippingAddressJson: string): string {
+  try {
+    const o = JSON.parse(shippingAddressJson) as Record<string, unknown>;
+    const c = o?.country ?? o?.countryCode;
+    const s = typeof c === 'string' ? c.trim().toUpperCase() : '';
+    return s || 'US';
+  } catch {
+    return 'US';
+  }
+}
+
+/**
+ * GET /api/orders/:id/smart-supplier
+ * Phase 48: one validated AliExpress supplier recommendation (Affiliate search + DS getProductInfo).
+ */
+router.get('/:id/smart-supplier', async (req: Request, res: Response) => {
+  try {
+    const id = (req.params.id || '').trim();
+    if (!id) return res.status(400).json({ error: 'Order id required' });
+    const userId = req.user!.userId;
+    const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { product: { select: { aliexpressPrice: true, id: true } } },
+    });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!isAdmin && order.userId != null && order.userId !== userId) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    if (order.userId == null) {
+      return res.status(400).json({ error: 'Order has no owner user; connect reseller account first.' });
+    }
+
+    const refresh =
+      req.query.refresh === '1' ||
+      req.query.refresh === 'true' ||
+      String(req.query.refresh || '').toLowerCase() === 'yes';
+    if (!refresh && order.recommendedSupplierMeta && typeof order.recommendedSupplierMeta === 'object') {
+      const meta = order.recommendedSupplierMeta as Record<string, unknown>;
+      const computedAt = meta.computedAt != null ? String(meta.computedAt) : '';
+      if (computedAt && !Number.isNaN(Date.parse(computedAt))) {
+        const age = Date.now() - new Date(computedAt).getTime();
+        if (age >= 0 && age < 60 * 60 * 1000) {
+          return res.status(200).json({
+            cached: true,
+            recommendation: meta as Record<string, unknown>,
+            recommendedSupplierUrl: order.recommendedSupplierUrl,
+          });
+        }
+      }
+    }
+
+    const originalSupplierUsd =
+      order.product?.aliexpressPrice != null
+        ? toNumber(order.product.aliexpressPrice)
+        : toNumber(order.price) * 0.4;
+    const base = Math.max(0.01, originalSupplierUsd);
+
+    const shipTo = parseShippingCountry(order.shippingAddress || '{}');
+
+    const recommendation = await findBestSupplierForManualOrder({
+      userId: order.userId,
+      orderTitle: order.title,
+      originalProductId: extractAliexpressProductIdFromUrl(order.productUrl),
+      originalSupplierPriceUsd: base,
+      shipToCountry: shipTo,
+    });
+
+    if (!recommendation) {
+      return res.status(404).json({
+        error: 'No validated supplier found',
+        hint: 'Check AliExpress Affiliate + Dropshipping credentials, or try refresh=1 later.',
+      });
+    }
+
+    return res.status(200).json({
+      cached: false,
+      recommendation,
+      optimizedQueryHint: order.title.slice(0, 80),
+    });
+  } catch (err: any) {
+    logger.error('[ORDERS] smart-supplier GET failed', { error: err?.message });
+    return res.status(500).json({ error: err?.message || 'Failed' });
+  }
+});
+
+/**
+ * POST /api/orders/:id/smart-supplier/apply
+ * Phase 48: persist recommended supplier on the order (opens same URL for manual buy).
+ */
+router.post('/:id/smart-supplier/apply', async (req: Request, res: Response) => {
+  try {
+    const id = (req.params.id || '').trim();
+    if (!id) return res.status(400).json({ error: 'Order id required' });
+    const userId = req.user!.userId;
+    const isAdmin = req.user!.role?.toUpperCase() === 'ADMIN';
+
+    const body = req.body as { recommendation?: Record<string, unknown> };
+    const rec = body.recommendation;
+    const url =
+      rec && typeof rec.productUrl === 'string' && rec.productUrl.trim()
+        ? rec.productUrl.trim()
+        : null;
+    if (!url || !/aliexpress\.com/i.test(url)) {
+      return res.status(400).json({ error: 'recommendation.productUrl (AliExpress) is required' });
+    }
+
+    const order = await prisma.order.findUnique({ where: { id }, select: { id: true, userId: true } });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!isAdmin && order.userId != null && order.userId !== userId) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    await prisma.order.update({
+      where: { id },
+      data: {
+        recommendedSupplierUrl: url,
+        recommendedSupplierMeta: rec != null ? (rec as Prisma.InputJsonValue) : undefined,
+      },
+    });
+
+    const full = await prisma.order.findUnique({ where: { id }, include: ORDER_DETAIL_INCLUDE });
+    const pp = (full?.paypalOrderId || '').trim();
+    const marketplaceOrderId = pp.startsWith('ebay:')
+      ? pp.slice(5)
+      : pp.startsWith('mercadolibre:')
+        ? pp.slice(13)
+        : pp.startsWith('amazon:')
+          ? pp.slice(7)
+          : null;
+    const sale = await prisma.sale.findUnique({
+      where: { orderId: id },
+      select: { id: true, status: true, trackingNumber: true },
+    });
+    logger.info('[ORDERS] smart-supplier applied', { orderId: id });
+    return res.status(200).json({
+      ...full,
+      marketplaceOrderId,
+      sale: sale ? { id: sale.id, status: sale.status, trackingNumber: sale.trackingNumber } : null,
+    });
+  } catch (err: any) {
+    logger.error('[ORDERS] smart-supplier apply failed', { error: err?.message });
+    return res.status(500).json({ error: err?.message || 'Failed' });
+  }
+});
 
 router.get('/:id', async (req: Request, res: Response) => {
   try {

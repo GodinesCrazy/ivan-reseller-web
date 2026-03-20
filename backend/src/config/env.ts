@@ -374,6 +374,24 @@ const envSchema = z.object({
     const n = parseFloat(val);
     return Number.isFinite(n) && n >= 0 ? n : 5.99;
   }),
+
+  /** Phase 51: safety lock — block all new marketplace publications until audit/validation is complete (Railway: set true during incidents). */
+  BLOCK_NEW_PUBLICATIONS: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+
+  /** Phase 53: skip AliExpress pre-publish validation (emergency / tests only). */
+  PRE_PUBLISH_VALIDATION_DISABLED: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
+  /** Minimum net profit after supplier + shipping + fees (same currency unit as listing sale price). */
+  PRE_PUBLISH_MIN_NET_PROFIT: z.string().default('0.01').transform((v) => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : 0.01;
+  }),
+  /** Optional minimum margin netProfit/salePrice (0–1). 0 = only PRE_PUBLISH_MIN_NET_PROFIT applies. */
+  PRE_PUBLISH_MIN_MARGIN_RATIO: z.string().default('0').transform((v) => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) && n >= 0 && n <= 1 ? n : 0;
+  }),
+  /** If AliExpress getProductInfo has no shipping methods with cost, use product effective default shipping. */
+  PRE_PUBLISH_SHIPPING_FALLBACK: z.enum(['true', 'false']).default('true').transform((val) => val === 'true'),
 });
 
 // Asegurar que DATABASE_URL esté en process.env

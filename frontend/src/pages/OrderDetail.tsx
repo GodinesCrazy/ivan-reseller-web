@@ -16,6 +16,7 @@ import {
   Settings,
   ExternalLink,
   ClipboardCopy,
+  Loader2,
 } from 'lucide-react';
 import {
   getOrder,
@@ -25,12 +26,16 @@ import {
   resetOrderPurchasing,
   markManualPurchased,
   retryAutomaticFulfillment,
+  getOrderSmartSupplier,
+  applyOrderSmartSupplier,
   type Order,
+  type SmartSupplierRecommendation,
 } from '@/services/orders.api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { formatCurrencySimple } from '@/utils/currency';
 import { useAuthStatusStore } from '@/stores/authStatusStore';
+import toast from 'react-hot-toast';
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -51,6 +56,10 @@ export default function OrderDetail() {
   const [manualMarkLoading, setManualMarkLoading] = useState(false);
   const [manualRetryLoading, setManualRetryLoading] = useState(false);
   const [manualActionError, setManualActionError] = useState<string | null>(null);
+  const [smartRec, setSmartRec] = useState<SmartSupplierRecommendation | null>(null);
+  const [smartLoading, setSmartLoading] = useState(false);
+  const [smartError, setSmartError] = useState<string | null>(null);
+  const [smartApplyLoading, setSmartApplyLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statuses = useAuthStatusStore((state) => state.statuses);
   const aliStatusUnknown = statuses?.aliexpress?.status === 'unknown';
@@ -175,6 +184,46 @@ export default function OrderDetail() {
     fetchOrder();
   }, [id]);
 
+  /** Phase 48: smart supplier when manual / SKU failure */
+  useEffect(() => {
+    if (!id || !order) return;
+    const eligible =
+      order.status === 'MANUAL_ACTION_REQUIRED' ||
+      order.status === 'FULFILLMENT_BLOCKED' ||
+      order.manualFulfillmentRequired ||
+      (order.status === 'FAILED' && /SKU_NOT_EXIST|PRODUCT_NOT_EXIST/i.test(order.errorMessage || ''));
+    if (!eligible) {
+      setSmartRec(null);
+      setSmartError(null);
+      setSmartLoading(false);
+      return;
+    }
+    const cached = order.recommendedSupplierMeta as SmartSupplierRecommendation | undefined;
+    if (cached?.productUrl && cached?.productId) {
+      setSmartRec(cached);
+    }
+    let cancelled = false;
+    (async () => {
+      setSmartLoading(true);
+      setSmartError(null);
+      try {
+        const data = await getOrderSmartSupplier(id);
+        if (!cancelled && data.recommendation) setSmartRec(data.recommendation);
+      } catch (e: any) {
+        const msg = e?.response?.data?.error || e?.message || 'No se encontró proveedor validado';
+        if (!cancelled) {
+          setSmartError(msg);
+          if (cached?.productUrl) setSmartRec(cached);
+        }
+      } finally {
+        if (!cancelled) setSmartLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, order?.id, order?.status, order?.manualFulfillmentRequired, order?.errorMessage, order?.recommendedSupplierMeta]);
+
   useEffect(() => {
     if (!id || !order) return;
     const isTerminal =
@@ -246,6 +295,13 @@ export default function OrderDetail() {
     order.status === 'FULFILLMENT_BLOCKED' ||
     !!order.manualFulfillmentRequired;
 
+  /** Same eligibility as Phase 48 smart-supplier fetch (incl. FAILED + SKU_NOT_EXIST). */
+  const showSmartSupplierSection =
+    order.status === 'MANUAL_ACTION_REQUIRED' ||
+    order.status === 'FULFILLMENT_BLOCKED' ||
+    !!order.manualFulfillmentRequired ||
+    (order.status === 'FAILED' && /SKU_NOT_EXIST|PRODUCT_NOT_EXIST/i.test(order.errorMessage || ''));
+
   const handleCopyAddress = async () => {
     try {
       await navigator.clipboard.writeText(addressText);
@@ -290,6 +346,45 @@ export default function OrderDetail() {
       setManualRetryLoading(false);
     }
   };
+
+  const handleSmartRefresh = async () => {
+    if (!id) return;
+    setSmartLoading(true);
+    setSmartError(null);
+    try {
+      const data = await getOrderSmartSupplier(id, { refresh: true });
+      if (data.recommendation) {
+        setSmartRec(data.recommendation);
+        toast.success('Recomendación actualizada');
+      } else {
+        setSmartRec(null);
+        toast('Sin resultados validados', { icon: 'ℹ️' });
+      }
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.message || 'Error al actualizar';
+      setSmartError(msg);
+      toast.error(msg);
+    } finally {
+      setSmartLoading(false);
+    }
+  };
+
+  const handleSmartApply = async () => {
+    if (!id || !smartRec) return;
+    setSmartApplyLoading(true);
+    try {
+      const updated = await applyOrderSmartSupplier(id, smartRec);
+      setOrder(updated);
+      await fetchOrder();
+      toast.success('Proveedor guardado en la orden');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || e?.message || 'Error al guardar');
+    } finally {
+      setSmartApplyLoading(false);
+    }
+  };
+
+  const smartOpenUrl = smartRec ? (smartRec.affiliateUrl || smartRec.productUrl) : '';
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 p-6">
@@ -418,6 +513,94 @@ export default function OrderDetail() {
                 {retryError && (
                   <p className="mt-2 text-sm text-red-700 dark:text-red-300">{retryError}</p>
                 )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showSmartSupplierSection && (
+          <div className="p-4 rounded-lg border-2 border-emerald-400 dark:border-emerald-600 bg-emerald-50/90 dark:bg-emerald-950/35 text-emerald-950 dark:text-emerald-100 space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-bold">Proveedor recomendado</p>
+                <p className="text-xs text-emerald-800/90 dark:text-emerald-200/90">
+                  Recommended supplier (Phase 48) — un producto validado con stock para compra manual
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleSmartRefresh}
+                  disabled={smartLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-emerald-700 text-emerald-900 dark:text-emerald-100 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${smartLoading ? 'animate-spin' : ''}`} />
+                  Actualizar búsqueda
+                </button>
+              </div>
+            </div>
+            {smartLoading && !smartRec && (
+              <div className="flex items-center gap-2 text-sm text-emerald-900 dark:text-emerald-200 py-1">
+                <Loader2 className="w-5 h-5 animate-spin text-emerald-700 dark:text-emerald-300 flex-shrink-0" />
+                <span>Buscando y validando proveedor…</span>
+              </div>
+            )}
+            {smartError && !smartRec && (
+              <p className="text-sm text-red-800 dark:text-red-200">{smartError}</p>
+            )}
+            {smartRec && (
+              <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-white/80 dark:bg-gray-900/40 p-3 space-y-3">
+                <div className="flex gap-3">
+                  {smartRec.productMainImageUrl ? (
+                    <img
+                      src={smartRec.productMainImageUrl}
+                      alt=""
+                      className="w-24 h-24 object-cover rounded-md border border-emerald-200 dark:border-emerald-800 flex-shrink-0 bg-white"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-md border border-dashed border-emerald-300 dark:border-emerald-700 flex items-center justify-center text-xs text-emerald-700 dark:text-emerald-300">
+                      Sin imagen
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 line-clamp-3">{smartRec.productTitle}</p>
+                    <p className="text-sm text-gray-800 dark:text-gray-200">
+                      {formatCurrencySimple(smartRec.salePriceUsd, 'USD')}
+                    </p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Valoración {smartRec.rating.toFixed(1)} · {smartRec.orderCount.toLocaleString()} pedidos
+                    </p>
+                    {smartRec.shippingSummary ? (
+                      <p className="text-xs text-gray-600 dark:text-gray-400">{smartRec.shippingSummary}</p>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {smartOpenUrl ? (
+                    <a
+                      href={smartOpenUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Abrir proveedor / AliExpress
+                    </a>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={handleSmartApply}
+                    disabled={smartApplyLoading || !smartRec}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg border border-emerald-700 text-emerald-900 dark:text-emerald-100 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 disabled:opacity-50"
+                  >
+                    {smartApplyLoading ? 'Guardando…' : 'Guardar en la orden'}
+                  </button>
+                </div>
+                {order.recommendedSupplierUrl ? (
+                  <p className="text-xs text-emerald-800/80 dark:text-emerald-200/80">
+                    URL guardada en la orden (puedes reemplazarla guardando de nuevo).
+                  </p>
+                ) : null}
               </div>
             )}
           </div>

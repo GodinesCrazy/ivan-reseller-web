@@ -49,6 +49,9 @@ Thumbs.db
 # Prisma
 prisma/migrations/**/migration.sql
 
+# Local scratch (never commit)
+backend/scripts/_tmp_*.json
+
 # Misc
 *.pem
 *.key

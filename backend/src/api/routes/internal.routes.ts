@@ -55,6 +55,7 @@ router.get('/health', (_req: Request, res: Response) => {
       'POST /api/internal/test-full-cycle',
       'POST /api/internal/test-full-dropshipping-cycle',
       'POST /api/internal/test-full-cycle-search-to-publish',
+      'POST /api/internal/active-listings-risk-scan',
     ],
   });
 });
@@ -1048,6 +1049,25 @@ router.get('/ebay-inventory-item-diagnostic', validateInternalSecret, async (req
       raw: resp.ok ? undefined : json,
     });
   } catch (e: any) {
+    return res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
+
+// POST /api/internal/active-listings-risk-scan — Phase 54: re-run pre-publish validator on all active listings
+router.post('/active-listings-risk-scan', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const { runActiveListingsRiskScan } = await import('../../services/active-listings-risk-scan.service');
+    const body = req.body || {};
+    const result = await runActiveListingsRiskScan({
+      userId: body.userId != null ? Number(body.userId) : undefined,
+      dryRun: body.dryRun === true,
+      autoUnpublishUnshippable: body.autoUnpublishUnshippable !== false,
+      autoUnpublishUnprofitable: body.autoUnpublishUnprofitable === true,
+      writeFlags: body.writeFlags !== false,
+    });
+    return res.status(200).json({ success: true, ...result });
+  } catch (e: any) {
+    logger.error('[INTERNAL] active-listings-risk-scan failed', { error: e?.message });
     return res.status(500).json({ success: false, error: e?.message || String(e) });
   }
 });

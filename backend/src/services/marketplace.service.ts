@@ -92,6 +92,7 @@ import { AppError } from '../middleware/error.middleware';
 import { prisma } from '../config/database';
 import { retryMarketplaceOperation } from '../utils/retry.util';
 import logger from '../config/logger';
+import { env } from '../config/env';
 import crypto from 'crypto';
 import type { CredentialScope } from '@prisma/client';
 import { toNumber } from '../utils/decimal.utils';
@@ -552,6 +553,13 @@ export class MarketplaceService {
     environment?: 'sandbox' | 'production'
   ): Promise<PublishResult> {
     try {
+      if (env.BLOCK_NEW_PUBLICATIONS) {
+        throw new AppError(
+          'New publications are temporarily disabled (BLOCK_NEW_PUBLICATIONS=true). Phase 51 safety lock — remove the flag after validation.',
+          423
+        );
+      }
+
       // Get product from database
       const product = await prisma.product.findFirst({
         where: {
@@ -623,6 +631,25 @@ export class MarketplaceService {
 
       if (credentials.issues?.length) {
         throw new AppError(credentials.issues.join(' '), 400);
+      }
+
+      // Phase 53: mandatory AliExpress DS validation (SKU/stock/destination, shipping, profit vs fees)
+      {
+        const { assertProductValidForPublishing } = await import('./pre-publish-validator.service');
+        const listingSalePrice = this.getEffectiveListingPrice(product, request.customData?.price);
+        try {
+          await assertProductValidForPublishing({
+            userId,
+            product,
+            marketplace: request.marketplace,
+            credentials: credentials.credentials as Record<string, unknown> | undefined,
+            listingSalePrice,
+          });
+        } catch (err: unknown) {
+          if (err instanceof AppError) throw err;
+          const msg = err instanceof Error ? err.message : String(err);
+          throw new AppError(`Product not valid for publishing: ${msg}`, 400);
+        }
       }
 
       // Publish to specific marketplace

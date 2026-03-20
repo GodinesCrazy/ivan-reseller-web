@@ -52,8 +52,33 @@ export interface Order {
   manualPurchaseDate?: string | null;
   quantity?: number;
   product?: OrderProductPreview | null;
+  /** Phase 48: saved smart supplier pick */
+  recommendedSupplierUrl?: string | null;
+  recommendedSupplierMeta?: SmartSupplierRecommendation | Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Phase 48 — one validated AliExpress recommendation */
+export interface SmartSupplierRecommendation {
+  productId: string;
+  productUrl: string;
+  affiliateUrl?: string;
+  productTitle: string;
+  productMainImageUrl: string;
+  salePriceUsd: number;
+  rating: number;
+  orderCount: number;
+  shippingSummary: string;
+  skuId?: string;
+  computedAt: string;
+}
+
+export interface SmartSupplierResponse {
+  cached?: boolean;
+  recommendation: SmartSupplierRecommendation;
+  recommendedSupplierUrl?: string | null;
+  optimizedQueryHint?: string;
 }
 
 export interface RetryFulfillResponse {
@@ -244,5 +269,26 @@ export async function retryAutomaticFulfillment(orderId: string): Promise<{
   order: Order | null;
 }> {
   const res = await api.post(`/api/orders/${orderId}/retry-automatic-fulfillment`, {}, { timeout: FULFILLMENT_REQUEST_TIMEOUT_MS });
+  return res.data;
+}
+
+const SMART_SUPPLIER_TIMEOUT_MS = 120_000;
+
+export async function getOrderSmartSupplier(
+  orderId: string,
+  options?: { refresh?: boolean }
+): Promise<SmartSupplierResponse> {
+  const res = await api.get<SmartSupplierResponse>(`/api/orders/${orderId}/smart-supplier`, {
+    params: options?.refresh ? { refresh: 1 } : undefined,
+    timeout: SMART_SUPPLIER_TIMEOUT_MS,
+  });
+  return res.data;
+}
+
+export async function applyOrderSmartSupplier(
+  orderId: string,
+  recommendation: SmartSupplierRecommendation
+): Promise<Order> {
+  const res = await api.post<Order>(`/api/orders/${orderId}/smart-supplier/apply`, { recommendation });
   return res.data;
 }
