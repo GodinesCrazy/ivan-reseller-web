@@ -10,7 +10,7 @@
 | Item | Status |
 |------|--------|
 | Dry run — localhost | **NO** — `http://localhost:4000` unreachable |
-| Dry run — Railway `ivan-reseller-backend-production` | **NO** — **404** (ruta Phase 54 no desplegada aún) |
+| Dry run — Railway `ivan-reseller-backend-production` | **SÍ** — **200**, `scanned: 0` (sin listings `active` al momento del scan) |
 | Real cleanup (`dryRun: false`) | **NOT EXECUTED** |
 | Marketplace API verification | **NOT RUN** |
 | Readiness report | **NOT RUN** (requires JWT) |

@@ -86,6 +86,12 @@ El despliegue actual en Railway **no incluye ese commit** (el health de producci
 - **Post-push (automático):** varios polls a `GET .../api/internal/health` y `POST .../active-listings-risk-scan` — **aún sin ruta nueva** en `health` y **404** en el scan (≈4–6 min tras el push).
 - **Interpretación probable:** el servicio Railway sigue sirviendo el **build anterior** (deploy en curso, build fallido, o servicio apuntando a otra rama/repo). Revisa en Railway: **Deployments** del servicio `ivan-reseller-backend` → último job **Success** con commit `14a7fab` y logs de `prisma migrate deploy`.
 
+### Verificación post-deploy (Success en Railway)
+
+- **`GET .../api/internal/health`:** incluye `POST /api/internal/active-listings-risk-scan`.
+- **Dry run** `{"dryRun":true}`: **200 OK**, `success: true`, `scanned: 0`, `summary` todo en 0, `dangerous` y `entries` vacíos.
+- **Significado:** no hay filas `marketplace_listings` con `status = 'active'` en la BD de producción en ese momento (o ninguna coincide con el filtro del scan). No implica fallo del endpoint.
+
 ---
 
 ## Step 3 — Classification rubric (when response is available)
