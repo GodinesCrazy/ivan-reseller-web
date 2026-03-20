@@ -8,7 +8,7 @@ import { prisma } from '../../config/database';
 import { trendsService } from '../../services/trends.service';
 import opportunityFinder from '../../services/opportunity-finder.service';
 import { ProductService } from '../../services/product.service';
-import MarketplaceService from '../../services/marketplace.service';
+import MarketplaceService, { type PublishProductRequest } from '../../services/marketplace.service';
 import { workflowConfigService } from '../../services/workflow-config.service';
 import { logger } from '../../config/logger';
 
@@ -135,6 +135,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
       res.status(200).json({
         success: true,
         dryRun: true,
+        userId,
         productId: product.id,
         keyword,
         marketplace,
@@ -150,19 +151,30 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
     let publishResult: { success: boolean; error?: string; listingId?: string; listingUrl?: string };
     try {
       const baseTitle = String(updated?.title || opp.title || `Product-${product.id}`).replace(/\s+/g, ' ').trim();
-      const uniqueTitle = `${baseTitle.slice(0, 70)} P${product.id}`.trim();
+      // ML title max 60 chars (see marketplace.service TITLE_MAX_BY_MARKETPLACE)
+      let uniqueTitle = `${baseTitle.slice(0, marketplace === 'mercadolibre' ? 48 : 70)} P${product.id}`.replace(/\s+/g, ' ').trim();
+      if (marketplace === 'mercadolibre' && uniqueTitle.length > 60) {
+        uniqueTitle = uniqueTitle.slice(0, 60).trim();
+      }
       const basePrice = Number(updated?.suggestedPrice || updated?.aliexpressPrice) * 1.5;
       const finalPrice = maxPriceUsd ? Math.min(basePrice, maxPriceUsd) : basePrice;
-      publishResult = await marketplaceService.publishProduct(userId, {
-        productId: product.id,
-        marketplace: 'ebay',
-        customData: {
-          title: uniqueTitle,
-          price: finalPrice,
-          quantity: 1,
-          categoryId: '20349',
+      const customData: Record<string, unknown> = {
+        title: uniqueTitle,
+        price: finalPrice,
+        quantity: 1,
+      };
+      if (marketplace === 'ebay') {
+        customData.categoryId = '20349';
+      }
+      publishResult = await marketplaceService.publishProduct(
+        userId,
+        {
+          productId: product.id,
+          marketplace,
+          customData: customData as PublishProductRequest['customData'],
         },
-      }, env);
+        env
+      );
 
       // No automatic sandbox fallback here: we need strict production diagnostics.
     } catch (publishErr: any) {
@@ -177,6 +189,8 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
         select: { status: true, isPublished: true, publishedAt: true },
       });
       logger.info('[INTERNAL] Full cycle search-to-publish OK', {
+        userId,
+        marketplace,
         productId: product.id,
         listingId: publishResult.listingId,
         status: verified?.status,
@@ -185,6 +199,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
       });
       res.status(200).json({
         success: true,
+        userId,
         productId: product.id,
         listingId: publishResult.listingId,
         listingUrl: publishResult.listingUrl,
@@ -207,8 +222,10 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
       logger.warn('[INTERNAL] eBay publish failed (token). Returning success with product ready.', { productId: product.id });
       res.status(200).json({
         success: true,
+        userId,
         productId: product.id,
         keyword,
+        marketplace,
         stages: { trends: true, search: true, product: true, approved: true, publish: 'pending_oauth' },
         ebayPendingOAuth: true,
         publishError: publishResult.error,
@@ -228,6 +245,7 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
       });
       res.status(200).json({
         success: true,
+        userId,
         productId: product.id,
         keyword,
         marketplace,
@@ -240,11 +258,19 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
       return;
     }
 
+    const dsHint =
+      publishResult.error &&
+      String(publishResult.error).includes('AliExpress Dropshipping API is not connected')
+        ? 'Las credenciales DS son por usuario: pasa body.userId o MLC_USER_ID igual al usuario que conectó AliExpress Dropshipping.'
+        : undefined;
+
     res.status(500).json({
       success: false,
       error: publishResult.error,
+      userId,
       productId: product.id,
       marketplace,
+      hint: dsHint,
       stages: { trends: true, search: true, product: true, approved: true, publish: false },
       durationMs: Date.now() - startTime,
     });

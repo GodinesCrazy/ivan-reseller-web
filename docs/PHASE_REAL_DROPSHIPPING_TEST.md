@@ -24,6 +24,8 @@ INTERNAL_RUN_SECRET=<secret> npm run internal:mlc-search-publish:dry   # solo cr
 INTERNAL_RUN_SECRET=<secret> npm run internal:mlc-search-publish        # publica en ML (real)
 ```
 
+**Importante:** El handler debe llamar a `publishProduct` con el mismo `marketplace` que el body (`mercadolibre`). Si siempre se forzaba `ebay`, Phase 53 validaba destino/credenciales como eBay y el flujo ML fallaba de forma confusa. **Credenciales AliExpress Dropshipping** están ligadas al **userId**: si el primer usuario activo no es quien hizo OAuth, usa `MLC_USER_ID=<id>` (o `body.userId`).
+
 **Last run (agent, UTC ~2026-03-20T01:30Z, production URL):**
 
 | Check | Result |
