@@ -63,6 +63,53 @@ export function clearCredentialsCache(
 }
 
 /**
+ * Si hay fila en DB sin accessToken pero Railway tiene ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN
+ * (o loadFromEnv completo), fusionar para no ignorar el token del servidor.
+ */
+function mergeDropshippingEnvIfTokenMissing(
+  apiName: string,
+  creds: Record<string, any>,
+  environment: 'sandbox' | 'production'
+): Record<string, any> {
+  const n = normalizeApiName(apiName);
+  if (n !== 'aliexpress-dropshipping') return creds;
+  if (String(creds.accessToken || '').trim()) return creds;
+
+  const envTokenOnly = (process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN || '').trim();
+  const envRefreshOnly = (process.env.ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN || '').trim();
+  const envFull = loadFromEnv(apiName, environment);
+
+  if (envFull?.accessToken) {
+    return {
+      ...creds,
+      appKey: String(creds.appKey || envFull.appKey || '').trim() || envFull.appKey,
+      appSecret: String(creds.appSecret || envFull.appSecret || '').trim() || envFull.appSecret,
+      accessToken: String(envFull.accessToken || '').trim(),
+      refreshToken:
+        String(creds.refreshToken || '').trim() ||
+        String(envFull.refreshToken || '').trim() ||
+        undefined,
+      sandbox: environment === 'sandbox',
+    };
+  }
+
+  if (!envTokenOnly) return creds;
+
+  const appKey = String(creds.appKey || process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY || '').trim();
+  const appSecret = String(creds.appSecret || process.env.ALIEXPRESS_DROPSHIPPING_APP_SECRET || '').trim();
+  if (!appKey || !appSecret) return creds;
+
+  return {
+    ...creds,
+    appKey,
+    appSecret,
+    accessToken: envTokenOnly,
+    refreshToken: String(creds.refreshToken || '').trim() || envRefreshOnly || undefined,
+    sandbox: environment === 'sandbox',
+  };
+}
+
+/**
  * Load credentials from env for APIs that support it
  */
 function loadFromEnv(
@@ -275,8 +322,9 @@ export const CredentialsManager = {
     });
 
     if (userEntry?.credentials) {
-      const creds = tryDecrypt(userEntry.credentials);
-      if (creds) {
+      const credsRaw = tryDecrypt(userEntry.credentials);
+      if (credsRaw) {
+        const creds = mergeDropshippingEnvIfTokenMissing(name, credsRaw, environment);
         const entry: CredentialEntry = {
           id: userEntry.id,
           credentials: creds,
@@ -302,8 +350,9 @@ export const CredentialsManager = {
       });
 
       if (globalEntry?.credentials) {
-        const creds = tryDecrypt(globalEntry.credentials);
-        if (creds) {
+        const credsRaw = tryDecrypt(globalEntry.credentials);
+        if (credsRaw) {
+          const creds = mergeDropshippingEnvIfTokenMissing(name, credsRaw, environment);
           const entry: CredentialEntry = {
             id: globalEntry.id,
             credentials: creds,
