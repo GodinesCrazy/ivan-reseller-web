@@ -377,4 +377,10 @@ export async function assertProductValidForPublishing(
   if (!result.passesValidation) {
     fail(result.message);
   }
+
+  if (env.PRE_PUBLISH_REJECT_RISKY && result.classification === 'RISKY') {
+    fail(
+      'listing classified RISKY (shipping not from AliExpress API lines); set PRE_PUBLISH_REJECT_RISKY=false or fix API shipping'
+    );
+  }
 }

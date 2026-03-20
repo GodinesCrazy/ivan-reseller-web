@@ -392,6 +392,8 @@ const envSchema = z.object({
   }),
   /** If AliExpress getProductInfo has no shipping methods with cost, use product effective default shipping. */
   PRE_PUBLISH_SHIPPING_FALLBACK: z.enum(['true', 'false']).default('true').transform((val) => val === 'true'),
+  /** When true, block publish if validation used shipping fallback (classification RISKY). Real E2E strict mode. */
+  PRE_PUBLISH_REJECT_RISKY: z.enum(['true', 'false']).default('false').transform((val) => val === 'true'),
 });
 
 // Asegurar que DATABASE_URL esté en process.env
