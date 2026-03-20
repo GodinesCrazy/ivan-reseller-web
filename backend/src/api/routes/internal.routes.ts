@@ -67,6 +67,7 @@ router.get('/health', (_req: Request, res: Response) => {
       'POST /api/internal/test-full-cycle-search-to-publish',
       'POST /api/internal/single-article-to-publish',
       'POST /api/internal/smartwatch-mlc-constrained-cycle',
+      'GET /api/internal/dropshipping-credential-debug',
       'POST /api/internal/active-listings-risk-scan',
     ],
   });
@@ -358,6 +359,45 @@ router.post('/test-full-dropshipping-cycle', validateInternalSecret, runTestFull
 router.post('/test-full-cycle-search-to-publish', validateInternalSecret, runTestFullCycleSearchToPublish);
 router.post('/single-article-to-publish', validateInternalSecret, runSingleArticleInternalPublish);
 router.post('/smartwatch-mlc-constrained-cycle', validateInternalSecret, runSmartwatchConstrainedCycleHandler);
+
+// GET /api/internal/dropshipping-credential-debug?userId= — flags only (no tokens)
+router.get('/dropshipping-credential-debug', validateInternalSecret, async (req: Request, res: Response) => {
+  try {
+    const userId = Number(req.query?.userId) || 396;
+    const { CredentialsManager } = await import('../../services/credentials-manager.service');
+    const { prisma } = await import('../../config/database');
+    const dbCount = await prisma.apiCredential.count({
+      where: {
+        userId,
+        apiName: 'aliexpress-dropshipping',
+        environment: 'production',
+        isActive: true,
+      },
+    });
+    const entry = await CredentialsManager.getCredentialEntry(userId, 'aliexpress-dropshipping', 'production');
+    const c = (entry?.credentials || {}) as Record<string, unknown>;
+    res.status(200).json({
+      userId,
+      dbActiveCredentialRows: dbCount,
+      resolvedHasAccessToken: !!String(c.accessToken || '').trim(),
+      resolvedHasAppKey: !!String(c.appKey || '').trim(),
+      resolvedHasRefreshToken: !!String(c.refreshToken || '').trim(),
+      processEnvHas_ALIEXPRESS_DROPSHIPPING_APP_KEY: !!(
+        process.env.ALIEXPRESS_DROPSHIPPING_APP_KEY || ''
+      ).trim(),
+      processEnvHas_ALIEXPRESS_DROPSHIPPING_APP_SECRET: !!(
+        process.env.ALIEXPRESS_DROPSHIPPING_APP_SECRET || ''
+      ).trim(),
+      processEnvHas_ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN: !!(
+        process.env.ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN || ''
+      ).trim(),
+      message:
+        'Si processEnvHas_* son false, las variables no están en el servicio backend de Railway. Si DB tiene fila sin token, hace falta deploy con merge + ACCESS_TOKEN en env.',
+    });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+});
 
 // GET /api/internal/ebay-connection-test - Probar si credenciales eBay son válidas
 router.get('/ebay-connection-test', validateInternalSecret, async (_req: Request, res: Response) => {
