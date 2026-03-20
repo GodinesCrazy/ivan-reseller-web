@@ -221,10 +221,13 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
     }
 
     // Degradación: si falla por token eBay, retornar éxito con producto creado/aprobado (pendiente OAuth)
+    const ebayErrLower = String(publishResult.error || '').toLowerCase();
+    const ebayConfigMsg = /credentials not found|inactive for|falta token oauth|completa la autorizaci/i.test(ebayErrLower);
     const tokenErr =
       marketplace === 'ebay' &&
       publishResult.error &&
-      /token|refresh|invalid_grant|401|expired|oauth/.test(String(publishResult.error).toLowerCase());
+      !ebayConfigMsg &&
+      /invalid_grant|unauthorized|401\b|403\b|expired|refresh.?token|access.?token|oauth.?error/i.test(ebayErrLower);
     if (tokenErr) {
       logger.warn('[INTERNAL] eBay publish failed (token). Returning success with product ready.', { productId: product.id });
       res.status(200).json({
@@ -242,10 +245,17 @@ export async function runTestFullCycleSearchToPublish(req: Request, res: Respons
       return;
     }
 
+    const mlErrLower = String(publishResult.error || '').toLowerCase();
+    // No usar la palabra suelta "oauth": mensajes de configuración la incluyen y generaban falso pending_oauth.
+    const mlConfigMsg =
+      /credentials not found|inactive for \w+ environment|faltan mercadolibre|complet[ae] oauth en la app|base de datos/i.test(
+        mlErrLower
+      );
     const mlTokenErr =
       marketplace === 'mercadolibre' &&
       publishResult.error &&
-      /token|refresh|invalid_grant|401|expired|oauth|unauthor/i.test(String(publishResult.error).toLowerCase());
+      !mlConfigMsg &&
+      /invalid_grant|invalid_token|unauthorized|401\b|403\b|token expired|access token|refresh.?token|revoked/i.test(mlErrLower);
     if (mlTokenErr) {
       logger.warn('[INTERNAL] ML publish failed (token). Returning success with product ready.', {
         productId: product.id,
