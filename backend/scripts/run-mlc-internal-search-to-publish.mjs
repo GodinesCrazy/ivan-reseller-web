@@ -22,11 +22,13 @@ if (!SECRET) {
   process.exit(1);
 }
 
+const userId = parseInt(process.env.MLC_USER_ID || process.env.USER_ID || '', 10);
 const body = {
   marketplace: 'mercadolibre',
   maxPriceUsd: 10,
   dryRun,
   keyword: process.env.MLC_KEYWORD || 'phone case',
+  ...(Number.isFinite(userId) && userId > 0 ? { userId } : {}),
 };
 
 async function main() {

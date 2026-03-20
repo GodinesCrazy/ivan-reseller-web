@@ -145,3 +145,22 @@ BLOCK_NEW_PUBLICATIONS=false
 ---
 
 *Generated as part of real E2E test planning; preflight section updated from live production checks where noted.*
+
+---
+
+## Ejecución directa (agente, producción Railway, 2026-03-20)
+
+1. **Deploy** `6472442`: `GET /api/internal/health` incluye `capabilities.mlcSearchToPublish: true`.
+2. **Dry run** `POST .../test-full-cycle-search-to-publish` con `marketplace: mercadolibre`, `maxPriceUsd: 10`, `dryRun: true` → **200**, `productId: 32676`, `marketplace: mercadolibre`.
+3. **Publicación real** mismo endpoint `dryRun: false` → **500**, `productId: 32677`, error Phase 53:
+   - `Product not valid for publishing: AliExpress Dropshipping API is not connected; cannot validate supplier`
+
+**Conclusión:** el pipeline hasta producto aprobado funciona; **no se publicó en ML** hasta conectar **AliExpress Dropshipping** (credenciales del **mismo `userId`** que publica, o fija `MLC_USER_ID` en el script).
+
+**Siguiente paso operativo:** en la app / Railway, completar OAuth **aliexpress-dropshipping** para el usuario reseller; re-ejecutar:
+
+`INTERNAL_RUN_SECRET=... npm run internal:mlc-search-publish`
+
+(Opcional: `MLC_USER_ID=1` si el usuario con token no es el `findFirst` activo.)
+
+Productos **32676** y **32677** quedaron creados en BD (32676 solo dry run, 32677 falló al publicar): revisar en admin si conviene archivar/eliminar.
