@@ -253,6 +253,67 @@ export class MarketplaceService {
         }
       }
 
+      // ✅ PRODUCTION: Env fallback for MercadoLibre when no DB row (Railway: CLIENT_ID/SECRET + tokens en env)
+      if ((!resolvedEnv || !resolvedCredentials) && marketplace === 'mercadolibre') {
+        const clientId = (
+          process.env.MERCADOLIBRE_CLIENT_ID ||
+          process.env.MERCADOLIBRE_PRODUCTION_CLIENT_ID ||
+          ''
+        ).trim();
+        const clientSecret = (
+          process.env.MERCADOLIBRE_CLIENT_SECRET ||
+          process.env.MERCADOLIBRE_PRODUCTION_CLIENT_SECRET ||
+          ''
+        ).trim();
+        const accessToken = (
+          process.env.MERCADOLIBRE_ACCESS_TOKEN ||
+          process.env.MERCADOLIBRE_PRODUCTION_ACCESS_TOKEN ||
+          ''
+        ).trim();
+        const refreshToken = (
+          process.env.MERCADOLIBRE_REFRESH_TOKEN ||
+          process.env.MERCADOLIBRE_PRODUCTION_REFRESH_TOKEN ||
+          ''
+        ).trim();
+        const siteId = (process.env.MERCADOLIBRE_SITE_ID || 'MLC').trim();
+        const redirectUri = (
+          process.env.MERCADOLIBRE_REDIRECT_URI ||
+          process.env.MERCADOLIBRE_REDIRECT_URL ||
+          ''
+        ).trim();
+
+        if (clientId && clientSecret) {
+          const envIssues: string[] = [];
+          if (!accessToken && !refreshToken) {
+            envIssues.push(
+              'Faltan MERCADOLIBRE_ACCESS_TOKEN y MERCADOLIBRE_REFRESH_TOKEN (o completa OAuth en la app para guardar tokens en la base de datos).'
+            );
+          }
+          const envCreds: MercadoLibreCredentials = {
+            clientId,
+            clientSecret,
+            accessToken: accessToken || undefined,
+            refreshToken: refreshToken || undefined,
+            siteId: siteId || 'MLC',
+            ...(redirectUri ? { redirectUri } : {}),
+          } as MercadoLibreCredentials & { redirectUri?: string };
+          return {
+            id: undefined,
+            userId,
+            marketplace: marketplace as any,
+            credentials: envCreds as any,
+            isActive: envIssues.length === 0,
+            environment: preferredEnvironment,
+            scope: 'user',
+            issues: envIssues.length ? envIssues : undefined,
+            warnings:
+              envIssues.length === 0
+                ? ['Mercado Libre: credenciales desde variables de entorno (sin fila en base de datos para este usuario).']
+                : undefined,
+          };
+        }
+      }
+
       if (!resolvedEnv || !resolvedCredentials || !resolvedEntry) {
         return null;
       }
@@ -626,7 +687,12 @@ export class MarketplaceService {
       // Get marketplace credentials (con environment)
       const credentials = await this.getCredentials(userId, request.marketplace, userEnvironment);
       if (!credentials || !credentials.isActive) {
-        throw new AppError(`${request.marketplace} credentials not found or inactive for ${userEnvironment} environment`, 400);
+        const detail =
+          credentials?.issues?.length ? ` (${credentials.issues.join('; ')})` : '';
+        throw new AppError(
+          `${request.marketplace} credentials not found or inactive for ${userEnvironment} environment${detail}`,
+          400
+        );
       }
 
       if (credentials.issues?.length) {

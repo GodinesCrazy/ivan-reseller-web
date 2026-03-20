@@ -28,6 +28,8 @@ INTERNAL_RUN_SECRET=<secret> npm run internal:mlc-search-publish        # public
 
 Si el workflow del usuario está en **sandbox** pero ML/eBay reales están en **production**, el script `internal:mlc-search-publish` envía por defecto `credentialEnvironment: production` (o `MLC_CREDENTIAL_ENV=sandbox` para forzar sandbox).
 
+**Railway sin credenciales ML en la base de datos:** el backend acepta fallback desde env (como eBay): `MERCADOLIBRE_CLIENT_ID`, `MERCADOLIBRE_CLIENT_SECRET`, **`MERCADOLIBRE_ACCESS_TOKEN`**, **`MERCADOLIBRE_REFRESH_TOKEN`**, `MERCADOLIBRE_SITE_ID=MLC`, `MERCADOLIBRE_REDIRECT_URI`. Los tokens salen del flujo OAuth de Mercado Libre (o del panel de desarrolladores); sin ellos la publicación seguirá fallando aunque exista Client ID/Secret.
+
 **Last run (agent, UTC ~2026-03-20T01:30Z, production URL):**
 
 | Check | Result |
