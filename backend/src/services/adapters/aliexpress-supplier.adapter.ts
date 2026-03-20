@@ -25,8 +25,11 @@ export class AliExpressSupplierAdapter implements SupplierAdapter {
     const userId = options?.userId;
     if (userId == null) throw new Error('userId required for AliExpress getProductInfo');
 
-    const entry = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', 'production');
-    const creds = entry?.credentials as AliExpressDropshippingCredentials | undefined;
+    const creds = (await CredentialsManager.getCredentials(
+      userId,
+      'aliexpress-dropshipping',
+      'production'
+    )) as AliExpressDropshippingCredentials | null;
     if (!creds?.accessToken) throw new Error('AliExpress dropshipping credentials not configured');
 
     const { aliexpressDropshippingAPIService } = await import('../aliexpress-dropshipping-api.service');

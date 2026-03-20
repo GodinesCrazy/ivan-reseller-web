@@ -77,6 +77,8 @@ INTERNAL_RUN_SECRET=xxx npm run internal:smartwatch-mlc-cycle
 
 Opcional: `MLC_USER_ID`, `MLC_CREDENTIAL_ENV`, `BASE_URL`.
 
+**Dropshipping solo en variables Railway:** `ALIEXPRESS_DROPSHIPPING_APP_KEY`, `ALIEXPRESS_DROPSHIPPING_APP_SECRET`, `ALIEXPRESS_DROPSHIPPING_ACCESS_TOKEN`, `ALIEXPRESS_DROPSHIPPING_REFRESH_TOKEN` — el backend las mezcla con `CredentialsManager.loadFromEnv` cuando no hay fila en `api_credential`.
+
 ---
 
 ## Reporte de ejecución (rellenar tras correr)

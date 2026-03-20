@@ -108,8 +108,8 @@ export async function runSmartwatchMlcConstrainedCycle(
   const riskDry = await runActiveListingsRiskScan({ userId, dryRun: true, writeFlags: false });
   stages.stage1_riskScanDry = { scanned: riskDry.scanned, summary: riskDry.summary };
 
-  const ds = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', 'production');
-  const dsOk = !!(ds?.credentials as { accessToken?: string })?.accessToken;
+  const dsRaw = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', 'production');
+  const dsOk = !!(dsRaw && String((dsRaw as { accessToken?: string }).accessToken || '').trim());
   stages.stage1_dropshippingConnected = dsOk;
   if (!dsOk) {
     return {

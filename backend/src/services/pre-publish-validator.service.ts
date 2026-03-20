@@ -216,8 +216,12 @@ export async function evaluatePrePublishValidation(
   const dest = resolveDestination(marketplace, credentials as any);
   const shipCountry = (product.targetCountry || dest.countryCode || 'US').toString().trim().toUpperCase() || 'US';
 
-  const entry = await CredentialsManager.getCredentials(userId, 'aliexpress-dropshipping', 'production');
-  const creds = entry?.credentials as AliExpressDropshippingCredentials | undefined;
+  // getCredentials devuelve el objeto de credenciales directamente (no { credentials: ... })
+  const creds = (await CredentialsManager.getCredentials(
+    userId,
+    'aliexpress-dropshipping',
+    'production'
+  )) as AliExpressDropshippingCredentials | null;
   if (!creds?.accessToken) {
     return {
       ...base,
