@@ -176,12 +176,15 @@ export class MarketplaceService {
         default: 'production'
       });
 
-      const environmentsToTry: Array<'sandbox' | 'production'> = [preferredEnvironment];
-      if (!environment) {
-        environmentsToTry.push(preferredEnvironment === 'production' ? 'sandbox' : 'production');
-      } else if (!environmentsToTry.includes(environment)) {
-        environmentsToTry.push(environment);
-      }
+      // Siempre probar el otro entorno como fallback. Si solo se pide production (p. ej. script interno
+      // con credentialEnvironment=production) pero las credenciales ML quedaron guardadas en sandbox,
+      // sin esto la publicación falla aunque OAuth esté bien (regresión respecto al flujo por workflow).
+      const alternateEnvironment: 'sandbox' | 'production' =
+        preferredEnvironment === 'production' ? 'sandbox' : 'production';
+      const environmentsToTry: Array<'sandbox' | 'production'> = [
+        preferredEnvironment,
+        alternateEnvironment,
+      ];
 
       let resolvedEnv: 'sandbox' | 'production' | null = null;
       let resolvedEntry: Awaited<ReturnType<typeof CredentialsManager.getCredentialEntry>> | null = null;
