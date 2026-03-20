@@ -4,6 +4,7 @@ import opportunityFinder from '../../services/opportunity-finder.service';
 import { runTestFullDropshippingCycle } from '../handlers/test-full-dropshipping-cycle.handler';
 import { runTestFullCycleSearchToPublish } from '../handlers/test-full-cycle-search-to-publish.handler';
 import { runSingleArticleInternalPublish } from '../handlers/single-article-internal-publish.handler';
+import { runSmartwatchConstrainedCycleHandler } from '../handlers/smartwatch-constrained-cycle.handler';
 import { runTestPostSaleFlow } from '../handlers/test-post-sale-flow.handler';
 
 const router = Router();
@@ -53,6 +54,8 @@ router.get('/health', (_req: Request, res: Response) => {
       mlcSearchToPublish: true,
       /** POST /api/internal/single-article-to-publish — 1 URL AliExpress o productId */
       singleArticleToPublish: true,
+      /** POST /api/internal/smartwatch-mlc-constrained-cycle — pipeline smartwatch → MLC Chile */
+      smartwatchMlcConstrainedCycle: true,
     },
     routes: [
       'POST /api/internal/run-ebay-cycle',
@@ -63,6 +66,7 @@ router.get('/health', (_req: Request, res: Response) => {
       'POST /api/internal/test-full-dropshipping-cycle',
       'POST /api/internal/test-full-cycle-search-to-publish',
       'POST /api/internal/single-article-to-publish',
+      'POST /api/internal/smartwatch-mlc-constrained-cycle',
       'POST /api/internal/active-listings-risk-scan',
     ],
   });
@@ -353,6 +357,7 @@ router.post('/test-full-cycle', validateInternalSecret, async (req: Request, res
 router.post('/test-full-dropshipping-cycle', validateInternalSecret, runTestFullDropshippingCycle);
 router.post('/test-full-cycle-search-to-publish', validateInternalSecret, runTestFullCycleSearchToPublish);
 router.post('/single-article-to-publish', validateInternalSecret, runSingleArticleInternalPublish);
+router.post('/smartwatch-mlc-constrained-cycle', validateInternalSecret, runSmartwatchConstrainedCycleHandler);
 
 // GET /api/internal/ebay-connection-test - Probar si credenciales eBay son válidas
 router.get('/ebay-connection-test', validateInternalSecret, async (_req: Request, res: Response) => {

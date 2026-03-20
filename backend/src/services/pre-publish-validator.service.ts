@@ -149,6 +149,12 @@ export interface PrePublishEvaluationResult {
   marketplace: PrePublishMarketplace;
   netProfit?: number;
   totalCost?: number;
+  /** Supplier unit price in USD (after FX) — QA / constrained cycles */
+  supplierUnitUsd?: number;
+  /** Min API shipping to destination, USD — QA / constrained cycles */
+  shippingUsd?: number;
+  /** Selected purchasable SKU id from getProductInfo */
+  aliexpressSkuId?: string;
   shipCountry?: string;
   aeProductId?: string;
   productId: number;
@@ -307,6 +313,9 @@ export async function evaluatePrePublishValidation(
       usedShippingFallback,
       netProfit,
       totalCost,
+      supplierUnitUsd,
+      shippingUsd,
+      aliexpressSkuId: selected.skuId || undefined,
       shipCountry,
       aeProductId,
     };
@@ -322,6 +331,9 @@ export async function evaluatePrePublishValidation(
       usedShippingFallback,
       netProfit,
       totalCost,
+      supplierUnitUsd,
+      shippingUsd,
+      aliexpressSkuId: selected.skuId || undefined,
       shipCountry,
       aeProductId,
     };
@@ -353,6 +365,9 @@ export async function evaluatePrePublishValidation(
     marketplace,
     netProfit,
     totalCost,
+    supplierUnitUsd,
+    shippingUsd,
+    aliexpressSkuId: selected.skuId || undefined,
     shipCountry,
     aeProductId,
     productId: product.id,
