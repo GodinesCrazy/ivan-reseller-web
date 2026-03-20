@@ -79,6 +79,13 @@ El despliegue actual en Railway **no incluye ese commit** (el health de producci
    cd backend && npm run phase54:cleanup
    ```
 
+### Deploy desde repo (hecho por el agente)
+
+- **Commit:** `14a7fab` en `main` — push a `origin` (`GodinesCrazy/ivan-reseller-web`) completado.
+- **Cambios:** Phase 48–54, migración Prisma `recommendedSupplier*`, fixes `tsc` (orders + smart-supplier).
+- **Post-push (automático):** varios polls a `GET .../api/internal/health` y `POST .../active-listings-risk-scan` — **aún sin ruta nueva** en `health` y **404** en el scan (≈4–6 min tras el push).
+- **Interpretación probable:** el servicio Railway sigue sirviendo el **build anterior** (deploy en curso, build fallido, o servicio apuntando a otra rama/repo). Revisa en Railway: **Deployments** del servicio `ivan-reseller-backend` → último job **Success** con commit `14a7fab` y logs de `prisma migrate deploy`.
+
 ---
 
 ## Step 3 — Classification rubric (when response is available)
