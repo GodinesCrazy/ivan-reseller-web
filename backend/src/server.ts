@@ -91,8 +91,7 @@ import { initBuildInfo } from './middleware/version-header.middleware';
 const execAsync = promisify(exec);
 
 process.on('exit', () => console.log('Process exiting'));
-process.on('SIGINT', () => process.exit(0));
-process.on('SIGTERM', () => process.exit(0));
+// Do not register SIGINT/SIGTERM -> process.exit(0) here; graceful handlers are defined below.
 
 const PORT = Number(process.env.PORT) || 4000;
 const portSource = process.env.PORT ? 'process.env.PORT' : 'fallback (4000)';
@@ -229,6 +228,11 @@ function validateEncryptionKey(): void {
 
 async function ensureAdminUser() {
   try {
+    if (process.env.NODE_ENV === 'production') {
+      console.log('⚠️  ensureAdminUser skipped in production');
+      return;
+    }
+
     // Verificar si existe el usuario admin (especificar campos explícitamente para evitar errores con columna plan)
     const adminExists = await prisma.user.findUnique({
       where: { username: 'admin' },
@@ -261,7 +265,6 @@ async function ensureAdminUser() {
       
       console.log('✅ Usuario admin creado exitosamente');
       console.log('   Usuario: admin');
-      console.log('   Contraseña: admin123');
     } else {
       console.log('✅ Usuario admin ya existe');
     }
@@ -603,9 +606,23 @@ async function startServer() {
     }
 
     // Fallback: create server and listen (dev or non-bootstrap)
+    const pathOnly = (url: string | undefined) => {
+      if (!url) return '/';
+      const q = url.indexOf('?');
+      const h = url.indexOf('#');
+      const end = Math.min(q >= 0 ? q : Infinity, h >= 0 ? h : Infinity);
+      return end === Infinity ? url : url.slice(0, end);
+    };
     const wrapperHandler = (req: http.IncomingMessage, res: http.ServerResponse) => {
-      const url = req.url || '';
-      if (req.method === 'GET' && (url === '/health' || url === '/health/' || url.startsWith('/health?'))) {
+      const pathname = pathOnly(req.url);
+      const isHealth =
+        pathname === '/health' || pathname === '/health/' || pathname.startsWith('/health/');
+      if (isHealth && (req.method === 'GET' || req.method === 'HEAD')) {
+        if (req.method === 'HEAD') {
+          res.writeHead(200);
+          res.end();
+          return;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
         return;
