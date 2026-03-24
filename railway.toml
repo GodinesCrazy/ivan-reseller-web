@@ -1,17 +1,14 @@
-# Railway config - Monorepo: deploy desde la raíz del repo.
-# https://docs.railway.com/deployments/monorepo
+# Railway config — aplicado cuando el snapshot usa este repo.
+# IMPORTANTE: no uses "cd ... &&" aquí. En Docker, Railway puede invocar el start sin shell y
+# "cd" no es un ejecutable → "The executable `cd` could not be found".
 #
-# Preferido: en el dashboard, Root Directory = backend y usa backend/Dockerfile o backend/railway.json.
-# Si despliegas desde la raíz, este archivo aplica.
-#
-# No uses migrate en el mismo comando que el servidor: si migrate falla, el proceso nunca escucha y el
-# healthcheck falla. Ejecuta migraciones con Railway "Release Command" o un job one-off:
-#   cd backend && npx prisma migrate deploy
+# Servicio API: Root Directory = backend (recomendado). Entonces cwd ya es /app del backend.
+# Migraciones: Release Command → node scripts/railway-migrate-deploy.js (desde /app en la imagen).
 
 [build]
-buildCommand = "cd backend && npm ci && npm run build"
+buildCommand = "npm ci && npm run build"
 
 [deploy]
-startCommand = "cd backend && npm run start"
+startCommand = "npm run start"
 healthcheckPath = "/health"
 healthcheckTimeout = 720
