@@ -1,0 +1,8 @@
+.git
+**/node_modules
+frontend
+artifacts
+**/*.log
+tmp_*.jpg
+histo.txt
+sakida.txt

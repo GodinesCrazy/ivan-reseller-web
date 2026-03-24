@@ -1,14 +1,17 @@
-# Railway config - Monorepo: deploy desde backend/
+# Railway config - Monorepo: deploy desde la raíz del repo.
 # https://docs.railway.com/deployments/monorepo
 #
-# Nota: Si el servicio usa Root Directory = backend en Railway Dashboard,
-# el config file debe especificarse como /backend/railway.toml
-# Este archivo en raíz aplica cuando Railway despliega desde la raíz (cd backend).
+# Preferido: en el dashboard, Root Directory = backend y usa backend/Dockerfile o backend/railway.json.
+# Si despliegas desde la raíz, este archivo aplica.
+#
+# No uses migrate en el mismo comando que el servidor: si migrate falla, el proceso nunca escucha y el
+# healthcheck falla. Ejecuta migraciones con Railway "Release Command" o un job one-off:
+#   cd backend && npx prisma migrate deploy
 
 [build]
-buildCommand = "cd backend && npm install && npm run build"
+buildCommand = "cd backend && npm ci && npm run build"
 
 [deploy]
-startCommand = "cd backend && npm run start:with-migrations"
+startCommand = "cd backend && npm run start"
 healthcheckPath = "/health"
-healthcheckTimeout = 120
+healthcheckTimeout = 720

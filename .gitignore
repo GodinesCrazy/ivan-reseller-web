@@ -43,9 +43,6 @@ Thumbs.db
 .Spotlight-V100
 .Trashes
 
-# Docker
-.dockerignore
-
 # Prisma
 prisma/migrations/**/migration.sql
 

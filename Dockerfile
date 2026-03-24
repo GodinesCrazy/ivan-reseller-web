@@ -1,52 +1,51 @@
-# Dockerfile for Railway deployment from monorepo root
-# This ensures Railway deploys the backend correctly without dashboard configuration
-
-FROM node:20-alpine
-
-# Install build tools for native modules (bcrypt, etc.)
-RUN apk add --no-cache \
-    openssl \
-    python3 \
-    make \
-    g++ \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    && ln -sf python3 /usr/bin/python
-
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-    CHROMIUM_PATH=/usr/bin/chromium
-
+# Monorepo root → build backend (same behavior as backend/Dockerfile).
+# Railway: set Root Directory to repo root if using this file, or prefer Root Directory = backend + backend/Dockerfile.
+FROM node:20
 WORKDIR /app
 
-# Copy backend package files
-COPY backend/package*.json ./
-COPY backend/tsconfig.json ./
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  ca-certificates \
+  fonts-liberation \
+  libasound2 \
+  libatk-bridge2.0-0 \
+  libatk1.0-0 \
+  libc6 \
+  libcairo2 \
+  libcups2 \
+  libdbus-1-3 \
+  libexpat1 \
+  libfontconfig1 \
+  libgbm1 \
+  libglib2.0-0 \
+  libgtk-3-0 \
+  libnspr4 \
+  libnss3 \
+  libpango-1.0-0 \
+  libpangocairo-1.0-0 \
+  libstdc++6 \
+  libx11-6 \
+  libx11-xcb1 \
+  libxcb1 \
+  libxcomposite1 \
+  libxcursor1 \
+  libxdamage1 \
+  libxext6 \
+  libxfixes3 \
+  libxi6 \
+  libxrandr2 \
+  libxrender1 \
+  libxss1 \
+  libxtst6 \
+  xdg-utils \
+  wget \
+  && rm -rf /var/lib/apt/lists/*
 
-# Copy Prisma schema BEFORE npm install (needed for postinstall hook)
-COPY backend/prisma ./prisma/
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci --ignore-scripts
 
-# Install ALL dependencies (including devDependencies for build and runtime)
-# Do NOT ignore scripts so bcrypt and other native modules compile correctly
-RUN npm install
+COPY backend/ .
+RUN npm run build
 
-# Copy backend source code
-COPY backend/src ./src
-
-# Generate Prisma Client (no DB connection needed for generation)
-RUN npx prisma generate
-
-# Build TypeScript to JavaScript (ignore type errors)
-# Try to compile, if it fails use tsx directly at runtime
-RUN npx tsc --skipLibCheck --noEmitOnError false || echo "⚠️ TypeScript compilation had errors, will use tsx at runtime"
-
-EXPOSE 3000
-
-# Server handles migrations internally with better error handling
-# Run with tsx if dist doesn't exist, otherwise with compiled node
-CMD ["sh", "-c", "test -f dist/server.js && node dist/server.js || tsx src/server.ts"]
-
+ENV NODE_ENV=production
+EXPOSE 4000
+CMD ["npm", "run", "start"]
