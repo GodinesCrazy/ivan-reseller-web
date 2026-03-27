@@ -329,35 +329,32 @@ export default function Products() {
     }
   }, [environment]);
 
+  const refreshProductsPageLive = useCallback(() => {
+    fetchProducts(true).catch(() => {});
+    void fetchInventorySummary();
+    void fetchPostSaleOverview();
+  }, [fetchProducts, fetchInventorySummary, fetchPostSaleOverview]);
+
   useEffect(() => {
-    const timer = setTimeout(() => { fetchProducts(); }, 100);
+    const timer = setTimeout(() => {
+      void fetchProducts();
+      void fetchInventorySummary();
+      void fetchPostSaleOverview();
+    }, 100);
     return () => clearTimeout(timer);
-  }, [fetchProducts]);
-
-  useEffect(() => {
-    fetchInventorySummary();
-  }, [fetchInventorySummary]);
-
-  useEffect(() => {
-    fetchPostSaleOverview();
-  }, [fetchPostSaleOverview]);
+  }, [fetchProducts, fetchInventorySummary, fetchPostSaleOverview]);
 
   useLiveData({
-    fetchFn: () => {
-      fetchProducts(true).catch(() => {});
-      fetchInventorySummary();
-      fetchPostSaleOverview();
-    },
-    intervalMs: 15000,
+    fetchFn: refreshProductsPageLive,
+    intervalMs: 30000,
     enabled: true,
+    pauseWhenHidden: true,
+    skipInitialRun: true,
   });
   useNotificationRefetch({
     handlers: {
-      PRODUCT_PUBLISHED: () => {
-        fetchProducts(true);
-        fetchInventorySummary();
-      },
-      PRODUCT_SCRAPED: () => fetchProducts(true),
+      PRODUCT_PUBLISHED: refreshProductsPageLive,
+      PRODUCT_SCRAPED: refreshProductsPageLive,
     },
     enabled: true,
   });

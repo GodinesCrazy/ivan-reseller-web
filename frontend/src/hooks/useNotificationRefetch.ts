@@ -30,6 +30,8 @@ export interface UseNotificationRefetchOptions {
   enabled?: boolean;
 }
 
+const NOTIFICATION_REFETCH_DEBOUNCE_MS = 450;
+
 export function useNotificationRefetch({
   handlers,
   enabled = true,
@@ -54,20 +56,37 @@ export function useNotificationRefetch({
       timeout: 20000,
     });
 
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const typesInWindow = new Set<NotificationTypeForRefetch>();
+
+    const flushDebounced = () => {
+      debounceTimer = null;
+      const fns = new Set<() => void | Promise<void>>();
+      for (const t of typesInWindow) {
+        const fn = handlersRef.current[t];
+        if (typeof fn === 'function') fns.add(fn);
+      }
+      typesInWindow.clear();
+      for (const fn of fns) {
+        void Promise.resolve(fn()).catch(() => {});
+      }
+    };
+
     socket.on('connect', () => {
       socket.emit('join_room', `user_${user.id}`);
     });
 
     socket.on('notification', (payload: { type?: string }) => {
       const type = payload?.type as NotificationTypeForRefetch | undefined;
-      if (!type) return;
-      const fn = handlersRef.current[type];
-      if (typeof fn === 'function') {
-        void Promise.resolve(fn()).catch(() => {});
-      }
+      if (!type || typeof handlersRef.current[type] !== 'function') return;
+      typesInWindow.add(type);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(flushDebounced, NOTIFICATION_REFETCH_DEBOUNCE_MS);
     });
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      typesInWindow.clear();
       socket.close();
     };
   }, [enabled, token, user?.id]);

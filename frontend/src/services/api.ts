@@ -41,7 +41,9 @@ api.interceptors.request.use(
     }
 
     const finalUrl = config.baseURL ? `${String(config.baseURL).replace(/\/$/, '')}${config.url?.startsWith('/') ? '' : '/'}${config.url || ''}` : config.url;
-    console.log('[API] request', finalUrl || config.url);
+    if (import.meta.env.DEV) {
+      console.log('[API] request', finalUrl || config.url);
+    }
     return config;
   },
   (error) => Promise.reject(error)
@@ -52,6 +54,8 @@ import toast from 'react-hot-toast';
 
 // ✅ FIX DEFINITIVO: Flag global para evitar spam de toasts 502/network
 let backendDownToastShown = false;
+let lastRateLimitToastAt = 0;
+const RATE_LIMIT_TOAST_MIN_GAP_MS = 8000;
 const BACKEND_DOWN_TOAST_ID = 'backend-down-toast';
 const RATE_LIMIT_TOAST_ID = 'rate-limit-toast';
 const FORBIDDEN_TOAST_ID = 'forbidden-toast';
@@ -66,11 +70,15 @@ api.interceptors.response.use(
     const url = response.config?.baseURL && response.config?.url
       ? `${String(response.config.baseURL).replace(/\/$/, '')}${response.config.url}`
       : response.config?.url;
-    console.log('[API]', url, response.status);
+    if (import.meta.env.DEV) {
+      console.log('[API]', url, response.status);
+    }
     return response;
   },
   async (error) => {
-    console.log('[API]', error.config?.url, error.response?.status);
+    if (import.meta.env.DEV) {
+      console.log('[API]', error.config?.url, error.response?.status);
+    }
     // ✅ FIX DEFINITIVO: Distinguir entre errores CORS y errores HTTP reales
     // Si NO hay error.response, puede ser:
     // 1. Error de red (CORS, timeout, DNS, etc.)
@@ -150,30 +158,16 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // 429: Rate limit - retry with backoff for idempotent GET requests
+    // 429: No reintentar aquí (los reintentos GET suman presión y empeoran tormentas de 429).
     if (status === 429) {
-      const config = error.config;
-      const method = (config?.method || 'get').toLowerCase();
-      const retryCount = (config?._retryCount as number) ?? 0;
-      const maxRetries = 2;
-      const retryAfter = error.response?.headers?.['retry-after']
-        ? parseInt(String(error.response.headers['retry-after']), 10)
-        : 30;
-
-      if (method === 'get' && retryCount < maxRetries) {
-        config._retryCount = retryCount + 1;
-        const delay = Math.min(retryAfter * 1000, 30000);
-        return new Promise((resolve) => {
-          setTimeout(() => {
-            resolve(api.request(config));
-          }, delay);
+      const wall = Date.now();
+      if (typeof window !== 'undefined' && wall - lastRateLimitToastAt >= RATE_LIMIT_TOAST_MIN_GAP_MS) {
+        lastRateLimitToastAt = wall;
+        toast.error('Demasiadas solicitudes. Por favor, espera un momento.', {
+          id: RATE_LIMIT_TOAST_ID,
+          duration: 6000,
         });
       }
-
-      toast.error('Demasiadas solicitudes. Por favor, espera un momento.', {
-        id: RATE_LIMIT_TOAST_ID,
-        duration: 6000,
-      });
       return Promise.reject(error);
     }
     

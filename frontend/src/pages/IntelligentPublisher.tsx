@@ -4,7 +4,7 @@ import { api } from '../services/api';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { API_BASE_URL } from '@/config/runtime';
-import { Check, X, ChevronLeft, ChevronRight, ExternalLink, Wallet, TrendingUp, Wrench } from 'lucide-react';
+import { Check, X, ChevronLeft, ChevronRight, ExternalLink, Wallet, TrendingUp, Wrench, Trash2 } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -59,6 +59,8 @@ export default function IntelligentPublisher() {
   const [listingsTotal, setListingsTotal] = useState(0);
   const [listingsMarketplaceFilter, setListingsMarketplaceFilter] = useState<'all' | 'ebay' | 'mercadolibre' | 'amazon'>('all');
   const [repairingMl, setRepairingMl] = useState(false);
+  const [pendingRowBusy, setPendingRowBusy] = useState<Record<string, 'reject' | 'remove'>>({});
+  const [bulkPendingBusy, setBulkPendingBusy] = useState(false);
   const [pendingPage, setPendingPage] = useState(1);
   const [capitalData, setCapitalData] = useState<{
     availableCash: number;
@@ -108,9 +110,10 @@ export default function IntelligentPublisher() {
     }
   }, [environment]);
 
-  const loadPublisherData = useCallback(async () => {
+  const loadPublisherData = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [pendingRes] = await Promise.all([
         api.get('/api/publisher/pending'),
         loadListings(1),
@@ -126,22 +129,24 @@ export default function IntelligentPublisher() {
         toast.error('Error al cargar productos pendientes');
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [loadListings, loadCapitalData]);
 
   // ✅ CORREGIDO: Recargar cuando se monta el componente O cuando cambia la location (navegación)
   useEffect(() => {
-    loadPublisherData();
+    void loadPublisherData();
   }, [loadPublisherData, location.pathname]); // ✅ Agregar location.pathname para recargar al navegar
 
   useLiveData({
-    fetchFn: loadPublisherData,
-    intervalMs: 30000,
+    fetchFn: () => void loadPublisherData({ silent: true }),
+    intervalMs: 45000,
     enabled: true,
+    pauseWhenHidden: true,
+    skipInitialRun: true,
   });
   useNotificationRefetch({
-    handlers: { PRODUCT_PUBLISHED: loadPublisherData },
+    handlers: { PRODUCT_PUBLISHED: () => void loadPublisherData({ silent: true }) },
     enabled: true,
   });
 
@@ -201,7 +206,7 @@ export default function IntelligentPublisher() {
     try {
       const response = await api.post(`/api/publisher/approve/${productId}`, { marketplaces });
       const data = response.data;
-      setPending((prev) => prev.filter(p => p.id !== productId));
+      setPending((prev) => prev.filter((p) => String(p.id) !== String(productId)));
 
       // Job encolado: publicación asíncrona (mismo flujo que Queue Publishing Jobs)
       if (data?.jobQueued === true) {
@@ -274,6 +279,166 @@ export default function IntelligentPublisher() {
       }
     }
   }, [navigate]);
+
+  const rejectPendingOne = useCallback(
+    async (productId: string) => {
+      const row = pending.find((p: any) => String(p.id) === productId);
+      const titleShort = row ? sanitizeProductTitle(String(row.title || '')).slice(0, 80) : productId;
+      if (
+        !window.confirm(
+          `¿Rechazar este producto?\n\n"${titleShort}"\n\nPasará a estado RECHAZADO y saldrá de la cola del publicador. El registro del producto se conserva en el sistema.`
+        )
+      ) {
+        return;
+      }
+      setPendingRowBusy((s) => ({ ...s, [productId]: 'reject' }));
+      try {
+        await api.post(`/api/publisher/pending/reject/${encodeURIComponent(productId)}`);
+        setPending((prev) => prev.filter((p: any) => String(p.id) !== productId));
+        setSelected((s) => {
+          const n = { ...s };
+          delete n[productId];
+          return n;
+        });
+        toast.success('Producto rechazado');
+        void loadPublisherData({ silent: true });
+      } catch (e: any) {
+        toast.error(e?.response?.data?.error || e?.response?.data?.message || 'Error al rechazar');
+      } finally {
+        setPendingRowBusy((s) => {
+          const n = { ...s };
+          delete n[productId];
+          return n;
+        });
+      }
+    },
+    [pending, loadPublisherData]
+  );
+
+  const removePendingOne = useCallback(
+    async (productId: string) => {
+      const row = pending.find((p: any) => String(p.id) === productId);
+      const titleShort = row ? sanitizeProductTitle(String(row.title || '')).slice(0, 80) : productId;
+      if (
+        !window.confirm(
+          `¿ELIMINAR permanentemente este producto?\n\n"${titleShort}"\n\nEsta acción borra el producto de la base de datos. No se puede eliminar si tiene ventas asociadas.`
+        )
+      ) {
+        return;
+      }
+      setPendingRowBusy((s) => ({ ...s, [productId]: 'remove' }));
+      try {
+        await api.post(`/api/publisher/pending/remove/${encodeURIComponent(productId)}`);
+        setPending((prev) => prev.filter((p: any) => String(p.id) !== productId));
+        setSelected((s) => {
+          const n = { ...s };
+          delete n[productId];
+          return n;
+        });
+        toast.success('Producto eliminado');
+        void loadPublisherData({ silent: true });
+      } catch (e: any) {
+        toast.error(e?.response?.data?.error || e?.response?.data?.message || 'Error al eliminar');
+      } finally {
+        setPendingRowBusy((s) => {
+          const n = { ...s };
+          delete n[productId];
+          return n;
+        });
+      }
+    },
+    [pending, loadPublisherData]
+  );
+
+  const runBulkPendingReject = useCallback(async () => {
+    const productIds = Object.entries(selected)
+      .filter(([, v]) => v)
+      .map(([k]) => k);
+    if (productIds.length === 0) {
+      toast.error('Selecciona al menos un producto pendiente');
+      return;
+    }
+    if (
+      !window.confirm(
+        `¿Rechazar ${productIds.length} producto(s) seleccionado(s)? Pasarán a RECHAZADO y saldrán de pendientes (no se eliminan).`
+      )
+    ) {
+      return;
+    }
+    setBulkPendingBusy(true);
+    try {
+      const { data } = await api.post('/api/publisher/pending/bulk-reject', {
+        productIds: productIds.map((id) => Number(id)),
+      });
+      const rejected: number[] = data?.rejected ?? [];
+      const skipped: { id: number; error: string }[] = data?.skipped ?? [];
+      setPending((prev) => prev.filter((p: any) => !rejected.includes(Number(p.id))));
+      setSelected((prev) => {
+        const n = { ...prev };
+        rejected.forEach((id) => {
+          delete n[String(id)];
+        });
+        return n;
+      });
+      if (skipped.length > 0) {
+        toast.error(
+          `${rejected.length} rechazado(s). ${skipped.length} omitido(s) (sin permiso o estado no pendiente).`
+        );
+      } else {
+        toast.success(`${rejected.length} producto(s) rechazado(s)`);
+      }
+      void loadPublisherData({ silent: true });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || 'Error en rechazo masivo');
+    } finally {
+      setBulkPendingBusy(false);
+    }
+  }, [selected, loadPublisherData]);
+
+  const runBulkPendingRemove = useCallback(async () => {
+    const productIds = Object.entries(selected)
+      .filter(([, v]) => v)
+      .map(([k]) => k);
+    if (productIds.length === 0) {
+      toast.error('Selecciona al menos un producto pendiente');
+      return;
+    }
+    if (
+      !window.confirm(
+        `¿ELIMINAR ${productIds.length} producto(s) de forma permanente? Esta acción no se puede deshacer. Los que tengan ventas no se eliminarán.`
+      )
+    ) {
+      return;
+    }
+    setBulkPendingBusy(true);
+    try {
+      const { data } = await api.post('/api/publisher/pending/bulk-remove', {
+        productIds: productIds.map((id) => Number(id)),
+      });
+      const removed: number[] = data?.removed ?? [];
+      const skipped: { id: number; error: string }[] = data?.skipped ?? [];
+      setPending((prev) => prev.filter((p: any) => !removed.includes(Number(p.id))));
+      setSelected((prev) => {
+        const n = { ...prev };
+        removed.forEach((id) => {
+          delete n[String(id)];
+        });
+        return n;
+      });
+      if (skipped.length > 0) {
+        toast.error(
+          `${removed.length} eliminado(s). ${skipped.length} omitido(s) (p. ej. con ventas o sin permiso).`
+        );
+      } else {
+        toast.success(`${removed.length} producto(s) eliminado(s)`);
+      }
+      void loadPublisherData({ silent: true });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || 'Error en eliminación masiva');
+    } finally {
+      setBulkPendingBusy(false);
+    }
+  }, [selected, loadPublisherData]);
 
   // Memoizar productos pendientes paginados
   const displayedPending = useMemo(() => {
@@ -359,7 +524,7 @@ export default function IntelligentPublisher() {
           <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.ebay} onChange={(e)=>setBulkMk(v=>({...v, ebay: e.target.checked}))}/> eBay</label>
           <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.mercadolibre} onChange={(e)=>setBulkMk(v=>({...v, mercadolibre: e.target.checked}))}/> ML</label>
           <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.amazon} onChange={(e)=>setBulkMk(v=>({...v, amazon: e.target.checked}))}/> Amazon</label>
-          <button onClick={async()=>{
+          <button disabled={bulkPendingBusy || bulkStatus.running} onClick={async()=>{
             const productIds = Object.entries(selected).filter(([,v])=>v).map(([k])=>k);
             const marketplaces = (['ebay','mercadolibre','amazon'] as const).filter(m=>bulkMk[m]);
             if (productIds.length===0 || marketplaces.length===0) { toast.error('Selecciona al menos un producto y un marketplace'); return; }
@@ -376,10 +541,12 @@ export default function IntelligentPublisher() {
             }
             setBulkStatus(s=>({ ...s, running: false }));
             toast.success('Trabajos de publicación encolados. Sigue el progreso en notificaciones.');
-          }} className="px-3 py-2 bg-blue-600 text-white rounded text-sm">Encolar trabajos de publicación</button>
-          <button onClick={()=>{ const all: Record<string, boolean> = {}; pending.forEach((p:any)=> all[p.id]=true); setSelected(all); }} className="px-3 py-2 border rounded text-sm">Seleccionar todo</button>
-          <button onClick={()=> setSelected({}) } className="px-3 py-2 border rounded text-sm">Limpiar</button>
-          <button onClick={async()=>{
+          }} className="px-3 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50">Encolar trabajos de publicación</button>
+          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={()=>{ const all: Record<string, boolean> = {}; pending.forEach((p:any)=> all[String(p.id)]=true); setSelected(all); }} className="px-3 py-2 border rounded text-sm disabled:opacity-50">Seleccionar todo</button>
+          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={()=> setSelected({}) } className="px-3 py-2 border rounded text-sm disabled:opacity-50">Limpiar</button>
+          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={runBulkPendingReject} className="px-3 py-2 border border-amber-600 text-amber-800 dark:text-amber-200 rounded text-sm hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50">Rechazar seleccionados</button>
+          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={runBulkPendingRemove} className="px-3 py-2 border border-red-600 text-red-700 dark:text-red-300 rounded text-sm hover:bg-red-50 dark:hover:bg-red-950/20 disabled:opacity-50 inline-flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" /> Eliminar seleccionados</button>
+          <button disabled={bulkPendingBusy || bulkStatus.running} onClick={async()=>{
             const allIds = pending.map((p:any)=> String(p.id));
             const marketplaces = (['ebay','mercadolibre','amazon'] as const).filter(m=>bulkMk[m]);
             if (allIds.length===0 || marketplaces.length===0) { toast.error('No hay productos pendientes o marketplaces'); return; }
@@ -395,7 +562,7 @@ export default function IntelligentPublisher() {
             }
             setBulkStatus(s=>({ ...s, running: false }));
             toast.success('Todos los pendientes encolados para publicar');
-          }} className="px-3 py-2 bg-green-600 text-white rounded text-sm">Publicar todo</button>
+          }} className="px-3 py-2 bg-green-600 text-white rounded text-sm disabled:opacity-50">Publicar todo</button>
         </div>
         <div className="h-2 bg-gray-100 rounded overflow-hidden">
           <div className="h-full bg-primary-500" style={{ width: `${bulkProgress}%` }} />
@@ -452,19 +619,17 @@ export default function IntelligentPublisher() {
           )}
         </div>
         <button 
+          type="button"
           onClick={async () => {
             try {
-              setLoading(true);
-              const { data } = await api.get('/api/publisher/pending');
-              setPending(data?.items || []);
+              await loadPublisherData({ silent: true });
               toast.success('Lista actualizada');
-            } catch (e: any) {
+            } catch {
               toast.error('Error al actualizar');
-            } finally {
-              setLoading(false);
             }
           }}
-          className="text-sm text-primary-600 hover:text-primary-700"
+          className="text-sm text-primary-600 hover:text-primary-700 disabled:opacity-50"
+          disabled={bulkPendingBusy || Object.keys(pendingRowBusy).length > 0}
         >
           Actualizar
         </button>
@@ -475,9 +640,12 @@ export default function IntelligentPublisher() {
             key={p.id}
             product={p}
             operationsTruth={operationsTruthByProduct.get(Number(p.id)) ?? null}
-            selected={!!selected[p.id]}
-            onSelectChange={(checked) => setSelected(s => ({ ...s, [p.id]: checked }))}
-            onApprove={(marketplaces) => approve(p.id, marketplaces)}
+            selected={!!selected[String(p.id)]}
+            onSelectChange={(checked) => setSelected(s => ({ ...s, [String(p.id)]: checked }))}
+            onApprove={(marketplaces) => approve(String(p.id), marketplaces)}
+            onReject={() => rejectPendingOne(String(p.id))}
+            onRemove={() => removePendingOne(String(p.id))}
+            rowBusy={pendingRowBusy[String(p.id)]}
           />
         ))}
         {pending.length === 0 && <div className="p-4 text-sm text-gray-600">No hay productos pendientes.</div>}
@@ -616,12 +784,18 @@ function PendingProductCard({
   selected,
   onSelectChange,
   onApprove,
+  onReject,
+  onRemove,
+  rowBusy,
 }: {
   product: any;
   operationsTruth: OperationsTruthItem | null;
   selected: boolean;
   onSelectChange: (checked: boolean) => void;
   onApprove: (marketplaces: string[]) => void;
+  onReject: () => void;
+  onRemove: () => void;
+  rowBusy?: 'reject' | 'remove';
 }) {
   const [expanded, setExpanded] = useState(false);
   const [marketplaces, setMarketplaces] = useState<Record<string, boolean>>({ ebay: true, mercadolibre: false, amazon: false });
@@ -639,7 +813,7 @@ function PendingProductCard({
   return (
     <div className="p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
       <div className="flex items-start gap-3 flex-1 w-full">
-        <input type="checkbox" className="mt-1 flex-shrink-0" checked={selected} onChange={(e) => onSelectChange(e.target.checked)} />
+        <input type="checkbox" className="mt-1 flex-shrink-0" checked={selected} disabled={!!rowBusy} onChange={(e) => onSelectChange(e.target.checked)} />
         <ImageCarousel images={imgSources} title={sanitizeProductTitle(p.title)} />
         <div className="flex-1 min-w-0">
           <div className="font-medium text-gray-900">{sanitizeProductTitle(p.title)}</div>
@@ -726,13 +900,24 @@ function PendingProductCard({
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-3 flex-shrink-0">
-        <label className="text-sm"><input type="checkbox" checked={marketplaces.ebay} onChange={(e) => setMarketplaces(m => ({ ...m, ebay: e.target.checked }))} className="mr-1" /> eBay</label>
-        <label className="text-sm"><input type="checkbox" checked={marketplaces.mercadolibre} onChange={(e) => setMarketplaces(m => ({ ...m, mercadolibre: e.target.checked }))} className="mr-1" /> ML</label>
-        <label className="text-sm"><input type="checkbox" checked={marketplaces.amazon} onChange={(e) => setMarketplaces(m => ({ ...m, amazon: e.target.checked }))} className="mr-1" /> Amazon</label>
-        <button onClick={handleApprove} className="px-3 py-2 bg-blue-600 text-white rounded text-sm flex items-center gap-1 whitespace-nowrap">
-          <Check className="w-4 h-4" /> Aprobar y publicar
-        </button>
+      <div className="flex flex-col items-stretch sm:items-end gap-2 flex-shrink-0 min-w-[200px]">
+        <div className="flex flex-wrap items-center gap-3 justify-end">
+          <label className="text-sm"><input type="checkbox" checked={marketplaces.ebay} onChange={(e) => setMarketplaces(m => ({ ...m, ebay: e.target.checked }))} className="mr-1" disabled={!!rowBusy} /> eBay</label>
+          <label className="text-sm"><input type="checkbox" checked={marketplaces.mercadolibre} onChange={(e) => setMarketplaces(m => ({ ...m, mercadolibre: e.target.checked }))} className="mr-1" disabled={!!rowBusy} /> ML</label>
+          <label className="text-sm"><input type="checkbox" checked={marketplaces.amazon} onChange={(e) => setMarketplaces(m => ({ ...m, amazon: e.target.checked }))} className="mr-1" disabled={!!rowBusy} /> Amazon</label>
+        </div>
+        <div className="flex flex-wrap gap-2 justify-end">
+          <button type="button" disabled={!!rowBusy} onClick={handleApprove} className="px-3 py-2 bg-blue-600 text-white rounded text-sm flex items-center gap-1 whitespace-nowrap disabled:opacity-50">
+            <Check className="w-4 h-4" /> Aprobar y publicar
+          </button>
+          <button type="button" disabled={!!rowBusy} onClick={onReject} className="px-3 py-2 border border-amber-600 text-amber-800 dark:text-amber-200 rounded text-sm whitespace-nowrap disabled:opacity-50">
+            {rowBusy === 'reject' ? 'Rechazando…' : 'Rechazar'}
+          </button>
+          <button type="button" disabled={!!rowBusy} onClick={onRemove} className="px-3 py-2 border border-red-600 text-red-700 dark:text-red-300 rounded text-sm inline-flex items-center gap-1 whitespace-nowrap disabled:opacity-50">
+            <Trash2 className="w-3.5 h-3.5" />
+            {rowBusy === 'remove' ? 'Eliminando…' : 'Eliminar'}
+          </button>
+        </div>
       </div>
     </div>
   );

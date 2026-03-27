@@ -57,9 +57,12 @@ export const createRoleBasedRateLimit = () => {
       const p = (req.path || req.originalUrl || '').split('?')[0];
       if (p.includes('autopilot/config') || p.includes('autopilot/status')) return true;
       if (p.includes('dashboard/inventory-summary')) return true;
-      // Skip rate limiting para ADMIN en ciertos casos
+      // Skip rate limiting para ADMIN en rutas /admin/* (req.path es relativo al mount /api)
       const user = (req as any).user;
-      return user?.role === 'ADMIN' && req.path.startsWith('/api/admin');
+      const role = typeof user?.role === 'string' ? user.role.toUpperCase() : '';
+      if (role === 'ADMIN' && (req.path.startsWith('/admin') || req.path.startsWith('/api/admin'))) {
+        return true;
+      }
     },
   });
 };

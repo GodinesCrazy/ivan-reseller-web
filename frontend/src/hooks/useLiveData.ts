@@ -16,6 +16,11 @@ export interface UseLiveDataOptions {
   enabled?: boolean;
   /** Si true, pausar completamente cuando la pestaña está oculta (por defecto: usar intervalo largo) */
   pauseWhenHidden?: boolean;
+  /**
+   * Si true, no dispara fetch al montar (solo intervalo y al volver visible).
+   * Útil cuando un useEffect ya hace la carga inicial y evita doble request.
+   */
+  skipInitialRun?: boolean;
 }
 
 export function useLiveData({
@@ -23,6 +28,7 @@ export function useLiveData({
   intervalMs,
   enabled = true,
   pauseWhenHidden = false,
+  skipInitialRun = false,
 }: UseLiveDataOptions): void {
   const fetchFnRef = useRef(fetchFn);
   fetchFnRef.current = fetchFn;
@@ -76,7 +82,9 @@ export function useLiveData({
       }
     };
 
-    runFetch();
+    if (!skipInitialRun) {
+      runFetch();
+    }
     schedule();
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -85,5 +93,5 @@ export function useLiveData({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (intervalId) clearInterval(intervalId);
     };
-  }, [enabled, intervalMs, pauseWhenHidden, runFetch]);
+  }, [enabled, intervalMs, pauseWhenHidden, skipInitialRun, runFetch]);
 }

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { authenticate, authorize } from '../../middleware/auth.middleware';
+import { AppError } from '../../middleware/error.middleware';
 import { productService, CreateProductDto } from '../../services/product.service';
 import { MarketplaceService } from '../../services/marketplace.service';
 import { getAliExpressProductCascaded } from '../../services/aliexpress-acquisition.service';
@@ -372,6 +373,173 @@ router.get('/pending', async (req: Request, res: Response) => {
       stack: e instanceof Error ? e.stack : undefined,
       userId: req.user?.userId
     });
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
+function parsePublisherProductIds(body: unknown): number[] {
+  const raw = (body as { productIds?: unknown })?.productIds;
+  if (!Array.isArray(raw)) return [];
+  const ids = raw.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0);
+  return Array.from(new Set(ids));
+}
+
+// POST /api/publisher/pending/reject/:productId — marca REJECTED (permanece en catálogo, fuera de cola de aprobación)
+router.post('/pending/reject/:productId', async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.productId);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ success: false, error: 'ID de producto inválido' });
+    }
+    const userId = req.user!.userId;
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const reasonRaw = (req.body as { reason?: string })?.reason;
+    const reason =
+      typeof reasonRaw === 'string' && reasonRaw.trim().length > 0
+        ? reasonRaw.trim().slice(0, 500)
+        : 'Rechazado desde Publicador inteligente';
+
+    const product = await productService.getProductById(id, userId, isAdmin);
+    if (!isAdmin && product.userId !== userId) {
+      return res.status(403).json({ success: false, error: 'No tienes permiso para rechazar este producto' });
+    }
+    if (product.status !== 'PENDING') {
+      return res.status(400).json({
+        success: false,
+        error: 'Solo se pueden rechazar productos en estado pendiente de aprobación',
+        currentStatus: product.status,
+      });
+    }
+
+    await productService.updateProductStatusSafely(id, 'REJECTED', userId, reason);
+    logger.info('[PUBLISHER] Product rejected from pending queue', { productId: id, actorUserId: userId, isAdmin });
+    return res.json({ success: true, message: 'Producto rechazado; ya no aparece en pendientes', productId: id });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Failed to reject product';
+    logger.error('[PUBLISHER] reject pending failed', { error: errorMessage });
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
+// POST /api/publisher/pending/remove/:productId — elimina el producto (destructivo; no permitido si tiene ventas)
+router.post('/pending/remove/:productId', async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.productId);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ success: false, error: 'ID de producto inválido' });
+    }
+    const userId = req.user!.userId;
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+
+    const product = await productService.getProductById(id, userId, isAdmin);
+    if (!isAdmin && product.userId !== userId) {
+      return res.status(403).json({ success: false, error: 'No tienes permiso para eliminar este producto' });
+    }
+    if (product.status !== 'PENDING') {
+      return res.status(400).json({
+        success: false,
+        error: 'Solo se pueden eliminar desde esta cola productos en estado pendiente',
+        currentStatus: product.status,
+      });
+    }
+
+    await productService.deleteProduct(id, userId, isAdmin);
+    logger.info('[PUBLISHER] Product removed (deleted) from pending queue', { productId: id, actorUserId: userId });
+    return res.json({ success: true, message: 'Producto eliminado', productId: id });
+  } catch (e: unknown) {
+    if (e instanceof AppError) {
+      return res.status(e.statusCode).json({ success: false, error: e.message });
+    }
+    const errorMessage = e instanceof Error ? e.message : 'Failed to remove product';
+    logger.error('[PUBLISHER] remove pending failed', { error: errorMessage });
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
+// POST /api/publisher/pending/bulk-reject
+router.post('/pending/bulk-reject', async (req: Request, res: Response) => {
+  try {
+    const ids = parsePublisherProductIds(req.body);
+    if (ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'Envía productIds: number[]' });
+    }
+    const userId = req.user!.userId;
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const reasonRaw = (req.body as { reason?: string })?.reason;
+    const reason =
+      typeof reasonRaw === 'string' && reasonRaw.trim().length > 0
+        ? reasonRaw.trim().slice(0, 500)
+        : 'Rechazado en bloque desde Publicador inteligente';
+
+    const rejected: number[] = [];
+    const skipped: { id: number; error: string }[] = [];
+
+    for (const id of ids) {
+      try {
+        const product = await productService.getProductById(id, userId, isAdmin);
+        if (!isAdmin && product.userId !== userId) {
+          skipped.push({ id, error: 'Sin permiso' });
+          continue;
+        }
+        if (product.status !== 'PENDING') {
+          skipped.push({ id, error: `Estado no pendiente (${product.status})` });
+          continue;
+        }
+        await productService.updateProductStatusSafely(id, 'REJECTED', userId, reason);
+        rejected.push(id);
+      } catch (err: any) {
+        skipped.push({ id, error: err?.message || 'Error' });
+      }
+    }
+
+    logger.info('[PUBLISHER] bulk reject completed', { count: rejected.length, skipped: skipped.length, actorUserId: userId });
+    return res.json({ success: true, rejected, skipped, totalRequested: ids.length });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Bulk reject failed';
+    return res.status(500).json({ success: false, error: errorMessage });
+  }
+});
+
+// POST /api/publisher/pending/bulk-remove
+router.post('/pending/bulk-remove', async (req: Request, res: Response) => {
+  try {
+    const ids = parsePublisherProductIds(req.body);
+    if (ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'Envía productIds: number[]' });
+    }
+    const userId = req.user!.userId;
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+
+    const removed: number[] = [];
+    const skipped: { id: number; error: string }[] = [];
+
+    for (const id of ids) {
+      try {
+        const product = await productService.getProductById(id, userId, isAdmin);
+        if (!isAdmin && product.userId !== userId) {
+          skipped.push({ id, error: 'Sin permiso' });
+          continue;
+        }
+        if (product.status !== 'PENDING') {
+          skipped.push({ id, error: `Estado no pendiente (${product.status})` });
+          continue;
+        }
+        await productService.deleteProduct(id, userId, isAdmin);
+        removed.push(id);
+      } catch (err: any) {
+        const msg = err?.message || 'Error';
+        skipped.push({ id, error: msg });
+      }
+    }
+
+    logger.info('[PUBLISHER] bulk remove completed', { count: removed.length, skipped: skipped.length, actorUserId: userId });
+    return res.json({ success: true, removed, skipped, totalRequested: ids.length });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Bulk remove failed';
     return res.status(500).json({ success: false, error: errorMessage });
   }
 });

@@ -1068,6 +1068,9 @@ app.use(responseTimeMiddleware);
 
 // ✅ PRODUCTION READY: Rate limiting global para todas las rutas API
 import { createRoleBasedRateLimit } from './middleware/rate-limit.middleware';
+import { optionalJwtUserForRateLimit } from './middleware/optional-jwt-user.middleware';
+// Decode JWT before limiter so ADMIN_LIMIT / per-user keys apply (authenticate runs later on routes)
+app.use('/api', optionalJwtUserForRateLimit);
 app.use('/api', createRoleBasedRateLimit());
 
 // Body parsing
