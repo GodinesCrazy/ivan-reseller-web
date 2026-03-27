@@ -65,7 +65,7 @@ export default function Login() {
           errorMessage =
             error.response.data?.message ||
             error.response.data?.error ||
-            'Credenciales por defecto deshabilitadas en producción. Revisa la variable ALLOW_DEFAULT_ADMIN_LOGIN_IN_PRODUCTION en Railway o cambia la contraseña del admin en la base de datos.';
+            'Credenciales por defecto bloqueadas por política (BLOCK_DEFAULT_ADMIN_LOGIN_IN_PRODUCTION). Cambia la contraseña del admin o quita esa variable en Railway.';
         } else {
           errorMessage = error.response.data?.message || 
                         error.response.data?.error || 
