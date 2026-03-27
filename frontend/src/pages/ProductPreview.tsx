@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, XCircle, Edit, Globe, Image as ImageIcon, Tag, DollarSign, TrendingUp, ChevronLeft, ChevronRight, Save, Clock, Info, Calculator, Trash2, Plus, MoveUp, MoveDown, Award } from 'lucide-react';
 import api from '@/services/api';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
-import MetricLabelWithTooltip from '@/components/MetricLabelWithTooltip';
-import { metricTooltips } from '@/config/metricTooltips';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ProductWorkflowPipeline from '@/components/ProductWorkflowPipeline';
 
@@ -120,6 +118,7 @@ interface ListingPreview {
     category?: string;
     aliexpressPrice: number;
     aliexpressCurrency: string;
+    winnerDetectedAt?: string;
   };
   marketplace: string;
   title: string;
@@ -174,6 +173,19 @@ export default function ProductPreview() {
   const [lifetimeDecision, setLifetimeDecision] = useState<any>(null);
   const [loadingLifetime, setLoadingLifetime] = useState(false);
   const [primaryImageIndex, setPrimaryImageIndex] = useState(0);
+  const [preflight, setPreflight] = useState<{
+    publishAllowed?: boolean;
+    overallState?: string;
+    nextAction?: string;
+    blockers?: string[];
+    warnings?: string[];
+    listingSalePriceUsd?: number;
+    canonicalPricing?: { ok?: boolean; failureReasons?: string[] };
+    images?: { publishSafe?: boolean; blockingReason?: string | null };
+    postsale?: { mercadolibreWebhookConfigured?: boolean; mercadolibreEventFlowReady?: boolean };
+    canary?: { tier?: string; score?: number; reasons?: string[] };
+  } | null>(null);
+  const [preflightLoading, setPreflightLoading] = useState(false);
 
   useEffect(() => {
     if (!id) {
@@ -184,6 +196,32 @@ export default function ProductPreview() {
 
     loadPreview();
   }, [id, marketplace, environment, showFinancialParam]);
+
+  useEffect(() => {
+    if (!id || marketplace !== 'mercadolibre') {
+      setPreflight(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        setPreflightLoading(true);
+        const res = await api.get(`/api/products/${id}/publish-preflight`, {
+          params: { marketplace: 'mercadolibre', ...(environment ? { environment } : {}) },
+        });
+        if (!cancelled && res.data?.success && res.data?.data) {
+          setPreflight(res.data.data);
+        }
+      } catch {
+        if (!cancelled) setPreflight(null);
+      } finally {
+        if (!cancelled) setPreflightLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, marketplace, environment]);
 
   const loadPreview = async () => {
     try {
@@ -616,12 +654,16 @@ export default function ProductPreview() {
             </button>
             <h1 className="text-3xl font-bold text-gray-900">Vista Previa del Listing</h1>
             <p className="text-gray-600 mt-1">
-              Revisa cómo se verá tu producto en {preview.marketplace}
+              Revisa cómo se verá tu producto en {preview.marketplace}. La verdad operativa (listing, blocker, proof) está en{' '}
+              <Link to="/control-center" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
+                Control Center
+              </Link>
+              — los datos financieros aquí son estimaciones pre-publicación.
             </p>
           </div>
         </div>
 
-        {/* ✅ Workflow Status Pipeline */}
+        {/* Canonical lifecycle truth first — P56 */}
         {id && (
           <div className="mb-6">
             <ProductWorkflowPipeline productId={Number(id)} showTimeline={true} />
@@ -712,17 +754,17 @@ export default function ProductPreview() {
               </div>
             </div>
 
-            {/* Ganador / Info del agente */}
+            {/* Score heurístico "ganador" — no es proof comercial */}
             {preview.product?.winnerDetectedAt && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-emerald-500">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-amber-400">
                 <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                  <Award className="w-5 h-5 text-emerald-600" />
-                  Ganador
+                  <Award className="w-5 h-5 text-amber-600" />
+                  Score heurístico &quot;ganador&quot;
                 </h2>
                 <p className="text-sm text-gray-700">
-                  Ganador detectado el{' '}
+                  Detectado el{' '}
                   <span className="font-medium">{new Date(preview.product.winnerDetectedAt).toLocaleDateString()}</span>.
-                  Este producto cumple la regla de ventas (últimos N días &gt;= umbral).
+                  Cumple regla de ventas por umbral en últimos N días — es referencia analítica, no ganancia realizada probada.
                 </p>
               </div>
             )}
@@ -776,11 +818,107 @@ export default function ProductPreview() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-start gap-2 text-xs text-gray-500">
+                    <div className="flex items-start gap-2 text-xs text-gray-500">
                     <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <span>Esta recomendación se basa en datos reales de ventas y rendimiento del listing.</span>
+                    <span>Recomendación heurística basada en ventas y rendimiento del listing. Las cifras de ganancia/ROI abajo son estimadas — la ganancia realizada requiere proof en órdenes y finance.</span>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {preview.marketplace === 'mercadolibre' && (
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-slate-200 dark:border-slate-600">
+                <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                  <Info className="w-5 h-5 text-slate-600" />
+                  Pre-publicación (backend)
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  Estado canónico desde la API; no sustituye el Control Center para proof operativo extendido.
+                </p>
+                {preflightLoading ? (
+                  <p className="text-sm text-gray-600">Cargando preflight…</p>
+                ) : preflight ? (
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Estado:</span>
+                      <span
+                        className={
+                          preflight.publishAllowed
+                            ? 'text-green-700 dark:text-green-400'
+                            : 'text-red-700 dark:text-red-400'
+                        }
+                      >
+                        {preflight.overallState}
+                      </span>
+                    </div>
+                    {preflight.canary && (
+                      <div className="text-xs rounded-md bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-600 p-2 space-y-1">
+                        <div className="font-medium text-slate-800 dark:text-slate-100">
+                          Canary E2E (heurística):{' '}
+                          <span className="uppercase tracking-wide">{preflight.canary.tier}</span>
+                          {typeof preflight.canary.score === 'number' ? ` · score ${preflight.canary.score}/100` : ''}
+                        </div>
+                        <p className="text-slate-600 dark:text-slate-400">
+                          Prioriza SKUs con mayor probabilidad de publicación + postventa; no reemplaza los bloqueadores de arriba.
+                        </p>
+                      </div>
+                    )}
+                    {typeof preflight.listingSalePriceUsd === 'number' && (
+                      <div>
+                        <span className="font-medium">Precio listado (USD) usado en validación: </span>
+                        {preflight.listingSalePriceUsd.toFixed(2)}
+                      </div>
+                    )}
+                    {preflight.canonicalPricing?.ok === false && preflight.canonicalPricing.failureReasons?.length ? (
+                      <div className="text-red-700 dark:text-red-400 text-xs">
+                        {preflight.canonicalPricing.failureReasons.join(' · ')}
+                      </div>
+                    ) : null}
+                    {preflight.images && (
+                      <div className="text-xs">
+                        Imágenes publishSafe:{' '}
+                        <span className={preflight.images.publishSafe ? 'text-green-700' : 'text-red-700'}>
+                          {preflight.images.publishSafe ? 'sí' : 'no'}
+                        </span>
+                        {preflight.images.blockingReason ? ` — ${preflight.images.blockingReason}` : ''}
+                      </div>
+                    )}
+                    {preflight.postsale && (
+                      <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1">
+                        <div>
+                          Webhook ML configurado:{' '}
+                          {preflight.postsale.mercadolibreWebhookConfigured ? 'sí' : 'no'}
+                        </div>
+                        <div>
+                          Flujo de eventos verificado:{' '}
+                          {preflight.postsale.mercadolibreEventFlowReady ? 'sí' : 'no'}
+                        </div>
+                      </div>
+                    )}
+                    {preflight.blockers && preflight.blockers.length > 0 && (
+                      <ul className="list-disc pl-4 text-xs text-red-700 dark:text-red-400 space-y-1">
+                        {preflight.blockers.map((b, i) => (
+                          <li key={i}>{b}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {preflight.warnings && preflight.warnings.length > 0 && (
+                      <ul className="list-disc pl-4 text-xs text-amber-800 dark:text-amber-200 space-y-1">
+                        {preflight.warnings.map((w, i) => (
+                          <li key={i}>{w}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {preflight.nextAction && (
+                      <p className="text-xs text-gray-700 dark:text-gray-200 pt-1 border-t border-gray-200 dark:border-gray-600">
+                        <span className="font-medium">Siguiente paso: </span>
+                        {preflight.nextAction}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600">No se pudo cargar el preflight.</p>
+                )}
               </div>
             )}
 
@@ -788,7 +926,12 @@ export default function ProductPreview() {
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-3">
               <button
                 onClick={handlePublish}
-                disabled={publishing}
+                disabled={
+                  publishing ||
+                  (preview.marketplace === 'mercadolibre' &&
+                    preflight != null &&
+                    preflight.publishAllowed === false)
+                }
                 className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {publishing ? (
@@ -858,41 +1001,32 @@ export default function ProductPreview() {
                 </p>
               </div>
 
-              {/* Ganancia Potencial y Margen */}
-              <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6 border border-green-200">
-                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-green-600" />
-                  Rentabilidad
+              {/* Rentabilidad estimada — no es ganancia realizada */}
+              <div className="bg-gray-50 dark:bg-gray-900/40 rounded-lg p-6 border-2 border-dashed border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                  <TrendingUp className="w-5 h-5 text-gray-500" />
+                  Rentabilidad estimada (pre-publicación)
                 </h3>
+                <p className="text-xs text-gray-500 mb-4">
+                  Referencia de unit economics — no sustituye proof de compra en proveedor, fondos liberados ni ganancia realizada. Ver Órdenes y Finance para truth.
+                </p>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <MetricLabelWithTooltip
-                      label="Ganancia Potencial"
-                      tooltipBody={metricTooltips.potentialProfit.body}
-                      className="text-sm text-gray-600"
-                    >
-                      <span className="text-sm text-gray-600">Ganancia Potencial</span>
-                    </MetricLabelWithTooltip>
-                    <p className="text-2xl font-bold text-green-600 mt-1">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Ganancia potencial (estim.)</span>
+                    <p className="text-xl font-bold text-gray-800 dark:text-gray-200 mt-1">
                       {formatCurrencySimple(preview.potentialProfit, preview.currency)}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      Monto estimado de utilidad por unidad vendida, considerando costos, comisiones de marketplace y tipo de cambio actual. Este valor puede variar según las condiciones reales de venta.
+                      Estimación por unidad; varía según costos, comisiones y tipo de cambio.
                     </p>
                   </div>
                   <div>
-                    <MetricLabelWithTooltip
-                      label="Margen"
-                      tooltipBody={metricTooltips.profitMargin.body}
-                      className="text-sm text-gray-600"
-                    >
-                      <span className="text-sm text-gray-600">Margen</span>
-                    </MetricLabelWithTooltip>
-                    <p className="text-2xl font-bold text-green-600 mt-1">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Margen estimado</span>
+                    <p className="text-xl font-bold text-gray-800 dark:text-gray-200 mt-1">
                       {preview.profitMargin.toFixed(1)}%
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      Porcentaje estimado de utilidad bruta sobre el precio de venta después de costos y comisiones. Un margen alto indica mayor rentabilidad potencial por unidad vendida.
+                      % estimado de utilidad bruta sobre precio de venta.
                     </p>
                   </div>
                 </div>
@@ -955,24 +1089,24 @@ export default function ProductPreview() {
                       </div>
                     )}
                     <div className="flex justify-between items-center py-3 pt-4 border-t-2 border-gray-300 mt-2">
-                      <span className="text-lg font-semibold text-gray-900">Ganancia Neta</span>
-                      <span className="text-2xl font-bold text-green-600">
+                      <span className="text-lg font-semibold text-gray-700 dark:text-gray-300">Ganancia neta proyectada (estimada)</span>
+                      <span className="text-xl font-bold text-gray-800 dark:text-gray-200">
                         {formatCurrencySimple(preview.fees.netProfit, preview.currency)}
                       </span>
                     </div>
+                    <p className="text-xs text-gray-500 mt-2">No es ganancia realizada — requiere proof en órdenes y payout.</p>
                   </div>
                 </div>
               )}
 
-              {/* Información Adicional */}
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              {/* Analytics vs proof — explicit disclaimer */}
+              <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg p-4 border border-amber-200 dark:border-amber-800">
                 <div className="flex items-start gap-2">
-                  <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm text-blue-800">
-                    <p className="font-medium mb-1">Nota:</p>
+                  <Info className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-amber-900 dark:text-amber-100">
+                    <p className="font-medium mb-1">Analytics vs proof</p>
                     <p>
-                      Los valores mostrados son estimaciones basadas en los costos actuales y las comisiones estándar del marketplace. 
-                      Los valores reales pueden variar según las condiciones de venta, tipo de cambio, y políticas del marketplace al momento de la transacción.
+                      Estos valores son <strong>estimaciones</strong> basadas en costos y comisiones estándar. La ganancia <strong>realizada</strong> solo se confirma con proof en Órdenes (compra en proveedor, tracking) y Finance (payout). Usa Control Center para verdad operativa canónica.
                     </p>
                   </div>
                 </div>

@@ -44,6 +44,8 @@ import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { useEnvironment } from '@/contexts/EnvironmentContext';
 import type { InventorySummary } from '@/types/dashboard';
+import type { OperationsTruthItem } from '@/types/operations';
+import { fetchOperationsTruth } from '@/services/operationsTruth.api';
 
 interface MarketplaceListing {
   id: number;
@@ -64,8 +66,17 @@ interface Product {
   marketplaceUrl?: string | null;
   marketplaceListings?: MarketplaceListing[];
   aliexpressUrl?: string | null;
-  status: 'PENDING' | 'APPROVED' | 'PUBLISHED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'PUBLISHED' | 'REJECTED' | 'LEGACY_UNVERIFIED' | 'VALIDATED_READY';
+  validationState?: 'LEGACY_UNVERIFIED' | 'PENDING' | 'REJECTED' | 'BLOCKED' | 'VALIDATION_INCOMPLETE' | 'VALIDATED_READY' | 'PUBLISHED';
+  blockedReasons?: string[];
+  resolvedCountry?: string | null;
+  resolvedLanguage?: string | null;
+  resolvedCurrency?: string | null;
+  feeCompleteness?: number;
+  projectedMargin?: number | null;
+  marketplaceContextSafety?: 'safe' | 'unsafe';
   imageUrl?: string;
+  estimatedUnitMargin?: number;
   profit?: number;
   createdAt: string;
   winnerDetectedAt?: string | null;
@@ -152,9 +163,45 @@ export default function Products() {
     listings: Array<{ marketplace: string; listingId: string; sku: string | null }>;
     lastOrder: { orderId: string; orderStatus: string; marketplaceOrderId: string; fulfillmentAutomationStatus: string; updatedAt: string } | null;
   }> | null>(null);
+  const [operationsTruthByProduct, setOperationsTruthByProduct] = useState<Record<string, OperationsTruthItem>>({});
   const [showPostSaleOverview, setShowPostSaleOverview] = useState(false);
+  const [mlCanaryPanelOpen, setMlCanaryPanelOpen] = useState(false);
+  const [mlCanaryLoading, setMlCanaryLoading] = useState(false);
+  const [mlCanaryData, setMlCanaryData] = useState<{
+    scanned: number;
+    candidates: Array<{
+      productId: number;
+      title: string | null;
+      publishAllowed: boolean;
+      overallState: string;
+      canaryTier: string;
+      canaryScore: number;
+      topBlockers: string[];
+    }>;
+  } | null>(null);
   const { formatMoney } = useCurrency();
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const loadMlCanaryCandidates = useCallback(async () => {
+    setMlCanaryLoading(true);
+    try {
+      const res = await api.get('/api/products/canary/mlc', {
+        params: { environment, limit: 8, scanCap: 20 },
+      });
+      if (res.data?.success && res.data?.data) {
+        setMlCanaryData(res.data.data);
+        toast.success(`Evaluados ${res.data.data.scanned} productos validados (máx. preflight).`);
+      } else {
+        setMlCanaryData(null);
+        toast.error('Respuesta inválida del servidor.');
+      }
+    } catch (e: any) {
+      setMlCanaryData(null);
+      toast.error(e?.response?.data?.error || 'No se pudo cargar candidatos canary ML');
+    } finally {
+      setMlCanaryLoading(false);
+    }
+  }, [environment]);
 
   const updateFilter = useCallback((key: keyof ProductFilters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -196,6 +243,20 @@ export default function Products() {
       })
       .catch(() => {});
   }, [products]);
+
+  useEffect(() => {
+    const ids = products.map((product) => product.id).filter(Boolean);
+    if (ids.length === 0) {
+      setOperationsTruthByProduct({});
+      return;
+    }
+    fetchOperationsTruth({ ids, environment })
+      .then((data) => {
+        const mapped = Object.fromEntries(data.items.map((item) => [String(item.productId), item]));
+        setOperationsTruthByProduct(mapped);
+      })
+      .catch(() => setOperationsTruthByProduct({}));
+  }, [products, environment]);
 
   const fetchProducts = useCallback(async (silent = false) => {
     try {
@@ -328,26 +389,26 @@ export default function Products() {
   const stats = {
     total: inventorySummary?.products?.total ?? aggregations?.totalAll ?? products.length,
     pending: inventorySummary?.products?.pending ?? aggregations?.byStatus?.PENDING ?? 0,
-    approved: inventorySummary?.products?.approved ?? aggregations?.byStatus?.APPROVED ?? 0,
+    validatedReady: inventorySummary?.products?.validatedReady ?? aggregations?.byStatus?.VALIDATED_READY ?? 0,
     published: inventorySummary?.listingsTotal ?? aggregations?.byStatus?.PUBLISHED ?? 0,
   };
   const listingsByMarketplace = inventorySummary?.listingsByMarketplace ?? { ebay: 0, mercadolibre: 0, amazon: 0 };
 
   // Summary for visible page
   const pageRevenue = products.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
-  const pageProfit = products.reduce((sum, p) => sum + (Number(p.profit) || 0), 0);
+  const pageEstimatedMargin = products.reduce((sum, p) => sum + (Number(p.estimatedUnitMargin ?? p.profit) || 0), 0);
 
   // CSV Export
   const exportToCSV = () => {
     const csv = [
-      ['ID', 'Titulo', 'Status', 'Marketplace', 'Precio', 'Beneficio', 'URL Marketplace', 'URL Proveedor', 'Fecha'].join(','),
+      ['ID', 'Titulo', 'Status', 'Marketplace', 'Precio', 'Margen estimado', 'URL Marketplace', 'URL Proveedor', 'Fecha'].join(','),
       ...products.map(p => [
         p.id,
         `"${(p.title || '').replace(/"/g, '""')}"`,
         p.status,
         p.marketplace,
         p.price,
-        p.profit || 0,
+        p.estimatedUnitMargin ?? p.profit ?? 0,
         p.marketplaceUrl || '',
         p.aliexpressUrl || '',
         new Date(p.createdAt).toLocaleDateString()
@@ -437,14 +498,42 @@ export default function Products() {
     }
   };
 
+  const formatBlockedReason = (reason: string) => {
+    const labels: Record<string, string> = {
+      missingSku: 'Sin SKU',
+      missingShipping: 'Sin shipping',
+      unsupportedCountry: 'Pais no soportado',
+      unsupportedLanguage: 'Idioma no soportado',
+      unresolvedCurrency: 'Moneda no resuelta',
+      incompleteFees: 'Fees incompletos',
+      policyIncomplete: 'Politica incompleta',
+      supplierUnavailable: 'Proveedor invalido',
+      invalidMarketplaceContext: 'Contexto invalido',
+    };
+    return labels[reason] || reason;
+  };
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, any> = {
       PENDING: 'warning',
-      APPROVED: 'success',
+      APPROVED: 'secondary',
+      VALIDATED_READY: 'success',
       PUBLISHED: 'default',
-      REJECTED: 'destructive'
+      REJECTED: 'destructive',
+      BLOCKED: 'destructive',
+      LEGACY_UNVERIFIED: 'secondary',
+      VALIDATION_INCOMPLETE: 'secondary',
     };
     return <Badge variant={variants[status] || 'secondary'}>{status}</Badge>;
+  };
+
+  const getLiveStateBadge = (state: string | null | undefined) => {
+    const normalized = String(state || '').trim().toLowerCase();
+    if (normalized === 'active') return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">active</Badge>;
+    if (normalized === 'under_review') return <Badge variant="outline" className="text-amber-700 border-amber-300 dark:text-amber-300">under_review</Badge>;
+    if (normalized === 'paused') return <Badge variant="outline" className="text-orange-700 border-orange-300 dark:text-orange-300">paused</Badge>;
+    if (normalized === 'failed_publish' || normalized === 'not_found') return <Badge variant="destructive">{normalized}</Badge>;
+    return <Badge variant="outline" className="text-gray-500">unknown</Badge>;
   };
 
   const totalFiltered = paginationMeta?.total ?? products.length;
@@ -491,8 +580,8 @@ export default function Products() {
             </Button>
           </div>
         </div>
-        <p className="text-gray-600 dark:text-gray-400 mt-0.5">Productos aprobados y publicados en marketplaces</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Datos reales desde API · Estado por marketplace desde BD</p>
+        <p className="text-gray-600 dark:text-gray-400 mt-0.5">Catalogo real: legacy congelado, candidatos validados y bloqueos operativos</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Datos reales desde API · El estado visible prioriza validacion segura sobre estados legacy</p>
         <div className="mt-3">
           <CycleStepsBreadcrumb currentStep={3} />
         </div>
@@ -532,7 +621,7 @@ export default function Products() {
                 <Package className="w-5 h-5" />
                 Estado post-venta por producto
               </CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => setShowPostSaleOverview((v) => !v)}>
+              <Button variant="ghost" onClick={() => setShowPostSaleOverview((v) => !v)}>
                 {showPostSaleOverview ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </Button>
             </div>
@@ -587,6 +676,90 @@ export default function Products() {
         </Card>
       )}
 
+      <Card className="border-blue-200 dark:border-blue-900/50">
+        <CardHeader className="pb-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Store className="w-5 h-5 text-blue-600" />
+              Canary publicación Mercado Libre (Chile)
+            </CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setMlCanaryPanelOpen((o) => {
+                  const open = !o;
+                  if (open) void loadMlCanaryCandidates();
+                  return open;
+                });
+              }}
+            >
+              {mlCanaryPanelOpen ? 'Ocultar' : 'Mostrar / actualizar'}
+            </Button>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Ordena tus productos <span className="font-medium">VALIDATED_READY</span> por idoneidad para un primer ciclo real (mismas comprobaciones que el preflight). Usa un candidato con{' '}
+            <span className="font-medium">publishAllowed</span> y mejor <span className="font-medium">tier</span>; evita forzar un SKU con imágenes bloqueadas.
+          </p>
+        </CardHeader>
+        {mlCanaryPanelOpen && (
+          <CardContent className="pt-0">
+            {mlCanaryLoading ? (
+              <p className="text-sm text-gray-600">Ejecutando preflight en lote…</p>
+            ) : mlCanaryData && mlCanaryData.candidates.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-gray-600 dark:text-gray-400">
+                      <th className="py-2 pr-2">ID</th>
+                      <th className="py-2 pr-2">Título</th>
+                      <th className="py-2 pr-2">Tier</th>
+                      <th className="py-2 pr-2">Score</th>
+                      <th className="py-2 pr-2">Listo</th>
+                      <th className="py-2 text-right">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mlCanaryData.candidates.map((c) => (
+                      <tr key={c.productId} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
+                        <td className="py-2 pr-2 font-mono">{c.productId}</td>
+                        <td className="py-2 pr-2 max-w-[220px] truncate" title={c.title || ''}>
+                          {c.title || '—'}
+                        </td>
+                        <td className="py-2 pr-2">
+                          <Badge variant={c.canaryTier === 'recommended' ? 'default' : c.canaryTier === 'blocked' ? 'destructive' : 'secondary'}>
+                            {c.canaryTier}
+                          </Badge>
+                        </td>
+                        <td className="py-2 pr-2">{c.canaryScore}</td>
+                        <td className="py-2 pr-2">{c.publishAllowed ? 'sí' : 'no'}</td>
+                        <td className="py-2 text-right">
+                          <button
+                            type="button"
+                            className="text-blue-600 dark:text-blue-400 hover:underline text-xs"
+                            onClick={() => navigate(`/products/${c.productId}/preview?marketplace=mercadolibre`)}
+                          >
+                            Preview ML
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {mlCanaryData.candidates.some((c) => c.topBlockers.length > 0) && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Revisa bloqueadores en preview; el listado trunca causas a 5 por producto.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600">No hay candidatos o aún no se ha cargado. Pulsa «Mostrar / actualizar».</p>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="cursor-pointer hover:ring-2 hover:ring-blue-300 transition-shadow" onClick={() => { updateFilter('status', 'ALL'); }}>
@@ -611,12 +784,12 @@ export default function Products() {
             </div>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer hover:ring-2 hover:ring-green-300 transition-shadow" onClick={() => { updateFilter('status', filters.status === 'APPROVED' ? 'ALL' : 'APPROVED'); }}>
+        <Card className="cursor-pointer hover:ring-2 hover:ring-green-300 transition-shadow" onClick={() => { updateFilter('status', filters.status === 'VALIDATED_READY' ? 'ALL' : 'VALIDATED_READY'); }}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Aprobados</p>
-                <p className="text-2xl font-bold text-green-600">{(stats.approved).toLocaleString()}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Validados</p>
+                <p className="text-2xl font-bold text-green-600">{(stats.validatedReady).toLocaleString()}</p>
               </div>
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
@@ -691,7 +864,9 @@ export default function Products() {
               <option value="ALL">Todos los estados</option>
               <option value="PENDING">Pendiente</option>
               <option value="APPROVED">Aprobado</option>
+              <option value="VALIDATED_READY">Validado</option>
               <option value="PUBLISHED">Publicado</option>
+              <option value="LEGACY_UNVERIFIED">Legacy congelado</option>
               <option value="REJECTED">Rechazado</option>
             </select>
             <select
@@ -862,7 +1037,7 @@ export default function Products() {
             <CardTitle>Productos ({totalFiltered.toLocaleString()})</CardTitle>
             <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
               <span>Revenue pagina: <strong className="text-gray-700 dark:text-gray-200">{formatCurrencySimple(pageRevenue, 'USD')}</strong></span>
-              <span>Beneficio pagina: <strong className="text-green-600">{formatCurrencySimple(pageProfit, 'USD')}</strong></span>
+              <span>Margen unitario estimado (página): <strong className="text-green-600">{formatCurrencySimple(pageEstimatedMargin, 'USD')}</strong></span>
             </div>
           </div>
         </CardHeader>
@@ -899,14 +1074,17 @@ export default function Products() {
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Enlaces</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Precio</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Estado</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Truth operacional</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Ganador</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Workflow</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Beneficio</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Margen estimado</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-slate-600 bg-white dark:bg-slate-900">
-                    {products.map((product, idx) => (
+                    {products.map((product, idx) => {
+                      const opsTruth = operationsTruthByProduct[product.id];
+                      return (
                       <tr key={product.id} className={`hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors ${idx % 2 === 1 ? 'bg-gray-50/50 dark:bg-slate-900/80' : ''}`}>
                         <td className="px-4 py-3">
                           <div
@@ -920,7 +1098,14 @@ export default function Products() {
                                 <Package className="w-5 h-5 text-gray-400" />
                               </div>
                             )}
-                            <span className="font-medium text-gray-900 dark:text-gray-100 max-w-xs truncate">{product.title}</span>
+                            <div className="min-w-0">
+                              <div className="font-medium text-gray-900 dark:text-gray-100 max-w-xs truncate">{product.title}</div>
+                              {product.validationState && product.validationState !== product.status && (
+                                <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                  Estado seguro: {product.validationState}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{product.sku}</td>
@@ -975,7 +1160,51 @@ export default function Products() {
                         <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
                           {formatCurrencySimple(product.price, product.currency || 'USD')}
                         </td>
-                        <td className="px-4 py-3">{getStatusBadge(product.status)}</td>
+                        <td className="px-4 py-3">
+                          <div className="space-y-1">
+                            {getStatusBadge(product.validationState || product.status)}
+                            {product.blockedReasons && product.blockedReasons.length > 0 && (
+                              <div className="text-xs text-red-600 dark:text-red-400 max-w-[180px] truncate" title={product.blockedReasons.map(formatBlockedReason).join(', ')}>
+                                {product.blockedReasons.slice(0, 2).map(formatBlockedReason).join(', ')}
+                              </div>
+                            )}
+                            {typeof product.feeCompleteness === 'number' && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                Fees: {Math.round(product.feeCompleteness * 100)}%
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {opsTruth ? (
+                            <div className="space-y-1 max-w-[220px]">
+                              <div className="flex flex-wrap gap-1 items-center">
+                                {getLiveStateBadge(opsTruth.externalMarketplaceState)}
+                                {opsTruth.externalMarketplaceSubStatus.length > 0 && (
+                                  <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate" title={opsTruth.externalMarketplaceSubStatus.join(', ')}>
+                                    {opsTruth.externalMarketplaceSubStatus.join(', ')}
+                                  </span>
+                                )}
+                              </div>
+                              {opsTruth.blockerCode ? (
+                                <div className="text-xs text-red-600 dark:text-red-400" title={opsTruth.blockerMessage || opsTruth.blockerCode}>
+                                  Blocker: {opsTruth.blockerCode}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-green-600 dark:text-green-400">
+                                  Sin blocker actual
+                                </div>
+                              )}
+                              {opsTruth.nextAction && (
+                                <div className="text-[11px] text-amber-700 dark:text-amber-300 truncate" title={opsTruth.nextAction}>
+                                  Next: {opsTruth.nextAction}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">Sin truth contract</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           {product.winnerDetectedAt ? (
                             <Badge
@@ -996,9 +1225,9 @@ export default function Products() {
                           />
                         </td>
                         <td className="px-4 py-3">
-                          {product.profit ? (
+                          {(product.estimatedUnitMargin ?? product.profit) ? (
                             <span className="text-sm font-medium text-green-600">
-                              +{formatCurrencySimple(product.profit, product.currency || 'USD')}
+                              +{formatCurrencySimple(product.estimatedUnitMargin ?? product.profit ?? 0, product.currency || 'USD')}
                             </span>
                           ) : null}
                         </td>
@@ -1020,8 +1249,8 @@ export default function Products() {
                                 </button>
                               </>
                             )}
-                            {product.status === 'APPROVED' && (
-                              <button onClick={() => handlePublish(product.id)} className="p-1 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded" title="Publicar">
+                            {product.status === 'VALIDATED_READY' && (
+                              <button onClick={() => handlePublish(product.id)} className="p-1 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded" title="Publicar validado">
                                 <Upload className="w-4 h-4" />
                               </button>
                             )}
@@ -1036,7 +1265,7 @@ export default function Products() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>
@@ -1134,9 +1363,9 @@ export default function Products() {
                 <div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Estado</p>
                   <div className="flex items-center gap-2">
-                    {getStatusBadge(selectedProduct.status)}
+                    {getStatusBadge(selectedProduct.validationState || selectedProduct.status)}
                     <MetricLabelWithTooltip
-                      label={selectedProduct.status}
+                      label={selectedProduct.validationState || selectedProduct.status}
                       tooltipBody={
                         selectedProduct.status === 'PENDING' ? metricTooltips.statusPending.body :
                         selectedProduct.status === 'APPROVED' ? metricTooltips.statusApproved.body :
@@ -1149,14 +1378,30 @@ export default function Products() {
                       <span className="cursor-help text-gray-400">?</span>
                     </MetricLabelWithTooltip>
                   </div>
+                  {selectedProduct.validationState && selectedProduct.validationState !== selectedProduct.status && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Estado de BD: {selectedProduct.status}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Contexto resuelto</p>
+                  <p className="font-medium dark:text-gray-100">
+                    {selectedProduct.resolvedCountry || '—'} / {selectedProduct.resolvedLanguage || '—'} / {selectedProduct.resolvedCurrency || '—'}
+                  </p>
+                  {typeof selectedProduct.feeCompleteness === 'number' && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Fees completos: {Math.round(selectedProduct.feeCompleteness * 100)}%
+                    </p>
+                  )}
                 </div>
                 {selectedProduct.profit ? (
                   <div>
-                    <MetricLabelWithTooltip label="Expected Profit" tooltipBody={metricTooltips.potentialProfit.body} className="text-sm text-gray-600 dark:text-gray-400">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Beneficio estimado</p>
+                    <MetricLabelWithTooltip label="Estimated unit margin" tooltipBody={metricTooltips.potentialProfit.body} className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Margen unitario estimado</p>
                     </MetricLabelWithTooltip>
                     <p className="font-medium text-green-600 text-lg">
-                      +{formatCurrencySimple(selectedProduct.profit, selectedProduct.currency || 'USD')}
+                      +{formatCurrencySimple(selectedProduct.estimatedUnitMargin ?? selectedProduct.profit ?? 0, selectedProduct.currency || 'USD')}
                     </p>
                   </div>
                 ) : null}
@@ -1165,6 +1410,62 @@ export default function Products() {
                   <p className="font-medium dark:text-gray-100">{new Date(selectedProduct.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>
+              {selectedProduct.blockedReasons && selectedProduct.blockedReasons.length > 0 && (
+                <div className="pt-4 border-t dark:border-gray-700">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Bloqueos operativos</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedProduct.blockedReasons.map((reason) => (
+                      <Badge key={reason} variant="destructive">
+                        {formatBlockedReason(reason)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {operationsTruthByProduct[selectedProduct.id] && (
+                <div className="pt-4 border-t dark:border-gray-700">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Truth operacional canónica</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-gray-600 dark:text-gray-400">Estado live marketplace</p>
+                      <div className="mt-1">{getLiveStateBadge(operationsTruthByProduct[selectedProduct.id].externalMarketplaceState)}</div>
+                      {operationsTruthByProduct[selectedProduct.id].externalMarketplaceSubStatus.length > 0 && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {operationsTruthByProduct[selectedProduct.id].externalMarketplaceSubStatus.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-gray-600 dark:text-gray-400">Blocker actual</p>
+                      <p className="font-medium text-gray-900 dark:text-gray-100">
+                        {operationsTruthByProduct[selectedProduct.id].blockerCode || 'Sin blocker'}
+                      </p>
+                      {operationsTruthByProduct[selectedProduct.id].nextAction && (
+                        <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                          Next: {operationsTruthByProduct[selectedProduct.id].nextAction}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-gray-600 dark:text-gray-400">Proof ladder</p>
+                      <p className="text-xs text-gray-700 dark:text-gray-300 mt-1">
+                        order={operationsTruthByProduct[selectedProduct.id].orderIngested ? 'yes' : 'no'} · supplier={operationsTruthByProduct[selectedProduct.id].supplierPurchaseProved ? 'yes' : 'no'} · tracking={operationsTruthByProduct[selectedProduct.id].trackingAttached ? 'yes' : 'no'} · payout={operationsTruthByProduct[selectedProduct.id].releasedFundsObtained ? 'yes' : 'no'} · realized={operationsTruthByProduct[selectedProduct.id].realizedProfitObtained ? 'yes' : 'no'}
+                      </p>
+                    </div>
+                    {operationsTruthByProduct[selectedProduct.id].agentTrace && (
+                      <div>
+                        <p className="text-gray-600 dark:text-gray-400">Última decisión de agente</p>
+                        <p className="font-medium text-gray-900 dark:text-gray-100">
+                          {operationsTruthByProduct[selectedProduct.id].agentTrace?.agentName} · {operationsTruthByProduct[selectedProduct.id].agentTrace?.decision}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {operationsTruthByProduct[selectedProduct.id].agentTrace?.reasonCode}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               {(selectedProduct.marketplaceUrl || selectedProduct.aliexpressUrl) && (
                 <div className="pt-4 border-t dark:border-gray-700">
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enlaces</p>

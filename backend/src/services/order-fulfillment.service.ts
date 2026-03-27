@@ -113,22 +113,33 @@ export class OrderFulfillmentService {
       }
     }
     if (!productUrl && order.productId) {
-      const listing = await prisma.marketplaceListing.findFirst({
+      const listings = await prisma.marketplaceListing.findMany({
         where: {
           productId: order.productId,
-          marketplace: 'ebay',
+          marketplace: { in: ['mercadolibre', 'ebay'] },
           ...(order.userId != null ? { userId: order.userId } : {}),
         },
-        select: { supplierUrl: true },
+        select: { supplierUrl: true, marketplace: true },
       });
-      const url = (listing?.supplierUrl || '').trim();
+      const withUrl = listings
+        .map((l) => ({ marketplace: l.marketplace, u: (l.supplierUrl || '').trim() }))
+        .filter((l) => l.u.length > 0);
+      const preferred =
+        withUrl.find((l) => l.marketplace === 'mercadolibre') ||
+        withUrl.find((l) => l.marketplace === 'ebay') ||
+        null;
+      const url = preferred?.u ?? '';
       if (url) {
         productUrl = url;
         await prisma.order.update({
           where: { id: orderId },
           data: { productUrl: url },
         });
-        logger.info('[ORDER-FULFILLMENT] Resolved productUrl from MarketplaceListing.supplierUrl', { orderId, productId: order.productId });
+        logger.info('[ORDER-FULFILLMENT] Resolved productUrl from MarketplaceListing.supplierUrl', {
+          orderId,
+          productId: order.productId,
+          marketplace: preferred?.marketplace,
+        });
       }
     }
     if (!productUrl) {

@@ -10,9 +10,44 @@ import { prisma } from '../../config/database';
 import { queryWithTimeout } from '../../utils/queryWithTimeout';
 import { handleSetupCheck } from '../../utils/setup-check';
 import { wrapAsync } from '../../utils/async-route-wrapper';
+import { getProductValidationSnapshot } from '../../services/catalog-validation-state.service';
 
 const router = Router();
 router.use(authenticate);
+
+// GET /api/products/canary/mlc — E2E: ranked MLC publish + postsale suitability (logged-in seller only)
+router.get(
+  '/canary/mlc',
+  wrapAsync(async (req: Request, res: Response) => {
+    const userRole = req.user?.role?.toUpperCase();
+    const isAdmin = userRole === 'ADMIN';
+    const userId = req.user!.userId;
+    const environment = req.query.environment as 'sandbox' | 'production' | undefined;
+    const scanCap = req.query.scanCap ? Number(req.query.scanCap) : undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+
+    const { listMercadoLibreCanaryCandidatesForUser } = await import(
+      '../../services/e2e-mercadolibre-canary-candidates.service'
+    );
+    const { candidates, scanned } = await listMercadoLibreCanaryCandidatesForUser({
+      userId,
+      isAdmin,
+      environment,
+      scanCap: Number.isFinite(scanCap) ? scanCap : undefined,
+      resultLimit: Number.isFinite(limit) ? limit : undefined,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        marketplace: 'mercadolibre',
+        note: 'Candidates are limited to products owned by the logged-in user so ML credentials and asset paths align.',
+        scanned,
+        candidates,
+      },
+    });
+  })
+);
 
 // Validación para crear producto
 const createProductSchema = z.object({
@@ -134,6 +169,7 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
     
     // ✅ Mapear datos del backend al formato esperado por el frontend
     const mappedProducts = result.products.map((product) => {
+      const validation = getProductValidationSnapshot(product);
       // Calcular profit (precio final - precio AliExpress)
       const calculatedProfit = (toNumber(product.finalPrice) || toNumber(product.suggestedPrice) || 0) - toNumber(product.aliexpressPrice);
       
@@ -159,6 +195,8 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
         title: product.title,
         description: product.description || '',
         status: product.status,
+        validationState: validation.validationState,
+        blockedReasons: validation.blockedReasons,
         sku: String(product.id),
         marketplace: marketplace,
         marketplaceUrl: marketplaceUrl,
@@ -167,7 +205,14 @@ router.get('/', wrapAsync(async (req: Request, res: Response, next: NextFunction
         aliexpressUrl: product.aliexpressUrl || null,
         price: product.finalPrice || product.suggestedPrice || product.aliexpressPrice || 0,
         currency: product.currency || 'USD',
+        resolvedCountry: validation.resolvedCountry,
+        resolvedLanguage: validation.resolvedLanguage,
+        resolvedCurrency: validation.resolvedCurrency,
+        feeCompleteness: validation.feeCompleteness,
+        projectedMargin: validation.projectedMargin,
+        marketplaceContextSafety: validation.marketplaceContextSafety,
         stock: 0,
+        estimatedUnitMargin: calculatedProfit > 0 ? calculatedProfit : 0,
         profit: calculatedProfit > 0 ? calculatedProfit : 0,
         imageUrl: imageUrl || undefined,
         createdAt: product.createdAt?.toISOString() || new Date().toISOString(),
@@ -375,6 +420,39 @@ router.get('/:id/preview', async (req: Request, res: Response, next: NextFunctio
   }
 });
 
+// GET /api/products/:id/publish-preflight — P89 Mercado Libre web preflight (canonical readiness contract)
+router.get('/:id/publish-preflight', wrapAsync(async (req: Request, res: Response) => {
+  const productId = Number(req.params.id);
+  const marketplace = String(req.query.marketplace || 'mercadolibre').toLowerCase();
+  const environment = req.query.environment as 'sandbox' | 'production' | undefined;
+
+  if (!productId || Number.isNaN(productId)) {
+    return res.status(400).json({ success: false, error: 'Invalid product ID' });
+  }
+  if (marketplace !== 'mercadolibre') {
+    return res.status(400).json({
+      success: false,
+      error: 'publish-preflight is implemented for marketplace=mercadolibre only',
+    });
+  }
+
+  const userRole = req.user?.role?.toUpperCase();
+  const isAdmin = userRole === 'ADMIN';
+  const userId = req.user!.userId;
+
+  const { buildMercadoLibrePublishPreflight } = await import(
+    '../../services/mercadolibre-publish-preflight.service'
+  );
+  const data = await buildMercadoLibrePublishPreflight({
+    userId,
+    productId,
+    isAdmin,
+    environment,
+  });
+
+  res.json({ success: true, data });
+}));
+
 // GET /api/products/:id - Obtener por ID
 router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -406,6 +484,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
       sku: String(product.id), // SKU temporal basado en ID
       stock: 0, // Valor por defecto
       marketplace: 'N/A',
+      estimatedUnitMargin: ((toNumber(product.finalPrice) || toNumber(product.suggestedPrice) || 0) - toNumber(product.aliexpressPrice)) || 0,
       profit: ((toNumber(product.finalPrice) || toNumber(product.suggestedPrice) || 0) - toNumber(product.aliexpressPrice)) || 0,
       winnerDetectedAt: product.winnerDetectedAt?.toISOString() ?? null
     };
@@ -613,7 +692,7 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
 router.patch('/:id/status', authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status } = req.body;
-    if (!['PENDING', 'APPROVED', 'REJECTED', 'PUBLISHED'].includes(status)) {
+    if (!['PENDING', 'APPROVED', 'REJECTED', 'PUBLISHED', 'LEGACY_UNVERIFIED', 'VALIDATED_READY'].includes(status)) {
       return res.status(400).json({ 
         success: false, 
         error: 'Estado inválido',
