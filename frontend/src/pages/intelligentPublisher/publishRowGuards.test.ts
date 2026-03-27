@@ -54,6 +54,14 @@ describe('publishRowGuards', () => {
     expect(isPendingRowPublishBlocked(baseTruth({ blockerCode: 'missingSku' }), false)).toBe(true);
   });
 
+  it('blocks on publicationReadinessState BLOCKED even if blockerCode missing', () => {
+    expect(isPendingRowPublishBlocked(baseTruth({ publicationReadinessState: 'BLOCKED', blockerCode: null }), false)).toBe(true);
+  });
+
+  it('blocks whitespace-only blockerCode (fail-closed)', () => {
+    expect(isPendingRowPublishBlocked(baseTruth({ blockerCode: '   ' }), false)).toBe(true);
+  });
+
   it('blocks when agentTrace.blocking', () => {
     expect(
       isPendingRowPublishBlocked(

@@ -1,5 +1,17 @@
 import type { OperationsTruthItem } from '@/types/operations';
 
+function hasCanonicalBlocker(truth: OperationsTruthItem): boolean {
+  const rawBc = truth.blockerCode;
+  if (rawBc != null) {
+    const s = String(rawBc);
+    if (s.trim().length > 0) return true;
+    if (s.length > 0) return true; // whitespace-only payload → fail-closed
+  }
+  const prs = String(truth.publicationReadinessState ?? '').trim().toUpperCase();
+  if (prs === 'BLOCKED') return true;
+  return false;
+}
+
 /** While truth is loading for a non-empty pending list, do not allow publish (fail-closed). */
 export function isPendingTruthLoading(pendingLength: number, operationsTruthFetchLoading: boolean): boolean {
   return pendingLength > 0 && operationsTruthFetchLoading;
@@ -9,7 +21,8 @@ export function isPendingTruthLoading(pendingLength: number, operationsTruthFetc
  * Row is not publishable from Intelligent Publisher when:
  * - truth still loading
  * - no truth item (missing / error)
- * - canonical blockerCode from operations truth
+ * - canonical blockerCode from operations truth (trimmed; whitespace-only counts as no code)
+ * - publication readiness BLOCKED (fail-closed if API ever omits blockerCode)
  * - agent trace explicitly blocking (e.g. ML image remediation publishSafe === false)
  */
 export function isPendingRowPublishBlocked(
@@ -18,7 +31,7 @@ export function isPendingRowPublishBlocked(
 ): boolean {
   if (truthLoading) return true;
   if (!truth) return true;
-  if (truth.blockerCode) return true;
+  if (hasCanonicalBlocker(truth)) return true;
   if (truth.agentTrace?.blocking === true) return true;
   return false;
 }

@@ -12,7 +12,7 @@ import { useEnvironment } from '@/contexts/EnvironmentContext';
 import OperationsTruthSummaryPanel from '@/components/OperationsTruthSummaryPanel';
 import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
 import AgentDecisionTracePanel from '@/components/AgentDecisionTracePanel';
-import { fetchOperationsTruth } from '@/services/operationsTruth.api';
+import { fetchOperationsTruthForProductIds } from '@/services/operationsTruth.api';
 import type { OperationsTruthItem, OperationsTruthResponse } from '@/types/operations';
 import {
   isPendingTruthLoading,
@@ -175,7 +175,7 @@ export default function IntelligentPublisher() {
     }
 
     setOperationsTruthLoading(true);
-    fetchOperationsTruth({ ids: productIds, environment })
+    fetchOperationsTruthForProductIds({ ids: productIds, environment })
       .then((data) => {
         if (!cancelled) setOperationsTruth(data);
       })
@@ -193,7 +193,7 @@ export default function IntelligentPublisher() {
 
   const operationsTruthByProduct = useMemo(() => {
     const entries = operationsTruth?.items ?? [];
-    return new Map(entries.map((item) => [item.productId, item]));
+    return new Map(entries.map((item) => [Number(item.productId), item]));
   }, [operationsTruth]);
 
   const rowTruthLoading = isPendingTruthLoading(pending.length, operationsTruthLoading);
@@ -813,14 +813,12 @@ export default function IntelligentPublisher() {
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded">
         {displayedPending.map((p: any) => {
           const truth = operationsTruthByProduct.get(Number(p.id)) ?? null;
-          const publishBlocked = isPendingRowPublishBlocked(truth, rowTruthLoading);
           return (
             <PendingProductCard
-              key={p.id}
+              key={`pending-${String(p.id)}`}
               product={p}
               productId={String(p.id)}
               operationsTruth={truth}
-              publishBlocked={publishBlocked}
               truthLoading={rowTruthLoading}
               selected={!!selected[String(p.id)]}
               onSelectChange={(checked) => setSelected((s) => ({ ...s, [String(p.id)]: checked }))}
@@ -968,7 +966,6 @@ function PendingProductCard({
   product: p,
   productId,
   operationsTruth,
-  publishBlocked,
   truthLoading,
   selected,
   onSelectChange,
@@ -980,7 +977,6 @@ function PendingProductCard({
   product: any;
   productId: string;
   operationsTruth: OperationsTruthItem | null;
-  publishBlocked: boolean;
   truthLoading: boolean;
   selected: boolean;
   onSelectChange: (checked: boolean) => void;
@@ -996,6 +992,14 @@ function PendingProductCard({
     mercadolibre: false,
     amazon: false,
   });
+  const rowBlockedVisual = isPendingRowPublishBlocked(operationsTruth, truthLoading);
+
+  useEffect(() => {
+    if (rowBlockedVisual) {
+      setMarketplaces({ ebay: false, mercadolibre: false, amazon: false });
+    }
+  }, [rowBlockedVisual, productId]);
+
   const imgSources = Array.isArray(p.images) ? p.images : (p.imageUrl ? [p.imageUrl] : []);
 
   const handleApprove = () => {
@@ -1015,12 +1019,10 @@ function PendingProductCard({
   const showDesc = desc.length > 0;
   const descShort = desc.length > 150 ? desc.slice(0, 150) + '...' : desc;
 
-  const rowBlockedVisual = publishBlocked || truthLoading;
-
   return (
     <div
       className={`p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
-        publishBlocked && !truthLoading ? 'bg-red-50/40 dark:bg-red-950/20 border-l-4 border-l-red-500 pl-3' : ''
+        rowBlockedVisual && !truthLoading ? 'bg-red-50/40 dark:bg-red-950/20 border-l-4 border-l-red-500 pl-3' : ''
       } ${truthLoading ? 'opacity-90' : ''}`}
     >
       <div className="flex items-start gap-3 flex-1 w-full">
@@ -1202,10 +1204,16 @@ function PendingProductCard({
             {rowBusy === 'remove' ? 'Eliminando…' : 'Eliminar'}
           </button>
         </div>
-        {publishBlocked && !truthLoading && operationsTruth?.blockerCode && (
+        {rowBlockedVisual &&
+          !truthLoading &&
+          (String(operationsTruth?.blockerCode ?? '').trim() ||
+            String(operationsTruth?.publicationReadinessState ?? '').toUpperCase() === 'BLOCKED') && (
           <p className="text-[10px] text-red-700 dark:text-red-300 text-right max-w-xs ml-auto">
-            Bloqueo: <span className="font-mono">{operationsTruth.blockerCode}</span>
-            {operationsTruth.blockerMessage ? ` — ${operationsTruth.blockerMessage}` : ''}
+            Bloqueo:{' '}
+            <span className="font-mono">
+              {String(operationsTruth?.blockerCode ?? '').trim() || operationsTruth?.publicationReadinessState || 'BLOCKED'}
+            </span>
+            {operationsTruth?.blockerMessage ? ` — ${operationsTruth.blockerMessage}` : ''}
           </p>
         )}
       </div>
