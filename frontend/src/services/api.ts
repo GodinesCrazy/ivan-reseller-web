@@ -139,12 +139,14 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
     
-    // 403: Prohibido - un solo toast por tipo para no multiplicar
+    // 403: Prohibido — no usar mensaje genérico en login (credenciales por defecto deshabilitadas, registro cerrado, etc.)
     if (status === 403) {
-      toast.error('No tienes permisos para realizar esta acción.', {
-        id: FORBIDDEN_TOAST_ID,
-        duration: 5000,
-      });
+      if (!isLoginRequest) {
+        toast.error('No tienes permisos para realizar esta acción.', {
+          id: FORBIDDEN_TOAST_ID,
+          duration: 5000,
+        });
+      }
       return Promise.reject(error);
     }
 

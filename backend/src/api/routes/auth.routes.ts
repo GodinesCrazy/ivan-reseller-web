@@ -49,13 +49,27 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     const isProduction = process.env.NODE_ENV === 'production';
-    if (isProduction && username === 'admin' && password === 'admin123') {
+    const allowDefaultAdmin =
+      String(process.env.ALLOW_DEFAULT_ADMIN_LOGIN_IN_PRODUCTION || '')
+        .toLowerCase()
+        .trim() === 'true' ||
+      process.env.ALLOW_DEFAULT_ADMIN_LOGIN_IN_PRODUCTION === '1';
+    if (
+      isProduction &&
+      !allowDefaultAdmin &&
+      String(username).toLowerCase() === 'admin' &&
+      password === 'admin123'
+    ) {
       logger.warn('[AUTH] Blocked default admin credentials in production', {
         username,
+        hint: 'Set ALLOW_DEFAULT_ADMIN_LOGIN_IN_PRODUCTION=true on Railway only if you accept the risk, or use a different password (see prisma/seed or update-admin-password).',
       });
+      const msg =
+        'En producción las credenciales por defecto admin/admin123 están deshabilitadas. Opciones: (1) En Railway → Variables del backend añade ALLOW_DEFAULT_ADMIN_LOGIN_IN_PRODUCTION=true y redespliega, o (2) ejecuta prisma seed / cambia la contraseña del usuario admin en la base de datos.';
       return res.status(403).json({
         success: false,
-        error: 'Default production credentials are disabled',
+        error: msg,
+        message: msg,
         errorCode: 'DEFAULT_CREDENTIALS_DISABLED',
       });
     }

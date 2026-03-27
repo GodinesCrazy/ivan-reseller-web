@@ -61,6 +61,11 @@ export default function Login() {
         const status = error.response.status;
         if (status === 502 || status === 503 || status === 504) {
           errorMessage = 'Backend no disponible. Por favor, intenta más tarde.';
+        } else if (status === 403 && error.response.data?.errorCode === 'DEFAULT_CREDENTIALS_DISABLED') {
+          errorMessage =
+            error.response.data?.message ||
+            error.response.data?.error ||
+            'Credenciales por defecto deshabilitadas en producción. Revisa la variable ALLOW_DEFAULT_ADMIN_LOGIN_IN_PRODUCTION en Railway o cambia la contraseña del admin en la base de datos.';
         } else {
           errorMessage = error.response.data?.message || 
                         error.response.data?.error || 

@@ -47,9 +47,12 @@ export const authApi = {
       console.log('[login] request URL', error?.config?.baseURL && error?.config?.url ? `${String(error.config.baseURL).replace(/\/$/, '')}${error.config.url}` : '/api/auth/login');
       console.log('[login] response status', error?.response?.status ?? 'no response');
       console.log('[login] response body', error?.response?.data ?? error?.message);
-      // Normalizar error para prevenir crash de React
       if (error?.response?.status === 502 || error?.response?.status === 503 || error?.response?.status === 504) {
         throw new Error('Backend no disponible. Por favor, intenta más tarde.');
+      }
+      // Conservar respuesta HTTP (403 DEFAULT_CREDENTIALS_DISABLED, etc.) para que Login muestre el mensaje del servidor
+      if (error?.response) {
+        throw error;
       }
       if (error?.message) {
         throw new Error(String(error.message));
