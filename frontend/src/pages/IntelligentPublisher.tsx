@@ -4,7 +4,7 @@ import { api } from '../services/api';
 import { useLiveData } from '@/hooks/useLiveData';
 import { useNotificationRefetch } from '@/hooks/useNotificationRefetch';
 import { API_BASE_URL } from '@/config/runtime';
-import { Check, X, ChevronLeft, ChevronRight, ExternalLink, Wallet, TrendingUp, Wrench, Trash2 } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ExternalLink, Wallet, TrendingUp, Wrench, Trash2, AlertTriangle } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import toast from 'react-hot-toast';
 import { formatCurrencySimple } from '@/utils/currency';
@@ -14,6 +14,11 @@ import PostSaleProofLadderPanel from '@/components/PostSaleProofLadderPanel';
 import AgentDecisionTracePanel from '@/components/AgentDecisionTracePanel';
 import { fetchOperationsTruth } from '@/services/operationsTruth.api';
 import type { OperationsTruthItem, OperationsTruthResponse } from '@/types/operations';
+import {
+  isPendingTruthLoading,
+  isPendingRowPublishBlocked,
+  isMlCanaryCandidateRow,
+} from '@/pages/intelligentPublisher/publishRowGuards';
 
 // Usar proxy de imágenes para evitar bloqueo de hotlink de AliExpress
 function toProxyUrl(url: string): string {
@@ -52,7 +57,11 @@ export default function IntelligentPublisher() {
   const [listings, setListings] = useState<any[]>([]);
   const [url, setUrl] = useState('');
   const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const [bulkMk, setBulkMk] = useState<{ ebay: boolean; mercadolibre: boolean; amazon: boolean }>({ ebay: true, mercadolibre: false, amazon: false });
+  const [bulkMk, setBulkMk] = useState<{ ebay: boolean; mercadolibre: boolean; amazon: boolean }>({
+    ebay: false,
+    mercadolibre: false,
+    amazon: false,
+  });
   const [bulkStatus, setBulkStatus] = useState<{ total: number; queued: number; done: number; errors: number; running: boolean }>({ total: 0, queued: 0, done: 0, errors: 0, running: false });
   const [loading, setLoading] = useState(true);
   const [listingsPage, setListingsPage] = useState(1);
@@ -68,10 +77,12 @@ export default function IntelligentPublisher() {
     remainingExposure: number;
   } | null>(null);
   const [operationsTruth, setOperationsTruth] = useState<OperationsTruthResponse | null>(null);
+  const [operationsTruthLoading, setOperationsTruthLoading] = useState(false);
+  const [pendingViewFilter, setPendingViewFilter] = useState<'all' | 'ml_canary_ready' | 'blocked_only'>('all');
+  const [pendingSort, setPendingSort] = useState<'smart' | 'ml_margin_desc' | 'estimate_desc'>('smart');
   const LISTINGS_PER_PAGE = 50;
   const PENDING_PER_PAGE = 20;
   const listingsTotalPages = Math.max(1, Math.ceil(listingsTotal / LISTINGS_PER_PAGE));
-  const pendingTotalPages = Math.max(1, Math.ceil(pending.length / PENDING_PER_PAGE));
 
   const loadListings = useCallback(async (page: number, marketplace?: 'all' | 'ebay' | 'mercadolibre' | 'amazon') => {
     try {
@@ -159,15 +170,20 @@ export default function IntelligentPublisher() {
 
     if (productIds.length === 0) {
       setOperationsTruth(null);
+      setOperationsTruthLoading(false);
       return;
     }
 
+    setOperationsTruthLoading(true);
     fetchOperationsTruth({ ids: productIds, environment })
       .then((data) => {
         if (!cancelled) setOperationsTruth(data);
       })
       .catch(() => {
         if (!cancelled) setOperationsTruth(null);
+      })
+      .finally(() => {
+        if (!cancelled) setOperationsTruthLoading(false);
       });
 
     return () => {
@@ -179,6 +195,81 @@ export default function IntelligentPublisher() {
     const entries = operationsTruth?.items ?? [];
     return new Map(entries.map((item) => [item.productId, item]));
   }, [operationsTruth]);
+
+  const rowTruthLoading = isPendingTruthLoading(pending.length, operationsTruthLoading);
+
+  const pendingFilteredSorted = useMemo(() => {
+    let rows = [...pending];
+    const getTruth = (p: any) => operationsTruthByProduct.get(Number(p.id)) ?? null;
+
+    if (pendingViewFilter === 'ml_canary_ready') {
+      rows = rows.filter((p) => isMlCanaryCandidateRow(p, getTruth(p), rowTruthLoading));
+    } else if (pendingViewFilter === 'blocked_only') {
+      rows = rows.filter((p) => isPendingRowPublishBlocked(getTruth(p), rowTruthLoading));
+    }
+
+    const mlMargin = (p: any) => Number(p?.estimatedProfitByMarketplace?.mercadolibre ?? NaN);
+
+    rows.sort((a, b) => {
+      const ta = getTruth(a);
+      const tb = getTruth(b);
+      const ba = isPendingRowPublishBlocked(ta, rowTruthLoading) ? 1 : 0;
+      const bb = isPendingRowPublishBlocked(tb, rowTruthLoading) ? 1 : 0;
+      if (pendingSort === 'smart' && ba !== bb) return ba - bb;
+      if (pendingSort === 'ml_margin_desc') {
+        const da = mlMargin(a);
+        const db = mlMargin(b);
+        if (Number.isFinite(db) && Number.isFinite(da) && db !== da) return db - da;
+        if (ba !== bb) return ba - bb;
+        return String(a.title || '').localeCompare(String(b.title || ''));
+      }
+      if (pendingSort === 'estimate_desc') {
+        const da = Number(a.estimatedProfit ?? 0);
+        const db = Number(b.estimatedProfit ?? 0);
+        if (db !== da) return db - da;
+        if (ba !== bb) return ba - bb;
+        return String(a.title || '').localeCompare(String(b.title || ''));
+      }
+      if (ba !== bb) return ba - bb;
+      const da = mlMargin(a);
+      const db = mlMargin(b);
+      if (Number.isFinite(db) && Number.isFinite(da) && db !== da) return db - da;
+      return String(a.title || '').localeCompare(String(b.title || ''));
+    });
+    return rows;
+  }, [pending, operationsTruthByProduct, pendingViewFilter, pendingSort, rowTruthLoading]);
+
+  const pendingTotalPages = Math.max(1, Math.ceil(pendingFilteredSorted.length / PENDING_PER_PAGE));
+
+  useEffect(() => {
+    setPendingPage(1);
+  }, [pendingViewFilter, pendingSort]);
+
+  const displayedPending = useMemo(() => {
+    const start = (pendingPage - 1) * PENDING_PER_PAGE;
+    return pendingFilteredSorted.slice(start, start + PENDING_PER_PAGE);
+  }, [pendingFilteredSorted, pendingPage]);
+
+  const filterPublishableProductIds = useCallback(
+    (ids: string[]) =>
+      ids.filter((pid) => {
+        const t = operationsTruthByProduct.get(Number(pid));
+        return !isPendingRowPublishBlocked(t, rowTruthLoading);
+      }),
+    [operationsTruthByProduct, rowTruthLoading]
+  );
+
+  const selectBlockedPendingOnly = useCallback(() => {
+    const next: Record<string, boolean> = {};
+    pending.forEach((p: any) => {
+      const t = operationsTruthByProduct.get(Number(p.id));
+      if (isPendingRowPublishBlocked(t, rowTruthLoading)) next[String(p.id)] = true;
+    });
+    setSelected(next);
+    const c = Object.keys(next).length;
+    if (c === 0) toast.error('No hay pendientes bloqueados en la lista actual.');
+    else toast.success(`${c} producto(s) bloqueado(s) seleccionado(s). Podés rechazar o eliminar en bloque.`);
+  }, [pending, operationsTruthByProduct, rowTruthLoading]);
 
   const operationsTruthByListing = useMemo(() => {
     const entries = operationsTruth?.items ?? [];
@@ -203,6 +294,18 @@ export default function IntelligentPublisher() {
   }, [operationsTruthByListing, operationsTruthByProduct]);
 
   const approve = useCallback(async (productId: string, marketplaces: string[]) => {
+    const truth = operationsTruthByProduct.get(Number(productId));
+    const loading = isPendingTruthLoading(pending.length, operationsTruthLoading);
+    if (isPendingRowPublishBlocked(truth, loading)) {
+      toast.error(
+        'Este producto tiene bloqueos operativos (ver bloque inferior). Resuélvelos antes de aprobar; no se publicará desde aquí hasta entonces.'
+      );
+      return;
+    }
+    if (!Array.isArray(marketplaces) || marketplaces.length === 0) {
+      toast.error('Selecciona al menos un marketplace; no hay ninguno preseleccionado por seguridad.');
+      return;
+    }
     try {
       const response = await api.post(`/api/publisher/approve/${productId}`, { marketplaces });
       const data = response.data;
@@ -278,7 +381,7 @@ export default function IntelligentPublisher() {
         toast.error(errorMessage);
       }
     }
-  }, [navigate]);
+  }, [navigate, operationsTruthByProduct, operationsTruthLoading, pending.length]);
 
   const rejectPendingOne = useCallback(
     async (productId: string) => {
@@ -440,12 +543,6 @@ export default function IntelligentPublisher() {
     }
   }, [selected, loadPublisherData]);
 
-  // Memoizar productos pendientes paginados
-  const displayedPending = useMemo(() => {
-    const start = (pendingPage - 1) * PENDING_PER_PAGE;
-    return pending.slice(start, start + PENDING_PER_PAGE);
-  }, [pending, pendingPage]);
-
   const goToListingsPage = useCallback((page: number) => {
     setListingsPage(page);
     loadListings(page, listingsMarketplaceFilter);
@@ -520,17 +617,44 @@ export default function IntelligentPublisher() {
       {/* Bulk publish toolbar */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded mb-4 flex flex-col gap-3">
         <div className="text-sm font-medium">Publicación masiva seleccionada (encolar trabajos)</div>
-        <div className="flex items-center gap-4 text-sm">
+        <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded px-2 py-1.5">
+          Por seguridad de canario ML: <strong>ningún marketplace viene preseleccionado</strong>. Solo se encolan productos{' '}
+          <strong>sin bloqueo canónico</strong> (p. ej. missingSku queda fuera). Elegí Mercado Libre explícitamente antes de encolar.
+        </p>
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span className="text-xs text-gray-600 dark:text-gray-400">Marketplaces para cola:</span>
           <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.ebay} onChange={(e)=>setBulkMk(v=>({...v, ebay: e.target.checked}))}/> eBay</label>
           <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.mercadolibre} onChange={(e)=>setBulkMk(v=>({...v, mercadolibre: e.target.checked}))}/> ML</label>
           <label className="inline-flex items-center gap-1"><input type="checkbox" checked={bulkMk.amazon} onChange={(e)=>setBulkMk(v=>({...v, amazon: e.target.checked}))}/> Amazon</label>
+          <button
+            type="button"
+            disabled={bulkPendingBusy || bulkStatus.running}
+            onClick={() => setBulkMk({ ebay: false, mercadolibre: true, amazon: false })}
+            className="px-2 py-1 text-xs border rounded border-primary-300 text-primary-800 dark:text-primary-200"
+          >
+            Preset: solo ML
+          </button>
+          <button
+            type="button"
+            disabled={bulkPendingBusy || bulkStatus.running}
+            onClick={() => setBulkMk({ ebay: false, mercadolibre: false, amazon: false })}
+            className="px-2 py-1 text-xs border rounded text-gray-600"
+          >
+            Limpiar marketplaces
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
           <button disabled={bulkPendingBusy || bulkStatus.running} onClick={async()=>{
             const productIds = Object.entries(selected).filter(([,v])=>v).map(([k])=>k);
             const marketplaces = (['ebay','mercadolibre','amazon'] as const).filter(m=>bulkMk[m]);
-            if (productIds.length===0 || marketplaces.length===0) { toast.error('Selecciona al menos un producto y un marketplace'); return; }
-            setBulkStatus({ total: productIds.length, queued: 0, done: 0, errors: 0, running: true });
-            // queue jobs sequentially to avoid hammering
-            for (const pid of productIds) {
+            if (productIds.length===0 || marketplaces.length===0) { toast.error('Selecciona al menos un producto y al menos un marketplace'); return; }
+            const allowed = filterPublishableProductIds(productIds);
+            if (allowed.length < productIds.length) {
+              toast.error(`Omitidos ${productIds.length - allowed.length} producto(s) con bloqueos; no se encolan.`);
+            }
+            if (allowed.length === 0) { toast.error('Ningún seleccionado está publicable sin bloqueos.'); return; }
+            setBulkStatus({ total: allowed.length, queued: 0, done: 0, errors: 0, running: true });
+            for (const pid of allowed) {
               try {
                 await api.post('/api/jobs/publishing', { productId: Number(pid), marketplaces });
                 setBulkStatus(s=>({ ...s, queued: s.queued + 1 }));
@@ -540,18 +664,26 @@ export default function IntelligentPublisher() {
               await new Promise(r=>setTimeout(r, 300));
             }
             setBulkStatus(s=>({ ...s, running: false }));
-            toast.success('Trabajos de publicación encolados. Sigue el progreso en notificaciones.');
+            toast.success('Trabajos de publicación encolados (solo filas sin bloqueo).');
           }} className="px-3 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50">Encolar trabajos de publicación</button>
           <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={()=>{ const all: Record<string, boolean> = {}; pending.forEach((p:any)=> all[String(p.id)]=true); setSelected(all); }} className="px-3 py-2 border rounded text-sm disabled:opacity-50">Seleccionar todo</button>
+          <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={selectBlockedPendingOnly} className="px-3 py-2 border border-red-300 text-red-800 dark:text-red-200 rounded text-sm disabled:opacity-50" title="Selecciona filas con bloqueo canónico para rechazar o eliminar en bloque">
+            Seleccionar solo bloqueados
+          </button>
           <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={()=> setSelected({}) } className="px-3 py-2 border rounded text-sm disabled:opacity-50">Limpiar</button>
           <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={runBulkPendingReject} className="px-3 py-2 border border-amber-600 text-amber-800 dark:text-amber-200 rounded text-sm hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50">Rechazar seleccionados</button>
           <button type="button" disabled={bulkPendingBusy || bulkStatus.running} onClick={runBulkPendingRemove} className="px-3 py-2 border border-red-600 text-red-700 dark:text-red-300 rounded text-sm hover:bg-red-50 dark:hover:bg-red-950/20 disabled:opacity-50 inline-flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" /> Eliminar seleccionados</button>
           <button disabled={bulkPendingBusy || bulkStatus.running} onClick={async()=>{
             const allIds = pending.map((p:any)=> String(p.id));
             const marketplaces = (['ebay','mercadolibre','amazon'] as const).filter(m=>bulkMk[m]);
-            if (allIds.length===0 || marketplaces.length===0) { toast.error('No hay productos pendientes o marketplaces'); return; }
-            setBulkStatus({ total: allIds.length, queued: 0, done: 0, errors: 0, running: true });
-            for (const pid of allIds) {
+            if (allIds.length===0 || marketplaces.length===0) { toast.error('No hay productos pendientes o no elegiste marketplaces'); return; }
+            const allowed = filterPublishableProductIds(allIds);
+            if (allowed.length < allIds.length) {
+              toast.error(`Omitidos ${allIds.length - allowed.length} pendiente(s) bloqueado(s). Solo se encolan ${allowed.length} sin bloqueo.`);
+            }
+            if (allowed.length === 0) { toast.error('Ningún pendiente está publicable sin bloqueos.'); return; }
+            setBulkStatus({ total: allowed.length, queued: 0, done: 0, errors: 0, running: true });
+            for (const pid of allowed) {
               try {
                 await api.post('/api/jobs/publishing', { productId: Number(pid), marketplaces });
                 setBulkStatus(s=>({ ...s, queued: s.queued + 1 }));
@@ -561,8 +693,8 @@ export default function IntelligentPublisher() {
               await new Promise(r=>setTimeout(r, 300));
             }
             setBulkStatus(s=>({ ...s, running: false }));
-            toast.success('Todos los pendientes encolados para publicar');
-          }} className="px-3 py-2 bg-green-600 text-white rounded text-sm disabled:opacity-50">Publicar todo</button>
+            toast.success('Encolados solo pendientes sin bloqueo canónico');
+          }} className="px-3 py-2 bg-green-600 text-white rounded text-sm disabled:opacity-50">Publicar todo (sin bloqueados)</button>
         </div>
         <div className="h-2 bg-gray-100 rounded overflow-hidden">
           <div className="h-full bg-primary-500" style={{ width: `${bulkProgress}%` }} />
@@ -609,47 +741,101 @@ export default function IntelligentPublisher() {
           </div>
         </div>
       )}
-      <div className="p-4 border rounded bg-white text-gray-700 dark:text-gray-300 mb-3 flex items-center justify-between">
-        <div>
-          Aprobaciones pendientes: <span className="font-semibold">{pending.length}</span>
-          {pending.length > 0 && (
-            <span className="ml-2 text-xs text-gray-500">
-              ({pending.filter((p: any) => p.source === 'autopilot').length} del Autopilot)
-            </span>
-          )}
+      <div className="p-4 border rounded bg-white text-gray-700 dark:text-gray-300 mb-3 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            Aprobaciones pendientes: <span className="font-semibold">{pending.length}</span>
+            {pending.length > 0 && (
+              <span className="ml-2 text-xs text-gray-500">
+                ({pending.filter((p: any) => p.source === 'autopilot').length} del Autopilot)
+              </span>
+            )}
+            {pendingFilteredSorted.length !== pending.length && (
+              <span className="ml-2 text-xs font-medium text-primary-700 dark:text-primary-300">
+                Vista: {pendingFilteredSorted.length} fila(s)
+              </span>
+            )}
+          </div>
+          <button 
+            type="button"
+            onClick={async () => {
+              try {
+                await loadPublisherData({ silent: true });
+                toast.success('Lista actualizada');
+              } catch {
+                toast.error('Error al actualizar');
+              }
+            }}
+            className="text-sm text-primary-600 hover:text-primary-700 disabled:opacity-50"
+            disabled={bulkPendingBusy || Object.keys(pendingRowBusy).length > 0}
+          >
+            Actualizar
+          </button>
         </div>
-        <button 
-          type="button"
-          onClick={async () => {
-            try {
-              await loadPublisherData({ silent: true });
-              toast.success('Lista actualizada');
-            } catch {
-              toast.error('Error al actualizar');
-            }
-          }}
-          className="text-sm text-primary-600 hover:text-primary-700 disabled:opacity-50"
-          disabled={bulkPendingBusy || Object.keys(pendingRowBusy).length > 0}
-        >
-          Actualizar
-        </button>
+        <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm border-t border-gray-100 dark:border-gray-700 pt-3">
+          <span className="font-medium text-gray-700 dark:text-gray-200 flex items-center gap-1">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+            Vista canario ML
+          </span>
+          {(['all', 'ml_canary_ready', 'blocked_only'] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setPendingViewFilter(key)}
+              className={`px-2.5 py-1 rounded-md border text-xs font-medium ${
+                pendingViewFilter === key
+                  ? 'bg-primary-600 text-white border-primary-600'
+                  : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300'
+              }`}
+            >
+              {key === 'all' && 'Todos'}
+              {key === 'ml_canary_ready' && 'Solo ML publicables'}
+              {key === 'blocked_only' && 'Solo bloqueados'}
+            </button>
+          ))}
+          <label className="inline-flex items-center gap-1 ml-2 text-gray-600 dark:text-gray-400">
+            Orden:
+            <select
+              value={pendingSort}
+              onChange={(e) => setPendingSort(e.target.value as typeof pendingSort)}
+              className="border rounded px-1 py-0.5 text-xs bg-white dark:bg-gray-800"
+            >
+              <option value="smart">Publicables primero + margen ML</option>
+              <option value="ml_margin_desc">Margen ML (estim.)</option>
+              <option value="estimate_desc">Margen fila (estim.)</option>
+            </select>
+          </label>
+        </div>
+        <p className="text-[11px] text-gray-500 dark:text-gray-400">
+          «Solo ML publicables»: sin bloqueo canónico y con margen ML estimado &gt; 0. Los bloqueados (p. ej. missingSku) no muestran aprobar como acción principal.
+        </p>
       </div>
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded">
-        {displayedPending.map((p: any) => (
-          <PendingProductCard
-            key={p.id}
-            product={p}
-            operationsTruth={operationsTruthByProduct.get(Number(p.id)) ?? null}
-            selected={!!selected[String(p.id)]}
-            onSelectChange={(checked) => setSelected(s => ({ ...s, [String(p.id)]: checked }))}
-            onApprove={(marketplaces) => approve(String(p.id), marketplaces)}
-            onReject={() => rejectPendingOne(String(p.id))}
-            onRemove={() => removePendingOne(String(p.id))}
-            rowBusy={pendingRowBusy[String(p.id)]}
-          />
-        ))}
+        {displayedPending.map((p: any) => {
+          const truth = operationsTruthByProduct.get(Number(p.id)) ?? null;
+          const publishBlocked = isPendingRowPublishBlocked(truth, rowTruthLoading);
+          return (
+            <PendingProductCard
+              key={p.id}
+              product={p}
+              productId={String(p.id)}
+              operationsTruth={truth}
+              publishBlocked={publishBlocked}
+              truthLoading={rowTruthLoading}
+              selected={!!selected[String(p.id)]}
+              onSelectChange={(checked) => setSelected((s) => ({ ...s, [String(p.id)]: checked }))}
+              onApprove={(marketplaces) => approve(String(p.id), marketplaces)}
+              onReject={() => rejectPendingOne(String(p.id))}
+              onRemove={() => removePendingOne(String(p.id))}
+              rowBusy={pendingRowBusy[String(p.id)]}
+            />
+          );
+        })}
+        {pendingFilteredSorted.length === 0 && pending.length > 0 && (
+          <div className="p-4 text-sm text-gray-600">Ningún pendiente coincide con el filtro actual.</div>
+        )}
         {pending.length === 0 && <div className="p-4 text-sm text-gray-600">No hay productos pendientes.</div>}
-        {pending.length > 0 && pendingTotalPages > 1 && (
+        {pendingFilteredSorted.length > 0 && pendingTotalPages > 1 && (
           <div className="flex items-center justify-center gap-3 py-3 px-4 border-t bg-gray-50 dark:bg-gray-700/50 rounded-b text-sm">
             <button
               disabled={pendingPage <= 1}
@@ -659,7 +845,7 @@ export default function IntelligentPublisher() {
               <ChevronLeft className="w-4 h-4 inline" /> Anterior
             </button>
             <span className="text-gray-600 font-medium">
-              Página {pendingPage} de {pendingTotalPages} ({pending.length} pendientes)
+              Página {pendingPage} de {pendingTotalPages} ({pendingFilteredSorted.length} en vista)
             </span>
             <button
               disabled={pendingPage >= pendingTotalPages}
@@ -780,7 +966,10 @@ export default function IntelligentPublisher() {
 // ✅ Tarjeta de producto pendiente con imágenes y más detalle
 function PendingProductCard({
   product: p,
+  productId,
   operationsTruth,
+  publishBlocked,
+  truthLoading,
   selected,
   onSelectChange,
   onApprove,
@@ -789,7 +978,10 @@ function PendingProductCard({
   rowBusy,
 }: {
   product: any;
+  productId: string;
   operationsTruth: OperationsTruthItem | null;
+  publishBlocked: boolean;
+  truthLoading: boolean;
   selected: boolean;
   onSelectChange: (checked: boolean) => void;
   onApprove: (marketplaces: string[]) => void;
@@ -797,21 +989,40 @@ function PendingProductCard({
   onRemove: () => void;
   rowBusy?: 'reject' | 'remove';
 }) {
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
-  const [marketplaces, setMarketplaces] = useState<Record<string, boolean>>({ ebay: true, mercadolibre: false, amazon: false });
+  const [marketplaces, setMarketplaces] = useState<Record<string, boolean>>({
+    ebay: false,
+    mercadolibre: false,
+    amazon: false,
+  });
   const imgSources = Array.isArray(p.images) ? p.images : (p.imageUrl ? [p.imageUrl] : []);
 
   const handleApprove = () => {
-    const mks = (['ebay', 'mercadolibre', 'amazon'] as const).filter(m => marketplaces[m]);
+    const mks = (['ebay', 'mercadolibre', 'amazon'] as const).filter((m) => marketplaces[m]);
+    if (mks.length === 0) {
+      toast.error('Elegí al menos un marketplace; ninguno viene marcado por defecto.');
+      return;
+    }
     onApprove(mks);
+  };
+
+  const applySoloMl = () => {
+    setMarketplaces({ ebay: false, mercadolibre: true, amazon: false });
   };
 
   const desc = p.description || '';
   const showDesc = desc.length > 0;
   const descShort = desc.length > 150 ? desc.slice(0, 150) + '...' : desc;
 
+  const rowBlockedVisual = publishBlocked || truthLoading;
+
   return (
-    <div className="p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div
+      className={`p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+        publishBlocked && !truthLoading ? 'bg-red-50/40 dark:bg-red-950/20 border-l-4 border-l-red-500 pl-3' : ''
+      } ${truthLoading ? 'opacity-90' : ''}`}
+    >
       <div className="flex items-start gap-3 flex-1 w-full">
         <input type="checkbox" className="mt-1 flex-shrink-0" checked={selected} disabled={!!rowBusy} onChange={(e) => onSelectChange(e.target.checked)} />
         <ImageCarousel images={imgSources} title={sanitizeProductTitle(p.title)} />
@@ -828,6 +1039,12 @@ function PendingProductCard({
             </div>
           )}
           <div className="text-xs text-gray-500 mt-1 space-y-2">
+            {truthLoading && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-800 p-2 text-xs text-amber-900 dark:text-amber-100 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                Comprobando bloqueos canónicos… la acción de publicar permanece deshabilitada hasta tener verdad operativa.
+              </div>
+            )}
             {operationsTruth && (
               <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3 space-y-1">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">Verdad operativa (listing / blocker)</p>
@@ -901,14 +1118,81 @@ function PendingProductCard({
         </div>
       </div>
       <div className="flex flex-col items-stretch sm:items-end gap-2 flex-shrink-0 min-w-[200px]">
-        <div className="flex flex-wrap items-center gap-3 justify-end">
-          <label className="text-sm"><input type="checkbox" checked={marketplaces.ebay} onChange={(e) => setMarketplaces(m => ({ ...m, ebay: e.target.checked }))} className="mr-1" disabled={!!rowBusy} /> eBay</label>
-          <label className="text-sm"><input type="checkbox" checked={marketplaces.mercadolibre} onChange={(e) => setMarketplaces(m => ({ ...m, mercadolibre: e.target.checked }))} className="mr-1" disabled={!!rowBusy} /> ML</label>
-          <label className="text-sm"><input type="checkbox" checked={marketplaces.amazon} onChange={(e) => setMarketplaces(m => ({ ...m, amazon: e.target.checked }))} className="mr-1" disabled={!!rowBusy} /> Amazon</label>
+        <div className="flex flex-wrap items-center gap-2 justify-end">
+          <span className="text-[10px] text-gray-500 w-full text-right sm:w-auto">Marketplaces (sin preselección)</span>
+        </div>
+        <div className={`flex flex-wrap items-center gap-3 justify-end ${rowBlockedVisual ? 'opacity-60' : ''}`}>
+          <label className="text-sm">
+            <input
+              type="checkbox"
+              checked={marketplaces.ebay}
+              onChange={(e) => setMarketplaces((m) => ({ ...m, ebay: e.target.checked }))}
+              className="mr-1"
+              disabled={!!rowBusy || rowBlockedVisual}
+            />{' '}
+            eBay
+          </label>
+          <label className="text-sm">
+            <input
+              type="checkbox"
+              checked={marketplaces.mercadolibre}
+              onChange={(e) => setMarketplaces((m) => ({ ...m, mercadolibre: e.target.checked }))}
+              className="mr-1"
+              disabled={!!rowBusy || rowBlockedVisual}
+            />{' '}
+            ML
+          </label>
+          <label className="text-sm">
+            <input
+              type="checkbox"
+              checked={marketplaces.amazon}
+              onChange={(e) => setMarketplaces((m) => ({ ...m, amazon: e.target.checked }))}
+              className="mr-1"
+              disabled={!!rowBusy || rowBlockedVisual}
+            />{' '}
+            Amazon
+          </label>
+          <button
+            type="button"
+            disabled={!!rowBusy || rowBlockedVisual}
+            onClick={applySoloMl}
+            className="px-2 py-0.5 text-[11px] border rounded border-primary-400 text-primary-800 dark:text-primary-200"
+          >
+            Solo ML
+          </button>
         </div>
         <div className="flex flex-wrap gap-2 justify-end">
-          <button type="button" disabled={!!rowBusy} onClick={handleApprove} className="px-3 py-2 bg-blue-600 text-white rounded text-sm flex items-center gap-1 whitespace-nowrap disabled:opacity-50">
-            <Check className="w-4 h-4" /> Aprobar y publicar
+          {rowBlockedVisual ? (
+            <button
+              type="button"
+              disabled
+              className="px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded text-sm flex items-center gap-1 whitespace-nowrap cursor-not-allowed"
+              title={
+                truthLoading
+                  ? 'Esperando verdad operativa'
+                  : operationsTruth?.blockerMessage || operationsTruth?.blockerCode || 'Bloqueado'
+              }
+            >
+              <AlertTriangle className="w-4 h-4" />
+              {truthLoading ? 'Verificando…' : 'No publicable (bloqueado)'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!!rowBusy}
+              onClick={handleApprove}
+              className="px-3 py-2 bg-blue-600 text-white rounded text-sm flex items-center gap-1 whitespace-nowrap disabled:opacity-50"
+            >
+              <Check className="w-4 h-4" /> Aprobar y publicar
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={!!rowBusy}
+            onClick={() => navigate(`/products/${encodeURIComponent(productId)}/preview`)}
+            className="px-3 py-2 border border-gray-400 text-gray-800 dark:text-gray-200 rounded text-sm whitespace-nowrap disabled:opacity-50"
+          >
+            Vista previa / resolver
           </button>
           <button type="button" disabled={!!rowBusy} onClick={onReject} className="px-3 py-2 border border-amber-600 text-amber-800 dark:text-amber-200 rounded text-sm whitespace-nowrap disabled:opacity-50">
             {rowBusy === 'reject' ? 'Rechazando…' : 'Rechazar'}
@@ -918,6 +1202,12 @@ function PendingProductCard({
             {rowBusy === 'remove' ? 'Eliminando…' : 'Eliminar'}
           </button>
         </div>
+        {publishBlocked && !truthLoading && operationsTruth?.blockerCode && (
+          <p className="text-[10px] text-red-700 dark:text-red-300 text-right max-w-xs ml-auto">
+            Bloqueo: <span className="font-mono">{operationsTruth.blockerCode}</span>
+            {operationsTruth.blockerMessage ? ` — ${operationsTruth.blockerMessage}` : ''}
+          </p>
+        )}
       </div>
     </div>
   );
